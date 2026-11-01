@@ -1,0 +1,77 @@
+name: App Android (APK)
+
+on:
+  push:
+    branches: [main]
+    paths: ['android/**', 'player/**', '.github/workflows/android.yml']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Copia il player nell'app
+        env:
+          KAIROS_SERVER_URL: ${{ vars.KAIROS_SERVER_URL }}
+        run: |
+          mkdir -p android/app/src/main/assets/www
+          cp player/index.html android/app/src/main/assets/www/index.html
+          URL="${KAIROS_SERVER_URL%/}"
+          printf 'window.KAIROS_SERVER = %s;\n' "$(jq -Rn --arg u "$URL" '$u')" > android/app/src/main/assets/www/config.js
+          if [ -z "$URL" ]; then echo "::warning::Variabile KAIROS_SERVER_URL non impostata: l'app partirà in modalità demo"; fi
+
+      - name: Chiave di firma
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "KS_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Nessuna chiave di firma: APK firmato con chiave temporanea (gli aggiornamenti non si installeranno sopra). Esegui il workflow 'Prepara segreti'."
+          fi
+
+      - name: Versione
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF#refs/tags/v}"; else V="1.0.${GITHUB_RUN_NUMBER}"; fi
+          echo "VERSION_NAME=$V" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$((GITHUB_RUN_NUMBER + 100))" >> "$GITHUB_ENV"
+
+      - name: Compila APK
+        env:
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          APP_NAME: ${{ vars.APP_NAME }}
+          APP_ID: ${{ vars.APP_ID }}
+        run: gradle -p android assembleRelease --no-daemon --stacktrace
+
+      - run: cp android/app/build/outputs/apk/release/app-release.apk kairos.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kairos-apk-${{ env.VERSION_NAME }}
+          path: kairos.apk
+
+      - name: Pubblica la release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: kairos.apk
+          make_latest: true
+          generate_release_notes: true
