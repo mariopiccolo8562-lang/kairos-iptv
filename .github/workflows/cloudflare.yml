@@ -1,0 +1,73 @@
+name: Pannello Cloudflare
+
+on:
+  push:
+    branches: [main]
+    paths: ['cloudflare/**', '.github/workflows/cloudflare.yml']
+  workflow_dispatch:
+
+concurrency: cloudflare-deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloudflare
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Installa Wrangler
+        run: npm install -g wrangler@4
+
+      - name: Controlli
+        env:
+          ENC_KEY: ${{ secrets.ENC_KEY }}
+          ADMIN_BOOTSTRAP_PASS: ${{ secrets.ADMIN_BOOTSTRAP_PASS }}
+        run: |
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo "::error::Manca il secret CLOUDFLARE_API_TOKEN"; exit 1; }
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { echo "::error::Manca il secret CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+          [ -n "$ENC_KEY" ] || { echo "::error::Manca il secret ENC_KEY (esegui il workflow 'Prepara segreti')"; exit 1; }
+          [ -n "$ADMIN_BOOTSTRAP_PASS" ] || { echo "::error::Manca il secret ADMIN_BOOTSTRAP_PASS"; exit 1; }
+
+      - name: Database D1
+        run: |
+          ID=$(wrangler d1 list --json | jq -r '.[] | select(.name=="kairos-db") | .uuid')
+          if [ -z "$ID" ]; then
+            wrangler d1 create kairos-db
+            ID=$(wrangler d1 list --json | jq -r '.[] | select(.name=="kairos-db") | .uuid')
+          fi
+          [ -n "$ID" ] || { echo "::error::Impossibile creare/trovare il database D1"; exit 1; }
+          sed -i "s/REPLACE_WITH_D1_ID/$ID/" wrangler.toml
+          wrangler d1 migrations apply kairos-db --remote
+
+      - name: Pubblica il Worker
+        env:
+          ACCESS_TEAM_DOMAIN: ${{ vars.ACCESS_TEAM_DOMAIN }}
+          ACCESS_AUD: ${{ vars.ACCESS_AUD }}
+          TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}
+        run: |
+          ARGS=()
+          for V in ACCESS_TEAM_DOMAIN ACCESS_AUD TURNSTILE_SITEKEY; do
+            [ -n "${!V}" ] && ARGS+=(--var "$V:${!V}")
+          done
+          wrangler deploy "${ARGS[@]}"
+
+      - name: Carica i segreti
+        env:
+          ENC_KEY: ${{ secrets.ENC_KEY }}
+          ADMIN_BOOTSTRAP_PASS: ${{ secrets.ADMIN_BOOTSTRAP_PASS }}
+          TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
+        run: |
+          umask 077
+          jq -n --arg a "$ENC_KEY" --arg b "$ADMIN_BOOTSTRAP_PASS" --arg c "$TURNSTILE_SECRET" \
+            '{ENC_KEY:$a, ADMIN_BOOTSTRAP_PASS:$b, TURNSTILE_SECRET:$c} | with_entries(select(.value != ""))' > "$RUNNER_TEMP/s.json"
+          wrangler secret bulk "$RUNNER_TEMP/s.json"
+          rm -f "$RUNNER_TEMP/s.json"
