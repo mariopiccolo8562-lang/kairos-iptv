@@ -39,14 +39,14 @@ jobs:
 
       - name: Database D1
         run: |
-          ID=$(wrangler d1 list --json | jq -r '.[] | select(.name=="kairos-db") | .uuid')
+          ID=$(wrangler d1 list --json | jq -r '.[] | select(.name=="kairos-iptv-db") | .uuid')
           if [ -z "$ID" ]; then
-            wrangler d1 create kairos-db
-            ID=$(wrangler d1 list --json | jq -r '.[] | select(.name=="kairos-db") | .uuid')
+            wrangler d1 create kairos-iptv-db
+            ID=$(wrangler d1 list --json | jq -r '.[] | select(.name=="kairos-iptv-db") | .uuid')
           fi
           [ -n "$ID" ] || { echo "::error::Impossibile creare/trovare il database D1"; exit 1; }
           sed -i "s/REPLACE_WITH_D1_ID/$ID/" wrangler.toml
-          wrangler d1 migrations apply kairos-db --remote
+          wrangler d1 migrations apply kairos-iptv-db --remote
 
       - name: Pubblica il Worker
         env:
