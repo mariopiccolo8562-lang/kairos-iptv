@@ -1,0 +1,14 @@
+# segreti: non vanno MAI nel repository
+*.jks
+*.keystore
+.dev.vars
+.env
+# build
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/assets/www/
+cloudflare/.wrangler/
+node_modules/
+.DS_Store
