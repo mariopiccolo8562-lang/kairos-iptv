@@ -491,6 +491,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             .put("id", item.id)
             .put("pos", (e?.position() ?: 0L) / 1000)
             .put("dur", (e?.duration() ?: 0L) / 1000)
+            .put("height", e?.videoHeight() ?: 0)
         if (userChangedEngine) r.put("engine", engineName)
         setResult(android.app.Activity.RESULT_OK, Intent().putExtra(RESULT, r.toString()))
         finish()

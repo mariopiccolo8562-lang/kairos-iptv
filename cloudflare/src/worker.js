@@ -205,14 +205,19 @@ function harden(res, req) {
     h.set('Content-Security-Policy', CSP_PANEL);
     if (url.pathname.endsWith('.html') || url.pathname.endsWith('/')) h.set('Cache-Control', 'no-cache');
   }
+  if (url.pathname.startsWith('/app/')) {
+    h.set('Access-Control-Allow-Origin', '*');
+    h.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    h.set('Cache-Control', 'no-cache');
+  }
   if (url.pathname.startsWith('/api/player/')) {
     h.set('Access-Control-Allow-Origin', '*');
-    h.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    h.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     h.set('Access-Control-Allow-Headers', 'Content-Type');
     h.set('Access-Control-Max-Age', '86400');
     h.set('Cross-Origin-Resource-Policy', 'cross-origin');
   } else {
-    h.set('Cross-Origin-Resource-Policy', 'same-origin');
+    if (!url.pathname.startsWith('/app/')) h.set('Cross-Origin-Resource-Policy', 'same-origin');
   }
   return r;
 }
@@ -223,14 +228,45 @@ function harden(res, req) {
 const DEFAULT_SETTINGS = {
   brand: 'KAIROS', tagline: 'Streaming', accent: 'cinema',
   announcement: 'Benvenuto su KAIROS — buona visione!', supportContact: '',
-  allowLocalPlaylists: true, apkUrl: '', downloaderCode: '',
+  allowLocalPlaylists: true, apkUrl: '', apkVersionCode: 0, downloaderCode: '',
+  serverUrl: '', showFootball: true,
 };
 async function getSettings(env) {
   const row = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('app').first();
   let s = {}; try { s = row ? JSON.parse(row.v) : {}; } catch {}
   return { ...DEFAULT_SETTINGS, ...s };
 }
-const publicSettings = (s) => ({ brand: s.brand, tagline: s.tagline, accent: s.accent, announcement: s.announcement, supportContact: s.supportContact, allowLocalPlaylists: !!s.allowLocalPlaylists });
+const publicSettings = (s) => ({ brand: s.brand, tagline: s.tagline, accent: s.accent, announcement: s.announcement, supportContact: s.supportContact, allowLocalPlaylists: !!s.allowLocalPlaylists, serverUrl: s.serverUrl || '', showFootball: s.showFootball !== false });
+
+/* ---------------- eventi di calcio (calendario pubblico ESPN, in cache 15 minuti) ---------------- */
+const LEAGUES = [
+  ['ita.1', 'Serie A'], ['uefa.champions', 'Champions League'], ['uefa.europa', 'Europa League'], ['uefa.europa.conf', 'Conference League'],
+  ['ita.coppa_italia', 'Coppa Italia'], ['eng.1', 'Premier League'], ['esp.1', 'LaLiga'], ['ger.1', 'Bundesliga'], ['fra.1', 'Ligue 1'],
+];
+const ymd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
+async function footballEvents(ctx) {
+  const cache = typeof caches !== 'undefined' ? caches.default : null;
+  const key = new Request('https://kairos.cache/football-v1');
+  if (cache) { const hit = await cache.match(key); if (hit) return hit.json(); }
+  const from = new Date(), to = new Date(Date.now() + 8 * 86400e3);
+  const all = await Promise.all(LEAGUES.map(async ([code, label]) => {
+    try {
+      const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${code}/scoreboard?dates=${ymd(from)}-${ymd(to)}&limit=60`, { cf: { cacheTtl: 900 } });
+      if (!r.ok) return [];
+      const j = await r.json();
+      return (j.events || []).map((e) => {
+        const c = (e.competitions || [])[0] || {};
+        const team = (side) => { const t = ((c.competitors || []).find((x) => x.homeAway === side) || {}).team || {}; return { name: t.shortDisplayName || t.displayName || '', logo: t.logo || '' }; };
+        const state = (e.status && e.status.type && e.status.type.state) || 'pre';
+        return { id: String(e.id), league: label, start: e.date, home: team('home'), away: team('away'), venue: (c.venue && c.venue.fullName) || '', live: state === 'in', state };
+      }).filter((e) => e.state !== 'post' && e.home.name && e.away.name);
+    } catch { return []; }
+  }));
+  const events = all.flat().sort((a, b) => new Date(a.start) - new Date(b.start)).slice(0, 40);
+  const body = { events, updated: now() };
+  if (cache && events.length) ctx.waitUntil(cache.put(key, new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=900' } })));
+  return body;
+}
 async function log(env, type, text, ip = '') {
   await env.DB.prepare('INSERT INTO activity (t, type, text, ip) VALUES (?, ?, ?, ?)').bind(now(), type, String(text).slice(0, 300), ip).run();
 }
@@ -271,6 +307,17 @@ async function route(req, env, ctx) {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204 });
     if (path === '/api/player/register' && req.method === 'POST') return playerRegister(req, env, ip, ctx);
     if (path === '/api/player/ping' && req.method === 'GET') return json({ ok: true, service: 'kairos', time: now() });
+    if (path === '/api/player/events' && req.method === 'GET') {
+      if (await limited(env.RL_DEVICE, 'ev:' + ip)) return json({ events: [] }, 429);
+      return json(await footballEvents(ctx));
+    }
+    if (path === '/api/player/update' && req.method === 'GET') {
+      const s = await getSettings(env);
+      return json({
+        ui: env.UI_VERSION ? { version: env.UI_VERSION, url: '/app/index.html' } : null,
+        apk: { versionCode: +s.apkVersionCode || 0, url: s.apkUrl || '' },
+      });
+    }
     return json({ error: 'Non trovato' }, 404);
   }
 
@@ -285,6 +332,12 @@ async function route(req, env, ctx) {
     if (!(await verifyAccess(req, env))) return json({ error: 'Accesso negato (Cloudflare Access)' }, 403);
     try { return await admin(req, env, url, ip, ctx); }
     catch (e) { if (e instanceof HttpErr) return json({ error: e.message }, e.status); throw e; }
+  }
+
+  /* ---------- interfaccia dell'app per l'aggiornamento automatico ---------- */
+  if (path.startsWith('/app/')) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return new Response('Metodo non consentito', { status: 405 });
+    return env.ASSETS.fetch(req);
   }
 
   /* ---------- pannello (asset) ---------- */
@@ -399,6 +452,14 @@ async function admin(req, env, url, ip, ctx) {
     for (const k of ['brand', 'tagline', 'accent', 'announcement', 'supportContact', 'downloaderCode']) if (typeof b[k] === 'string') s[k] = str(b[k], k === 'announcement' ? 300 : 80);
     if (typeof b.apkUrl === 'string') { const u = str(b.apkUrl, 500); s.apkUrl = !u || /^https:\/\//.test(u) ? u : s.apkUrl; }
     if (typeof b.allowLocalPlaylists === 'boolean') s.allowLocalPlaylists = b.allowLocalPlaylists;
+    if (typeof b.showFootball === 'boolean') s.showFootball = b.showFootball;
+    if (b.apkVersionCode !== undefined) s.apkVersionCode = Math.max(0, Math.min(1e9, parseInt(b.apkVersionCode, 10) || 0));
+    if (typeof b.serverUrl === 'string') {
+      const u = str(b.serverUrl, 300).replace(/\/+$/, '').replace(/\/panel$/i, '');
+      if (!u) s.serverUrl = '';
+      else if (/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(u)) s.serverUrl = u;
+      else throw new HttpErr(400, 'Indirizzo server non valido: usa https://dominio (senza percorsi)');
+    }
     await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('app', JSON.stringify(s)).run();
     await log(env, 'settings', `${who}: impostazioni aggiornate`, ip);
     return json({ settings: s });

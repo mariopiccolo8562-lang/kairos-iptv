@@ -3,6 +3,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- aggiornamento automatico dell'app -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- funziona su TV (Fire TV, Android TV, Google TV) e su telefoni/tablet -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -37,5 +39,15 @@
             android:exported="false"
             android:launchMode="singleTop"
             android:theme="@style/PlayerTheme" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

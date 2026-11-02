@@ -39,7 +39,7 @@ const DEMO = (() => {
     { t: now - 9 * 3600e3, type: 'off', text: 'Bar Centrale: active → disabled' },
     { t: now - 26 * 3600e3, type: 'auth', text: 'Accesso al pannello' },
   ];
-  return { settings: { brand: 'KAIROS', tagline: 'Next-gen streaming', accent: 'cinema', announcement: 'Benvenuto su KAIROS — buona visione!', allowLocalPlaylists: true, supportContact: 'WhatsApp +39 333 000 0000', apkUrl: 'https://github.com/tuo-utente/kairos-iptv/releases/latest/download/kairos.apk', downloaderCode: '1234567' }, devices, activity };
+  return { settings: { brand: 'KAIROS', tagline: 'Next-gen streaming', accent: 'cinema', announcement: 'Benvenuto su KAIROS — buona visione!', allowLocalPlaylists: true, showFootball: true, serverUrl: '', apkVersionCode: 112, supportContact: 'WhatsApp +39 333 000 0000', apkUrl: 'https://github.com/tuo-utente/kairos-iptv/releases/latest/download/kairos.apk', downloaderCode: '1234567' }, devices, activity };
 })();
 async function demoApi(method, path, body) {
   await new Promise((r) => setTimeout(r, 160));
@@ -283,6 +283,7 @@ function renderSettings() {
   const s = D.settings; tmpAccent = s.accent || 'cinema';
   $('#sBrand').value = s.brand || ''; $('#sTag').value = s.tagline || ''; $('#sAnn').value = s.announcement || ''; $('#sSup').value = s.supportContact || '';
   $('#sLocal').classList.toggle('on', !!s.allowLocalPlaylists); $('#sApk').value = s.apkUrl || ''; $('#sDl').value = s.downloaderCode || '';
+  $('#sFoot').classList.toggle('on', s.showFootball !== false); $('#sSrv').value = s.serverUrl || ''; $('#sVer').value = s.apkVersionCode || '';
   $('#aUser').value = D.user;
   $('#themes').innerHTML = Object.entries(THEMES).map(([n, c]) => `<button class="th ${n === tmpAccent ? 'on' : ''}" data-th="${n}"><div class="sw" style="background:linear-gradient(120deg,${c.join(',')})"></div><b>${n}</b></button>`).join('');
   $$('[data-th]').forEach((b) => (b.onclick = () => { tmpAccent = b.dataset.th; $$('[data-th]').forEach((x) => x.classList.toggle('on', x === b)); applyTheme(tmpAccent); preview(); drawChart(); }));
@@ -291,8 +292,9 @@ function renderSettings() {
 function preview() { const c = THEMES[tmpAccent]; $('#tvA').style.background = `radial-gradient(circle at 20% 30%,${c[0]},transparent 45%),radial-gradient(circle at 80% 50%,${c[1]},transparent 45%),radial-gradient(circle at 50% 100%,${c[2]},transparent 45%)`; $('#tvN').textContent = ($('#sBrand').value || 'KAIROS').toUpperCase(); $('#tvT').textContent = $('#sAnn').value || '—'; }
 ['#sBrand', '#sAnn'].forEach((s) => $(s).addEventListener('input', preview));
 $('#sLocal').onclick = () => $('#sLocal').classList.toggle('on');
+$('#sFoot').onclick = () => $('#sFoot').classList.toggle('on');
 $('#sSave').onclick = async () => {
-  try { const r = await api('PUT', '/admin/settings', { brand: $('#sBrand').value.trim() || 'KAIROS', tagline: $('#sTag').value, accent: tmpAccent, announcement: $('#sAnn').value, supportContact: $('#sSup').value, allowLocalPlaylists: $('#sLocal').classList.contains('on'), apkUrl: $('#sApk').value.trim(), downloaderCode: $('#sDl').value.trim() }); D.settings = r.settings; await load(); toast('Impostazioni salvate — i player si aggiornano al prossimo avvio'); } catch (e) { toast(e.message, 1); }
+  try { const r = await api('PUT', '/admin/settings', { brand: $('#sBrand').value.trim() || 'KAIROS', tagline: $('#sTag').value, accent: tmpAccent, announcement: $('#sAnn').value, supportContact: $('#sSup').value, allowLocalPlaylists: $('#sLocal').classList.contains('on'), apkUrl: $('#sApk').value.trim(), downloaderCode: $('#sDl').value.trim(), showFootball: $('#sFoot').classList.contains('on'), serverUrl: $('#sSrv').value.trim(), apkVersionCode: $('#sVer').value.trim() }); D.settings = r.settings; await load(); toast('Impostazioni salvate — i player si aggiornano al prossimo avvio'); } catch (e) { toast(e.message, 1); }
 };
 function renderSecurity() {
   const x = D.security || {};

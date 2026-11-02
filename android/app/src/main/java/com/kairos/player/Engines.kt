@@ -69,6 +69,7 @@ interface Engine {
     fun subtitles(): List<Track>
     fun selectSubtitle(id: String)
     fun setAspect(mode: String)
+    fun videoHeight(): Int
     fun release()
 }
 
@@ -93,7 +94,7 @@ private fun langName(code: String?): String {
 /* ExoPlayer                                                               */
 /* ======================================================================= */
 @OptIn(UnstableApi::class)
-class ExoEngine(ctx: Context, private val l: EngineListener, ua: String, private val prefs: PlayPrefs) : Engine {
+class ExoEngine(ctx: Context, private val l: EngineListener, ua: String, private val prefs: PlayPrefs, overlay: Boolean = false) : Engine {
     override val name = "exo"
     private val selector = DefaultTrackSelector(
         ctx,
@@ -135,6 +136,8 @@ class ExoEngine(ctx: Context, private val l: EngineListener, ua: String, private
         pv.setShutterBackgroundColor(Color.BLACK)
         pv.setKeepContentOnPlayerReset(true)
         pv.player = player
+        // anteprima sopra la pagina web: la superficie video va disegnata sopra la finestra
+        if (overlay) (pv.videoSurfaceView as? android.view.SurfaceView)?.setZOrderMediaOverlay(true)
         setAspect(prefs.aspect)
 
         player.addListener(object : Player.Listener {
@@ -279,6 +282,7 @@ class ExoEngine(ctx: Context, private val l: EngineListener, ua: String, private
         }
     }
 
+    override fun videoHeight(): Int = player.videoSize.height
     override fun release() { pv.player = null; player.release() }
 }
 
@@ -377,6 +381,8 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
             },
         )
     }
+
+    override fun videoHeight(): Int = try { mp.currentVideoTrack?.height ?: 0 } catch (_: Exception) { 0 }
 
     override fun release() {
         try { mp.stop() } catch (_: Exception) {}
