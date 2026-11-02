@@ -3,7 +3,7 @@ name: Pannello Cloudflare
 on:
   push:
     branches: [main]
-    paths: ['cloudflare/**', '.github/workflows/cloudflare.yml']
+    paths: ['cloudflare/**', 'player/**', '.github/workflows/cloudflare.yml']
   workflow_dispatch:
 
 concurrency: cloudflare-deploy
@@ -17,6 +17,7 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      STORE_REPO: ${{ vars.STORE_REPO || format('{0}/kairos-store', github.repository_owner) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -48,16 +49,26 @@ jobs:
           sed -i "s/REPLACE_WITH_D1_ID/$ID/" wrangler.toml
           wrangler d1 migrations apply kairos-iptv-db --remote
 
+      - name: Interfaccia dell'app per l'aggiornamento automatico
+        run: |
+          mkdir -p public/app
+          cp ../player/index.html public/app/index.html
+          echo "UI_VERSION=$(sha256sum ../player/index.html | cut -c1-12)" >> "$GITHUB_ENV"
+
       - name: Pubblica il Worker
         env:
           ACCESS_TEAM_DOMAIN: ${{ vars.ACCESS_TEAM_DOMAIN }}
           ACCESS_AUD: ${{ vars.ACCESS_AUD }}
           TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}
+          OWNER_EMAIL: ${{ vars.OWNER_EMAIL }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
         run: |
           ARGS=()
-          for V in ACCESS_TEAM_DOMAIN ACCESS_AUD TURNSTILE_SITEKEY; do
+          for V in ACCESS_TEAM_DOMAIN ACCESS_AUD TURNSTILE_SITEKEY OWNER_EMAIL MAIL_FROM; do
             [ -n "${!V}" ] && ARGS+=(--var "$V:${!V}")
           done
+          ARGS+=(--var "UI_VERSION:${UI_VERSION}")
+          ARGS+=(--var "APK_FEED:https://github.com/${STORE_REPO}/releases/download/kairos-tv/kairos-tv.json")
           wrangler deploy "${ARGS[@]}"
 
       - name: Carica i segreti
@@ -65,9 +76,11 @@ jobs:
           ENC_KEY: ${{ secrets.ENC_KEY }}
           ADMIN_BOOTSTRAP_PASS: ${{ secrets.ADMIN_BOOTSTRAP_PASS }}
           TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
+          RESEND_KEY: ${{ secrets.RESEND_KEY }}
+          TMDB_KEY: ${{ secrets.TMDB_KEY }}
         run: |
           umask 077
-          jq -n --arg a "$ENC_KEY" --arg b "$ADMIN_BOOTSTRAP_PASS" --arg c "$TURNSTILE_SECRET" \
-            '{ENC_KEY:$a, ADMIN_BOOTSTRAP_PASS:$b, TURNSTILE_SECRET:$c} | with_entries(select(.value != ""))' > "$RUNNER_TEMP/s.json"
+          jq -n --arg a "$ENC_KEY" --arg b "$ADMIN_BOOTSTRAP_PASS" --arg c "$TURNSTILE_SECRET" --arg d "$RESEND_KEY" --arg e "$TMDB_KEY" \
+            '{ENC_KEY:$a, ADMIN_BOOTSTRAP_PASS:$b, TURNSTILE_SECRET:$c, RESEND_KEY:$d, TMDB_KEY:$e} | with_entries(select(.value != ""))' > "$RUNNER_TEMP/s.json"
           wrangler secret bulk "$RUNNER_TEMP/s.json"
           rm -f "$RUNNER_TEMP/s.json"
