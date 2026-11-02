@@ -3,7 +3,12 @@ package com.kairos.player
 import android.content.Context
 import android.graphics.Color
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import android.view.View
+import android.view.ViewGroup
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.Format
@@ -18,6 +23,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -52,6 +58,21 @@ object Handoff {
     @Volatile var id: String = ""
     /** riquadro dell'anteprima sullo schermo (x, y, larghezza, altezza) */
     @Volatile var box: IntArray? = null
+
+    /** La schermata principale (sotto lo schermo intero, che è trasparente). Tutto sul thread principale. */
+    interface Host {
+        /** riprende subito [back] nel riquadro; [onShown] quando il video è visibile lì. false = non possibile ora */
+        fun adoptNow(onShown: Runnable): Boolean
+        /** lo schermo intero mostra il video: l'anteprima ingrandita (ormai coperta) può sparire */
+        fun fullShown()
+        /** chiusura senza ritorno nel riquadro: l'interfaccia viene coperta di nero (poi sfuma), niente lampi */
+        fun coverUi()
+    }
+    /** riferimento debole: non trattiene l'activity dopo la chiusura */
+    @Volatile private var hostRef: java.lang.ref.WeakReference<Host>? = null
+    var host: Host?
+        get() = hostRef?.get()
+        set(v) { hostRef = if (v == null) null else java.lang.ref.WeakReference(v) }
 }
 
 object NoopListener : EngineListener {
@@ -65,8 +86,11 @@ object NoopListener : EngineListener {
 data class PlayPrefs(val quality: String, val buffer: String, val aspect: String, val live: Boolean = false, val hw: String = "auto") {
     /** millisecondi di video da accumulare prima di partire / dopo un'interruzione.
      *  In diretta si parte prima: il cambio canale è molto più rapido. */
-    val startMs: Int get() = if (live) when (buffer) { "fast" -> 350; "stable" -> 1800; else -> 650 } else when (buffer) { "fast" -> 1200; "stable" -> 4000; else -> 2000 }
-    val rebufferMs: Int get() = when (buffer) { "fast" -> 2500; "stable" -> 8000; else -> 4000 }
+    // film/serie: dopo un salto (avanti/indietro) la riproduzione riparte con poco video pronto → ricerca veloce
+    val startMs: Int get() = if (live) when (buffer) { "fast" -> 350; "stable" -> 1800; else -> 650 } else when (buffer) { "fast" -> 800; "stable" -> 2500; else -> 1000 }
+    val rebufferMs: Int get() = if (live) when (buffer) { "fast" -> 2500; "stable" -> 8000; else -> 4000 } else when (buffer) { "fast" -> 1500; "stable" -> 5000; else -> 2000 }
+    /** video già visto tenuto in memoria (film): «indietro di 10 s» è immediato, senza ricaricare */
+    val backMs: Int get() = if (live) 0 else 12_000
     val maxMs: Int get() = when (buffer) { "fast" -> 30000; "stable" -> 90000; else -> 50000 }
     val vlcCacheMs: Int get() = if (live) when (buffer) { "fast" -> 600; "stable" -> 3000; else -> 1200 } else when (buffer) { "fast" -> 1000; "stable" -> 5000; else -> 2500 }
     val maxHeight: Int get() = quality.toIntOrNull() ?: 0
@@ -83,6 +107,8 @@ interface Engine {
     fun position(): Long
     fun duration(): Long
     fun seekBy(ms: Long)
+    /** salto a una posizione assoluta (ms); i salti lunghi usano il fotogramma chiave più vicino (più rapido) */
+    fun seekTo(ms: Long)
     fun audioTracks(): List<Track>
     fun selectAudio(id: String)
     fun qualities(): List<Track>
@@ -125,8 +151,18 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
     )
     private var currentQuality = "auto"
     private val player: ExoPlayer
-    private val pv = PlayerView(ctx)
+    private var resize = AspectRatioFrameLayout.RESIZE_MODE_FIT
+    private var subFactor = 1f
+    /** vista attuale del video (cambia quando il video passa a un'altra schermata, vedi [moveTo]) */
+    private var pv: PlayerView
     override val view: View get() = pv
+    private val main = Handler(Looper.getMainLooper())
+    private var released = false
+    /** viste lasciate da [moveTo]: mostrano ancora l'ultimo fotogramma finché non chiami [dropOldView] */
+    private val oldViews = ArrayList<PlayerView>()
+    private var moveCb: (() -> Unit)? = null
+    private var moveArmed = false
+    private val moveTimeout = Runnable { fireMoved() }
 
     init {
         val http = DefaultHttpDataSource.Factory()
@@ -138,7 +174,8 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
         val sources = DefaultMediaSourceFactory(DefaultDataSource.Factory(ctx, http), extractors)
         val load = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(maxOf(15_000, prefs.startMs + 1000), prefs.maxMs, prefs.startMs, prefs.rebufferMs)
+            .setBufferDurationsMs(maxOf(15_000, prefs.startMs + 1000, prefs.rebufferMs), prefs.maxMs, prefs.startMs, prefs.rebufferMs)
+            .setBackBuffer(prefs.backMs, true)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
         val renderers = DefaultRenderersFactory(ctx)
@@ -161,13 +198,9 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
         player.setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS)
         applyQuality(prefs.quality)
 
-        pv.useController = false
-        pv.setShutterBackgroundColor(Color.BLACK)
-        pv.setKeepContentOnPlayerReset(true)
+        resize = resizeOf(prefs.aspect)
+        pv = makeView(ctx, overlay)
         pv.player = player
-        // anteprima sopra la pagina web: la superficie video va disegnata sopra la finestra
-        if (overlay) (pv.videoSurfaceView as? android.view.SurfaceView)?.setZOrderMediaOverlay(true)
-        setAspect(prefs.aspect)
 
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
@@ -179,7 +212,9 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
                 }
             }
 
-            override fun onRenderedFirstFrame() { l.onFirstFrame() }
+            // arriva di nuovo dopo ogni cambio di superficie (solo per la superficie attuale):
+            // è il segnale che il video è davvero visibile nella nuova schermata
+            override fun onRenderedFirstFrame() { if (moveArmed) fireMoved(); l.onFirstFrame() }
 
             override fun onPlayerError(error: PlaybackException) {
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
@@ -190,12 +225,88 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
         })
     }
 
+    /* ---------------- vista del video ---------------- */
+    private fun resizeOf(mode: String) = when (mode) {
+        "fill" -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+        "zoom" -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+    }
+
+    private fun makeView(ctx: Context, overlay: Boolean): PlayerView = PlayerView(ctx).apply {
+        useController = false
+        setShutterBackgroundColor(Color.BLACK)
+        setKeepContentOnPlayerReset(true)
+        resizeMode = resize
+        // anteprima sopra la pagina web: va impostato prima che la vista entri nella finestra
+        if (overlay) (videoSurfaceView as? SurfaceView)?.setZOrderMediaOverlay(true)
+        subtitleView?.setFractionalTextSize(androidx.media3.ui.SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * subFactor)
+    }
+
+    /**
+     * Sposta il video in una nuova vista (per un'altra schermata) senza fermarlo né ricaricarlo.
+     * Il player passa alla nuova superficie appena questa esiste; la vista precedente resta dov'è con
+     * l'ultimo fotogramma. [onShown] viene chiamato (thread principale) al primo fotogramma disegnato sulla
+     * nuova superficie, o dopo [timeoutMs]: solo allora conviene togliere la vecchia con [dropOldView].
+     */
+    fun moveTo(ctx: Context, overlay: Boolean, timeoutMs: Long, onShown: () -> Unit): View {
+        fireMoved() // un passaggio precedente non ancora concluso
+        val n = makeView(ctx, overlay)
+        oldViews.add(pv)
+        pv = n
+        moveCb = onShown
+        val sv = n.videoSurfaceView as? SurfaceView
+        if (sv == null) bindView(n)
+        else sv.holder.addCallback(object : SurfaceHolder.Callback {
+            override fun surfaceCreated(holder: SurfaceHolder) {
+                holder.removeCallback(this)
+                // passaggio diretto vecchia → nuova superficie: nessun buco nero nel mezzo
+                if (!released && pv === n) bindView(n)
+            }
+            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
+            override fun surfaceDestroyed(holder: SurfaceHolder) {}
+        })
+        main.removeCallbacks(moveTimeout)
+        main.postDelayed(moveTimeout, timeoutMs)
+        return n
+    }
+
+    private fun bindView(n: PlayerView) {
+        if (n.player === player) return
+        if (moveCb != null) moveArmed = true
+        n.player = player
+    }
+
+    private fun fireMoved() {
+        main.removeCallbacks(moveTimeout)
+        moveArmed = false
+        val cb = moveCb ?: return
+        moveCb = null
+        if (!released && pv.player !== player) pv.player = player
+        try { cb() } catch (_: Exception) {}
+    }
+
+    /** toglie le viste lasciate da [moveTo] (anche dalla schermata che le contiene) */
+    fun dropOldView() {
+        if (oldViews.isEmpty()) return
+        val list = ArrayList(oldViews)
+        oldViews.clear()
+        for (v in list) {
+            try {
+                // il player disegna già altrove: qui si staccano solo gli ascoltatori della vecchia vista
+                if (v.player != null) v.player = null
+                (v.parent as? ViewGroup)?.removeView(v)
+            } catch (_: Exception) {}
+        }
+    }
+
     override fun play(url: String, startMs: Long) {
         val b = MediaItem.Builder().setUri(Uri.parse(url))
         mimeOf(url)?.let { b.setMimeType(it) }
-        b.setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(6_000).build())
         playingUrl = url
-        player.setMediaItem(b.build(), maxOf(0L, startMs))
+        // senza posizione: si parte da quella predefinita (in diretta HLS vicino al presente, come indica la
+        // playlist) e non dall'inizio della finestra, dove i segmenti stanno per scadere
+        if (startMs > 0) player.setMediaItem(b.build(), startMs) else player.setMediaItem(b.build())
+        player.setSeekParameters(SeekParameters.DEFAULT)
         player.prepare()
         player.playWhenReady = true
     }
@@ -204,18 +315,20 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
     @Volatile var playingUrl: String = ""
     fun isActive(): Boolean = player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING
     /** la superficie video va sopra (anteprima) o sotto (schermo intero, con i menu sopra) la finestra */
-    fun setOverlay(on: Boolean) { (pv.videoSurfaceView as? android.view.SurfaceView)?.setZOrderMediaOverlay(on) }
+    fun setOverlay(on: Boolean) { (pv.videoSurfaceView as? SurfaceView)?.setZOrderMediaOverlay(on) }
 
     override fun stop() { player.stop(); playingUrl = "" }
     override fun togglePause() { player.playWhenReady = !player.playWhenReady }
     override fun isPlaying(): Boolean = player.playWhenReady
     override fun position(): Long = maxOf(0L, player.currentPosition)
     override fun duration(): Long = player.duration.let { if (it == C.TIME_UNSET || it < 0) 0L else it }
-    override fun seekBy(ms: Long) {
+    override fun seekBy(ms: Long) = seekTo(position() + ms)
+    override fun seekTo(ms: Long) {
         val d = duration()
-        var t = position() + ms
-        if (t < 0) t = 0
-        if (d > 0 && t > d - 1000) t = d - 1000
+        var t = maxOf(0L, ms)
+        if (d > 0) t = minOf(t, maxOf(0L, d - 1000))
+        // salti lunghi: si riparte dal fotogramma chiave più vicino (niente decodifica a vuoto fino al punto esatto)
+        player.setSeekParameters(if (kotlin.math.abs(t - position()) > 30_000) SeekParameters.CLOSEST_SYNC else SeekParameters.DEFAULT)
         player.seekTo(t)
     }
 
@@ -240,12 +353,15 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
         Track("$gi:$i", if (parts.isEmpty()) "Traccia ${n + 1}" else parts.joinToString(" · "), isSelected(gi, i))
     }
 
+    // le tracce possono cambiare mentre il menu è aperto (cambio canale, nuovo flusso): mai un crash per questo
     override fun selectAudio(id: String) {
-        val (gi, i) = id.split(":").map { it.toInt() }
-        val g = player.currentTracks.groups[gi]
-        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-            .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, i))
-            .build()
+        try {
+            val (gi, i) = id.split(":").map { it.toInt() }
+            val g = player.currentTracks.groups[gi]
+            player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, i))
+                .build()
+        } catch (_: Exception) {}
     }
 
     override fun qualities(): List<Track> {
@@ -280,13 +396,15 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
 
     override fun selectQuality(id: String) {
         if (id.startsWith("t:")) {
-            val (_, gi, i) = id.split(":")
-            val g = player.currentTracks.groups[gi.toInt()]
-            player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-                .clearVideoSizeConstraints()
-                .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, i.toInt()))
-                .build()
-            currentQuality = id
+            try {
+                val (_, gi, i) = id.split(":")
+                val g = player.currentTracks.groups[gi.toInt()]
+                player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                    .clearVideoSizeConstraints()
+                    .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, i.toInt()))
+                    .build()
+                currentQuality = id
+            } catch (_: Exception) {}
         } else applyQuality(id)
     }
 
@@ -302,27 +420,27 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
     }
 
     override fun selectSubtitle(id: String) {
-        val b = player.trackSelectionParameters.buildUpon()
-        if (id == "off") b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-        else {
-            val (gi, i) = id.split(":").map { it.toInt() }
-            b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                .setOverrideForType(TrackSelectionOverride(player.currentTracks.groups[gi].mediaTrackGroup, i))
-        }
-        player.trackSelectionParameters = b.build()
+        try {
+            val b = player.trackSelectionParameters.buildUpon()
+            if (id == "off") b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            else {
+                val (gi, i) = id.split(":").map { it.toInt() }
+                b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setOverrideForType(TrackSelectionOverride(player.currentTracks.groups[gi].mediaTrackGroup, i))
+            }
+            player.trackSelectionParameters = b.build()
+        } catch (_: Exception) {}
     }
 
     override fun setAspect(mode: String) {
-        pv.resizeMode = when (mode) {
-            "fill" -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-            "zoom" -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-            else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-        }
+        resize = resizeOf(mode)
+        pv.resizeMode = resize
     }
 
     override fun videoHeight(): Int = player.videoSize.height
     /** dimensione dei sottotitoli (1 = normale) */
     fun setSubtitleScale(f: Float) {
+        subFactor = f
         pv.subtitleView?.setFractionalTextSize(androidx.media3.ui.SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * f)
     }
     /** descrizione del video in onda, es. "1080p · 50 fps · 6,2 Mbps" */
@@ -335,7 +453,15 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
         f.sampleMimeType?.substringAfter('/')?.uppercase(Locale.ROOT)?.let { if (it.isNotBlank()) parts.add(it.replace("AVC", "H.264").replace("HEVC", "H.265")) }
         return parts.joinToString(" · ")
     }
-    override fun release() { pv.player = null; player.release() }
+    override fun release() {
+        if (released) return
+        released = true
+        main.removeCallbacks(moveTimeout)
+        moveCb = null; moveArmed = false
+        dropOldView()
+        pv.player = null
+        player.release()
+    }
 }
 
 /* ======================================================================= */
@@ -397,13 +523,20 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
     override fun isPlaying(): Boolean = mp.isPlaying
     override fun position(): Long = maxOf(0L, mp.time)
     override fun duration(): Long = maxOf(0L, mp.length)
-    override fun seekBy(ms: Long) { if (duration() > 2000) mp.time = (position() + ms).coerceIn(0L, duration() - 1000) }
+    override fun seekBy(ms: Long) = seekTo(position() + ms)
+    override fun seekTo(ms: Long) {
+        val d = duration()
+        if (d <= 2000) return
+        val t = ms.coerceIn(0L, d - 1000)
+        // salti lunghi: ricerca veloce di libVLC (al fotogramma chiave, come fa l'app VLC); brevi: precisa
+        if (kotlin.math.abs(t - position()) > 30_000) mp.setTime(t, true) else mp.time = t
+    }
 
     override fun audioTracks(): List<Track> {
         val cur = mp.audioTrack
         return (mp.audioTracks ?: emptyArray()).filter { it.id >= 0 }.map { Track(it.id.toString(), it.name ?: "Traccia ${it.id}", it.id == cur) }
     }
-    override fun selectAudio(id: String) { mp.setAudioTrack(id.toInt()) }
+    override fun selectAudio(id: String) { id.toIntOrNull()?.let { mp.setAudioTrack(it) } }
 
     override fun qualities(): List<Track> = listOf(
         Track("auto", "Automatica (consigliata)", maxH == 0),
@@ -437,9 +570,13 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
 
     override fun videoHeight(): Int = try { mp.currentVideoTrack?.height ?: 0 } catch (_: Exception) { 0 }
 
+    private var released = false
     override fun release() {
+        if (released) return
+        released = true
+        try { mp.setEventListener(null) } catch (_: Exception) {} // nessun evento verso una schermata già chiusa
         try { mp.stop() } catch (_: Exception) {}
-        mp.detachViews()
+        try { mp.detachViews() } catch (_: Exception) {}
         mp.release()
         lib.release()
     }

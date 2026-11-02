@@ -5,6 +5,14 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- aggiornamento automatico dell'app -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- registrazioni: servizio in primo piano con notifica (Android 14+: tipo dichiarato e permesso del tipo) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- avvio puntuale delle registrazioni programmate (se non concesso si usa una sveglia non esatta) -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <!-- funziona su TV (Fire TV, Android TV, Google TV) e su telefoni/tablet -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -24,7 +32,7 @@
 
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|locale|layoutDirection|fontScale|touchscreen"
             android:exported="true"
             android:launchMode="singleTask">
             <intent-filter>
@@ -36,7 +44,7 @@
 
         <activity
             android:name=".PlayerActivity"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|locale|layoutDirection|fontScale|touchscreen"
             android:exported="false"
             android:launchMode="singleTop"
             android:theme="@style/PlayerTheme" />
@@ -50,5 +58,20 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- registrazioni (PVR): Android 10-13 tipo dataSync, Android 14+ specialUse (nessun limite di 6 ore) -->
+        <service
+            android:name=".RecService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Videoregistratore: registra i canali TV in diretta scelti dall utente, anche a un orario programmato" />
+        </service>
+
+        <!-- Safe Browsing della WebView sempre attivo (anche prima di Android 8) -->
+        <meta-data
+            android:name="android.webkit.WebView.EnableSafeBrowsing"
+            android:value="true" />
     </application>
 </manifest>

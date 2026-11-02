@@ -44,6 +44,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // la libreria WireGuard usa java.time / Optional / stream: servono anche su Android 5-7
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { buildConfig = true }
@@ -57,4 +59,8 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
     implementation("androidx.media3:media3-ui:1.4.1")
     implementation("org.videolan.android:libvlc-all:3.6.0")
+    // VPN WireGuard (libreria ufficiale). 1.0.20250531 = ultima con minSdk 21 (la 1.0.20260102 richiede
+    // Android 7+, stesso motore wireguard-go): così la VPN funziona anche su Fire TV con Fire OS 5
+    implementation("com.wireguard.android:tunnel:1.0.20250531")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }

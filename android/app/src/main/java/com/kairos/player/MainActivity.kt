@@ -60,15 +60,24 @@ class MainActivity : ComponentActivity() {
 
     /** ritorno dal player nativo: posizione, durata, motore scelto, risoluzione */
     private val playerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
-        adoptBack()
+        adoptBack() // se il player non l'ha già restituito mentre si chiudeva
+        Handoff.engine?.let { Handoff.engine = null; it.release() } // mai preso dal player (avvio fallito): niente audio orfano
+        endHandoff()
+        uncoverUi()
         val r = res.data?.getStringExtra(PlayerActivity.RESULT) ?: return@registerForActivityResult
         js("window.kxPlayerClosed && window.kxPlayerClosed(${JSONObject.quote(r)})")
     }
 
-    /** il video tornato dallo schermo intero continua nel riquadro dell'anteprima senza ricaricarsi */
-    private fun adoptBack() {
+    /**
+     * Il video tornato dallo schermo intero continua nel riquadro dell'anteprima senza ricaricarsi.
+     * Una nuova vista nasce nel riquadro, sotto la finestra (trasparente) del player che mostra ancora l'ultimo
+     * fotogramma nello stesso punto; quando la nuova ha disegnato il video, la vecchia viene tolta e [onShown]
+     * chiude il player. Nessun buco tra le due.
+     */
+    private fun adoptBack(onShown: Runnable? = null) {
         val b = Handoff.back ?: return
         Handoff.back = null
+        endHandoff()
         val box = Handoff.box
         if (previewEngine != null && previewEngine !== b) { previewEngine?.release(); previewBox.removeAllViews() }
         previewEngine = b
@@ -76,16 +85,59 @@ class MainActivity : ComponentActivity() {
         previewId = Handoff.id
         previewAlt = ""
         previewTriedAlt = false
-        if (b.view.parent == null) { b.setOverlay(true); previewBox.addView(b.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)) }
         if (box != null) {
             previewBox.layoutParams = FrameLayout.LayoutParams(box[2], box[3]).apply { leftMargin = box[0]; topMargin = box[1] }
             previewBox.visibility = View.VISIBLE
         }
+        if (b.view.parent !== previewBox) {
+            val v = b.moveTo(this, true, 1200L) { b.dropOldView(); onShown?.run() }
+            previewBox.addView(v, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        } else onShown?.run()
         // se entro pochi secondi la pagina non chiede di nuovo l'anteprima (utente uscito dalla Live), si ferma
         ui.postDelayed({ if (previewEngine === b && !previewWanted) stopPreview() }, 4000)
         previewWanted = false
     }
     @Volatile private var previewWanted = false
+
+    /* passaggio anteprima ↔ schermo intero: il player (finestra trasparente sopra) chiama questi metodi */
+    private var handoffBusy = false
+    private val handoffHost = object : Handoff.Host {
+        override fun adoptNow(onShown: Runnable): Boolean {
+            if (isFinishing || isDestroyed || Handoff.back == null) return false
+            adoptBack(onShown)
+            return true
+        }
+        override fun fullShown() { endHandoff() }
+        override fun coverUi() { if (!isDestroyed) coverUiNow(false) }
+    }
+
+    /** lo schermo intero mostra il video: via l'anteprima ingrandita rimasta sotto (ormai coperta) */
+    private fun endHandoff() {
+        if (!handoffBusy) return
+        handoffBusy = false
+        val keep = previewEngine?.view
+        for (i in previewBox.childCount - 1 downTo 0) if (previewBox.getChildAt(i) !== keep) previewBox.removeViewAt(i)
+        if (previewEngine == null) previewBox.visibility = View.GONE
+    }
+
+    /* velo nero sopra l'interfaccia: niente lampi della pagina tra schermo intero e app (film, VLC, altro canale) */
+    private var uiVeil: View? = null
+    private fun coverUiNow(fade: Boolean) {
+        val v = uiVeil ?: View(this).apply { setBackgroundColor(Color.BLACK); alpha = 0f; isFocusable = false }.also {
+            uiVeil = it
+            root.addView(it, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        v.animate().cancel()
+        v.bringToFront()
+        v.visibility = View.VISIBLE
+        if (fade && v.alpha < 1f) v.animate().alpha(1f).setStartDelay(0).setDuration(140).start() else v.alpha = 1f
+    }
+    private fun uncoverUi() {
+        val v = uiVeil ?: return
+        if (v.visibility != View.VISIBLE) return
+        v.animate().cancel()
+        v.animate().alpha(0f).setStartDelay(160).setDuration(260).withEndAction { v.visibility = View.GONE }.start()
+    }
 
     private fun js(code: String) { runOnUiThread { if (::web.isInitialized) web.evaluateJavascript(code, null) } }
 
@@ -97,6 +149,8 @@ class MainActivity : ComponentActivity() {
         applyOrientation(prefs.getString("orient", "auto") ?: "auto")
 
         root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        // ispezione remota (chrome://inspect) solo nelle build di debug, mai nell'APK pubblicato
+        try { WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG) } catch (_: Exception) {}
         web = WebView(this)
         web.setBackgroundColor(Color.BLACK)
         web.setLayerType(View.LAYER_TYPE_HARDWARE, null)
@@ -121,18 +175,38 @@ class MainActivity : ComponentActivity() {
             textZoom = 100
             cacheMode = WebSettings.LOAD_DEFAULT
             userAgentString = "$userAgentString KairosPlayer/${BuildConfig.VERSION_NAME}"
+            // sicurezza: niente content://, niente finestre/popup aperti da script, niente posizione
+            allowContentAccess = false
+            javaScriptCanOpenWindowsAutomatically = false
+            setSupportMultipleWindows(false)
+            setGeolocationEnabled(false)
+            if (Build.VERSION.SDK_INT >= 26) safeBrowsingEnabled = true
         }
         web.isFocusable = true
         web.isFocusableInTouchMode = true
         web.addJavascriptInterface(Bridge(), "KairosNative")
         web.webChromeClient = WebChromeClient()
         web.webViewClient = object : WebViewClient() {
-            // il player non deve mai navigare fuori dai propri file
-            private fun allowed(u: String) = u.startsWith("file:///android_asset/") || u.startsWith("file://" + otaDir.absolutePath)
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = !allowed(request.url.toString())
+            // il player non deve mai navigare fuori dai propri file (il ponte KairosNative è esposto a ogni pagina caricata)
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                if (isAppUrl(request.url.toString())) return false
+                // link esterno toccato dall'utente nella pagina principale: si apre nel browser, mai dentro l'app
+                if (request.isForMainFrame && request.hasGesture()) openExternal(request.url)
+                return true
+            }
 
             @Deprecated("Deprecated in Java")
-            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = !allowed(url)
+            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = !isAppUrl(url)
+
+            /** pagine esterne dentro un iframe: bloccate (vedrebbero anche il ponte KairosNative) */
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): android.webkit.WebResourceResponse? {
+                if (request.isForMainFrame) return null
+                val s = request.url.scheme ?: return null
+                if (!s.equals("http", true) && !s.equals("https", true)) return null
+                val accept = request.requestHeaders?.entries?.firstOrNull { it.key.equals("Accept", true) }?.value ?: return null
+                if (!accept.startsWith("text/html")) return null // immagini, script, XHR/fetch passano come sempre
+                return android.webkit.WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap<String, String>(), java.io.ByteArrayInputStream(ByteArray(0)))
+            }
 
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
                 recreate()
@@ -141,6 +215,11 @@ class MainActivity : ComponentActivity() {
         }
 
         thread(name = "kx-clean") { try { netDir.listFiles()?.forEach { it.delete() } } catch (_: Exception) {} }
+        // registrazioni e VPN: notifiche verso la pagina; le registrazioni programmate vengono riattivate
+        Recorder.ua = userAgent()
+        Recorder.listener = recListener
+        KxVpn.listener = vpnListener
+        try { Recorder.init(this) } catch (_: Throwable) {}
         loadUi()
         web.requestFocus()
 
@@ -208,6 +287,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showPreview(json: String) {
+        if (handoffBusy) return // il video sta passando allo schermo intero: nessuna seconda connessione
         val o = try { JSONObject(json) } catch (e: Exception) { return }
         val vw = o.optDouble("vw", 0.0)
         if (vw <= 0 || web.width == 0) return
@@ -235,7 +315,9 @@ class MainActivity : ComponentActivity() {
         boxAnim?.cancel()
         previewEngine?.stop()
         previewId = ""
-        previewBox.visibility = View.GONE
+        // durante il passaggio allo schermo intero il riquadro ingrandito (ultimo fotogramma) deve restare visibile
+        // finché il player non mostra il video: nasconderlo qui (es. onPause) faceva comparire la pagina web
+        if (!handoffBusy) previewBox.visibility = View.GONE
     }
 
     /* il riquadro dell'anteprima si allarga fino a riempire lo schermo (come nelle app TV) */
@@ -265,6 +347,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun launchPlayer(noAnim: Boolean) {
+        Handoff.host = handoffHost
         val i = Intent(this@MainActivity, PlayerActivity::class.java)
         if (noAnim) playerLauncher.launch(i, androidx.core.app.ActivityOptionsCompat.makeCustomAnimation(this, 0, 0))
         else playerLauncher.launch(i)
@@ -282,20 +365,28 @@ class MainActivity : ComponentActivity() {
                     handed = true
                     growBox {
                         try {
-                            previewBox.removeView(e.view)
-                            e.setOverlay(false)
+                            // Il riquadro, ora a tutto schermo, resta qui con il video (poi con l'ultimo fotogramma)
+                            // finché il player sopra non ha disegnato il video sulla sua superficie: solo allora
+                            // chiama fullShown() e il riquadro sparisce. Prima la vista veniva staccata subito e
+                            // onPause nascondeva il riquadro: si vedeva la pagina/il nero fino al primo fotogramma.
                             e.l = NoopListener
                             Handoff.engine = e
                             Handoff.id = previewId
+                            handoffBusy = true
                             previewEngine = null
                             previewId = ""
                             launchPlayer(noAnim = true)
-                        } catch (x: Exception) { stopPreview(); launchPlayer(false) }
+                        } catch (x: Exception) {
+                            handoffBusy = false
+                            if (Handoff.engine === e) { Handoff.engine = null; previewEngine = e; e.l = previewListener }
+                            stopPreview(); coverUiNow(true); launchPlayer(false)
+                        }
                     }
                 }
             }
         } catch (x: Exception) { handed = false }
-        if (!handed) { Handoff.box = null; stopPreview(); launchPlayer(false) } // uscendo, nessun riquadro in cui tornare
+        // uscendo, nessun riquadro in cui tornare; velo nero: la pagina non lampeggia prima del player
+        if (!handed) { Handoff.box = null; stopPreview(); coverUiNow(true); launchPlayer(false) }
     }
 
     /** layout orizzontale fisso (telefoni e tablet); sulle TV non cambia nulla */
@@ -361,6 +452,8 @@ class MainActivity : ComponentActivity() {
                 if (out.length() < 500_000 || head[0] != 'P'.code.toByte() || head[1] != 'K'.code.toByte()) {
                     out.delete(); throw Exception("il link non porta a un file APK")
                 }
+                // stessa versione (o più vecchia) o firma diversa: l'installer non va aperto (evita il ciclo di aggiornamenti)
+                ApkCheck.verify(this, out)?.let { msg -> out.delete(); throw Exception(msg) }
                 js("window.kxApkCb && kxApkCb(100)")
                 runOnUiThread { launchInstaller(out) }
             } catch (e: Exception) {
@@ -397,74 +490,9 @@ class MainActivity : ComponentActivity() {
     /* ------------------------------------------------------------------ */
     /* Speed test                                                          */
     /* ------------------------------------------------------------------ */
-    @Volatile private var speedRunning = false
-
+    /** ping+jitter, download (6 connessioni) e upload (4 invii): vedi SpeedTest.kt. Una nuova chiamata annulla la precedente. */
     private fun runSpeedTest() {
-        if (speedRunning) return
-        speedRunning = true
-        thread(name = "kx-speed") {
-            fun send(o: JSONObject) = js("window.kxSpeedCb && kxSpeedCb(${JSONObject.quote(o.toString())})")
-            val ua = userAgent()
-            fun open(u: String, timeout: Int): HttpURLConnection = (URL(u).openConnection() as HttpURLConnection).apply {
-                connectTimeout = timeout; readTimeout = timeout; useCaches = false
-                setRequestProperty("User-Agent", ua)
-                setRequestProperty("Accept-Encoding", "identity")
-            }
-            try {
-                // latenza: la migliore di 4 richieste vuote (la prima apre la connessione)
-                var best = Double.MAX_VALUE
-                repeat(4) {
-                    val t0 = System.nanoTime()
-                    val c = open("https://speed.cloudflare.com/__down?bytes=0", 8000)
-                    c.inputStream.use { it.readBytes() }
-                    c.disconnect()
-                    best = minOf(best, (System.nanoTime() - t0) / 1e6)
-                }
-                val ping = best
-                send(JSONObject().put("phase", "download").put("ping", ping).put("mbps", 0))
-                // download: 4 connessioni in parallelo per 8 secondi (misura più vicina alla velocità reale)
-                val total = java.util.concurrent.atomic.AtomicLong(0)
-                val stop = java.util.concurrent.atomic.AtomicBoolean(false)
-                val errors = java.util.concurrent.atomic.AtomicInteger(0)
-                val start = System.nanoTime()
-                val workers = (1..4).map {
-                    thread(name = "kx-speed-$it") {
-                        val buf = ByteArray(128 * 1024)
-                        while (!stop.get()) {
-                            try {
-                                val c = open("https://speed.cloudflare.com/__down?bytes=25000000", 10_000)
-                                c.inputStream.use { input ->
-                                    while (!stop.get()) {
-                                        val n = input.read(buf)
-                                        if (n < 0) break
-                                        total.addAndGet(n.toLong())
-                                    }
-                                }
-                                c.disconnect()
-                            } catch (e: Exception) {
-                                if (errors.incrementAndGet() > 6) break
-                                Thread.sleep(200)
-                            }
-                        }
-                    }
-                }
-                while (true) {
-                    Thread.sleep(250)
-                    val el = (System.nanoTime() - start) / 1e9
-                    val mbps = total.get() * 8.0 / el / 1e6
-                    if (el >= 8.0 || errors.get() > 6) { stop.set(true); break }
-                    send(JSONObject().put("phase", "download").put("ping", ping).put("mbps", mbps).put("p", (el / 8.0 * 100).toInt()))
-                }
-                workers.forEach { it.join(3000) }
-                val sec = (System.nanoTime() - start) / 1e9
-                if (total.get() == 0L) throw Exception("nessun dato ricevuto")
-                send(JSONObject().put("done", true).put("ping", ping).put("mbps", total.get() * 8.0 / sec / 1e6))
-            } catch (e: Exception) {
-                send(JSONObject().put("error", e.message ?: e.javaClass.simpleName))
-            } finally {
-                speedRunning = false
-            }
-        }
+        SpeedTest.start(userAgent()) { s -> js("window.kxSpeedCb && kxSpeedCb(${JSONObject.quote(s)})") }
     }
 
     /* ------------------------------------------------------------------ */
@@ -696,6 +724,65 @@ class MainActivity : ComponentActivity() {
     private fun libFile(key: String) = File(libDir, key.replace(Regex("[^A-Za-z0-9_-]"), "_").take(80) + ".json")
 
     /* ------------------------------------------------------------------ */
+    /* Registrazioni, VPN e sicurezza della WebView                        */
+    /* ------------------------------------------------------------------ */
+    private val recListener: (String) -> Unit = { s -> js("window.kxRecCb && kxRecCb(${JSONObject.quote(s)})") }
+    private val vpnListener: (String, String) -> Unit = { st, msg -> js("window.kxVpnCb && kxVpnCb(${JSONObject.quote(st)}, ${JSONObject.quote(msg)})") }
+
+    /** Android 13+: permesso per la notifica "Registrazione in corso" (se negato la registrazione funziona lo stesso) */
+    private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    private fun askNotifications() {
+        if (Build.VERSION.SDK_INT < 33 || prefs.getBoolean("notif_asked", false)) return
+        if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        prefs.edit().putBoolean("notif_asked", true).apply()
+        try { notifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS) } catch (_: Exception) {}
+    }
+
+    /** consenso di Android per la VPN (VpnService.prepare): la configurazione resta solo in memoria */
+    private var vpnConf: String? = null
+    private val vpnLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val c = vpnConf
+        vpnConf = null
+        if (c != null && res.resultCode == RESULT_OK) KxVpn.start(this, c) else KxVpn.denied()
+    }
+
+    private fun startVpn(conf: String) {
+        val bad = KxVpn.check(conf)
+        if (bad != null) { KxVpn.fail(bad); return }
+        val consent = try { android.net.VpnService.prepare(this) } catch (e: Exception) {
+            KxVpn.fail("Questo dispositivo non permette di usare una VPN"); return
+        }
+        if (consent == null) { KxVpn.start(this, conf); return }
+        vpnConf = conf
+        KxVpn.waitingConsent()
+        try { vpnLauncher.launch(consent) } catch (e: Exception) {
+            vpnConf = null
+            KxVpn.fail("Questo dispositivo non permette di usare una VPN")
+        }
+    }
+
+    /** solo i file dell'app: asset dell'APK o interfaccia aggiornata in files/www (percorso canonico, niente "..") */
+    private fun isAppUrl(u: String): Boolean {
+        if (u.startsWith("file:///android_asset/")) return !u.contains("..")
+        if (!u.startsWith("file://")) return false
+        return try {
+            val p = Uri.parse(u).path ?: return false
+            File(p).canonicalPath.startsWith(otaDir.canonicalPath + File.separator)
+        } catch (_: Exception) { false }
+    }
+
+    private fun openExternal(u: Uri) {
+        val s = u.scheme?.lowercase() ?: return
+        if (s != "http" && s != "https") return
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, u).addCategory(Intent.CATEGORY_BROWSABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Exception) {
+            Toast.makeText(this, "Nessun browser disponibile su questo dispositivo", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
 
     /** Tasti canale +/- del telecomando → zapping nel player */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -746,6 +833,17 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        if (Recorder.listener === recListener) Recorder.listener = null
+        if (KxVpn.listener === vpnListener) KxVpn.listener = null
+        if (isFinishing) {
+            SpeedTest.stop()
+            // uscendo dall'app la VPN (che riguarda solo questa app) si spegne, salvo registrazioni in corso o programmate
+            if (KxVpn.active() && !Recorder.hasWork()) KxVpn.stop()
+            // video passato tra le schermate e non più ripreso da nessuno: niente audio orfano dopo la chiusura
+            Handoff.back?.let { Handoff.back = null; if (it !== previewEngine) it.release() }
+            Handoff.engine?.let { Handoff.engine = null; if (it !== previewEngine) it.release() }
+            if (Handoff.host === handoffHost) Handoff.host = null
+        }
         ui.removeCallbacksAndMessages(null)
         previewEngine?.release()
         previewEngine = null
@@ -759,6 +857,12 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface fun version(): String = BuildConfig.VERSION_NAME
         @JavascriptInterface fun versionCode(): Int = BuildConfig.VERSION_CODE
         @JavascriptInterface fun model(): String = "${Build.MANUFACTURER} ${Build.MODEL}".trim().take(70)
+        /** TV (Android TV / Google TV / Fire TV): la pagina non usa l'interfaccia touch anche se il puntatore è "coarse" */
+        @JavascriptInterface fun isTv(): Boolean = try {
+            (getSystemService(UI_MODE_SERVICE) as android.app.UiModeManager).currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION ||
+                packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK) ||
+                packageManager.hasSystemFeature("amazon.hardware.fire_tv")
+        } catch (_: Exception) { false }
         @JavascriptInterface fun exit() { runOnUiThread { finish() } }
 
         /** l'interfaccia è partita correttamente */
@@ -808,12 +912,32 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface fun previewStop() { runOnUiThread { previewWanted = false; stopPreview() } }
         @JavascriptInterface fun installApk(url: String) { downloadAndInstall(url) }
         @JavascriptInterface fun speedTest() { runSpeedTest() }
+        /** ferma lo speed test in corso (es. finestra chiusa) */
+        @JavascriptInterface fun speedStop() { SpeedTest.stop() }
+
+        /** registrazione: json {chId, name, url, at?, until?} (epoch ms) → id, "" se non valida. Aggiornamenti in window.kxRecCb(lista JSON) */
+        @JavascriptInterface fun recStart(json: String): String {
+            val o = try { JSONObject(json) } catch (e: Exception) { return "" }
+            val id = Recorder.start(this@MainActivity, o.optString("chId"), o.optString("name"), o.optString("url"), o.optLong("at", 0L), o.optLong("until", 0L))
+            if (id.isNotEmpty()) runOnUiThread { askNotifications() }
+            return id
+        }
+        @JavascriptInterface fun recStop(id: String) { Recorder.stop(this@MainActivity, id) }
+        @JavascriptInterface fun recList(): String = Recorder.listJson()
+        @JavascriptInterface fun recDelete(id: String): Boolean = Recorder.delete(this@MainActivity, id)
+        @JavascriptInterface fun recFree(): String = Recorder.freeJson(this@MainActivity)
+
+        /** VPN WireGuard (testo wg-quick dal pannello). Stato in window.kxVpnCb(state, message) */
+        @JavascriptInterface fun vpnSupported(): Boolean = KxVpn.supported(this@MainActivity)
+        @JavascriptInterface fun vpnStart(conf: String) { runOnUiThread { startVpn(conf) } }
+        @JavascriptInterface fun vpnStop() { KxVpn.stop() }
+        @JavascriptInterface fun vpnState(): String = KxVpn.state
 
         /** scarica un indirizzo in un file locale; risposta in window.kxFileCb(id, status, path, error) */
         @JavascriptInterface fun httpFile(id: String, url: String, ua: String) { fetchToFile(id, url, ua) }
         /** cancella un file scaricato con httpFile */
         @JavascriptInterface fun dropFile(path: String) {
-            try { val f = File(Uri.parse(path).path ?: return); if (f.absolutePath.startsWith(netDir.absolutePath)) f.delete() } catch (_: Exception) {}
+            try { val f = File(Uri.parse(path).path ?: return).canonicalFile; if (f.path.startsWith(netDir.canonicalPath + File.separator)) f.delete() } catch (_: Exception) {}
         }
         /** cache della libreria (canali, film, serie) per un avvio istantaneo */
         @JavascriptInterface fun cachePut(key: String, data: String) {
@@ -873,11 +997,13 @@ class MainActivity : ComponentActivity() {
                     }
                     conn.disconnect()
                     text = out.toString("UTF-8")
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     status = -1
-                    text = e.javaClass.simpleName + (e.message?.let { ": $it" } ?: "")
+                    // dispositivi con poca memoria: una risposta enorme non deve chiudere l'app
+                    text = if (e is OutOfMemoryError) "risposta troppo grande per la memoria del dispositivo" else e.javaClass.simpleName + (e.message?.let { ": $it" } ?: "")
                 }
-                val js = "window.kxHttpCb && window.kxHttpCb(${JSONObject.quote(id)}, $status, ${JSONObject.quote(text)})"
+                val js = try { "window.kxHttpCb && window.kxHttpCb(${JSONObject.quote(id)}, $status, ${JSONObject.quote(text)})" }
+                    catch (e: OutOfMemoryError) { "window.kxHttpCb && window.kxHttpCb(${JSONObject.quote(id)}, -1, 'risposta troppo grande per la memoria del dispositivo')" }
                 runOnUiThread { if (::web.isInitialized) web.evaluateJavascript(js, null) }
             }
         }

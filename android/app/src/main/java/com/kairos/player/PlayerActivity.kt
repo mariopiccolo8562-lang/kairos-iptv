@@ -3,13 +3,18 @@ package com.kairos.player
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
@@ -17,9 +22,13 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.WebSettings
+import android.widget.AbsListView
+import android.widget.BaseAdapter
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ListView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -41,8 +50,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         private val ACCENT = Color.parseColor("#E5202B")
     }
 
-    /** e = guida: [titolo ora, inizio, fine (secondi), titolo dopo, inizio dopo] */
-    private data class Item(val id: String, val title: String, val url: String, val alt: String, val num: Int, val group: String, val epg: org.json.JSONArray?)
+    /** e = guida: [titolo ora, inizio, fine (secondi), titolo dopo, inizio dopo]; logo = indirizzo del logo (può mancare) */
+    private data class Item(val id: String, val title: String, val url: String, val alt: String, val num: Int, val group: String, val epg: org.json.JSONArray?, val logo: String = "")
 
     private val ui = Handler(Looper.getMainLooper())
     private lateinit var root: FrameLayout
@@ -82,6 +91,12 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private var autoNext = false
     private var engineKey = ""
     private lateinit var resView: TextView
+    private lateinit var tRec: TextView
+    private var bRec: TextView? = null
+    private var dialog: AlertDialog? = null
+    /** canale in onda (per «canale precedente») e quello visto prima */
+    private var playingIndex = -1
+    private var prevIndex = -1
 
     private val item: Item get() = items[index]
     private val isLive: Boolean get() = kind == "live"
@@ -92,7 +107,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         Handoff.engine = null
         val payload = pending
         pending = null
-        if (payload == null) { handed?.release(); finish(); return }
+        // chiusura immediata: nessun tasto o evento deve toccare l'interfaccia mai costruita
+        if (payload == null) { closing = true; handed?.release(); finish(); return }
         try {
             val j = JSONObject(payload)
             kind = j.optString("kind", "live")
@@ -109,11 +125,12 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             val arr = j.getJSONArray("items")
             items = (0 until arr.length()).map {
                 val o = arr.getJSONObject(it)
-                Item(o.optString("id"), o.optString("t"), o.optString("u"), o.optString("a"), o.optInt("n"), o.optString("g"), o.optJSONArray("e"))
+                Item(o.optString("id"), o.optString("t"), o.optString("u"), o.optString("a"), o.optInt("n"), o.optString("g"), o.optJSONArray("e"), o.optString("l"))
             }
-        } catch (e: Exception) { handed?.release(); finish(); return }
-        if (items.isEmpty()) { handed?.release(); finish(); return }
+        } catch (e: Exception) { closing = true; handed?.release(); finish(); return }
+        if (items.isEmpty()) { closing = true; handed?.release(); finish(); return }
         index = index.coerceIn(0, items.size - 1)
+        playingIndex = index
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         @Suppress("DEPRECATION") overridePendingTransition(0, 0)
@@ -128,11 +145,22 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             if (prefs.quality != "auto") h.selectQuality(prefs.quality) // rispetta la qualità scelta nelle impostazioni
             engineName = h.name
             currentUrl = h.playingUrl.ifEmpty { item.url }
+            // Questa finestra è trasparente: sotto resta l'anteprima ingrandita a tutto schermo con il video.
+            // La nuova vista parte minuscola (la sua superficie, finché è vuota, sarebbe nera: tendina del player
+            // e sfondo nero delle SurfaceView da Android 10) e si allarga solo quando ha disegnato il primo
+            // fotogramma; allora l'anteprima sotto viene tolta. Niente sparizione/ricomparsa del video.
+            root.setBackgroundColor(Color.TRANSPARENT)
+            handoffPending = true
+            val v = h.moveTo(this, false, 1500L) { completeHandoff(false) }
             h.setAspect(aspect)
             h.setSubtitleScale(subScale)
-            root.addView(h.view, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
+            root.addView(v, 0, FrameLayout.LayoutParams(4, 4, Gravity.TOP or Gravity.START))
         } else {
-            h?.release()
+            if (h != null) {
+                h.release()
+                // l'anteprima ingrandita resta sotto questa finestra (nera): la si toglie quando questa è sullo schermo
+                ui.postDelayed({ Handoff.host?.fullShown() }, 400)
+            }
             startEngine(engineName)
             playCurrent(resumeMs)
         }
@@ -140,9 +168,37 @@ class PlayerActivity : ComponentActivity(), EngineListener {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (osd.visibility == View.VISIBLE && bar.hasFocus()) hideOsd() else finishWithResult()
+                when {
+                    closing -> {}
+                    listOpen -> closeList()
+                    osd.visibility == View.VISIBLE && bar.hasFocus() -> hideOsd()
+                    else -> finishWithResult()
+                }
             }
         })
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Passaggio dall'anteprima                                            */
+    /* ------------------------------------------------------------------ */
+    private var handoffPending = false
+    private var dropPending: Runnable? = null
+
+    /** il video è visibile qui (o è scaduta l'attesa): vista a tutto schermo, poi via l'anteprima che sta sotto.
+     *  [now] = subito (chiusura, cambio motore, uscita dall'app), senza attendere il disegno del fotogramma. */
+    private fun completeHandoff(now: Boolean) {
+        if (handoffPending) {
+            handoffPending = false
+            val e = adopted
+            val v = e?.view
+            if (v != null && v.parent === root) v.layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER)
+            root.setBackgroundColor(Color.BLACK)
+            val r = Runnable { dropPending = null; e?.dropOldView(); Handoff.host?.fullShown() }
+            dropPending = r
+            // un attimo per far arrivare sullo schermo questa finestra a tutto schermo, poi l'anteprima (coperta) sparisce
+            if (!now) { ui.postDelayed(r, 150); return }
+        }
+        if (now) dropPending?.let { ui.removeCallbacks(it); it.run() }
     }
 
     /* ------------------------------------------------------------------ */
@@ -180,7 +236,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private fun buildUi() {
         root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         setContentView(root)
-        root.setOnClickListener { if (osd.visibility == View.VISIBLE) hideOsd() else showOsd(true) }
+        root.setOnClickListener { if (listOpen) closeList() else if (osd.visibility == View.VISIBLE) hideOsd() else showOsd(true) }
 
         spinner = ProgressBar(this).apply {
             isIndeterminate = true
@@ -228,7 +284,17 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             setPadding(dp(8), dp(3), dp(8), dp(3))
             background = GradientDrawable().apply { cornerRadius = dp(4).toFloat(); setColor(ACCENT) }
         }
-        val badgeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; addView(tBadge) }
+        // registrazione in corso del canale in onda
+        tRec = text(12f, Color.WHITE, true).apply {
+            text = "● REC"
+            letterSpacing = 0.2f
+            setPadding(dp(8), dp(3), dp(8), dp(3))
+            background = GradientDrawable().apply { cornerRadius = dp(4).toFloat(); setColor(Color.argb(200, 0, 0, 0)); setStroke(dp(1), Color.parseColor("#FF3B3B")) }
+            setTextColor(Color.parseColor("#FF3B3B"))
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(10) }
+            visibility = View.GONE
+        }
+        val badgeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; addView(tBadge); addView(tRec) }
         tTitle = text(30f, Color.WHITE, true).apply { maxLines = 1; setPadding(0, dp(8), 0, 0) }
         tSub = text(16f, Color.argb(200, 255, 255, 255))
         tEpg = text(17f, Color.WHITE).apply { setPadding(0, dp(8), 0, 0); maxLines = 3 }
@@ -241,8 +307,12 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         tTime = text(13f, Color.argb(190, 255, 255, 255)).apply { setPadding(0, dp(6), 0, dp(14)) }
 
         bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        bPause = button("Pausa") { engine?.togglePause(); ui.postDelayed({ updatePauseLabel() }, 150) }
+        bPause = button("Pausa") { commitSeek(); engine?.togglePause(); ui.postDelayed({ updatePauseLabel() }, 150) }
         if (!isLive) bar.addView(bPause)
+        if (isLive) {
+            bar.addView(button("Lista canali") { openList() })
+            bRec = button("Registra") { toggleRecording() }.also { bar.addView(it) }
+        }
         bar.addView(button("Audio") { menuAudio() })
         bar.addView(button("Qualità") { menuQuality() })
         bar.addView(button("Sottotitoli") { menuSubtitles() })
@@ -250,8 +320,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         bEngine = button("") { menuEngine() }
         bar.addView(bEngine)
         if (!isLive) {
-            bar.addView(button("−10 s") { engine?.seekBy(-10_000) })
-            bar.addView(button("+30 s") { engine?.seekBy(30_000) })
+            bar.addView(button("−10 s") { seekAdd(-10_000) })
+            bar.addView(button("+30 s") { seekAdd(30_000) })
         }
         val scroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(bar) }
 
@@ -286,11 +356,12 @@ class PlayerActivity : ComponentActivity(), EngineListener {
 
     private val hideRunnable = Runnable { hideOsd() }
     private val tickRunnable = object : Runnable {
-        override fun run() { updateTime(); updateRes(); ui.postDelayed(this, 1000) }
+        override fun run() { updateTime(); updateRes(); updateRec(); ui.postDelayed(this, 1000) }
     }
 
     private fun showOsd(focusBar: Boolean) {
         if (closing) return
+        if (listOpen) closeList()
         updateInfo()
         ui.postDelayed({ updateRes() }, 30)
         // annulla una chiusura in corso (altrimenti al termine lo nasconderebbe)
@@ -349,8 +420,10 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             if (e.length() >= 5 && e.optString(3).isNotBlank()) t += "\nDopo  ${f.format(java.util.Date(e.optLong(4) * 1000))}   ${e.optString(3)}"
             tEpg.text = t; tEpg.visibility = View.VISIBLE
             if (e0 > s0) { progress.visibility = View.VISIBLE; progress.progress = (((now - s0) * 1000) / (e0 - s0)).toInt().coerceIn(0, 1000) }
+            else progress.visibility = View.GONE
         } else tEpg.visibility = View.GONE
         bEngine.text = "Motore: ${engineLabel(engineName)}"
+        updateRec()
         if (!isLive) progress.visibility = View.VISIBLE else if (tEpg.visibility != View.VISIBLE) progress.visibility = View.GONE
         updatePauseLabel()
         updateTime()
@@ -366,11 +439,17 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private fun updateTime() {
         val e = engine ?: return
         if (isLive) {
-            tTime.text = "▲▼ cambia canale  ·  OK menu  ·  Indietro per uscire"
+            tTime.text = "▲▼ cambia canale   ·   OK menu   ·   OK a schermo pulito: lista canali   ·   Indietro per uscire"
         } else {
-            val d = e.duration(); val p = e.position()
-            progress.progress = if (d > 0) ((p * 1000) / d).toInt() else 0
-            tTime.text = "${fmt(p)} / ${if (d > 0) fmt(d) else "--:--"}   ·   ◀ −10 s   ▶ +30 s   ·   OK menu"
+            val d = e.duration()
+            val cur = e.position()
+            val pending = seekTarget >= 0
+            var p = if (pending) seekTarget else cur
+            // subito dopo il salto alcuni motori riportano ancora la posizione vecchia: si mostra quella scelta
+            if (!pending && seekHold >= 0) { if (SystemClock.uptimeMillis() < seekHoldUntil && kotlin.math.abs(cur - seekHold) > 3000) p = seekHold else seekHold = -1L }
+            progress.progress = if (d > 0) ((p * 1000) / d).toInt().coerceIn(0, 1000) else 0
+            val jump = if (pending) "   (${if (seekTarget >= cur) "▶▶ +" else "◀◀ −"}${fmt(kotlin.math.abs(seekTarget - cur))})" else ""
+            tTime.text = "${fmt(p)} / ${if (d > 0) fmt(d) else "--:--"}$jump   ·   ◀ ▶ cerca (tieni premuto: più veloce)   ·   OK menu"
         }
     }
 
@@ -389,20 +468,37 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     } catch (e: Exception) { "Mozilla/5.0 (Linux; Android) KairosPlayer/" + BuildConfig.VERSION_NAME }
 
     private fun startEngine(name: String) {
+        completeHandoff(true) // il video dell'anteprima viene sostituito: l'anteprima sotto va tolta subito
+        ui.removeCallbacks(seekCommit); seekTarget = -1L; seekHold = -1L
         engine?.let { root.removeView(it.view); it.release() }
-        val e: Engine = try {
-            if (name == "vlc") VlcEngine(this, this, "", prefs.copy(aspect = aspect)) else ExoEngine(this, this, userAgent(), prefs.copy(aspect = aspect))
-        } catch (t: Throwable) {
+        engine = null
+        fun make(n: String): Engine = if (n == "vlc") VlcEngine(this, this, "", prefs.copy(aspect = aspect)) else ExoEngine(this, this, userAgent(), prefs.copy(aspect = aspect))
+        val e: Engine? = try { make(name) } catch (t: Throwable) {
             // se un motore non si avvia su questo dispositivo, usa l'altro
-            if (name == "vlc") ExoEngine(this, this, userAgent(), prefs.copy(aspect = aspect)) else VlcEngine(this, this, "", prefs.copy(aspect = aspect))
+            try { make(if (name == "vlc") "exo" else "vlc") } catch (t2: Throwable) { null }
         }
+        if (e == null) { spinner.visibility = View.GONE; showMsg("Impossibile avviare il player su questo dispositivo"); return }
         engineName = e.name
         engine = e
         (e as? ExoEngine)?.setSubtitleScale(subScale)
         root.addView(e.view, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
     }
 
+    /** segna il canale [index] come quello in onda (il precedente diventa «canale precedente») */
+    private fun markPlaying() {
+        if (playingIndex != index) {
+            if (playingIndex in items.indices) prevIndex = playingIndex
+            playingIndex = index
+        }
+        listChanged()
+    }
+
+    /** il numero di righe della lista dipende da canale scelto/precedente (riga «↩»): l'adattatore va avvisato
+     *  a ogni cambio, altrimenti ListView lancia IllegalStateException al primo ridisegno (es. mentre si chiude) */
+    private fun listChanged() { if (::listPanel.isInitialized) listAdapter.notifyDataSetChanged() }
+
     private fun playCurrent(startMs: Long) {
+        markPlaying()
         triedAlt = false; triedFallback = false; retries = 0
         startUrl(item.url, startMs)
     }
@@ -420,6 +516,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private fun zap(delta: Int) {
         if (items.size < 2) return
         index = (index + delta + items.size) % items.size
+        listChanged()
         veil.animate().cancel()
         veil.animate().alpha(0.55f).setDuration(120).start()
         ui.removeCallbacks(zapPlay)
@@ -444,14 +541,37 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         val n = numBuf.toIntOrNull(); numBuf = ""
         zapView.visibility = View.GONE
         val i = items.indexOfFirst { it.num == n }
-        if (i >= 0 && i != index) { index = i; veil.animate().alpha(0.55f).setDuration(120).start(); playCurrent(0); showOsd(false) } else if (n != null) toast("Canale $n non trovato")
+        if (i >= 0 && i != index) jumpTo(i) else if (n != null && i < 0) toast("Canale $n non trovato")
+    }
+
+    /** salto diretto a un canale (numero, lista canali, canale precedente): parte subito, stessa strada dello zapping */
+    private fun jumpTo(i: Int) {
+        if (i !in items.indices || closing) return
+        ui.removeCallbacks(zapPlay); zapPending = false
+        index = i
+        listChanged()
+        veil.animate().cancel()
+        veil.animate().alpha(0.55f).setDuration(120).start()
+        playCurrent(0)
+        showOsd(false)
+        flashNumber(if (item.num > 0) item.num.toString() else "")
+    }
+
+    private fun hasPrev(): Boolean = prevIndex in items.indices && prevIndex != index
+
+    /** tasto «canale precedente» (LAST): alterna tra gli ultimi due canali visti */
+    private fun previousChannel() {
+        if (!isLive) return
+        // durante uno zapping non ancora partito, «precedente» è il canale ancora in onda
+        val t = if (zapPending && playingIndex in items.indices && playingIndex != index) playingIndex else prevIndex
+        if (t in items.indices && t != index) jumpTo(t) else toast("Nessun canale precedente")
     }
 
     private fun switchEngine(name: String, byUser: Boolean) {
-        val pos = if (isLive) 0L else engine?.position() ?: 0L
+        val pos = if (isLive) 0L else if (seekTarget >= 0) seekTarget else engine?.position() ?: 0L
         if (byUser) userChangedEngine = true
         startEngine(name)
-        startUrl(currentUrl, pos)
+        if (engine != null) startUrl(currentUrl, pos)
         updateInfo()
     }
 
@@ -486,10 +606,10 @@ class PlayerActivity : ComponentActivity(), EngineListener {
                     val other = if (engineName == "vlc") "exo" else "vlc"
                     toast("Provo con ${engineLabel(other)}…")
                     startEngine(other)
-                    startUrl(currentUrl, pos)
+                    if (engine != null) startUrl(currentUrl, pos)
                     updateInfo()
                 }
-                isLive && retries < 3 -> { retries++; ui.postDelayed({ startUrl(currentUrl, 0) }, 1500L * retries) }
+                isLive && retries < 3 -> { retries++; ui.postDelayed({ if (!closing) startUrl(currentUrl, 0) }, 1500L * retries) }
                 else -> { spinner.visibility = View.GONE; showMsg("Impossibile riprodurre questo contenuto\n($message)") }
             }
         }
@@ -500,11 +620,13 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     /* ------------------------------------------------------------------ */
     private fun choose(title: String, list: List<Track>, empty: String, onPick: (Track) -> Unit) {
         if (list.isEmpty()) { toast(empty); return }
+        if (closing || isFinishing) return
         val labels = list.map { it.label }.toTypedArray()
         val checked = list.indexOfFirst { it.selected }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        try { dialog?.dismiss() } catch (_: Exception) {}
+        dialog = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle(title)
-            .setSingleChoiceItems(labels, checked) { d, which -> onPick(list[which]); d.dismiss(); touchOsd() }
+            .setSingleChoiceItems(labels, checked) { d, which -> d.dismiss(); if (!closing && which in list.indices) { onPick(list[which]); touchOsd() } }
             .setNegativeButton("Chiudi", null)
             .show()
     }
@@ -538,6 +660,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     /* ------------------------------------------------------------------ */
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (closing) return true
+        if (listOpen && listKey(keyCode, event)) return true
         val barFocused = osd.visibility == View.VISIBLE && bar.hasFocus()
         if (barFocused) {
             touchOsd()
@@ -550,21 +673,453 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_PAGE_UP -> if (isLive) zap(-1) else showOsd(false)
             KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_PAGE_DOWN -> if (isLive) zap(1) else showOsd(true)
-            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> if (isLive) showOsd(false) else { engine?.seekBy(-10_000); showOsd(false) }
-            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> if (isLive) showOsd(false) else { engine?.seekBy(30_000); showOsd(false) }
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_INFO -> showOsd(true)
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE, KeyEvent.KEYCODE_SPACE -> { engine?.togglePause(); showOsd(false) }
+            // film: le pressioni si sommano e il salto avviene quando smetti di premere (un solo caricamento)
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> if (isLive) showOsd(false) else seekStep(-1, event)
+            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> if (isLive) showOsd(false) else seekStep(1, event)
+            // diretta a schermo pulito: OK apre la lista canali (come nelle app TV); con le info visibili apre il menu
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> if (isLive && osd.visibility != View.VISIBLE) openList() else showOsd(true)
+            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_INFO -> showOsd(true)
+            KeyEvent.KEYCODE_GUIDE -> if (isLive) openList() else showOsd(true)
+            KeyEvent.KEYCODE_LAST_CHANNEL -> previousChannel()
+            KeyEvent.KEYCODE_PROG_RED, KeyEvent.KEYCODE_MEDIA_RECORD -> if (isLive) { toggleRecording(); showOsd(false) }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE, KeyEvent.KEYCODE_SPACE -> { commitSeek(); engine?.togglePause(); showOsd(false) }
             KeyEvent.KEYCODE_CAPTIONS -> menuSubtitles()
             KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK -> menuAudio()
             in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> {
                 if (!isLive) return true
+                if (numBuf.length >= 5) numBuf = ""
                 numBuf += (keyCode - KeyEvent.KEYCODE_0).toString()
                 zapView.text = numBuf; zapView.visibility = View.VISIBLE
-                ui.removeCallbacks(numRunnable); ui.postDelayed(numRunnable, 1500)
+                ui.removeCallbacks(numRunnable)
+                // se nessun canale ha un numero più lungo che inizia così, si parte quasi subito
+                val b = numBuf
+                val more = items.any { it.num > 0 && it.num.toString().let { s -> s.length > b.length && s.startsWith(b) } }
+                ui.postDelayed(numRunnable, if (more) 1500L else 400L)
             }
             else -> return super.onKeyDown(keyCode, event)
         }
         return true
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Ricerca nei film: pressioni accumulate, un solo salto               */
+    /* ------------------------------------------------------------------ */
+    private var seekTarget = -1L
+    private var seekDir = 0
+    private var seekStreak = 0
+    private var seekLastPress = 0L
+    private var seekHold = -1L
+    private var seekHoldUntil = 0L
+    private val seekCommit = Runnable { commitSeek() }
+
+    /** Sinistra/Destra (anche tenuti premuti): il passo cresce 10 s → 30 s → 1 min → 3 min */
+    private fun seekStep(dir: Int, event: KeyEvent?) {
+        val e = engine ?: return
+        val now = SystemClock.uptimeMillis()
+        val repeat = event != null && event.repeatCount > 0
+        if (repeat && now - seekLastPress < 140) return // tasto tenuto: un passo ogni 140 ms circa
+        if (dir != seekDir || now - seekLastPress > 1500) seekStreak = 0
+        seekDir = dir
+        seekLastPress = now
+        seekStreak++
+        val step = when {
+            seekStreak <= 3 -> 10_000L
+            seekStreak <= 6 -> 30_000L
+            seekStreak <= 10 -> 60_000L
+            else -> 180_000L
+        }
+        seekAdd(dir * step, e)
+    }
+
+    /** aggiunge [delta] alla posizione scelta (mostrata subito); il salto vero parte 450 ms dopo l'ultima pressione */
+    private fun seekAdd(delta: Long, eng: Engine? = engine) {
+        val e = eng ?: return
+        if (closing) return
+        val d = e.duration()
+        val base = if (seekTarget >= 0) seekTarget else e.position()
+        var t = maxOf(0L, base + delta)
+        if (d > 0) t = minOf(t, maxOf(0L, d - 2000))
+        seekTarget = t
+        ui.removeCallbacks(seekCommit)
+        ui.postDelayed(seekCommit, 450)
+        showOsd(false)
+    }
+
+    private fun commitSeek() {
+        ui.removeCallbacks(seekCommit)
+        val t = seekTarget
+        seekTarget = -1L
+        if (t < 0) return
+        val e = engine ?: return
+        e.seekTo(t)
+        seekHold = t
+        seekHoldUntil = SystemClock.uptimeMillis() + 1500
+        if (::osd.isInitialized && osd.visibility == View.VISIBLE) updateTime()
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Registrazione                                                       */
+    /* ------------------------------------------------------------------ */
+    private fun recIdOf(chId: String): String? = try { Recorder.activeFor(chId) } catch (_: Throwable) { null }
+
+    private fun toggleRecording() {
+        if (!isLive || closing) return
+        val ch = item
+        try {
+            val active = recIdOf(ch.id)
+            if (active != null) {
+                Recorder.stop(this, active)
+                toast("Registrazione fermata: ${ch.title}")
+            } else {
+                val id = Recorder.start(this, ch.id, ch.title, ch.url)
+                toast(if (id.isNotEmpty()) "Registrazione avviata: ${ch.title}" else "Impossibile avviare la registrazione")
+            }
+        } catch (t: Throwable) {
+            toast("Registrazione non disponibile")
+        }
+        updateRec()
+    }
+
+    private fun updateRec() {
+        if (!::tRec.isInitialized) return
+        val on = isLive && recIdOf(item.id) != null
+        tRec.visibility = if (on) View.VISIBLE else View.GONE
+        bRec?.text = if (on) "Ferma registrazione" else "Registra"
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Lista canali (OK durante la diretta)                                */
+    /* ------------------------------------------------------------------ */
+    private var listOpen = false
+    private var listSel = 0
+    private lateinit var listPanel: LinearLayout
+    private lateinit var listTitle: TextView
+    private lateinit var listView: ListView
+    private val listAdapter = ChannelAdapter()
+    private val listHide = Runnable { closeList() }
+    private val rowH: Int get() = dp(66)
+
+    /** riga dell'elenco ↔ canale: con un canale precedente, la prima riga è «↩ Canale precedente» */
+    private fun listOffset(): Int = if (hasPrev()) 1 else 0
+    private fun idxOf(pos: Int): Int = if (hasPrev() && pos == 0) prevIndex else pos - listOffset()
+
+    private fun buildList() {
+        if (::listPanel.isInitialized) return
+        val w = (resources.displayMetrics.widthPixels * 0.40f).toInt().coerceIn(dp(300), dp(560))
+        listPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(22), dp(12), dp(14))
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(Color.argb(246, 8, 8, 12), Color.argb(228, 10, 10, 14)))
+            layoutParams = FrameLayout.LayoutParams(w, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.START)
+            visibility = View.GONE
+            isClickable = true // i tocchi sul pannello non arrivano allo schermo sotto
+        }
+        listTitle = text(14f, Color.argb(220, 255, 255, 255), true).apply {
+            letterSpacing = 0.14f
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setPadding(dp(10), 0, dp(6), dp(12))
+        }
+        listView = ListView(this).apply {
+            divider = null
+            dividerHeight = 0
+            isVerticalScrollBarEnabled = false
+            setSelector(ColorDrawable(Color.TRANSPARENT))
+            cacheColorHint = Color.TRANSPARENT
+            isFocusable = false
+            isFocusableInTouchMode = false
+            itemsCanFocus = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+            adapter = listAdapter
+            setOnItemClickListener { _, _, pos, _ -> pickList(pos) }
+            setOnScrollListener(object : AbsListView.OnScrollListener {
+                override fun onScrollStateChanged(view: AbsListView?, scrollState: Int) { if (listOpen) touchList() }
+                override fun onScroll(view: AbsListView?, firstVisibleItem: Int, visibleItemCount: Int, totalItemCount: Int) {}
+            })
+        }
+        listPanel.addView(listTitle)
+        listPanel.addView(listView)
+        root.addView(listPanel, root.indexOfChild(spinner).coerceAtLeast(0))
+    }
+
+    private fun openList() {
+        if (!isLive || items.isEmpty() || closing) return
+        buildList()
+        hideOsd()
+        currentFocus?.clearFocus()
+        listOpen = true
+        listSel = index + listOffset()
+        listTitle.text = (if (item.group.isNotBlank()) item.group.uppercase(Locale.ITALIAN) + "  ·  " else "") + "${items.size} CANALI"
+        listAdapter.notifyDataSetChanged()
+        listPanel.animate().cancel()
+        listPanel.visibility = View.VISIBLE
+        listPanel.alpha = 0f
+        listPanel.translationX = -dp(36).toFloat()
+        listPanel.animate().alpha(1f).translationX(0f).setStartDelay(0).setDuration(170).start()
+        centerList()
+        listView.post { if (listOpen) centerList() } // dopo la prima misura la posizione è esatta
+        touchList()
+    }
+
+    private fun closeList() {
+        ui.removeCallbacks(listHide)
+        if (!listOpen) return
+        listOpen = false
+        listPanel.animate().cancel()
+        listPanel.animate().alpha(0f).translationX(-dp(36).toFloat()).setStartDelay(0).setDuration(140)
+            .withEndAction { if (!listOpen) { listPanel.visibility = View.GONE; listPanel.alpha = 1f; listPanel.translationX = 0f } }.start()
+    }
+
+    private fun touchList() { ui.removeCallbacks(listHide); ui.postDelayed(listHide, 8000) }
+
+    /** la riga scelta resta al centro: scorrimento immediato anche con migliaia di canali */
+    private fun centerList() {
+        val h = listView.height.takeIf { it > 0 } ?: (root.height - dp(70)).coerceAtLeast(rowH)
+        listView.setSelectionFromTop(listSel.coerceIn(0, maxOf(0, listAdapter.count - 1)), ((h - rowH) / 2).coerceAtLeast(0))
+    }
+
+    private fun moveSel(delta: Int) {
+        val n = listAdapter.count
+        if (n == 0) return
+        listSel = ((listSel + delta) % n + n) % n
+        listAdapter.notifyDataSetChanged()
+        centerList()
+        touchList()
+    }
+
+    private fun pickList(pos: Int) {
+        val i = idxOf(pos)
+        closeList()
+        if (i !in items.indices) return
+        if (i == index && !zapPending) { showOsd(false); return }
+        jumpTo(i)
+    }
+
+    /** tasti con la lista aperta; false = il tasto prosegue normalmente */
+    private fun listKey(keyCode: Int, event: KeyEvent): Boolean {
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> moveSel(if (event.repeatCount > 15) -3 else -1)
+            KeyEvent.KEYCODE_DPAD_DOWN -> moveSel(if (event.repeatCount > 15) 3 else 1)
+            KeyEvent.KEYCODE_PAGE_UP, KeyEvent.KEYCODE_CHANNEL_UP -> moveSel(-8)
+            KeyEvent.KEYCODE_PAGE_DOWN, KeyEvent.KEYCODE_CHANNEL_DOWN -> moveSel(8)
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> { if (event.repeatCount == 0) pickList(listSel) }
+            KeyEvent.KEYCODE_DPAD_LEFT -> closeList()
+            KeyEvent.KEYCODE_DPAD_RIGHT -> touchList()
+            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_INFO -> { closeList(); showOsd(true) }
+            KeyEvent.KEYCODE_BACK -> return false // chiude la lista tramite il gestore di Indietro
+            KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_MUTE, KeyEvent.KEYCODE_MUTE -> return false
+            else -> { closeList(); return false }
+        }
+        return true
+    }
+
+    /** programma in onda: titolo e avanzamento 0..1000 (-1 = sconosciuto) */
+    private fun nowOf(it: Item): Pair<String, Int> {
+        val e = it.epg ?: return "" to -1
+        val now = System.currentTimeMillis() / 1000
+        val t0 = e.optString(0)
+        val s0 = e.optLong(1); val e0 = e.optLong(2)
+        if (t0.isNotBlank() && (e0 <= 0 || now < e0)) {
+            val f = if (e0 > s0 && s0 > 0) (((now - s0) * 1000) / (e0 - s0)).toInt().coerceIn(0, 1000) else -1
+            return t0 to f
+        }
+        // il programma indicato è finito: ora va in onda il successivo
+        val t1 = if (e.length() >= 4) e.optString(3) else ""
+        return t1 to -1
+    }
+
+    private class Row(val root: LinearLayout, val num: TextView, val logo: ImageView, val letter: TextView, val name: TextView, val prog: TextView, val bar: ProgressBar, val selBg: GradientDrawable)
+
+    private fun makeRow(): Row {
+        val r = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(6), 0, dp(12), 0)
+            layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, rowH)
+        }
+        val num = TextView(this).apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            maxLines = 1
+            layoutParams = LinearLayout.LayoutParams(dp(48), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(12) }
+        }
+        val box = FrameLayout(this).apply {
+            background = GradientDrawable().apply { cornerRadius = dp(8).toFloat(); setColor(Color.argb(34, 255, 255, 255)) }
+            layoutParams = LinearLayout.LayoutParams(dp(60), dp(44)).apply { marginEnd = dp(14) }
+        }
+        val letter = TextView(this).apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.argb(210, 255, 255, 255))
+            gravity = Gravity.CENTER
+            layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        val logo = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setPadding(dp(5), dp(4), dp(5), dp(4))
+            layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            visibility = View.GONE
+        }
+        box.addView(letter)
+        box.addView(logo)
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val name = TextView(this).apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            typeface = Typeface.DEFAULT_BOLD
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        val prog = TextView(this).apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTextColor(Color.argb(175, 255, 255, 255))
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 1000
+            progressTintList = ColorStateList.valueOf(ACCENT)
+            progressBackgroundTintList = ColorStateList.valueOf(Color.argb(60, 255, 255, 255))
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(3)).apply { topMargin = dp(5) }
+        }
+        col.addView(name)
+        col.addView(prog)
+        col.addView(bar)
+        r.addView(num)
+        r.addView(box)
+        r.addView(col)
+        val sel = GradientDrawable().apply { cornerRadius = dp(10).toFloat(); setColor(Color.argb(52, 255, 255, 255)); setStroke(dp(2), ACCENT) }
+        return Row(r, num, logo, letter, name, prog, bar, sel).also { r.tag = it }
+    }
+
+    private fun bindRow(row: Row, pos: Int) {
+        val prevRow = hasPrev() && pos == 0
+        val i = idxOf(pos)
+        val it = items.getOrNull(i) ?: return
+        val playing = !prevRow && i == index
+        row.num.text = if (prevRow) "↩" else if (it.num > 0) it.num.toString() else ""
+        row.num.setTextColor(if (playing) ACCENT else Color.argb(170, 255, 255, 255))
+        row.name.text = if (prevRow) "Canale precedente: ${it.title}" else it.title
+        row.name.setTextColor(if (playing) ACCENT else Color.WHITE)
+        val (title, frac) = nowOf(it)
+        row.prog.text = title.ifBlank { it.group }
+        row.prog.visibility = if (row.prog.text.isNullOrBlank()) View.GONE else View.VISIBLE
+        if (frac >= 0) { row.bar.visibility = View.VISIBLE; row.bar.progress = frac } else row.bar.visibility = View.INVISIBLE
+        row.root.background = if (pos == listSel) row.selBg else null
+        // logo (scaricato in sottofondo e tenuto in memoria) oppure l'iniziale del nome
+        val clean = it.title.substringAfter('|', it.title).trim()
+        row.letter.text = (clean.firstOrNull { c -> c.isLetterOrDigit() } ?: '?').uppercaseChar().toString()
+        val bmp = if (it.logo.isNotEmpty()) logos.get(it.logo) else null
+        if (bmp != null) {
+            row.logo.setImageBitmap(bmp); row.logo.visibility = View.VISIBLE; row.letter.visibility = View.INVISIBLE
+        } else {
+            row.logo.setImageDrawable(null); row.logo.visibility = View.GONE; row.letter.visibility = View.VISIBLE
+        }
+    }
+
+    private inner class ChannelAdapter : BaseAdapter() {
+        override fun getCount(): Int = if (items.isEmpty()) 0 else items.size + listOffset()
+        override fun getItem(position: Int): Any = position
+        override fun getItemId(position: Int): Long = position.toLong()
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+            val row = (convertView?.tag as? Row) ?: makeRow()
+            bindRow(row, position)
+            return row.root
+        }
+    }
+
+    /* loghi: piccolo scaricatore con cache in memoria (2 thread, prima i più recenti = quelli visibili) */
+    private val logosLazy = lazy { LogoCache(userAgent()) }
+    private val logos: LogoCache get() = logosLazy.value
+
+    private inner class LogoCache(private val ua: String) {
+        private val mem = object : android.util.LruCache<String, Bitmap>(6 * 1024 * 1024) {
+            override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+        }
+        private val failed = HashSet<String>()
+        private val loading = HashSet<String>()
+        private var refreshQueued = false
+        private val pool = java.util.concurrent.ThreadPoolExecutor(
+            2, 2, 30L, java.util.concurrent.TimeUnit.SECONDS,
+            object : java.util.concurrent.LinkedBlockingDeque<Runnable>() {
+                override fun offer(e: Runnable): Boolean = offerFirst(e)
+            },
+        )
+
+        /** sul thread principale: il logo se è già pronto, altrimenti lo chiede e restituisce null */
+        fun get(url: String): Bitmap? {
+            mem.get(url)?.let { return it }
+            if (url in failed || url in loading || loading.size >= 40) return null
+            if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) { failed.add(url); return null }
+            loading.add(url)
+            try {
+                pool.execute {
+                    val b = fetch(url)
+                    ui.post {
+                        loading.remove(url)
+                        if (b != null) mem.put(url, b) else failed.add(url)
+                        refresh()
+                    }
+                }
+            } catch (_: Exception) { loading.remove(url) }
+            return null
+        }
+
+        private fun refresh() {
+            if (refreshQueued || !listOpen) return
+            refreshQueued = true
+            ui.postDelayed({ refreshQueued = false; if (listOpen) listAdapter.notifyDataSetChanged() }, 150)
+        }
+
+        private fun fetch(url: String): Bitmap? {
+            var conn: java.net.HttpURLConnection? = null
+            try {
+                var target = java.net.URL(url)
+                var hops = 0
+                while (true) {
+                    val c = target.openConnection() as java.net.HttpURLConnection
+                    conn = c
+                    c.connectTimeout = 6000
+                    c.readTimeout = 8000
+                    c.instanceFollowRedirects = false
+                    c.setRequestProperty("User-Agent", ua)
+                    val code = c.responseCode
+                    val loc = c.getHeaderField("Location")
+                    if (code in 300..399 && loc != null && hops < 4) { c.disconnect(); target = java.net.URL(target, loc); hops++; continue }
+                    if (code != 200) return null
+                    break
+                }
+                val bytes = conn!!.inputStream.use { input ->
+                    val out = java.io.ByteArrayOutputStream()
+                    val buf = ByteArray(16 * 1024)
+                    var total = 0
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        total += n
+                        if (total > 2_000_000) return null // non è un logo
+                        out.write(buf, 0, n)
+                    }
+                    out.toByteArray()
+                }
+                val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
+                if (o.outWidth <= 0 || o.outHeight <= 0) return null
+                var s = 1
+                while (o.outWidth / (s * 2) >= 140 && o.outHeight / (s * 2) >= 70) s *= 2
+                return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = s })
+            } catch (_: Throwable) {
+                return null
+            } finally {
+                try { conn?.disconnect() } catch (_: Exception) {}
+            }
+        }
+
+        fun shutdown() { try { pool.shutdownNow() } catch (_: Exception) {} }
     }
 
     /* ------------------------------------------------------------------ */
@@ -574,9 +1129,13 @@ class PlayerActivity : ComponentActivity(), EngineListener {
 
     override fun onStop() {
         super.onStop()
-        if (zapPending) { ui.removeCallbacks(zapPlay); zapPending = false; currentUrl = item.url }
+        if (!::osd.isInitialized) return // chiusa prima di costruire l'interfaccia
+        completeHandoff(true)
+        if (zapPending) { ui.removeCallbacks(zapPlay); zapPending = false; markPlaying(); currentUrl = item.url }
+        val pendingSeek = seekTarget
+        ui.removeCallbacks(seekCommit); seekTarget = -1L
         val e = engine ?: return
-        stoppedAt = if (isLive) 0L else e.position()
+        stoppedAt = if (isLive) 0L else if (pendingSeek >= 0) pendingSeek else e.position()
         e.stop()
     }
 
@@ -593,20 +1152,27 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         if (closing) return
         closing = true
         ui.removeCallbacks(zapPlay)
+        ui.removeCallbacks(listHide)
+        val pendingSeek = seekTarget
+        ui.removeCallbacks(seekCommit); seekTarget = -1L
+        try { dialog?.dismiss() } catch (_: Exception) {}
+        completeHandoff(true)
         val e = engine
         val r = JSONObject()
             .put("kind", kind)
             .put("id", item.id)
-            .put("pos", (e?.position() ?: 0L) / 1000)
+            .put("pos", (if (pendingSeek >= 0) pendingSeek else e?.position() ?: 0L) / 1000)
             .put("dur", (e?.duration() ?: 0L) / 1000)
             .put("height", e?.videoHeight() ?: 0)
         if (userChangedEngine) { r.put("engine", engineName); r.put("engineKey", engineKey) }
         setResult(android.app.Activity.RESULT_OK, Intent().putExtra(RESULT, r.toString()))
         val box = Handoff.box
         val v = e?.view
-        if (isLive && !zapPending && e is ExoEngine && e === adopted && e.isActive() && box != null && v != null && root.width > 0) {
+        if (isLive && !zapPending && e is ExoEngine && e === adopted && e.isActive() && box != null && v != null && v.parent === root && root.width > 0) {
             // il video torna nel riquadro dell'anteprima e continua lì
             osd.visibility = View.GONE; brandView.visibility = View.GONE; zapView.visibility = View.GONE; spinner.visibility = View.GONE; veil.alpha = 0f; resView.visibility = View.GONE
+            if (::listPanel.isInitialized) listPanel.visibility = View.GONE
+            msgView.visibility = View.GONE
             root.setBackgroundColor(Color.TRANSPARENT)
             val W = root.width; val H = root.height
             android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
@@ -622,27 +1188,47 @@ class PlayerActivity : ComponentActivity(), EngineListener {
                     override fun onAnimationEnd(animation: android.animation.Animator) {
                         try {
                             if (engine === e && !isDestroyed) {
-                                root.removeView(v)
                                 e.l = NoopListener
                                 Handoff.id = item.id
                                 Handoff.back = e
                                 engine = null
+                                // La schermata principale crea subito la sua vista nel riquadro, sotto questa finestra:
+                                // il video passa lì, e solo quando vi è visibile la nostra (ferma sull'ultimo
+                                // fotogramma, nello stesso punto) viene tolta e questa schermata si chiude.
+                                val host = Handoff.host
+                                if (host != null && host.adoptNow(Runnable { finishNow() })) {
+                                    ui.postDelayed({ finishNow() }, 1800) // sicurezza
+                                    return
+                                }
+                                // altrimenti la riprende al ritorno (risultato dell'activity)
                             }
                         } catch (_: Exception) {}
-                        finish()
-                        @Suppress("DEPRECATION") overridePendingTransition(0, 0)
+                        finishNow()
                     }
                 })
                 start()
             }
             return
         }
+        // nessun ritorno nel riquadro: l'interfaccia sotto viene coperta di nero e poi sfuma, niente lampi
+        try { Handoff.host?.coverUi() } catch (_: Exception) {}
+        finishNow()
+    }
+
+    private var done = false
+    private fun finishNow() {
+        if (done) return
+        done = true
         finish()
         @Suppress("DEPRECATION") overridePendingTransition(0, 0)
     }
 
     override fun onDestroy() {
         ui.removeCallbacksAndMessages(null)
+        if (::osd.isInitialized) completeHandoff(true)
+        try { dialog?.dismiss() } catch (_: Exception) {}
+        dialog = null
+        if (logosLazy.isInitialized()) logos.shutdown()
         engine?.release()
         engine = null
         super.onDestroy()

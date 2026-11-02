@@ -101,6 +101,50 @@ Link fisso dell'APK da usare ovunque (Downloader, store, sito):
 
 L'interfaccia (grafica e funzioni) si aggiorna comunque da sola a ogni pubblicazione, anche senza nuovo APK.
 
+## 7. Approvazione download dello store
+
+Con questa funzione nessuno scarica un'app dal tuo Kairos Store senza il tuo ok. Quando un cliente preme **Installa**, lo store chiede l'autorizzazione: a te arriva un'**email** con app, dispositivo, ora, paese e un **codice di 6 cifre**, e la richiesta compare nel pannello alla pagina **Download store**. Premi **Autorizza** (nell'email o nel pannello) e il download sul dispositivo parte da solo; oppure detti il codice al cliente, che lo scrive nello store.
+
+**1. Chiave gratuita per le email (Resend)** — una volta sola
+1. Vai su **resend.com** → *Sign up* e registrati **con la tua email**, quella dove vuoi ricevere gli avvisi (il piano gratuito basta: 100 email al giorno).
+2. Nel menu **API Keys** → *Create API Key* → nome `kairos`, permesso **Sending access** → *Add*. Copia la chiave (inizia con `re_`): viene mostrata una volta sola.
+3. Su GitHub, repository **kairos-iptv** → *Settings → Secrets and variables → Actions* → **New repository secret**: nome `RESEND_KEY`, valore la chiave copiata. Non incollarla da nessun'altra parte e non condividerla con nessuno.
+4. (Facoltativo) nella scheda **Variables** crea `OWNER_EMAIL` = la tua email. Puoi anche scriverla direttamente nel pannello.
+5. **Actions → "Pannello Cloudflare" → Run workflow**: crea la tabella delle richieste e carica la chiave sul Worker.
+
+> Il mittente di prova `onboarding@resend.dev` funziona senza dominio, ma **solo verso l'email con cui ti sei registrato su Resend**. Se un giorno verifichi un tuo dominio su Resend, crea la variabile `MAIL_FROM` (es. `Kairos Store <store@tuodominio.it>`) e potrai usare qualsiasi indirizzo. Se la prima email finisce nello spam, segnala "Non è spam".
+
+**2. Pannello** → pagina **Download store**: controlla che *Chiedi la mia autorizzazione* sia acceso, scrivi la tua email e premi **Salva**. Se lo spegni i download partono subito, ma restano registrati nello storico.
+
+**3. Collega lo store** — nel repository **kairos-store** apri `docs/apps.json` e, dentro `"store"`, scrivi l'indirizzo del pannello **senza** `/panel`:
+```json
+"approval": { "server": "https://kairos-panel.TUO-SOTTODOMINIO.workers.dev", "on": true }
+```
+Salva (Commit): lo store si aggiorna da solo in un minuto. Con `"server": ""` oppure `"on": false` lo store torna a scaricare senza chiedere nulla.
+
+**4. App dello store** — la nuova versione di Kairos Store (si aggiorna da sola) blocca anche lei ogni download non autorizzato, non solo la pagina.
+
+**Se usi le regole WAF del punto 5**, aggiungi `/api/store` alla regola 1 (*URI Path inizia con `/api/player` **oppure** inizia con `/api/store` → Skip*), altrimenti lo store sulle TV non riesce a chiedere l'autorizzazione.
+
+**Da sapere**
+- La richiesta resta valida 24 ore; dopo l'ok il cliente ha 30 minuti per scaricare. 5 codici sbagliati annullano la richiesta.
+- Senza `RESEND_KEY` non arrivano email, ma le richieste compaiono comunque nel pannello (con il codice) e puoi autorizzarle da lì.
+- Il link **Autorizza** dell'email apre una pagina di conferma con il pulsante: così i programmi antivirus della posta che "aprono" i link da soli non possono autorizzare nulla al posto tuo.
+- I link degli APK e i codici Downloader in `apps.json` restano pubblici su GitHub: chi li copia può scaricare fuori dallo store. L'autorizzazione controlla i download **dallo store**; la tua app Kairos resta comunque protetta dall'attivazione nel pannello.
+
+## 8. Account dei clienti: più dispositivi, profili, VPN, privacy
+
+Tutto dal pannello, nella scheda del dispositivo (**Dispositivi → matita**):
+- **Connessioni massime**: quanti dispositivi può usare lo stesso abbonamento (il principale compreso). Il cliente collega una nuova TV dall'app: sul dispositivo già attivo genera un **codice a 6 cifre** (vale 10 minuti, una sola volta) e lo scrive sulla nuova TV, che mostra il suo codice di attivazione. In alternativa apri tu la nuova TV "in attesa" e premi **Collega a un cliente**. Le TV collegate usano scadenza, playlist e profili del principale; **Scollega** le rimette "in attesa".
+- **Profili massimi** e **Profili personali** (nome, avatar 1–12, profilo bambini, playlist): i clienti li creano dall'app dopo l'attivazione, oppure li crei tu. **Blocca modifica profili** impedisce al cliente di cambiarli.
+- **VPN**: *Disattivata*, *Consentita* (il cliente la accende dall'app) o *Sempre attiva*. La configurazione **WireGuard** si incolla in *Impostazioni* (vale per tutti) oppure nella scheda del singolo dispositivo; dopo il salvataggio resta cifrata e non viene più mostrata. Meglio una configurazione (chiave) diversa per ogni dispositivo: la stessa chiave usata da due TV insieme fa cadere la connessione.
+
+In **Impostazioni** trovi anche il **prezzo** mostrato ai clienti e il testo **Privacy e condizioni**, che l'app mostra prima del codice di attivazione ed è pubblicato su `https://IL-TUO-PANNELLO/privacy`. Se lasci il testo vuoto viene usato un **modello predefinito generico**: fallo verificare da un professionista (avvocato o consulente privacy) e completalo con i tuoi dati ("Usa il modello" lo copia nel campo per modificarlo).
+
+**Film e serie di tendenza** nell'app: arrivano da soli dalle classifiche Apple iTunes Italia (nessuna chiave). Facoltativo: per le tendenze di TMDB crea una chiave gratuita su themoviedb.org (*Impostazioni → API*) e salvala su GitHub come secret `TMDB_KEY`, poi rilancia "Pannello Cloudflare".
+
+**Aggiornamenti**: con l'aggiornamento automatico (punto 6) non serve scrivere nulla. Se scrivi a mano una versione in *Impostazioni*, il pannello calcola da solo il codice (1.5.0 → 10500, come la build) e la usa solo se è **più nuova** di quella automatica; se è più vecchia ti avvisa e la ignora.
+
 ## Come funziona per i clienti
 
 1. Installano l'app (codice Downloader) e la aprono: compare un **codice** tipo `KXAB-7Q2M`.
@@ -116,6 +160,7 @@ android/            progetto Android (Kotlin, WebView) — Fire TV / Android TV 
 player/index.html   interfaccia dell'app (stile Netflix), copiata nell'APK durante la build
 cloudflare/
   src/worker.js     API + sicurezza
+  src/store.js      autorizzazione dei download dello store (/api/store)
   migrations/       tabelle del database D1
   public/panel/     pannello (HTML + JS)
   wrangler.toml     configurazione Cloudflare
