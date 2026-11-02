@@ -235,11 +235,13 @@ addEventListener('resize', () => drawChart());
 
 /* ---------------- dispositivi ---------------- */
 function renderDevices() {
-  const cnt = (s) => (s === 'all' ? D.devices.length : D.devices.filter((d) => d.status === s).length);
-  $('#filters').innerHTML = ['all', 'active', 'pending', 'expired', 'disabled'].map((s) => `<button class="fchip ${D.filter === s ? 'on' : ''}" data-fl="${s}">${s === 'all' ? 'Tutti' : STL[s]}<span>${cnt(s)}</span></button>`).join('');
+  const soon = (d) => d.status === 'active' && !d.parent && daysLeft(d) !== null && daysLeft(d) <= 14;
+  const fit = (d, s) => s === 'all' || (s === 'soon' ? soon(d) : d.status === s);
+  const cnt = (s) => D.devices.filter((d) => fit(d, s)).length;
+  $('#filters').innerHTML = ['all', 'active', 'soon', 'pending', 'expired', 'disabled'].map((s) => `<button class="fchip ${D.filter === s ? 'on' : ''}" data-fl="${s}">${s === 'all' ? 'Tutti' : s === 'soon' ? 'In scadenza' : STL[s]}<span>${cnt(s)}</span></button>`).join('');
   $$('[data-fl]').forEach((b) => (b.onclick = () => { D.filter = b.dataset.fl; renderDevices(); }));
   const hay = (d) => { const p = parentOf(d); return [d.code, d.name, d.notes, d.model, p ? p.name + ' ' + p.code : ''].join(' ').toLowerCase(); };
-  const list = D.devices.filter((d) => (D.filter === 'all' || d.status === D.filter) && (!D.q || hay(d).includes(D.q)));
+  const list = D.devices.filter((d) => fit(d, D.filter || 'all') && (!D.q || hay(d).includes(D.q)));
   // le connessioni collegate compaiono subito sotto il loro cliente principale
   const inList = new Set(list.map((d) => d.id)), ordered = [];
   for (const d of list) {
@@ -308,6 +310,17 @@ function profRow(p, i) {
     <select class="inp" data-pk="pl" title="Playlist del profilo"><option value="all">Tutte le playlist</option>${edit.playlists.map((x) => `<option value="${esc(x.id)}" ${p.pl === x.id ? 'selected' : ''}>${esc(x.name || 'Playlist')}</option>`).join('')}</select>
     <button class="btn sm kid ${p.kids ? 'on' : ''}" data-pkids title="Profilo per bambini">${p.kids ? '✓ ' : ''}Bambini</button></div></div>`;
 }
+const PERM_L = [
+  ['report', 'Segnalare problemi', 'Pulsante «Segnala un problema» nell\'app'],
+  ['request', 'Richiedere contenuti', 'Il cliente può chiederti film e serie'],
+  ['profiles', 'Gestire i profili', 'Creare, modificare ed eliminare i profili'],
+  ['link', 'Collegare altri dispositivi', 'Generare il codice dall\'app (entro le connessioni massime)'],
+  ['rec', 'Registrare', 'Registrazioni dei canali e programmate'],
+  ['speed', 'Speed test', 'Misura della velocità della linea'],
+  ['vpn', 'Accendere/spegnere la VPN', 'Se spento decidi tu dal pannello'],
+  ['epgUrl', 'Cambiare la guida TV', 'Inserire un indirizzo EPG diverso'],
+  ['localPl', 'Aggiungere playlist proprie', 'Playlist personali oltre a quelle che assegni tu'],
+];
 function renderDrawer() {
   const linked = !!edit.parent, P = linked ? parentOf(edit) : null;
   const kids = isNew || linked ? [] : kidsOf(edit.id);
@@ -323,6 +336,7 @@ function renderDrawer() {
   const accBox = linked ? '' : `
     <label class="lbl">Account del cliente</label>
     <div class="row"><div><small class="mut">Connessioni massime</small><input class="inp" type="number" min="1" max="20" id="eMaxC" value="${esc(edit.maxConn ?? 1)}"></div><div><small class="mut">Profili massimi</small><input class="inp" type="number" min="0" max="12" id="eMaxP" value="${esc(maxP)}"></div></div>
+    <div style="margin-top:10px"><small class="mut">Visioni contemporanee (0 = senza limite)</small><input class="inp" type="number" min="0" max="20" id="eMaxS" value="${esc(edit.maxStreams ?? 0)}"><small class="mut" style="display:block;margin-top:4px;font-size:11px">Quanti dispositivi di questo abbonamento possono guardare nello stesso momento</small></div>
     <div class="tog ${edit.lockProfiles ? 'on' : ''}" id="eLockP" style="margin-top:10px"><div><b>Blocca modifica profili</b><small>Il cliente usa i profili ma non può crearli, modificarli o eliminarli dall'app</small></div><i></i></div>
     <label class="lbl">Profili personali <span class="cnt">${edit.profiles.length} di ${maxP}</span></label>
     <div id="profs">${edit.profiles.map(profRow).join('') || `<p class="mut" style="font-size:12px;margin-bottom:8px">${maxP ? 'Nessun profilo: il cliente può crearli dall\'app, oppure aggiungili qui.' : 'Profili non inclusi in questo abbonamento (profili massimi = 0).'}</p>`}</div>
@@ -334,6 +348,13 @@ function renderDrawer() {
     ${linked ? `<p class="mut" style="font-size:13px;margin-bottom:8px">Modalità del cliente principale: <b>${VPN_L[effVpn]}</b></p>` : `<div class="seg" id="eVpn">${VPN_L.map((l, v) => `<button data-vpn="${v}" class="${effVpn === v ? 'on' : ''}">${l}</button>`).join('')}</div><p class="mut" style="font-size:12px;margin:6px 0 10px">${VPN_H[effVpn]}${effVpn && !ownConf && !edit.wgText && !D.wgConf ? ' <span class="warnx">⚠️ Nessuna configurazione WireGuard: incollala qui sotto o in Impostazioni.</span>' : ''}</p>`}
     ${effVpn || ownConf || edit.vpnConfClear ? `<div class="kvst"><span>WireGuard di questo dispositivo (facoltativa): ${ownConf ? '<b>✓ configurata</b>' : edit.vpnConfClear ? '<span class="warnx">verrà rimossa al salvataggio</span>' : D.wgConf ? 'usa quella generale' : 'non impostata'}</span>${ownConf ? '<button class="btn sm danger" id="eWgClr">Rimuovi</button>' : ''}</div>
     <textarea class="inp mono" id="eWg" rows="4" spellcheck="false" autocomplete="off" placeholder="${ownConf ? 'Incolla una nuova configurazione per sostituirla' : '[Interface]&#10;PrivateKey = …&#10;Address = …&#10;&#10;[Peer]&#10;PublicKey = …&#10;Endpoint = …'}">${esc(edit.wgText || '')}</textarea>` : ''}`;
+  // località VPN, permessi e codice di collegamento (1.8)
+  const locs = (window.KC && KC.vpnLocs) || [];
+  const extraBox = linked ? '' : `
+    ${locs.length ? `<label class="lbl">Località VPN</label><select class="inp" id="eLoc"><option value="">Configurazione generale / del dispositivo</option>${locs.map((l) => `<option value="${esc(l.id)}" ${edit.vpnLoc === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select>` : ''}
+    <label class="lbl">Permessi del cliente</label>
+    <div class="perms">${PERM_L.map(([k, l, d]) => `<div class="tog ${!edit.perms || edit.perms[k] !== false ? 'on' : ''}" data-perm="${k}"><div><b>${l}</b><small>${d}</small></div><i></i></div>`).join('')}</div>
+    ${isNew ? '' : `<label class="lbl">Collegare un altro dispositivo</label><button class="btn" id="eLinkCode" style="width:100%">🔗 Genera codice di collegamento (6 cifre)</button><small class="mut" style="display:block;margin-top:6px;font-size:12px">Sulla nuova TV il cliente sceglie «Ho già un abbonamento» e scrive il codice. Vale 10 minuti.</small>`}`;
   $('#dBody').innerHTML = `
     ${isNew ? `<label class="lbl">Codice dispositivo</label><input class="inp mono" id="eCode" placeholder="Vuoto = generato, oppure quello mostrato dall'app (KXAB-12CD)" value="${esc(edit.code)}">` : `<div class="tog" style="cursor:default"><div><b>${edit.bound ? '🔒 Collegato al dispositivo' : '🔓 Non ancora collegato'}</b><small>${edit.bound ? 'Il codice funziona solo sul dispositivo che l\'ha generato. Se il cliente cambia TV o reinstalla l\'app, sblocca il collegamento.' : 'Il primo dispositivo che usa questo codice verrà collegato.'}</small></div>${edit.bound ? '<button class="btn sm" id="eReset">Sblocca</button>' : ''}</div>`}
     ${linkedBox}${linkBox}
@@ -350,6 +371,7 @@ function renderDrawer() {
     <button class="btn" id="addPl" style="width:100%;border-style:dashed">+ Aggiungi playlist</button>`}
     ${accBox}
     ${vpnBox}
+    ${extraBox}
     <label class="lbl">Note interne</label><textarea class="inp" id="eNotes" placeholder="Pagamento, contatto, dettagli…">${esc(edit.notes)}</textarea>
     ${!isNew ? `<p class="mut" style="font-size:12px;margin-top:14px">Registrato ${fmtD(edit.createdAt)} · ultimo accesso ${ago(edit.lastSeen)}${edit.model ? ' · ' + esc(edit.model) : ''}</p>` : ''}`;
   $('#eReset') && ($('#eReset').onclick = async () => { if (await ask('Sbloccare il collegamento?', 'Il prossimo dispositivo che usa questo codice verrà collegato al suo posto.', 'Sblocca')) { try { await api('POST', '/admin/devices/' + edit.id + '/reset'); edit.bound = false; renderDrawer(); await load(); toast('Collegamento sbloccato'); } catch (e) { toast(e.message, 1); } } });
@@ -362,7 +384,16 @@ function renderDrawer() {
     if ($('#eMaxP')) edit.maxProfiles = Math.max(0, Math.round(+$('#eMaxP').value) || 0);
     $$('#profs .prof').forEach((el) => { const p = edit.profiles[+el.dataset.pi]; $$('[data-pk]', el).forEach((i) => (p[i.dataset.pk] = i.value)); });
     if ($('#eWg')) edit.wgText = $('#eWg').value;
+    if ($('#eMaxS')) edit.maxStreams = Math.max(0, Math.round(+$('#eMaxS').value) || 0);
+    if ($('#eLoc')) edit.vpnLoc = $('#eLoc').value;
   };
+  $$('[data-perm]').forEach((b) => (b.onclick = () => { const k = b.dataset.perm; edit.perms = { ...(edit.perms || {}) }; edit.perms[k] = edit.perms[k] === false; b.classList.toggle('on', edit.perms[k] !== false); }));
+  $('#eLinkCode') && ($('#eLinkCode').onclick = async () => {
+    try {
+      const r = await (window.KC ? KC.api : api)('POST', '/admin/devices/' + edit.id + '/linkcode');
+      await ask('Codice di collegamento', `<div style="font-size:40px;font-weight:700;letter-spacing:.25em;text-align:center;margin:10px 0" class="mono">${esc(r.pin)}</div><p class="mut" style="text-align:center">Valido fino alle ${new Date(r.until).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}. Sulla nuova TV: <b>Ho già un abbonamento</b> → scrivi il codice.</p>`, 'Fatto');
+    } catch (e) { toast(e.message, 1); }
+  });
   const re = () => { sync(); renderDrawer(); };
   $('#eAct') && ($('#eAct').onclick = () => { edit.active = !edit.active; $('#eAct').classList.toggle('on', edit.active); });
   $('#eInf') && ($('#eInf').onclick = () => { sync(); edit.expires = ''; renderDrawer(); });
@@ -403,7 +434,7 @@ function renderDrawer() {
   $('#dSave').onclick = async () => {
     sync();
     const vpnPart = edit.wgText && edit.wgText.trim() ? { vpnConf: edit.wgText } : edit.vpnConfClear ? { vpnConfClear: true } : {};
-    const acc = { maxConn: edit.maxConn, maxProfiles: edit.maxProfiles, lockProfiles: !!edit.lockProfiles, vpn: +edit.vpn || 0, profiles: edit.profiles.map((p) => ({ id: p.id || undefined, name: p.name, avatar: p.avatar, kids: !!p.kids, pl: p.pl || 'all' })) };
+    const acc = { maxConn: edit.maxConn, maxProfiles: edit.maxProfiles, maxStreams: +edit.maxStreams || 0, vpnLoc: edit.vpnLoc || '', perms: Object.fromEntries(PERM_L.map(([k]) => [k, !edit.perms || edit.perms[k] !== false])), lockProfiles: !!edit.lockProfiles, vpn: +edit.vpn || 0, profiles: edit.profiles.map((p) => ({ id: p.id || undefined, name: p.name, avatar: p.avatar, kids: !!p.kids, pl: p.pl || 'all' })) };
     try {
       if (isNew) await api('POST', '/admin/devices', { code: edit.code, name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, ...acc, ...vpnPart });
       else if (edit.parent) await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, ...vpnPart });

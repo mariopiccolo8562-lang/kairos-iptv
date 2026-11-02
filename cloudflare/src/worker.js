@@ -180,7 +180,7 @@ const CSP_PANEL = [
   "script-src 'self' https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src https://fonts.gstatic.com",
-  "img-src 'self' data:",
+  "img-src 'self' data: https: http:", // locandine della videoteca (server dei clienti)
   "connect-src 'self'",
   "frame-src https://challenges.cloudflare.com",
   "frame-ancestors 'none'",
@@ -356,6 +356,62 @@ const CODE_RE = /^KX[A-Z0-9]{2}-[A-Z0-9]{4}$/;
 // '' (illimitata) oppure una data AAAA-MM-GG esistente (una data impossibile non scadrebbe mai)
 const DATE_RE = { test: (s) => { if (s === '') return true; if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false; const t = new Date(s + 'T00:00:00Z'); return !isNaN(t) && t.toISOString().slice(0, 10) === s; } };
 
+/* ---------------- permessi per dispositivo ---------------- */
+// tutte le funzioni sono consentite se non vengono spente: nel DB restano solo le chiavi a false
+const PERM_KEYS = ['report', 'request', 'profiles', 'link', 'rec', 'speed', 'vpn', 'epgUrl', 'localPl'];
+const PERM_MSG = 'Funzione disattivata dal fornitore';
+/** oggetto completo {chiave: bool} a partire dal JSON salvato (o da un oggetto parziale) */
+function permsParse(src) {
+  let o = src;
+  if (typeof src === 'string') { try { o = src ? JSON.parse(src) : {}; } catch { o = {}; } }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) o = {};
+  const out = {};
+  for (const k of PERM_KEYS) out[k] = o[k] !== false;
+  return out;
+}
+/** forma compatta per il DB: solo le chiavi spente ('' = tutto consentito) */
+function permsJson(obj) {
+  const off = {};
+  for (const k of PERM_KEYS) if (obj && obj[k] === false) off[k] = false;
+  return Object.keys(off).length ? JSON.stringify(off) : '';
+}
+/** permessi inviati dal pannello: solo booleani su chiavi note (altro → errore) */
+function permsInput(b) {
+  if (!b || typeof b !== 'object' || Array.isArray(b)) throw new HttpErr(400, 'Permessi non validi');
+  const out = {};
+  for (const [k, v] of Object.entries(b)) {
+    if (!PERM_KEYS.includes(k)) throw new HttpErr(400, `Permesso sconosciuto: ${String(k).slice(0, 20)}`);
+    if (typeof v !== 'boolean') throw new HttpErr(400, 'Permessi non validi');
+    out[k] = v;
+  }
+  return out;
+}
+/** permessi effettivi dell'account (un dispositivo collegato eredita quelli del principale) */
+const permsOf = (P) => permsParse(P && P.perms);
+/** permessi predefiniti per i nuovi dispositivi (Impostazioni) in forma compatta per il DB */
+const defaultPermsJson = (s) => permsJson(permsParse(s && s.permsDefault));
+
+/* ---------------- DNS = server delle playlist ---------------- */
+/** origine (schema + host[:porta]) di una playlist, '' se non valida */
+function hostOf(p) {
+  try { const u = new URL(p.type === 'xtream' ? p.host : p.url); return /^https?:$/.test(u.protocol) ? u.origin : ''; } catch { return ''; }
+}
+/** controlla il nuovo server: http(s)://host[:porta], senza percorsi, credenziali o parametri */
+function cleanHost(h) {
+  h = str(h, 300).replace(/\/+$/, '');
+  if (!h) throw new HttpErr(400, 'Scrivi il nuovo server, es. http://nuovo.server.tv:8080');
+  if (!/^https?:\/\//i.test(h)) h = 'http://' + h;
+  let u; try { u = new URL(h); } catch { throw new HttpErr(400, 'Indirizzo del server non valido'); }
+  if (!/^https?:$/.test(u.protocol) || u.username || u.password || u.search || u.hash || (u.pathname && u.pathname !== '/')) throw new HttpErr(400, 'Indica solo schema e host, es. http://nuovo.server.tv:8080 (senza percorsi)');
+  if (!/^[a-z0-9.-]+$/i.test(u.hostname) && !/^\[[0-9a-f:.]+\]$/i.test(u.hostname)) throw new HttpErr(400, 'Nome del server non valido');
+  return u.origin;
+}
+/** stessa playlist con un altro server (percorso e parametri invariati) */
+function swapHost(p, host) {
+  if (p.type === 'xtream') return { ...p, host };
+  try { const u = new URL(p.url); return { ...p, url: (host + u.pathname + u.search).slice(0, 1000) }; } catch { return p; }
+}
+
 /* ====================================================================== */
 /* Account: connessioni (più dispositivi), profili personali, VPN           */
 /* ====================================================================== */
@@ -403,7 +459,7 @@ async function primaryOf(env, d) {
 const linkedOf = async (env, id) => ((await env.DB.prepare('SELECT id, code, name, model, last_seen, vpn_conf FROM devices WHERE parent = ? ORDER BY created_at LIMIT 100').bind(id).all()).results) || [];
 async function accountOf(env, P, me, pls) {
   const conns = [P, ...(await linkedOf(env, P.id))].map((x) => ({ name: x.name || '', model: x.model || '', seen: x.id === me.id ? now() : +x.last_seen || 0, me: x.id === me.id }));
-  return { primary: me.id === P.id, owner: P.name || '', maxConn: P.max_conn ?? 1, conns, maxProfiles: P.max_profiles ?? 3, profiles: readProfiles(P, pls.map((p) => p.id)), canEdit: !P.lock_profiles };
+  return { primary: me.id === P.id, owner: P.name || '', maxConn: P.max_conn ?? 1, conns, maxProfiles: P.max_profiles ?? 3, profiles: readProfiles(P, pls.map((p) => p.id)), canEdit: !P.lock_profiles, maxStreams: +P.max_streams || 0 };
 }
 /* ---------------- VPN (WireGuard) ---------------- */
 /** controlla una configurazione wg-quick; '' = nessuna */
@@ -422,12 +478,20 @@ async function wgGlobal(env) {
   const r = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('wg').first();
   return r ? unsealText(env, r.v) : '';
 }
+/** località VPN: più server WireGuard salvati cifrati, scelti dal pannello per ogni cliente (l'app non le mostra) */
+async function wgLocs(env) {
+  const r = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('wgl').first();
+  const v = r ? await unseal(env, r.v).catch(() => []) : [];
+  return Array.isArray(v) ? v.filter((x) => x && typeof x.id === 'string' && typeof x.conf === 'string') : [];
+}
 async function vpnOf(env, P, me) {
   const lvl = +P.vpn || 0, mode = lvl === 2 ? 'force' : lvl === 1 ? 'allow' : 'off';
   const out = { mode };
   if (mode !== 'off') {
-    // ogni dispositivo dovrebbe avere la sua chiave: prima la sua, poi quella del principale, poi quella generale
-    const conf = (me.id !== P.id && await unsealText(env, me.vpn_conf)) || await unsealText(env, P.vpn_conf) || await wgGlobal(env);
+    // ogni dispositivo dovrebbe avere la sua chiave: prima la sua, poi quella del principale, poi la località scelta, poi quella generale
+    let conf = (me.id !== P.id && await unsealText(env, me.vpn_conf)) || await unsealText(env, P.vpn_conf);
+    if (!conf && P.vpn_loc) { const l = (await wgLocs(env)).find((x) => x.id === P.vpn_loc); if (l) { conf = l.conf; out.loc = l.name; } }
+    if (!conf) conf = await wgGlobal(env);
     if (conf) out.conf = conf;
   }
   return out;
@@ -474,6 +538,7 @@ async function playerProfiles(req, env, ip, ctx) {
   if (bad) return bad;
   const [P, pls] = await activeAccount(env, d);
   if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
+  if (!permsOf(P).profiles) return json({ error: PERM_MSG }, 403);
   if (P.lock_profiles) return json({ error: 'La modifica dei profili è stata bloccata dal fornitore' }, 403);
   if (await throttled(env, 'prof:' + P.id, 60, 3600e3)) return json({ error: 'Troppe modifiche, riprova più tardi' }, 429);
   let list;
@@ -490,19 +555,24 @@ async function playerLinkCode(req, env, ip, ctx) {
   if (bad) return bad;
   const [P] = await activeAccount(env, d);
   if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
+  if (!permsOf(P).link) return json({ error: PERM_MSG }, 403);
   const used = await connCount(env, P), max = P.max_conn ?? 1;
   if (used >= max) return json({ error: `Connessioni esaurite (${used} di ${max})` }, 409);
   if (await throttled(env, 'lc:' + P.id, 12, 3600e3)) return json({ error: 'Hai richiesto troppi codici, riprova più tardi' }, 429);
+  try { return json(await issuePin(env, P)); } catch (e) { return json({ error: e.message }, e.status || 500); }
+}
+/** genera un codice a 6 cifre per collegare un dispositivo all'account P (dall'app o dal pannello) */
+async function issuePin(env, P) {
   const until = now() + PIN_TTL;
   await env.DB.prepare('DELETE FROM link_pins WHERE device_id = ? OR until < ?').bind(P.id, now()).run(); // un solo codice valido per account
   for (let i = 0; i < 8; i++) {
     const pin = newPin();
     try {
       await env.DB.prepare('INSERT INTO link_pins (pin_hash, device_id, until) VALUES (?, ?, ?)').bind(await pinHash(env, pin), P.id, until).run();
-      return json({ pin, until });
+      return { pin, until };
     } catch {} // stesso codice già in uso da un altro account: se ne genera un altro
   }
-  return json({ error: 'Riprova tra poco' }, 503);
+  throw new HttpErr(503, 'Riprova tra poco');
 }
 async function playerLink(req, env, ip, ctx) {
   if (await limited(env.RL_DEVICE, 'lk:' + ip)) return json({ error: 'Troppe richieste, riprova tra poco' }, 429);
@@ -531,6 +601,7 @@ async function playerLink(req, env, ip, ctx) {
   const P0 = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(row.device_id).first();
   const [P] = P0 && !P0.parent && P0.id !== d.id ? await activeAccount(env, P0) : [null];
   if (!P) return fail();
+  if (!permsOf(P).link) return json({ error: PERM_MSG }, 403);
   const used = await connCount(env, P), max = P.max_conn ?? 1;
   if (used >= max) return json({ error: `Connessioni esaurite (${used} di ${max})` }, 409);
   // il codice si usa una volta sola (se due dispositivi lo inviano insieme, solo uno lo ottiene)
@@ -705,6 +776,315 @@ ${custom ? '' : '<!-- Testo predefinito: modello generico da far verificare a un
 }
 
 /* ====================================================================== */
+/* Utenti online: battito dell'app, presenza, contenuti più guardati       */
+/* ====================================================================== */
+const HB_MIN_MS = 15e3;          // un battito ogni 15 s al massimo per dispositivo
+const ONLINE_MS = 3 * 60e3;      // "online" = segnale negli ultimi 3 minuti
+const STATES = ['idle', 'live', 'movie', 'series', 'rec'];
+const NETS = ['wifi', 'eth', 'mobile', 'none', ''];
+const num = (v, lo, hi) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : 0; };
+const cfOf = (req) => { const c = req.cf || {}; return { country: str(c.country, 4).toUpperCase(), city: str(c.city, 60) }; };
+/** giorno in ora italiana AAAA-MM-GG (per le classifiche) */
+function dayIT(t = now()) {
+  try { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t)); }
+  catch { return new Date(t).toISOString().slice(0, 10); }
+}
+const PRESENCE_COLS = ['t', 'hb_t', 'ip', 'ip2', 'ip2_t', 'country', 'city', 'home_country', 'ver', 'ui', 'model', 'state', 'title', 'ch', 'ch_id', 'grp', 'pl', 'prof', 'screen', 'net', 'rssi', 'speed_dl', 'speed_ul', 'speed_ping', 'speed_jit', 'speed_t', 'res', 'fps', 'bitrate', 'buffers', 'dropped', 'engine', 'vpn'];
+/** scrive/aggiorna la riga di presenza con i campi indicati (gli altri restano) */
+async function upsertPresence(env, id, fields) {
+  const cols = Object.keys(fields).filter((k) => PRESENCE_COLS.includes(k));
+  if (!cols.length) return;
+  const sql = `INSERT INTO presence (device_id, ${cols.join(', ')}) VALUES (?${', ?'.repeat(cols.length)}) ON CONFLICT(device_id) DO UPDATE SET ${cols.map((c) => `${c} = excluded.${c}`).join(', ')}`;
+  await env.DB.prepare(sql).bind(id, ...cols.map((c) => fields[c])).run();
+}
+/** campi "da dove si collega": IP attuale, IP precedente se diverso (per notare condivisioni), paese di casa */
+function whereFields(old, ip, cf) {
+  const f = { ip, country: cf.country, city: cf.city };
+  if (old && old.ip && old.ip !== ip) { f.ip2 = old.ip; f.ip2_t = old.t; }
+  if (!old || !old.home_country) f.home_country = cf.country;
+  return f;
+}
+/** al register: il dispositivo è nei menu (non nel lettore) → presenza minima, stato "idle" */
+async function presenceFromRegister(env, d, b, ip, cf) {
+  try {
+    const old = await env.DB.prepare('SELECT ip, t, home_country FROM presence WHERE device_id = ?').bind(d.id).first();
+    const f = { t: now(), state: 'idle', title: '', ch: '', ch_id: '', grp: '', ...whereFields(old, ip, cf) };
+    const model = str(b.model, 80), ver = str(b.ver, 20), ui = str(b.ui, 20);
+    if (model) f.model = model; if (ver) f.ver = ver; if (ui) f.ui = ui;
+    await upsertPresence(env, d.id, f);
+  } catch {} // tabella non ancora creata
+}
+/* messaggi arrivati dopo l'ultimo register: l'app li scarica al prossimo register */
+async function unseenCount(env, d, pid) {
+  try { return (await env.DB.prepare('SELECT COUNT(*) AS n FROM messages WHERE (target = ? OR target = ? OR target = ?) AND created > ? AND (until = 0 OR until > ?)').bind('all', d.id, pid || d.id, +d.last_seen || 0, now()).first()).n; } catch { return 0; }
+}
+async function playerHeartbeat(req, env, ip, ctx) {
+  if (await limited(env.RL_DEVICE, 'hb:' + ip)) return json({ error: 'Troppe richieste' }, 429);
+  let b;
+  try { b = await readJSON(req, 4096); } catch (e) { return json({ error: e.message }, e.status || 400); }
+  const [d, bad] = await deviceAuth(env, b);
+  if (bad) return bad;
+  const t = now();
+  const old = await env.DB.prepare('SELECT * FROM presence WHERE device_id = ?').bind(d.id).first();
+  // il limite conta solo i battiti (register e inizio visione aggiornano la presenza ma non contano)
+  if (old && t - (+old.hb_t || 0) < HB_MIN_MS) return json({ error: 'Troppi battiti: attendi qualche secondo', wait: Math.ceil((HB_MIN_MS - (t - old.hb_t)) / 1000) }, 429);
+  const cf = cfOf(req);
+  const state = STATES.includes(b.state) ? b.state : 'idle';
+  const net = b.net && typeof b.net === 'object' ? b.net : {};
+  const sp = b.speed && typeof b.speed === 'object' ? b.speed : null;
+  const st = b.stats && typeof b.stats === 'object' ? b.stats : null;
+  const f = {
+    t, hb_t: t, ...whereFields(old, ip, cf),
+    ver: str(b.ver, 20), ui: str(b.ui, 20), model: str(b.model, 80) || (old && old.model) || d.model || '',
+    state, title: state === 'idle' ? '' : nameClean(b.title, 120), ch: nameClean(b.ch, 80), ch_id: str(b.chId, 60), grp: nameClean(b.group, 60),
+    pl: str(b.pl, 40), prof: nameClean(b.prof, 24), screen: str(b.screen, 20),
+    net: NETS.includes(net.type) ? net.type : '', rssi: Math.round(num(net.rssi, -120, 0)),
+    vpn: b.vpn === 'on' ? 'on' : b.vpn === 'off' ? 'off' : '',
+  };
+  if (sp) Object.assign(f, { speed_dl: num(sp.dl, 0, 1e5), speed_ul: num(sp.ul, 0, 1e5), speed_ping: num(sp.ping, 0, 1e5), speed_jit: num(sp.jitter, 0, 1e5), speed_t: Math.round(num(sp.t, 0, 1e13)) || t });
+  if (st) Object.assign(f, { res: str(st.res, 20), fps: num(st.fps, 0, 1e3), bitrate: num(st.bitrate, 0, 1e9), buffers: Math.round(num(st.buffers, 0, 1e6)), dropped: Math.round(num(st.dropped, 0, 1e9)), engine: str(st.engine, 20) });
+  else if (state === 'idle') Object.assign(f, { res: '', fps: 0, bitrate: 0, buffers: 0, dropped: 0, engine: '' });
+  const writes = [upsertPresence(env, d.id, f)];
+  // nuova "sessione" di visione: contenuto diverso da quello dell'ultimo battito
+  if (state !== 'idle' && f.title && (!old || old.state !== state || old.title !== f.title))
+    writes.push(env.DB.prepare('INSERT INTO watch (day, kind, title, n) VALUES (?, ?, ?, 1) ON CONFLICT(day, kind, title) DO UPDATE SET n = watch.n + 1').bind(dayIT(t), state, f.title).run());
+  await Promise.all(writes);
+  // modalità VPN e permessi attuali: se il pannello li ha cambiati l'app si riallinea subito (senza aspettare 20 minuti)
+  const [P, pls] = await activeAccount(env, d);
+  const vm = P ? (+P.vpn === 2 ? 'force' : +P.vpn === 1 ? 'allow' : 'off') : 'off';
+  // impronta dei server delle playlist: se cambia (DNS cambiato dal pannello) l'app aggiorna gli indirizzi senza ricaricare la lista
+  const pv = pls.length ? (await sha256(pls.map((p) => p.id + '|' + hostOf(p) + '|' + (p.username || '')).join(','))).slice(0, 12) : '';
+  return json({ ok: true, unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv });
+}
+/** vista pannello: chi è collegato e cosa guarda */
+/* visioni contemporanee: prima di iniziare a guardare l'app chiede il permesso (solo se il pannello ha messo un limite) */
+async function playerStream(req, env, ip, ctx) {
+  if (await limited(env.RL_DEVICE, 'st:' + ip)) return json({ ok: true }); // in caso di dubbio non si blocca la visione
+  let b;
+  try { b = await readJSON(req, 2048); } catch (e) { return json({ error: e.message }, e.status || 400); }
+  const [d, bad] = await deviceAuth(env, b);
+  if (bad) return bad;
+  const [P] = await activeAccount(env, d);
+  if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
+  const max = +P.max_streams || 0, state = STATES.includes(b.state) && b.state !== 'idle' ? b.state : 'live', t = now();
+  if (max > 0) {
+    const ids = [P.id, ...(await linkedOf(env, P.id)).map((x) => x.id)].filter((id) => id !== d.id);
+    let busy = 0;
+    for (const id of ids) { const r = await env.DB.prepare('SELECT state, t FROM presence WHERE device_id = ?').bind(id).first(); if (r && r.state !== 'idle' && t - r.t < 150e3) busy++; }
+    if (busy >= max) {
+      ctx.waitUntil(log(env, 'off', `Limite visioni contemporanee raggiunto: ${P.name || P.code} (${max})`, ip));
+      return json({ ok: false, error: `Limite di visioni contemporanee raggiunto (${max} su questo abbonamento). Chiudi la visione su un altro dispositivo e riprova.`, max, busy });
+    }
+  }
+  ctx.waitUntil(upsertPresence(env, d.id, { t, state, title: nameClean(b.title, 120) }));
+  return json({ ok: true, max });
+}
+/* trailer: anteprime ufficiali dalla ricerca di Apple iTunes (senza chiave), conservate 14 giorni */
+async function playerTrailer(req, env, ip, url, ctx) {
+  if (await limited(env.RL_DEVICE, 'tr:' + ip)) return json({ error: 'Troppe richieste' }, 429);
+  const title = nameClean(url.searchParams.get('t') || '', 120).replace(/\s*[\(\[][^)\]]*[\)\]]\s*/g, ' ').replace(/^\W*(it|ita|en|eng|4k|vip|multi)\s*[|:\-–]\s*/i, '').trim();
+  const year = parseInt(url.searchParams.get('y') || '', 10) || 0, kind = url.searchParams.get('kind') === 'series' ? 'series' : 'movie';
+  if (title.length < 2) return json({ url: '' });
+  const key = 'trl:' + (await sha256(kind + '|' + title.toLowerCase() + '|' + year)).slice(0, 24);
+  const c = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(key).first();
+  if (c) { try { const v = JSON.parse(c.v); if (now() - v.t < 14 * 864e5) return json({ url: v.url, title: v.title || '', src: 'itunes' }); } catch {} }
+  const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const want = norm(title);
+  let best = null;
+  for (const country of ['it', 'us']) {
+    const q = kind === 'series' ? `media=tvShow&entity=tvSeason` : `media=movie&entity=movie`;
+    try {
+      const r = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(title)}&country=${country}&${q}&limit=10`, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(8000) });
+      if (!r.ok) continue;
+      const j = await r.json();
+      for (const x of j.results || []) {
+        if (!x.previewUrl || !/^https:\/\//.test(x.previewUrl)) continue;
+        const name = norm(kind === 'series' ? String(x.collectionName || '').replace(/,?\s*(stagione|season)\s*\d+.*$/i, '') : x.trackName);
+        const y = parseInt(String(x.releaseDate || '').slice(0, 4), 10) || 0;
+        const score = (name === want ? 10 : name.startsWith(want) || want.startsWith(name) ? 5 : name.includes(want) ? 2 : 0) + (year && y ? (y === year ? 4 : Math.abs(y - year) <= 1 ? 2 : -3) : 0);
+        if (score >= 5 && (!best || score > best.score)) best = { score, url: x.previewUrl, title: x.trackName || x.collectionName || '' };
+      }
+    } catch {}
+    if (best && best.score >= 10) break;
+  }
+  const out = { url: best ? best.url : '', title: best ? best.title : '', t: now() };
+  ctx.waitUntil(env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(key, JSON.stringify(out)).run());
+  return json({ url: out.url, title: out.title, src: 'itunes' });
+}
+async function adminPresence(env) {
+  const t = now();
+  const rows = ((await env.DB.prepare('SELECT p.*, d.name, d.code, d.expires, d.active, d.parent, d.playlists AS has_pl, d.model AS dmodel FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ? ORDER BY p.t DESC LIMIT 1000').bind(t - 86400e3).all()).results) || [];
+  const pids = [...new Set(rows.filter((r) => r.parent).map((r) => r.parent))];
+  const parents = new Map();
+  for (const pid of pids) { const p = await env.DB.prepare('SELECT id, name, code, active, expires, playlists FROM devices WHERE id = ?').bind(pid).first(); if (p) parents.set(pid, p); }
+  const stOf = (d) => statusOf(d, d.playlists || d.has_pl ? [1] : []);
+  const online = [], recent = [];
+  for (const r of rows) {
+    const P = r.parent ? parents.get(r.parent) : null;
+    const o = { id: r.device_id, name: r.name || (P ? `${P.name || P.code} · ${r.dmodel || r.model || 'dispositivo'}` : ''), code: r.code, expires: r.parent ? (P ? P.expires : '') : r.expires, status: r.parent ? (P && !P.parent ? stOf(P) : 'pending') : stOf(r), parent: r.parent || '', owner: P ? P.name || P.code : '' };
+    for (const c of PRESENCE_COLS) o[c] = r[c];
+    if (!o.model) o.model = r.dmodel || '';
+    o.ago = t - r.t;
+    o.online = t - r.t <= ONLINE_MS;
+    // segnali utili, calcolati qui per non far lavorare il pannello
+    o.flags = [];
+    if (r.ip2 && r.ip2 !== r.ip && r.t - r.ip2_t < 10 * 60e3) o.flags.push('ip');            // due IP diversi a pochi minuti: possibile condivisione
+    if (r.home_country && r.country && r.country !== r.home_country) o.flags.push('country'); // paese diverso dal solito
+    (o.online ? online : recent).push(o);
+  }
+  let top = [];
+  try { top = ((await env.DB.prepare('SELECT kind, title, n FROM watch WHERE day = ? ORDER BY n DESC, title LIMIT 15').bind(dayIT(t)).all()).results) || []; } catch {}
+  const total = ((await env.DB.prepare('SELECT COUNT(*) AS n FROM devices').first()) || { n: 0 }).n;
+  const watching = online.filter((o) => o.state !== 'idle').length;
+  return { online, recent, top, counts: { online: online.length, watching, idle: online.length - watching, total }, ts: t };
+}
+const onlineCount = async (env) => { try { return (await env.DB.prepare('SELECT COUNT(*) AS n FROM presence WHERE t > ?').bind(now() - ONLINE_MS).first()).n; } catch { return 0; } };
+
+/* ====================================================================== */
+/* Segnalazioni e richieste di contenuti                                   */
+/* ====================================================================== */
+const CTYPES = ['movie', 'series', 'live'];
+const REQ_STATUS = ['new', 'seen', 'done'];
+async function addRequest(env, d, kind, f, ip) {
+  await env.DB.prepare('INSERT INTO requests (device_id, kind, ctype, title, body, info, status, created, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(d.id, kind, f.ctype || '', f.title || '', f.body || '', f.info || '', 'new', now(), ip).run();
+}
+/* "Richiedi un contenuto" dall'app: film, serie o canale che il cliente vorrebbe */
+async function playerRequest(req, env, ip, ctx) {
+  if (await limited(env.RL_DEVICE, 'rq:' + ip)) return json({ error: 'Troppe richieste, riprova tra poco' }, 429);
+  let b;
+  try { b = await readJSON(req, 4096); } catch (e) { return json({ error: e.message }, e.status || 400); }
+  const [d, bad] = await deviceAuth(env, b);
+  if (bad) return bad;
+  const [P] = await activeAccount(env, d);
+  if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
+  if (!permsOf(P).request) return json({ error: PERM_MSG }, 403);
+  const title = nameClean(b.title, 120), body = nameClean(b.body, 400), ctype = CTYPES.includes(b.ctype) ? b.ctype : '';
+  if (!title) return json({ error: 'Scrivi il titolo' }, 400);
+  if (await throttled(env, 'rq:' + d.id, 10, 3600e3)) return json({ error: 'Hai inviato troppe richieste: riprova tra un\'ora' }, 429);
+  await addRequest(env, d, 'content', { ctype, title, body }, ip);
+  ctx.waitUntil(log(env, 'req', `Richiesta contenuto da ${P.name || d.code}: ${title}`, ip));
+  return json({ ok: true });
+}
+const newCounts = async (env) => {
+  const out = { reports: 0, requests: 0 };
+  try {
+    const r = ((await env.DB.prepare("SELECT kind, COUNT(*) AS n FROM requests WHERE status = 'new' GROUP BY kind").all()).results) || [];
+    for (const x of r) { if (x.kind === 'report') out.reports = x.n; else if (x.kind === 'content') out.requests = x.n; }
+  } catch {}
+  return out;
+};
+async function adminRequests(req, env, path, url, who, ip) {
+  const m = req.method;
+  if (path === '/requests' && m === 'GET') {
+    const kind = url.searchParams.get('kind') === 'content' ? 'content' : 'report';
+    const rows = ((await env.DB.prepare('SELECT r.id, r.device_id, r.kind, r.ctype, r.title, r.body, r.info, r.status, r.created, r.ip, r.note, d.name, d.code, d.model FROM requests r LEFT JOIN devices d ON d.id = r.device_id WHERE r.kind = ? ORDER BY r.id DESC LIMIT 300').bind(kind).all()).results) || [];
+    return json({ kind, items: rows.map((r) => ({ id: r.id, deviceId: r.device_id, kind: r.kind, ctype: r.ctype, title: r.title, body: r.body, info: r.info, status: r.status, created: r.created, ip: r.ip, note: r.note, name: r.name || '', code: r.code || '', model: r.model || '' })) });
+  }
+  if (path === '/requests' && m === 'DELETE') {
+    const kind = url.searchParams.get('kind') || '', status = url.searchParams.get('status') || 'done';
+    if (!['seen', 'done'].includes(status)) throw new HttpErr(400, 'Si possono svuotare solo le richieste viste o fatte');
+    if (kind && !['report', 'content'].includes(kind)) throw new HttpErr(400, 'Tipo non valido');
+    const r = kind ? await env.DB.prepare('DELETE FROM requests WHERE kind = ? AND status = ?').bind(kind, status).run() : await env.DB.prepare('DELETE FROM requests WHERE status = ?').bind(status).run();
+    await log(env, 'del', `${who}: svuotate ${kind === 'content' ? 'richieste' : kind === 'report' ? 'segnalazioni' : 'segnalazioni e richieste'} (${status === 'done' ? 'fatte' : 'viste'})`, ip);
+    return json({ ok: true, deleted: (r.meta && r.meta.changes) || 0 });
+  }
+  const rm = path.match(/^\/requests\/(\d{1,10})(\/status)?$/);
+  if (rm && rm[2] && m === 'POST') {
+    const b = await readJSON(req, 2048);
+    const status = String(b.status || '');
+    if (!REQ_STATUS.includes(status)) throw new HttpErr(400, 'Stato non valido');
+    const note = typeof b.note === 'string' ? nameClean(b.note, 300) : null;
+    const r = note === null ? await env.DB.prepare('UPDATE requests SET status = ? WHERE id = ?').bind(status, +rm[1]).run() : await env.DB.prepare('UPDATE requests SET status = ?, note = ? WHERE id = ?').bind(status, note, +rm[1]).run();
+    if (!(r.meta && r.meta.changes)) throw new HttpErr(404, 'Richiesta non trovata');
+    return json({ ok: true });
+  }
+  if (rm && !rm[2] && m === 'DELETE') {
+    await env.DB.prepare('DELETE FROM requests WHERE id = ?').bind(+rm[1]).run();
+    return json({ ok: true });
+  }
+  return null;
+}
+
+/* ====================================================================== */
+/* Videoteca: catalogo film/serie dei server Xtream usati dai clienti      */
+/* ====================================================================== */
+const CAT_TTL = 3600e3, CAT_PAGE = 60, CAT_UA = 'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36 KairosPlayer/1.7';
+let srcMem = { t: 0, map: null };
+/** sorgenti Xtream distinte tra tutte le playlist dei clienti: chiave → {host, user, pass, devices} (mai verso il pannello le credenziali) */
+async function catalogSources(env) {
+  if (srcMem.map && now() - srcMem.t < 5 * 60e3) return srcMem.map;
+  const rows = ((await env.DB.prepare("SELECT id, playlists FROM devices WHERE playlists <> '' LIMIT 5000").all()).results) || [];
+  const map = new Map();
+  for (const d of rows) {
+    const pls = await unseal(env, d.playlists).catch(() => []);
+    const seen = new Set();
+    for (const p of pls) {
+      if (p.type !== 'xtream' || !p.host || !p.username) continue;
+      const host = hostOf(p); if (!host) continue;
+      const key = (await sha256(`src:${host}|${p.username}|${p.password}`)).slice(0, 16);
+      if (seen.has(key)) continue; seen.add(key);
+      const e = map.get(key) || { key, host, user: p.username, pass: p.password, devices: 0 };
+      e.devices++; map.set(key, e);
+    }
+  }
+  srcMem = { t: now(), map };
+  return map;
+}
+const catMem = new Map(); // piccola cache in memoria (su workers.dev la cache di Cloudflare non è disponibile)
+async function cachedJson(key, loader) {
+  const m = catMem.get(key);
+  if (m && now() - m.t < CAT_TTL) return m.v;
+  const ck = new Request('https://kairos-cache.invalid/' + key);
+  let cache = null; try { cache = typeof caches !== 'undefined' && caches.default ? caches.default : null; } catch {}
+  if (cache) { try { const r = await cache.match(ck); if (r) { const v = await r.json(); catMem.set(key, { t: now(), v }); return v; } } catch {} }
+  const v = await loader();
+  if (catMem.size > 6) catMem.delete(catMem.keys().next().value);
+  catMem.set(key, { t: now(), v });
+  if (cache) { try { await cache.put(ck, new Response(JSON.stringify(v), { headers: { 'Content-Type': 'application/json', 'Cache-Control': `max-age=${CAT_TTL / 1000}` } })); } catch {} }
+  return v;
+}
+async function xtreamGet(src, action) {
+  const u = `${src.host}/player_api.php?username=${encodeURIComponent(src.user)}&password=${encodeURIComponent(src.pass)}&action=${action}`;
+  const r = await fetch(u, { headers: { 'User-Agent': CAT_UA, Accept: 'application/json' }, signal: tmo(20000), redirect: 'follow' });
+  if (!r.ok) throw new HttpErr(502, `Il server ha risposto ${r.status}`);
+  const txt = await r.text();
+  if (txt.length > 40 * 1024 * 1024) throw new HttpErr(502, 'Catalogo troppo grande');
+  let j; try { j = JSON.parse(txt); } catch { throw new HttpErr(502, 'Il server non ha restituito un catalogo valido'); }
+  return Array.isArray(j) ? j : j && typeof j === 'object' ? Object.values(j) : [];
+}
+/** catalogo normalizzato e già in cache: {cats:[{id,name}], items:[{id,name,year,cat,poster,rating,added}]} */
+async function xtreamCatalog(src, kind) {
+  return cachedJson(`catalog/${src.key}/${kind}`, async () => {
+    const [cats, items] = await Promise.all([xtreamGet(src, kind === 'series' ? 'get_series_categories' : 'get_vod_categories'), xtreamGet(src, kind === 'series' ? 'get_series' : 'get_vod_streams')]);
+    const okUrl = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u.slice(0, 500) : '');
+    const s = (v, n) => (v === undefined || v === null ? '' : String(v).slice(0, n));
+    return {
+      cats: cats.map((c) => ({ id: s(c.category_id, 20), name: nameClean(c.category_name, 60) || 'Altro' })).filter((c) => c.id),
+      items: items.map((x) => (kind === 'series'
+        ? { id: s(x.series_id, 20), name: nameClean(x.name, 160), year: (s(x.releaseDate || x.release_date, 10).match(/^\d{4}/) || [yearOf(x.name)])[0] || '', cat: s(x.category_id, 20), poster: okUrl(x.cover), rating: num(x.rating_5based ? x.rating_5based * 2 : x.rating, 0, 10), added: +x.last_modified || 0 }
+        : { id: s(x.stream_id, 20), name: nameClean(x.name, 160), year: yearOf(x.name) || '', cat: s(x.category_id, 20), poster: okUrl(x.stream_icon), rating: num(x.rating_5based ? x.rating_5based * 2 : x.rating, 0, 10), added: +x.added || 0 })).filter((x) => x.id && x.name),
+    };
+  });
+}
+async function adminCatalog(env, url) {
+  const srcs = await catalogSources(env);
+  const key = str(url.searchParams.get('src'), 16), src = /^[A-Za-z0-9_-]{16}$/.test(key) ? srcs.get(key) : null;
+  if (!src) throw new HttpErr(400, 'Scegli una sorgente');
+  const kind = url.searchParams.get('kind') === 'series' ? 'series' : 'movies';
+  const q = nameClean(url.searchParams.get('q') || '', 80).toLowerCase(), cat = str(url.searchParams.get('cat'), 20);
+  const page = Math.max(1, Math.min(10000, parseInt(url.searchParams.get('page') || '1', 10) || 1));
+  const data = await xtreamCatalog(src, kind);
+  let items = q ? data.items.filter((x) => x.name.toLowerCase().includes(q)) : data.items;
+  const perCat = new Map();
+  for (const x of items) perCat.set(x.cat, (perCat.get(x.cat) || 0) + 1);
+  if (cat) items = items.filter((x) => x.cat === cat);
+  const catName = new Map(data.cats.map((c) => [c.id, c.name]));
+  const cats = data.cats.map((c) => ({ ...c, n: perCat.get(c.id) || 0 })).filter((c) => c.n || !q);
+  return { total: items.length, page, pages: Math.max(1, Math.ceil(items.length / CAT_PAGE)), cats, items: items.slice((page - 1) * CAT_PAGE, page * CAT_PAGE).map((x) => ({ ...x, catName: catName.get(x.cat) || '' })), kind, src: key };
+}
+
+/* ====================================================================== */
 /* Router                                                                 */
 /* ====================================================================== */
 async function route(req, env, ctx) {
@@ -722,6 +1102,10 @@ async function route(req, env, ctx) {
     if (path === '/api/player/profiles' && req.method === 'POST') return playerProfiles(req, env, ip, ctx);
     if (path === '/api/player/linkcode' && req.method === 'POST') return playerLinkCode(req, env, ip, ctx);
     if (path === '/api/player/link' && req.method === 'POST') return playerLink(req, env, ip, ctx);
+    if (path === '/api/player/heartbeat' && req.method === 'POST') return playerHeartbeat(req, env, ip, ctx);
+    if (path === '/api/player/stream' && req.method === 'POST') return playerStream(req, env, ip, ctx);
+    if (path === '/api/player/trailer' && req.method === 'GET') return playerTrailer(req, env, ip, url, ctx);
+    if (path === '/api/player/request' && req.method === 'POST') return playerRequest(req, env, ip, ctx);
     if (path === '/api/player/trending' && req.method === 'GET') {
       if (await limited(env.RL_DEVICE, 'tr:' + ip)) return json({ movies: [], series: [], src: '', updated: 0 }, 429);
       return json(await trending(env, ctx));
@@ -801,9 +1185,9 @@ async function playerRegister(req, env, ip, ctx) {
       pending = await env.DB.prepare('SELECT COUNT(*) AS n ' + PENDING_SQL).first();
       if (pending && pending.n >= MAX_PENDING) return json({ error: 'Registrazioni temporaneamente sospese' }, 503);
     }
-    d = { id: b64url(rand(9)), code, secret_hash: sh, name: '', model, notes: '', active: 0, expires: '', playlists: '', created_at: now(), last_seen: now(), last_ip: ip };
-    await env.DB.prepare('INSERT INTO devices (id, code, secret_hash, model, created_at, last_seen, last_ip) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .bind(d.id, code, sh, model, d.created_at, d.last_seen, ip).run();
+    d = { id: b64url(rand(9)), code, secret_hash: sh, name: '', model, notes: '', active: 0, expires: '', playlists: '', created_at: now(), last_seen: now(), last_ip: ip, perms: defaultPermsJson(await getSettings(env)) };
+    await env.DB.prepare('INSERT INTO devices (id, code, secret_hash, model, created_at, last_seen, last_ip, perms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(d.id, code, sh, model, d.created_at, d.last_seen, ip, d.perms).run();
     ctx.waitUntil(log(env, 'new', `Nuovo dispositivo in attesa: ${code}${model ? ' (' + model + ')' : ''}`, ip));
   } else if (!d.secret_hash) {
     // dispositivo creato dal pannello: il primo che si presenta col codice lo "lega" al proprio segreto
@@ -817,6 +1201,7 @@ async function playerRegister(req, env, ip, ctx) {
 
   ctx.waitUntil(env.DB.prepare('UPDATE devices SET last_seen = ?, last_ip = ?, model = CASE WHEN ? <> \'\' THEN ? ELSE model END WHERE id = ?')
     .bind(now(), ip, model, model, d.id).run());
+  ctx.waitUntil(presenceFromRegister(env, d, b, ip, cfOf(req)));
 
   // un dispositivo collegato usa stato, scadenza, playlist, profili e limiti del suo principale
   const P = await primaryOf(env, d);
@@ -827,6 +1212,7 @@ async function playerRegister(req, env, ip, ctx) {
   if (status === 'active') {
     out.account = await accountOf(env, P, d, pls);
     out.vpn = await vpnOf(env, P, d);
+    out.perms = permsOf(P); // i collegati ereditano i permessi del principale
   }
   return json(out);
 }
@@ -844,10 +1230,14 @@ async function playerReport(req, env, ip, ctx) {
   try { b = await readJSON(req, 8192); } catch (e) { return json({ error: e.message }, e.status || 400); }
   const code = str(b.code, 20).toUpperCase(), secret = str(b.secret, 100);
   if (!CODE_RE.test(code) || !/^[A-Za-z0-9_-]{32,100}$/.test(secret)) return json({ error: 'Dati non validi' }, 400);
-  const d = await env.DB.prepare('SELECT id, name, secret_hash FROM devices WHERE code = ?').bind(code).first();
+  const d = await env.DB.prepare('SELECT id, name, secret_hash, parent, perms FROM devices WHERE code = ?').bind(code).first();
   if (!d || !d.secret_hash || !safeEq(d.secret_hash, await sha256('dev:' + secret))) return json({ error: 'Dispositivo non riconosciuto' }, 403);
-  const kind = str(b.kind, 40), text = str(b.text, 400), info = str(b.info, 400);
-  ctx.waitUntil(log(env, 'report', `Segnalazione da ${d.name || code} · ${kind}${text ? ': ' + text : ''}${info ? ' [' + info + ']' : ''}`, ip));
+  const P = (await primaryOf(env, d)) || d;
+  if (!permsOf(P).report) return json({ error: PERM_MSG }, 403);
+  if (await throttled(env, 'rep:' + d.id, 20, 3600e3)) return json({ error: 'Troppe segnalazioni, riprova più tardi' }, 429);
+  const kind = nameClean(b.kind, 40), text = nameClean(b.text, 400), info = nameClean(b.info, 400);
+  await addRequest(env, d, 'report', { title: kind, body: text, info }, ip).catch(() => {}); // sezione "Segnalazioni" del pannello
+  ctx.waitUntil(log(env, 'report', `Segnalazione da ${P.name || d.name || code} · ${kind}${text ? ': ' + text : ''}${info ? ' [' + info + ']' : ''}`, ip));
   return json({ ok: true });
 }
 
@@ -896,23 +1286,114 @@ async function admin(req, env, url, ip, ctx) {
   if (path === '/state' && m === 'GET') {
     const rows = (await env.DB.prepare('SELECT * FROM devices ORDER BY created_at DESC LIMIT 5000').all()).results || [];
     const devices = [];
-    for (const d of rows) {
-      const pls = await unseal(env, d.playlists).catch(() => []);
-      // le configurazioni WireGuard non tornano mai al pannello: solo "configurata sì/no"
-      devices.push({ id: d.id, code: d.code, name: d.name, model: d.model, notes: d.notes, active: !!d.active, expires: d.expires, playlists: pls, createdAt: d.created_at, lastSeen: d.last_seen, lastIp: d.last_ip, bound: !!d.secret_hash, status: statusOf(d, pls),
-        parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf });
-    }
+    for (const d of rows) devices.push(await deviceOut(env, d));
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p && !p.parent ? p.status : 'pending'; }
     const activity = ((await env.DB.prepare('SELECT t, type, text, ip FROM activity ORDER BY id DESC LIMIT 200').all()).results) || [];
     let messages = [];
     try { messages = ((await env.DB.prepare('SELECT id, target, title, body, level, created, until FROM messages ORDER BY id DESC LIMIT 100').all()).results) || []; } catch {}
     const sessions = (await env.DB.prepare('SELECT COUNT(*) AS n FROM sessions WHERE admin_id = ? AND expires > ?').bind(ses.admin_id, now()).first()).n;
+    const settings = await getSettings(env);
     return json({
-      settings: await getSettings(env), devices, activity, messages, user: who, apk: await latestApk(env, await getSettings(env)), apkFeed: await apkFeed(env),
+      settings, devices, activity, messages, user: who, apk: await latestApk(env, settings), apkFeed: await apkFeed(env),
       wgConf: !!(await env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first()),
       security: { totp: !!ses.totp_on, encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
+      counts: { ...(await newCounts(env)), online: await onlineCount(env) }, permKeys: PERM_KEYS,
     });
+  }
+
+  /* ---------- utenti online ---------- */
+  if (path === '/presence' && m === 'GET') return json(await adminPresence(env));
+
+  /* ---------- località VPN (più server WireGuard) ---------- */
+  if (path === '/vpn-locs' && m === 'GET') return json((await wgLocs(env)).map((x) => ({ id: x.id, name: x.name })));
+  if (path === '/vpn-locs' && m === 'POST') {
+    const b = await readJSON(req, 16384);
+    const name = nameClean(b.name, 40); if (!name) throw new HttpErr(400, 'Scrivi il nome della località, es. Milano');
+    const conf = cleanWg(b.conf); if (!conf) throw new HttpErr(400, 'Incolla la configurazione WireGuard');
+    const list = await wgLocs(env); if (list.length >= 20) throw new HttpErr(400, 'Puoi salvare al massimo 20 località');
+    list.push({ id: b64url(rand(6)), name, conf });
+    await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('wgl', await seal(env, list)).run();
+    await log(env, 'settings', `${who}: località VPN aggiunta · ${name}`, ip);
+    return json({ ok: true });
+  }
+  const vl = path.match(/^\/vpn-locs\/([A-Za-z0-9_-]{4,20})$/);
+  if (vl && m === 'DELETE') {
+    const list = (await wgLocs(env)).filter((x) => x.id !== vl[1]);
+    await env.DB.batch([env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('wgl', await seal(env, list)), env.DB.prepare("UPDATE devices SET vpn_loc = '' WHERE vpn_loc = ?").bind(vl[1])]);
+    await log(env, 'settings', `${who}: località VPN eliminata`, ip);
+    return json({ ok: true });
+  }
+
+  /* ---------- segnalazioni e richieste di contenuti ---------- */
+  if (path === '/requests' || path.startsWith('/requests/')) { const r = await adminRequests(req, env, path, url, who, ip); if (r) return r; }
+
+  /* ---------- DNS (server delle playlist) ---------- */
+  if (path === '/dns' && m === 'GET') {
+    const rows = ((await env.DB.prepare("SELECT playlists FROM devices WHERE playlists <> '' LIMIT 5000").all()).results) || [];
+    const count = new Map();
+    for (const r of rows) {
+      const hosts = new Set((await unseal(env, r.playlists).catch(() => [])).map(hostOf).filter(Boolean));
+      for (const h of hosts) count.set(h, (count.get(h) || 0) + 1);
+    }
+    return json([...count].map(([host, devices]) => ({ host, devices })).sort((a, b) => b.devices - a.devices || a.host.localeCompare(b.host)));
+  }
+  if (path === '/devices/dns' && m === 'POST') {
+    const b = await readJSON(req, 16384);
+    const host = cleanHost(b.host);
+    let rows, from = '';
+    if (Array.isArray(b.ids)) {
+      if (b.ids.length > 200) throw new HttpErr(400, 'Puoi cambiare al massimo 200 dispositivi alla volta');
+      const ids = [...new Set(b.ids.map((x) => str(x, 20)).filter((x) => /^[A-Za-z0-9_-]{6,20}$/.test(x)))];
+      rows = [];
+      for (const id of ids) { const d = await env.DB.prepare("SELECT id, name, code, playlists FROM devices WHERE id = ? AND playlists <> ''").bind(id).first(); if (d) rows.push(d); }
+    } else if (typeof b.from === 'string') {
+      from = cleanHost(b.from);
+      if (from === host) throw new HttpErr(400, 'Il nuovo server è uguale a quello attuale');
+      rows = (((await env.DB.prepare("SELECT id, name, code, playlists FROM devices WHERE playlists <> '' LIMIT 5000").all()).results) || []);
+      const keep = [];
+      for (const d of rows) { const pls = await unseal(env, d.playlists).catch(() => []); if (pls.some((p) => hostOf(p) === from)) keep.push({ ...d, _pls: pls }); }
+      rows = keep;
+    } else throw new HttpErr(400, 'Indica i dispositivi (ids) oppure il server da sostituire (from)');
+    const stmts = []; let changed = 0;
+    for (const d of rows) {
+      const pls = d._pls || await unseal(env, d.playlists).catch(() => []);
+      const next = pls.map((p) => (from && hostOf(p) !== from ? p : swapHost(p, host)));
+      if (JSON.stringify(next) === JSON.stringify(pls)) continue;
+      stmts.push(env.DB.prepare('UPDATE devices SET playlists = ? WHERE id = ?').bind(await seal(env, next), d.id)); changed++;
+    }
+    for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
+    srcMem.map = null;
+    await log(env, 'edit', `${who}: server playlist cambiato in ${host} su ${changed} dispositivi${from ? ' (prima ' + from + ')' : ''}`, ip);
+    return json({ changed, host });
+  }
+
+  /* ---------- permessi di massa ---------- */
+  if (path === '/devices/perms' && m === 'POST') {
+    const b = await readJSON(req, 16384);
+    if (!Array.isArray(b.ids) || !b.ids.length) throw new HttpErr(400, 'Scegli almeno un dispositivo');
+    if (b.ids.length > 200) throw new HttpErr(400, 'Puoi modificare al massimo 200 dispositivi alla volta');
+    const set = permsInput(b.perms);
+    if (!Object.keys(set).length) throw new HttpErr(400, 'Scegli almeno un permesso da cambiare');
+    const ids = [...new Set(b.ids.map((x) => str(x, 20)).filter((x) => /^[A-Za-z0-9_-]{6,20}$/.test(x)))];
+    const stmts = [];
+    for (const id of ids) {
+      const d = await env.DB.prepare('SELECT id, perms FROM devices WHERE id = ?').bind(id).first();
+      if (d) stmts.push(env.DB.prepare('UPDATE devices SET perms = ? WHERE id = ?').bind(permsJson({ ...permsParse(d.perms), ...set }), d.id));
+    }
+    for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
+    await log(env, 'edit', `${who}: permessi (${Object.entries(set).map(([k, v]) => k + (v ? ' on' : ' off')).join(', ')}) su ${stmts.length} dispositivi`, ip);
+    return json({ changed: stmts.length });
+  }
+
+  /* ---------- videoteca ---------- */
+  if (path === '/catalog/sources' && m === 'GET') {
+    const srcs = await catalogSources(env);
+    return json([...srcs.values()].map((s) => ({ key: s.key, label: `${s.host.replace(/^https?:\/\//, '')} · ${s.user}`, host: s.host, devices: s.devices })).sort((a, b) => b.devices - a.devices || a.label.localeCompare(b.label)));
+  }
+  if (path === '/catalog' && m === 'GET') {
+    try { return json(await adminCatalog(env, url)); }
+    catch (e) { if (e instanceof HttpErr) throw e; return json({ error: e && e.name === 'TimeoutError' ? 'Il server non ha risposto entro 20 secondi' : 'Server non raggiungibile' }, 502); }
   }
 
   if (path === '/messages' && m === 'POST') {
@@ -949,6 +1430,7 @@ async function admin(req, env, url, ip, ctx) {
       else throw new HttpErr(400, 'Versione APK non valida: scrivila come 1.3.0');
     }
     if (typeof b.price === 'string') s.price = nameClean(b.price, 60);
+    if (b.permsDefault !== undefined) s.permsDefault = { ...permsParse(s.permsDefault), ...permsInput(b.permsDefault) }; // permessi dei nuovi dispositivi
     if (typeof b.privacy === 'string') {
       const p = b.privacy.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim();
       if (p.length > 10000) throw new HttpErr(400, 'Il testo della privacy è troppo lungo (massimo 10.000 caratteri)');
@@ -1026,15 +1508,17 @@ async function admin(req, env, url, ip, ctx) {
     const id = b64url(rand(9));
     const pls = cleanPlaylists(b.playlists);
     const acc = await accountFields(env, b, {}, pls);
-    await env.DB.prepare('INSERT INTO devices (id, code, name, notes, active, expires, playlists, created_at, max_conn, max_profiles, profiles, lock_profiles, vpn, vpn_conf) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(id, code, str(b.name, 60), str(b.notes, 500), b.active ? 1 : 0, str(b.expires, 10), await seal(env, pls), now(), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf).run();
+    const perms = b.perms !== undefined ? permsJson({ ...permsParse((await getSettings(env)).permsDefault), ...permsInput(b.perms) }) : defaultPermsJson(await getSettings(env));
+    await env.DB.prepare('INSERT INTO devices (id, code, name, notes, active, expires, playlists, created_at, max_conn, max_profiles, profiles, lock_profiles, vpn, vpn_conf, perms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(id, code, str(b.name, 60), str(b.notes, 500), b.active ? 1 : 0, str(b.expires, 10), await seal(env, pls), now(), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, perms).run();
+    await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, id).run();
     await log(env, 'new', `${who}: creato dispositivo ${str(b.name, 60) || code}`, ip);
     return json({ ok: true, id, code });
   }
 
   if (path === '/privacy-template' && m === 'GET') return json({ text: PRIVACY_TEMPLATE });
 
-  const dm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})(\/reset|\/link|\/unlink)?$/);
+  const dm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})(\/reset|\/link|\/unlink|\/dns|\/linkcode)?$/);
   if (dm) {
     const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(dm[1]).first();
     if (!d) throw new HttpErr(404, 'Dispositivo non trovato');
@@ -1043,6 +1527,30 @@ async function admin(req, env, url, ip, ctx) {
       await env.DB.prepare('UPDATE devices SET secret_hash = ? WHERE id = ?').bind('', d.id).run();
       await log(env, 'edit', `${who}: sbloccato il collegamento di ${label}`, ip);
       return json({ ok: true });
+    }
+    if (dm[2] === '/dns' && m === 'POST') {
+      // cambia solo il server (schema+host[:porta]) di tutte le playlist: percorsi, utente e password restano
+      const b = await readJSON(req, 2048);
+      const host = cleanHost(b.host);
+      if (d.parent) throw new HttpErr(400, 'Le playlist di una connessione collegata si cambiano dal cliente principale');
+      const pls = await unseal(env, d.playlists).catch(() => []);
+      if (!pls.length) throw new HttpErr(400, 'Il dispositivo non ha playlist');
+      const next = pls.map((p) => swapHost(p, host));
+      await env.DB.prepare('UPDATE devices SET playlists = ? WHERE id = ?').bind(await seal(env, next), d.id).run();
+      srcMem.map = null;
+      await log(env, 'edit', `${who}: server playlist di ${label} → ${host}`, ip);
+      return json(await deviceOut(env, { ...d, playlists: await seal(env, next) }));
+    }
+    if (dm[2] === '/linkcode' && m === 'POST') {
+      // codice a 6 cifre da dettare al cliente per collegare un altro dispositivo ("Ho già un abbonamento")
+      if (d.parent) throw new HttpErr(400, 'Genera il codice dal cliente principale');
+      const [P] = await activeAccount(env, d);
+      if (!P) throw new HttpErr(400, 'L\'abbonamento non è attivo');
+      const used = await connCount(env, P), max = P.max_conn ?? 1;
+      if (used >= max) throw new HttpErr(400, `Connessioni esaurite (${used} di ${max}): aumenta "Connessioni massime"`);
+      const r = await issuePin(env, P);
+      await log(env, 'edit', `${who}: codice di collegamento generato per ${label} (${used} di ${max} connessioni)`, ip);
+      return json(r);
     }
     if (dm[2] === '/unlink' && m === 'POST') {
       if (!d.parent) throw new HttpErr(400, 'Il dispositivo non è collegato a nessun cliente');
@@ -1068,7 +1576,7 @@ async function admin(req, env, url, ip, ctx) {
     if (m === 'PUT' && d.parent) {
       // connessione di un altro cliente: abbonamento, playlist, profili e limiti si cambiano dal principale
       const b = await readJSON(req);
-      if (['active', 'expires', 'playlists', 'profiles', 'maxConn', 'maxProfiles', 'lockProfiles', 'vpn'].some((k) => b[k] !== undefined)) throw new HttpErr(400, 'Questo dispositivo è una connessione di un altro cliente: abbonamento, playlist e profili si modificano dal cliente principale');
+      if (['active', 'expires', 'playlists', 'profiles', 'maxConn', 'maxProfiles', 'lockProfiles', 'vpn', 'perms'].some((k) => b[k] !== undefined)) throw new HttpErr(400, 'Questo dispositivo è una connessione di un altro cliente: abbonamento, playlist, profili e permessi si modificano dal cliente principale');
       const acc = await accountFields(env, { vpnConf: b.vpnConf, vpnConfClear: b.vpnConfClear }, d, []);
       await env.DB.prepare('UPDATE devices SET name = ?, notes = ?, vpn_conf = ? WHERE id = ?')
         .bind(typeof b.name === 'string' ? str(b.name, 60) : d.name, typeof b.notes === 'string' ? str(b.notes, 500) : d.notes, acc.vpn_conf, d.id).run();
@@ -1087,8 +1595,11 @@ async function admin(req, env, url, ip, ctx) {
       const acc = await accountFields(env, b, d, pls);
       const used = await connCount(env, d);
       if (acc.max_conn < used) throw new HttpErr(400, `Su questo abbonamento ci sono già ${used} dispositivi: scollegane qualcuno prima di ridurre le connessioni`);
-      await env.DB.prepare('UPDATE devices SET name = ?, notes = ?, expires = ?, active = ?, playlists = ?, max_conn = ?, max_profiles = ?, profiles = ?, lock_profiles = ?, vpn = ?, vpn_conf = ? WHERE id = ?')
-        .bind(name, notes, expires, active, await seal(env, pls), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, d.id).run();
+      const perms = b.perms !== undefined ? permsJson({ ...permsParse(d.perms), ...permsInput(b.perms) }) : d.perms || '';
+      await env.DB.prepare('UPDATE devices SET name = ?, notes = ?, expires = ?, active = ?, playlists = ?, max_conn = ?, max_profiles = ?, profiles = ?, lock_profiles = ?, vpn = ?, vpn_conf = ?, perms = ? WHERE id = ?')
+        .bind(name, notes, expires, active, await seal(env, pls), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, perms, d.id).run();
+      await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, d.id).run();
+      if (JSON.stringify(pls) !== JSON.stringify(await unseal(env, d.playlists).catch(() => []))) srcMem.map = null;
       const after = statusOf({ active, expires }, pls);
       await log(env, before !== after ? (after === 'active' ? 'on' : 'off') : 'edit', before !== after ? `${who}: ${name || d.code} ${before} → ${after}` : `${who}: modificato ${name || d.code}`, ip);
       return json({ ok: true });
@@ -1103,6 +1614,12 @@ async function admin(req, env, url, ip, ctx) {
   }
   throw new HttpErr(404, 'Endpoint sconosciuto');
 }
+/** dispositivo come lo vede il pannello (le configurazioni WireGuard non tornano mai: solo "configurata sì/no") */
+async function deviceOut(env, d) {
+  const pls = await unseal(env, d.playlists).catch(() => []);
+  return { id: d.id, code: d.code, name: d.name, model: d.model, notes: d.notes, active: !!d.active, expires: d.expires, playlists: pls, hosts: [...new Set(pls.map(hostOf).filter(Boolean))], createdAt: d.created_at, lastSeen: d.last_seen, lastIp: d.last_ip, bound: !!d.secret_hash, status: statusOf(d, pls),
+    parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '' };
+}
 /** campi "account" inviati dal pannello: connessioni, profili, VPN (cur = valori attuali del dispositivo) */
 async function accountFields(env, b, cur, pls) {
   const o = { max_conn: cur.max_conn ?? 1, max_profiles: cur.max_profiles ?? 3, lock_profiles: cur.lock_profiles ? 1 : 0, vpn: +cur.vpn || 0, vpn_conf: cur.vpn_conf || '', profiles: cur.profiles || '' };
@@ -1112,6 +1629,9 @@ async function accountFields(env, b, cur, pls) {
   if (b.vpn !== undefined) { const v = Number(b.vpn); if (![0, 1, 2].includes(v)) throw new HttpErr(400, 'Modalità VPN non valida'); o.vpn = v; }
   if (b.vpnConfClear === true) o.vpn_conf = '';
   else if (typeof b.vpnConf === 'string' && b.vpnConf.trim()) o.vpn_conf = await seal(env, cleanWg(b.vpnConf));
+  o.max_streams = +cur.max_streams || 0; o.vpn_loc = cur.vpn_loc || '';
+  if (b.maxStreams !== undefined) o.max_streams = intIn(b.maxStreams, 0, MAX_CONN, 'Visioni contemporanee');
+  if (b.vpnLoc !== undefined) { const v = str(b.vpnLoc, 20); if (v && !(await wgLocs(env)).some((x) => x.id === v)) throw new HttpErr(400, 'Località VPN non trovata'); o.vpn_loc = v; }
   const plIds = pls.map((p) => p.id);
   if (b.profiles !== undefined) o.profiles = JSON.stringify(cleanProfiles(b.profiles, o.max_profiles, plIds));
   else if (o.profiles && o.max_profiles < (cur.max_profiles ?? 3)) o.profiles = JSON.stringify(readProfiles({ profiles: o.profiles, max_profiles: o.max_profiles }, plIds));
@@ -1179,6 +1699,7 @@ async function cleanup(env) {
   const t = now();
   await env.DB.batch([
     env.DB.prepare('DELETE FROM sessions WHERE expires < ?').bind(t),
+    env.DB.prepare("DELETE FROM settings WHERE k LIKE 'trl:%' AND CAST(json_extract(v, '$.t') AS INTEGER) < ?").bind(t - 14 * 864e5),
     env.DB.prepare('DELETE FROM login_fail WHERE until < ? AND updated < ?').bind(t, t - 86400e3),
     env.DB.prepare('DELETE FROM activity WHERE t < ?').bind(t - 90 * 86400e3),
     // dispositivi mai attivati e non più visti da 30 giorni (non le connessioni collegate a un cliente,
@@ -1187,7 +1708,9 @@ async function cleanup(env) {
   ]);
   try { await env.DB.prepare('DELETE FROM messages WHERE until > 0 AND until < ?').bind(t).run(); } catch {}
   try { await env.DB.batch([env.DB.prepare('DELETE FROM link_pins WHERE until < ?').bind(t), env.DB.prepare('DELETE FROM throttle WHERE until < ?').bind(t)]); } catch {}
+  // segnalazioni/richieste "fatte" da più di 90 giorni, presenze vecchie di 30 giorni, classifiche di oltre 60 giorni
+  try { await env.DB.batch([env.DB.prepare("DELETE FROM requests WHERE status = 'done' AND created < ?").bind(t - 90 * 86400e3), env.DB.prepare('DELETE FROM presence WHERE t < ?').bind(t - 30 * 86400e3), env.DB.prepare('DELETE FROM watch WHERE day < ?').bind(dayIT(t - 60 * 86400e3))]); } catch {}
 }
 
 // esportati per i test
-export const _internal = { hashPass, checkPass, hotp, checkTotp, b32enc, seal, unseal, cleanTitle, cleanProfiles, semverCode, textToHtml, cleanWg };
+export const _internal = { hashPass, checkPass, hotp, checkTotp, b32enc, seal, unseal, cleanTitle, cleanProfiles, semverCode, textToHtml, cleanWg, permsParse, permsJson, hostOf, cleanHost, swapHost, dayIT, PERM_KEYS };

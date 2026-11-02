@@ -514,6 +514,18 @@ img{display:block}
   box-shadow:0 0 24px var(--a1-70);opacity:0;transform:scale(.2) rotate(-14deg);animation:spTv .5s 1.35s cubic-bezier(.2,1.6,.4,1) forwards}
 @keyframes spTv{to{opacity:1;transform:none}}
 #boot.out .sp-tv,#boot.out .sp-floor,#boot.out .sp-orbit{opacity:0!important;transition:opacity .25s}
+/* ===== 1.8: marchio più futuristico (Orbitron pesante, bordo luminoso, scia di glitch all'ingresso) ===== */
+.sp-wrow .sp-word{font-family:Orbitron,'Bebas Neue',sans-serif;font-weight:900;font-size:clamp(34px,8.2vh,96px);letter-spacing:.22em;margin-right:-.22em;position:relative;
+  background:linear-gradient(180deg,#fff 0 45%,#dfe3ff 50%,#8e97c8 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 18px var(--a1-55)) drop-shadow(0 2px 0 rgba(0,0,0,.6));animation:spWordIn .9s .7s cubic-bezier(.2,.8,.2,1) forwards}
+.sp-wrow .sp-word.shine{background:linear-gradient(100deg,#fff 0 40%,var(--a2) 50%,#fff 60% 100%);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;animation:spWordIn .9s .7s cubic-bezier(.2,.8,.2,1) forwards,spShine 1.4s 1.6s ease-in-out forwards}
+@keyframes spShine{from{background-position:100% 0}to{background-position:0 0}}
+.sp-wrow .sp-word::before,.sp-wrow .sp-word::after{content:attr(data-t);position:absolute;left:0;top:0;width:100%;height:100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;opacity:0;pointer-events:none}
+.sp-wrow .sp-word::before{background:var(--a1);animation:spGlA .7s 1.25s steps(2) 2}
+.sp-wrow .sp-word::after{background:var(--a2);animation:spGlB .7s 1.25s steps(2) 2}
+@keyframes spGlA{0%{opacity:0}10%{opacity:.8;transform:translate(-5px,-2px);clip-path:inset(10% 0 55% 0)}30%{opacity:.8;transform:translate(4px,1px);clip-path:inset(60% 0 10% 0)}50%{opacity:0}100%{opacity:0}}
+@keyframes spGlB{0%{opacity:0}15%{opacity:.8;transform:translate(5px,2px);clip-path:inset(40% 0 30% 0)}35%{opacity:.8;transform:translate(-4px,-1px);clip-path:inset(0 0 75% 0)}55%{opacity:0}100%{opacity:0}}
+.sp-tag{font-family:Orbitron,sans-serif;font-weight:700;letter-spacing:.9em;margin-right:-.9em;color:#fff;font-size:clamp(10px,1.8vh,15px);text-shadow:0 0 14px var(--a1)}
 /* ---------- qualità canale ---------- */
 .qb{flex:none;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 6px;border-radius:5px;line-height:1;border:1px solid currentColor;margin-left:4px}
 .qb.qnone{display:none}
@@ -932,7 +944,15 @@ h5.fh{margin-top:16px}
 .ptext.focused{box-shadow:0 0 0 2px #fff}
 .pdesc{text-align:left;max-height:24vh;overflow:hidden;color:#cfd6ee;font-size:14px;line-height:1.5;margin:0 0 12px}
 /* ===== speed test ===== */
-.spbox{width:min(640px,94vw)!important}
+.spbox{width:min(560px,58vw,94vw)!important;padding:clamp(14px,2.4vh,24px) clamp(16px,2.6vw,28px)!important;max-height:94vh;overflow:hidden}
+.spbox .gauge{width:min(240px,34vh,60%);margin:0 auto}
+.spbox .snum b{font-size:clamp(34px,7vh,56px)}
+.spbox .sphase{font-size:clamp(10px,1.6vh,12px);margin-top:2px}
+.spbox .tbar{margin:8px auto 0}
+.spbox .s4{margin:10px 0 4px;gap:8px}.spbox .s4>div{padding:6px 4px}.spbox .s4 small{font-size:clamp(9px,1.4vh,11px)}.spbox .s4 b{font-size:clamp(13px,2.2vh,16px);margin-top:2px}
+.spbox .sfit{margin:6px 0 0;min-height:22px}.spbox .sfit span{font-size:clamp(11px,1.7vh,13px);padding:4px 10px}
+.spbox .sverd{font-size:clamp(12px,1.9vh,15px);margin:6px 0 10px;line-height:1.35}
+.spbox .sbtn .btn{padding:clamp(8px,1.4vh,12px) clamp(12px,1.6vw,18px);font-size:clamp(12px,1.9vh,15px)}
 .s4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0 6px}
 .s4>div{padding:10px 6px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--line);transition:border-color .2s,background .2s}
 .s4 small{display:block;font-size:11px;letter-spacing:.12em;color:var(--mut);text-transform:uppercase}
@@ -972,6 +992,26 @@ h5.fh{margin-top:16px}
   .bscr .rows{padding-bottom:70px}
 }
 .touch .hint{display:none}
+/* campanella messaggi + richiesta contenuti */
+.ti.tbell{position:relative}
+.ti.tbell.new{color:var(--warn)}
+.ti.tbell .nb{position:absolute;top:2px;right:0;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;box-shadow:0 0 0 2px #0b0b10;animation:popIn .3s}
+.ti.tbell.focused .nb{box-shadow:0 0 0 2px #fff}
+.msgsm .sbox{width:min(700px,94vw);text-align:left}
+.msgl{max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin:14px 0 6px}
+.msg{padding:12px 14px 12px 18px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--line);position:relative}
+.msg::before{content:'';position:absolute;left:0;top:10px;bottom:10px;width:4px;border-radius:3px;background:var(--nc,var(--a1))}
+.msg small{display:block;font-size:11px;letter-spacing:.14em;color:var(--nc,var(--mut));margin-bottom:4px}
+.msg b{display:block;font-size:17px}
+.msg p{margin:6px 0 0;color:#cfd6ee;line-height:1.5;font-size:14px}
+.msg.new{background:rgba(255,255,255,.08)}
+.msg.focused{box-shadow:0 0 0 2px #fff}
+/* 1.8: profilo obbligatorio, scudo VPN cliccabile, trailer */
+.prsub{font-size:clamp(14px,2vh,18px);margin-top:-2.4vh;text-align:center;max-width:620px}
+.ti.tvpn{color:var(--mut)}.ti.tvpn svg{width:22px;height:22px}
+.ti.tvpn.on{color:var(--ok)}.ti.tvpn.on svg{filter:drop-shadow(0 0 6px var(--ok))}
+.ti.tvpn.focused{color:#000}
+#dTrailer.busy{opacity:.6}
 /* ===== WebView delle TV meno recenti (Chrome < 88): niente aspect-ratio → misure equivalenti ===== */
 @supports not (aspect-ratio: 1 / 1) {
   .post::before{content:'';display:block;padding-top:150%}
@@ -1010,8 +1050,8 @@ h5.fh{margin-top:16px}
     <div class="sp-wave"></div><div class="sp-wave w2"></div>
     <div class="sp-orbit"><i></i><i></i><i></i></div>
     <div class="sp-logo"><svg class="sp-svg" viewBox="0 0 200 200"><defs><linearGradient id="kgS" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><circle class="lo-orb" cx="100" cy="100" r="84" fill="none" stroke="url(#kgS)" stroke-width="7" stroke-linecap="round" stroke-dasharray="400 128" transform="rotate(-38 100 100)"/><circle class="lo-orb2" cx="100" cy="100" r="70" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="1.5" stroke-dasharray="3 7"/><rect class="lo-kb" x="62" y="52" width="22" height="96" rx="4" fill="#fff"/><path class="lo-ku" d="M90 104 L128 52 H156 L116 108 Z" fill="url(#kgS)"/><path class="lo-kl" d="M104 98 L122 92 L158 148 H130 Z" fill="#fff"/><circle class="lo-sat" cx="171" cy="62" r="7" fill="#fff"/></svg></div>
-    <div class="sp-wrow"><div class="sp-word" id="bootTitle">KAIROS</div><span class="sp-tv">TV</span></div>
-    <div class="sp-tag">STREAMING</div>
+    <div class="sp-wrow"><div class="sp-word" id="bootTitle" data-t="KAIROS">KAIROS</div><span class="sp-tv">TV</span></div>
+    <div class="sp-tag">PLAYER</div>
     <div class="boot-bar"><i id="bootBar"></i></div>
     <div class="boot-msg" id="bootMsg"></div>
   </section>
@@ -1422,6 +1462,15 @@ function move(dir) {
 }
 function edgeLeft() { const s = $('.screen.on'); if (s && layer() === s && (s.classList.contains('bscr') || s.id === 'live' || s.id === 'guide')) openDrawer(); }
 let okDown = 0, okLast = 0, longFired = false;
+/* lavori pesanti in sottofondo (playlist, guida, loghi, classifiche): partono quando il telecomando è fermo da un attimo,
+   così non rallentano chi sta scorrendo i menu subito dopo l'avvio */
+let lastInput = Date.now();
+for (const ev of ['keydown', 'pointerdown', 'wheel']) document.addEventListener(ev, () => { lastInput = Date.now(); }, { capture: true, passive: true });
+function whenIdle(fn, delay = 0, quiet = 2500, maxWait = 90e3) {
+  const t0 = Date.now() + delay;
+  const tick = () => { if (Date.now() - lastInput >= quiet || Date.now() - t0 > maxWait) { try { fn(); } catch (e) { console.error(e); } } else setTimeout(tick, 400); };
+  setTimeout(tick, delay);
+}
 document.addEventListener('visibilitychange', () => { okDown = 0; });
 document.addEventListener('keydown', (e) => {
   const k = e.key, kc = e.keyCode;
@@ -1490,11 +1539,15 @@ const NAV_IC = {
   favs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>',
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
 };
+NAV_IC.bell = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 0 1 12 0v4l1.8 3H4.2L6 13z"/><path d="M10 19.5a2 2 0 0 0 4 0"/></svg>';
+NAV_IC.req = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 9h18M8 5v4M16 5v4M12 12v4M10 14h4"/></svg>';
+const unseenMsgs = () => { const seen = new Set(store.get('seenMsg', [])); return (S.messages || []).filter((x) => !seen.has(x.id)); };
+const perm = (k) => !S.perms || S.perms[k] !== false;
 let navSeq = 0;
 function navHTML(curKey) {
   return `<nav class="tnav">${LOGO_SVG('kgN' + ++navSeq)}<span class="tdate"></span>
     <div class="ttabs">${TABS.map(([k, l]) => `<div class="tt ${k === curKey ? 'cur' : ''}" data-f data-go="${k}">${l}</div>`).join('')}</div>
-    <div class="ticons">${['refresh', 'search', 'favs', 'settings'].map((k) => `<div class="ti ${k === curKey ? 'cur' : ''}${k === 'refresh' && S.refreshing ? ' spin' : ''}" data-f data-go="${k}" title="${{ refresh: 'Aggiorna contenuti', search: 'Cerca', favs: 'La mia lista', settings: 'Impostazioni' }[k]}">${NAV_IC[k]}</div>`).join('')}${S.vpn && S.vpn.mode !== 'off' && vpnOk() ? `<span class="vpnbadge${S.vpnState === 'on' ? ' on' : ''}" title="VPN">${ICX.shield}</span>` : ''}${S.prof && profList().length > 1 ? `<div class="ti tprof" data-f data-go="profiles" title="Cambia profilo">${avatarSVG(S.prof.avatar, S.prof.name)}</div>` : ''}</div></nav>`;
+    <div class="ticons">${['refresh', 'search', 'favs', 'settings'].map((k) => `<div class="ti ${k === curKey ? 'cur' : ''}${k === 'refresh' && S.refreshing ? ' spin' : ''}" data-f data-go="${k}" title="${{ refresh: 'Aggiorna contenuti', search: 'Cerca', favs: 'La mia lista', settings: 'Impostazioni' }[k]}">${NAV_IC[k]}</div>`).join('')}${!S.demo && perm('request') && baseServer() ? `<div class="ti" data-f data-go="request" title="Richiedi un contenuto">${NAV_IC.req}</div>` : ''}<div class="ti tbell${unseenMsgs().length ? ' new' : ''}" data-f data-go="messages" title="Messaggi del fornitore">${NAV_IC.bell}${unseenMsgs().length ? `<b class="nb">${unseenMsgs().length}</b>` : ''}</div>${S.vpn && S.vpn.mode !== 'off' && vpnOk() ? `<div class="ti tvpn vpnbadge${S.vpnState === 'on' ? ' on' : ''}" data-f data-go="vpn" title="VPN: premi per accendere o spegnere">${ICX.shield}</div>` : ''}${S.prof && profList().length > 1 ? `<div class="ti tprof" data-f data-go="profiles" title="Cambia profilo">${avatarSVG(S.prof.avatar, S.prof.name)}</div>` : ''}</div></nav>`;
 }
 function fillNav(id) {
   const slot = $('#' + id + ' .navslot'); if (!slot) return;
@@ -1590,13 +1643,9 @@ function back() {
     return;
   }
   if ($('#drawer').classList.contains('on')) return closeDrawer();
-  if ($('#detail').classList.contains('on')) {
-    $('#detail').classList.remove('on');
-    let f = lastFocusBeforeDetail;
-    // la Home può essere stata ricostruita mentre la scheda era aperta (eventi, aggiornamenti): si ritrova lo stesso titolo
-    if (!f || !document.body.contains(f)) { const k = lastKeyBeforeDetail; f = k && browseFind(k.scr, k.key); }
-    focus(f || visibleF($('.screen.on'))[0], true); return;
-  }
+  if ($('#detail').classList.contains('on')) { closeDetail(); return; }
+  // senza profili non si entra: Indietro chiede solo se uscire dall'app
+  { const ps = $('#profiles'); if (ps.classList.contains('on') && ps._must) { confirmExit(); return; } }
   // da una cartella/scheda torna alla schermata precedente; dalle sezioni principali torna alla Home
   if (!S.stack.length) { const sc = $('.screen.on'); if (sc && !['boot', 'activate'].includes(sc.id)) confirmExit(); return; }
   const prev = S.stack.pop();
@@ -1611,6 +1660,9 @@ function back() {
 function go(where, fromNav) {
   if (where === 'refresh') return manualRefresh();
   if (where === 'profiles') { S.stack = ['home']; return showProfiles(() => go('home', true)); }
+  if (where === 'messages') return messagesDialog();
+  if (where === 'vpn') return vpnQuick();
+  if (where === 'request') return requestDialog();
   if (fromNav) S.stack = where === 'home' ? [] : ['home'];
   const sh = (id) => (fromNav ? show(id, false) : show(id));
   if (where === 'home') { buildBrowse($('#home'), 'all'); return sh('home'); }
@@ -1706,6 +1758,7 @@ async function register() {
   S.lastError = '';
   S.status = j.status; S.expires = j.expires; S.playlists = j.playlists || [];
   S.messages = Array.isArray(j.messages) ? j.messages : [];
+  S.perms = j.perms && typeof j.perms === 'object' ? j.perms : null;
   if (j.status === 'active') {
     if (j.account) { S.account = j.account; store.set('acctCache', j.account); }
     S.vpn = j.vpn || { mode: 'off' }; store.set('vpnCache', S.vpn.mode === 'off' ? null : S.vpn);
@@ -1793,7 +1846,8 @@ async function loadXtream(p) {
     series: ss.map((s) => ({ id: 'xs' + s.series_id, k: 's', seriesId: s.series_id, name: String(s.name ?? ''), poster: s.cover, group: sc.get(String(s.category_id)) || 'Altro', rating: s.rating, plot: s.plot, genre: s.genre, cast: s.cast, added: +s.last_modified || 0, backdrop: (Array.isArray(s.backdrop_path) ? s.backdrop_path[0] : s.backdrop_path) || '', year: (s.releaseDate || s.release_date || '').slice(0, 4), pl })),
   };
 }
-const activePlaylists = () => [...S.playlists, ...(S.settings.allowLocalPlaylists ? S.local : [])].map((p) => ({ ...p, id: p.id || 'p' + hashStr((p.url || '') + (p.host || '') + (p.username || '')) }));
+const localOk = () => S.settings.allowLocalPlaylists && perm('localPl');
+const activePlaylists = () => [...S.playlists, ...(localOk() ? S.local : [])].map((p) => ({ ...p, id: p.id || 'p' + hashStr((p.url || '') + (p.host || '') + (p.username || '')) }));
 const fixUrl = (u) => { u = String(u || '').trim(); return u && !/^[a-z][a-z0-9+.-]*:\/\//i.test(u) ? 'http://' + u : u; };
 function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
 /* scarica e legge tutte le playlist in parallelo */
@@ -1851,7 +1905,7 @@ function libSig(lib) {
 }
 /* cache della libreria: IndexedDB, oppure file dell'app se IndexedDB non è disponibile */
 const LibCache = {
-  key() { return 'lib_' + hashStr(JSON.stringify(activePlaylists().map((p) => [p.id, p.type, p.url, p.host, p.username, p.password]))); },
+  key() { return 'lib_' + hashStr(JSON.stringify(activePlaylists().map((p) => [p.id, p.type, p.type === 'xtream' ? '' : plPath(p.url), '', p.username, p.password]))); },
   db() {
     return this._db || (this._db = new Promise((res, rej) => {
       try { const r = indexedDB.open('kairos', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); }
@@ -2078,6 +2132,7 @@ function playUrl(v, item, box) {
    LIVE TV
    ===================================================================== */
 const logoHTML = (c) => c.logo ? `<img loading="lazy" decoding="async" src="${esc(c.logo)}" data-c="${esc(c.id)}" onerror="kxLogoBad(this.dataset.c,this)">` : esc(c.name.replace(RX_CC, '').trim().slice(0, 2).toUpperCase());
+const recentLive = () => S.recent.filter((r) => r.kind === 'live').map((r) => S.byId && S.byId.get(r.id)).filter((x) => x && x.k === 'l').slice(0, 40);
 function liveCatList() {
   return [{ name: 'all', label: 'Tutti i canali', count: visLive(S.lib.live).length }, { name: 'fav', label: '★ Preferiti', count: S.lib.live.filter((c) => S.favs.has(c.id)).length }, ...sortCats(S.lib.liveCats).map((c) => ({ ...c, label: c.name }))];
 }
@@ -2110,8 +2165,8 @@ window.kxPreviewInfo = (id, h) => setMeasuredQuality(id, +h);
 let chRendered = 0, chStart = 0; // finestra di canali disegnati: [chStart, chRendered)
 function renderChannels(from = 0) {
   const c = S.liveCat;
-  S.liveIndex = sortChannels(visLive(c === 'all' ? S.lib.live : c === 'fav' ? S.lib.live.filter((x) => S.favs.has(x.id)) : (S.byGroup && S.byGroup.get('l' + c)) || S.lib.live.filter((x) => x.group === c)));
-  $('#liveCatName').textContent = c === 'all' ? 'Tutti i canali' : c === 'fav' ? '★ Preferiti' : c;
+  S.liveIndex = c === 'recent' ? visLive(recentLive()) : sortChannels(visLive(c === 'all' ? S.lib.live : c === 'fav' ? S.lib.live.filter((x) => S.favs.has(x.id)) : (S.byGroup && S.byGroup.get('l' + c)) || S.lib.live.filter((x) => x.group === c)));
+  $('#liveCatName').textContent = c === 'all' ? 'Tutti i canali' : c === 'fav' ? '★ Preferiti' : c === 'recent' ? '⟲ Continua a guardare' : c;
   $('#liveCatCount').textContent = S.liveIndex.length.toLocaleString('it');
   $('#liveList').scrollTop = 0;
   $('#liveList').innerHTML = S.liveIndex.length ? '' : '<div class="mut" style="padding:30px;text-align:center">Nessun canale</div>';
@@ -2186,8 +2241,9 @@ function idleBox(ch) {
   $('#pvPh').innerHTML = ch ? `${ch.logo ? `<img src="${esc(ch.logo)}" onerror="this.remove()">` : ''}<b>${esc(ch.name)}</b><small>${HINT_OK}</small>` : '<small>Seleziona un canale</small>';
   if (ch) showInfo(ch);
 }
-function preview(ch) {
+function preview(ch, gated) {
   if (isLocked(ch)) { gate(ch).then((ok) => ok && preview(ch)); return; }
+  if (!gated && streamGateNeeded()) { streamGate('live', ch.name).then((ok) => ok && preview(ch, true)); return; }
   S.previewing = ch; S.playingLive = ch;
   $$('#liveList .ch').forEach((x) => x.classList.toggle('playing', S.liveIndex[+x.dataset.i] === ch));
   const b = $('#pvBox');
@@ -2196,7 +2252,9 @@ function preview(ch) {
   if (HAS_PREVIEW) { b.classList.remove('demo'); b.classList.add('loading'); nativePreview(ch); }
   else { const v = $('#pv'); v.muted = false; playUrl(v, ch, b); }
   showInfo(ch);
+  clearTimeout(hbPv); hbPv = setTimeout(() => heartbeat(true), 2500);
 }
+let hbPv;
 const HAS_PREVIEW = !!(NATIVE && NATIVE.preview);
 function previewRect() {
   const r = ($('#guide').classList.contains('on') ? $('#gBox') : $('#pvBox')).getBoundingClientRect();
@@ -2391,8 +2449,8 @@ function openGuide(fromStart) {
 function guideRender(first, target) {
   G.q.length = 0; // richieste della guida breve per righe non più a schermo
   const c = S.liveCat;
-  G.idx = sortChannels(visLive(c === 'all' ? S.lib.live : c === 'fav' ? S.lib.live.filter((x) => S.favs.has(x.id)) : (S.byGroup && S.byGroup.get('l' + c)) || S.lib.live.filter((x) => x.group === c)));
-  $('#gCatName').textContent = c === 'all' ? 'Tutti i canali' : c === 'fav' ? '★ Preferiti' : c;
+  G.idx = c === 'recent' ? visLive(recentLive()) : sortChannels(visLive(c === 'all' ? S.lib.live : c === 'fav' ? S.lib.live.filter((x) => S.favs.has(x.id)) : (S.byGroup && S.byGroup.get('l' + c)) || S.lib.live.filter((x) => x.group === c)));
+  $('#gCatName').textContent = c === 'all' ? 'Tutti i canali' : c === 'fav' ? '★ Preferiti' : c === 'recent' ? '⟲ Continua a guardare' : c;
   $('#gCatCount').textContent = G.idx.length.toLocaleString('it');
   const d = new Date(); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() < 30 ? 0 : 30); G.T0 = +d - 30 * 60e3;
   guideGeom();
@@ -2607,12 +2665,14 @@ function nativePlay(item, kind, fromSec, extra) {
       hw: opt('hw'), sub: opt('subSize'), res: !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list) }));
   } catch (e) { return false; }
   S.inPlayer = true;
-  if (kind === 'live') { S.playingLive = item; addRecent(item, 'live'); store.set('lastCh', item.id); }
+  if (kind === 'live') { S.playingLive = item; S.playingVod = null; addRecent(item, 'live'); store.set('lastCh', item.id); } else { S.playingVod = item; S.playingLive = null; }
+  setTimeout(() => heartbeat(true), 1500);
   return true;
 }
 // chiamata dall'app quando si chiude il player nativo
 window.kxPlayerClosed = (r) => {
-  S.inPlayer = false;
+  S.inPlayer = false; S.playingVod = null;
+  setTimeout(() => heartbeat(true), 800);
   try { r = typeof r === 'string' ? JSON.parse(r) : r; } catch { return; }
   if (!r) return;
   if (r.engine && r.engineKey && OPT[r.engineKey]) store.set('o_' + r.engineKey, r.engine); // scelta fatta nel player: ricordata per quel tipo di contenuto
@@ -2620,6 +2680,8 @@ window.kxPlayerClosed = (r) => {
     const pos = store.get('pos', {}), du = store.get('dur', {});
     if (r.pos > 5 && r.pos < r.dur - 30) pos[r.id] = r.pos; else delete pos[r.id];
     du[r.id] = r.dur; store.set('pos', pos); store.set('dur', du);
+    const dp = $('#detail').classList.contains('on') && $('#dPlay');
+    if (dp && dp.lastChild && dp.lastChild.nodeType === 3) dp.lastChild.textContent = pos[r.id] ? 'Riprendi' : 'Riproduci';
   }
   if (r.height) setMeasuredQuality(r.id, +r.height);
   if (r.kind === 'live' && r.id && S.byId) {
@@ -2628,7 +2690,8 @@ window.kxPlayerClosed = (r) => {
   }
   setTimeout(placeRing, 100);
 };
-function openFs(item, kind, fromSec, extra) {
+function openFs(item, kind, fromSec, extra, gated) {
+  if (!gated && streamGateNeeded()) { streamGate(kind, item && item.name).then((ok) => ok && openFs(item, kind, fromSec, extra, true)); return; }
   if (isLocked(item) || (extra && extra.parent && isLocked(extra.parent))) { gate(extra && extra.parent && isLocked(extra.parent) ? extra.parent : item).then((ok) => ok && openFs(item, kind, fromSec, extra)); return; }
   if (nativePlay(item, kind, fromSec, extra)) return;
   fsItem = item; fsKind = kind;
@@ -2726,6 +2789,13 @@ function openItem(x) {
   openDetail(x);
 }
 let lastFocusBeforeDetail = null, lastKeyBeforeDetail = null, detailTok = 0;
+/* chiude la scheda e rimette la selezione sul titolo da cui era stata aperta (anche se la lista è stata ricostruita) */
+function closeDetail() {
+  $('#detail').classList.remove('on');
+  let f = lastFocusBeforeDetail;
+  if (!f || !document.body.contains(f)) { const k = lastKeyBeforeDetail; f = k && browseFind(k.scr, k.key); }
+  focus(f && isVis(f) ? f : visibleF($('.screen.on'))[0], true);
+}
 async function openDetail(x) {
   if (isLocked(x) && !(await gate(x))) return;
   lastFocusBeforeDetail = cur;
@@ -2742,7 +2812,7 @@ async function openDetail(x) {
         <span class="brandmark">${esc((S.settings.brand || 'KAIROS').toUpperCase())}</span>
         <button class="dx" data-f data-back>✕</button>
         <div class="dht"><div class="hkind"><i class="kb">K</i>${isSeries ? 'SERIE' : 'FILM'}</div><h1>${esc(x.name)}</h1>
-          <div class="acts">${isSeries ? `<button class="nbtn play" data-f data-autof id="dEp1"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>Episodi</button>` : `<button class="nbtn play" data-f data-autof id="dPlay"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>${pos ? 'Riprendi' : 'Riproduci'}</button>${pos ? '<button class="nbtn info" data-f id="dRestart">↺ Dall\'inizio</button>' : ''}`}
+          <div class="acts">${isSeries ? `<button class="nbtn play" data-f data-autof id="dEp1"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>Episodi</button>` : `<button class="nbtn play" data-f data-autof id="dPlay"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>${pos ? 'Riprendi' : 'Riproduci'}</button>${pos ? '<button class="nbtn info" data-f id="dRestart">↺ Dall\'inizio</button>' : ''}`}${!S.demo && baseServer() ? '<button class="nbtn info" data-f id="dTrailer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="m10 9 5 3-5 3z" fill="currentColor"/></svg>Trailer</button>' : ''}
           <button class="rbtn" data-f id="dFav" title="La mia lista">${S.favs.has(x.id) ? '✓' : '+'}</button></div></div>
       </div>
       <div class="dbody"><div><div class="hmeta">${+x.rating ? `<span class="m">★ ${(+x.rating).toFixed(1)}</span>` : ''}${ex.year ? `<span>${esc(ex.year)}</span>` : ''}${ex.duration ? `<span>${esc(ex.duration)}</span>` : ''}<span class="bx">HD</span></div>
@@ -2750,9 +2820,12 @@ async function openDetail(x) {
         <div class="side">${ex.cast ? `<p><span>Cast:</span> ${esc(ex.cast)}</p>` : ''}${ex.genre ? `<p><span>Generi:</span> ${esc(ex.genre)}</p>` : ''}<p><span>Categoria:</span> ${esc(x.group)}</p></div></div>
       ${isSeries ? '<div class="dsec"><div class="dsh"><h3>Episodi</h3><div class="seasons" id="dSeas"></div></div><div class="eps" id="dEps"><div class="mut">Caricamento episodi…</div></div></div>' : ''}</div>`;
     $('#dEp1') && ($('#dEp1').onclick = () => { const f = $('#dEps .ep'); f && focus(f); });
-    const play = (from) => { $('#detail').classList.remove('on'); openFs(x, 'vod', from || 0); addRecent(x, 'movie'); };
-    $('#dPlay') && ($('#dPlay').onclick = () => play(pos));
+    // nell'app la scheda resta aperta sotto il lettore: finita la visione si torna qui, e con Indietro alla lista nello stesso punto
+    const play = (from) => { if (!HAS_PLAYER) closeDetail(); openFs(x, 'vod', from || 0); addRecent(x, 'movie'); };
+    // la posizione si legge al momento del clic: tornando dal lettore la scheda è rimasta aperta
+    $('#dPlay') && ($('#dPlay').onclick = () => play(store.get('pos', {})[x.id] || 0));
     $('#dRestart') && ($('#dRestart').onclick = () => play(0));
+    $('#dTrailer') && ($('#dTrailer').onclick = () => playTrailer(x, ex));
     $('#dFav').onclick = () => { toggleFav(x); $('#dFav').textContent = S.favs.has(x.id) ? '✓' : '+'; };
   };
   render();
@@ -2780,7 +2853,7 @@ async function openDetail(x) {
       const list = eps.filter((e) => e.season === s).sort((a, b) => a.ep - b.ep);
       $('#dEps').innerHTML = list.map((e, i) => `<div class="ep" data-f data-i="${i}"><b>${e.ep}</b><div class="et">${x.backdrop || x.poster ? `<img loading="lazy" decoding="async" src="${esc(x.backdrop || x.poster)}" onerror="this.remove()">` : ''}<i>▶</i></div><span>${esc(e.title)}</span></div>`).join('');
       const epItem = (e) => ({ id: e.id || x.id + 's' + e.season + 'e' + e.ep, ep: 1, name: `${x.name} · S${e.season} E${e.ep}${e.title && !/^episodio/i.test(e.title) ? ' · ' + e.title : ''}`, poster: x.poster, url: e.url, group: x.group, demo: x.episodes && e.url === 'demo' });
-      $$('#dEps .ep').forEach((el) => (el.onclick = () => { const i = +el.dataset.i, it = epItem(list[i]); $('#detail').classList.remove('on'); openFs(it, 'series', null, { list: list.map(epItem), index: i, parent: x }); addRecent(x, 'series'); }));
+      $$('#dEps .ep').forEach((el) => (el.onclick = () => { const i = +el.dataset.i, it = epItem(list[i]); if (!HAS_PLAYER) closeDetail(); openFs(it, 'series', null, { list: list.map(epItem), index: i, parent: x }); addRecent(x, 'series'); }));
     };
     $('#dSeas').innerHTML = seasons.map((s) => `<button class="chip" data-f data-s="${s}">Stagione ${s}</button>`).join('');
     $$('#dSeas .chip').forEach((c) => (c.onclick = () => showSeason(+c.dataset.s)));
@@ -2844,14 +2917,12 @@ function makeRows(kind) {
   // eventi sportivi sempre per primi nella Home
   const ev = kind === 'all' && S.settings.showFootball !== false ? upcomingEvents() : [];
   if (ev.length) R.push({ title: ev.some((e) => e.live) ? '● In corso e prossimi eventi sportivi' : 'Prossimi eventi sportivi', type: 'ev', items: ev });
-  const inKind = (x) => kind === 'all' || (kind === 'movies' ? x.k === 'm' : x.k === 's');
-  let rec = S.recent.map((r) => S.byId && S.byId.get(r.id)).filter((x) => x && inKind(x));
-  if (S.demo && !rec.length) rec = [L.movies[2], L.series[0], L.movies[5], L.live[0], L.movies[9], L.series[3]].filter((x) => x && inKind(x));
-  if (rec.length) R.push({ title: 'Continua a guardare', type: 'cont', items: rec });
-  if (kind === 'all' && L.live.length) {
-    const base = visLive(safe(L.live));
-    const lv = S.favs.size ? [...base.filter((c) => S.favs.has(c.id)), ...base.filter((c) => !S.favs.has(c.id))] : base;
-    R.push({ title: 'In diretta ora', sub: L.live.length.toLocaleString('it') + ' canali', type: 'live', items: lv.slice(0, 30), more: { go: 'live' } });
+  // "Continua a guardare" sta dentro ogni sezione (Film, Serie, In Diretta), non nella Home
+  if (kind !== 'all') {
+    const inKind = (x) => (kind === 'movies' ? x.k === 'm' : x.k === 's');
+    let rec = S.recent.map((r) => S.byId && S.byId.get(r.id)).filter((x) => x && inKind(x));
+    if (S.demo && !rec.length) rec = [L.movies[2], L.series[0], L.movies[5], L.movies[9], L.series[3]].filter((x) => x && inKind(x));
+    if (rec.length) R.push({ title: 'Continua a guardare', type: 'cont', items: rec });
   }
   const TR = trendLists();
   if (kind !== 'series') {
@@ -3310,7 +3381,7 @@ function itemMenu(x, el) {
   acts.push(['lock', lk ? '🔓  Sblocca (togli il PIN)' : '🔒  Blocca con PIN']);
   if (live || x.group) acts.push(['lockg', S.locked.has('g:' + (x.k || '') + '|' + x.group) ? `🔓  Sblocca la categoria «${x.group}»` : `🔒  Blocca la categoria «${x.group}»`]);
   if (live && canRec()) acts.unshift(['rec', recFor(x.id) ? '■  Ferma la registrazione' : '●  Registra ora']);
-  acts.push(['rep', live ? '⚠  Segnala: il canale non funziona' : '⚠  Segnala un problema']);
+  if (perm('report')) acts.push(['rep', live ? '⚠  Segnala: il canale non funziona' : '⚠  Segnala un problema']);
   fx('ok');
   modalPause();
   document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="menuM"><div class="sbox menubox"><div class="orb mut" style="font-size:12px;letter-spacing:.3em">${live ? 'CANALE' : isSeriesItem(x) ? 'SERIE' : 'FILM'}</div><h2>${esc(x.name)}</h2>
@@ -3367,7 +3438,7 @@ S.setSec = 'dev';
 function renderSettings(sec) {
   if (sec) S.setSec = sec;
   const st = { active: ['Attivo', 'var(--ok)'], pending: ['In attesa', 'var(--warn)'], expired: ['Scaduto', 'var(--bad)'], disabled: ['Disattivato', 'var(--bad)'], demo: ['Demo', 'var(--a1)'] }[S.demo ? 'demo' : S.status] || ['—', 'var(--mut)'];
-  const allPl = [...S.playlists.map((p) => ({ ...p, srv: 1 })), ...(S.settings.allowLocalPlaylists ? S.local : [])];
+  const allPl = [...S.playlists.map((p) => ({ ...p, srv: 1 })), ...(localOk() ? S.local : [])];
   const P = playPrefs(), theme = store.get('theme') || S.settings.accent || 'cinema';
   const MENU = [['dev', 'Account'], ['acct', 'Profili e dispositivi'], ['pl', 'Gestione playlist'], ['play', 'Lettore'], ['tv', 'TV in diretta e guida TV'], ['rec', 'Registrazioni'], ['kids', 'Controllo genitori'], ['net', 'Rete e speed test'], ['priv', 'Privacy e VPN'], ['look', 'Generali'], ['info', 'Informazioni']];
   const kv = (k, v) => `<div class="sr static"><span>${k}</span><b>${v}</b></div>`;
@@ -3376,7 +3447,7 @@ function renderSettings(sec) {
     dev: `<h3>Account</h3>${kv('Codice dispositivo', `<span class="orb">${esc(S.code)}</span>`)}${kv('Stato', `<span style="color:${st[1]}">${st[0]}</span>`)}${kv('Scadenza', S.expires ? new Date(S.expires).toLocaleDateString('it-IT') : 'Illimitata')}${kv('Contenuti', `${S.lib.live.length.toLocaleString('it')} canali · ${S.lib.movies.length.toLocaleString('it')} film · ${S.lib.series.length.toLocaleString('it')} serie`)}${S.settings.supportContact ? kv('Assistenza', esc(S.settings.supportContact)) : ''}
       <div class="sbtns"><button class="btn pri" data-f id="sReload">↻ Aggiorna contenuti</button></div>`,
     pl: `<h3>Gestione playlist</h3>${allPl.map((p) => `<div class="sr static"><span><b style="color:#fff">${esc(p.name)}</b><br><small class="mut">${p.type === 'xtream' ? 'Xtream Codes' : 'M3U'}${p.srv ? ' · dal gestore' : ' · personale'}</small></span>${p.srv ? '<b>✓</b>' : `<button class="btn" data-f data-del="${p.id}" style="padding:8px 14px">Rimuovi</button>`}</div>`).join('') || '<div class="snote">Nessuna playlist collegata.</div>'}
-      ${S.settings.allowLocalPlaylists ? `<div class="seg" style="margin-top:18px"><button data-f class="sel" id="tM3U">M3U</button><button data-f id="tXT">Xtream Codes</button></div><div id="plForm"></div><button class="btn pri" data-f id="plAdd" style="width:100%;justify-content:center">+ Aggiungi playlist</button>` : '<div class="snote">Le playlist sono gestite dal tuo fornitore.</div>'}
+      ${localOk() ? `<div class="seg" style="margin-top:18px"><button data-f class="sel" id="tM3U">M3U</button><button data-f id="tXT">Xtream Codes</button></div><div id="plForm"></div><button class="btn pri" data-f id="plAdd" style="width:100%;justify-content:center">+ Aggiungi playlist</button>` : '<div class="snote">Le playlist sono gestite dal tuo fornitore.</div>'}
       <h3 style="margin-top:26px">Ordinamento</h3>${optRow('sortCats')}${optRow('sortCh')}${optRow('sortVod')}`,
     play: `<h3>Lettore</h3>${HAS_PLAYER ? '' : '<div class="snote">Queste opzioni valgono nell\'app (Fire TV, Android TV, telefoni).</div>'}
       ${optRow('engLive')}${optRow('engMovie')}${optRow('engSeries')}
@@ -3389,7 +3460,7 @@ function renderSettings(sec) {
       return `<h3>TV in diretta e guida TV</h3>${optRow('liveFmt')}${kv('Guida TV (EPG)', `<span id="eStat">${esc(st)}</span>`)}${kv('Sorgenti', src.length ? src.length + (src.length > 1 ? ' trovate' : ' trovata') : 'nessuna')}
       <div class="sbtns"><button class="btn pri" data-f id="eUpd">↻ Forza aggiornamento guida TV</button></div>${optRow('epgShift')}
       <div class="snote">La guida viene presa dal tuo server (Xtream) o dall'indirizzo indicato nella lista M3U, e si aggiorna da sola ogni 3 ore. Se il tuo fornitore ti ha dato un link EPG diverso, inseriscilo qui:</div>
-      <input class="inp" data-f id="eUrl" placeholder="Indirizzo EPG (XMLTV), es. http://server/epg.xml.gz" value="${esc(store.get('epgUrl', ''))}"><button class="btn" data-f id="eSave">Salva indirizzo EPG</button>
+      ${perm('epgUrl') ? `<input class="inp" data-f id="eUrl" placeholder="Indirizzo EPG (XMLTV), es. http://server/epg.xml.gz" value="${esc(store.get('epgUrl', ''))}"><button class="btn" data-f id="eSave">Salva indirizzo EPG</button>` : ''}
       <h3 style="margin-top:26px">Canali nascosti</h3>${kv('Canali nascosti', `<span id="hCount">${S.hidden.size}</span>`)}${optRow('showHidden')}
       <div class="sbtns"><button class="btn" data-f id="hRestore">Ripristina canali nascosti</button></div>
       <div class="snote">Per nascondere un canale tieni premuto OK sul canale e scegli «Nascondi canale».</div>`;
@@ -3402,18 +3473,19 @@ function renderSettings(sec) {
       <div class="sbtns"><button class="btn" data-f id="kClear">Sblocca tutto</button></div>
       <div class="snote">Con il controllo attivo, i contenuti bloccati chiedono il PIN prima di essere guardati. Per bloccare un canale, un film o un'intera categoria tieni premuto OK e scegli «Blocca con PIN».</div>`,
     net: `<h3>Rete e speed test</h3>${kv('Ultimo speed test', `<span id="sLast">${speedLastTxt()}</span>`)}
-      <div class="sbtns"><button class="btn pri" data-f id="sSpeed">⚡ Avvia speed test</button><button class="btn" data-f id="sTest">Test connessione al server</button></div>
+      <div class="sbtns">${perm('speed') ? '<button class="btn pri" data-f id="sSpeed">⚡ Avvia speed test</button>' : ''}<button class="btn" data-f id="sTest">Test connessione al server</button></div>
       <div class="snote">Lo speed test misura la velocità reale della tua linea e ti consiglia le impostazioni migliori per il lettore.</div>`,
     look: `<h3>Generali</h3>${optRow('startScr')}${optRow('sfx')}${optRow('textSize')}
       <div class="sr" data-f id="sTheme"><span>Colore</span><b><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(THEMES[theme] || THEMES.cinema)[0]};margin-right:8px"></span>${theme}</b></div>
       ${optRow('orient')}
       <div class="sr" data-f id="sAdult"><span>Contenuti per adulti nella Home e nei consigliati</span><b>${showAdult() ? 'Sì' : 'No'}</b></div>
       <div class="sr" data-f id="sLogo"><span>Loghi dei canali automatici</span><b>${store.get('autoLogo', true) === false ? 'No' : 'Sì'}</b></div>
-      <div class="sr" data-f id="sClearCont"><span>Cancella «Continua a guardare»</span><b>›</b></div>
+      <div class="sr" data-f id="sClearCont"><span>Cancella «Continua a guardare» (film e serie)</span><b>›</b></div>
+      <div class="sr" data-f id="sClearSeen"><span>Cancella «Ultimi visti» (canali e titoli aperti)</span><b>›</b></div>
       <div class="sr" data-f id="sClear"><span>Svuota preferiti e cronologia</span><b>›</b></div>
       <div class="sr" data-f id="sCache"><span>Svuota la memoria dei contenuti</span><b>›</b></div>`,
     info: `<h3>Informazioni</h3>${kv('App', esc((S.settings.brand || 'KAIROS') + ' TV'))}${kv('Versione', esc((NATIVE && NATIVE.version && NATIVE.version()) || 'web'))}${kv('Interfaccia', esc((NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || 'inclusa'))}${kv('Dispositivo', esc((NATIVE && NATIVE.model && NATIVE.model()) || 'browser'))}${kv('Codice', `<span class="orb">${esc(S.code)}</span>`)}
-      <div class="sbtns"><button class="btn pri" data-f id="sUpd">⟳ Cerca aggiornamenti</button><button class="btn" data-f id="sBug">⚠ Segnala un problema</button></div><div class="snote" id="sUpdTxt"></div>`,
+      <div class="sbtns"><button class="btn pri" data-f id="sUpd">⟳ Cerca aggiornamenti</button>${perm('report') ? '<button class="btn" data-f id="sBug">⚠ Segnala un problema</button>' : ''}</div><div class="snote" id="sUpdTxt"></div>`,
   };
   $('#settBody').innerHTML = `<div class="smenu">${MENU.map(([k, l]) => `<div class="sm ${k === S.setSec ? 'sel' : ''}" data-f data-sec="${k}">${SET_IC[k]}<span>${l}</span></div>`).join('')}</div>
     <div class="spanel">${MENU.map(([k]) => `<div class="card ${k === S.setSec ? 'on' : ''}" data-card="${k}">${cards[k]}</div>`).join('')}</div>`;
@@ -3438,7 +3510,7 @@ function renderSettings(sec) {
   $$('[data-del]').forEach((b) => (b.onclick = async () => { S.local = S.local.filter((p) => p.id !== b.dataset.del); store.set('localPl', S.local); await loadLibrary(); renderSettings('pl'); focus($('.sm.sel'), true); }));
   $('#sReload').onclick = () => manualRefresh();
 
-  $('#sSpeed').onclick = () => speedTest();
+  if ($('#sSpeed')) $('#sSpeed').onclick = () => speedTest();
   const epgRun = async (force) => {
     $('#eStat').textContent = 'Scarico e leggo la guida… (può richiedere fino a un minuto)';
     const r = await buildXmltv(force);
@@ -3446,7 +3518,7 @@ function renderSettings(sec) {
     toast(r.ok ? '✓ Guida TV aggiornata' : 'Guida TV non aggiornata: ' + (r.err || ''), 5000);
   };
   $('#eUpd').onclick = () => epgRun(true);
-  $('#eSave').onclick = () => { store.set('epgUrl', $('#eUrl').value.trim()); toast('Indirizzo EPG salvato'); epgRun(true); };
+  if ($('#eSave')) $('#eSave').onclick = () => { store.set('epgUrl', $('#eUrl').value.trim()); toast('Indirizzo EPG salvato'); epgRun(true); };
   $('#sTest').onclick = async () => {
     const b = baseServer(); if (!b) return toast('Nessun server impostato');
     const t0 = performance.now();
@@ -3464,7 +3536,7 @@ function renderSettings(sec) {
     const i = opts.findIndex((o) => o[0] === P2[k]), nx = opts[(i + 1) % opts.length];
     P2[k] = nx[0]; store.set('play', P2); b.querySelector('b').textContent = nx[1];
   }));
-  $('#sBug').onclick = () => reportDialog();
+  if ($('#sBug')) $('#sBug').onclick = () => reportDialog();
   $('#hRestore').onclick = () => { S.hidden.clear(); store.set('hidden', []); $('#hCount').textContent = '0'; toast('Tutti i canali sono di nuovo visibili'); if (S.lib.live.length) renderChannels(); };
   $('#kPin').onclick = async () => {
     if (store.get('pinH', '') && !(await checkPin('PIN attuale'))) return;
@@ -3579,7 +3651,7 @@ function profList() {
 }
 // 0 = profili non inclusi nell'abbonamento (non va trattato come "nessun limite")
 const profMax = () => (S.account && S.account.maxProfiles != null ? +S.account.maxProfiles || 0 : 5);
-const profCanEdit = () => !S.account || S.account.canEdit !== false;
+const profCanEdit = () => (!S.account || S.account.canEdit !== false) && perm('profiles');
 function applyProfile(p, silent) {
   S.prof = p || null;
   let main = store.get('profMain', '');
@@ -3608,6 +3680,8 @@ function profFilter(lib) {
 }
 function needProfilePick() {
   const l = profList();
+  // dopo l'attivazione serve almeno un profilo: si crea subito (oppure lo crea il fornitore dal pannello)
+  if (!l.length && S.account && Array.isArray(S.account.profiles) && (+S.account.maxProfiles || 0) > 0) return 'create';
   if (l.length < 2) { if (l.length === 1 && (!S.prof || S.prof.id !== l[0].id)) applyProfile(l[0], true); else if (!l.length && (profNs || S.prof)) applyProfile(null, true); return false; }
   const last = store.get('profId', '');
   if (store.get('askProf', true) === false && last) { const p = l.find((x) => x.id === last); if (p) { applyProfile(p, true); return false; } }
@@ -3623,10 +3697,25 @@ function showProfiles(after) {
   const l = profList(), canAdd = profCanEdit() && l.length < profMax();
   const scr = $('#profiles');
   if (after) scr.classList.remove('manage'); // apertura nuova: si parte dalla scelta, non dalla modifica
-  scr.innerHTML = `<div class="prw"><div class="prbrand"><b class="brandName">${esc((S.settings.brand || 'KAIROS').toUpperCase())}</b><span>TV</span></div><h1>Chi sta guardando?</h1>
+  scr._must = !l.length;
+  const head = !l.length ? (canAdd ? '<h1>Crea il tuo profilo</h1><p class="mut prsub">Per iniziare serve almeno un profilo: scegli nome e avatar.</p>' : '<h1>Profilo in preparazione</h1><p class="mut prsub">Il tuo fornitore sta creando il tuo profilo. Riprova tra poco.</p>') : '<h1>Chi sta guardando?</h1>';
+  scr.innerHTML = `<div class="prw"><div class="prbrand"><b class="brandName">${esc((S.settings.brand || 'KAIROS').toUpperCase())}</b><span>TV</span></div>${head}
     <div class="prlist">${l.map((p, i) => `<div class="prof" data-f data-pi="${i}" style="animation-delay:${i * 70}ms"><div class="pav">${avatarSVG(p.avatar, p.name)}</div><b>${esc(p.name)}</b>${p.kids ? '<small>BAMBINI</small>' : ''}</div>`).join('')}${canAdd ? `<div class="prof add" data-f data-pi="add" style="animation-delay:${l.length * 70}ms"><div class="pav"><span>+</span></div><b>Aggiungi profilo</b></div>` : ''}</div>
-    ${profCanEdit() ? `<button class="btn" data-f id="prManage">${scr.classList.contains('manage') ? '✓ Fine' : '✎ Gestisci profili'}</button>` : ''}</div>`;
+    ${!l.length ? (canAdd ? '' : '<button class="btn pri" data-f id="prRetry">↻ Riprova</button>') : profCanEdit() ? `<button class="btn" data-f id="prManage">${scr.classList.contains('manage') ? '✓ Fine' : '✎ Gestisci profili'}</button>` : ''}</div>`;
+  const rt = scr.querySelector('#prRetry');
+  if (rt) rt.onclick = async () => { try { await register(); } catch {} if (profList().length) { const a = scr._after; scr._after = null; applyProfile(profList()[0]); if (a) a(); else go('home', true); } else toast('Il profilo non è ancora pronto'); };
   scr._after = after || scr._after;
+  // profilo creato dal fornitore nel pannello: si entra da soli appena è pronto
+  clearTimeout(scr._poll);
+  if (!l.length && !canAdd && !S.demo && baseServer()) {
+    const tick = async () => {
+      if (!scr.classList.contains('on') || !scr._must) return;
+      try { await register(); } catch {}
+      if (profList().length) { scr._must = false; const a = scr._after; scr._after = null; applyProfile(profList()[0]); if (a) a(); else go('home', true); }
+      else scr._poll = setTimeout(tick, 20e3);
+    };
+    scr._poll = setTimeout(tick, 20e3);
+  }
   const pick = async (p) => { if (!p.kids && !(await kidsGate())) return; applyProfile(p); const a = scr._after; scr._after = null; if (a) a(); else go('home', true); };
   $$('#profiles .prof').forEach((el) => (el.onclick = () => {
     if (scr.classList.contains('manage')) { const i = el.dataset.pi; return profileEditor(i === 'add' ? null : l[+i]); }
@@ -3671,7 +3760,15 @@ function profileEditorOpen(p) {
   $('#peKids').onclick = () => { d.kids = !d.kids; $('#peKids b').textContent = d.kids ? 'Sì' : 'No'; };
   if ($('#pePl')) $('#pePl').onclick = () => { const ids = ['all', ...pls.map((x) => x.id)]; d.pl = ids[(ids.indexOf(d.pl) + 1) % ids.length]; $('#pePl b').textContent = plLabel(); };
   $('#peNo').onclick = () => kxClose('profM');
-  const done = (list) => { kxClose('profM'); if ($('#profiles').classList.contains('on')) showProfiles(); if ($('#settings').classList.contains('on')) { renderSettings('acct'); } return list; };
+  const done = (list) => {
+    kxClose('profM');
+    const ps = $('#profiles');
+    // primo profilo appena creato: si entra subito
+    if (ps.classList.contains('on') && ps._must && list.length) { ps._must = false; applyProfile(list[0]); const a = ps._after; ps._after = null; if (a) a(); else go('home', true); return list; }
+    if (ps.classList.contains('on')) showProfiles();
+    if ($('#settings').classList.contains('on')) { renderSettings('acct'); }
+    return list;
+  };
   $('#peSave').onclick = async () => {
     d.name = $('#peName').value.trim().slice(0, 24);
     if (!d.name) { toast('Scrivi un nome'); return focus($('#peName'), true); }
@@ -3703,7 +3800,7 @@ async function linkCodeDialog() {
 function linkEnterDialog() {
   kxModal('linkE', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">HO GIÀ UN ABBONAMENTO</div>
     <h2 style="margin:12px 0 6px">Collega questo dispositivo</h2>
-    <p class="mut" style="line-height:1.5">Sul dispositivo già attivo vai in <b>Impostazioni › Profili e dispositivi › Collega un altro dispositivo</b> e inserisci qui il codice di 6 cifre.</p>
+    <p class="mut" style="line-height:1.5">Inserisci il <b>codice di 6 cifre</b> che ti dà il tuo fornitore (lo genera dal suo pannello, nella scheda del tuo abbonamento). Puoi crearlo anche tu da un dispositivo già attivo: <b>Impostazioni › Profili e dispositivi › Collega un altro dispositivo</b>.</p>
     <input class="inp pinin" data-f id="lPin" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off">
     <div class="mut" id="lMsg" style="min-height:20px"></div>
     <div class="sbtn"><button class="btn pri" data-f id="lGo">Collega</button><button class="btn" data-f id="lNo">Annulla</button></div>`);
@@ -3748,7 +3845,7 @@ window.kxVpnCb = (state, msg) => {
 
 /* ---------------- registrazioni ---------------- */
 S.recs = [];
-const canRec = () => !!(NATIVE && NATIVE.recStart);
+const canRec = () => !!(NATIVE && NATIVE.recStart) && perm('rec');
 function recLoad() { if (!canRec()) return; try { S.recs = JSON.parse(NATIVE.recList() || '[]'); } catch { S.recs = []; } }
 const recFor = (id) => S.recs.find((r) => r.chId === id && (r.state === 'rec' || r.state === 'scheduled') && (r.state === 'rec' || r.at <= Date.now() + 60e3));
 window.kxRecCb = (json) => {
@@ -4048,6 +4145,42 @@ function privacyStep() {
   $('#pRead').onclick = () => privacyDialog();
 }
 
+/* ---------------- scudo VPN nella barra: accende e spegne al volo ---------------- */
+function vpnQuick() {
+  const v = S.vpn; if (!v || v.mode === 'off') return;
+  if (v.mode === 'force') return toast('🛡 La VPN è sempre attiva (impostata dal fornitore)');
+  if (!perm('vpn')) return toast('La VPN è gestita dal fornitore');
+  const on = !store.get('vpnOn', false); store.set('vpnOn', on);
+  toast(on ? '🛡 Attivo la VPN…' : 'VPN spenta');
+  vpnApply(true);
+  setTimeout(() => { const sc = $('.screen.on'); if (sc && sc.querySelector('.navslot')) { const f = cur && cur.dataset && cur.dataset.go; fillNav(sc.id === 'cat' ? 'cat' : sc.id); const n = f && sc.querySelector(`.tnav [data-go="${f}"]`); n && focus(n, true); } }, 400);
+}
+/* ---------------- trailer: anteprima ufficiale trovata online (Apple), si guarda nel lettore ---------------- */
+async function playTrailer(x, ex) {
+  const b = $('#dTrailer'); if (b) b.classList.add('busy');
+  toast('Cerco il trailer…', 1500);
+  try {
+    const y = (ex && ex.year) || x.year || '', kind = isSeriesItem(x) ? 'series' : 'movie';
+    const j = await getJSON(`${baseServer()}/api/player/trailer?t=${encodeURIComponent(x.name)}&y=${encodeURIComponent(String(y).slice(0, 4))}&kind=${kind}`);
+    if (!j || !j.url) return toast('Trailer non trovato per questo titolo');
+    const it = { id: 'trl:' + x.id, name: 'Trailer · ' + x.name, url: j.url, group: 'Trailer' };
+    if (!HAS_PLAYER) closeDetail();
+    if (!(HAS_PLAYER && nativePlay(it, 'movie', 0))) openFs(it, 'movie', 0, null, true);
+  } catch { toast('Trailer non disponibile in questo momento'); } finally { if (b) b.classList.remove('busy'); }
+}
+/* ---------------- visioni contemporanee (limite impostato dal pannello) ---------------- */
+let streamOkT = 0;
+const streamGateNeeded = () => !S.demo && !!S.account && +S.account.maxStreams > 0 && !!baseServer() && Date.now() - streamOkT > 90e3;
+async function streamGate(kind, title) {
+  try {
+    const j = await Promise.race([apiPost('/api/player/stream', { state: kind === 'live' ? 'live' : kind === 'series' ? 'series' : 'movie', title: String(title || '').slice(0, 120) }), sleep(2500).then(() => ({ ok: true }))]);
+    if (j && j.ok === false) throw new Error(j.error || 'Limite di visioni contemporanee raggiunto');
+  } catch (e) {
+    if (/Limite/i.test(e.message)) { fx('err'); noticeModal('Limite di visioni', e.message, 'warn'); return false; }
+  }
+  streamOkT = Date.now();
+  return true;
+}
 /* ---------------- impostazioni: profili e dispositivi, registrazioni, privacy e VPN ---------------- */
 Object.assign(SET_IC, { kids: ICX.kids, acct: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c.8-3.3 3.2-5 6-5s5.2 1.7 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c2.6-.4 4.6 1.2 5.5 4.3"/></svg>', rec: ICX.rec, priv: ICX.shield });
 const kv2 = (k, v) => `<div class="sr static"><span>${k}</span><b>${v}</b></div>`;
@@ -4058,7 +4191,7 @@ function acctCard() {
     ${l.length > 1 ? `<div class="sr" data-f id="aSw"><span>Cambia profilo</span><b>${S.prof ? esc(S.prof.name) : '›'}</b></div><div class="sr" data-f id="aAsk"><span>Chiedi il profilo all'avvio</span><b>${store.get('askProf', true) === false ? 'No' : 'Sì'}</b></div>` : ''}
     <h3 style="margin-top:24px">Dispositivi collegati</h3>
     ${a && a.maxConn ? `${kv2('Connessioni usate', `${conns.length || 1} di ${a.maxConn}`)}${conns.map((c) => kv2(`${esc(c.name || c.model || 'Dispositivo')}${c.me ? ' <small class="mut">· questo</small>' : ''}<br><small class="mut">${esc(c.model || '')}${c.seen ? ' · ' + dayTime(c.seen) : ''}</small>`, c.me ? '●' : '')).join('')}
-      ${a.maxConn > (conns.length || 1) ? `<div class="sbtns"><button class="btn pri" data-f id="aLinkNew">${ICX.link} Collega un altro dispositivo</button></div><div class="snote">Ti verrà mostrato un codice di 6 cifre da inserire sull'altro dispositivo.</div>` : '<div class="snote">Hai usato tutte le connessioni del tuo abbonamento. Per aggiungerne altre contatta il tuo fornitore.</div>'}${a.primary === false ? `<div class="snote">Questo dispositivo usa l'abbonamento di <b>${esc(a.owner || 'un altro dispositivo')}</b>.</div>` : ''}`
+      ${a.maxConn > (conns.length || 1) && perm('link') ? `<div class="sbtns"><button class="btn pri" data-f id="aLinkNew">${ICX.link} Collega un altro dispositivo</button></div><div class="snote">Ti verrà mostrato un codice di 6 cifre da inserire sull'altro dispositivo.</div>` : '<div class="snote">Hai usato tutte le connessioni del tuo abbonamento. Per aggiungerne altre contatta il tuo fornitore.</div>'}${a.primary === false ? `<div class="snote">Questo dispositivo usa l'abbonamento di <b>${esc(a.owner || 'un altro dispositivo')}</b>.</div>` : ''}`
       : '<div class="snote">Per usare lo stesso abbonamento su più dispositivi chiedi al tuo fornitore di aumentare le connessioni dal pannello.</div>'}`;
 }
 function privCard() {
@@ -4066,7 +4199,7 @@ function privCard() {
   let vpn;
   if (!v || v.mode === 'off' || !v.conf) vpn = '<div class="snote">La protezione VPN non è attiva per il tuo abbonamento. Se ti interessa chiedila al tuo fornitore: la attiva dal suo pannello.</div>';
   else if (!vpnOk()) vpn = '<div class="snote">La VPN è inclusa nel tuo abbonamento: aggiorna l\'app alla versione 1.7 per usarla.</div>';
-  else vpn = `${v.mode === 'force' ? kv2('Protezione VPN', 'Sempre attiva') : `<div class="sr" data-f id="vOn"><span>Protezione VPN</span><b>${store.get('vpnOn', false) ? 'Attiva' : 'Disattivata'}</b></div>`}${kv2('Stato', `<span id="vpnSt">${esc(vpnLabel())}</span>`)}<div class="snote">La VPN cifra la connessione del dispositivo e nasconde il tuo indirizzo IP. La prima volta Android chiede il permesso: conferma con OK.</div>`;
+  else vpn = `${v.mode === 'force' || !perm('vpn') ? kv2('Protezione VPN', v.mode === 'force' ? 'Sempre attiva' : store.get('vpnOn', false) ? 'Attiva' : 'Disattivata') : `<div class="sr" data-f id="vOn"><span>Protezione VPN</span><b>${store.get('vpnOn', false) ? 'Attiva' : 'Disattivata'}</b></div>`}${kv2('Stato', `<span id="vpnSt">${esc(vpnLabel())}</span>`)}<div class="snote">La VPN cifra la connessione del dispositivo e nasconde il tuo indirizzo IP. La prima volta Android chiede il permesso: conferma con OK.</div>`;
   return `<h3>Privacy e VPN</h3>${vpn}<h3 style="margin-top:24px">Informativa</h3><div class="sr" data-f id="pvRead"><span>Privacy e condizioni del servizio</span><b>›</b></div>${priceTxt() ? kv2('Abbonamento', esc(priceTxt())) : ''}`;
 }
 function wireSettingsExtra() {
@@ -4081,7 +4214,8 @@ function wireSettingsExtra() {
   on('aLinkNew', () => linkCodeDialog());
   on('vOn', () => { const v = !store.get('vpnOn', false); store.set('vpnOn', v); $('#vOn b').textContent = v ? 'Attiva' : 'Disattivata'; vpnApply(true); });
   on('pvRead', () => privacyDialog());
-  on('sClearCont', () => { S.recent = []; store.set('recent', []); store.set('pos', {}); store.set('dur', {}); fx('ok'); toast('«Continua a guardare» cancellato'); });
+  on('sClearCont', () => { S.recent = S.recent.filter((r) => r.kind === 'live'); store.set('recent', S.recent); store.set('pos', {}); store.set('dur', {}); fx('ok'); toast('«Continua a guardare» cancellato'); });
+  on('sClearSeen', () => { S.recent = []; store.set('recent', []); store.set('lastCh', ''); fx('ok'); toast('«Ultimi visti» cancellati'); });
   $$('[data-rid]').forEach((b) => (b.onclick = () => { const r = S.recs.find((x) => x.id === b.dataset.rid); if (r) recMenu(r); }));
 }
 
@@ -4280,8 +4414,8 @@ async function afterActive() {
   $('#bootBar').style.width = '100%';
   await sleep(200);
   enterApp();
-  if (S.fromCache) setTimeout(() => refreshLibrary(), 3000);
-  setTimeout(() => loadTrending(), 6000);
+  if (S.fromCache) whenIdle(() => refreshLibrary(), 3000);
+  whenIdle(() => loadTrending(), 6000);
 }
 /* Aggiornamenti automatici: interfaccia (subito, senza reinstallare) e APK (proposto all'utente) */
 async function fetchUpdateInfo() {
@@ -4378,12 +4512,85 @@ function showNotices() {
     noticeModal(m.title, m.body, m.level, showNotices);
   }
 }
+/* tutti i messaggi del fornitore (anche quelli già letti), dalla campanella */
+function messagesDialog() {
+  const list = (S.messages || []).slice().sort((a, b) => b.id - a.id);
+  const seen = new Set(store.get('seenMsg', []));
+  const lv = { urgent: ['URGENTE', 'var(--bad)'], warn: ['AVVISO', 'var(--warn)'], info: ['INFO', 'var(--a1)'] };
+  kxModal('msgsM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">MESSAGGI DEL FORNITORE</div>
+    <div class="msgl">${list.map((m) => { const [t, c] = lv[m.level] || lv.info; return `<div class="msg${seen.has(m.id) ? '' : ' new'}" data-f style="--nc:${c}"><small>${t} · ${m.created ? dayTime(m.created) : ''}</small><b>${esc(m.title || '')}</b><p>${esc(m.body || '').replace(/\n/g, '<br>')}</p></div>`; }).join('') || '<div class="snote">Nessun messaggio.</div>'}</div>
+    <div class="sbtn"><button class="btn pri" data-f id="msgOk">Chiudi</button></div>`, () => { store.set('seenMsg', [...new Set([...seen, ...list.map((m) => m.id)])].slice(-200)); $$('.tnav').forEach((n) => { const sc = n.closest('.screen'); if (sc) fillNav(sc.id); }); }, 'msgsm');
+  setTimeout(() => focus($('#msgsM .msg') || $('#msgOk'), true), 40);
+  $('#msgOk').onclick = () => kxClose('msgsM');
+}
+/* richiesta di un film, una serie o un canale: arriva al fornitore nel pannello */
+function requestDialog() {
+  if (S.demo || !baseServer()) return toast('Disponibile con un abbonamento attivo');
+  let ctype = 'movie';
+  const L = { movie: 'Film', series: 'Serie TV', live: 'Canale' };
+  kxModal('reqcM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">RICHIEDI UN CONTENUTO</div>
+    <h2 style="margin:12px 0 6px">Cosa vorresti vedere?</h2>
+    <div class="seg" id="rqType">${Object.entries(L).map(([k, v]) => `<button data-f data-ct="${k}" class="${k === ctype ? 'sel' : ''}">${v}</button>`).join('')}</div>
+    <input class="inp" data-f id="rqTitle" maxlength="120" placeholder="Titolo (es. Il Gladiatore 2)">
+    <input class="inp" data-f id="rqNote" maxlength="200" placeholder="Note (anno, lingua, stagione…) — facoltativo">
+    <div class="mut" id="rqMsg" style="min-height:20px;font-size:14px"></div>
+    <div class="sbtn"><button class="btn pri" data-f id="rqGo">Invia richiesta</button><button class="btn" data-f id="rqNo">Annulla</button></div>`);
+  setTimeout(() => focus($('#rqTitle'), true), 60);
+  $$('#rqType button').forEach((b) => (b.onclick = () => { ctype = b.dataset.ct; $$('#rqType button').forEach((x) => x.classList.toggle('sel', x === b)); }));
+  $('#rqNo').onclick = () => kxClose('reqcM');
+  $('#rqGo').onclick = async () => {
+    const title = $('#rqTitle').value.trim(); if (title.length < 2) { $('#rqMsg').textContent = 'Scrivi il titolo'; return focus($('#rqTitle'), true); }
+    $('#rqMsg').textContent = 'Invio in corso…';
+    try { await apiPost('/api/player/request', { ctype, title, body: $('#rqNote').value.trim() }); fx('ok'); kxClose('reqcM'); toast('✓ Richiesta inviata al fornitore'); }
+    catch (e) { fx('err'); $('#rqMsg').textContent = 'Non inviata: ' + e.message; }
+  };
+}
+/* presenza: ogni minuto il server sa che l'app è aperta e cosa sta guardando (il fornitore lo vede in "Utenti online") */
+let hbLast = '', hbT = 0, hbPlv = '';
+function hbState() {
+  if (S.inPlayer && S.playingLive) return ['live', S.playingLive];
+  if (S.inPlayer && S.playingVod) return [S.playingVod.k === 's' || S.playingVod.series ? 'series' : 'movie', S.playingVod];
+  if (S.previewing) return ['live', S.previewing];
+  return ['idle', null];
+}
+async function heartbeat(force) {
+  if (S.demo || !baseServer() || S.status !== 'active' || $('#activate').classList.contains('on')) return;
+  const [state, it] = hbState();
+  const sig = state + '|' + (it ? it.id : '');
+  const now = Date.now();
+  if (!force && sig === hbLast && now - hbT < 60e3) return;
+  if (now - hbT < 15e3) return; // mai più di una ogni 15 s
+  hbLast = sig; hbT = now;
+  let net = null, stats = null;
+  try { if (NATIVE && NATIVE.netInfo) net = JSON.parse(NATIVE.netInfo() || 'null'); } catch {}
+  try { if (NATIVE && NATIVE.playStats && it) stats = JSON.parse(NATIVE.playStats() || 'null'); } catch {}
+  const n = it && it.k === 'l' ? nowOf(it) : null;
+  const sp = speedLast ? { dl: +speedLast.mbps.toFixed(1), ul: speedLast.ul != null && speedLast.ul >= 0 ? +speedLast.ul.toFixed(1) : null, ping: Math.round(speedLast.ping || 0), jitter: Math.round(speedLast.jitter || 0), t: speedLast.t } : null;
+  const body = { state, title: it ? (it.k === 'l' ? (n ? n.title : '') : it.name) : '', ch: it && it.k === 'l' ? it.name : '', chId: it ? it.id : '', group: it ? it.group || '' : '', pl: it ? it.pl || '' : '', prof: S.prof ? S.prof.name : '',
+    ver: (NATIVE && NATIVE.version && NATIVE.version()) || 'web', ui: (NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || '', model: (NATIVE && NATIVE.model && NATIVE.model()) || 'browser', screen: ($('.screen.on') || {}).id || '',
+    net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off' };
+  try {
+    const j = await apiPost('/api/player/heartbeat', body); if (!j) return;
+    const offNow = S.perms ? Object.keys(S.perms).filter((k) => S.perms[k] === false).sort().join(',') : '';
+    let offSrv = ''; try { offSrv = j.ph ? Object.keys(JSON.parse(j.ph)).sort().join(',') : ''; } catch {}
+    const changed = (j.vm && j.vm !== (S.vpn ? S.vpn.mode : 'off')) || (j.ph !== undefined && offSrv !== offNow) || (j.ms !== undefined && S.account && (+S.account.maxStreams || 0) !== j.ms);
+    // server delle playlist cambiato dal pannello (DNS): si riscrivono gli indirizzi, la lista non si ricarica
+    const dnsNew = typeof j.pv === 'string' && j.pv && hbPlv && j.pv !== hbPlv;
+    if (typeof j.pv === 'string' && j.pv) hbPlv = j.pv;
+    if (changed || dnsNew || (typeof j.unseen === 'number' && j.unseen > unseenMsgs().length)) register().then(() => {
+      if (dnsNew) { const snap = store.get('plSnap', null), pls = activePlaylists(); if (snap && !dnsSwap(snap, pls)) store.set('plSnap', plSnapOf(pls)); }
+      vpnApply(); const sc = $('.screen.on'); if (sc && sc.querySelector('.navslot')) fillNav(sc.id === 'cat' ? 'cat' : sc.id); showNotices();
+    }).catch(() => {});
+  } catch {}
+}
+setInterval(() => heartbeat(false), 60e3);
 /* mentre l'app resta aperta: ogni 20 minuti si aggiornano stato, messaggi e scadenza */
 setInterval(async () => {
   if (S.demo || !baseServer() || S.inPlayer || $('#activate').classList.contains('on') || $('#boot').classList.contains('on')) return;
   const was = S.status;
   try { await register(); } catch { return; }
   if (was === 'active' && S.status !== 'active') { vpnApply(); showActivate(false); return; }
+  { const snap = store.get('plSnap', null), pls = activePlaylists(); if (snap && !dnsSwap(snap, pls)) store.set('plSnap', plSnapOf(pls)); }
   vpnApply(); loadTrending();
   showNotices();
 }, 20 * 60e3);
@@ -4490,8 +4697,9 @@ async function enterHome() {
   warpStop && warpStop();
   if (S.apkUpdate) setTimeout(offerApkUpdate, 900);
   setTimeout(showNotices, S.apkUpdate ? 2500 : 1600);
-  setTimeout(autoLogos, S.fromCache ? 9000 : 5000);
-  setTimeout(() => buildXmltv(), S.fromCache ? 2500 : 4000);
+  whenIdle(autoLogos, S.fromCache ? 9000 : 5000);
+  whenIdle(() => buildXmltv(), S.fromCache ? 2500 : 4000);
+  setTimeout(() => heartbeat(true), 2000);
 }
 function startDemo() {
   S.demo = true; clearInterval(pollT);
@@ -4517,7 +4725,7 @@ async function boot() {
   if (!ok) {
     await anim;
     // Non collegato a un server Kairos: se ci sono playlist personali usale, altrimenti demo
-    if (S.local.length) { S.demo = false; await loadOrCache(); bar.style.width = '100%'; enterApp(); if (S.fromCache) setTimeout(() => refreshLibrary(), 3000); return; }
+    if (S.local.length) { S.demo = false; await loadOrCache(); bar.style.width = '100%'; enterApp(); if (S.fromCache) whenIdle(() => refreshLibrary(), 3000); return; }
     if (S.server) { bar.style.width = '100%'; S.status = 'offline'; return showActivate(false); }
     bar.style.width = '100%';
     return startDemo();
@@ -4531,14 +4739,51 @@ async function boot() {
   bar.style.width = '100%';
   enterApp();
   // avvio istantaneo dalla memoria: la lista viene riscaricata in sottofondo
-  if (S.fromCache) setTimeout(() => refreshLibrary(), 3000);
-  setTimeout(() => loadTrending(), 6000);
+  if (S.fromCache) whenIdle(() => refreshLibrary(), 3000);
+  whenIdle(() => loadTrending(), 6000);
 }
 async function loadOrCache() {
   S.fromCache = false;
   const c = await LibCache.load();
-  if (c) { setLib(c); S.libSig = libSig(c); S.fromCache = true; return; }
+  if (c) {
+    setLib(c); S.libSig = libSig(c); S.fromCache = true;
+    // il fornitore può aver cambiato il server ("DNS") mentre l'app era chiusa: si riscrivono solo gli indirizzi
+    const snap = store.get('plSnap', null);
+    if (snap && dnsSwap(snap, activePlaylists())) return;
+    store.set('plSnap', plSnapOf(activePlaylists()));
+    return;
+  }
   await loadLibrary();
+  store.set('plSnap', plSnapOf(activePlaylists()));
+}
+/* ---- cambio del server (DNS) senza riscaricare la playlist: si sostituisce solo l'host negli indirizzi ---- */
+const plPath = (u) => { try { const x = new URL(fixUrl(u)); return x.pathname + x.search; } catch { return String(u || ''); } };
+const plOrigin = (u) => { try { return new URL(fixUrl(u)).origin; } catch { return ''; } };
+const plSnapOf = (pls) => pls.map((p) => ({ id: p.id, host: p.type === 'xtream' ? fixUrl(p.host).replace(/\/+$/, '') : plOrigin(p.url), username: p.username || '' }));
+function dnsSwap(oldPls, newPls) {
+  const changes = [];
+  for (const p of newPls) {
+    const o = oldPls.find((x) => x.id === p.id); if (!o) continue;
+    const nh = p.type === 'xtream' ? fixUrl(p.host).replace(/\/+$/, '') : plOrigin(p.url), oh = (o.host || '').replace(/\/+$/, '');
+    if (oh && nh && oh !== nh && (o.username || '') === (p.username || '')) changes.push([p.id, oh, nh]);
+  }
+  if (!changes.length) return false;
+  const lib = S.fullLib; if (!lib) return false;
+  const sw = (u, oh, nh) => (u && u.startsWith(oh) ? nh + u.slice(oh.length) : u);
+  let n = 0;
+  for (const [pid, oh, nh] of changes) for (const arr of [lib.live, lib.movies, lib.series]) for (const x of arr) {
+    if (!(x.pl === pid || String(x.id).endsWith(pid))) continue;
+    n++;
+    x.url = sw(x.url, oh, nh); if (x.alt) x.alt = sw(x.alt, oh, nh);
+    if (x.logo) x.logo = sw(x.logo, oh, nh); if (x.poster) x.poster = sw(x.poster, oh, nh);
+    if (x.episodes) for (const e of x.episodes) e.url = sw(e.url, oh, nh);
+  }
+  setLib(lib); S.libSig = libSig(lib); S.epg.clear(); S.xepgVer++;
+  (window.requestIdleCallback || setTimeout)(() => LibCache.save(lib), { timeout: 3000 });
+  store.set('plSnap', plSnapOf(newPls));
+  if (n) toast('Il fornitore ha aggiornato il server: indirizzi aggiornati');
+  if ($('#live').classList.contains('on')) renderChannels();
+  return true;
 }
 document.addEventListener('pointerdown', () => fx('_'), { once: true });
 document.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') document.body.classList.add('nokbd'); });

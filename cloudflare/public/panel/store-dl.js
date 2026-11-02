@@ -4,7 +4,7 @@
   if (typeof TITLES === 'object') TITLES.store = 'Download store';
   const V = $('#v-store'); if (!V) return;
 
-  const ST = { pending: ['In attesa', 'pending'], approved: ['Autorizzata', 'active'], used: ['Scaricata', 'active'], denied: ['Rifiutata', 'disabled'], expired: ['Scaduta', 'expired'] };
+  const ST = { pending: ['In attesa', 'pending'], approved: ['Autorizzata', 'active'], used: ['Scaricata', 'active'], denied: ['Rifiutata', 'disabled'], expired: ['Scaduta', 'expired'], revoked: ['Revocata', 'disabled'] };
   const VIA = { email: "dall'email", panel: 'dal pannello', code: 'con il codice', auto: 'approvazione spenta', tries: 'troppi codici errati' };
   const IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v11M7 9l5 5 5-5"/><rect x="4" y="17" width="16" height="4" rx="1.5"/></svg>';
   const S = { data: null, seen: null, busy: false };
@@ -25,7 +25,15 @@
 .sd-note{font-size:13px;margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.1);color:var(--mut);line-height:1.45}
 .sd-note b{color:var(--txt)}
 .sd-how{padding-left:20px;color:var(--mut);font-size:14px;line-height:1.55}.sd-how li{margin:4px 0}.sd-how b{color:var(--txt)}
-@media (max-width:820px){.sd-act{width:100%}.sd-act .btn{flex:1}}`;
+.sd-dev{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;flex-wrap:wrap;transition:.2s}
+.sd-dev:hover{background:rgba(255,255,255,.04)}
+.sd-dev.blk{background:color-mix(in srgb,var(--bad) 7%,transparent);border:1px solid color-mix(in srgb,var(--bad) 25%,transparent);margin-bottom:8px}
+.sd-dev .ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex:none;background:rgba(255,255,255,.05);border:1px solid var(--line)}
+.sd-dev .ic svg{width:18px}
+.sd-dev .tx{flex:1;min-width:160px}.sd-dev .tx b{display:block;font-size:15px}.sd-dev .tx small{display:block;color:var(--mut);font-size:12px;word-break:break-word}
+.sd-dev .tog{margin:0;padding:8px 12px;gap:10px;flex:none}.sd-dev .tog b{font-size:13px}
+.sd-dev .tog.on i{background:linear-gradient(90deg,var(--bad),#ff8a5b);box-shadow:0 0 16px -2px var(--bad)}
+@media (max-width:820px){.sd-act{width:100%}.sd-act .btn{flex:1}.sd-dev .tog{width:100%;justify-content:space-between}}`;
   document.head.appendChild(css);
 
   V.innerHTML = `<div class="g2">
@@ -37,6 +45,10 @@
     <button class="btn sm" id="sdClear" style="margin-top:12px">Svuota storico</button>
   </div>
   <div>
+    <div class="card glass" style="margin-bottom:18px">
+      <div class="hd"><h3>Dispositivi<small>Chi ha chiesto di scaricare negli ultimi 30 giorni. Un dispositivo bloccato non può più inviare richieste</small></h3></div>
+      <div id="sdDev"></div>
+    </div>
     <div class="card glass">
       <div class="hd"><h3>Approvazione<small>Decidi tu chi può scaricare</small></h3></div>
       <div class="tog" id="sdOn"><div><b>Chiedi la mia autorizzazione</b><small>Spento: i download partono subito, ma restano registrati qui</small></div><i></i></div>
@@ -51,7 +63,8 @@
         <li>Il cliente preme <b>Installa</b> nello store e invia la richiesta.</li>
         <li>Ti arriva un'email con l'app, il dispositivo e un <b>codice di 6 cifre</b>; la richiesta compare anche qui.</li>
         <li>Premi <b>Autorizza</b> (qui o nell'email) e il download sul dispositivo parte da solo. In alternativa detta il codice al cliente.</li>
-        <li>Se non rispondi, la richiesta scade dopo 24 ore. Dopo l'ok il cliente ha 30 minuti per scaricare.</li>
+        <li>Se non rispondi, la richiesta scade dopo 24 ore. Dopo l'ok il cliente ha 30 minuti per scaricare: <b>ogni autorizzazione vale per una sola app e un solo download</b>, per reinstallare dovrà chiedertela di nuovo.</li>
+        <li>Hai cambiato idea? Premi <b>Revoca</b> su un'autorizzazione non ancora usata. Con <b>Blocca dispositivo</b> quel dispositivo non può più chiederti nulla finché non lo sblocchi.</li>
       </ol>
     </div>
   </div>
@@ -61,24 +74,45 @@
   const DM = (() => {
     const t = Date.now();
     return {
-      settings: { approval: true, ownerEmail: 'tuo@email.it' },
+      settings: { approval: true, ownerEmail: 'tuo@email.it', blocked: ['demo-did-mt-firetv-000000'] },
       mail: { resend: true, envEmail: false, links: true, sentToday: 3, limit: 90 },
       requests: [
-        { id: 'demo-req-0001', app: 'IboPro', device: 'Amazon AFTKA (Fire TV)', note: 'Marco', country: 'IT · Milano', code: '482913', status: 'pending', tries: 0, uses: 0, created: t - 90e3 },
-        { id: 'demo-req-0002', app: 'TiviMate', device: 'Xiaomi MiTV-AXSO0 (Android TV)', note: '', country: 'IT', code: '105377', status: 'pending', tries: 1, uses: 0, created: t - 11 * 60e3 },
-        { id: 'demo-req-0003', app: 'OrbixPlay', device: 'Samsung SM-A546B', note: 'Giulia', country: 'IT · Roma', code: '', status: 'used', via: 'email', tries: 0, uses: 1, created: t - 3 * 3600e3, decided: t - 3 * 3600e3 + 120e3 },
-        { id: 'demo-req-0004', app: 'MT', device: 'Amazon AFTMM (Fire TV)', note: '', country: 'DE', code: '', status: 'denied', via: 'panel', tries: 0, uses: 0, created: t - 26 * 3600e3, decided: t - 25 * 3600e3 },
-        { id: 'demo-req-0005', app: 'Kairos App', device: 'Amazon AFTSS (Fire TV)', note: 'Bar Centrale', country: 'IT', code: '', status: 'expired', via: '', tries: 0, uses: 0, created: t - 50 * 3600e3 },
+        { id: 'demo-req-0001', app: 'IboPro', did: 'demo-did-marco-firetv-0000', device: 'Amazon AFTKA (Fire TV)', note: 'Marco', country: 'IT · Milano', code: '482913', status: 'pending', tries: 0, uses: 0, created: t - 90e3 },
+        { id: 'demo-req-0002', app: 'TiviMate', did: 'demo-did-xiaomi-tv-000000', device: 'Xiaomi MiTV-AXSO0 (Android TV)', note: '', country: 'IT', code: '105377', status: 'pending', tries: 1, uses: 0, created: t - 11 * 60e3 },
+        { id: 'demo-req-0006', app: 'OraPlayer', did: 'demo-did-marco-firetv-0000', device: 'Amazon AFTKA (Fire TV)', note: 'Marco', country: 'IT · Milano', code: '', status: 'approved', via: 'panel', tries: 0, uses: 0, created: t - 6 * 60e3, decided: t - 4 * 60e3 },
+        { id: 'demo-req-0003', app: 'OrbixPlay', did: 'demo-did-giulia-phone-0000', device: 'Samsung SM-A546B', note: 'Giulia', country: 'IT · Roma', code: '', status: 'used', via: 'email', tries: 0, uses: 1, created: t - 3 * 3600e3, decided: t - 3 * 3600e3 + 120e3 },
+        { id: 'demo-req-0007', app: 'IboOne', did: 'demo-did-giulia-phone-0000', device: 'Samsung SM-A546B', note: 'Giulia', country: 'IT · Roma', code: '', status: 'revoked', via: 'code', tries: 0, uses: 0, created: t - 5 * 3600e3, decided: t - 5 * 3600e3 + 60e3 },
+        { id: 'demo-req-0004', app: 'MT', did: 'demo-did-mt-firetv-000000', device: 'Amazon AFTMM (Fire TV)', note: '', country: 'DE', code: '', status: 'denied', via: 'panel', tries: 0, uses: 0, created: t - 26 * 3600e3, decided: t - 25 * 3600e3 },
+        { id: 'demo-req-0005', app: 'Kairos App', did: 'demo-did-bar-centrale-0000', device: 'Amazon AFTSS (Fire TV)', note: 'Bar Centrale', country: 'IT', code: '', status: 'expired', via: '', tries: 0, uses: 0, created: t - 50 * 3600e3 },
       ],
     };
   })();
+  function demoDevices() {
+    const by = new Map();
+    for (const r of [...DM.requests].sort((a, b) => b.created - a.created)) {
+      let d = by.get(r.did);
+      if (!d) { d = { did: r.did, device: r.device, note: r.note, country: r.country, last: r.created, requests: 0, downloads: 0, pending: 0, blocked: DM.settings.blocked.includes(r.did) }; by.set(r.did, d); }
+      d.requests++; if (r.uses) d.downloads++; if (r.status === 'pending') d.pending++;
+    }
+    for (const did of DM.settings.blocked) if (!by.has(did)) by.set(did, { did, device: '', note: '', country: '', last: 0, requests: 0, downloads: 0, pending: 0, blocked: true });
+    return [...by.values()].sort((a, b) => (+b.blocked - +a.blocked) || (b.last - a.last));
+  }
   async function demo(method, path, body) {
     await new Promise((r) => setTimeout(r, 120));
-    if (path === '' && method === 'GET') return { ...DM, pending: DM.requests.filter((r) => r.status === 'pending').length };
+    if (path === '' && method === 'GET') return { ...DM, pending: DM.requests.filter((r) => r.status === 'pending').length, devices: demoDevices() };
     if (path === '/settings') { Object.assign(DM.settings, body); return { settings: DM.settings }; }
     if (path === '' && method === 'DELETE') { DM.requests = DM.requests.filter((r) => r.status === 'pending'); return { ok: true }; }
-    const m = path.match(/^\/(.+)\/(approve|deny)$/);
-    if (m) { const r = DM.requests.find((x) => x.id === m[1]); if (!r || r.status !== 'pending') throw new Error('La richiesta non è più in attesa'); Object.assign(r, { status: m[2] === 'approve' ? 'approved' : 'denied', via: 'panel', decided: Date.now(), code: '' }); return { ok: true }; }
+    if (path === '/device/block') {
+      DM.settings.blocked = DM.settings.blocked.filter((d) => d !== body.did);
+      if (body.blocked !== false) { DM.settings.blocked.unshift(body.did); DM.requests.forEach((r) => { if (r.did === body.did && (r.status === 'pending' || r.status === 'approved')) Object.assign(r, { status: 'revoked', code: '', decided: Date.now() }); }); }
+      return { ok: true, did: body.did, blocked: body.blocked !== false, settings: DM.settings };
+    }
+    const m = path.match(/^\/(.+)\/(approve|deny|revoke)$/);
+    if (m) {
+      const r = DM.requests.find((x) => x.id === m[1]);
+      if (m[2] === 'revoke') { if (!r || (r.status !== 'pending' && r.status !== 'approved')) throw new Error('Questa richiesta non si può più revocare'); Object.assign(r, { status: 'revoked', decided: Date.now(), code: '' }); return { ok: true, status: 'revoked' }; }
+      if (!r || r.status !== 'pending') throw new Error('La richiesta non è più in attesa'); Object.assign(r, { status: m[2] === 'approve' ? 'approved' : 'denied', via: 'panel', decided: Date.now(), code: '' }); return { ok: true };
+    }
     throw new Error('demo');
   }
   const sApi = (method, path, body) => (D.demo ? demo(method, path, body) : api(method, '/admin/store' + path, body));
@@ -96,9 +130,19 @@
     }
     const [lb, cls] = ST[r.status] || ST.expired;
     const how = r.via && VIA[r.via] ? ' · ' + VIA[r.via] : '';
-    return `<div class="sd-req"><div class="ic" style="color:var(--mut)">${IC}</div>
-      <div class="tx"><b>${esc(r.app)}</b><small>${meta}</small><small>${esc(when(r.created))}${esc(how)}${r.uses && r.status !== 'used' ? ' · scaricata' : ''}</small></div>
-      <span class="st ${cls}"><i></i>${lb}</span></div>`;
+    const extra = r.status === 'approved' ? ' · in attesa del download (vale 30 min)' : r.uses && r.status !== 'used' ? ' · scaricata' : '';
+    const act = r.status === 'approved' ? `<div class="sd-act"><button class="btn sm danger" data-sda="revoke" title="Il cliente non potrà più scaricare con questa autorizzazione">Revoca</button></div>` : '';
+    return `<div class="sd-req" data-id="${esc(r.id)}"><div class="ic" style="color:var(--mut)">${IC}</div>
+      <div class="tx"><b>${esc(r.app)}</b><small>${meta}</small><small>${esc(when(r.created))}${esc(how)}${extra}</small></div>
+      <span class="st ${cls}"><i></i>${lb}</span>${act}</div>`;
+  }
+  const DEVI = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>';
+  function devItem(d) {
+    const meta = [d.note, d.country].filter(Boolean).map(esc).join(' · ');
+    const nums = [`${d.requests} ${d.requests === 1 ? 'richiesta' : 'richieste'}`, `${d.downloads} download`, d.pending ? `${d.pending} in attesa` : ''].filter(Boolean).join(' · ');
+    return `<div class="sd-dev${d.blocked ? ' blk' : ''}" data-did="${esc(d.did)}"><div class="ic" style="color:${d.blocked ? 'var(--bad)' : 'var(--mut)'}">${DEVI}</div>
+      <div class="tx"><b>${esc(d.device || 'Dispositivo sconosciuto')}</b>${meta ? `<small>${meta}</small>` : ''}<small>${nums}${d.last ? ' · ultima ' + esc(ago(d.last)) : ''}${d.blocked ? ' · <b style="color:var(--bad);display:inline;font-size:12px">bloccato</b>' : ''}</small></div>
+      <div class="tog${d.blocked ? ' on' : ''}" data-sdb="1" role="switch" aria-checked="${d.blocked ? 'true' : 'false'}" tabindex="0"><div><b>Blocca dispositivo</b></div><i></i></div></div>`;
   }
   function badge() {
     const n = S.data ? S.data.pending || 0 : 0, b = $('#storeB');
@@ -110,6 +154,8 @@
     $('#sdPend').innerHTML = pend.length ? pend.map(item).join('') : '<div class="emptyc">Nessuna richiesta in attesa ✓</div>';
     $('#sdHist').innerHTML = hist.length ? hist.map(item).join('') : '<div class="emptyc">Nessun download registrato</div>';
     $('#sdClear').style.display = hist.length ? '' : 'none';
+    const devs = (S.data && S.data.devices) || [];
+    $('#sdDev').innerHTML = devs.length ? devs.map(devItem).join('') : '<div class="emptyc">Nessun dispositivo ha ancora chiesto un download</div>';
   }
   function renderSettings() {
     if (!S.data) return;
@@ -143,16 +189,34 @@
 
   /* ---------------- azioni ---------------- */
   V.addEventListener('click', async (e) => {
+    const tg = e.target.closest('[data-sdb]');
+    if (tg) { await blockDevice(tg); return; }
     const b = e.target.closest('[data-sda]');
     if (!b) return;
-    const id = b.closest('[data-id]').dataset.id, act = b.dataset.sda;
+    const row = b.closest('[data-id]'), id = row.dataset.id, act = b.dataset.sda;
+    if (act === 'revoke') {
+      const app = row.querySelector('.tx b') ? row.querySelector('.tx b').textContent : '';
+      if (!(await ask('Revocare l\'autorizzazione?', `Il cliente non potrà più scaricare <b>${esc(app)}</b> con questa autorizzazione. Per installarla dovrà chiedertela di nuovo.`, 'Revoca'))) return;
+    }
     b.disabled = true;
     try {
       await sApi('POST', `/${encodeURIComponent(id)}/${act}`);
-      toast(act === 'approve' ? 'Download autorizzato: sul dispositivo parte da solo' : 'Download rifiutato');
+      toast(act === 'approve' ? 'Download autorizzato: sul dispositivo parte da solo (vale per un solo download)' : act === 'revoke' ? 'Autorizzazione revocata' : 'Download rifiutato');
     } catch (err) { toast(err.message, 1); }
     await refresh();
   });
+  V.addEventListener('keydown', (e) => { const tg = e.target.closest && e.target.closest('[data-sdb]'); if (tg && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); blockDevice(tg); } });
+  async function blockDevice(tg) {
+    const row = tg.closest('[data-did]'), did = row.dataset.did, blocked = !tg.classList.contains('on');
+    const name = row.querySelector('.tx b') ? row.querySelector('.tx b').textContent : 'questo dispositivo';
+    if (blocked && !(await ask('Bloccare il dispositivo?', `<b>${esc(name)}</b> non potrà più chiederti di scaricare app dallo store e le sue richieste in corso decadono. Potrai sbloccarlo quando vuoi.`, 'Blocca'))) return;
+    tg.classList.toggle('on', blocked); tg.setAttribute('aria-checked', blocked ? 'true' : 'false');
+    try {
+      await sApi('POST', '/device/block', { did, blocked });
+      toast(blocked ? 'Dispositivo bloccato: non può più inviare richieste' : 'Dispositivo sbloccato');
+    } catch (err) { toast(err.message, 1); }
+    await refresh();
+  }
   $('#sdReload').onclick = () => refresh(true);
   $('#sdOn').onclick = () => $('#sdOn').classList.toggle('on');
   $('#sdSave').onclick = async () => {

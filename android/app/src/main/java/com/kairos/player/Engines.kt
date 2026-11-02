@@ -444,6 +444,14 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
         pv.subtitleView?.setFractionalTextSize(androidx.media3.ui.SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * f)
     }
     /** descrizione del video in onda, es. "1080p · 50 fps · 6,2 Mbps" */
+    /** dati per il pannello (risoluzione, fps, bitrate): da chiamare sul thread principale */
+    fun fillStats() {
+        val f = player.videoFormat ?: return
+        PlayStats.width = if (f.width > 0) f.width else 0
+        PlayStats.height = if (f.height > 0) f.height else 0
+        PlayStats.fps = if (f.frameRate > 0f) f.frameRate else 0f
+        PlayStats.bitrate = if (f.bitrate > 0) f.bitrate else 0
+    }
     fun videoInfo(): String {
         val f = player.videoFormat ?: return ""
         val parts = mutableListOf<String>()

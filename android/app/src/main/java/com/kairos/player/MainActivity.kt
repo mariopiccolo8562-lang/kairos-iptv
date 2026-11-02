@@ -857,6 +857,9 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface fun version(): String = BuildConfig.VERSION_NAME
         @JavascriptInterface fun versionCode(): Int = BuildConfig.VERSION_CODE
         @JavascriptInterface fun model(): String = "${Build.MANUFACTURER} ${Build.MODEL}".trim().take(70)
+        /** rete (wifi/eth/mobile, segnale Wi-Fi) e dati della visione in corso, per il pannello "Online ora" */
+        @JavascriptInterface fun netInfo(): String = NetInfo.json(applicationContext)
+        @JavascriptInterface fun playStats(): String = PlayStats.json()
         /** TV (Android TV / Google TV / Fire TV): la pagina non usa l'interfaccia touch anche se il puntatore è "coarse" */
         @JavascriptInterface fun isTv(): Boolean = try {
             (getSystemService(UI_MODE_SERVICE) as android.app.UiModeManager).currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION ||

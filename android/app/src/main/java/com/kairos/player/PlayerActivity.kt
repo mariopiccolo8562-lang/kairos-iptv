@@ -145,6 +145,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             if (prefs.quality != "auto") h.selectQuality(prefs.quality) // rispetta la qualità scelta nelle impostazioni
             engineName = h.name
             currentUrl = h.playingUrl.ifEmpty { item.url }
+            statsStart()
             // Questa finestra è trasparente: sotto resta l'anteprima ingrandita a tutto schermo con il video.
             // La nuova vista parte minuscola (la sua superficie, finché è vuota, sarebbe nera: tendina del player
             // e sfondo nero delle SurfaceView da Android 10) e si allarga solo quando ha disegnato il primo
@@ -355,6 +356,18 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     }
 
     private val hideRunnable = Runnable { hideOsd() }
+    // dati della visione per il pannello ("Online ora"): letti ogni 5 secondi sul thread principale
+    private val statsRunnable = object : Runnable {
+        override fun run() {
+            val e = engine
+            if (e != null) {
+                PlayStats.engine = e.name
+                if (e is ExoEngine) e.fillStats() else { PlayStats.width = 0; PlayStats.height = e.videoHeight() }
+            }
+            ui.postDelayed(this, 5000)
+        }
+    }
+    private fun statsStart() { PlayStats.start(engineName); ui.removeCallbacks(statsRunnable); ui.postDelayed(statsRunnable, 1500) }
     private val tickRunnable = object : Runnable {
         override fun run() { updateTime(); updateRes(); updateRec(); ui.postDelayed(this, 1000) }
     }
@@ -482,6 +495,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         engine = e
         (e as? ExoEngine)?.setSubtitleScale(subScale)
         root.addView(e.view, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
+        statsStart()
     }
 
     /** segna il canale [index] come quello in onda (il precedente diventa «canale precedente») */
@@ -576,7 +590,10 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     }
 
     /* EngineListener */
-    override fun onBuffering(buffering: Boolean) { ui.post { spinner.visibility = if (buffering) View.VISIBLE else View.GONE } }
+    override fun onBuffering(buffering: Boolean) {
+        if (buffering) PlayStats.buffers++
+        ui.post { spinner.visibility = if (buffering) View.VISIBLE else View.GONE }
+    }
 
     override fun onReady() { ui.post { spinner.visibility = View.GONE; showMsg(null); retries = 0; veil.animate().alpha(0f).setDuration(260).start() } }
     override fun onFirstFrame() { ui.post { veil.animate().alpha(0f).setDuration(260).start() } }
@@ -1225,6 +1242,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
 
     override fun onDestroy() {
         ui.removeCallbacksAndMessages(null)
+        PlayStats.stop()
         if (::osd.isInitialized) completeHandoff(true)
         try { dialog?.dismiss() } catch (_: Exception) {}
         dialog = null
