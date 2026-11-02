@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="frame-src 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="frame-src https://www.youtube-nocookie.com https://www.youtube.com; object-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#05060f">
 <title>KAIROS Player</title>
@@ -526,6 +526,22 @@ img{display:block}
 @keyframes spGlA{0%{opacity:0}10%{opacity:.8;transform:translate(-5px,-2px);clip-path:inset(10% 0 55% 0)}30%{opacity:.8;transform:translate(4px,1px);clip-path:inset(60% 0 10% 0)}50%{opacity:0}100%{opacity:0}}
 @keyframes spGlB{0%{opacity:0}15%{opacity:.8;transform:translate(5px,2px);clip-path:inset(40% 0 30% 0)}35%{opacity:.8;transform:translate(-4px,-1px);clip-path:inset(0 0 75% 0)}55%{opacity:0}100%{opacity:0}}
 .sp-tag{font-family:Orbitron,sans-serif;font-weight:700;letter-spacing:.9em;margin-right:-.9em;color:#fff;font-size:clamp(10px,1.8vh,15px);text-shadow:0 0 14px var(--a1)}
+/* ===== 1.9: marchio con carattere vettoriale KAIROS (cromato, neon, si disegna all'avvio) ===== */
+.kxw{height:1em;width:auto;display:block;overflow:visible}
+.kxw .kg{opacity:.5}
+.kxw .kc,.kxw .ks,.kxw .kg{stroke-linecap:butt}
+.sp-wrow .sp-word.kxv{font-size:clamp(46px,10.5vh,128px);letter-spacing:0;margin-right:0;background:none;-webkit-text-fill-color:initial;filter:drop-shadow(0 0 22px var(--a1-55)) drop-shadow(0 3px 0 rgba(0,0,0,.55));animation:none;opacity:1}
+.sp-wrow .sp-word.kxv::before,.sp-wrow .sp-word.kxv::after{display:none}
+.kxw.draw .kc path,.kxw.draw .kg path{stroke-dasharray:100 100;stroke-dashoffset:100;animation:kxDraw 1.05s cubic-bezier(.65,0,.25,1) forwards;animation-delay:calc(.5s + var(--i) * .11s)}
+.kxw.draw .ks{opacity:0;animation:fadein .4s 1.9s forwards}
+.kxw.draw{animation:kxFlash .9s 1.55s ease-out both}
+@keyframes kxDraw{to{stroke-dashoffset:0}}
+@keyframes kxFlash{0%{filter:none}35%{filter:brightness(2.4) drop-shadow(0 0 26px #fff)}100%{filter:none}}
+.sp-tv{display:flex;align-items:center;padding:.22em .4em!important}.sp-tv .kxw{height:.78em}
+.sp-tv .kxw .kc,.prbrand span .kxw .kc{stroke:#fff}.sp-tv .kxw .kg,.sp-tv .kxw .ks,.prbrand span .kxw .kg,.prbrand span .kxw .ks{display:none}
+.sp-tag{letter-spacing:0;margin-right:0;font-size:clamp(11px,2vh,18px);display:flex;justify-content:center}.sp-tag .kxw .kc{stroke:#fff}.sp-tag .kxw .kg{stroke:var(--a1);opacity:.8}
+.hbrand .kxw{height:.82em}.prbrand .kxw{height:.85em}.prbrand span{display:flex;align-items:center}.prbrand span .kxw{height:.7em}
+.dm .brandmark .kxw{height:.9em}
 /* ---------- qualità canale ---------- */
 .qb{flex:none;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 6px;border-radius:5px;line-height:1;border:1px solid currentColor;margin-left:4px}
 .qb.qnone{display:none}
@@ -595,6 +611,13 @@ img{display:block}
 .tnav>*{pointer-events:auto}
 .tnav .tlogo{width:clamp(38px,6vh,58px);height:clamp(38px,6vh,58px);flex:none}
 .tnav .tdate{color:#ddd;font-weight:600;font-size:clamp(13px,2.2vh,20px);white-space:nowrap}
+.tnav .tmeta{display:flex;flex-direction:column;gap:3px;min-width:0}
+.texp{display:inline-flex;align-items:center;gap:6px;font-size:clamp(10px,1.55vh,14px);font-weight:600;color:#9fe6b8;white-space:nowrap}
+.texp svg{width:1.15em;height:1.15em;flex:none}.texp b{padding:1px 7px;border-radius:20px;background:rgba(61,220,132,.16);color:#c8ffd9;font-weight:700}
+@media (max-width:1180px){.tnav .tt.tpl span{display:none!important}.tnav .tt.tpl{padding-left:12px;padding-right:12px}.texp .texd{display:none}.tnav .ttabs .tt{padding-left:clamp(8px,1.1vw,16px);padding-right:clamp(8px,1.1vw,16px)}}
+.tnav .ttabs{min-width:0;justify-content:safe center}.tnav .tmeta{flex:none}
+.texp.warn{color:#ffd27a}.texp.warn b{background:rgba(255,194,61,.2);color:#ffe2a1}
+.texp.bad{color:#ff8a8a}.texp.bad b{background:rgba(255,74,85,.25);color:#ffc9cc;animation:fadein 1s infinite alternate}
 .tnav .ttabs{flex:1;display:flex;justify-content:center;gap:clamp(4px,.6vw,12px)}
 .tnav .tt{padding:clamp(6px,1.1vh,11px) clamp(14px,1.6vw,28px);border-radius:99px;font-weight:700;font-size:clamp(15px,2.7vh,25px);color:#e6e6e6;white-space:nowrap;transition:background .15s,color .15s}
 .tnav .tt.cur{background:rgba(255,255,255,.16);color:#fff}
@@ -821,7 +844,7 @@ img{display:block}
 .speedm .tbar{height:3px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin:12px auto 0;width:70%}
 .speedm .tbar i{display:block;height:100%;width:0;background:var(--a1);transition:width .25s linear}
 @media (max-width:900px){
-  .tnav{padding:0 12px;gap:8px}.tnav .tdate{display:none}.tnav .ttabs{justify-content:flex-start;overflow-x:auto}
+  .tnav{padding:0 12px;gap:8px}.tnav .tdate,.tnav .texp{display:none}.tnav .ttabs{justify-content:flex-start;overflow-x:auto}
   .tnav .tt{padding:6px 10px;font-size:14px}
   .lv2{grid-template-columns:1fr;grid-template-rows:auto 1fr}.lvr{order:-1}.lvinfo{display:none}
   .sett2{grid-template-columns:1fr}.smenu{flex-direction:row;overflow-x:auto}
@@ -1011,7 +1034,20 @@ h5.fh{margin-top:16px}
 .ti.tvpn{color:var(--mut)}.ti.tvpn svg{width:22px;height:22px}
 .ti.tvpn.on{color:var(--ok)}.ti.tvpn.on svg{filter:drop-shadow(0 0 6px var(--ok))}
 .ti.tvpn.focused{color:#000}
-#dTrailer.busy{opacity:.6}
+#dTrailer{flex:none!important;width:auto!important}#dTrailer.busy{opacity:.6}
+.ytm{background:rgba(0,0,0,.92)}.ytbox{width:min(1100px,92vw);display:flex;flex-direction:column;gap:12px}
+.ytbox iframe{width:100%;aspect-ratio:16/9;border:0;border-radius:14px;background:#000;box-shadow:0 20px 80px rgba(0,0,0,.7)}
+.ytbar{display:flex;align-items:center;gap:10px}.ytbar b{flex:1;font-size:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* più playlist: sigla colorata della playlist d'origine e pulsante rapido */
+.plb{display:inline-block;font:800 10px/1 'Space Grotesk',sans-serif;letter-spacing:.08em;padding:3px 6px 2px;border-radius:5px;background:var(--pc,#888);color:#07070b;margin-right:6px;vertical-align:1px;box-shadow:0 0 10px color-mix(in srgb,var(--pc,#888) 45%,transparent);font-style:normal;white-space:nowrap}
+.plb.all{background:linear-gradient(90deg,#ff4a55,#3fb4ff,#ffc23d);--pc:#ff4a55}
+.nc .plb,.post .plb{position:absolute;top:7px;right:7px;z-index:4;margin:0}
+.nc.t .pp .plb{top:7px;right:7px}
+.tt.tpl{display:flex;align-items:center;gap:7px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05)}
+.tt.tpl svg{width:16px;height:16px;flex:none}.tt.tpl span{display:flex;align-items:center;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plpick{display:flex;flex-direction:column;gap:10px;margin-top:16px;min-width:min(420px,80vw)}
+.plpick .btn{justify-content:flex-start;gap:10px;text-align:left}.plpick .btn span{flex:1}.plpick .btn .plb{margin:0}
+.plrow .plact{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.plrow .plact .btn{padding:8px 14px}.plrow.off{opacity:.55}
 /* ===== WebView delle TV meno recenti (Chrome < 88): niente aspect-ratio → misure equivalenti ===== */
 @supports not (aspect-ratio: 1 / 1) {
   .post::before{content:'';display:block;padding-top:150%}
@@ -1050,8 +1086,79 @@ h5.fh{margin-top:16px}
     <div class="sp-wave"></div><div class="sp-wave w2"></div>
     <div class="sp-orbit"><i></i><i></i><i></i></div>
     <div class="sp-logo"><svg class="sp-svg" viewBox="0 0 200 200"><defs><linearGradient id="kgS" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><circle class="lo-orb" cx="100" cy="100" r="84" fill="none" stroke="url(#kgS)" stroke-width="7" stroke-linecap="round" stroke-dasharray="400 128" transform="rotate(-38 100 100)"/><circle class="lo-orb2" cx="100" cy="100" r="70" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="1.5" stroke-dasharray="3 7"/><rect class="lo-kb" x="62" y="52" width="22" height="96" rx="4" fill="#fff"/><path class="lo-ku" d="M90 104 L128 52 H156 L116 108 Z" fill="url(#kgS)"/><path class="lo-kl" d="M104 98 L122 92 L158 148 H130 Z" fill="#fff"/><circle class="lo-sat" cx="171" cy="62" r="7" fill="#fff"/></svg></div>
-    <div class="sp-wrow"><div class="sp-word" id="bootTitle" data-t="KAIROS">KAIROS</div><span class="sp-tv">TV</span></div>
+    <div class="sp-wrow"><div class="sp-word kxv" id="bootTitle">KAIROS</div><span class="sp-tv">TV</span></div>
     <div class="sp-tag">PLAYER</div>
+    <script>
+/* Carattere vettoriale KAIROS: lettere disegnate con tratti a 45°, smussi e tagli "stencil". Altezza 10, tratto 1.45 */
+const C = 1.6;
+const OCT = (w) => [C, 0, w - C, 0, w, C, w, 10 - C, w - C, 10, C, 10, 0, 10 - C, 0, C, C, 0];
+const KXG = {
+  A: [7, [[0, 10, 3.5, 0, 7, 10], [2.25, 6.9, 4.75, 6.9]]],
+  B: [7, [[0, 5, 0, 0, 5.2, 0, 6.6, 1.4, 6.6, 3.6, 5.2, 5, 0, 5], [0, 5, 0, 10, 5.6, 10, 7, 8.6, 7, 6.4, 5.6, 5]]],
+  C: [7, [[7, C, 7 - C, 0, C, 0, 0, C, 0, 10 - C, C, 10, 7 - C, 10, 7, 10 - C]]],
+  D: [7, [[0, 0, 0, 10, 5, 10, 7, 8, 7, 2, 5, 0, 0, 0]]],
+  E: [6.6, [[6.6, 0, 0, 0, 0, 10, 6.6, 10], [0, 5, 4.8, 5]]],
+  F: [6.6, [[6.6, 0, 0, 0, 0, 10], [0, 5, 4.8, 5]]],
+  G: [7, [[7, C, 7 - C, 0, C, 0, 0, C, 0, 10 - C, C, 10, 7 - C, 10, 7, 10 - C, 7, 5.4, 3.8, 5.4]]],
+  H: [7, [[0, 0, 0, 10], [7, 0, 7, 10], [0, 5, 7, 5]]],
+  I: [0, [[0, 0, 0, 10]]],
+  J: [7, [[7, 0, 7, 10 - C, 7 - C, 10, C, 10, 0, 10 - C, 0, 7.2]]],
+  K: [6.8, [[0, 0, 0, 10], [6.8, 0, 2.5, 5, 6.8, 10]]],
+  L: [6.4, [[0, 0, 0, 10, 6.4, 10]]],
+  M: [8.4, [[0, 10, 0, 0, 4.2, 5.2, 8.4, 0, 8.4, 10]]],
+  N: [7, [[0, 10, 0, 0, 7, 10, 7, 0]]],
+  O: [7, [OCT(7)]],
+  P: [7, [[0, 10, 0, 0, 5.4, 0, 7, C, 7, 5.4 - C, 5.4, 5.4, 0, 5.4]]],
+  Q: [7, [OCT(7), [4.4, 7.4, 7.3, 10.3]]],
+  R: [7, [[0, 10, 0, 0, 5.4, 0, 7, C, 7, 5.4 - C, 5.4, 5.4, 0, 5.4], [3.9, 5.4, 7, 8.6, 7, 10]]],
+  S: [7, [[7, C, 7 - C, 0, C, 0, 0, C, 0, 5 - C, C, 5, 7 - C, 5, 7, 5 + C, 7, 10 - C, 7 - C, 10, C, 10, 0, 10 - C]]],
+  T: [7, [[0, 0, 7, 0], [3.5, 0, 3.5, 10]]],
+  U: [7, [[0, 0, 0, 10 - C, C, 10, 7 - C, 10, 7, 10 - C, 7, 0]]],
+  V: [7.4, [[0, 0, 3.7, 10, 7.4, 0]]],
+  W: [9, [[0, 0, 1.9, 10, 4.5, 3.8, 7.1, 10, 9, 0]]],
+  X: [7, [[0, 0, 7, 10], [7, 0, 0, 10]]],
+  Y: [7, [[0, 0, 3.5, 5, 7, 0], [3.5, 5, 3.5, 10]]],
+  Z: [7, [[0, 0, 7, 0, 0, 10, 7, 10]]],
+  0: [7, [OCT(7), [2.2, 7.4, 4.8, 2.6]]],
+  1: [3.4, [[0, 2.2, 2.2, 0, 2.2, 10]]],
+  2: [7, [[0, C, C, 0, 7 - C, 0, 7, C, 7, 3.6, 0, 10, 7, 10]]],
+  3: [7, [[0, C, C, 0, 7 - C, 0, 7, C, 7, 5 - C, 7 - C, 5, 2.4, 5], [7 - C, 5, 7, 5 + C, 7, 10 - C, 7 - C, 10, C, 10, 0, 10 - C]]],
+  4: [7, [[5.4, 10, 5.4, 0, 0, 7, 7, 7]]],
+  5: [7, [[7, 0, 0, 0, 0, 4.6, 7 - C, 4.6, 7, 4.6 + C, 7, 10 - C, 7 - C, 10, C, 10, 0, 10 - C]]],
+  6: [7, [[6.4, 0, C, 0, 0, C, 0, 10 - C, C, 10, 7 - C, 10, 7, 10 - C, 7, 5 + C, 7 - C, 5, 0, 5]]],
+  7: [7, [[0, 0, 7, 0, 2.4, 10]]],
+  8: [7, [[C, 5, 0, 5 - C, 0, C, C, 0, 7 - C, 0, 7, C, 7, 5 - C, 7 - C, 5, C, 5, 0, 5 + C, 0, 10 - C, C, 10, 7 - C, 10, 7, 10 - C, 7, 5 + C, 7 - C, 5]]],
+  9: [7, [[0.6, 10, 7 - C, 10, 7, 10 - C, 7, C, 7 - C, 0, C, 0, 0, C, 0, 5 - C, C, 5, 7, 5]]],
+  '-': [4.6, [[0, 5, 4.6, 5]]],
+  '.': [0, [[0, 9.3, 0, 10]]],
+  '+': [6, [[0, 5, 6, 5], [3, 2, 3, 8]]],
+  ' ': [3.4, []],
+};
+function kxWord(text, cls, sp = 3.1, label = '') {
+  const t = String(text || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  let x = 0; const paths = []; let i = 0;
+  for (const ch of t) {
+    const g = KXG[ch] || KXG[' '];
+    for (const pl of g[1]) { let d = ''; for (let k = 0; k < pl.length; k += 2) d += (k ? 'L' : 'M') + (+(pl[k] + x).toFixed(2)) + ' ' + pl[k + 1]; paths.push(`<path pathLength="100" style="--i:${i}" d="${d}"/>`); }
+    x += g[0] + sp; if (ch !== ' ') i++;
+  }
+  const W = Math.max(1, x - sp), id = 'kw' + Math.random().toString(36).slice(2, 8), p = paths.join('');
+  return `<svg class="kxw ${cls || ''}" viewBox="-1.2 -1.4 ${(W + 2.4).toFixed(2)} 12.8" role="img" aria-label="${(label || t).replace(/"/g, '')}"><defs>
+<linearGradient id="${id}c" x1="0" y1="0" x2="0" y2="10" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffffff"/><stop offset=".46" stop-color="#eef0ff"/><stop offset=".5" stop-color="#9ea6d6"/><stop offset=".62" stop-color="#ffffff"/><stop offset="1" stop-color="var(--a1,#ff2a3d)"/></linearGradient>
+<linearGradient id="${id}s" x1="-14" y1="0" x2="-2" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/><animateTransform attributeName="gradientTransform" type="translate" from="0 0" to="${(W + 28).toFixed(1)} 0" dur="5.5s" begin="2.2s" repeatCount="indefinite"/></linearGradient>
+<filter id="${id}g" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="0.9"/></filter></defs>
+<g class="kg" fill="none" stroke="var(--a1,#ff2a3d)" stroke-width="2.6" stroke-linejoin="miter" stroke-miterlimit="2.3" filter="url(#${id}g)">${p}</g>
+<g class="kc" fill="none" stroke="url(#${id}c)" stroke-width="1.45" stroke-linejoin="miter" stroke-miterlimit="2.3">${p}</g>
+<g class="ks" fill="none" stroke="url(#${id}s)" stroke-width="1.45" stroke-linejoin="miter" stroke-miterlimit="2.3">${p}</g></svg>`;
+}
+
+(function () {
+  var b = 'KAIROS'; try { var st = JSON.parse(localStorage.getItem('kx_brand') || '""'); if (st) b = String(st).toUpperCase(); } catch (e) {}
+  var t = document.getElementById('bootTitle'); t.innerHTML = kxWord(b, 'draw'); t.dataset.b = b;
+  document.querySelector('#boot .sp-tv').innerHTML = kxWord('TV', 'tvw', 2.4);
+  document.querySelector('#boot .sp-tag').innerHTML = kxWord('PLAYER', 'tagw', 6.5);
+})();
+    </script>
     <div class="boot-bar"><i id="bootBar"></i></div>
     <div class="boot-msg" id="bootMsg"></div>
   </section>
@@ -1545,9 +1652,46 @@ const unseenMsgs = () => { const seen = new Set(store.get('seenMsg', [])); retur
 const perm = (k) => !S.perms || S.perms[k] !== false;
 let navSeq = 0;
 function navHTML(curKey) {
-  return `<nav class="tnav">${LOGO_SVG('kgN' + ++navSeq)}<span class="tdate"></span>
-    <div class="ttabs">${TABS.map(([k, l]) => `<div class="tt ${k === curKey ? 'cur' : ''}" data-f data-go="${k}">${l}</div>`).join('')}</div>
+  return `<nav class="tnav">${LOGO_SVG('kgN' + ++navSeq)}<span class="tmeta"><span class="tdate"></span>${expChip()}</span>
+    <div class="ttabs">${TABS.map(([k, l]) => `<div class="tt ${k === curKey ? 'cur' : ''}" data-f data-go="${k}">${l}</div>`).join('')}${plBtnHTML()}</div>
     <div class="ticons">${['refresh', 'search', 'favs', 'settings'].map((k) => `<div class="ti ${k === curKey ? 'cur' : ''}${k === 'refresh' && S.refreshing ? ' spin' : ''}" data-f data-go="${k}" title="${{ refresh: 'Aggiorna contenuti', search: 'Cerca', favs: 'La mia lista', settings: 'Impostazioni' }[k]}">${NAV_IC[k]}</div>`).join('')}${!S.demo && perm('request') && baseServer() ? `<div class="ti" data-f data-go="request" title="Richiedi un contenuto">${NAV_IC.req}</div>` : ''}<div class="ti tbell${unseenMsgs().length ? ' new' : ''}" data-f data-go="messages" title="Messaggi del fornitore">${NAV_IC.bell}${unseenMsgs().length ? `<b class="nb">${unseenMsgs().length}</b>` : ''}</div>${S.vpn && S.vpn.mode !== 'off' && vpnOk() ? `<div class="ti tvpn vpnbadge${S.vpnState === 'on' ? ' on' : ''}" data-f data-go="vpn" title="VPN: premi per accendere o spegnere">${ICX.shield}</div>` : ''}${S.prof && profList().length > 1 ? `<div class="ti tprof" data-f data-go="profiles" title="Cambia profilo">${avatarSVG(S.prof.avatar, S.prof.name)}</div>` : ''}</div></nav>`;
+}
+/* scadenza dell'abbonamento sempre in vista nella barra in alto */
+function expChip() {
+  if (S.demo || !S.expires || S.status !== 'active') return '';
+  const d = new Date(S.expires + 'T23:59:59'); if (isNaN(d)) return '';
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  const left = Math.round((new Date(S.expires + 'T00:00:00') - t0) / 864e5);
+  const cls = left <= 3 ? 'bad' : left <= 15 ? 'warn' : '';
+  return `<span class="texp ${cls}" title="Scadenza dell'abbonamento"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="texd">Scade il ${d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span><b>${left <= 0 ? 'oggi' : left === 1 ? 'domani' : left + ' giorni'}</b></span>`;
+}
+function plBtnHTML() {
+  const l = plList(); if (l.length < 2 || !perm('plSwitch')) return '';
+  const sel = plSel(), cur = l.find((p) => p.id === sel);
+  return `<div class="tt tpl" data-f data-go="plpick" title="Cambia playlist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h11M4 12h11M4 18h7"/><path d="m17 15 3 3-3 3M20 18h-5"/></svg><span>${cur ? `<i class="plb" style="--pc:${cur.col}">${esc(cur.tag)}</i>${esc(cur.name)}` : 'Tutte'}</span></div>`;
+}
+function plPickDialog() {
+  const l = plList(), sel = plSel(), opts = (plMode() === 'merge' ? [{ id: 'all', name: 'Tutte le playlist (unite)', tag: '', col: '' }] : []).concat(l);
+  kxModal('plPickM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">CAMBIA PLAYLIST</div>
+    <div class="plpick">${opts.map((p) => `<button class="btn${p.id === sel ? ' pri' : ''}" data-f data-plp="${esc(p.id)}">${p.tag ? `<i class="plb" style="--pc:${p.col}">${esc(p.tag)}</i>` : '<i class="plb all">TUTTE</i>'}<span>${esc(p.name)}</span>${p.id === sel ? '<b>✓</b>' : ''}</button>`).join('')}</div>`);
+  setTimeout(() => focus($(`#plPickM [data-plp="${sel}"]`) || $('#plPickM [data-plp]'), true), 40);
+  $$('#plPickM [data-plp]').forEach((b) => (b.onclick = () => { kxClose('plPickM'); plUse(b.dataset.plp); }));
+}
+function plUse(id) {
+  if (id === plSel()) return;
+  store.set('plSel', id); fx('ok');
+  const need = libPlaylists().map((p) => p.id).join(',');
+  if (S.libPlIds && need !== S.libPlIds && !S.demo) { toast('Caricamento della playlist…'); loadLibrary().then(() => plRerender()); return; }
+  plRerender();
+  const p = plList().find((x) => x.id === id); toast(p ? 'Playlist: ' + p.name : 'Tutte le playlist');
+}
+function plRerender() {
+  if (S.fullLib) setLib(S.fullLib);
+  S.liveCat = 'all';
+  const sc = $('.screen.on'); if (!sc) return;
+  if (sc.id === 'cat') return go($('#cat')._kind, true);
+  if (['home', 'live', 'guide'].includes(sc.id)) return go(sc.id, true);
+  fillNav(sc.id);
 }
 function fillNav(id) {
   const slot = $('#' + id + ' .navslot'); if (!slot) return;
@@ -1663,6 +1807,7 @@ function go(where, fromNav) {
   if (where === 'messages') return messagesDialog();
   if (where === 'vpn') return vpnQuick();
   if (where === 'request') return requestDialog();
+  if (where === 'plpick') return plPickDialog();
   if (fromNav) S.stack = where === 'home' ? [] : ['home'];
   const sh = (id) => (fromNav ? show(id, false) : show(id));
   if (where === 'home') { buildBrowse($('#home'), 'all'); return sh('home'); }
@@ -1765,14 +1910,15 @@ async function register() {
   } else if (S.vpn && S.vpn.mode !== 'off') { S.vpn = { mode: 'off' }; store.set('vpnCache', null); } // abbonamento non attivo: niente VPN del fornitore
   const mv = j.settings && j.settings.serverUrl;
   if (mv && /^https:\/\//.test(mv) && mv.replace(/\/+$/, '') !== baseServer()) { S.server = mv.replace(/\/+$/, ''); store.set('server', S.server); }
-  S.settings = { ...S.settings, ...j.settings };
+  S.settings = { ...S.settings, ...j.settings }; store.set('brand', S.settings.brand || '');
   applyBrand();
   return j;
 }
 function applyBrand() {
   applyTheme(store.get('theme') || S.settings.accent);
-  $$('.brandName').forEach((e) => (e.textContent = (S.settings.brand || 'KAIROS').toUpperCase()));
-  $('#bootTitle').textContent = (S.settings.brand || 'KAIROS').toUpperCase();
+  const brandU = (S.settings.brand || 'KAIROS').toUpperCase();
+  $$('.brandName').forEach((e) => { if (e.dataset.b !== brandU) { e.innerHTML = kxWord(brandU, ''); e.dataset.b = brandU; } });
+  { const bt = $('#bootTitle'); if (bt.dataset.b !== brandU) { bt.innerHTML = kxWord(brandU, 'draw'); bt.dataset.b = brandU; } }
   document.title = (S.settings.brand || 'KAIROS') + ' Player';
   $$('.annc .mq').forEach((e) => (e.textContent = S.settings.announcement || ''));
 }
@@ -1847,12 +1993,47 @@ async function loadXtream(p) {
   };
 }
 const localOk = () => S.settings.allowLocalPlaylists && perm('localPl');
-const activePlaylists = () => [...S.playlists, ...(localOk() ? S.local : [])].map((p) => ({ ...p, id: p.id || 'p' + hashStr((p.url || '') + (p.host || '') + (p.username || '')) }));
+const allPlaylists = () => [...S.playlists, ...(localOk() ? S.local : [])].map((p) => ({ ...p, id: p.id || 'p' + hashStr((p.url || '') + (p.host || '') + (p.username || '')) }));
+const activePlaylists = () => { const all = allPlaylists(); if (!localOk()) return all; const hid = new Set(store.get('plHidden', [])); const vis = all.filter((p) => !hid.has(p.id)); return vis.length ? vis : all; };
+/* ---- più playlist: unite (con la sigla colorata della playlist d'origine) o divise (una alla volta) ---- */
+const PL_COL = ['#ff4a55', '#3fb4ff', '#ffc23d', '#3ddc84', '#c77dff', '#ff8a3d', '#21d4d4', '#ff6fb5'];
+const plMode = () => (S.account && S.account.plMode === 'split' ? 'split' : 'merge');
+function plTagOf(p, i) {
+  const t = String(p.tag || '').trim(); if (t) return t.toUpperCase().slice(0, 6);
+  const n = String(p.name || '').replace(/[^\p{L}\p{N} ]/gu, ' ').trim(); if (!n) return 'P' + (i + 1);
+  const w = n.split(/\s+/).filter(Boolean);
+  return (n.length <= 5 ? n : w.length > 1 ? w.map((x) => x[0]).join('').slice(0, 4) : n.slice(0, 4)).toUpperCase();
+}
+function plList() {
+  const seen = new Map();
+  return activePlaylists().map((p, i) => {
+    let tag = plTagOf(p, i); const n = seen.get(tag) || 0; seen.set(tag, n + 1); if (n) tag += n + 1;
+    return { id: p.id, name: p.name || 'Playlist ' + (i + 1), tag, col: PL_COL[i % PL_COL.length], type: p.type };
+  });
+}
+/** playlist in uso: 'all' (unite) oppure l'id di una sola */
+function plSel() {
+  const ids = activePlaylists().map((p) => p.id); if (ids.length < 2) return 'all';
+  const def = S.account && ids.includes(S.account.plDefault) ? S.account.plDefault : ids[0];
+  const mine = perm('plSwitch') ? store.get('plSel', '') : '';
+  if (plMode() === 'split') return ids.includes(mine) ? mine : def;
+  return ids.includes(mine) ? mine : 'all';
+}
+/* divise e senza permesso di cambiarla: si scarica solo la playlist da usare (avvio più veloce) */
+const libPlaylists = () => { const all = activePlaylists(); if (all.length < 2 || plMode() !== 'split' || perm('plSwitch')) return all; const sel = plSel(); return all.filter((p) => p.id === sel); };
+function plFilter(lib) {
+  const sel = plSel();
+  if (sel === 'all' || (S.prof && S.prof.pl && S.prof.pl !== 'all')) return lib;
+  const f = (a) => a.filter((x) => x.pl === sel);
+  const out = { ...lib, live: f(lib.live), movies: f(lib.movies), series: f(lib.series) };
+  return out.live.length + out.movies.length + out.series.length ? out : lib;
+}
+const plBadge = (x) => { if (!S.plBadges || !x || !x.pl) return ''; const t = S.plTags.get(x.pl); return t ? `<i class="plb" style="--pc:${t.col}">${esc(t.tag)}</i>` : ''; };
 const fixUrl = (u) => { u = String(u || '').trim(); return u && !/^[a-z][a-z0-9+.-]*:\/\//i.test(u) ? 'http://' + u : u; };
 function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
 /* scarica e legge tutte le playlist in parallelo */
 async function fetchLibrary(onMsg) {
-  const all = activePlaylists();
+  const all = libPlaylists();
   S.loadErrors = [];
   let done = 0;
   const parts = await Promise.all(all.map(async (p) => {
@@ -1867,7 +2048,23 @@ async function fetchLibrary(onMsg) {
   parts.forEach((part, i) => { if (part && part.epg) m3uEpg[all[i].id] = part.epg.slice(0, 3); });
   store.set('m3uEpg', m3uEpg);
   // niente push(...lista): con 150.000+ titoli supererebbe il limite dello stack
-  for (const part of parts) if (part) for (const k of ['live', 'movies', 'series']) { const src = part[k], dst = lib[k]; for (let i = 0; i < src.length; i++) dst.push(src[i]); }
+  // ogni contenuto sa da quale playlist arriva; due playlist Xtream possono avere gli stessi numeri: il secondo id diventa unico
+  const multi = all.length > 1;
+  parts.forEach((part, pi) => {
+    if (!part) return;
+    const pid = all[pi].id;
+    for (const k of ['live', 'movies', 'series']) {
+      const src = part[k], dst = lib[k], seen = multi ? (lib['_' + k] || (lib['_' + k] = new Set())) : null;
+      for (let i = 0; i < src.length; i++) {
+        const x = src[i];
+        if (!x.pl) x.pl = pid;
+        if (seen) { if (seen.has(x.id)) x.id = x.id + '@' + pid; seen.add(x.id); }
+        dst.push(x);
+      }
+    }
+  });
+  delete lib._live; delete lib._movies; delete lib._series;
+  S.libPlIds = all.map((p) => p.id).join(',');
   return { lib, ok: parts.some(Boolean), total: all.length };
 }
 async function loadLibrary() {
@@ -1905,7 +2102,7 @@ function libSig(lib) {
 }
 /* cache della libreria: IndexedDB, oppure file dell'app se IndexedDB non è disponibile */
 const LibCache = {
-  key() { return 'lib_' + hashStr(JSON.stringify(activePlaylists().map((p) => [p.id, p.type, p.type === 'xtream' ? '' : plPath(p.url), '', p.username, p.password]))); },
+  key() { return 'lib_' + hashStr(JSON.stringify(libPlaylists().map((p) => [p.id, p.type, p.type === 'xtream' ? '' : plPath(p.url), '', p.username, p.password]))); },
   db() {
     return this._db || (this._db = new Promise((res, rej) => {
       try { const r = indexedDB.open('kairos', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); }
@@ -1942,7 +2139,14 @@ const isSepCh = (c) => { const n = String(c.name || '').trim(); return !n || /[\
 function setLib(lib) {
   if (lib.live.some(isSepCh)) lib = { ...lib, live: lib.live.filter((c) => !isSepCh(c)) };
   S.fullLib = lib; trendCache = null;
-  lib = profFilter(lib);
+  { // contenuti di una cache vecchia senza la playlist d'origine
+    const ids = activePlaylists().map((p) => p.id);
+    if (ids.length > 1) for (const arr of [lib.live, lib.movies, lib.series]) for (const x of arr) if (!x.pl) { const id = ids.find((i) => String(x.id).endsWith(i)); if (id) x.pl = id; }
+    const pl = plList();
+    S.plTags = new Map(pl.map((p) => [p.id, p]));
+    S.plBadges = pl.length > 1 && plMode() === 'merge' && plSel() === 'all' && !(S.prof && S.prof.pl && S.prof.pl !== 'all');
+  }
+  lib = plFilter(profFilter(lib));
   lib.live.forEach((c, i) => { c.num = c.num || i + 1; c.k = 'l'; });
   lib.movies.forEach((x) => (x.k = 'm'));
   lib.series.forEach((x) => (x.k = 's'));
@@ -2178,7 +2382,7 @@ const epgOf = (ch) => xepgItems(ch) || (S.epg.get(ch.id) || {}).items || null;
 const nowOf = (ch) => { const it = epgOf(ch); if (!it) return null; const t = Date.now(); return it.find((x) => x.start <= t && x.end > t) || null; };
 function chHTML(ch, i) {
   const n = nowOf(ch);
-  return `<div class="ch ${S.previewing && S.previewing.id === ch.id ? 'playing' : ''}${isLocked(ch) ? ' lk' : ''}${S.hidden.has(ch.id) ? ' hid' : ''}${recFor(ch.id) ? ' recing' : ''}" data-f data-i="${i}"><div class="lg" data-lg="${esc(ch.id)}">${logoHTML(ch)}</div><div class="nm"><b>${esc(ch.name)}</b><small>${qBadge(ch)}<span data-now="${esc(ch.id)}">${esc(n ? n.title : ch.group || '')}</span></small></div><span class="cn">${ch.num}</span><svg class="star ${S.favs.has(ch.id) ? 'on' : ''}" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></div>`;
+  return `<div class="ch ${S.previewing && S.previewing.id === ch.id ? 'playing' : ''}${isLocked(ch) ? ' lk' : ''}${S.hidden.has(ch.id) ? ' hid' : ''}${recFor(ch.id) ? ' recing' : ''}" data-f data-i="${i}"><div class="lg" data-lg="${esc(ch.id)}">${logoHTML(ch)}</div><div class="nm"><b>${esc(ch.name)}</b><small>${plBadge(ch)}${qBadge(ch)}<span data-now="${esc(ch.id)}">${esc(n ? n.title : ch.group || '')}</span></small></div><span class="cn">${ch.num}</span><svg class="star ${S.favs.has(ch.id) ? 'on' : ''}" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></div>`;
 }
 const CH_MAX = 480;
 function moreChannels() {
@@ -2673,8 +2877,8 @@ function nativePlay(item, kind, fromSec, extra) {
 window.kxPlayerClosed = (r) => {
   S.inPlayer = false; S.playingVod = null;
   setTimeout(() => heartbeat(true), 800);
-  try { r = typeof r === 'string' ? JSON.parse(r) : r; } catch { return; }
-  if (!r) return;
+  try { r = typeof r === 'string' ? JSON.parse(r) : r; } catch { r = null; }
+  if (!r) { evReturn(); return; }
   if (r.engine && r.engineKey && OPT[r.engineKey]) store.set('o_' + r.engineKey, r.engine); // scelta fatta nel player: ricordata per quel tipo di contenuto
   if (r.kind === 'vod' && r.id && r.dur > 0) {
     const pos = store.get('pos', {}), du = store.get('dur', {});
@@ -2688,6 +2892,7 @@ window.kxPlayerClosed = (r) => {
     const ch = S.byId.get(r.id);
     if (ch) { S.playingLive = ch; addRecent(ch, 'live'); if ($('#live').classList.contains('on')) focusChannel(ch, true); else if ($('#guide').classList.contains('on')) guideFocusChannel(ch, true); }
   }
+  if (evReturn()) return;
   setTimeout(placeRing, 100);
 };
 function openFs(item, kind, fromSec, extra, gated) {
@@ -2709,6 +2914,7 @@ function closeFs() {
   stopVideo($('#fv'));
   $('#fs').classList.remove('on');
   try { document.fullscreenElement && document.exitFullscreen(); } catch {}
+  if (evReturn()) return;
   if (fsKind === 'live' && $('#live').classList.contains('on')) focusChannel(fsItem, true);
   else placeRing();
 }
@@ -2767,7 +2973,7 @@ function vodSource() {
 }
 function posterHTML(x, i) {
   const img = x.poster || x.logo;
-  return `<div class="post" data-f data-i="${i}">${img ? `<img loading="lazy" decoding="async" src="${esc(img)}" onerror="this.remove()">` : ''}${x.rating && +x.rating ? `<span class="rt">★ ${(+x.rating).toFixed(1)}</span>` : ''}<div class="t">${esc(x.name)}<small>${esc(x.year || x.group || '')}</small></div></div>`;
+  return `<div class="post" data-f data-i="${i}">${img ? `<img loading="lazy" decoding="async" src="${esc(img)}" onerror="this.remove()">` : ''}${plBadge(x)}${x.rating && +x.rating ? `<span class="rt">★ ${(+x.rating).toFixed(1)}</span>` : ''}<div class="t">${esc(x.name)}<small>${esc(x.year || x.group || '')}</small></div></div>`;
 }
 function renderVod() {
   vodItems = vodSource(); vodRendered = 0;
@@ -2809,7 +3015,7 @@ async function openDetail(x) {
     const bg = x.backdrop || x.poster || '';
     $('#dIn').innerHTML = `<div class="dm">
       <div class="dhero ${x.backdrop ? '' : 'ph'}" style="background-image:url('${esc(bg)}')">${x.backdrop ? '' : `<div class="dblur"></div><div class="dpost" style="background-image:url('${esc(x.poster || '')}')"></div>`}<div class="dfade"></div>
-        <span class="brandmark">${esc((S.settings.brand || 'KAIROS').toUpperCase())}</span>
+        <span class="brandmark">${kxWord((S.settings.brand || 'KAIROS').toUpperCase(), '')}</span>
         <button class="dx" data-f data-back>✕</button>
         <div class="dht"><div class="hkind"><i class="kb">K</i>${isSeries ? 'SERIE' : 'FILM'}</div><h1>${esc(x.name)}</h1>
           <div class="acts">${isSeries ? `<button class="nbtn play" data-f data-autof id="dEp1"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>Episodi</button>` : `<button class="nbtn play" data-f data-autof id="dPlay"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>${pos ? 'Riprendi' : 'Riproduci'}</button>${pos ? '<button class="nbtn info" data-f id="dRestart">↺ Dall\'inizio</button>' : ''}`}${!S.demo && baseServer() ? '<button class="nbtn info" data-f id="dTrailer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="m10 9 5 3-5 3z" fill="currentColor"/></svg>Trailer</button>' : ''}
@@ -2982,9 +3188,9 @@ function cardHTML(type, x, k, i) {
   }
   const img = x.poster || x.logo, ft = `<div class="ft">${esc(x.name)}</div>`;
   const onerr = `onerror="this.parentNode.classList.add('noimg');this.remove()"`;
-  if (type === 'live') return `<div class="nc l${isLocked(x) ? ' lk' : ''}" data-f data-k="${k}"><span class="tg">LIVE</span>${x.logo ? `<img loading="lazy" decoding="async" src="${esc(x.logo)}" data-t="${esc(x.name.slice(0, 2).toUpperCase())}" onerror="kxImgTxt(this,'lini')">` : `<span class="lini">${esc(x.name.slice(0, 2).toUpperCase())}</span>`}<div class="ln"><b>${x.num}</b>${esc(x.name)}</div>${qBadge(x).replace('class="qb', 'class="qb qcard')}</div>`;
+  if (type === 'live') return `<div class="nc l${isLocked(x) ? ' lk' : ''}" data-f data-k="${k}"><span class="tg">LIVE</span>${x.logo ? `<img loading="lazy" decoding="async" src="${esc(x.logo)}" data-t="${esc(x.name.slice(0, 2).toUpperCase())}" onerror="kxImgTxt(this,'lini')">` : `<span class="lini">${esc(x.name.slice(0, 2).toUpperCase())}</span>`}<div class="ln"><b>${x.num}</b>${esc(x.name)}</div>${qBadge(x).replace('class="qb', 'class="qb qcard')}${plBadge(x)}</div>`;
   if (type === 'rec') return `<div class="nc l rc" data-f data-k="${k}"><span class="tg rec">REC</span>${x.logo ? `<img loading="lazy" decoding="async" src="${esc(x.logo)}" onerror="this.remove()">` : ''}<div class="ft">${esc(x.name)}<small>${esc(dayTime(x.rec.start || x.rec.at))}</small></div></div>`;
-  if (type === 'top') return `<div class="nc t" data-f data-k="${k}"><span class="big">${i + 1}</span><div class="pp ${img ? '' : 'noimg'}">${img ? `<img loading="lazy" decoding="async" src="${esc(img)}" ${onerr}>` : ''}${ft}</div></div>`;
+  if (type === 'top') return `<div class="nc t" data-f data-k="${k}"><span class="big">${i + 1}</span><div class="pp ${img ? '' : 'noimg'}">${img ? `<img loading="lazy" decoding="async" src="${esc(img)}" ${onerr}>` : ''}${ft}${plBadge(x)}</div></div>`;
   let extra = '';
   if (type === 'cont') {
     if (isLiveItem(x)) extra = '<span class="tg">LIVE</span>';
@@ -2994,7 +3200,7 @@ function cardHTML(type, x, k, i) {
       if (pct) extra = `<div class="pr"><i style="width:${pct}%"></i></div>`;
     }
   }
-  return `<div class="nc p ${img ? '' : 'noimg'}${isLocked(x) ? ' lk' : ''}" data-f data-k="${k}">${img ? `<img loading="lazy" class="${isLiveItem(x) ? 'lgfit' : ''}" src="${esc(img)}" ${onerr}>` : ''}${ft}${extra}</div>`;
+  return `<div class="nc p ${img ? '' : 'noimg'}${isLocked(x) ? ' lk' : ''}" data-f data-k="${k}">${img ? `<img loading="lazy" class="${isLiveItem(x) ? 'lgfit' : ''}" src="${esc(img)}" ${onerr}>` : ''}${ft}${extra}${plBadge(x)}</div>`;
 }
 function rowHTML(r, ri) {
   const max = 40;
@@ -3013,7 +3219,7 @@ function buildBrowse(scr, kind) {
   scr.innerHTML = `<div class="navslot"></div><div class="dhandle" data-drawer title="Categorie"></div>
   <div class="browse">
     <div class="hero"><div class="hbg"><img class="blur" alt=""><img class="main fade" alt="" decoding="async"><img class="main fade" alt="" decoding="async"></div><div class="hshade"></div>
-      <div class="htop"><b class="hbrand brandName">${esc((S.settings.brand || 'KAIROS').toUpperCase())}</b>${kind !== 'all' ? `<span class="hsec">${kind === 'movies' ? 'Film' : 'Serie TV'}</span>` : ''}${S.demo ? '<span class="dtag">DEMO</span>' : ''}${S.settings.announcement ? `<span class="annc"><span class="mq">${esc(S.settings.announcement)}</span></span>` : ''}<span class="sp"></span><b class="clk2"></b></div>
+      <div class="htop"><b class="hbrand brandName" data-b="${esc((S.settings.brand || 'KAIROS').toUpperCase())}">${kxWord((S.settings.brand || 'KAIROS').toUpperCase(), '')}</b>${kind !== 'all' ? `<span class="hsec">${kind === 'movies' ? 'Film' : 'Serie TV'}</span>` : ''}${S.demo ? '<span class="dtag">DEMO</span>' : ''}${S.settings.announcement ? `<span class="annc"><span class="mq">${esc(S.settings.announcement)}</span></span>` : ''}<span class="sp"></span><b class="clk2"></b></div>
       ${S.settings.announcement ? `<div class="hann"><span class="mq">${esc(S.settings.announcement)}</span></div>` : ''}<div class="hinfo"><div class="hkind"></div><h1 class="htitle"></h1><div class="hmeta"></div><div class="hrate"></div><p class="hplot"></p>
         <div class="hbtns"><button class="nbtn play" data-hplay><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg><span>Riproduci</span></button><button class="nbtn info" data-hinfo><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Altre info</button></div></div>
     </div>
@@ -3438,7 +3644,9 @@ S.setSec = 'dev';
 function renderSettings(sec) {
   if (sec) S.setSec = sec;
   const st = { active: ['Attivo', 'var(--ok)'], pending: ['In attesa', 'var(--warn)'], expired: ['Scaduto', 'var(--bad)'], disabled: ['Disattivato', 'var(--bad)'], demo: ['Demo', 'var(--a1)'] }[S.demo ? 'demo' : S.status] || ['—', 'var(--mut)'];
-  const allPl = [...S.playlists.map((p) => ({ ...p, srv: 1 })), ...(localOk() ? S.local : [])];
+  const plHid = new Set(store.get('plHidden', [])), plT = new Map(plList().map((p) => [p.id, p]));
+  const allPl = allPlaylists().map((p) => ({ ...p, srv: !S.local.some((x) => x.id === p.id) }));
+  const plCur = plSel(), canSw = perm('plSwitch') && plList().length > 1;
   const P = playPrefs(), theme = store.get('theme') || S.settings.accent || 'cinema';
   const MENU = [['dev', 'Account'], ['acct', 'Profili e dispositivi'], ['pl', 'Gestione playlist'], ['play', 'Lettore'], ['tv', 'TV in diretta e guida TV'], ['rec', 'Registrazioni'], ['kids', 'Controllo genitori'], ['net', 'Rete e speed test'], ['priv', 'Privacy e VPN'], ['look', 'Generali'], ['info', 'Informazioni']];
   const kv = (k, v) => `<div class="sr static"><span>${k}</span><b>${v}</b></div>`;
@@ -3446,7 +3654,9 @@ function renderSettings(sec) {
     acct: acctCard(), rec: recCard(), priv: privCard(),
     dev: `<h3>Account</h3>${kv('Codice dispositivo', `<span class="orb">${esc(S.code)}</span>`)}${kv('Stato', `<span style="color:${st[1]}">${st[0]}</span>`)}${kv('Scadenza', S.expires ? new Date(S.expires).toLocaleDateString('it-IT') : 'Illimitata')}${kv('Contenuti', `${S.lib.live.length.toLocaleString('it')} canali · ${S.lib.movies.length.toLocaleString('it')} film · ${S.lib.series.length.toLocaleString('it')} serie`)}${S.settings.supportContact ? kv('Assistenza', esc(S.settings.supportContact)) : ''}
       <div class="sbtns"><button class="btn pri" data-f id="sReload">↻ Aggiorna contenuti</button></div>`,
-    pl: `<h3>Gestione playlist</h3>${allPl.map((p) => `<div class="sr static"><span><b style="color:#fff">${esc(p.name)}</b><br><small class="mut">${p.type === 'xtream' ? 'Xtream Codes' : 'M3U'}${p.srv ? ' · dal gestore' : ' · personale'}</small></span>${p.srv ? '<b>✓</b>' : `<button class="btn" data-f data-del="${p.id}" style="padding:8px 14px">Rimuovi</button>`}</div>`).join('') || '<div class="snote">Nessuna playlist collegata.</div>'}
+    pl: `<h3>Gestione playlist</h3>${plList().length > 1 ? `<div class="snote">${plMode() === 'split' ? 'Vedi una playlist alla volta' : 'Le playlist sono unite: ogni contenuto mostra la sigla colorata della sua playlist'}${canSw ? '. Cambia playlist anche dal pulsante vicino a «Guida TV».' : '.'}</div>` : ''}
+      ${allPl.map((p) => { const t = plT.get(p.id), hid = plHid.has(p.id); return `<div class="sr static plrow${hid ? ' off' : ''}"><span>${t && plList().length > 1 ? `<i class="plb" style="--pc:${t.col}">${esc(t.tag)}</i>` : ''}<b style="color:#fff">${esc(p.name)}</b><br><small class="mut">${p.type === 'xtream' ? 'Xtream Codes' : 'M3U'}${p.srv ? ' · dal fornitore' : ' · personale'}${hid ? ' · nascosta' : plCur === p.id ? ' · in uso' : ''}</small></span><span class="plact">${canSw && !hid && plCur !== p.id ? `<button class="btn" data-f data-puse="${esc(p.id)}">Usa</button>` : ''}${!p.srv ? `<button class="btn" data-f data-pedit="${esc(p.id)}">Modifica</button><button class="btn" data-f data-del="${esc(p.id)}">Rimuovi</button>` : localOk() && allPl.length > 1 ? `<button class="btn" data-f data-phide="${esc(p.id)}">${hid ? 'Mostra' : 'Nascondi'}</button>` : '<b>✓</b>'}</span></div>`; }).join('') || '<div class="snote">Nessuna playlist collegata.</div>'}
+      ${canSw && plMode() === 'merge' && plCur !== 'all' ? '<div class="sbtns"><button class="btn" data-f data-puse="all">Mostra tutte le playlist unite</button></div>' : ''}
       ${localOk() ? `<div class="seg" style="margin-top:18px"><button data-f class="sel" id="tM3U">M3U</button><button data-f id="tXT">Xtream Codes</button></div><div id="plForm"></div><button class="btn pri" data-f id="plAdd" style="width:100%;justify-content:center">+ Aggiungi playlist</button>` : '<div class="snote">Le playlist sono gestite dal tuo fornitore.</div>'}
       <h3 style="margin-top:26px">Ordinamento</h3>${optRow('sortCats')}${optRow('sortCh')}${optRow('sortVod')}`,
     play: `<h3>Lettore</h3>${HAS_PLAYER ? '' : '<div class="snote">Queste opzioni valgono nell\'app (Fire TV, Android TV, telefoni).</div>'}
@@ -3497,17 +3707,33 @@ function renderSettings(sec) {
     form('m3u');
     $('#tM3U').onclick = () => { pType = 'm3u'; $('#tM3U').classList.add('sel'); $('#tXT').classList.remove('sel'); form('m3u'); };
     $('#tXT').onclick = () => { pType = 'xtream'; $('#tXT').classList.add('sel'); $('#tM3U').classList.remove('sel'); form('xtream'); };
+    let editId = '';
+    $$('[data-pedit]').forEach((b) => (b.onclick = () => {
+      const p = S.local.find((x) => x.id === b.dataset.pedit); if (!p) return;
+      editId = p.id; pType = p.type === 'xtream' ? 'xtream' : 'm3u';
+      $('#tXT').classList.toggle('sel', pType === 'xtream'); $('#tM3U').classList.toggle('sel', pType === 'm3u'); form(pType);
+      $('#pName').value = p.name || ''; if ($('#pUrl')) $('#pUrl').value = p.url || ''; if ($('#pHost')) $('#pHost').value = p.host || ''; if ($('#pUser')) $('#pUser').value = p.username || ''; if ($('#pPass')) $('#pPass').value = p.password || '';
+      $('#plAdd').textContent = '✓ Salva modifiche'; focus($('#pName'), true);
+    }));
     $('#plAdd').onclick = async () => {
-      const p = { id: 'loc' + Date.now(), type: pType, name: $('#pName').value.trim() || 'La mia playlist', url: $('#pUrl')?.value.trim(), host: $('#pHost')?.value.trim().replace(/\/+$/, ''), username: $('#pUser')?.value.trim(), password: $('#pPass')?.value.trim() };
+      const p = { id: editId || 'loc' + Date.now(), type: pType, name: $('#pName').value.trim() || 'La mia playlist', url: $('#pUrl')?.value.trim(), host: $('#pHost')?.value.trim().replace(/\/+$/, ''), username: $('#pUser')?.value.trim(), password: $('#pPass')?.value.trim() };
       if (pType === 'm3u' ? !p.url : !(p.host && p.username)) return toast('Compila i campi della playlist');
       // un link get.php con utente e password è una lista Xtream: la carico come tale (più veloce, con copertine)
       if (pType === 'm3u') { try { const u = new URL(fixUrl(p.url)); const us = u.searchParams.get('username'), pw = u.searchParams.get('password'); if (/get\.php$/i.test(u.pathname) && us && pw) Object.assign(p, { type: 'xtream', host: u.origin, username: us, password: pw }); } catch {} }
-      S.local.push(p); store.set('localPl', S.local); toast('Playlist aggiunta, caricamento…');
+      if (editId) S.local = S.local.map((x) => (x.id === editId ? p : x)); else S.local.push(p);
+      store.set('localPl', S.local); toast(editId ? 'Playlist modificata, caricamento…' : 'Playlist aggiunta, caricamento…');
       if (S.demo) S.demo = false;
       await loadLibrary(); renderSettings('pl'); focus($('#plAdd') || $('.sm.sel'), true);
     };
   }
   $$('[data-del]').forEach((b) => (b.onclick = async () => { S.local = S.local.filter((p) => p.id !== b.dataset.del); store.set('localPl', S.local); await loadLibrary(); renderSettings('pl'); focus($('.sm.sel'), true); }));
+  $$('[data-phide]').forEach((b) => (b.onclick = async () => {
+    const h = new Set(store.get('plHidden', [])), id = b.dataset.phide;
+    if (h.has(id)) h.delete(id); else { if (allPlaylists().filter((p) => !h.has(p.id)).length <= 1) return toast('Deve restare almeno una playlist'); h.add(id); }
+    store.set('plHidden', [...h]); toast(h.has(id) ? 'Playlist nascosta' : 'Playlist di nuovo visibile');
+    await loadLibrary(); renderSettings('pl'); focus($(`[data-phide="${id}"]`) || $('.sm.sel'), true);
+  }));
+  $$('[data-puse]').forEach((b) => (b.onclick = () => { plUse(b.dataset.puse); setTimeout(() => { renderSettings('pl'); focus($('.sm.sel'), true); }, 300); }));
   $('#sReload').onclick = () => manualRefresh();
 
   if ($('#sSpeed')) $('#sSpeed').onclick = () => speedTest();
@@ -3699,7 +3925,7 @@ function showProfiles(after) {
   if (after) scr.classList.remove('manage'); // apertura nuova: si parte dalla scelta, non dalla modifica
   scr._must = !l.length;
   const head = !l.length ? (canAdd ? '<h1>Crea il tuo profilo</h1><p class="mut prsub">Per iniziare serve almeno un profilo: scegli nome e avatar.</p>' : '<h1>Profilo in preparazione</h1><p class="mut prsub">Il tuo fornitore sta creando il tuo profilo. Riprova tra poco.</p>') : '<h1>Chi sta guardando?</h1>';
-  scr.innerHTML = `<div class="prw"><div class="prbrand"><b class="brandName">${esc((S.settings.brand || 'KAIROS').toUpperCase())}</b><span>TV</span></div>${head}
+  scr.innerHTML = `<div class="prw"><div class="prbrand"><b class="brandName" data-b="${esc((S.settings.brand || 'KAIROS').toUpperCase())}">${kxWord((S.settings.brand || 'KAIROS').toUpperCase(), '')}</b><span>${kxWord('TV', 'tvw', 2.4)}</span></div>${head}
     <div class="prlist">${l.map((p, i) => `<div class="prof" data-f data-pi="${i}" style="animation-delay:${i * 70}ms"><div class="pav">${avatarSVG(p.avatar, p.name)}</div><b>${esc(p.name)}</b>${p.kids ? '<small>BAMBINI</small>' : ''}</div>`).join('')}${canAdd ? `<div class="prof add" data-f data-pi="add" style="animation-delay:${l.length * 70}ms"><div class="pav"><span>+</span></div><b>Aggiungi profilo</b></div>` : ''}</div>
     ${!l.length ? (canAdd ? '' : '<button class="btn pri" data-f id="prRetry">↻ Riprova</button>') : profCanEdit() ? `<button class="btn" data-f id="prManage">${scr.classList.contains('manage') ? '✓ Fine' : '✎ Gestisci profili'}</button>` : ''}</div>`;
   const rt = scr.querySelector('#prRetry');
@@ -4057,7 +4283,10 @@ function eventChannels(e) {
   pool.filter((ch) => { const n = normT(ch.name) + ' ' + (ch.group || '').toLowerCase(); return kw.some((k) => n.includes(k)); }).sort((a, b) => q(a) - q(b)).forEach((ch) => push(ch, ch.group || 'Canale sportivo', false));
   return out;
 }
-function openEvent(e) {
+/* evento: dopo la visione di un canale (anche se era quello sbagliato) si torna alla lista «Dove vederla» */
+let evBack = null;
+function evReturn() { if (!evBack) return false; const b = evBack; evBack = null; setTimeout(() => openEvent(b.e, b.i), 120); return true; }
+function openEvent(e, fi) {
   const list = eventChannels(e);
   const sc = e.live && e.home.score != null ? `<em class="sc">${esc(e.home.score)} - ${esc(e.away.score)}</em>` : '<em>VS</em>';
   kxModal('evM', `<div class="evhd"><span class="evl">${esc(e.league)}</span><span class="evw ${e.live ? 'live' : ''}">${e.live ? '● IN DIRETTA' : esc(evWhen(e))}</span></div>
@@ -4065,8 +4294,8 @@ function openEvent(e) {
     <h5 class="evh5">DOVE VEDERLA</h5>
     <div class="evlist">${list.map((c, i) => { const n = nowOf(c.ch); return `<div class="evch" data-f data-ei="${i}"><div class="lg">${logoHTML(c.ch)}</div><div class="nm"><b>${esc(c.ch.name)}</b><small>${esc(n ? n.title : c.why)}</small></div>${c.epg ? '<span class="evtag">IN GUIDA</span>' : ''}<span class="evgo">▶</span></div>`; }).join('') || '<div class="noepg"><b>Nessun canale trovato automaticamente</b>Cerca tra tutti i canali qui sotto.</div>'}</div>
     <div class="sbtn"><button class="btn" data-f id="evSearch">🔍 Cerca tra tutti i canali</button><button class="btn" data-f id="evNo">Chiudi</button></div>`, null, 'evmodal');
-  setTimeout(() => focus($('#evM .evch') || $('#evSearch'), true), 60);
-  $$('#evM .evch').forEach((el) => (el.onclick = () => { const ch = list[+el.dataset.ei].ch; kxClose('evM'); openFs(ch, 'live'); }));
+  setTimeout(() => focus((fi != null && $(`#evM [data-ei="${fi}"]`)) || $('#evM .evch') || $('#evSearch'), true), 60);
+  $$('#evM .evch').forEach((el) => (el.onclick = () => { const ch = list[+el.dataset.ei].ch; evBack = { e, i: +el.dataset.ei }; kxClose('evM'); openFs(ch, 'live'); }));
   $('#evNo').onclick = () => kxClose('evM');
   $('#evSearch').onclick = () => { kxClose('evM'); show('search'); $('#q').value = e.league.replace(/League|LaLiga/i, '').trim() || e.home.name; doSearch(); };
 }
@@ -4162,11 +4391,25 @@ async function playTrailer(x, ex) {
   try {
     const y = (ex && ex.year) || x.year || '', kind = isSeriesItem(x) ? 'series' : 'movie';
     const j = await getJSON(`${baseServer()}/api/player/trailer?t=${encodeURIComponent(x.name)}&y=${encodeURIComponent(String(y).slice(0, 4))}&kind=${kind}`);
+    if (j && j.yt && /^[\w-]{11}$/.test(j.yt)) {
+      // YouTube: nel lettore dei trailer dell'app (APK 1.9), altrimenti in una finestra della pagina
+      if (NATIVE && NATIVE.playYoutube) { NATIVE.playYoutube(j.yt, x.name); return; }
+      return ytOverlay(j.yt, x.name);
+    }
     if (!j || !j.url) return toast('Trailer non trovato per questo titolo');
     const it = { id: 'trl:' + x.id, name: 'Trailer · ' + x.name, url: j.url, group: 'Trailer' };
     if (!HAS_PLAYER) closeDetail();
     if (!(HAS_PLAYER && nativePlay(it, 'movie', 0))) openFs(it, 'movie', 0, null, true);
   } catch { toast('Trailer non disponibile in questo momento'); } finally { if (b) b.classList.remove('busy'); }
+}
+function ytOverlay(id, name) {
+  const back = cur;
+  document.body.insertAdjacentHTML('beforeend', `<div class="speedm on ytm" id="ytM"><div class="ytbox"><iframe src="https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&playsinline=1&modestbranding=1&hl=it" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+    <div class="ytbar"><b>${esc(name)}</b><a class="btn" data-f id="ytApp" href="https://www.youtube.com/watch?v=${id}" target="_blank" rel="noopener">Apri su YouTube</a><button class="btn pri" data-f id="ytNo">Chiudi</button></div></div></div>`);
+  const m = $('#ytM');
+  m._onClose = () => { setTimeout(() => back && document.body.contains(back) && focus(back, true), 30); };
+  $('#ytNo').onclick = () => { m._onClose(); m.remove(); };
+  setTimeout(() => focus($('#ytNo'), true), 60);
 }
 /* ---------------- visioni contemporanee (limite impostato dal pannello) ---------------- */
 let streamOkT = 0;
@@ -4573,12 +4816,15 @@ async function heartbeat(force) {
     const j = await apiPost('/api/player/heartbeat', body); if (!j) return;
     const offNow = S.perms ? Object.keys(S.perms).filter((k) => S.perms[k] === false).sort().join(',') : '';
     let offSrv = ''; try { offSrv = j.ph ? Object.keys(JSON.parse(j.ph)).sort().join(',') : ''; } catch {}
-    const changed = (j.vm && j.vm !== (S.vpn ? S.vpn.mode : 'off')) || (j.ph !== undefined && offSrv !== offNow) || (j.ms !== undefined && S.account && (+S.account.maxStreams || 0) !== j.ms);
+    const pmNow = S.account ? (S.account.plMode === 'split' ? 'split' : 'merge') + '|' + (S.account.plDefault || '') : '';
+    const plChanged = typeof j.pm === 'string' && j.pm && S.account && j.pm !== pmNow;
+    const changed = plChanged || (j.vm && j.vm !== (S.vpn ? S.vpn.mode : 'off')) || (j.ph !== undefined && offSrv !== offNow) || (j.ms !== undefined && S.account && (+S.account.maxStreams || 0) !== j.ms);
     // server delle playlist cambiato dal pannello (DNS): si riscrivono gli indirizzi, la lista non si ricarica
     const dnsNew = typeof j.pv === 'string' && j.pv && hbPlv && j.pv !== hbPlv;
     if (typeof j.pv === 'string' && j.pv) hbPlv = j.pv;
     if (changed || dnsNew || (typeof j.unseen === 'number' && j.unseen > unseenMsgs().length)) register().then(() => {
       if (dnsNew) { const snap = store.get('plSnap', null), pls = activePlaylists(); if (snap && !dnsSwap(snap, pls)) store.set('plSnap', plSnapOf(pls)); }
+      if (plChanged || (j.ph !== undefined && offSrv !== offNow)) { const need = libPlaylists().map((p) => p.id).join(','); if (S.libPlIds && need !== S.libPlIds) whenIdle(() => loadLibrary().then(plRerender), 500); else if (!S.inPlayer) plRerender(); }
       vpnApply(); const sc = $('.screen.on'); if (sc && sc.querySelector('.navslot')) fillNav(sc.id === 'cat' ? 'cat' : sc.id); showNotices();
     }).catch(() => {});
   } catch {}

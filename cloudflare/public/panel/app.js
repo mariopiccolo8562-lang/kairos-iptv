@@ -110,7 +110,7 @@ $('#lform').addEventListener('submit', async (e) => {
   } catch (err) { tsReset(); $('#lerr').textContent = D.demo ? '' : err.message; $('.lcard').animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-10px)' }, { transform: 'translateX(10px)' }, { transform: 'translateX(0)' }], { duration: 300 }); }
 });
 let poll;
-function showLogin() { clearInterval(poll); $('#app').classList.remove('on'); $('#login').style.display = 'grid'; $('#lt').style.display = 'none'; tsReset(); }
+function showLogin() { clearInterval(poll); const c = $('#chk'); if (c) c.remove(); $('#app').classList.remove('on'); $('#login').style.display = 'grid'; $('#lt').style.display = 'none'; tsReset(); }
 async function logout() { try { await api('POST', '/admin/logout'); } catch {} showLogin(); }
 $('#logout').onclick = logout;
 
@@ -145,6 +145,7 @@ async function load() {
 }
 async function enter() {
   await load();
+  { const c = $('#chk'); if (c) c.remove(); }
   $('#login').style.display = 'none'; $('#app').classList.add('on'); requestAnimationFrame(drawChart);
   $('#copyLink').onclick = () => { const l = D.settings.apkUrl; if (!l) return toast('Imposta il link APK in Impostazioni', 1); navigator.clipboard.writeText(l).then(() => toast('Link copiato'), () => toast('Copia non consentita', 1)); };
   clearInterval(poll);
@@ -319,7 +320,8 @@ const PERM_L = [
   ['speed', 'Speed test', 'Misura della velocità della linea'],
   ['vpn', 'Accendere/spegnere la VPN', 'Se spento decidi tu dal pannello'],
   ['epgUrl', 'Cambiare la guida TV', 'Inserire un indirizzo EPG diverso'],
-  ['localPl', 'Aggiungere playlist proprie', 'Playlist personali oltre a quelle che assegni tu'],
+  ['localPl', 'Aggiungere, modificare ed eliminare playlist', 'Playlist personali nell\'app (oltre alle tue) e nascondere quelle che non usa'],
+  ['plSwitch', 'Cambiare playlist', 'Pulsante rapido vicino a «Guida TV» per passare da una playlist all\'altra'],
 ];
 function renderDrawer() {
   const linked = !!edit.parent, P = linked ? parentOf(edit) : null;
@@ -365,10 +367,15 @@ function renderDrawer() {
     <div class="quick">${[1, 3, 6, 12].map((m) => `<button class="btn sm" data-m="${m}">+${m} ${m === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>
     <label class="lbl">Playlist assegnate</label>
     <div id="pls">${edit.playlists.map((p, i) => `<div class="pl" data-i="${i}">
-      <div class="ph"><input class="inp" data-k="name" value="${esc(p.name)}" placeholder="Nome"><div class="seg"><button class="${p.type === 'm3u' ? 'on' : ''}" data-t="m3u">M3U</button><button class="${p.type === 'xtream' ? 'on' : ''}" data-t="xtream">Xtream</button></div><button class="icb" data-rm><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button></div>
+      <div class="ph"><input class="inp" data-k="name" value="${esc(p.name)}" placeholder="Nome"><input class="inp pltag" data-k="tag" value="${esc(p.tag || '')}" maxlength="6" placeholder="Sigla" title="Sigla mostrata nell'app sui contenuti di questa playlist quando sono unite (es. SKY, A, B)"><div class="seg"><button class="${p.type === 'm3u' ? 'on' : ''}" data-t="m3u">M3U</button><button class="${p.type === 'xtream' ? 'on' : ''}" data-t="xtream">Xtream</button></div><button class="icb" data-rm><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button></div>
       ${p.type === 'm3u' ? `<input class="inp mono" data-k="url" value="${esc(p.url)}" placeholder="http://…/get.php?…&type=m3u_plus">` : `<input class="inp mono" data-k="host" value="${esc(p.host)}" placeholder="http://host:porta"><div class="row"><input class="inp" data-k="username" value="${esc(p.username)}" placeholder="Username"><input class="inp" data-k="password" value="${esc(p.password)}" placeholder="Password"></div>`}
     </div>`).join('')}</div>
-    <button class="btn" id="addPl" style="width:100%;border-style:dashed">+ Aggiungi playlist</button>`}
+    <button class="btn" id="addPl" style="width:100%;border-style:dashed">+ Aggiungi playlist</button>
+    ${edit.playlists.length > 1 ? `<div class="plmode"><b>Più playlist: come le vede il cliente?</b>
+      <div class="seg wide"><button class="${edit.plMode !== 'split' ? 'on' : ''}" data-plm="merge">Unite</button><button class="${edit.plMode === 'split' ? 'on' : ''}" data-plm="split">Divise</button></div>
+      <small>${edit.plMode === 'split' ? 'Il cliente vede una playlist alla volta. Con il permesso «Cambiare playlist» passa all\'altra con il pulsante vicino a «Guida TV».' : 'Tutti i contenuti insieme; ogni film, serie e canale mostra la sigla colorata della sua playlist. Con «Cambiare playlist» il cliente può anche filtrarne una sola.'}</small>
+      ${edit.plMode === 'split' ? `<label class="lbl">Playlist da usare</label><select class="inp" id="ePlDef"><option value="">La prima (${esc(edit.playlists[0].name || 'Playlist 1')})</option>${edit.playlists.filter((p) => p.id).map((p) => `<option value="${esc(p.id)}" ${edit.plDefault === p.id ? 'selected' : ''}>${esc(p.name || 'Playlist')}</option>`).join('')}</select><small>Se il cliente non può cambiare playlist, usa sempre questa.</small>` : ''}
+    </div>` : ''}`}
     ${accBox}
     ${vpnBox}
     ${extraBox}
@@ -398,6 +405,8 @@ function renderDrawer() {
   $('#eAct') && ($('#eAct').onclick = () => { edit.active = !edit.active; $('#eAct').classList.toggle('on', edit.active); });
   $('#eInf') && ($('#eInf').onclick = () => { sync(); edit.expires = ''; renderDrawer(); });
   $$('[data-m]').forEach((b) => (b.onclick = () => { sync(); edit.expires = addMonths(edit.expires, +b.dataset.m); edit.active = true; renderDrawer(); }));
+  $$('[data-plm]').forEach((b) => (b.onclick = () => { sync(); edit.plMode = b.dataset.plm; renderDrawer(); }));
+  $('#ePlDef') && ($('#ePlDef').onchange = (e) => { edit.plDefault = e.target.value; });
   $('#addPl') && ($('#addPl').onclick = () => { sync(); edit.playlists.push({ id: 'p' + Date.now(), name: 'Playlist ' + (edit.playlists.length + 1), type: 'm3u', url: '', host: '', username: '', password: '' }); renderDrawer(); });
   $$('#pls .pl').forEach((el) => { const i = +el.dataset.i; $$('[data-t]', el).forEach((b) => (b.onclick = () => { sync(); edit.playlists[i].type = b.dataset.t; renderDrawer(); })); $('[data-rm]', el).onclick = () => { sync(); edit.playlists.splice(i, 1); renderDrawer(); }; });
   /* account: limiti e profili */
@@ -434,7 +443,7 @@ function renderDrawer() {
   $('#dSave').onclick = async () => {
     sync();
     const vpnPart = edit.wgText && edit.wgText.trim() ? { vpnConf: edit.wgText } : edit.vpnConfClear ? { vpnConfClear: true } : {};
-    const acc = { maxConn: edit.maxConn, maxProfiles: edit.maxProfiles, maxStreams: +edit.maxStreams || 0, vpnLoc: edit.vpnLoc || '', perms: Object.fromEntries(PERM_L.map(([k]) => [k, !edit.perms || edit.perms[k] !== false])), lockProfiles: !!edit.lockProfiles, vpn: +edit.vpn || 0, profiles: edit.profiles.map((p) => ({ id: p.id || undefined, name: p.name, avatar: p.avatar, kids: !!p.kids, pl: p.pl || 'all' })) };
+    const acc = { maxConn: edit.maxConn, maxProfiles: edit.maxProfiles, maxStreams: +edit.maxStreams || 0, vpnLoc: edit.vpnLoc || '', perms: Object.fromEntries(PERM_L.map(([k]) => [k, !edit.perms || edit.perms[k] !== false])), lockProfiles: !!edit.lockProfiles, vpn: +edit.vpn || 0, plMode: edit.plMode === 'split' ? 'split' : 'merge', plDefault: edit.plDefault || '', profiles: edit.profiles.map((p) => ({ id: p.id || undefined, name: p.name, avatar: p.avatar, kids: !!p.kids, pl: p.pl || 'all' })) };
     try {
       if (isNew) await api('POST', '/admin/devices', { code: edit.code, name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, ...acc, ...vpnPart });
       else if (edit.parent) await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, ...vpnPart });
@@ -554,7 +563,14 @@ $('#aSave').onclick = async () => { try { await api('PUT', '/admin/password', { 
     const c = await fetch('/api/public/config', { credentials: 'same-origin' });
     if (!c.ok || !(c.headers.get('content-type') || '').includes('json')) throw 0;
     loadTurnstile((await c.json()).turnstileSiteKey);
-    const r = await fetch('/api/admin/state', { credentials: 'same-origin', headers: { 'X-Kairos': '1' } });
-    if (r.ok) return enter();
-  } catch { D.demo = true; $('#demoTag').style.display = 'block'; $('#lp').value = 'demo'; $('#lerr').innerHTML = '<span class="mut">Nessun server collegato: premi Accedi per esplorare la demo.</span>'; }
+  } catch { D.demo = true; $('#demoTag').style.display = 'block'; $('#lp').value = 'demo'; $('#lerr').innerHTML = '<span class="mut">Nessun server collegato: premi Accedi per esplorare la demo.</span>'; showLogin(); return; }
+  // sessione ancora valida → si entra senza rifare l'accesso; un errore di rete o del server non fa uscire (si riprova)
+  for (let i = 0; i < 4; i++) {
+    let r = null;
+    try { r = await fetch('/api/admin/state', { credentials: 'same-origin', headers: { 'X-Kairos': '1' }, cache: 'no-store' }); } catch {}
+    if (r && r.ok) { try { return await enter(); } catch { break; } }
+    if (r && r.status === 401) break;
+    await new Promise((ok) => setTimeout(ok, 800 * (i + 1)));
+  }
+  showLogin();
 })();
