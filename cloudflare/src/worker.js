@@ -453,7 +453,14 @@ async function admin(req, env, url, ip, ctx) {
     if (typeof b.apkUrl === 'string') { const u = str(b.apkUrl, 500); s.apkUrl = !u || /^https:\/\//.test(u) ? u : s.apkUrl; }
     if (typeof b.allowLocalPlaylists === 'boolean') s.allowLocalPlaylists = b.allowLocalPlaylists;
     if (typeof b.showFootball === 'boolean') s.showFootball = b.showFootball;
-    if (b.apkVersionCode !== undefined) s.apkVersionCode = Math.max(0, Math.min(1e9, parseInt(b.apkVersionCode, 10) || 0));
+    if (b.apkVersionCode !== undefined) {
+      // si scrive la versione pubblicata, es. "1.3.0" (→ 10300)
+      const v = String(b.apkVersionCode).trim().replace(/^v/i, '');
+      const m = v.match(/^(\d+)\.(\d+)\.(\d+)$/);
+      if (!v) { s.apkVersionCode = 0; s.apkVersion = ''; }
+      else if (m) { s.apkVersionCode = +m[1] * 10000 + +m[2] * 100 + +m[3]; s.apkVersion = v; }
+      else throw new HttpErr(400, 'Versione APK non valida: scrivila come 1.3.0');
+    }
     if (typeof b.serverUrl === 'string') {
       const u = str(b.serverUrl, 300).replace(/\/+$/, '').replace(/\/panel$/i, '');
       if (!u) s.serverUrl = '';
