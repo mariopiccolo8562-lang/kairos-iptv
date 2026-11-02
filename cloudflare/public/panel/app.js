@@ -42,11 +42,13 @@ const DEMO = (() => {
   return { settings: { brand: 'KAIROS', tagline: 'Next-gen streaming', accent: 'cinema', announcement: 'Benvenuto su KAIROS — buona visione!', allowLocalPlaylists: true, showFootball: true, serverUrl: '', apkVersionCode: 10200, apkVersion: '1.2.0', supportContact: 'WhatsApp +39 333 000 0000', apkUrl: 'https://github.com/tuo-utente/kairos-iptv/releases/latest/download/kairos.apk', downloaderCode: '1234567' }, devices, activity };
 })();
 async function demoApi(method, path, body) {
+  if (path === '/admin/messages' && method === 'POST') { DEMO.messages = [{ id: Date.now(), target: body.target || 'all', title: body.title || '', body: body.body || '', level: body.level || 'info', created: Date.now(), until: body.days ? Date.now() + body.days * 864e5 : 0 }, ...(DEMO.messages || [])]; return { ok: true }; }
+  const dmm = path.match(/^\/admin\/messages\/(\d+)$/); if (dmm && method === 'DELETE') { DEMO.messages = (DEMO.messages || []).filter((m) => String(m.id) !== dmm[1]); return { ok: true }; }
   await new Promise((r) => setTimeout(r, 160));
   const pub = (d) => ({ ...d, status: statusOf(d) });
   const log = (type, text) => DEMO.activity.unshift({ t: Date.now(), type, text });
   if (path === '/admin/login') return { ok: true, user: body.user || 'admin' };
-  if (path === '/admin/state') return { settings: DEMO.settings, devices: DEMO.devices.map(pub), activity: DEMO.activity, user: 'admin', security: DEMO.sec || (DEMO.sec = { totp: false, encryption: true, access: true, turnstile: true, sessions: 1 }) };
+  if (path === '/admin/state') return { settings: DEMO.settings, devices: DEMO.devices.map(pub), activity: DEMO.activity, messages: DEMO.messages || [], user: 'admin', security: DEMO.sec || (DEMO.sec = { totp: false, encryption: true, access: true, turnstile: true, sessions: 1 }) };
   if (path === '/admin/totp/setup') return { secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', uri: 'otpauth://totp/KAIROS:admin?secret=JBSWY3DPEHPK3PXP' };
   if (path === '/admin/totp/enable') { DEMO.sec.totp = true; return { ok: true }; }
   if (path === '/admin/totp/disable') { DEMO.sec.totp = false; return { ok: true }; }
@@ -93,7 +95,7 @@ function loadTurnstile(key) {
 
 async function load() {
   const s = await api('GET', '/admin/state');
-  D.settings = s.settings; D.devices = s.devices; D.activity = s.activity; D.user = s.user; D.security = s.security || {}; D.apk = s.apk || null;
+  D.settings = s.settings; D.devices = s.devices; D.activity = s.activity; D.user = s.user; D.security = s.security || {}; D.apk = s.apk || null; D.messages = s.messages || [];
   const aa = document.getElementById('apkAuto');
   if (aa) aa.innerHTML = D.apk && D.apk.auto ? `✅ <b>Aggiornamento automatico attivo</b> · versione pubblicata: <b>${esc(D.apk.version || String(D.apk.versionCode))}</b>` : D.apk && D.apk.versionCode ? `✍️ Versione impostata a mano: <b>${esc(D.apk.version || String(D.apk.versionCode))}</b> (aggiornamento automatico non attivo)` : '⚠️ Aggiornamento automatico non attivo: nessuna versione pubblicata';
   applyTheme(D.settings.accent);
@@ -114,10 +116,10 @@ function renderSide() {
   $('#dlCode').textContent = D.settings.downloaderCode ? 'Downloader ' + D.settings.downloaderCode : '';
   $('#plLink').textContent = D.settings.apkUrl || 'Link APK non impostato';
 }
-function renderAll() { renderSide(); renderSecurity(); renderDash(); renderDevices(); renderFeed(); renderSettings(); }
+function renderAll() { renderSide(); renderSecurity(); renderDash(); renderDevices(); renderFeed(); renderSettings(); renderMsgs(); }
 
 /* ---------------- navigazione ---------------- */
-const TITLES = { dash: 'Dashboard', devices: 'Dispositivi', activity: 'Attività', settings: 'Impostazioni' };
+const TITLES = { dash: 'Dashboard', devices: 'Dispositivi', msgs: 'Messaggi', activity: 'Attività', settings: 'Impostazioni' };
 function view(v) { $$('.nav[data-v]').forEach((n) => n.classList.toggle('on', n.dataset.v === v)); $$('.view').forEach((x) => x.classList.toggle('on', x.id === 'v-' + v)); $('#vTitle').textContent = TITLES[v]; $('#side').classList.remove('open'); if (v === 'dash') renderDash(); }
 $$('.nav[data-v]').forEach((n) => (n.onclick = () => view(n.dataset.v)));
 $('#menuB').onclick = () => $('#side').classList.toggle('open');
@@ -274,10 +276,31 @@ function renderDrawer() {
 $('#newDev').onclick = () => openDrawer(null);
 
 /* ---------------- attività ---------------- */
-const AIC = { new: ['var(--warn)', 'M12 5v14M5 12h14'], on: ['var(--ok)', 'M5 12l5 5L20 7'], off: ['var(--bad)', 'M18 6 6 18M6 6l12 12'], edit: ['var(--a1)', 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'], del: ['var(--bad)', 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'], settings: ['var(--a2)', 'M4 6h16M4 12h16M4 18h16'], auth: ['var(--a3)', 'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3'] };
+const AIC = { report: ['var(--warn)', 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'], msg: ['var(--a1)', 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'], new: ['var(--warn)', 'M12 5v14M5 12h14'], on: ['var(--ok)', 'M5 12l5 5L20 7'], off: ['var(--bad)', 'M18 6 6 18M6 6l12 12'], edit: ['var(--a1)', 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'], del: ['var(--bad)', 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'], settings: ['var(--a2)', 'M4 6h16M4 12h16M4 18h16'], auth: ['var(--a3)', 'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3'] };
 function renderFeed() {
   $('#feed').innerHTML = D.activity.length ? D.activity.map((a) => { const [c, p] = AIC[a.type] || AIC.edit; return `<div class="mini"><div class="ic" style="color:${c}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="${p}"/></svg></div><div class="tx"><b>${esc(a.text)}</b><small>${new Date(a.t).toLocaleString('it-IT', { dateStyle: 'medium', timeStyle: 'short' })} · ${ago(a.t)}</small></div></div>`; }).join('') : '<div class="emptyc">Nessuna attività</div>';
 }
+
+/* ---------------- messaggi ai dispositivi ---------------- */
+const LVL = { info: ['Informazione', 'var(--a1)'], warn: ['Avviso', 'var(--warn)'], urgent: ['Urgente', 'var(--bad)'] };
+function renderMsgs() {
+  const sel = $('#mTo'); if (!sel) return;
+  const keep = sel.value;
+  sel.innerHTML = '<option value="all">Tutti i dispositivi</option>' + D.devices.map((d) => `<option value="${esc(d.id)}">${esc(d.name || d.code)} · ${esc(d.code)}</option>`).join('');
+  if (keep) sel.value = keep;
+  const devName = (id) => { const d = D.devices.find((x) => x.id === id); return d ? d.name || d.code : 'dispositivo eliminato'; };
+  const list = (D.messages || []).filter((m) => !m.until || m.until > Date.now());
+  $('#mList').innerHTML = list.length ? list.map((m) => `<div class="mini"><div class="ic" style="color:${LVL[m.level] ? LVL[m.level][1] : 'var(--a1)'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="${AIC.msg[1]}"/></svg></div><div class="tx"><b>${esc(m.title || '(senza titolo)')}</b><small style="display:block">${esc(m.body).slice(0, 140)}</small><small style="display:block;margin-top:2px">${m.target === 'all' ? 'A tutti' : 'A ' + esc(devName(m.target))} · ${new Date(m.created).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}${m.until ? ' · fino al ' + new Date(m.until).toLocaleDateString('it-IT') : ''}</small></div><button class="btn sm" data-mdel="${m.id}">Elimina</button></div>`).join('') : '<div class="emptyc">Nessun messaggio attivo</div>';
+  $$('[data-mdel]').forEach((b) => (b.onclick = async () => { try { await api('DELETE', '/admin/messages/' + b.dataset.mdel); await load(); toast('Messaggio eliminato'); } catch (e) { toast(e.message, 1); } }));
+}
+document.addEventListener('click', async (e) => {
+  if (!e.target.closest('#mSend')) return;
+  try {
+    await api('POST', '/admin/messages', { target: $('#mTo').value, title: $('#mTitle').value.trim(), body: $('#mBody').value.trim(), level: $('#mLvl').value, days: +$('#mDays').value });
+    $('#mTitle').value = ''; $('#mBody').value = '';
+    await load(); toast('Messaggio inviato: comparirà sulle TV entro pochi minuti');
+  } catch (err) { toast(err.message, 1); }
+});
 
 /* ---------------- impostazioni ---------------- */
 let tmpAccent = 'cinema';

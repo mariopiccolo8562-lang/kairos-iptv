@@ -565,6 +565,7 @@ img{display:block}
 .tnav .tann{max-width:28vw;overflow:hidden;white-space:nowrap;color:#bbb;font-size:13px}
 .tnav .tann .mq{display:inline-block;padding-left:100%;animation:mq 26s linear infinite}
 @media (max-width:1100px){.tnav .tann{display:none}}
+#guide{padding-top:calc(var(--navh) + 2px)!important;padding-left:var(--padx)!important;padding-right:var(--padx)!important;padding-bottom:12px!important}
 #live,#search,#settings{padding-top:calc(var(--navh) + 4px)!important;padding-left:var(--padx)!important;padding-right:var(--padx)!important}
 /* copertina */
 .hero{height:min(57vh,640px)}
@@ -612,6 +613,73 @@ img{display:block}
 #fs.on{animation:fsIn .32s cubic-bezier(.2,.8,.2,1)}
 @keyframes fsIn{from{transform:scale(.45);opacity:.2;border-radius:24px}}
 .osd{transition:opacity .25s,transform .25s}
+/* contenuti bloccati / nascosti */
+.lk img{filter:blur(14px) brightness(.5)}
+.lk::before{content:'🔒';position:absolute;inset:0;display:grid;place-items:center;font-size:clamp(22px,4vh,38px);z-index:3;pointer-events:none}
+#liveList .ch.lk .lg{position:relative;overflow:hidden}#liveList .ch.lk::before{inset:auto auto auto 18px;top:50%;transform:translateY(-50%);font-size:20px;display:block}
+#liveList .ch.hid{opacity:.45}
+/* PIN */
+.pinbox{text-align:center}.pinbox h2{font-size:clamp(18px,3.4vh,26px);margin:10px 0 6px}
+.pinds{display:flex;gap:14px;justify-content:center;margin:16px 0}.pinds i{width:18px;height:18px;border-radius:50%;border:2px solid #888;transition:.15s}.pinds i.on{background:var(--a1);border-color:var(--a1);transform:scale(1.15)}
+.pinpad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:300px;margin:0 auto}.pinpad .btn{justify-content:center;font-size:20px;padding:12px}
+.menubox h2{font-size:clamp(18px,3.4vh,24px);margin:10px 0 14px}
+.sr b.flip{animation:panIn .2s}
+/* dimensione testi */
+.nrow h3{font-size:calc(clamp(15px,min(1.35vw,3vh),23px) * var(--ts,1))}
+.htitle{font-size:calc(clamp(32px,min(6.2vw,9.5vh),112px) * var(--ts,1))}
+.hplot{font-size:calc(clamp(14px,1.15vw,19px) * var(--ts,1))}
+.hmeta{font-size:calc(clamp(13px,2.2vh,19px) * var(--ts,1))}
+#liveList .ch .nm b{font-size:calc(clamp(14px,2.4vh,19px) * var(--ts,1))}
+#liveList .ch .nm small{font-size:calc(clamp(11px,1.9vh,15px) * var(--ts,1))}
+.lpan .pt{font-size:calc(clamp(17px,3.2vh,28px) * var(--ts,1))}.lpan p{font-size:calc(clamp(12px,2vh,16px) * var(--ts,1))}
+.di,.sm{font-size:calc(clamp(15px,2.6vh,22px) * var(--ts,1))}.sr{font-size:calc(clamp(14px,2.4vh,20px) * var(--ts,1))}
+.tnav .tt{font-size:calc(clamp(15px,2.7vh,25px) * var(--ts,1))}
+.nc .ft{font-size:calc(15px * var(--ts,1))}
+/* avvisi e segnalazioni */
+.notebox{text-align:center;border-top:4px solid var(--nc)}.notebox h2{font-size:clamp(20px,3.8vh,30px);margin:12px 0 10px}.notebox p{color:#ddd;line-height:1.55;font-size:clamp(14px,2.4vh,18px)}
+.notebox .sbtn{margin-top:20px}
+.replist{display:flex;flex-direction:column;gap:8px}.replist .btn{justify-content:flex-start}
+/* annuncio del fornitore sulla copertina */
+.hann{position:absolute;top:calc(var(--navh) + 2px);left:var(--padx);max-width:min(760px,54vw);overflow:hidden;white-space:nowrap;z-index:3;color:#ddd;font-size:13px;padding:6px 14px;border-radius:99px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.1)}
+.hann .mq{display:inline-block;padding-left:100%;animation:mq 26s linear infinite}
+/* guida TV */
+.gtop{display:flex;gap:clamp(14px,1.6vw,28px);height:clamp(150px,31vh,330px);flex:none}
+#gBox{flex:none;height:100%;width:auto;aspect-ratio:16/9;border-radius:14px;box-shadow:0 0 0 1px rgba(255,255,255,.12)}
+#gBox .badge-live{background:#e5202b;box-shadow:none;border-radius:6px;font-size:clamp(10px,1.7vh,13px);padding:4px 9px}
+.ginfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;padding:4px 0;overflow:hidden}
+.ginfo.upd>*{animation:panIn .25s both}
+.gic{display:flex;gap:8px;align-items:center;color:#aaa;font-weight:700;font-size:calc(clamp(12px,2vh,16px) * var(--ts,1))}
+.git{font-size:calc(clamp(20px,4vh,38px) * var(--ts,1));font-weight:800;line-height:1.1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.gim{display:flex;gap:14px;flex-wrap:wrap;color:#ddd;font-weight:600;font-size:calc(clamp(12px,2.1vh,17px) * var(--ts,1))}.gim .lv{color:#ff3b45}
+.ginfo .prog{max-width:520px;margin-top:2px}
+.ginfo p{color:#c9c9c9;font-size:calc(clamp(12px,2vh,16px) * var(--ts,1));line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.gih{margin-top:auto;color:#888;font-size:clamp(10px,1.7vh,13px)}.gih kbd{font-family:inherit;border:1px solid #555;border-radius:5px;padding:0 6px;color:#ddd}
+.gbar{display:flex;align-items:center;gap:12px;margin:8px 0 4px}
+.gbar .lvcat{margin:0}
+.ggrid{flex:1;min-height:0;overflow:auto;position:relative;border-radius:12px;background:rgba(255,255,255,.02);scrollbar-width:none;scroll-behavior:auto}
+.ggrid::-webkit-scrollbar{display:none}
+.ghead{position:sticky;top:0;z-index:5;display:flex;height:34px;background:#0d0d10;min-width:max-content}
+.gcorner{position:sticky;left:0;z-index:6;width:var(--gcw);flex:none;background:#0d0d10;display:flex;align-items:center;padding-left:12px;color:var(--a1);font-weight:800;font-size:13px;text-transform:capitalize}
+.gtimes{position:relative;flex:none;height:100%}
+.gtimes span{position:absolute;top:8px;transform:translateX(-50%);color:#bbb;font-weight:700;font-size:13px}
+.gtimes span::after{content:'';position:absolute;left:50%;top:20px;width:1px;height:6px;background:#555}
+.grows{position:relative}
+.gnow{position:absolute;top:0;bottom:0;width:2px;background:#ff3b45;z-index:2;pointer-events:none;box-shadow:0 0 8px #ff3b45}
+.grow{position:absolute;left:0;right:0;height:var(--grh);display:flex}
+.gch{position:sticky;left:0;z-index:4;width:var(--gcw);flex:none;height:calc(var(--grh) - 4px);margin:2px 0;display:flex;align-items:center;gap:8px;padding:0 10px;background:#141418;border-radius:8px;border:1px solid rgba(255,255,255,.07);overflow:hidden}
+.gch .cn{color:#888;font-weight:800;font-size:12px;width:2.6em;text-align:right;flex:none}
+.gch .lg{width:calc(var(--grh) * .8);height:calc(var(--grh) * .55);border-radius:6px;background:#fff;flex:none;display:grid;place-items:center;overflow:hidden;font-weight:800;font-size:11px;color:#333}
+.gch .lg img{width:100%;height:100%;object-fit:contain;padding:3px}
+.gch b{font-size:calc(clamp(11px,1.9vh,15px) * var(--ts,1));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grow.playing .gch{border-color:var(--a1);box-shadow:inset 3px 0 0 var(--a1)}
+.gtl{position:relative;flex:none;height:100%}
+.gp{position:absolute;top:2px;height:calc(var(--grh) - 4px);border-radius:8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);padding:6px 10px;overflow:hidden;display:flex;flex-direction:column;justify-content:center;transition:background .12s,transform .12s}
+.gp b{font-size:calc(clamp(11px,1.9vh,15px) * var(--ts,1));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}
+.gp small{color:#999;font-size:calc(clamp(10px,1.6vh,12px) * var(--ts,1));white-space:nowrap;margin-top:2px}
+.gp.now{background:color-mix(in srgb,var(--a1) 30%,rgba(255,255,255,.05))}
+.gp.past{opacity:.55}
+.gp.noepg b{color:#999;font-weight:600}
+.gp.focused{background:#fff;color:#000;outline:0;z-index:3}.gp.focused small{color:#444}.gp.focused.noepg b{color:#333}
 /* conferma di uscita */
 .exitbox{text-align:center}.exitbox .tlogo{width:70px;height:70px;margin:0 auto 6px;display:block}
 .exitbox h2{font-size:clamp(20px,3.6vh,28px);margin:8px 0}
@@ -775,6 +843,18 @@ img{display:block}
     </div>
   </section>
 
+  <!-- GUIDA TV -->
+  <section class="screen" id="guide">
+    <div class="navslot"></div>
+    <div class="dhandle" data-drawer></div>
+    <div class="gtop">
+      <div class="screen-box" id="gBox"><div class="pvph" id="gPh"></div><span class="badge-live">● DIRETTA</span><div class="spinner"></div></div>
+      <div class="ginfo" id="gInfo"></div>
+    </div>
+    <div class="gbar"><button class="lvcat" data-f id="gCat"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span id="gCatName">Tutti i canali</span><small id="gCatCount"></small></button></div>
+    <div class="ggrid" id="gGrid"><div class="ghead" id="gHead"></div><div class="grows" id="gRows"></div></div>
+  </section>
+
   <!-- GRIGLIA VOD -->
   <section class="screen" id="vod">
     <div class="top">
@@ -892,6 +972,7 @@ function fx(type) {
       g.gain.setValueAtTime(0.0001, t + delay); g.gain.exponentialRampToValueAtTime(vol, t + delay + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + delay + dur);
       o.connect(g).connect(out); o.start(t + delay); o.stop(t + delay + dur + 0.02);
     };
+    if (type !== 'boot' && sfxPlay(type, tone)) return;
     if (type === 'move') tone(2400, 1800, 0.035, 0.018);
     else if (type === 'ok') { tone(880, 880, 0.06, 0.035, 'triangle'); tone(1320, 1320, 0.09, 0.03, 'triangle', 0.05); }
     else if (type === 'back') tone(700, 420, 0.07, 0.03);
@@ -996,6 +1077,7 @@ function focus(el, silent, mouse) {
   if (!el) return;
   if (cur && cur !== el) cur.classList.remove('focused');
   cur = el; el.classList.add('focused');
+  if (el.closest('.screen')) S.lastScreenFocus = el; // per tornarci quando si chiude una finestra
   if (!mouse) ensureVisible(el);
   if (el.tagName === 'INPUT') el.focus({ preventScroll: true }); else if (document.activeElement && document.activeElement.tagName === 'INPUT') document.activeElement.blur();
   if (!silent) fx('move');
@@ -1063,6 +1145,8 @@ function candidates(L) {
 function move(dir) {
   const L = layer(); if (!L) return;
   if (!cur || !L.contains(cur) || !isVis(cur)) { const f = L.querySelector('.sel[data-f], [data-autof]'); return focus(f && isVis(f) ? f : visibleF(L)[0]); }
+  if (cur.classList.contains('gp')) return guideMove(dir);
+  if (cur.id === 'gCat' && dir === 'down') return guideFocus(G.first >= 0 ? Math.max(0, Math.floor($('#gGrid').scrollTop / G.rowH)) : 0, Math.max(Date.now(), G.time || 0));
   const vert = dir === 'up' || dir === 'down', d = dir === 'down' || dir === 'right' ? 1 : -1;
   const par = cur.parentElement;
   // 1) card nelle righe orizzontali
@@ -1112,7 +1196,7 @@ function move(dir) {
   if (best) return focus(best);
   if (dir === 'left') edgeLeft();
 }
-function edgeLeft() { const s = $('.screen.on'); if (s && layer() === s && (s.classList.contains('bscr') || s.id === 'live')) openDrawer(); }
+function edgeLeft() { const s = $('.screen.on'); if (s && layer() === s && (s.classList.contains('bscr') || s.id === 'live' || s.id === 'guide')) openDrawer(); }
 let okDown = 0, longFired = false;
 document.addEventListener('keydown', (e) => {
   const k = e.key, kc = e.keyCode;
@@ -1171,7 +1255,7 @@ function confirmExit() {
 
 /* ---------------- barra in alto ---------------- */
 const LOGO_SVG = (id) => `<svg class="tlogo" viewBox="0 0 200 200"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><circle cx="100" cy="100" r="84" fill="none" stroke="url(#${id})" stroke-width="9" stroke-linecap="round" stroke-dasharray="400 128" transform="rotate(-38 100 100)"/><rect x="62" y="52" width="22" height="96" rx="4" fill="#fff"/><path d="M90 104 L128 52 H156 L116 108 Z" fill="url(#${id})"/><path d="M104 98 L122 92 L158 148 H130 Z" fill="#fff"/><circle cx="171" cy="62" r="8" fill="#fff"/></svg>`;
-const TABS = [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta']];
+const TABS = [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta'], ['guide', 'Guida TV']];
 const NAV_IC = {
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>',
@@ -1180,7 +1264,7 @@ const NAV_IC = {
 };
 let navSeq = 0;
 function navHTML(curKey) {
-  return `<nav class="tnav">${LOGO_SVG('kgN' + ++navSeq)}<span class="tdate"></span>${S.settings.announcement ? `<span class="tann"><span class="mq">${esc(S.settings.announcement)}</span></span>` : ''}
+  return `<nav class="tnav">${LOGO_SVG('kgN' + ++navSeq)}<span class="tdate"></span>
     <div class="ttabs">${TABS.map(([k, l]) => `<div class="tt ${k === curKey ? 'cur' : ''}" data-f data-go="${k}">${l}</div>`).join('')}</div>
     <div class="ticons">${['refresh', 'search', 'favs', 'settings'].map((k) => `<div class="ti ${k === curKey ? 'cur' : ''}${k === 'refresh' && S.refreshing ? ' spin' : ''}" data-f data-go="${k}" title="${{ refresh: 'Aggiorna contenuti', search: 'Cerca', favs: 'La mia lista', settings: 'Impostazioni' }[k]}">${NAV_IC[k]}</div>`).join('')}</div></nav>`;
 }
@@ -1214,10 +1298,10 @@ function openDrawer() {
   const scr = $('.screen.on'); if (!scr || layer() !== scr) return;
   drawerBack = cur;
   let title = 'CATEGORIE', items = [], selIdx = 0;
-  if (scr.id === 'live') {
+  if (scr.id === 'live' || scr.id === 'guide') {
     items = liveCatList().map((c) => ({ label: c.label, count: c.count, v: c.name }));
     selIdx = Math.max(0, items.findIndex((x) => x.v === S.liveCat));
-    drawerPick = (it) => { S.liveCat = it.v; renderChannels(); const f = $('#liveList [data-f]'); f && focus(f, true); };
+    drawerPick = scr.id === 'guide' ? (it) => { S.liveCat = it.v; guideRender(); } : (it) => { S.liveCat = it.v; renderChannels(); const f = $('#liveList [data-f]'); f && focus(f, true); };
     if (S.previewing && HAS_PREVIEW) { drawerWasPreview = S.previewing; try { NATIVE.previewStop(); } catch {} }
   } else if (scr.classList.contains('bscr') && scr._rows) {
     title = scr._kind === 'movies' ? 'CATEGORIE FILM' : scr._kind === 'series' ? 'CATEGORIE SERIE' : 'SEZIONI';
@@ -1236,7 +1320,7 @@ function openDrawer() {
 function closeDrawer(picked) {
   $('#drawer').classList.remove('on');
   const wp = drawerWasPreview; drawerWasPreview = null;
-  if (wp && $('#live').classList.contains('on')) nativePreview(wp);
+  if (wp && ($('#live').classList.contains('on') || $('#guide').classList.contains('on'))) nativePreview(wp);
   if (!picked) { const s = $('.screen.on'); const f = (drawerBack && s && s.contains(drawerBack) && isVis(drawerBack) && drawerBack) || (s && (s.querySelector('#liveList .ch') || firstRowCard(s))); if (f) focus(f, true); }
 }
 function jumpToRow(scr, ri) {
@@ -1251,7 +1335,8 @@ function jumpToRow(scr, ri) {
 function show(id, push = true) {
   const now = $('.screen.on');
   if (now && now.id === id) return;
-  if (now && now.id === 'live' && id !== 'live') stopPreview();
+  if (now && (now.id === 'live' || now.id === 'guide') && id !== now.id) stopPreview();
+  if (now && now.id === 'guide' && id !== 'guide') G.q.length = 0;
   if (push && now && !['boot', 'activate'].includes(now.id)) S.stack.push(now.id);
   $$('.screen').forEach((s) => s.classList.remove('on'));
   $('#' + id).classList.add('on');
@@ -1267,11 +1352,11 @@ function back() {
   if (m) {
     if (m.id === 'speedM') { m.classList.remove('on'); speedRun++; focus($('#sSpeed') || visibleF($('.screen.on'))[0], true); return; }
     if (m.id === 'updM') S.apkUpdate = null;
+    if (m._onClose) m._onClose();
     m.remove();
-    const s = $('.screen.on');
-    focus((s && s.querySelector('.focused')) || (s && (s.querySelector('[data-autof]') || visibleF(s).find((e) => !e.closest('.tnav')))) || visibleF(s)[0], true);
-    if (m.id === 'exitM' && S.exitPv) { S.previewing = S.exitPv; S.exitPv = null; }
-    if (s && s.id === 'live' && S.previewing && HAS_PREVIEW) nativePreview(S.previewing);
+    const s = $('.screen.on'), lf = S.lastScreenFocus;
+    focus((lf && s && s.contains(lf) && isVis(lf) && lf) || (s && (s.querySelector('[data-autof]') || visibleF(s).find((e) => !e.closest('.tnav')))) || visibleF(s)[0], true);
+    modalResume();
     return;
   }
   if ($('#drawer').classList.contains('on')) return closeDrawer();
@@ -1293,6 +1378,7 @@ function go(where, fromNav) {
     return sh('cat');
   }
   if (where === 'live') { renderLive(); return sh('live'); }
+  if (where === 'guide') { if (!S.lib.live.length) return toast('Nessun canale'); sh('guide'); return guideRender(true); }
   if (where === 'favs') { openVod('favs'); if (fromNav) S.stack = ['home']; return; }
   if (where === 'search') { sh('search'); $('#q').value = ''; return doSearch(); }
   if (where === 'settings') { renderSettings(); return sh('settings'); }
@@ -1376,6 +1462,7 @@ async function register() {
   if (status >= 400) { S.lastError = `Errore del server (HTTP ${status})${j.error ? ': ' + j.error : ''}.`; throw new Error('server'); }
   S.lastError = '';
   S.status = j.status; S.expires = j.expires; S.playlists = j.playlists || [];
+  S.messages = Array.isArray(j.messages) ? j.messages : [];
   const mv = j.settings && j.settings.serverUrl;
   if (mv && /^https:\/\//.test(mv) && mv.replace(/\/+$/, '') !== baseServer()) { S.server = mv.replace(/\/+$/, ''); store.set('server', S.server); }
   S.settings = { ...S.settings, ...j.settings };
@@ -1736,7 +1823,7 @@ function playUrl(v, item, box) {
    ===================================================================== */
 const logoHTML = (c) => c.logo ? `<img loading="lazy" decoding="async" src="${esc(c.logo)}" onerror="kxLogoBad('${esc(c.id)}',this)">` : esc(c.name.replace(RX_CC, '').trim().slice(0, 2).toUpperCase());
 function liveCatList() {
-  return [{ name: 'all', label: 'Tutti i canali', count: S.lib.live.length }, { name: 'fav', label: '★ Preferiti', count: S.lib.live.filter((c) => S.favs.has(c.id)).length }, ...S.lib.liveCats.map((c) => ({ ...c, label: c.name }))];
+  return [{ name: 'all', label: 'Tutti i canali', count: visLive(S.lib.live).length }, { name: 'fav', label: '★ Preferiti', count: S.lib.live.filter((c) => S.favs.has(c.id)).length }, ...sortCats(S.lib.liveCats).map((c) => ({ ...c, label: c.name }))];
 }
 function renderLive() {
   renderChannels();
@@ -1767,7 +1854,7 @@ window.kxPreviewInfo = (id, h) => setMeasuredQuality(id, +h);
 let chRendered = 0, chStart = 0; // finestra di canali disegnati: [chStart, chRendered)
 function renderChannels(from = 0) {
   const c = S.liveCat;
-  S.liveIndex = c === 'all' ? S.lib.live : c === 'fav' ? S.lib.live.filter((x) => S.favs.has(x.id)) : (S.byGroup && S.byGroup.get('l' + c)) || S.lib.live.filter((x) => x.group === c);
+  S.liveIndex = sortChannels(visLive(c === 'all' ? S.lib.live : c === 'fav' ? S.lib.live.filter((x) => S.favs.has(x.id)) : (S.byGroup && S.byGroup.get('l' + c)) || S.lib.live.filter((x) => x.group === c)));
   $('#liveCatName').textContent = c === 'all' ? 'Tutti i canali' : c === 'fav' ? '★ Preferiti' : c;
   $('#liveCatCount').textContent = S.liveIndex.length.toLocaleString('it');
   $('#liveList').scrollTop = 0;
@@ -1780,7 +1867,7 @@ const epgOf = (ch) => xepgItems(ch) || (S.epg.get(ch.id) || {}).items || null;
 const nowOf = (ch) => { const it = epgOf(ch); if (!it) return null; const t = Date.now(); return it.find((x) => x.start <= t && x.end > t) || null; };
 function chHTML(ch, i) {
   const n = nowOf(ch);
-  return `<div class="ch ${S.previewing && S.previewing.id === ch.id ? 'playing' : ''}" data-f data-i="${i}"><div class="lg" data-lg="${esc(ch.id)}">${logoHTML(ch)}</div><div class="nm"><b>${esc(ch.name)}</b><small>${qBadge(ch)}<span data-now="${esc(ch.id)}">${esc(n ? n.title : ch.group || '')}</span></small></div><span class="cn">${ch.num}</span><svg class="star ${S.favs.has(ch.id) ? 'on' : ''}" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></div>`;
+  return `<div class="ch ${S.previewing && S.previewing.id === ch.id ? 'playing' : ''}${isLocked(ch) ? ' lk' : ''}${S.hidden.has(ch.id) ? ' hid' : ''}" data-f data-i="${i}"><div class="lg" data-lg="${esc(ch.id)}">${logoHTML(ch)}</div><div class="nm"><b>${esc(ch.name)}</b><small>${qBadge(ch)}<span data-now="${esc(ch.id)}">${esc(n ? n.title : ch.group || '')}</span></small></div><span class="cn">${ch.num}</span><svg class="star ${S.favs.has(ch.id) ? 'on' : ''}" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></div>`;
 }
 const CH_MAX = 480;
 function moreChannels() {
@@ -1818,7 +1905,7 @@ $('#liveList').addEventListener('click', (e) => {
   if (HAS_PLAYER && !HAS_PREVIEW) return openFs(ch, 'live');
   preview(ch);
 });
-$('#liveList').addEventListener('klong', (e) => { const el = e.target.closest('.ch'); if (el) toggleFav(S.liveIndex[+el.dataset.i], el); });
+$('#liveList').addEventListener('klong', (e) => { const el = e.target.closest('.ch'); if (el) itemMenu(S.liveIndex[+el.dataset.i], el); });
 /* passando sopra un canale si aggiornano solo le informazioni (niente video) */
 let infoT;
 document.addEventListener('kfocus', (e) => {
@@ -1844,6 +1931,7 @@ function idleBox(ch) {
   if (ch) showInfo(ch);
 }
 function preview(ch) {
+  if (isLocked(ch)) { gate(ch).then((ok) => ok && preview(ch)); return; }
   S.previewing = ch; S.playingLive = ch;
   $$('#liveList .ch').forEach((x) => x.classList.toggle('playing', S.liveIndex[+x.dataset.i] === ch));
   const b = $('#pvBox');
@@ -1855,14 +1943,15 @@ function preview(ch) {
 }
 const HAS_PREVIEW = !!(NATIVE && NATIVE.preview);
 function previewRect() {
-  const r = $('#pvBox').getBoundingClientRect();
+  const r = ($('#guide').classList.contains('on') ? $('#gBox') : $('#pvBox')).getBoundingClientRect();
   return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height), vw: innerWidth, vh: innerHeight };
 }
 function nativePreview(ch) {
-  try { NATIVE.preview(JSON.stringify({ id: ch.id, u: ch.url, a: ch.alt || '', ...previewRect() })); } catch {}
+  const [u, a] = liveUrls(ch);
+  try { NATIVE.preview(JSON.stringify({ id: ch.id, u, a, ...previewRect() })); } catch {}
 }
-window.kxPreviewState = (state) => { const b = $('#pvBox'); if (!b) return; b.classList.toggle('loading', state === 'loading'); if (state === 'error') { b.classList.add('demo'); $('#pvDemo').textContent = 'Anteprima non disponibile'; } };
-addEventListener('resize', () => { if (HAS_PREVIEW && S.previewing && $('#live').classList.contains('on') && !$('#drawer').classList.contains('on')) setTimeout(() => nativePreview(S.previewing), 200); });
+window.kxPreviewState = (state) => { const b = $('#guide').classList.contains('on') ? $('#gBox') : $('#pvBox'); if (!b) return; b.classList.toggle('loading', state === 'loading'); if (state === 'error') { b.classList.add('demo'); $('#pvDemo').textContent = 'Anteprima non disponibile'; } };
+addEventListener('resize', () => { if (HAS_PREVIEW && S.previewing && ($('#live').classList.contains('on') || $('#guide').classList.contains('on')) && !$('#drawer').classList.contains('on')) setTimeout(() => nativePreview(S.previewing), 260); });
 function stopPreview() {
   stopVideo($('#pv')); if (HAS_PREVIEW) try { NATIVE.previewStop(); } catch {}
   S.previewing = null;
@@ -1883,9 +1972,10 @@ async function loadEpg(ch) {
     const p = xtOf(ch);
     if (p && ch.sid) {
       try {
-        const j = JSON.parse(await getText(`${xtBase(p)}&action=get_short_epg&stream_id=${ch.sid}&limit=6`));
+        const j = JSON.parse(await getText(`${xtBase(p)}&action=get_short_epg&stream_id=${ch.sid}&limit=12`));
         const dec = (s) => { try { return decodeURIComponent(escape(atob(s))); } catch { return s || ''; } };
-        items = (j.epg_listings || []).map((x) => ({ title: dec(x.title), desc: dec(x.description || ''), start: +x.start_timestamp * 1000, end: +x.stop_timestamp * 1000 })).filter((x) => x.end > Date.now()).sort((a, b) => a.start - b.start);
+        const sh = (+opt('epgShift') || 0) * 3600e3;
+        items = (j.epg_listings || []).map((x) => ({ title: dec(x.title), desc: dec(x.description || ''), start: +x.start_timestamp * 1000 + sh, end: +x.stop_timestamp * 1000 + sh })).filter((x) => x.end > Date.now() - 2 * 3600e3).sort((a, b) => a.start - b.start);
       } catch {}
     }
   }
@@ -1901,7 +1991,8 @@ function xepgItems(ch) {
   const X = S.xepg; if (!X || !ch) return null;
   const c = XE.get(ch); if (c && c.v === S.xepgVer) return c.items;
   const arr = (ch.epgId && X.byId.get(String(ch.epgId).toLowerCase())) || X.byName.get(logoKey(ch.name).key) || null;
-  const items = arr ? arr.map((x) => ({ start: x[0] * 1000, end: x[1] * 1000, title: x[2] || '', desc: x[3] || '' })).filter((x) => x.end > Date.now() - 600e3) : null;
+  const sh = (+opt('epgShift') || 0) * 3600e3; // spostamento orario scelto nelle impostazioni
+  const items = arr ? arr.map((x) => ({ start: x[0] * 1000 + sh, end: x[1] * 1000 + sh, title: x[2] || '', desc: x[3] || '' })).filter((x) => x.end > Date.now() - 2 * 3600e3) : null;
   XE.set(ch, { v: S.xepgVer, items });
   return items;
 }
@@ -2009,32 +2100,238 @@ function numZap(d) {
 }
 
 /* =====================================================================
+   GUIDA TV a griglia (come nelle app TV): anteprima in alto, griglia orari
+   Solo le righe visibili sono disegnate → fluida anche con migliaia di canali
+   ===================================================================== */
+const G = { idx: [], T0: 0, ppm: 4, rowH: 64, chW: 220, first: -1, last: -1, time: 0, span: 26 * 60, q: [], qRun: 0 };
+const GHOUR = 60e3;
+function guideGeom() {
+  const grid = $('#gGrid');
+  const cs = getComputedStyle(document.documentElement);
+  G.chW = Math.round(Math.min(300, Math.max(150, innerWidth * 0.17)));
+  G.rowH = Math.round(Math.min(76, Math.max(46, innerHeight * 0.078)));
+  G.ppm = Math.max(2.5, ((grid.clientWidth || innerWidth) - G.chW) / 150); // circa 2 ore e mezza visibili
+  document.documentElement.style.setProperty('--gcw', G.chW + 'px');
+  document.documentElement.style.setProperty('--grh', G.rowH + 'px');
+}
+const gx = (t) => ((t - G.T0) / 60e3) * G.ppm; // tempo → pixel nella riga
+function openGuide(fromStart) {
+  if (!S.lib.live.length) return toast('Nessun canale');
+  show('guide', !fromStart);
+  guideRender(true);
+}
+function guideRender(first, target) {
+  G.q.length = 0; // richieste della guida breve per righe non più a schermo
+  const c = S.liveCat;
+  G.idx = sortChannels(visLive(c === 'all' ? S.lib.live : c === 'fav' ? S.lib.live.filter((x) => S.favs.has(x.id)) : (S.byGroup && S.byGroup.get('l' + c)) || S.lib.live.filter((x) => x.group === c)));
+  $('#gCatName').textContent = c === 'all' ? 'Tutti i canali' : c === 'fav' ? '★ Preferiti' : c;
+  $('#gCatCount').textContent = G.idx.length.toLocaleString('it');
+  const d = new Date(); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() < 30 ? 0 : 30); G.T0 = +d - 30 * 60e3;
+  guideGeom();
+  const W = G.span * G.ppm;
+  // intestazione con gli orari
+  let h = '';
+  for (let m = 0; m <= G.span; m += 30) { const t = G.T0 + m * 60e3; h += `<span style="left:${gx(t)}px">${hhmm(t)}</span>`; }
+  $('#gHead').innerHTML = `<div class="gcorner" id="gDay"></div><div class="gtimes" style="width:${W}px">${h}</div>`;
+  $('#gRows').style.height = G.idx.length * G.rowH + 'px';
+  $('#gRows').style.width = G.chW + W + 'px';
+  $('#gRows').innerHTML = `<i class="gnow" id="gNow"></i>`;
+  G.first = G.last = -1;
+  guideNow();
+  $('#gDay').textContent = new Date().toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' });
+  const grid = $('#gGrid'); grid.scrollTop = 0; grid.scrollLeft = Math.max(0, gx(Date.now()) - 40);
+  guideRange();
+  if (!G.idx.length) { $('#gRows').innerHTML = '<div class="mut" style="padding:30px">Nessun canale</div>'; return; }
+  const pi = target ? G.idx.indexOf(target) : S.previewing ? G.idx.indexOf(S.previewing) : -1;
+  setTimeout(() => guideFocus(pi >= 0 ? pi : 0, Date.now(), true), first ? 60 : 0);
+  if (!S.previewing) guideIdle(G.idx[Math.max(0, pi)]);
+}
+function guideNow() { const n = $('#gNow'); if (n) n.style.left = G.chW + gx(Date.now()) + 'px'; }
+setInterval(() => { if ($('#guide').classList.contains('on')) guideNow(); }, 60e3);
+function guideRow(i) {
+  const ch = G.idx[i]; if (!ch) return '';
+  const end = G.T0 + G.span * 60e3, now = Date.now();
+  let items = (epgOf(ch) || []).filter((x) => x.end > G.T0 && x.start < end);
+  let blocks = '';
+  if (items.length) {
+    for (const x of items) {
+      const l = Math.max(0, gx(x.start)), r = gx(Math.min(x.end, end)), w = Math.max(6, r - l);
+      blocks += `<div class="gp${x.start <= now && x.end > now ? ' now' : x.end <= now ? ' past' : ''}" data-f data-r="${i}" data-s="${x.start}" data-e="${x.end}" style="left:${l}px;width:${w - 3}px"><b>${esc(x.title)}</b><small>${hhmm(x.start)} – ${hhmm(x.end)}</small></div>`;
+    }
+  } else {
+    // senza guida: blocchi di un'ora, così ci si muove comunque nel tempo
+    for (let t = G.T0; t < end; t += 60 * GHOUR) blocks += `<div class="gp noepg${t <= now && t + 60 * GHOUR > now ? ' now' : ''}" data-f data-r="${i}" data-s="${t}" data-e="${t + 60 * GHOUR}" style="left:${gx(t)}px;width:${60 * G.ppm - 3}px"><b>${S.xepg || ch.sid ? 'Dati EPG non disponibili' : esc(ch.name)}</b></div>`;
+    if (!S.xepg && (ch.demo || (ch.sid && xtOf(ch))) && !S.epg.has(ch.id) && !G.q.includes(ch)) { G.q.push(ch); guideQueue(); }
+  }
+  return `<div class="grow${S.previewing && S.previewing.id === ch.id ? ' playing' : ''}" data-row="${i}" style="top:${i * G.rowH}px"><div class="gch${isLocked(ch) ? ' lk' : ''}"><span class="cn">${ch.num}</span><div class="lg" data-lg="${esc(ch.id)}">${logoHTML(ch)}</div><b>${esc(ch.name)}</b></div><div class="gtl">${blocks}</div></div>`;
+}
+/* guida breve (Xtream) per le righe a schermo: al massimo 3 richieste insieme */
+function guideQueue() {
+  while (G.qRun < 3 && G.q.length) {
+    const ch = G.q.shift();
+    const ri = G.idx.indexOf(ch);
+    if (!$('#guide').classList.contains('on') || ri < G.first || ri > G.last) continue; // riga non più a schermo
+    G.qRun++;
+    loadEpg(ch).finally(() => {
+      G.qRun--;
+      const i = G.idx.indexOf(ch), el = $(`#gRows .grow[data-row="${i}"]`);
+      if (el && $('#guide').classList.contains('on')) { const f = cur && el.contains(cur); el.outerHTML = guideRow(i); if (f) guideFocus(i, G.time, true); }
+      guideQueue();
+    });
+  }
+}
+/* disegna solo le righe nella finestra visibile (più un margine) */
+function guideRange(force) {
+  const grid = $('#gGrid'); if (!grid) return;
+  const vis = Math.ceil(grid.clientHeight / G.rowH) + 1;
+  const a = Math.max(0, Math.floor(grid.scrollTop / G.rowH) - 6), b = Math.min(G.idx.length - 1, a + vis + 12);
+  if (!force && a === G.first && b === G.last) return;
+  G.first = a; G.last = b; // prima di disegnare: la coda della guida breve usa questi limiti
+  const box = $('#gRows');
+  for (const el of [...box.querySelectorAll('.grow')]) { const r = +el.dataset.row; if (r < a || r > b) { if (el.contains(cur)) continue; el.remove(); } }
+  let html = '';
+  for (let i = a; i <= b; i++) if (!box.querySelector(`.grow[data-row="${i}"]`)) html += guideRow(i);
+  if (html) box.insertAdjacentHTML('beforeend', html);
+}
+function guideBlock(i, t) {
+  const row = $(`#gRows .grow[data-row="${i}"]`); if (!row) return null;
+  const ps = [...row.querySelectorAll('.gp')];
+  return ps.find((p) => +p.dataset.s <= t && +p.dataset.e > t) || ps.find((p) => +p.dataset.s >= t) || ps[ps.length - 1] || null;
+}
+function guideFocus(i, t, silent) {
+  if (!G.idx.length) return;
+  i = Math.max(0, Math.min(G.idx.length - 1, i));
+  const grid = $('#gGrid'), headH = $('#gHead').offsetHeight;
+  const top = i * G.rowH, viewH = grid.clientHeight - headH;
+  if (top < grid.scrollTop) grid.scrollTop = top;
+  else if (top + G.rowH > grid.scrollTop + viewH) grid.scrollTop = top + G.rowH - viewH;
+  guideRange();
+  const b = guideBlock(i, t); if (!b) return;
+  G.time = t;
+  focus(b, silent);
+}
+/* scorrimento orizzontale: l'inizio del programma resta visibile accanto alla colonna dei canali */
+function guideScrollX(b) {
+  const grid = $('#gGrid'), l = parseFloat(b.style.left) || 0, w = b.offsetWidth, viewW = grid.clientWidth - G.chW;
+  if (l < grid.scrollLeft + 10) grid.scrollLeft = Math.max(0, l - 30);
+  else if (l + Math.min(w, viewW * 0.6) > grid.scrollLeft + viewW) grid.scrollLeft = Math.max(0, l - 30);
+}
+function guideMove(dir) {
+  const b = cur, i = +b.dataset.r, s = +b.dataset.s, e = +b.dataset.e;
+  if (dir === 'left' || dir === 'right') {
+    const n = dir === 'left' ? b.previousElementSibling : b.nextElementSibling;
+    if (n && n.classList.contains('gp')) { G.time = Math.max(+n.dataset.s, G.T0); return focus(n); }
+    if (dir === 'left') edgeLeft();
+    return;
+  }
+  // su/giù: stesso orario sulla riga accanto
+  const t = Math.max(G.time || s, s, Math.min(Date.now(), e - 1));
+  if (dir === 'up' && i === 0) return focus($('#gCat'));
+  if (dir === 'down' && i >= G.idx.length - 1) return;
+  guideFocus(i + (dir === 'up' ? -1 : 1), Math.min(t, e - 1));
+}
+let gInfoT;
+document.addEventListener('kfocus', (e) => {
+  const b = e.target; if (!b.classList || !b.classList.contains('gp')) return;
+  if (!(e.detail && e.detail.mouse)) guideScrollX(b);
+  clearTimeout(gInfoT);
+  gInfoT = setTimeout(() => guideInfo(G.idx[+b.dataset.r], +b.dataset.s, +b.dataset.e, b), 110);
+});
+function guideInfo(ch, s, e, b) {
+  if (!ch) return;
+  const ep = (epgOf(ch) || []).find((x) => x.start === s);
+  const now = Date.now(), live = s <= now && e > now;
+  $('#gInfo').innerHTML = `<div class="gic">${qBadge(ch)}<span>CH ${ch.num} · ${esc(ch.name)}</span>${S.favs.has(ch.id) ? '<span style="color:var(--warn)">★</span>' : ''}</div>
+    <div class="git">${esc(ep ? ep.title : b && b.classList.contains('noepg') ? 'Dati EPG non disponibili' : ch.name)}</div>
+    <div class="gim">${live ? '<span class="lv">● IN ONDA</span>' : s > now ? '<span>PROSSIMAMENTE</span>' : ''}<span>${hhmm(s)} – ${hhmm(e)}</span><span>${durTxt(e - s)}</span><span>${new Date(s).toDateString() === new Date().toDateString() ? 'oggi' : new Date(s).toLocaleDateString('it-IT', { weekday: 'long' })}</span></div>
+    ${live ? `<div class="prog"><i style="width:${Math.max(0, Math.min(100, ((now - s) / (e - s)) * 100))}%"></i></div>` : ''}
+    ${ep && ep.desc ? `<p>${esc(ep.desc)}</p>` : ''}
+    <div class="gih">${S.previewing && S.previewing.id === ch.id ? '<kbd>OK</kbd> schermo intero' : '<kbd>OK</kbd> anteprima · <kbd>OK</kbd> di nuovo per lo schermo intero'} · tieni premuto <kbd>OK</kbd> per altre opzioni</div>`;
+  $('#gInfo').classList.remove('upd'); void $('#gInfo').offsetWidth; $('#gInfo').classList.add('upd');
+  if (!S.previewing) guideIdle(ch);
+}
+function guideIdle(ch) {
+  const b = $('#gBox'); if (!ch || !b) return;
+  b.classList.remove('has', 'loading', 'demo');
+  $('#gPh').innerHTML = `${ch.logo ? `<img src="${esc(ch.logo)}" onerror="this.remove()">` : ''}<b>${esc(ch.name)}</b>`;
+}
+function guidePreview(ch) {
+  if (isLocked(ch)) { gate(ch).then((ok) => ok && guidePreview(ch)); return; }
+  if (!HAS_PREVIEW) return openFs(ch, 'live');
+  S.previewing = ch; S.playingLive = ch;
+  $$('#gRows .grow').forEach((r) => r.classList.toggle('playing', G.idx[+r.dataset.row] === ch));
+  const b = $('#gBox'); b.classList.add('has', 'loading'); b.classList.remove('demo');
+  nativePreview(ch);
+  if (cur && cur.classList.contains('gp')) guideInfo(ch, +cur.dataset.s, +cur.dataset.e, cur);
+}
+function guideFocusChannel(ch, play) {
+  let i = G.idx.indexOf(ch);
+  if (i < 0) { S.liveCat = 'all'; guideRender(false, ch); i = G.idx.indexOf(ch); }
+  if (i < 0) return;
+  guideFocus(i, Date.now(), true);
+  if (play) guidePreview(ch);
+}
+$('#gGrid').addEventListener('scroll', () => { requestAnimationFrame(() => guideRange()); }, { passive: true });
+$('#gGrid').addEventListener('click', (e) => {
+  const b = e.target.closest('.gp'); if (!b) return;
+  if (b !== cur) focus(b, true);
+  const ch = G.idx[+b.dataset.r]; if (!ch) return;
+  if (S.previewing && S.previewing.id === ch.id) return openFs(ch, 'live');
+  guidePreview(ch);
+});
+$('#gGrid').addEventListener('klong', (e) => { const b = e.target.closest('.gp'); if (b) itemMenu(G.idx[+b.dataset.r], b); });
+$('#gCat').addEventListener('click', () => openDrawer());
+addEventListener('resize', () => { if ($('#guide').classList.contains('on')) guideRender(); });
+
+/* =====================================================================
    FULLSCREEN + OSD
    ===================================================================== */
 let fsItem = null, fsKind = '', osdT;
-function nativePlay(item, kind, fromSec) {
+/* indirizzi di un canale: con «Veloce (TS)» le liste Xtream usano il flusso diretto .ts (parte prima dell'HLS) */
+function liveUrls(c) {
+  if (opt('liveFmt') === 'ts' && c.alt && /\.ts(\?|$)/i.test(c.alt) && /\.m3u8(\?|$)/i.test(c.url)) return [c.alt, c.url];
+  return [c.url, c.alt || ''];
+}
+const RX_VLC_ONLY = /\.(avi|wmv|flv|mpe?g|rmvb|divx|xvid|vob|asf|3gp)(\?|$)/i;
+function engineFor(kind, item) {
+  const k = kind === 'live' ? 'engLive' : kind === 'series' || isSeriesItem(item) || item.ep ? 'engSeries' : 'engMovie';
+  const e = opt(k);
+  return e === 'auto' ? (RX_VLC_ONLY.test(item.url || '') ? 'vlc' : 'exo') : e;
+}
+function nativePlay(item, kind, fromSec, extra) {
   if (!HAS_PLAYER) return false;
-  if (HAS_PREVIEW) try { NATIVE.previewStop(); } catch {}
+  // l'anteprima si ferma solo se non mostra già questo canale: in quel caso il video passa allo schermo intero senza interruzioni
+  if (HAS_PREVIEW && !(kind === 'live' && S.previewing && S.previewing.id === item.id)) try { NATIVE.previewStop(); } catch {}
   const P = playPrefs();
-  let items, index = 0;
+  let items, index = 0, pk = kind;
   if (kind === 'live') {
-    const list = S.liveIndex.length && S.liveIndex.includes(item) ? S.liveIndex : S.lib.live;
+    let list = S.liveIndex.length && S.liveIndex.includes(item) ? S.liveIndex : visLive(S.lib.live);
+    // controllo genitori: nel player si può passare solo ai canali non bloccati
+    if (parentalOn() && !S.unlocked) list = list.filter((c) => c === item || !isLocked(c));
     index = Math.max(0, list.indexOf(item));
     // al player si passa al massimo una finestra di 3000 canali attorno a quello scelto (liste enormi = JSON enorme)
     let from = 0, sub = list;
     if (list.length > 3000) { from = Math.max(0, Math.min(index - 1500, list.length - 3000)); sub = list.slice(from, from + 3000); index -= from; }
     const t = Date.now();
     items = sub.map((c) => {
-      const o = { id: c.id, t: c.name, u: c.url, a: c.alt || '', n: c.num || 0, g: c.group || '' };
+      const [u, a] = liveUrls(c);
+      const o = { id: c.id, t: c.name, u, a, n: c.num || 0, g: c.group || '' };
       const ep = epgOf(c);
-      if (ep && ep.length) { const i = ep.findIndex((x) => x.start <= t && x.end > t); if (i >= 0) { const a = ep[i], b = ep[i + 1]; o.e = [a.title, Math.floor(a.start / 1000), Math.floor(a.end / 1000), b ? b.title : '', b ? Math.floor(b.start / 1000) : 0]; } }
+      if (ep && ep.length) { const i = ep.findIndex((x) => x.start <= t && x.end > t); if (i >= 0) { const a2 = ep[i], b = ep[i + 1]; o.e = [a2.title, Math.floor(a2.start / 1000), Math.floor(a2.end / 1000), b ? b.title : '', b ? Math.floor(b.start / 1000) : 0]; } }
       return o;
     });
+  } else if (extra && extra.list && extra.list.length) {
+    // episodi: tutta la stagione, così il player passa da solo al successivo
+    pk = 'vod';
+    items = extra.list.map((e) => ({ id: e.id, t: e.name, u: e.url, a: '', n: 0, g: e.group || '' }));
+    index = Math.max(0, extra.index || 0);
   } else items = [{ id: item.id, t: item.name, u: item.url, a: '', n: 0, g: item.group || '' }];
   const stored = kind === 'live' ? 0 : store.get('pos', {})[item.id] || 0;
   const start = fromSec != null ? fromSec : stored;
   try {
-    NATIVE.play(JSON.stringify({ kind, items, index, start: Math.floor(start * 1000), engine: P.engine, quality: P.quality, buffer: P.buffer, aspect: P.aspect, brand: S.settings.brand || 'KAIROS' }));
+    NATIVE.play(JSON.stringify({ kind: pk, items, index, start: Math.floor(start * 1000), engine: engineFor(kind, item), engineKey: kind === 'live' ? 'engLive' : kind === 'series' ? 'engSeries' : 'engMovie',
+      quality: P.quality, buffer: P.buffer, aspect: P.aspect, brand: S.settings.brand || 'KAIROS',
+      hw: opt('hw'), sub: opt('subSize'), res: !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list) }));
   } catch (e) { return false; }
   S.inPlayer = true;
   if (kind === 'live') { S.playingLive = item; addRecent(item, 'live'); }
@@ -2045,7 +2342,7 @@ window.kxPlayerClosed = (r) => {
   S.inPlayer = false;
   try { r = typeof r === 'string' ? JSON.parse(r) : r; } catch { return; }
   if (!r) return;
-  if (r.engine) { const P = playPrefs(); P.engine = r.engine; store.set('play', P); }
+  if (r.engine && r.engineKey && OPT[r.engineKey]) store.set('o_' + r.engineKey, r.engine); // scelta fatta nel player: ricordata per quel tipo di contenuto
   if (r.kind === 'vod' && r.id && r.dur > 0) {
     const pos = store.get('pos', {}), du = store.get('dur', {});
     if (r.pos > 5 && r.pos < r.dur - 30) pos[r.id] = r.pos; else delete pos[r.id];
@@ -2054,12 +2351,13 @@ window.kxPlayerClosed = (r) => {
   if (r.height) setMeasuredQuality(r.id, +r.height);
   if (r.kind === 'live' && r.id && S.byId) {
     const ch = S.byId.get(r.id);
-    if (ch) { S.playingLive = ch; addRecent(ch, 'live'); if ($('#live').classList.contains('on')) focusChannel(ch, true); }
+    if (ch) { S.playingLive = ch; addRecent(ch, 'live'); if ($('#live').classList.contains('on')) focusChannel(ch, true); else if ($('#guide').classList.contains('on')) guideFocusChannel(ch, true); }
   }
   setTimeout(placeRing, 100);
 };
-function openFs(item, kind, fromSec) {
-  if (nativePlay(item, kind, fromSec)) return;
+function openFs(item, kind, fromSec, extra) {
+  if (isLocked(item) || (extra && extra.parent && isLocked(extra.parent))) { gate(extra && extra.parent && isLocked(extra.parent) ? extra.parent : item).then((ok) => ok && openFs(item, kind, fromSec, extra)); return; }
+  if (nativePlay(item, kind, fromSec, extra)) return;
   fsItem = item; fsKind = kind;
   if (fromSec > 0) $('#fv').addEventListener('loadedmetadata', () => ($('#fv').currentTime = fromSec), { once: true });
   stopPreview();
@@ -2098,7 +2396,7 @@ function fsKey(e) {
   if (k === 'Escape' || k === 'GoBack' || k === 'Backspace' || kc === 4 || kc === 461 || kc === 10009) { fx('back'); return closeFs(); }
   if (/^[0-9]$/.test(k) && fsKind === 'live') return numZap(k);
   if (fsKind === 'live' && (k === 'ArrowUp' || k === 'ArrowDown' || k === 'ChannelUp' || k === 'ChannelDown' || k === 'PageUp' || k === 'PageDown')) {
-    const list = S.liveIndex.length ? S.liveIndex : S.lib.live;
+    const list = (S.liveIndex.length ? S.liveIndex : S.lib.live).filter((c) => c === fsItem || !isLocked(c));
     let i = list.indexOf(fsItem); if (i < 0) i = 0;
     i = (i + (k === 'ArrowUp' || k === 'ChannelUp' || k === 'PageUp' ? -1 : 1) + list.length) % list.length;
     fx('move'); fsItem = list[i]; $('#fvDemo').textContent = fsItem.name; playUrl(v, fsItem, $('#fs')); osd(); addRecent(fsItem, 'live'); return;
@@ -2144,7 +2442,7 @@ function moreVod() { const s = vodItems.slice(vodRendered, vodRendered + 120); $
 $('#vodGrid').addEventListener('scroll', (e) => { const l = e.target; if (l.scrollTop + l.clientHeight > l.scrollHeight - 600 && vodRendered < vodItems.length) moreVod(); });
 document.addEventListener('kfocus', (e) => { const el = e.target; if (el.classList.contains('post') && el.closest('#vodGrid') && +el.dataset.i > vodRendered - 20 && vodRendered < vodItems.length) moreVod(); });
 $('#vodGrid').addEventListener('click', (e) => { const el = e.target.closest('.post'); if (el) openItem(vodItems[+el.dataset.i]); });
-$('#vodGrid').addEventListener('klong', (e) => { const el = e.target.closest('.post'); if (el) toggleFav(vodItems[+el.dataset.i]); });
+$('#vodGrid').addEventListener('klong', (e) => { const el = e.target.closest('.post'); if (el) itemMenu(vodItems[+el.dataset.i], el); });
 
 function openEvent(e) {
   // cerca canali che possono trasmettere la partita (nome squadre / competizione)
@@ -2162,6 +2460,7 @@ function openItem(x) {
 }
 let lastFocusBeforeDetail = null, detailTok = 0;
 async function openDetail(x) {
+  if (isLocked(x) && !(await gate(x))) return;
   lastFocusBeforeDetail = cur;
   const tok = ++detailTok, alive = () => tok === detailTok && $('#detail').classList.contains('on');
   const isSeries = isSeriesItem(x);
@@ -2212,7 +2511,8 @@ async function openDetail(x) {
       $$('#dSeas .chip').forEach((c) => c.classList.toggle('sel', +c.dataset.s === s));
       const list = eps.filter((e) => e.season === s).sort((a, b) => a.ep - b.ep);
       $('#dEps').innerHTML = list.map((e, i) => `<div class="ep" data-f data-i="${i}"><b>${e.ep}</b><div class="et">${x.backdrop || x.poster ? `<img loading="lazy" decoding="async" src="${esc(x.backdrop || x.poster)}" onerror="this.remove()">` : ''}<i>▶</i></div><span>${esc(e.title)}</span></div>`).join('');
-      $$('#dEps .ep').forEach((el) => (el.onclick = () => { const e = list[+el.dataset.i]; $('#detail').classList.remove('on'); openFs({ id: e.id || x.id + 's' + e.season + 'e' + e.ep, name: `${x.name} · S${e.season} E${e.ep}`, poster: x.poster, url: e.url, demo: x.episodes && e.url === 'demo' }, 'vod'); addRecent(x, 'series'); }));
+      const epItem = (e) => ({ id: e.id || x.id + 's' + e.season + 'e' + e.ep, ep: 1, name: `${x.name} · S${e.season} E${e.ep}${e.title && !/^episodio/i.test(e.title) ? ' · ' + e.title : ''}`, poster: x.poster, url: e.url, group: x.group, demo: x.episodes && e.url === 'demo' });
+      $$('#dEps .ep').forEach((el) => (el.onclick = () => { const i = +el.dataset.i, it = epItem(list[i]); $('#detail').classList.remove('on'); openFs(it, 'series', null, { list: list.map(epItem), index: i, parent: x }); addRecent(x, 'series'); }));
     };
     $('#dSeas').innerHTML = seasons.map((s) => `<button class="chip" data-f data-s="${s}">Stagione ${s}</button>`).join('');
     $$('#dSeas .chip').forEach((c) => (c.onclick = () => showSeason(+c.dataset.s)));
@@ -2281,7 +2581,7 @@ function makeRows(kind) {
   if (S.demo && !rec.length) rec = [L.movies[2], L.series[0], L.movies[5], L.live[0], L.movies[9], L.series[3]].filter((x) => x && inKind(x));
   if (rec.length) R.push({ title: 'Continua a guardare', type: 'cont', items: rec });
   if (kind === 'all' && L.live.length) {
-    const base = safe(L.live);
+    const base = visLive(safe(L.live));
     const lv = S.favs.size ? [...base.filter((c) => S.favs.has(c.id)), ...base.filter((c) => !S.favs.has(c.id))] : base;
     R.push({ title: 'In diretta ora', sub: L.live.length.toLocaleString('it') + ' canali', type: 'live', items: lv.slice(0, 30), more: { go: 'live' } });
   }
@@ -2289,18 +2589,19 @@ function makeRows(kind) {
   const top = topSrc.filter((x) => x.poster && +x.rating).sort((a, b) => (+b.rating || 0) - (+a.rating || 0)).slice(0, 10);
   if (top.length >= 5) R.push({ title: kind === 'series' ? 'Top 10 serie' : 'Top 10 film di oggi', type: 'top', items: top });
   if (kind === 'all') { const f = [...L.movies, ...L.series].filter((x) => S.favs.has(x.id)); if (f.length) R.push({ title: 'La mia lista', type: 'poster', items: f }); }
-  const catRows = (arr, cats, label, k) => cats.forEach((c) => R.push({ title: (label ? label + ' · ' : '') + c.name, type: 'poster', items: (S.byGroup && S.byGroup.get((k === 'movies' ? 'm' : 's') + c.name)) || arr.filter((x) => x.group === c.name), more: { kind: k, cat: c.name } }));
+  const catRows = (arr, cats, label, k) => cats.forEach((c) => R.push({ title: (label ? label + ' · ' : '') + c.name, type: 'poster', items: sortVod((S.byGroup && S.byGroup.get((k === 'movies' ? 'm' : 's') + c.name)) || arr.filter((x) => x.group === c.name)), more: { kind: k, cat: c.name } }));
   const recent = (arr) => { arr = safe(arr); return (arr.some((x) => x.added) ? [...arr].sort((a, b) => (b.added || 0) - (a.added || 0)) : arr.slice().reverse()).slice(0, 40); };
   if (kind === 'all') {
     if (L.movies.length) R.push({ title: 'Film aggiunti di recente', type: 'poster', items: recent(L.movies), more: { kind: 'movies', cat: 'all' } });
     if (L.series.length) R.push({ title: 'Serie aggiunte di recente', type: 'poster', items: recent(L.series), more: { kind: 'series', cat: 'all' } });
-    catRows(L.movies, safeCats(L.movieCats).slice(0, 8), 'Film', 'movies');
-    catRows(L.series, safeCats(L.seriesCats).slice(0, 6), 'Serie', 'series');
+    catRows(L.movies, safeCats(sortCats(L.movieCats)).slice(0, 8), 'Film', 'movies');
+    catRows(L.series, safeCats(sortCats(L.seriesCats)).slice(0, 6), 'Serie', 'series');
   } else {
     const arr = kind === 'movies' ? L.movies : L.series, cats = kind === 'movies' ? L.movieCats : L.seriesCats;
     if (arr.length > 20) R.splice(R.findIndex((r) => r.type === 'top') >= 0 ? R.findIndex((r) => r.type === 'top') : R.length, 0, { title: 'Aggiunti di recente', type: 'poster', items: recent(arr), more: { kind, cat: 'all' } });
     // le categorie per adulti restano raggiungibili, ma in fondo
-    catRows(arr, [...safeCats(cats), ...(showAdult() ? [] : cats.filter((c) => RX_ADULT_G.test(c.name)))], '', kind);
+    const sc = sortCats(cats);
+    catRows(arr, [...safeCats(sc), ...(showAdult() ? [] : sc.filter((c) => RX_ADULT_G.test(c.name)))].filter((c, i, a) => a.indexOf(c) === i), '', kind);
   }
   return R.filter((r) => r.items.length);
 }
@@ -2333,7 +2634,7 @@ function cardHTML(type, x, k, i) {
   }
   const img = x.poster || x.logo, ft = `<div class="ft">${esc(x.name)}</div>`;
   const onerr = `onerror="this.parentNode.classList.add('noimg');this.remove()"`;
-  if (type === 'live') return `<div class="nc l" data-f data-k="${k}"><span class="tg">LIVE</span>${x.logo ? `<img loading="lazy" decoding="async" src="${esc(x.logo)}" onerror="this.outerHTML='<span class=lini>${esc(x.name.slice(0, 2).toUpperCase())}</span>'">` : `<span class="lini">${esc(x.name.slice(0, 2).toUpperCase())}</span>`}<div class="ln"><b>${x.num}</b>${esc(x.name)}</div>${qBadge(x).replace('class="qb', 'class="qb qcard')}</div>`;
+  if (type === 'live') return `<div class="nc l${isLocked(x) ? ' lk' : ''}" data-f data-k="${k}"><span class="tg">LIVE</span>${x.logo ? `<img loading="lazy" decoding="async" src="${esc(x.logo)}" onerror="this.outerHTML='<span class=lini>${esc(x.name.slice(0, 2).toUpperCase())}</span>'">` : `<span class="lini">${esc(x.name.slice(0, 2).toUpperCase())}</span>`}<div class="ln"><b>${x.num}</b>${esc(x.name)}</div>${qBadge(x).replace('class="qb', 'class="qb qcard')}</div>`;
   if (type === 'top') return `<div class="nc t" data-f data-k="${k}"><span class="big">${i + 1}</span><div class="pp ${img ? '' : 'noimg'}">${img ? `<img loading="lazy" decoding="async" src="${esc(img)}" ${onerr}>` : ''}${ft}</div></div>`;
   let extra = '';
   if (type === 'cont') {
@@ -2344,7 +2645,7 @@ function cardHTML(type, x, k, i) {
       if (pct) extra = `<div class="pr"><i style="width:${pct}%"></i></div>`;
     }
   }
-  return `<div class="nc p ${img ? '' : 'noimg'}" data-f data-k="${k}">${img ? `<img loading="lazy" class="${isLiveItem(x) ? 'lgfit' : ''}" src="${esc(img)}" ${onerr}>` : ''}${ft}${extra}</div>`;
+  return `<div class="nc p ${img ? '' : 'noimg'}${isLocked(x) ? ' lk' : ''}" data-f data-k="${k}">${img ? `<img loading="lazy" class="${isLiveItem(x) ? 'lgfit' : ''}" src="${esc(img)}" ${onerr}>` : ''}${ft}${extra}</div>`;
 }
 function rowHTML(r, ri) {
   const max = 40;
@@ -2364,7 +2665,7 @@ function buildBrowse(scr, kind) {
   <div class="browse">
     <div class="hero"><div class="hbg"><img class="blur" alt=""><img class="main fade" alt="" decoding="async"><img class="main fade" alt="" decoding="async"></div><div class="hshade"></div>
       <div class="htop"><b class="hbrand brandName">${esc((S.settings.brand || 'KAIROS').toUpperCase())}</b>${kind !== 'all' ? `<span class="hsec">${kind === 'movies' ? 'Film' : 'Serie TV'}</span>` : ''}${S.demo ? '<span class="dtag">DEMO</span>' : ''}${S.settings.announcement ? `<span class="annc"><span class="mq">${esc(S.settings.announcement)}</span></span>` : ''}<span class="sp"></span><b class="clk2"></b></div>
-      <div class="hinfo"><div class="hkind"></div><h1 class="htitle"></h1><div class="hmeta"></div><div class="hrate"></div><p class="hplot"></p>
+      ${S.settings.announcement ? `<div class="hann"><span class="mq">${esc(S.settings.announcement)}</span></div>` : ''}<div class="hinfo"><div class="hkind"></div><h1 class="htitle"></h1><div class="hmeta"></div><div class="hrate"></div><p class="hplot"></p>
         <div class="hbtns"><button class="nbtn play" data-hplay><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg><span>Riproduci</span></button><button class="nbtn info" data-hinfo><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Altre info</button></div></div>
     </div>
     <div class="rows"></div>
@@ -2388,7 +2689,7 @@ function buildBrowse(scr, kind) {
     if (e.target.closest('[data-hplay]')) return heroPlay(scr);
     if (e.target.closest('[data-hinfo]')) { const x = scr._hero; if (x) x.folder ? openFolder(x) : x.home ? openEvent(x) : isLiveItem(x) ? openItem(x) : openDetail(x); }
   });
-  scr.addEventListener('klong', (e) => { const c = e.target.closest('[data-k]'); if (c) { const x = item(c.dataset.k); x && !x.folder && !x.home && toggleFav(x); } });
+  scr.addEventListener('klong', (e) => { const c = e.target.closest('[data-k]'); if (c) { const x = item(c.dataset.k); x && !x.folder && !x.home && itemMenu(x, c); } });
   scr.addEventListener('kfocus', (e) => {
     const t = e.target, mouse = e.detail && e.detail.mouse;
     const c = t.closest('[data-k]'), rows = scr.querySelector('.rows');
@@ -2673,6 +2974,184 @@ const SET_IC = {
   look: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.8 1.2V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 14H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10 3V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 21 10h0a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
 };
+/* =====================================================================
+   OPZIONI (impostazioni a scelta con OK)
+   ===================================================================== */
+const ENG = [['auto', 'Automatico avanzato'], ['exo', 'ExoPlayer'], ['vlc', 'VLC']];
+const YN = [[true, 'Sì'], [false, 'No']];
+const OPT = {
+  engLive: ['Lettore TV in diretta', ENG, 'auto'],
+  engMovie: ['Lettore film', ENG, 'auto'],
+  engSeries: ['Lettore serie TV', ENG, 'auto'],
+  hw: ['Accelerazione hardware', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['off', 'Disattivata (software)']], 'auto'],
+  autoNext: ['Episodio successivo automatico', YN, true],
+  subSize: ['Dimensione sottotitoli', [['small', 'Piccola'], ['medium', 'Media'], ['large', 'Grande'], ['xl', 'Molto grande']], 'medium'],
+  resInd: ['Indicatore risoluzione', YN, true],
+  liveFmt: ['Formato TV in diretta', [['ts', 'Veloce (TS)'], ['hls', 'HLS']], 'ts'],
+  epgShift: ['Spostamento orario guida', [[0, 'Nessuno'], [1, '+1 ora'], [2, '+2 ore'], [-1, '−1 ora'], [-2, '−2 ore']], 0, () => { S.xepgVer++; S.epg.clear(); }],
+  showHidden: ['Mostra canali nascosti', [[false, 'No'], [true, 'Sì']], false, () => { if (S.lib.live.length) renderChannels(); }],
+  sortCats: ['Ordina categorie', [['pl', 'Come la playlist'], ['az', 'A → Z'], ['za', 'Z → A']], 'pl'],
+  sortCh: ['Ordina canali', [['pl', 'Come la playlist'], ['num', 'Per numero'], ['az', 'A → Z']], 'pl'],
+  sortVod: ['Ordina film e serie', [['pl', 'Come la playlist'], ['recent', 'Aggiunti di recente'], ['az', 'A → Z'], ['rating', 'Valutazione']], 'pl'],
+  startScr: ['Schermata iniziale', [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta'], ['guide', 'Guida TV']], 'home'],
+  sfx: ['Effetti sonori', [['classic', 'Classici'], ['soft', 'Morbidi'], ['futur', 'Futuristici'], ['retro', 'Retrò'], ['off', 'Disattivati']], 'classic', (v) => { S.sound = v !== 'off'; fx('ok'); }],
+  textSize: ['Dimensione testi', [['s', 'Piccola'], ['m', 'Media'], ['l', 'Grande'], ['xl', 'Molto grande']], 'm', (v) => applyTextSize(v)],
+  orient: ['Layout orizzontale (telefoni e tablet)', [['auto', 'Automatico'], ['land', 'Sempre orizzontale']], 'auto', (v) => applyOrient(v)],
+  lockAdult: ['Blocca contenuti per adulti', YN, true],
+};
+const opt = (k) => { const v = store.get('o_' + k, null); return v === null ? (k === 'startScr' ? store.get('startScr', OPT[k][2]) : k === 'sfx' && store.get('sound', true) === false ? 'off' : OPT[k][2]) : v; };
+const optLabel = (k) => { const [, o] = OPT[k], v = opt(k); return (o.find((x) => x[0] === v) || o[0])[1]; };
+const optRow = (k) => `<div class="sr" data-f data-opt="${k}"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))}</b></div>`;
+function cycleOpt(k, el) {
+  const [, o, , after] = OPT[k], v = opt(k), i = o.findIndex((x) => x[0] === v), nx = o[(i + 1) % o.length];
+  store.set('o_' + k, nx[0]);
+  if (k === 'startScr') store.set('startScr', nx[0]);
+  if (el) { const b = el.querySelector('b'); b.textContent = nx[1]; b.classList.remove('flip'); void b.offsetWidth; b.classList.add('flip'); }
+  if (k.startsWith('sort')) S.sortVer = (S.sortVer || 0) + 1;
+  after && after(nx[0]);
+}
+document.addEventListener('click', async (e) => {
+  const r = e.target.closest('[data-opt]'); if (!r) return;
+  if (r.dataset.opt === 'lockAdult' && parentalOn() && !(await checkPin('PIN per modificare'))) return focus(r, true);
+  cycleOpt(r.dataset.opt, r); if (r.dataset.opt === 'lockAdult') focus(r, true);
+});
+const TS = { s: 0.9, m: 1, l: 1.15, xl: 1.3 };
+function applyTextSize(v) { document.documentElement.style.setProperty('--ts', TS[v] || 1); }
+function applyOrient(v) { try { NATIVE && NATIVE.setOrientation && NATIVE.setOrientation(v); } catch {} }
+
+/* ---------------- ordinamento ---------------- */
+const byName = (a, b) => String(a.name || a.label || '').localeCompare(String(b.name || b.label || ''), 'it', { sensitivity: 'base', numeric: true });
+function sortCats(cats) { const m = opt('sortCats'); if (m === 'pl') return cats; const a = [...cats].sort(byName); return m === 'za' ? a.reverse() : a; }
+function sortChannels(list) { const m = opt('sortCh'); if (m === 'pl') return list; return [...list].sort(m === 'num' ? (a, b) => (a.num || 0) - (b.num || 0) : byName); }
+function sortVod(list) {
+  const m = opt('sortVod'); if (m === 'pl') return list;
+  if (m === 'az') return [...list].sort(byName);
+  if (m === 'rating') return [...list].sort((a, b) => (+b.rating || 0) - (+a.rating || 0));
+  return list.some((x) => x.added) ? [...list].sort((a, b) => (b.added || 0) - (a.added || 0)) : [...list].reverse();
+}
+
+/* l'anteprima nativa è disegnata sopra la pagina: si mette in pausa mentre una finestra è aperta */
+function modalPause() {
+  if (HAS_PREVIEW && S.previewing && ($('#live').classList.contains('on') || $('#guide').classList.contains('on'))) { try { NATIVE.previewStop(); } catch {} S.exitPv = S.previewing; }
+}
+function modalResume() {
+  if (S.exitPv) { S.previewing = S.exitPv; S.exitPv = null; }
+  const s = $('.screen.on');
+  if (s && (s.id === 'live' || s.id === 'guide') && S.previewing && HAS_PREVIEW && !$('.speedm.on') && !$('#drawer').classList.contains('on')) nativePreview(S.previewing);
+}
+
+/* ---------------- canali nascosti ---------------- */
+S.hidden = new Set(store.get('hidden', []));
+const visLive = (arr) => (opt('showHidden') || !S.hidden.size ? arr : arr.filter((c) => !S.hidden.has(c.id)));
+function toggleHidden(ch) {
+  if (S.hidden.has(ch.id)) { S.hidden.delete(ch.id); toast('Canale di nuovo visibile'); } else { S.hidden.add(ch.id); toast('Canale nascosto · lo ritrovi in Impostazioni › TV in diretta'); }
+  store.set('hidden', [...S.hidden]);
+}
+
+/* ---------------- controllo genitori ---------------- */
+S.locked = new Set(store.get('locked', []));
+const parentalOn = () => !!store.get('pinH', '') && store.get('parental', false) === true;
+function isLocked(x) {
+  if (!x || !parentalOn() || S.unlocked) return false;
+  return S.locked.has(x.id) || S.locked.has('g:' + (x.k || '') + '|' + x.group) || (opt('lockAdult') && isAdult(x));
+}
+function askPin(title, sub) {
+  return new Promise((res) => {
+    if ($('#pinM')) return res(null);
+    modalPause();
+    let v = '';
+    document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="pinM"><div class="sbox pinbox"><div class="orb mut" style="font-size:12px;letter-spacing:.35em">CONTROLLO GENITORI</div><h2>${esc(title)}</h2>${sub ? `<p class="mut">${esc(sub)}</p>` : ''}
+      <div class="pinds">${'<i></i>'.repeat(4)}</div>
+      <div class="pinpad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button class="btn" data-f data-pd="${n}">${n}</button>`).join('')}<button class="btn" data-f data-pd="x">Annulla</button><button class="btn" data-f data-pd="0">0</button><button class="btn" data-f data-pd="b">⌫</button></div></div></div>`);
+    const m = $('#pinM');
+    const draw = () => $$('#pinM .pinds i').forEach((e, i) => e.classList.toggle('on', i < v.length));
+    const done = (r) => { m._onClose = null; m.remove(); document.removeEventListener('keydown', kd, true); res(r); const s = $('.screen.on'), lf = S.lastScreenFocus; const f = (lf && s && s.contains(lf) && isVis(lf) && lf) || (s && s.querySelector('[data-autof]')); f && focus(f, true); setTimeout(() => { if (!$('.speedm.on')) modalResume(); }, 60); };
+    const add = (d) => { if (v.length >= 4) return; v += d; draw(); fx('move'); if (v.length === 4) setTimeout(() => done(v), 120); };
+    const kd = (e) => { if (/^[0-9]$/.test(e.key)) { e.preventDefault(); e.stopPropagation(); add(e.key); } };
+    document.addEventListener('keydown', kd, true);
+    m._onClose = () => { document.removeEventListener('keydown', kd, true); res(null); };
+    $$('#pinM [data-pd]').forEach((b) => (b.onclick = () => { const d = b.dataset.pd; if (d === 'x') return back(); if (d === 'b') { v = v.slice(0, -1); draw(); return; } add(d); }));
+    setTimeout(() => focus($('#pinM [data-pd="5"]'), true), 40);
+  });
+}
+async function checkPin(title) {
+  const p = await askPin(title || 'Inserisci il PIN');
+  if (p == null) return false;
+  if (hashStr('pin:' + p) === store.get('pinH', '')) return true;
+  fx('err'); toast('PIN errato'); return false;
+}
+/* contenuto bloccato: chiede il PIN una volta per sessione */
+async function gate(x) {
+  if (!isLocked(x)) return true;
+  if (await checkPin('Contenuto protetto')) { S.unlocked = true; $$('.lk').forEach((e) => e.classList.remove('lk')); return true; }
+  return false;
+}
+async function setNewPin() {
+  const a = await askPin('Scegli un PIN di 4 cifre'); if (a == null) return false;
+  const b = await askPin('Ripeti il PIN'); if (b == null) return false;
+  if (a !== b) { fx('err'); toast('I due PIN non coincidono'); return false; }
+  store.set('pinH', hashStr('pin:' + a)); toast('✓ PIN impostato'); return true;
+}
+
+/* ---------------- menu del tasto OK tenuto premuto ---------------- */
+function itemMenu(x, el) {
+  if (!x || x.folder || x.home || $('#menuM')) return;
+  const live = isLiveItem(x), fav = S.favs.has(x.id), hid = S.hidden.has(x.id), lk = S.locked.has(x.id);
+  const acts = [['fav', fav ? '✕  Rimuovi dalla mia lista' : '★  Aggiungi alla mia lista']];
+  if (live) acts.push(['hide', hid ? '👁  Mostra di nuovo il canale' : '⊘  Nascondi canale']);
+  acts.push(['lock', lk ? '🔓  Sblocca (togli il PIN)' : '🔒  Blocca con PIN']);
+  if (live || x.group) acts.push(['lockg', S.locked.has('g:' + (x.k || '') + '|' + x.group) ? `🔓  Sblocca la categoria «${x.group}»` : `🔒  Blocca la categoria «${x.group}»`]);
+  acts.push(['rep', live ? '⚠  Segnala: il canale non funziona' : '⚠  Segnala un problema']);
+  fx('ok');
+  modalPause();
+  document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="menuM"><div class="sbox menubox"><div class="orb mut" style="font-size:12px;letter-spacing:.3em">${live ? 'CANALE' : isSeriesItem(x) ? 'SERIE' : 'FILM'}</div><h2>${esc(x.name)}</h2>
+    <div class="replist">${acts.map(([k, t]) => `<button class="btn" data-f data-ma="${k}">${t}</button>`).join('')}</div></div></div>`);
+  setTimeout(() => focus($('#menuM [data-ma]'), true), 40);
+  const close = () => { const m = $('#menuM'); if (m) m.remove(); const s = $('.screen.on'), lf = S.lastScreenFocus; const f = (el && document.body.contains(el) && el) || (lf && document.body.contains(lf) && lf) || (s && s.querySelector('[data-autof]')); f && focus(f, true); setTimeout(() => { if (!$('.speedm.on')) modalResume(); }, 60); };
+  $$('#menuM [data-ma]').forEach((b) => (b.onclick = async () => {
+    const a = b.dataset.ma;
+    if (a === 'fav') { close(); toggleFav(x, el); return; }
+    if (a === 'hide') { close(); toggleHidden(x); if ($('#live').classList.contains('on')) renderChannels(); if ($('#guide').classList.contains('on')) guideRender(); return; }
+    if (a === 'rep') { close(); reportDialog(x.name); return; }
+    // blocchi: serve il PIN
+    $('#menuM').remove();
+    if (!store.get('pinH', '')) { if (!(await setNewPin())) return close(); store.set('parental', true); }
+    else if (!(await checkPin('PIN per modificare i blocchi'))) return close();
+    const key = a === 'lock' ? x.id : 'g:' + (x.k || '') + '|' + x.group;
+    if (S.locked.has(key)) S.locked.delete(key); else S.locked.add(key);
+    store.set('locked', [...S.locked]); store.set('parental', true);
+    toast(S.locked.has(key) ? '🔒 Bloccato con PIN' : '🔓 Sbloccato');
+    close();
+  }));
+}
+
+/* ---------------- effetti sonori: più stili ---------------- */
+function sfxPlay(type, tone) {
+  const p = opt('sfx');
+  if (p === 'soft') {
+    if (type === 'move') tone(900, 860, 0.05, 0.012);
+    else if (type === 'ok') { tone(660, 660, 0.09, 0.028); tone(990, 990, 0.12, 0.022, 'sine', 0.06); }
+    else if (type === 'back') tone(520, 360, 0.09, 0.022);
+    else if (type === 'err') tone(300, 220, 0.2, 0.035);
+    return true;
+  }
+  if (p === 'futur') {
+    if (type === 'move') { tone(3200, 2400, 0.03, 0.012, 'triangle'); tone(1600, 1500, 0.025, 0.008, 'sine', 0.012); }
+    else if (type === 'ok') { tone(800, 2400, 0.1, 0.028, 'triangle'); tone(2400, 2400, 0.08, 0.02, 'sine', 0.08); }
+    else if (type === 'back') tone(2000, 500, 0.11, 0.024, 'triangle');
+    else if (type === 'err') { tone(200, 120, 0.2, 0.04, 'sawtooth'); }
+    return true;
+  }
+  if (p === 'retro') {
+    if (type === 'move') tone(880, 880, 0.03, 0.016, 'square');
+    else if (type === 'ok') { tone(523, 523, 0.06, 0.022, 'square'); tone(784, 784, 0.08, 0.022, 'square', 0.06); }
+    else if (type === 'back') { tone(392, 392, 0.05, 0.022, 'square'); tone(262, 262, 0.07, 0.022, 'square', 0.05); }
+    else if (type === 'err') tone(150, 150, 0.25, 0.03, 'square');
+    return true;
+  }
+  return false;
+}
+
 const PLAY_OPTS = [['engine', 'Motore video', [['exo', 'ExoPlayer'], ['vlc', 'VLC']]], ['quality', 'Qualità video', [['auto', 'Automatica'], ['max', 'Massima'], ['1080', '1080p'], ['720', '720p'], ['480', '480p']]], ['buffer', 'Buffer di rete', [['fast', 'Veloce'], ['balanced', 'Bilanciato'], ['stable', 'Stabile']]], ['aspect', 'Formato immagine', [['fit', 'Adatta'], ['fill', 'Riempi'], ['zoom', 'Zoom']]]];
 S.setSec = 'dev';
 function renderSettings(sec) {
@@ -2680,35 +3159,49 @@ function renderSettings(sec) {
   const st = { active: ['Attivo', 'var(--ok)'], pending: ['In attesa', 'var(--warn)'], expired: ['Scaduto', 'var(--bad)'], disabled: ['Disattivato', 'var(--bad)'], demo: ['Demo', 'var(--a1)'] }[S.demo ? 'demo' : S.status] || ['—', 'var(--mut)'];
   const allPl = [...S.playlists.map((p) => ({ ...p, srv: 1 })), ...(S.settings.allowLocalPlaylists ? S.local : [])];
   const P = playPrefs(), theme = store.get('theme') || S.settings.accent || 'cinema';
-  const MENU = [['dev', 'Account'], ['pl', 'Gestione playlist'], ['play', 'Lettore'], ['tv', 'TV in diretta e guida TV'], ['net', 'Rete e speed test'], ['look', 'Generali'], ['info', 'Informazioni']];
+  const MENU = [['dev', 'Account'], ['pl', 'Gestione playlist'], ['play', 'Lettore'], ['tv', 'TV in diretta e guida TV'], ['kids', 'Controllo genitori'], ['net', 'Rete e speed test'], ['look', 'Generali'], ['info', 'Informazioni']];
   const kv = (k, v) => `<div class="sr static"><span>${k}</span><b>${v}</b></div>`;
   const cards = {
     dev: `<h3>Account</h3>${kv('Codice dispositivo', `<span class="orb">${esc(S.code)}</span>`)}${kv('Stato', `<span style="color:${st[1]}">${st[0]}</span>`)}${kv('Scadenza', S.expires ? new Date(S.expires).toLocaleDateString('it-IT') : 'Illimitata')}${kv('Contenuti', `${S.lib.live.length.toLocaleString('it')} canali · ${S.lib.movies.length.toLocaleString('it')} film · ${S.lib.series.length.toLocaleString('it')} serie`)}${S.settings.supportContact ? kv('Assistenza', esc(S.settings.supportContact)) : ''}
       <div class="sbtns"><button class="btn pri" data-f id="sReload">↻ Aggiorna contenuti</button></div>`,
     pl: `<h3>Gestione playlist</h3>${allPl.map((p) => `<div class="sr static"><span><b style="color:#fff">${esc(p.name)}</b><br><small class="mut">${p.type === 'xtream' ? 'Xtream Codes' : 'M3U'}${p.srv ? ' · dal gestore' : ' · personale'}</small></span>${p.srv ? '<b>✓</b>' : `<button class="btn" data-f data-del="${p.id}" style="padding:8px 14px">Rimuovi</button>`}</div>`).join('') || '<div class="snote">Nessuna playlist collegata.</div>'}
-      ${S.settings.allowLocalPlaylists ? `<div class="seg" style="margin-top:18px"><button data-f class="sel" id="tM3U">M3U</button><button data-f id="tXT">Xtream Codes</button></div><div id="plForm"></div><button class="btn pri" data-f id="plAdd" style="width:100%;justify-content:center">+ Aggiungi playlist</button>` : '<div class="snote">Le playlist sono gestite dal tuo fornitore.</div>'}`,
+      ${S.settings.allowLocalPlaylists ? `<div class="seg" style="margin-top:18px"><button data-f class="sel" id="tM3U">M3U</button><button data-f id="tXT">Xtream Codes</button></div><div id="plForm"></div><button class="btn pri" data-f id="plAdd" style="width:100%;justify-content:center">+ Aggiungi playlist</button>` : '<div class="snote">Le playlist sono gestite dal tuo fornitore.</div>'}
+      <h3 style="margin-top:26px">Ordinamento</h3>${optRow('sortCats')}${optRow('sortCh')}${optRow('sortVod')}`,
     play: `<h3>Lettore</h3>${HAS_PLAYER ? '' : '<div class="snote">Queste opzioni valgono nell\'app (Fire TV, Android TV, telefoni).</div>'}
-      ${PLAY_OPTS.map(([k, lbl, opts]) => `<div class="sr" data-f data-pk="${k}"><span>${lbl}</span><b>${(opts.find((o) => o[0] === P[k]) || opts[0])[1]}</b></div>`).join('')}
-      <div class="snote">Premi OK su una voce per cambiarla. ExoPlayer è il più fluido; VLC legge più formati: usalo se un canale non parte. <b>Stabile</b> accumula più video in anticipo. Durante la visione premi OK per cambiare audio, qualità e sottotitoli.</div>`,
+      ${optRow('engLive')}${optRow('engMovie')}${optRow('engSeries')}
+      ${PLAY_OPTS.filter((o) => o[0] !== 'engine').map(([k, lbl, opts]) => `<div class="sr" data-f data-pk="${k}"><span>${lbl}</span><b>${(opts.find((o) => o[0] === P[k]) || opts[0])[1]}</b></div>`).join('')}
+      ${optRow('hw')}${optRow('autoNext')}${optRow('subSize')}${optRow('resInd')}
+      <div class="snote"><b>Automatico avanzato</b> sceglie da solo il lettore migliore per ogni contenuto (ExoPlayer, oppure VLC per i formati che ExoPlayer non legge) e cambia lettore da solo se qualcosa non parte. Disattiva l'accelerazione hardware solo se vedi immagini verdi o a scatti. Durante la visione premi OK per audio, qualità e sottotitoli.</div>`,
     tv: (() => {
       const m = store.get('epgMeta', {}), src = epgSources();
       const st = S.epgRunning ? 'In aggiornamento…' : S.xepg ? `Attiva · ${(m.n || 0).toLocaleString('it')} programmi · aggiornata alle ${new Date(m.t || S.xepg.t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : NATIVE && NATIVE.epgBuild ? 'Non ancora scaricata' : 'Guida breve (aggiorna l\'app alla 1.5 per la guida completa)';
-      return `<h3>TV in diretta e guida TV</h3>${kv('Guida TV (EPG)', `<span id="eStat">${esc(st)}</span>`)}${kv('Sorgenti', src.length ? src.length + (src.length > 1 ? ' trovate' : ' trovata') : 'nessuna')}
-      <div class="sbtns"><button class="btn pri" data-f id="eUpd">↻ Aggiorna guida TV</button></div>
+      return `<h3>TV in diretta e guida TV</h3>${optRow('liveFmt')}${kv('Guida TV (EPG)', `<span id="eStat">${esc(st)}</span>`)}${kv('Sorgenti', src.length ? src.length + (src.length > 1 ? ' trovate' : ' trovata') : 'nessuna')}
+      <div class="sbtns"><button class="btn pri" data-f id="eUpd">↻ Forza aggiornamento guida TV</button></div>${optRow('epgShift')}
       <div class="snote">La guida viene presa dal tuo server (Xtream) o dall'indirizzo indicato nella lista M3U, e si aggiorna da sola ogni 3 ore. Se il tuo fornitore ti ha dato un link EPG diverso, inseriscilo qui:</div>
-      <input class="inp" data-f id="eUrl" placeholder="Indirizzo EPG (XMLTV), es. http://server/epg.xml.gz" value="${esc(store.get('epgUrl', ''))}"><button class="btn" data-f id="eSave">Salva indirizzo EPG</button>`;
+      <input class="inp" data-f id="eUrl" placeholder="Indirizzo EPG (XMLTV), es. http://server/epg.xml.gz" value="${esc(store.get('epgUrl', ''))}"><button class="btn" data-f id="eSave">Salva indirizzo EPG</button>
+      <h3 style="margin-top:26px">Canali nascosti</h3>${kv('Canali nascosti', `<span id="hCount">${S.hidden.size}</span>`)}${optRow('showHidden')}
+      <div class="sbtns"><button class="btn" data-f id="hRestore">Ripristina canali nascosti</button></div>
+      <div class="snote">Per nascondere un canale tieni premuto OK sul canale e scegli «Nascondi canale».</div>`;
     })(),
+    kids: `<h3>Controllo genitori</h3>
+      <div class="sr" data-f id="kOn"><span>Controllo genitori</span><b>${parentalOn() ? 'Attivo' : 'Disattivato'}</b></div>
+      ${optRow('lockAdult')}
+      <div class="sr" data-f id="kPin"><span>${store.get('pinH', '') ? 'Cambia PIN' : 'Imposta PIN'}</span><b>›</b></div>
+      ${kv('Canali, titoli e categorie bloccati', `<span id="kCount">${S.locked.size}</span>`)}
+      <div class="sbtns"><button class="btn" data-f id="kClear">Sblocca tutto</button></div>
+      <div class="snote">Con il controllo attivo, i contenuti bloccati chiedono il PIN prima di essere guardati. Per bloccare un canale, un film o un'intera categoria tieni premuto OK e scegli «Blocca con PIN».</div>`,
     net: `<h3>Rete e speed test</h3>${kv('Ultimo speed test', `<span id="sLast">${speedLast ? `${speedLast.mbps.toFixed(1)} Mbps · ${Math.round(speedLast.ping)} ms` : '—'}</span>`)}
       <div class="sbtns"><button class="btn pri" data-f id="sSpeed">⚡ Avvia speed test</button><button class="btn" data-f id="sTest">Test connessione al server</button></div>
       <div class="snote">Lo speed test misura la velocità reale della tua linea e ti consiglia le impostazioni migliori per il lettore.</div>`,
-    look: `<h3>Generali</h3><div class="sr" data-f id="sSound"><span>Effetti sonori</span><b>${S.sound ? 'Sì' : 'No'}</b></div>
+    look: `<h3>Generali</h3>${optRow('startScr')}${optRow('sfx')}${optRow('textSize')}
       <div class="sr" data-f id="sTheme"><span>Colore</span><b><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(THEMES[theme] || THEMES.cinema)[0]};margin-right:8px"></span>${theme}</b></div>
+      ${optRow('orient')}
       <div class="sr" data-f id="sAdult"><span>Contenuti per adulti nella Home e nei consigliati</span><b>${showAdult() ? 'Sì' : 'No'}</b></div>
       <div class="sr" data-f id="sLogo"><span>Loghi dei canali automatici</span><b>${store.get('autoLogo', true) === false ? 'No' : 'Sì'}</b></div>
       <div class="sr" data-f id="sClear"><span>Svuota preferiti e cronologia</span><b>›</b></div>
       <div class="sr" data-f id="sCache"><span>Svuota la memoria dei contenuti</span><b>›</b></div>`,
     info: `<h3>Informazioni</h3>${kv('App', esc((S.settings.brand || 'KAIROS') + ' TV'))}${kv('Versione', esc((NATIVE && NATIVE.version && NATIVE.version()) || 'web'))}${kv('Interfaccia', esc((NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || 'inclusa'))}${kv('Dispositivo', esc((NATIVE && NATIVE.model && NATIVE.model()) || 'browser'))}${kv('Codice', `<span class="orb">${esc(S.code)}</span>`)}
-      <div class="sbtns"><button class="btn pri" data-f id="sUpd">⟳ Cerca aggiornamenti</button></div><div class="snote" id="sUpdTxt"></div>`,
+      <div class="sbtns"><button class="btn pri" data-f id="sUpd">⟳ Cerca aggiornamenti</button><button class="btn" data-f id="sBug">⚠ Segnala un problema</button></div><div class="snote" id="sUpdTxt"></div>`,
   };
   $('#settBody').innerHTML = `<div class="smenu">${MENU.map(([k, l]) => `<div class="sm ${k === S.setSec ? 'sel' : ''}" data-f data-sec="${k}">${SET_IC[k]}<span>${l}</span></div>`).join('')}</div>
     <div class="spanel">${MENU.map(([k]) => `<div class="card ${k === S.setSec ? 'on' : ''}" data-card="${k}">${cards[k]}</div>`).join('')}</div>`;
@@ -2759,7 +3252,22 @@ function renderSettings(sec) {
     const i = opts.findIndex((o) => o[0] === P2[k]), nx = opts[(i + 1) % opts.length];
     P2[k] = nx[0]; store.set('play', P2); b.querySelector('b').textContent = nx[1];
   }));
-  $('#sSound').onclick = () => { S.sound = !S.sound; store.set('sound', S.sound); $('#sSound b').textContent = S.sound ? 'Sì' : 'No'; };
+  $('#sBug').onclick = () => reportDialog();
+  $('#hRestore').onclick = () => { S.hidden.clear(); store.set('hidden', []); $('#hCount').textContent = '0'; toast('Tutti i canali sono di nuovo visibili'); if (S.lib.live.length) renderChannels(); };
+  $('#kPin').onclick = async () => {
+    if (store.get('pinH', '') && !(await checkPin('PIN attuale'))) return;
+    if (await setNewPin()) renderSettings('kids');
+    focus($('#kPin'), true);
+  };
+  $('#kOn').onclick = async () => {
+    if (parentalOn()) { if (!(await checkPin('PIN per disattivare'))) return focus($('#kOn'), true); store.set('parental', false); S.unlocked = false; }
+    else { if (!store.get('pinH', '') && !(await setNewPin())) return focus($('#kOn'), true); store.set('parental', true); S.unlocked = false; }
+    renderSettings('kids'); focus($('#kOn'), true);
+  };
+  $('#kClear').onclick = async () => {
+    if (store.get('pinH', '') && !(await checkPin('PIN per sbloccare tutto'))) return focus($('#kClear'), true);
+    S.locked.clear(); store.set('locked', []); $('#kCount').textContent = '0'; toast('Tutti i contenuti sbloccati'); focus($('#kClear'), true);
+  };
   $('#sTheme').onclick = () => { const ks = Object.keys(THEMES), nx = ks[(ks.indexOf(store.get('theme') || S.settings.accent || 'cinema') + 1) % ks.length]; store.set('theme', nx); applyTheme(nx); $('#sTheme b').innerHTML = `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${THEMES[nx][0]};margin-right:8px"></span>${nx}`; };
   $('#sAdult').onclick = () => { const on = !showAdult(); store.set('adultHome', on); $('#sAdult b').textContent = on ? 'Sì' : 'No'; buildBrowse($('#home'), 'all'); };
   $('#sUpd').onclick = async () => {
@@ -2891,20 +3399,88 @@ async function backgroundUpdateCheck() {
 setInterval(backgroundUpdateCheck, 3 * 3600e3);
 window.kxResume = () => {
   // tornando nell'app l'anteprima della Live riparte (Android la ferma quando l'app va in pausa)
-  if (HAS_PREVIEW && S.previewing && $('#live').classList.contains('on') && !$('#drawer').classList.contains('on') && !$('.speedm.on') && !S.inPlayer) setTimeout(() => S.previewing && nativePreview(S.previewing), 300);
+  if (HAS_PREVIEW && S.previewing && ($('#live').classList.contains('on') || $('#guide').classList.contains('on')) && !$('#drawer').classList.contains('on') && !$('.speedm.on') && !S.inPlayer) setTimeout(() => S.previewing && nativePreview(S.previewing), 300);
   if (Date.now() - (S.lastUpdCheck || 0) > 45 * 60e3) setTimeout(backgroundUpdateCheck, 2500);
 };
+/* ---------------- avvisi: messaggi del fornitore e scadenza dell'abbonamento ---------------- */
+function noticeModal(title, body, level, onClose) {
+  if ($('#noteM')) return false;
+  modalPause();
+  fx('ok');
+  const col = level === 'urgent' ? 'var(--bad)' : level === 'warn' ? 'var(--warn)' : 'var(--a1)';
+  document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="noteM"><div class="sbox notebox" style="--nc:${col}"><div class="orb mut" style="font-size:12px;letter-spacing:.35em;color:${col}">${level === 'urgent' ? 'AVVISO IMPORTANTE' : level === 'warn' ? 'AVVISO' : 'MESSAGGIO'}</div>
+    ${title ? `<h2>${esc(title)}</h2>` : ''}${body ? `<p>${esc(body).replace(/\n/g, '<br>')}</p>` : ''}<div class="sbtn"><button class="btn pri" data-f id="noteOk">Ho capito</button></div></div></div>`);
+  setTimeout(() => focus($('#noteOk'), true), 40);
+  $('#noteOk').onclick = () => { back(); onClose && onClose(); };
+  return true;
+}
+function showNotices() {
+  if (S.inPlayer || $('.speedm.on') || $('#boot').classList.contains('on') || $('#activate').classList.contains('on')) return;
+  // 1) scadenza vicina (una volta al giorno)
+  if (S.expires && !S.demo) {
+    const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+    const days = Math.round((new Date(S.expires + 'T00:00:00').getTime() - d0.getTime()) / 864e5), today = new Date().toDateString(); // giorni di calendario
+    if (days >= 0 && days <= 2 && store.get('expWarn', '') !== today) {
+      store.set('expWarn', today);
+      const when = days === 0 ? 'oggi' : days === 1 ? 'domani' : 'tra 2 giorni';
+      if (noticeModal(`Il tuo abbonamento scade ${when}`, `Scadenza: ${new Date(S.expires).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}. Contatta il tuo fornitore per rinnovarlo e non perdere la visione.${S.settings.supportContact ? '\nAssistenza: ' + S.settings.supportContact : ''}\nCodice dispositivo: ${S.code}`, days === 0 ? 'urgent' : 'warn', showNotices)) return;
+    }
+  }
+  // 2) messaggi del fornitore non ancora letti (dal più vecchio)
+  const seen = new Set(store.get('seenMsg', []));
+  const m = (S.messages || []).filter((x) => !seen.has(x.id)).sort((a, b) => a.id - b.id)[0];
+  if (m) {
+    seen.add(m.id); store.set('seenMsg', [...seen].slice(-200));
+    noticeModal(m.title, m.body, m.level, showNotices);
+  }
+}
+/* mentre l'app resta aperta: ogni 20 minuti si aggiornano stato, messaggi e scadenza */
+setInterval(async () => {
+  if (S.demo || !baseServer() || S.inPlayer || $('#activate').classList.contains('on') || $('#boot').classList.contains('on')) return;
+  const was = S.status;
+  try { await register(); } catch { return; }
+  if (was === 'active' && S.status !== 'active') { showActivate(false); return; }
+  showNotices();
+}, 20 * 60e3);
+
+/* ---------------- segnala un problema ---------------- */
+function reportDialog(preset) {
+  if ($('#repM')) return;
+  modalPause();
+  const kinds = ['Un canale non funziona', 'Un film o una serie non parte', 'La guida TV è sbagliata', 'L\'app è lenta o si blocca', 'Altro'];
+  document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="repM"><div class="sbox"><div class="orb mut" style="font-size:12px;letter-spacing:.35em">SEGNALA UN PROBLEMA</div>
+    <h2 style="margin:12px 0 6px;font-size:24px">Cosa non va?</h2><p class="mut" style="font-size:14px;margin-bottom:12px">La segnalazione arriva direttamente al tuo fornitore.</p>
+    <div class="replist">${kinds.map((k, i) => `<button class="btn" data-f data-rk="${i}">${esc(k)}</button>`).join('')}</div>
+    <input class="inp" data-f id="repTxt" placeholder="Dettagli (facoltativo)" value="${esc(preset || '')}" style="margin-top:12px">
+    <div class="mut" id="repSt" style="min-height:18px;font-size:13px;margin-top:6px"></div>
+    <div class="sbtn"><button class="btn" data-f id="repNo">Chiudi</button></div></div></div>`);
+  setTimeout(() => focus($('[data-rk]'), true), 40);
+  $('#repNo').onclick = () => back();
+  $$('[data-rk]').forEach((b) => (b.onclick = async () => {
+    const st = $('#repSt'); st.textContent = 'Invio in corso…';
+    const info = [`app ${(NATIVE && NATIVE.version && NATIVE.version()) || 'web'}`, (NATIVE && NATIVE.model && NATIVE.model()) || '', S.playingLive ? 'canale: ' + S.playingLive.name : '', S.loadErrors && S.loadErrors.length ? 'errore: ' + S.loadErrors[0] : ''].filter(Boolean).join(' · ');
+    const body = JSON.stringify({ code: S.code, secret: S.secret, kind: kinds[+b.dataset.rk], text: $('#repTxt').value.trim(), info });
+    try {
+      const url = baseServer() + '/api/player/report';
+      let status;
+      if (hasNativeHttp()) ({ status } = await nativeFetch(url, 'POST', body)); else status = (await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })).status;
+      if (status === 200) { st.textContent = '✓ Inviata, grazie!'; toast('Segnalazione inviata al fornitore'); setTimeout(() => $('#repM') && back(), 1200); }
+      else st.textContent = status === 429 ? 'Hai già inviato molte segnalazioni: riprova più tardi.' : 'Invio non riuscito (' + status + ').';
+    } catch (e) { st.textContent = 'Server non raggiungibile.'; }
+  }));
+}
+
 function offerApkUpdate(force) {
   const a = S.apkUpdate; if (!a || $('#updM')) return;
   const skip = store.get('apkSkip', {});
   if (!force && skip.v === a.versionCode && Date.now() - skip.t < 12 * 3600e3) return;
-  if ($('#live').classList.contains('on')) stopPreview(); // l'anteprima nativa coprirebbe la finestra
+  modalPause(); // l'anteprima nativa coprirebbe la finestra
   document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="updM"><div class="sbox"><div class="orb mut" style="font-size:12px;letter-spacing:.35em">AGGIORNAMENTO</div>
     <h2 style="margin:14px 0 8px;font-size:26px">Nuova versione ${esc(a.version || '')} disponibile</h2><p class="mut" style="line-height:1.5">Contiene miglioramenti e correzioni. Il download richiede pochi secondi, poi conferma l'installazione.</p>
     <div class="ubar"><i id="uBar"></i></div><div class="mut" id="uTxt" style="font-size:13px;min-height:18px;line-height:1.4"></div>
     <div class="sbtn"><button class="btn pri" data-f id="uGo">Aggiorna ora</button><button class="btn" data-f id="uLater">Più tardi</button></div></div></div>`);
   setTimeout(() => focus($('#uGo'), true), 80);
-  $('#uLater').onclick = () => { store.set('apkSkip', { v: a.versionCode, t: Date.now() }); $('#updM').remove(); focus(visibleF($('.screen.on')).find((e) => !e.closest('.tnav')) || visibleF($('.screen.on'))[0], true); };
+  $('#uLater').onclick = () => { store.set('apkSkip', { v: a.versionCode, t: Date.now() }); back(); };
   $('#uGo').onclick = () => {
     if (S.apkDl) return;
     S.apkDl = true;
@@ -2952,10 +3528,16 @@ async function enterHome() {
   tick(); S.stack = [];
   const b = $('#boot');
   if (b.classList.contains('on')) { b.classList.add('out'); await sleep(560); }
-  show('home', false);
+  // schermata iniziale scelta nelle impostazioni
+  const st = store.get('startScr', 'home');
+  if (st === 'movies' || st === 'series') { buildBrowse($('#cat'), st); show('cat', false); S.stack = ['home']; }
+  else if (st === 'live' && S.lib.live.length) { renderLive(); show('live', false); S.stack = ['home']; }
+  else if (st === 'guide' && S.lib.live.length) { openGuide(true); S.stack = ['home']; }
+  else show('home', false);
   b.classList.remove('out');
   warpStop && warpStop();
   if (S.apkUpdate) setTimeout(offerApkUpdate, 900);
+  setTimeout(showNotices, S.apkUpdate ? 2500 : 1600);
   setTimeout(autoLogos, S.fromCache ? 9000 : 5000);
   setTimeout(() => buildXmltv(), S.fromCache ? 2500 : 4000);
 }
@@ -2968,6 +3550,7 @@ function startDemo() {
 
 async function boot() {
   try { NATIVE && NATIVE.uiReady && NATIVE.uiReady(); } catch {} // l'interfaccia è partita
+  S.sound = opt('sfx') !== 'off'; applyTextSize(opt('textSize')); if (opt('orient') !== 'auto') applyOrient(opt('orient'));
   const t = store.get('theme'); applyTheme(t || 'cinema');
   fx('boot');
   const bar = $('#bootBar');

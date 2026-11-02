@@ -348,6 +348,7 @@ async function route(req, env, ctx) {
   if (path.startsWith('/api/player/')) {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204 });
     if (path === '/api/player/register' && req.method === 'POST') return playerRegister(req, env, ip, ctx);
+    if (path === '/api/player/report' && req.method === 'POST') return playerReport(req, env, ip, ctx);
     if (path === '/api/player/ping' && req.method === 'GET') return json({ ok: true, service: 'kairos', time: now() });
     if (path === '/api/player/events' && req.method === 'GET') {
       if (await limited(env.RL_DEVICE, 'ev:' + ip)) return json({ events: [] }, 429);
@@ -429,7 +430,27 @@ async function playerRegister(req, env, ip, ctx) {
   const pls = await unseal(env, d.playlists).catch(() => []);
   const status = statusOf(d, pls);
   const s = await getSettings(env);
-  return json({ status, name: d.name, expires: d.expires, settings: publicSettings(s), playlists: status === 'active' ? pls : [] });
+  return json({ status, name: d.name, expires: d.expires, settings: publicSettings(s), playlists: status === 'active' ? pls : [], messages: await deviceMessages(env, d.id) });
+}
+/* messaggi del fornitore per questo dispositivo (tutti + personali, non scaduti) */
+async function deviceMessages(env, id) {
+  try {
+    const r = await env.DB.prepare('SELECT id, title, body, level, created FROM messages WHERE (target = ? OR target = ?) AND (until = 0 OR until > ?) ORDER BY id DESC LIMIT 10').bind('all', id, now()).all();
+    return r.results || [];
+  } catch { return []; } // tabella non ancora creata
+}
+/* "Segnala un problema" dall'app: finisce nell'attività del pannello */
+async function playerReport(req, env, ip, ctx) {
+  if (await limited(env.RL_DEVICE, 'rep:' + ip)) return json({ error: 'Troppe segnalazioni, riprova più tardi' }, 429);
+  let b;
+  try { b = await readJSON(req, 8192); } catch (e) { return json({ error: e.message }, e.status || 400); }
+  const code = str(b.code, 20).toUpperCase(), secret = str(b.secret, 100);
+  if (!CODE_RE.test(code) || !/^[A-Za-z0-9_-]{32,100}$/.test(secret)) return json({ error: 'Dati non validi' }, 400);
+  const d = await env.DB.prepare('SELECT id, name, secret_hash FROM devices WHERE code = ?').bind(code).first();
+  if (!d || !d.secret_hash || !safeEq(d.secret_hash, await sha256('dev:' + secret))) return json({ error: 'Dispositivo non riconosciuto' }, 403);
+  const kind = str(b.kind, 40), text = str(b.text, 400), info = str(b.info, 400);
+  ctx.waitUntil(log(env, 'report', `Segnalazione da ${d.name || code} · ${kind}${text ? ': ' + text : ''}${info ? ' [' + info + ']' : ''}`, ip));
+  return json({ ok: true });
 }
 
 /* ---------------- pannello ---------------- */
@@ -480,12 +501,32 @@ async function admin(req, env, url, ip, ctx) {
       const pls = await unseal(env, d.playlists).catch(() => []);
       devices.push({ id: d.id, code: d.code, name: d.name, model: d.model, notes: d.notes, active: !!d.active, expires: d.expires, playlists: pls, createdAt: d.created_at, lastSeen: d.last_seen, lastIp: d.last_ip, bound: !!d.secret_hash, status: statusOf(d, pls) });
     }
-    const activity = ((await env.DB.prepare('SELECT t, type, text, ip FROM activity ORDER BY id DESC LIMIT 120').all()).results) || [];
+    const activity = ((await env.DB.prepare('SELECT t, type, text, ip FROM activity ORDER BY id DESC LIMIT 200').all()).results) || [];
+    let messages = [];
+    try { messages = ((await env.DB.prepare('SELECT id, target, title, body, level, created, until FROM messages ORDER BY id DESC LIMIT 100').all()).results) || []; } catch {}
     const sessions = (await env.DB.prepare('SELECT COUNT(*) AS n FROM sessions WHERE admin_id = ? AND expires > ?').bind(ses.admin_id, now()).first()).n;
     return json({
-      settings: await getSettings(env), devices, activity, user: who, apk: await latestApk(env, await getSettings(env)),
+      settings: await getSettings(env), devices, activity, messages, user: who, apk: await latestApk(env, await getSettings(env)),
       security: { totp: !!ses.totp_on, encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
     });
+  }
+
+  if (path === '/messages' && m === 'POST') {
+    const b = await readJSON(req);
+    const title = str(b.title, 80), body = str(b.body, 600);
+    if (!title && !body) throw new HttpErr(400, 'Scrivi il titolo o il testo del messaggio');
+    let target = str(b.target, 20) || 'all';
+    if (target !== 'all' && !(await env.DB.prepare('SELECT id FROM devices WHERE id = ?').bind(target).first())) throw new HttpErr(400, 'Dispositivo non trovato');
+    const level = ['info', 'warn', 'urgent'].includes(b.level) ? b.level : 'info';
+    const days = Math.max(0, Math.min(365, +b.days || 0));
+    await env.DB.prepare('INSERT INTO messages (target, title, body, level, created, until) VALUES (?, ?, ?, ?, ?, ?)').bind(target, title, body, level, now(), days ? now() + days * 864e5 : 0).run();
+    await log(env, 'msg', `${who}: messaggio inviato a ${target === 'all' ? 'tutti' : 'un dispositivo'} · ${title || body.slice(0, 40)}`, ip);
+    return json({ ok: true });
+  }
+  const mm = path.match(/^\/messages\/(\d{1,10})$/);
+  if (mm && m === 'DELETE') {
+    await env.DB.prepare('DELETE FROM messages WHERE id = ?').bind(+mm[1]).run();
+    return json({ ok: true });
   }
 
   if (path === '/settings' && m === 'PUT') {
@@ -662,6 +703,7 @@ async function cleanup(env) {
     // dispositivi mai attivati e non più visti da 30 giorni
     env.DB.prepare("DELETE FROM devices WHERE active = 0 AND playlists = '' AND last_seen < ?").bind(t - 30 * 86400e3),
   ]);
+  try { await env.DB.prepare('DELETE FROM messages WHERE until > 0 AND until < ?').bind(t).run(); } catch {}
 }
 
 // esportati per i test

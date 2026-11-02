@@ -77,6 +77,11 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private var retries = 0
     private var resumeMs = 0L
     private var numBuf = ""
+    private var subScale = 1f
+    private var showRes = true
+    private var autoNext = false
+    private var engineKey = ""
+    private lateinit var resView: TextView
 
     private val item: Item get() = items[index]
     private val isLive: Boolean get() = kind == "live"
@@ -95,7 +100,11 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             engineName = j.optString("engine", "exo")
             aspect = j.optString("aspect", "fit")
             brand = j.optString("brand", "KAIROS")
-            prefs = PlayPrefs(j.optString("quality", "auto"), j.optString("buffer", "balanced"), aspect, live = kind == "live")
+            prefs = PlayPrefs(j.optString("quality", "auto"), j.optString("buffer", "balanced"), aspect, live = kind == "live", hw = j.optString("hw", "auto"))
+            subScale = when (j.optString("sub", "medium")) { "small" -> 0.8f; "large" -> 1.3f; "xl" -> 1.6f; else -> 1f }
+            showRes = j.optBoolean("res", true)
+            autoNext = j.optBoolean("autoNext", false)
+            engineKey = j.optString("engineKey", "")
             resumeMs = j.optLong("start", 0L)
             val arr = j.getJSONArray("items")
             items = (0 until arr.length()).map {
@@ -120,6 +129,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             engineName = h.name
             currentUrl = h.playingUrl.ifEmpty { item.url }
             h.setAspect(aspect)
+            h.setSubtitleScale(subScale)
             root.addView(h.view, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
         } else {
             h?.release()
@@ -186,13 +196,19 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             visibility = View.GONE
         }
         zapView = text(64f, Color.WHITE, true).apply {
-            layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(28), dp(40), 0) }
+            layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(64), dp(40), 0) }
             visibility = View.GONE
         }
         veil = View(this).apply {
             setBackgroundColor(Color.BLACK)
             alpha = 0f
             layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        resView = text(13f, Color.WHITE, true).apply {
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+            background = GradientDrawable().apply { cornerRadius = dp(6).toFloat(); setColor(Color.argb(150, 0, 0, 0)); setStroke(dp(1), Color.argb(90, 255, 255, 255)) }
+            layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(28), dp(40), 0) }
+            visibility = View.GONE
         }
         brandView = text(26f, ACCENT, true).apply {
             text = brand.uppercase(Locale.ROOT)
@@ -250,6 +266,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         root.addView(veil)
         root.addView(osd)
         root.addView(brandView)
+        root.addView(resView)
         root.addView(zapView)
         root.addView(spinner)
         root.addView(msgView)
@@ -269,12 +286,13 @@ class PlayerActivity : ComponentActivity(), EngineListener {
 
     private val hideRunnable = Runnable { hideOsd() }
     private val tickRunnable = object : Runnable {
-        override fun run() { updateTime(); ui.postDelayed(this, 500) }
+        override fun run() { updateTime(); updateRes(); ui.postDelayed(this, 1000) }
     }
 
     private fun showOsd(focusBar: Boolean) {
         if (closing) return
         updateInfo()
+        ui.postDelayed({ updateRes() }, 30)
         // annulla una chiusura in corso (altrimenti al termine lo nasconderebbe)
         osd.animate().cancel(); brandView.animate().cancel()
         if (osd.visibility == View.VISIBLE && osd.alpha < 1f) { osd.alpha = 1f; osd.translationY = 0f; brandView.alpha = 1f }
@@ -302,9 +320,21 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         if (osd.visibility != View.VISIBLE) return
         osd.animate().alpha(0f).translationY(dp(30).toFloat()).setDuration(180).withEndAction { osd.visibility = View.GONE; osd.alpha = 1f; osd.translationY = 0f }.start()
         brandView.animate().alpha(0f).setDuration(180).withEndAction { brandView.visibility = View.GONE; brandView.alpha = 1f }.start()
+        resView.visibility = View.GONE
     }
 
     private fun engineLabel(n: String) = if (n == "vlc") "VLC" else "ExoPlayer"
+
+    private fun updateRes() {
+        if (!showRes) { resView.visibility = View.GONE; return }
+        val e = engine
+        val info = when (e) { is ExoEngine -> e.videoInfo(); null -> ""; else -> e.videoHeight().let { if (it > 0) "${it}p" else "" } }
+        val h = e?.videoHeight() ?: 0
+        val tag = when { h >= 2000 -> "4K"; h >= 1000 -> "FHD"; h >= 700 -> "HD"; h > 0 -> "SD"; else -> "" }
+        if (info.isBlank()) { resView.visibility = View.GONE; return }
+        resView.text = if (tag.isNotEmpty()) "$tag  ·  $info" else info
+        resView.visibility = if (osd.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+    }
 
     private fun updateInfo() {
         tBadge.text = if (isLive) "● IN DIRETTA" else "FILM · SERIE"
@@ -368,6 +398,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         }
         engineName = e.name
         engine = e
+        (e as? ExoEngine)?.setSubtitleScale(subScale)
         root.addView(e.view, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
     }
 
@@ -393,7 +424,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         veil.animate().alpha(0.55f).setDuration(120).start()
         ui.removeCallbacks(zapPlay)
         zapPending = true
-        ui.postDelayed(zapPlay, 280)
+        ui.postDelayed(zapPlay, 200)
         showOsd(false)
         osd.translationY = (if (delta > 0) dp(18) else -dp(18)).toFloat()
         osd.animate().translationY(0f).setDuration(200).start()
@@ -434,7 +465,13 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         ui.post {
             if (closing) return@post
             if (isLive) { if (retries < 3) { retries++; startUrl(currentUrl, 0) } }
-            else finishWithResult()
+            else if (autoNext && index < items.size - 1) {
+                index++
+                toast("Episodio successivo: ${item.title}")
+                veil.animate().alpha(0.7f).setDuration(150).start()
+                playCurrent(0)
+                showOsd(false)
+            } else finishWithResult()
         }
     }
 
@@ -563,13 +600,13 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             .put("pos", (e?.position() ?: 0L) / 1000)
             .put("dur", (e?.duration() ?: 0L) / 1000)
             .put("height", e?.videoHeight() ?: 0)
-        if (userChangedEngine) r.put("engine", engineName)
+        if (userChangedEngine) { r.put("engine", engineName); r.put("engineKey", engineKey) }
         setResult(android.app.Activity.RESULT_OK, Intent().putExtra(RESULT, r.toString()))
         val box = Handoff.box
         val v = e?.view
         if (isLive && !zapPending && e is ExoEngine && e === adopted && e.isActive() && box != null && v != null && root.width > 0) {
             // il video torna nel riquadro dell'anteprima e continua lì
-            osd.visibility = View.GONE; brandView.visibility = View.GONE; zapView.visibility = View.GONE; spinner.visibility = View.GONE; veil.alpha = 0f
+            osd.visibility = View.GONE; brandView.visibility = View.GONE; zapView.visibility = View.GONE; spinner.visibility = View.GONE; veil.alpha = 0f; resView.visibility = View.GONE
             root.setBackgroundColor(Color.TRANSPARENT)
             val W = root.width; val H = root.height
             android.animation.ValueAnimator.ofFloat(0f, 1f).apply {

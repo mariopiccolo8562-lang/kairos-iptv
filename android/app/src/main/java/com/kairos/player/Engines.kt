@@ -62,10 +62,10 @@ object NoopListener : EngineListener {
 }
 
 /** Impostazioni di riproduzione scelte nell'app. */
-data class PlayPrefs(val quality: String, val buffer: String, val aspect: String, val live: Boolean = false) {
+data class PlayPrefs(val quality: String, val buffer: String, val aspect: String, val live: Boolean = false, val hw: String = "auto") {
     /** millisecondi di video da accumulare prima di partire / dopo un'interruzione.
      *  In diretta si parte prima: il cambio canale è molto più rapido. */
-    val startMs: Int get() = if (live) when (buffer) { "fast" -> 500; "stable" -> 2000; else -> 900 } else when (buffer) { "fast" -> 1200; "stable" -> 4000; else -> 2000 }
+    val startMs: Int get() = if (live) when (buffer) { "fast" -> 350; "stable" -> 1800; else -> 650 } else when (buffer) { "fast" -> 1200; "stable" -> 4000; else -> 2000 }
     val rebufferMs: Int get() = when (buffer) { "fast" -> 2500; "stable" -> 8000; else -> 4000 }
     val maxMs: Int get() = when (buffer) { "fast" -> 30000; "stable" -> 90000; else -> 50000 }
     val vlcCacheMs: Int get() = if (live) when (buffer) { "fast" -> 600; "stable" -> 3000; else -> 1200 } else when (buffer) { "fast" -> 1000; "stable" -> 5000; else -> 2500 }
@@ -144,6 +144,14 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
         val renderers = DefaultRenderersFactory(ctx)
             .setEnableDecoderFallback(true)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
+        // accelerazione hardware: "off" preferisce i decoder software, "on" quelli hardware
+        if (prefs.hw == "off" || prefs.hw == "on") {
+            val wantSw = prefs.hw == "off"
+            renderers.setMediaCodecSelector { mime, secure, tunneling ->
+                androidx.media3.exoplayer.mediacodec.MediaCodecUtil.getDecoderInfos(mime, secure, tunneling)
+                    .sortedBy { if (it.softwareOnly == wantSw) 0 else 1 }
+            }
+        }
         player = ExoPlayer.Builder(ctx, renderers)
             .setTrackSelector(selector)
             .setLoadControl(load)
@@ -313,6 +321,20 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
     }
 
     override fun videoHeight(): Int = player.videoSize.height
+    /** dimensione dei sottotitoli (1 = normale) */
+    fun setSubtitleScale(f: Float) {
+        pv.subtitleView?.setFractionalTextSize(androidx.media3.ui.SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * f)
+    }
+    /** descrizione del video in onda, es. "1080p · 50 fps · 6,2 Mbps" */
+    fun videoInfo(): String {
+        val f = player.videoFormat ?: return ""
+        val parts = mutableListOf<String>()
+        if (f.height > 0) parts.add("${f.height}p")
+        if (f.frameRate > 0) parts.add("${f.frameRate.toInt()} fps")
+        if (f.bitrate > 0) parts.add(String.format(Locale.ITALIAN, "%.1f Mbps", f.bitrate / 1_000_000.0))
+        f.sampleMimeType?.substringAfter('/')?.uppercase(Locale.ROOT)?.let { if (it.isNotBlank()) parts.add(it.replace("AVC", "H.264").replace("HEVC", "H.265")) }
+        return parts.joinToString(" · ")
+    }
     override fun release() { pv.player = null; player.release() }
 }
 
@@ -362,7 +384,7 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
     override fun play(url: String, startMs: Long) {
         this.url = url
         val m = Media(lib, Uri.parse(url))
-        m.setHWDecoderEnabled(true, false)
+        m.setHWDecoderEnabled(prefs.hw != "off", false)
         if (maxH > 0) m.addOption(":adaptive-maxheight=$maxH")
         if (startMs > 0) m.addOption(":start-time=${startMs / 1000.0}")
         mp.media = m

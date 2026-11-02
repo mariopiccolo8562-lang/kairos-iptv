@@ -243,6 +243,7 @@ canvas{display:block;width:100%}
     <div class="brand"><svg viewBox="0 0 200 200"><defs><linearGradient id="kg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><circle cx="100" cy="100" r="84" fill="none" stroke="url(#kg2)" stroke-width="7" stroke-linecap="round" stroke-dasharray="400 128" transform="rotate(-38 100 100)"/><circle cx="100" cy="100" r="70" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="1.5" stroke-dasharray="3 7"/><rect x="62" y="52" width="22" height="96" rx="4" fill="#fff"/><path d="M90 104 L128 52 H156 L116 108 Z" fill="url(#kg2)"/><path d="M104 98 L122 92 L158 148 H130 Z" fill="#fff"/><circle cx="171" cy="62" r="7" fill="#fff"/></svg><div><b class="brandName">KAIROS</b><small>CONTROL</small></div></div>
     <button class="nav on" data-v="dash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>Dashboard</button>
     <button class="nav" data-v="devices"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Dispositivi<span class="bdg" id="pendB" style="display:none"></span></button>
+    <button class="nav" data-v="msgs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messaggi</button>
     <button class="nav" data-v="activity"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Attività</button>
     <button class="nav" data-v="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Impostazioni</button>
     <div class="foot glass"><div class="mut" style="font-size:12px">App per i clienti</div><div id="dlCode" class="orb" style="font-size:20px;margin-top:6px"></div><div class="mono" id="plLink" style="font-size:11px;word-break:break-all;margin-top:4px;color:var(--mut)"></div><button class="btn sm" id="copyLink" style="margin-top:10px;width:100%">Copia link APK</button></div>
@@ -277,6 +278,23 @@ canvas{display:block;width:100%}
       <div class="filters" id="filters"></div>
       <table class="tbl"><thead><tr><th>Codice</th><th>Cliente</th><th class="hm">Dispositivo</th><th>Stato</th><th class="hm">Scadenza</th><th class="hm">Playlist</th><th class="hm">Ultimo accesso</th><th></th></tr></thead><tbody id="rows"></tbody></table>
       <div class="emptyc" id="noRows" style="display:none">Nessun dispositivo trovato</div>
+    </section>
+
+    <!-- MESSAGGI -->
+    <section class="view" id="v-msgs">
+      <div class="g2">
+        <div class="card glass">
+          <div class="hd"><h3>Nuovo messaggio<small>Compare sulle TV dei clienti all'avvio e mentre usano l'app</small></h3></div>
+          <label class="lbl">Destinatario</label><select class="inp" id="mTo"></select>
+          <label class="lbl">Titolo</label><input class="inp" id="mTitle" maxlength="80" placeholder="es. Manutenzione stasera">
+          <label class="lbl">Testo</label><textarea class="inp" id="mBody" rows="4" maxlength="600" placeholder="es. Dalle 23 alle 24 alcuni canali potrebbero non funzionare."></textarea>
+          <div class="row"><div><label class="lbl">Tipo</label><select class="inp" id="mLvl"><option value="info">Informazione</option><option value="warn">Avviso</option><option value="urgent">Urgente</option></select></div>
+          <div><label class="lbl">Visibile per</label><select class="inp" id="mDays"><option value="1">1 giorno</option><option value="3">3 giorni</option><option value="7" selected>7 giorni</option><option value="30">30 giorni</option><option value="0">Sempre</option></select></div></div>
+          <button class="btn pri" id="mSend" style="margin-top:14px">Invia messaggio</button>
+          <p class="mut" style="font-size:12px;margin-top:10px">I clienti ricevono anche da soli un avviso 2 giorni prima della scadenza dell'abbonamento.</p>
+        </div>
+        <div class="card glass"><div class="hd"><h3>Messaggi attivi<small>Puoi eliminarli in qualsiasi momento</small></h3></div><div id="mList"></div></div>
+      </div>
     </section>
 
     <!-- ATTIVITÀ -->

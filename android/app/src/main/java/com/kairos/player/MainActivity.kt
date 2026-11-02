@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         prefs = getSharedPreferences("kairos", MODE_PRIVATE)
+        applyOrientation(prefs.getString("orient", "auto") ?: "auto")
 
         root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         web = WebView(this)
@@ -295,6 +296,11 @@ class MainActivity : ComponentActivity() {
             }
         } catch (x: Exception) { handed = false }
         if (!handed) { Handoff.box = null; stopPreview(); launchPlayer(false) } // uscendo, nessun riquadro in cui tornare
+    }
+
+    /** layout orizzontale fisso (telefoni e tablet); sulle TV non cambia nulla */
+    private fun applyOrientation(mode: String) {
+        requestedOrientation = if (mode == "land") android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 
     private fun userAgent(): String = try {
@@ -785,6 +791,10 @@ class MainActivity : ComponentActivity() {
                 File(otaDir, "index.tmp").renameTo(otaFile)
                 prefs.edit().putString("ui_ver", version).putInt("ui_apk", BuildConfig.VERSION_CODE).putInt("ui_fail", 0).apply()
             } catch (e: Exception) { resetOta() }
+        }
+        @JavascriptInterface fun setOrientation(mode: String) {
+            prefs.edit().putString("orient", mode).apply()
+            runOnUiThread { applyOrientation(mode) }
         }
         @JavascriptInterface fun canInstall(): Boolean = Build.VERSION.SDK_INT < 26 || packageManager.canRequestPackageInstalls()
 
