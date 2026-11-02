@@ -79,6 +79,28 @@ Il pannello ha già le sue protezioni interne (vedi `SICUREZZA.md`). Queste aggi
    - regola personalizzata 2 — *se URI Path contiene `/panel` e Paese non è Italia → Block* (adatta i paesi alle tue esigenze).
 4. **SSL/TLS**: modalità *Full (strict)*, **Always Use HTTPS** attivo, **HSTS** attivo, TLS minimo 1.2.
 
+## 6. Aggiornamento automatico dell'app (una volta sola)
+
+Così ogni nuova versione arriva da sola su tutte le TV, senza scrivere nulla nel pannello.
+
+1. Su GitHub: foto profilo → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+   - Nome: `kairos-store`, scadenza: 1 anno
+   - Repository access: **Only select repositories** → `kairos-store`
+   - Permissions → Repository permissions → **Contents: Read and write**
+   - Genera e copia il token
+2. Nel repository **kairos-iptv** → Settings → Secrets and variables → Actions → **New repository secret**: nome `STORE_TOKEN`, valore il token copiato.
+3. (Solo se lo store ha un nome diverso da `kairos-store`) nella scheda *Variables* crea `STORE_REPO` = `tuo-utente/nome-store`.
+
+Da quel momento, quando pubblichi una versione (tag `v1.4.0`, `v1.5.0`, …):
+- l'APK viene copiato nella release fissa **kairos-tv** dello store (pubblica) con il file `kairos-tv.json`;
+- il pannello lo legge da solo (Impostazioni mostra "Aggiornamento automatico attivo");
+- le app installate propongono l'aggiornamento all'avvio e ogni 3 ore se restano accese.
+
+Link fisso dell'APK da usare ovunque (Downloader, store, sito):
+`https://github.com/TUO-UTENTE/kairos-store/releases/download/kairos-tv/kairos-tv.apk`
+
+L'interfaccia (grafica e funzioni) si aggiorna comunque da sola a ogni pubblicazione, anche senza nuovo APK.
+
 ## Come funziona per i clienti
 
 1. Installano l'app (codice Downloader) e la aprono: compare un **codice** tipo `KXAB-7Q2M`.

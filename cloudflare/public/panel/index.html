@@ -298,7 +298,8 @@ canvas{display:block;width:100%}
           <p class="mut" style="font-size:12px;margin-top:-4px">Serve solo quando passi a un nuovo dominio: le app installate si spostano da sole al nuovo indirizzo. Prima di cambiarlo assicurati che il pannello risponda già sul nuovo indirizzo.</p>
           <div class="row"><div><label class="lbl">Link download APK</label><input class="inp mono" id="sApk" placeholder="https://github.com/…/releases/latest/download/kairos.apk"></div><div><label class="lbl">Codice Downloader</label><input class="inp mono" id="sDl" placeholder="es. 1234567"></div></div>
           <label class="lbl">Ultima versione APK pubblicata</label><input class="inp mono" id="sVer" placeholder="es. 1.3.0 — la stessa che hai scritto nella release su GitHub">
-          <p class="mut" style="font-size:12px;margin-top:-4px">Quando scrivi una versione nuova, le app più vecchie propongono da sole l'aggiornamento scaricandolo dal link APK. L'interfaccia dell'app invece si aggiorna in automatico a ogni pubblicazione.</p>
+          <div id="apkAuto" class="mut" style="font-size:13px;margin:2px 0 8px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.1)"></div>
+          <p class="mut" style="font-size:12px;margin-top:-4px">Con l'aggiornamento automatico attivo non serve scrivere nulla: ogni nuova release su GitHub viene proposta da sola alle app. I due campi sopra servono solo se pubblichi l'APK a mano. L'interfaccia dell'app si aggiorna sempre in automatico.</p>
           <button class="btn pri" id="sSave" style="margin-top:14px">Salva impostazioni</button>
         </div>
         <div>

@@ -143,17 +143,19 @@ class MainActivity : ComponentActivity() {
         val fails = prefs.getInt("ui_fail", 0)
         val sameApk = prefs.getInt("ui_apk", -1) == BuildConfig.VERSION_CODE
         val useOta = otaFile.exists() && sameApk && fails < 2
-        if (otaFile.exists() && !useOta) resetOta()
+        if (otaFile.exists() && !useOta) resetOta(markBad = fails >= 2 && sameApk)
         uiOk = false
         if (useOta) {
             prefs.edit().putInt("ui_fail", fails + 1).apply()
             web.loadUrl("file://" + otaFile.absolutePath)
             // se la versione scaricata non parte entro 15 secondi, torna a quella inclusa nell'APK
-            ui.postDelayed({ if (!uiOk) { resetOta(); web.loadUrl(HOME) } }, 15_000)
+            ui.postDelayed({ if (!uiOk) { resetOta(markBad = true); web.loadUrl(HOME) } }, 15_000)
         } else web.loadUrl(HOME)
     }
 
-    private fun resetOta() {
+    /** [markBad]: la versione scaricata non partiva → non va più riapplicata (evita un ciclo di riavvii) */
+    private fun resetOta(markBad: Boolean = false) {
+        if (markBad) prefs.getString("ui_ver", null)?.let { prefs.edit().putString("ui_bad", it).apply() }
         otaDir.deleteRecursively()
         prefs.edit().remove("ui_ver").remove("ui_apk").putInt("ui_fail", 0).apply()
     }
@@ -213,7 +215,10 @@ class MainActivity : ComponentActivity() {
     /* ------------------------------------------------------------------ */
     /* Aggiornamento APK                                                   */
     /* ------------------------------------------------------------------ */
+    private val apkBusy = java.util.concurrent.atomic.AtomicBoolean(false)
+
     private fun downloadAndInstall(url: String) {
+        if (!apkBusy.compareAndSet(false, true)) return // un solo download alla volta
         thread(name = "kx-apk") {
             try {
                 val dir = if (Build.VERSION.SDK_INT >= 24) File(cacheDir, "apk") else (externalCacheDir ?: cacheDir)
@@ -233,7 +238,7 @@ class MainActivity : ComponentActivity() {
                         conn = target.openConnection() as HttpURLConnection
                         continue
                     }
-                    if (code != 200) throw Exception("HTTP $code")
+                    if (code != 200) throw Exception(if (code == 404) "file non trovato (HTTP 404): il link dell'APK non è pubblico o è sbagliato" else "HTTP $code")
                     break
                 }
                 val total = conn.contentLength.toLong()
@@ -255,21 +260,34 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 conn.disconnect()
+                // deve essere davvero un APK (un link sbagliato spesso scarica una pagina web)
+                val head = ByteArray(2)
+                java.io.FileInputStream(out).use { it.read(head) }
+                if (out.length() < 500_000 || head[0] != 'P'.code.toByte() || head[1] != 'K'.code.toByte()) {
+                    out.delete(); throw Exception("il link non porta a un file APK")
+                }
                 js("window.kxApkCb && kxApkCb(100)")
                 runOnUiThread { launchInstaller(out) }
             } catch (e: Exception) {
-                js("window.kxApkCb && kxApkCb(-1)")
+                js("window.kxApkCb && kxApkCb(-1, ${JSONObject.quote(e.message ?: e.javaClass.simpleName)})")
+            } finally {
+                apkBusy.set(false)
             }
         }
     }
 
     private fun launchInstaller(apk: File) {
         if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
-            Toast.makeText(this, "Consenti a ${getString(R.string.app_name)} di installare app, poi torna indietro", Toast.LENGTH_LONG).show()
-            try {
-                startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
-            } catch (_: Exception) {}
+            Toast.makeText(this, "Consenti a ${getString(R.string.app_name)} di installare app, poi premi Indietro", Toast.LENGTH_LONG).show()
             pendingApk = apk
+            js("window.kxApkCb && kxApkCb(-2)")
+            // Fire TV: la schermata per singola app non sempre esiste → si apre quella generale
+            val tries = listOf(
+                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")),
+                Intent(Settings.ACTION_SECURITY_SETTINGS),
+                Intent(Settings.ACTION_SETTINGS),
+            )
+            for (i in tries) { try { startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return } catch (_: Exception) {} }
             return
         }
         val uri: Uri = if (Build.VERSION.SDK_INT >= 24) FileProvider.getUriForFile(this, "$packageName.files", apk) else Uri.fromFile(apk)
@@ -448,6 +466,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         web.onResume()
         web.requestFocus()
+        js("window.kxResume && kxResume()")
         // tornando dalle impostazioni "installa app sconosciute"
         val apk = pendingApk
         if (apk != null && (Build.VERSION.SDK_INT < 26 || packageManager.canRequestPackageInstalls())) { pendingApk = null; launchInstaller(apk) }
@@ -474,7 +493,9 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface fun uiVersion(): String = prefs.getString("ui_ver", "") ?: ""
 
         /** installa una nuova versione dell'interfaccia scaricata dal pannello e la ricarica */
+        @JavascriptInterface fun uiBad(): String = prefs.getString("ui_bad", "") ?: ""
         @JavascriptInterface fun applyUi(html: String, version: String) {
+            if (version == prefs.getString("ui_bad", "")) return
             try {
                 otaDir.mkdirs()
                 File(otaDir, "index.tmp").writeText(html, Charsets.UTF_8)
@@ -485,6 +506,20 @@ class MainActivity : ComponentActivity() {
                 runOnUiThread { loadUi() }
             } catch (e: Exception) { resetOta() }
         }
+
+        /** prepara la nuova interfaccia senza ricaricare: verrà usata al prossimo avvio */
+        @JavascriptInterface fun stageUi(html: String, version: String) {
+            if (version == prefs.getString("ui_bad", "")) return
+            try {
+                otaDir.mkdirs()
+                File(otaDir, "index.tmp").writeText(html, Charsets.UTF_8)
+                val cfg = try { assets.open("www/config.js").bufferedReader().use { it.readText() } } catch (e: Exception) { "" }
+                File(otaDir, "config.js").writeText(cfg, Charsets.UTF_8)
+                File(otaDir, "index.tmp").renameTo(otaFile)
+                prefs.edit().putString("ui_ver", version).putInt("ui_apk", BuildConfig.VERSION_CODE).putInt("ui_fail", 0).apply()
+            } catch (e: Exception) { resetOta() }
+        }
+        @JavascriptInterface fun canInstall(): Boolean = Build.VERSION.SDK_INT < 26 || packageManager.canRequestPackageInstalls()
 
         /** Avvia il player nativo (ExoPlayer / VLC) */
         @JavascriptInterface fun play(payload: String) {

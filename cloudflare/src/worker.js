@@ -231,6 +231,29 @@ const DEFAULT_SETTINGS = {
   allowLocalPlaylists: true, apkUrl: '', apkVersionCode: 0, downloaderCode: '',
   serverUrl: '', showFootball: true,
 };
+/* Versione dell'APK da proporre alle app: quella pubblicata in automatico da GitHub (kairos-tv.json)
+   oppure, se più recente, quella scritta a mano nel pannello. */
+let feedMem = { t: 0, v: null };
+async function apkFeed(env) {
+  if (!env.APK_FEED) return null;
+  if (now() - feedMem.t < 5 * 60e3) return feedMem.v;
+  let v = null;
+  try {
+    const r = await fetch(env.APK_FEED, { headers: { 'User-Agent': 'KairosPanel' }, cf: { cacheTtl: 300, cacheEverything: true } });
+    if (r.ok) {
+      const j = await r.json();
+      if (+j.versionCode > 0 && /^https:\/\//.test(j.url || '')) v = { versionCode: +j.versionCode, version: String(j.version || ''), url: String(j.url), date: String(j.date || '') };
+    }
+  } catch {}
+  feedMem = { t: now(), v };
+  return v;
+}
+async function latestApk(env, s) {
+  const manual = { versionCode: +s.apkVersionCode || 0, version: s.apkVersion || '', url: s.apkUrl || '', auto: false };
+  const f = await apkFeed(env);
+  return f && f.versionCode >= manual.versionCode ? { ...f, auto: true } : manual;
+}
+
 async function getSettings(env) {
   const row = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('app').first();
   let s = {}; try { s = row ? JSON.parse(row.v) : {}; } catch {}
@@ -315,8 +338,8 @@ async function route(req, env, ctx) {
       const s = await getSettings(env);
       return json({
         ui: env.UI_VERSION ? { version: env.UI_VERSION, url: '/app/index.html' } : null,
-        apk: { versionCode: +s.apkVersionCode || 0, url: s.apkUrl || '' },
-      });
+        apk: await latestApk(env, s),
+      }, 200, { 'Cache-Control': 'no-store' });
     }
     return json({ error: 'Non trovato' }, 404);
   }
@@ -441,7 +464,7 @@ async function admin(req, env, url, ip, ctx) {
     const activity = ((await env.DB.prepare('SELECT t, type, text, ip FROM activity ORDER BY id DESC LIMIT 120').all()).results) || [];
     const sessions = (await env.DB.prepare('SELECT COUNT(*) AS n FROM sessions WHERE admin_id = ? AND expires > ?').bind(ses.admin_id, now()).first()).n;
     return json({
-      settings: await getSettings(env), devices, activity, user: who,
+      settings: await getSettings(env), devices, activity, user: who, apk: await latestApk(env, await getSettings(env)),
       security: { totp: !!ses.totp_on, encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
     });
   }

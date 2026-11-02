@@ -93,7 +93,9 @@ function loadTurnstile(key) {
 
 async function load() {
   const s = await api('GET', '/admin/state');
-  D.settings = s.settings; D.devices = s.devices; D.activity = s.activity; D.user = s.user; D.security = s.security || {};
+  D.settings = s.settings; D.devices = s.devices; D.activity = s.activity; D.user = s.user; D.security = s.security || {}; D.apk = s.apk || null;
+  const aa = document.getElementById('apkAuto');
+  if (aa) aa.innerHTML = D.apk && D.apk.auto ? `✅ <b>Aggiornamento automatico attivo</b> · versione pubblicata: <b>${esc(D.apk.version || String(D.apk.versionCode))}</b>` : D.apk && D.apk.versionCode ? `✍️ Versione impostata a mano: <b>${esc(D.apk.version || String(D.apk.versionCode))}</b> (aggiornamento automatico non attivo)` : '⚠️ Aggiornamento automatico non attivo: nessuna versione pubblicata';
   applyTheme(D.settings.accent);
   $$('.brandName').forEach((e) => (e.textContent = (D.settings.brand || 'KAIROS').toUpperCase()));
   $('#av').textContent = (D.user || 'A')[0].toUpperCase();

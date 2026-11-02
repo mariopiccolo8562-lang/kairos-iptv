@@ -561,6 +561,7 @@ img{display:block}
 .tnav .ti{width:clamp(40px,6.4vh,58px);height:clamp(40px,6.4vh,58px);border-radius:50%;display:grid;place-items:center;color:#fff;transition:background .15s,color .15s}
 .tnav .ti.cur{background:rgba(255,255,255,.18)}
 .tnav .ti svg{width:50%;height:50%}
+.tnav .ti.spin svg{animation:spin .9s linear infinite}
 .tnav .tann{max-width:28vw;overflow:hidden;white-space:nowrap;color:#bbb;font-size:13px}
 .tnav .tann .mq{display:inline-block;padding-left:100%;animation:mq 26s linear infinite}
 @media (max-width:1100px){.tnav .tann{display:none}}
@@ -589,6 +590,17 @@ img{display:block}
 .nc.t.focused .pp{outline:3px solid #fff;outline-offset:2px}
 .nc.more.focused{background:#fff;color:#000}
 .nrow h3{padding-left:14px}
+/* animazioni della copertina (dissolvenza incrociata come nelle app TV) */
+.hbg img.main{opacity:1;transform:scale(1);transition:opacity .5s ease,transform 7s cubic-bezier(.2,.6,.3,1);will-change:opacity,transform;object-fit:cover;object-position:center 20%;padding:0;filter:none}
+.hbg img.main.fade{opacity:0;transform:scale(1.06);transition:opacity .45s ease,transform .45s ease}
+.hbg img.main.ph{object-fit:contain;object-position:right center;padding:7vh 7vw 9vh 0;filter:drop-shadow(0 30px 60px rgba(0,0,0,.8))}
+.hbg img.main.lv{object-fit:contain;object-position:right center;padding:10vh 7vw 16vh 18vw;filter:drop-shadow(0 0 60px rgba(255,255,255,.15))}
+.hbg img.blur{transition:opacity .5s}
+.lite .hbg img.main.ph,.lite .hbg img.main.lv{filter:none}
+.hinfo{transition:opacity .22s ease,transform .22s ease}
+.hinfo.sw{opacity:0;transform:translateX(-14px)}
+.rows{scroll-behavior:smooth}
+.nrow{transition:opacity .3s}
 /* cassetto (categorie / righe) */
 .drawer{position:fixed;inset:0;z-index:32;display:none}
 .drawer.on{display:block}
@@ -978,7 +990,7 @@ function ensureVisible(el) {
   if (tr && tr.classList.contains('track')) {
     // stile TV: la card selezionata resta a sinistra della riga
     const x = Math.max(0, el.offsetLeft - TRACK_PAD);
-    if (Math.abs(tr.scrollLeft - x) > 1) tr.scrollTo({ left: x, behavior: NATIVE ? 'auto' : 'smooth' });
+    if (Math.abs(tr.scrollLeft - x) > 1) tr.scrollTo({ left: x, behavior: 'smooth' });
     return;
   }
   for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
@@ -1047,6 +1059,7 @@ function move(dir) {
   if (par && par.matches('.list, .dlist, .smenu') && vert) {
     let s = sib(cur, d);
     if (!s && d > 0 && par.id === 'liveList' && chRendered < S.liveIndex.length) { moreChannels(); s = sib(cur, d); }
+    if (!s && d < 0 && par.id === 'liveList' && chStart > 0) { prevChannels(); s = sib(cur, d); }
     if (s) return focus(s);
     if (d > 0) return;
   }
@@ -1080,7 +1093,7 @@ function move(dir) {
   if (best) return focus(best);
   if (dir === 'left') edgeLeft();
 }
-function edgeLeft() { const s = $('.screen.on'); if (s && !$('#drawer').classList.contains('on') && (s.classList.contains('bscr') || s.id === 'live')) openDrawer(); }
+function edgeLeft() { const s = $('.screen.on'); if (s && layer() === s && (s.classList.contains('bscr') || s.id === 'live')) openDrawer(); }
 let okDown = 0, longFired = false;
 document.addEventListener('keydown', (e) => {
   const k = e.key, kc = e.keyCode;
@@ -1097,7 +1110,7 @@ document.addEventListener('keydown', (e) => {
     else if (!longFired && Date.now() - okDown > 650) { longFired = true; cur && cur.dispatchEvent(new CustomEvent('klong', { bubbles: true })); }
   }
   else if (k === 'Escape' || k === 'GoBack' || k === 'BrowserBack' || kc === 4 || kc === 461 || kc === 10009 || (k === 'Backspace' && !inInput)) { e.preventDefault(); back(); }
-  else if (k === 'ContextMenu' && !inInput) { e.preventDefault(); const s = $('.screen.on'); if (s && (s.classList.contains('bscr') || s.id === 'live')) openDrawer(); }
+  else if (k === 'ContextMenu' && !inInput) { e.preventDefault(); edgeLeft(); }
   else if (/^[0-9]$/.test(k) && !inInput && $('#live').classList.contains('on')) numZap(k);
 });
 document.addEventListener('keyup', (e) => {
@@ -1127,6 +1140,7 @@ window.kxBack = () => {
 const LOGO_SVG = (id) => `<svg class="tlogo" viewBox="0 0 200 200"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><circle cx="100" cy="100" r="84" fill="none" stroke="url(#${id})" stroke-width="9" stroke-linecap="round" stroke-dasharray="400 128" transform="rotate(-38 100 100)"/><rect x="62" y="52" width="22" height="96" rx="4" fill="#fff"/><path d="M90 104 L128 52 H156 L116 108 Z" fill="url(#${id})"/><path d="M104 98 L122 92 L158 148 H130 Z" fill="#fff"/><circle cx="171" cy="62" r="8" fill="#fff"/></svg>`;
 const TABS = [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta']];
 const NAV_IC = {
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>',
   favs: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>',
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
@@ -1135,17 +1149,37 @@ let navSeq = 0;
 function navHTML(curKey) {
   return `<nav class="tnav">${LOGO_SVG('kgN' + ++navSeq)}<span class="tdate"></span>${S.settings.announcement ? `<span class="tann"><span class="mq">${esc(S.settings.announcement)}</span></span>` : ''}
     <div class="ttabs">${TABS.map(([k, l]) => `<div class="tt ${k === curKey ? 'cur' : ''}" data-f data-go="${k}">${l}</div>`).join('')}</div>
-    <div class="ticons">${['search', 'favs', 'settings'].map((k) => `<div class="ti ${k === curKey ? 'cur' : ''}" data-f data-go="${k}" title="${k === 'search' ? 'Cerca' : k === 'favs' ? 'La mia lista' : 'Impostazioni'}">${NAV_IC[k]}</div>`).join('')}</div></nav>`;
+    <div class="ticons">${['refresh', 'search', 'favs', 'settings'].map((k) => `<div class="ti ${k === curKey ? 'cur' : ''}${k === 'refresh' && S.refreshing ? ' spin' : ''}" data-f data-go="${k}" title="${{ refresh: 'Aggiorna contenuti', search: 'Cerca', favs: 'La mia lista', settings: 'Impostazioni' }[k]}">${NAV_IC[k]}</div>`).join('')}</div></nav>`;
 }
 function fillNav(id) {
   const slot = $('#' + id + ' .navslot'); if (!slot) return;
   slot.innerHTML = navHTML(id === 'cat' ? $('#cat')._kind : id); tick();
 }
 
+/* ---------------- pulsante "Aggiorna contenuti" ---------------- */
+async function manualRefresh() {
+  if (S.refreshing || S.manualRef) return toast('Aggiornamento già in corso…');
+  S.manualRef = true;
+  const spin = (on) => $$('.ti[data-go="refresh"]').forEach((e) => e.classList.toggle('spin', on));
+  spin(true); toast('Aggiorno i contenuti…', 60000);
+  try {
+    try { if (!S.demo && baseServer()) await register(); } catch {}
+    S.refreshPartial = false;
+    if (S.demo) setLib(demoLib()); else { S.libSig = ''; await refreshLibrary(true); }
+    loadEvents();
+    const scr = $('.screen.on'), wasOn = cur && cur.closest('.tnav') ? cur.dataset.go : null;
+    if (scr && scr.classList.contains('bscr')) buildBrowse(scr, scr._kind);
+    else if (scr && scr.id === 'live') renderChannels();
+    if (scr) { const f = (wasOn && scr.querySelector(`.tnav [data-go="${wasOn}"]`)) || scr.querySelector('[data-autof]'); f && focus(f, true); }
+    toast(S.loadErrors && S.loadErrors.length ? (S.refreshPartial ? 'Una playlist non risponde, tengo i contenuti salvati: ' : 'Errore: ') + S.loadErrors[0] : `✓ Contenuti aggiornati · ${S.lib.live.length.toLocaleString('it')} canali · ${S.lib.movies.length.toLocaleString('it')} film · ${S.lib.series.length.toLocaleString('it')} serie`, 4000);
+  } finally { S.manualRef = false; spin(false); }
+}
+
 /* ---------------- cassetto categorie / righe ---------------- */
-let drawerPick = null, drawerWasPreview = null;
+let drawerPick = null, drawerWasPreview = null, drawerBack = null;
 function openDrawer() {
-  const scr = $('.screen.on'); if (!scr) return;
+  const scr = $('.screen.on'); if (!scr || layer() !== scr) return;
+  drawerBack = cur;
   let title = 'CATEGORIE', items = [], selIdx = 0;
   if (scr.id === 'live') {
     items = liveCatList().map((c) => ({ label: c.label, count: c.count, v: c.name }));
@@ -1170,7 +1204,7 @@ function closeDrawer(picked) {
   $('#drawer').classList.remove('on');
   const wp = drawerWasPreview; drawerWasPreview = null;
   if (wp && $('#live').classList.contains('on')) nativePreview(wp);
-  if (!picked) { const s = $('.screen.on'); const f = s && (s.querySelector('.focused') || s.querySelector('#liveList .ch') || firstRowCard(s)); if (f) focus(f, true); }
+  if (!picked) { const s = $('.screen.on'); const f = (drawerBack && s && s.contains(drawerBack) && isVis(drawerBack) && drawerBack) || (s && (s.querySelector('#liveList .ch') || firstRowCard(s))); if (f) focus(f, true); }
 }
 function jumpToRow(scr, ri) {
   while (scr._rendered <= ri && scr._rendered < scr._rows.length) moreRows(scr, 5);
@@ -1205,6 +1239,7 @@ function back() {
   if (prev) { if (prev === 'home') buildBrowse($('#home'), 'all'); if ($('#live').classList.contains('on')) stopPreview(); show(prev, false); }
 }
 function go(where, fromNav) {
+  if (where === 'refresh') return manualRefresh();
   if (fromNav) S.stack = where === 'home' ? [] : ['home'];
   const sh = (id) => (fromNav ? show(id, false) : show(id));
   if (where === 'home') { buildBrowse($('#home'), 'all'); return sh('home'); }
@@ -1366,9 +1401,9 @@ async function loadXtream(p) {
   if (!ls.length && !vs.length && !ss.length) throw new Error('nessun contenuto: controlla server, utente e password');
   const U = encodeURIComponent(p.username), P = encodeURIComponent(p.password), pl = p.id;
   return {
-    live: ls.map((s, i) => ({ id: 'x' + s.stream_id, k: 'l', sid: s.stream_id, num: +s.num || i + 1, name: s.name, logo: s.stream_icon, group: lc.get(String(s.category_id)) || 'Altro', url: `${h}/live/${U}/${P}/${s.stream_id}.m3u8`, alt: `${h}/live/${U}/${P}/${s.stream_id}.ts`, pl })),
-    movies: vs.map((s) => ({ id: 'xm' + s.stream_id, k: 'm', vid: s.stream_id, name: s.name, poster: s.stream_icon, group: vc.get(String(s.category_id)) || 'Altro', rating: s.rating, added: +s.added || 0, url: `${h}/movie/${U}/${P}/${s.stream_id}.${s.container_extension || 'mp4'}`, pl })),
-    series: ss.map((s) => ({ id: 'xs' + s.series_id, k: 's', seriesId: s.series_id, name: s.name, poster: s.cover, group: sc.get(String(s.category_id)) || 'Altro', rating: s.rating, plot: s.plot, genre: s.genre, cast: s.cast, added: +s.last_modified || 0, backdrop: (Array.isArray(s.backdrop_path) ? s.backdrop_path[0] : s.backdrop_path) || '', year: (s.releaseDate || s.release_date || '').slice(0, 4), pl })),
+    live: ls.map((s, i) => ({ id: 'x' + s.stream_id, k: 'l', sid: s.stream_id, num: +s.num || i + 1, name: String(s.name ?? ''), logo: s.stream_icon, group: lc.get(String(s.category_id)) || 'Altro', url: `${h}/live/${U}/${P}/${s.stream_id}.m3u8`, alt: `${h}/live/${U}/${P}/${s.stream_id}.ts`, pl })),
+    movies: vs.map((s) => ({ id: 'xm' + s.stream_id, k: 'm', vid: s.stream_id, name: String(s.name ?? ''), poster: s.stream_icon, group: vc.get(String(s.category_id)) || 'Altro', rating: s.rating, added: +s.added || 0, url: `${h}/movie/${U}/${P}/${s.stream_id}.${s.container_extension || 'mp4'}`, pl })),
+    series: ss.map((s) => ({ id: 'xs' + s.series_id, k: 's', seriesId: s.series_id, name: String(s.name ?? ''), poster: s.cover, group: sc.get(String(s.category_id)) || 'Altro', rating: s.rating, plot: s.plot, genre: s.genre, cast: s.cast, added: +s.last_modified || 0, backdrop: (Array.isArray(s.backdrop_path) ? s.backdrop_path[0] : s.backdrop_path) || '', year: (s.releaseDate || s.release_date || '').slice(0, 4), pl })),
   };
 }
 const activePlaylists = () => [...S.playlists, ...(S.settings.allowLocalPlaylists ? S.local : [])].map((p) => ({ ...p, id: p.id || 'p' + hashStr((p.url || '') + (p.host || '') + (p.username || '')) }));
@@ -1387,7 +1422,8 @@ async function fetchLibrary(onMsg) {
     } catch (e) { S.loadErrors.push(`${p.name}: ${e.message || 'errore'}`); return null; }
   }));
   const lib = { live: [], movies: [], series: [] };
-  for (const part of parts) if (part) { lib.live.push(...part.live); lib.movies.push(...part.movies); lib.series.push(...part.series); }
+  // niente push(...lista): con 150.000+ titoli supererebbe il limite dello stack
+  for (const part of parts) if (part) for (const k of ['live', 'movies', 'series']) { const src = part[k], dst = lib[k]; for (let i = 0; i < src.length; i++) dst.push(src[i]); }
   return { lib, ok: parts.some(Boolean), total: all.length };
 }
 async function loadLibrary() {
@@ -1405,6 +1441,8 @@ async function refreshLibrary(manual) {
   try {
     const r = await fetchLibrary();
     if (!r.ok) { if (manual) toast('Aggiornamento non riuscito: ' + (S.loadErrors[0] || ''), 5000); return; }
+    // se una playlist non ha risposto si tiene la versione in memoria (altrimenti i suoi contenuti sparirebbero)
+    if (S.loadErrors.length) { if (manual) S.refreshPartial = true; return; }
     const sig = libSig(r.lib);
     if (sig !== S.libSig) {
       setLib(r.lib); S.libSig = sig;
@@ -1415,9 +1453,11 @@ async function refreshLibrary(manual) {
   } finally { S.refreshing = false; }
 }
 function libSig(lib) {
-  let s = `${lib.live.length}|${lib.movies.length}|${lib.series.length}|`;
-  for (const arr of [lib.live, lib.movies, lib.series]) for (let i = 0; i < arr.length; i += Math.max(1, Math.floor(arr.length / 60))) s += arr[i].id + arr[i].name;
-  return hashStr(s);
+  let h = 2166136261;
+  const add = (t) => { t = String(t || ''); for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } };
+  add(`${lib.live.length}|${lib.movies.length}|${lib.series.length}`);
+  for (const arr of [lib.live, lib.movies, lib.series]) for (const x of arr) { add(x.id); add(x.url); add(x.name); }
+  return (h >>> 0).toString(36);
 }
 /* cache della libreria: IndexedDB, oppure file dell'app se IndexedDB non è disponibile */
 const LibCache = {
@@ -1456,11 +1496,94 @@ function setLib(lib) {
   lib.live.forEach((c, i) => { c.num = c.num || i + 1; c.k = 'l'; });
   lib.movies.forEach((x) => (x.k = 'm'));
   lib.series.forEach((x) => (x.k = 's'));
-  const cats = (arr) => { const m = new Map(); for (const x of arr) m.set(x.group, (m.get(x.group) || 0) + 1); return [...m].map(([name, count]) => ({ name, count })); };
-  S.lib = { live: lib.live, movies: lib.movies, series: lib.series, liveCats: cats(lib.live), movieCats: cats(lib.movies), seriesCats: cats(lib.series) };
+  S.byGroup = new Map();
+  const cats = (arr, k) => { const m = new Map(); for (const x of arr) { let g = S.byGroup.get(k + x.group); if (!g) S.byGroup.set(k + x.group, (g = [])); g.push(x); m.set(x.group, (m.get(x.group) || 0) + 1); } return [...m].map(([name, count]) => ({ name, count })); };
+  S.lib = { live: lib.live, movies: lib.movies, series: lib.series, liveCats: cats(lib.live, 'l'), movieCats: cats(lib.movies, 'm'), seriesCats: cats(lib.series, 's') };
   S.byId = new Map();
   for (const arr of [lib.live, lib.movies, lib.series]) for (const x of arr) S.byId.set(x.id, x);
   S.plMap = new Map(activePlaylists().map((p) => [p.id, { ...p, host: fixUrl(p.host) }]));
+  applyLogos(lib.live);
+}
+/* ---------------- loghi automatici dei canali (banca dati pubblica iptv-org) ---------------- */
+const LOGO_DB = 'https://iptv-org.github.io/api/';
+const logoMap = store.get('logoMap', {}); // "PAESE|nome normalizzato" -> url del logo ('' = non trovato)
+const CC3 = { ITA: 'IT', UK: 'GB', USA: 'US', ESP: 'ES', FRA: 'FR', GER: 'DE', DEU: 'DE', ALB: 'AL', POR: 'PT', NLD: 'NL', POL: 'PL', ROM: 'RO', TUR: 'TR', SUI: 'CH', AUT: 'AT', BEL: 'BE', GRE: 'GR' };
+const RX_CC = /^[\s|[\](){}#*.]*([A-Z]{2}|ITA|UK|USA|ESP|FRA|GER|DEU|ALB|POR|NLD|POL|ROM|TUR|SUI|AUT|BEL|GRE)\s*[|:\])-]+\s*/;
+const RX_QUAL = /\b(fhd|uhd|hd|sd|4k|8k|hevc|h ?26[45]|1080[pi]?|720p?|576[pi]?|480p?|2160p?|\d{2}fps|fps|backup|bkp|raw|multi|vip|hq|lq|low|high|test|new|nuovo|orig|original|feed|direct|dash)\b/g;
+function logoKey(name) {
+  let s = String(name || '').normalize('NFKD').replace(/[̀-ͯ]/g, '');
+  let cc = '';
+  const m = s.match(RX_CC);
+  if (m) { cc = CC3[m[1]] || m[1]; s = s.slice(m[0].length); }
+  s = s.toLowerCase().replace(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}/g, ' ').replace(/&/g, ' and ').replace(RX_QUAL, ' ').replace(/[^a-z0-9+]+/g, '');
+  return { cc, key: s.length >= 2 ? s : '' };
+}
+function applyLogos(list, dom) {
+  let n = 0; const upd = dom ? new Map() : null;
+  if (store.get('autoLogo', true) === false) return 0;
+  for (const ch of list) {
+    if (ch.logo && !ch.logoBad) continue;
+    const k = logoKey(ch.name); if (!k.key) continue;
+    const u = logoMap[k.cc + '|' + k.key];
+    if (u && u !== ch.logo) {
+      ch.logo = u; ch.logoBad = false; ch.autoLogo = 1; n++;
+      if (upd) upd.set(ch.id, ch);
+    }
+  }
+  if (upd && upd.size) for (const e of document.querySelectorAll('[data-lg]')) { const ch = upd.get(e.dataset.lg); if (ch) e.innerHTML = logoHTML(ch); }
+  return n;
+}
+/* un logo della playlist che non si carica viene sostituito dalla ricerca automatica */
+let logoBadT;
+window.kxLogoBad = (id, img) => {
+  const ch = S.byId && S.byId.get(id);
+  if (img) img.replaceWith(document.createTextNode(((ch && ch.name) || '?').replace(RX_CC, '').trim().slice(0, 2).toUpperCase()));
+  if (!ch || ch.autoLogo || ch.logoBad) return;
+  ch.logoBad = true;
+  if (applyLogos([ch], true)) return;
+  clearTimeout(logoBadT); logoBadT = setTimeout(autoLogos, 4000);
+};
+async function autoLogos() {
+  if (S.demo || S.logoRun || store.get('autoLogo', true) === false || !S.lib.live.length) return;
+  // le ricerche andate a vuoto si ripetono dopo 7 giorni (la banca dati viene aggiornata spesso)
+  if (Date.now() - store.get('logoDbT', 0) > 7 * 864e5) for (const k in logoMap) if (!logoMap[k]) delete logoMap[k];
+  const need = new Map();
+  for (const ch of S.lib.live) {
+    if (ch.logo && !ch.logoBad) continue;
+    const k = logoKey(ch.name); if (!k.key) continue;
+    const mk = k.cc + '|' + k.key;
+    if (!(mk in logoMap)) need.set(mk, k);
+  }
+  if (!need.size) return;
+  S.logoRun = true;
+  try {
+    const [chs, logos] = await Promise.all([getText(LOGO_DB + 'channels.json').then(JSON.parse), getText(LOGO_DB + 'logos.json').then(JSON.parse)]);
+    const best = new Map();
+    for (const l of logos) {
+      if (!l || !l.url) continue;
+      const sc = (l.feed ? 0 : 8) + (l.in_use === false ? 0 : 4) + (/png|svg|webp/i.test(l.format || '') ? 2 : 0) + ((l.width || 0) >= (l.height || 0) ? 1 : 0);
+      const b = best.get(l.channel); if (!b || sc > b.sc) best.set(l.channel, { sc, url: l.url });
+    }
+    const wanted = new Set([...need.values()].map((k) => k.key)), idx = new Map();
+    for (const c of chs) {
+      const lg = best.get(c.id); if (!lg) continue;
+      for (const n of [c.name, ...(c.alt_names || [])]) {
+        const k = logoKey(n).key; if (!k || !wanted.has(k)) continue;
+        let a = idx.get(k); if (!a) idx.set(k, (a = []));
+        a.push({ cc: c.country, closed: c.closed ? 1 : 0, url: lg.url });
+      }
+    }
+    for (const [mk, k] of need) {
+      const a = idx.get(k.key);
+      if (!a) { logoMap[mk] = ''; continue; }
+      const want = k.cc || 'IT';
+      a.sort((x, y) => (+(y.cc === want) - +(x.cc === want)) || (x.closed - y.closed));
+      logoMap[mk] = a[0].url;
+    }
+    store.set('logoMap', logoMap); store.set('logoDbT', Date.now());
+    const n = applyLogos(S.lib.live, true);
+    if (n) { (window.requestIdleCallback || setTimeout)(() => LibCache.save(S.lib), { timeout: 5000 }); toast(`Trovati ${n.toLocaleString('it')} loghi dei canali`); }
+  } catch {} finally { S.logoRun = false; }
 }
 const updFavCount = () => {};
 
@@ -1546,7 +1669,7 @@ function playUrl(v, item, box) {
 /* =====================================================================
    LIVE TV
    ===================================================================== */
-const logoHTML = (c) => c.logo ? `<img loading="lazy" decoding="async" src="${esc(c.logo)}" onerror="this.replaceWith(document.createTextNode('${esc(c.name.slice(0, 2).toUpperCase())}'))">` : esc(c.name.slice(0, 2).toUpperCase());
+const logoHTML = (c) => c.logo ? `<img loading="lazy" decoding="async" src="${esc(c.logo)}" onerror="kxLogoBad('${esc(c.id)}',this)">` : esc(c.name.replace(RX_CC, '').trim().slice(0, 2).toUpperCase());
 function liveCatList() {
   return [{ name: 'all', label: 'Tutti i canali', count: S.lib.live.length }, { name: 'fav', label: '★ Preferiti', count: S.lib.live.filter((c) => S.favs.has(c.id)).length }, ...S.lib.liveCats.map((c) => ({ ...c, label: c.name }))];
 }
@@ -1576,25 +1699,51 @@ function setMeasuredQuality(id, h) {
   $$(`.qb[data-q="${CSS.escape(id)}"]`).forEach((e) => { e.className = 'qb q' + q; e.textContent = q; });
 }
 window.kxPreviewInfo = (id, h) => setMeasuredQuality(id, +h);
-let chRendered = 0;
-function renderChannels() {
+let chRendered = 0, chStart = 0; // finestra di canali disegnati: [chStart, chRendered)
+function renderChannels(from = 0) {
   const c = S.liveCat;
-  S.liveIndex = c === 'all' ? S.lib.live : c === 'fav' ? S.lib.live.filter((x) => S.favs.has(x.id)) : S.lib.live.filter((x) => x.group === c);
+  S.liveIndex = c === 'all' ? S.lib.live : c === 'fav' ? S.lib.live.filter((x) => S.favs.has(x.id)) : (S.byGroup && S.byGroup.get('l' + c)) || S.lib.live.filter((x) => x.group === c);
   $('#liveCatName').textContent = c === 'all' ? 'Tutti i canali' : c === 'fav' ? '★ Preferiti' : c;
   $('#liveCatCount').textContent = S.liveIndex.length.toLocaleString('it');
   $('#liveList').scrollTop = 0;
   $('#liveList').innerHTML = S.liveIndex.length ? '' : '<div class="mut" style="padding:30px;text-align:center">Nessun canale</div>';
-  chRendered = 0; moreChannels();
+  chStart = chRendered = Math.max(0, Math.min(from, S.liveIndex.length - 1));
+  moreChannels();
   const f = $('#liveList .ch'); if (f) f.setAttribute('data-autof', '');
 }
 const nowOf = (ch) => { const e = S.epg.get(ch.id); if (!e) return null; const t = Date.now(); return e.items.find((x) => x.start <= t && x.end > t) || null; };
+function chHTML(ch, i) {
+  const n = nowOf(ch);
+  return `<div class="ch ${S.previewing && S.previewing.id === ch.id ? 'playing' : ''}" data-f data-i="${i}"><div class="lg" data-lg="${esc(ch.id)}">${logoHTML(ch)}</div><div class="nm"><b>${esc(ch.name)}</b><small>${qBadge(ch)}<span data-now="${esc(ch.id)}">${esc(n ? n.title : ch.group || '')}</span></small></div><span class="cn">${ch.num}</span><svg class="star ${S.favs.has(ch.id) ? 'on' : ''}" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></div>`;
+}
+const CH_MAX = 480;
 function moreChannels() {
   const list = $('#liveList'), slice = S.liveIndex.slice(chRendered, chRendered + 120);
-  const html = slice.map((ch, i) => { const n = nowOf(ch); return `<div class="ch ${S.previewing && S.previewing.id === ch.id ? 'playing' : ''}" data-f data-i="${chRendered + i}"><div class="lg">${logoHTML(ch)}</div><div class="nm"><b>${esc(ch.name)}</b><small>${qBadge(ch)}<span data-now="${esc(ch.id)}">${esc(n ? n.title : ch.group || '')}</span></small></div><span class="cn">${ch.num}</span><svg class="star ${S.favs.has(ch.id) ? 'on' : ''}" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></div>`; }).join('');
-  list.insertAdjacentHTML('beforeend', html);
+  if (!slice.length) return;
+  list.insertAdjacentHTML('beforeend', slice.map((ch, i) => chHTML(ch, chRendered + i)).join(''));
   chRendered += slice.length;
+  // tiene nel DOM al massimo ~480 righe: quelle troppo in alto si tolgono (la lista resta leggera)
+  if (chRendered - chStart > CH_MAX) {
+    const drop = chRendered - chStart - CH_MAX, h0 = list.scrollHeight;
+    for (let k = 0; k < drop; k++) { const e = list.firstElementChild; if (!e || e === cur) break; e.remove(); chStart++; }
+    list.scrollTop -= h0 - list.scrollHeight;
+  }
 }
-$('#liveList').addEventListener('scroll', (e) => { const l = e.target; if (l.scrollTop + l.clientHeight > l.scrollHeight - 500 && chRendered < S.liveIndex.length) moreChannels(); });
+function prevChannels() {
+  if (chStart <= 0) return;
+  const list = $('#liveList'), from = Math.max(0, chStart - 120), slice = S.liveIndex.slice(from, chStart), h0 = list.scrollHeight;
+  list.insertAdjacentHTML('afterbegin', slice.map((ch, i) => chHTML(ch, from + i)).join(''));
+  list.scrollTop += list.scrollHeight - h0;
+  chStart = from;
+  if (chRendered - chStart > CH_MAX) {
+    for (let k = chRendered - chStart - CH_MAX; k > 0; k--) { const e = list.lastElementChild; if (!e || e === cur) break; e.remove(); chRendered--; }
+  }
+}
+function chEl(i) {
+  if (i < chStart || i >= chRendered) renderChannels(Math.max(0, i - 8));
+  return $(`#liveList .ch[data-i="${i}"]`);
+}
+$('#liveList').addEventListener('scroll', (e) => { const l = e.target; if (l.scrollTop + l.clientHeight > l.scrollHeight - 500 && chRendered < S.liveIndex.length) moreChannels(); else if (l.scrollTop < 300 && chStart > 0) prevChannels(); });
 /* OK su un canale: prima volta anteprima nel riquadro, seconda volta schermo intero */
 $('#liveList').addEventListener('click', (e) => {
   const el = e.target.closest('.ch'); if (!el) return;
@@ -1610,6 +1759,7 @@ document.addEventListener('kfocus', (e) => {
   const el = e.target;
   if (!el.classList.contains('ch') || !el.closest('#liveList')) return;
   if (+el.dataset.i > chRendered - 12 && chRendered < S.liveIndex.length) moreChannels();
+  else if (+el.dataset.i < chStart + 12 && chStart > 0) prevChannels();
   clearTimeout(infoT);
   infoT = setTimeout(() => { const ch = S.liveIndex[+el.dataset.i]; if (ch && cur === el) showInfo(ch); }, 260);
 });
@@ -1704,8 +1854,7 @@ function showInfo(ch) {
 function focusChannel(ch, play) {
   if (!S.liveIndex.includes(ch)) { S.liveCat = 'all'; renderChannels(); }
   const i = S.liveIndex.indexOf(ch); if (i < 0) return;
-  while (chRendered <= i && chRendered < S.liveIndex.length) moreChannels();
-  const el = $(`#liveList .ch[data-i="${i}"]`); el && focus(el, true);
+  const el = chEl(i); el && focus(el, true);
   if (play) preview(ch);
 }
 let numBuf = '', numT;
@@ -1718,9 +1867,7 @@ function numZap(d) {
     if (!ch) return toast('Canale non trovato');
     if ($('#fs').classList.contains('on')) return openFs(ch, 'live');
     if (!S.liveIndex.includes(ch)) { S.liveCat = 'all'; renderChannels(); }
-    const i = S.liveIndex.indexOf(ch);
-    while (chRendered <= i && chRendered < S.liveIndex.length) moreChannels();
-    const el = $(`#liveList .ch[data-i="${i}"]`); el && focus(el, true);
+    const el = chEl(S.liveIndex.indexOf(ch)); el && focus(el, true);
     preview(ch);
   }, 1300);
 }
@@ -1737,18 +1884,23 @@ function nativePlay(item, kind, fromSec) {
   if (kind === 'live') {
     const list = S.liveIndex.length && S.liveIndex.includes(item) ? S.liveIndex : S.lib.live;
     index = Math.max(0, list.indexOf(item));
-    items = list.map((c) => ({ id: c.id, t: c.name, u: c.url, a: c.alt || '', n: c.num || 0, g: c.group || '' }));
+    // al player si passa al massimo una finestra di 3000 canali attorno a quello scelto (liste enormi = JSON enorme)
+    let from = 0, sub = list;
+    if (list.length > 3000) { from = Math.max(0, Math.min(index - 1500, list.length - 3000)); sub = list.slice(from, from + 3000); index -= from; }
+    items = sub.map((c) => ({ id: c.id, t: c.name, u: c.url, a: c.alt || '', n: c.num || 0, g: c.group || '' }));
   } else items = [{ id: item.id, t: item.name, u: item.url, a: '', n: 0, g: item.group || '' }];
   const stored = kind === 'live' ? 0 : store.get('pos', {})[item.id] || 0;
   const start = fromSec != null ? fromSec : stored;
   try {
     NATIVE.play(JSON.stringify({ kind, items, index, start: Math.floor(start * 1000), engine: P.engine, quality: P.quality, buffer: P.buffer, aspect: P.aspect, brand: S.settings.brand || 'KAIROS' }));
   } catch (e) { return false; }
+  S.inPlayer = true;
   if (kind === 'live') { S.playingLive = item; addRecent(item, 'live'); }
   return true;
 }
 // chiamata dall'app quando si chiude il player nativo
 window.kxPlayerClosed = (r) => {
+  S.inPlayer = false;
   try { r = typeof r === 'string' ? JSON.parse(r) : r; } catch { return; }
   if (!r) return;
   if (r.engine) { const P = playPrefs(); P.engine = r.engine; store.set('play', P); }
@@ -1866,9 +2018,10 @@ function openItem(x) {
   if (isLiveItem(x)) { S.liveCat = 'all'; renderLive(); show('live'); setTimeout(() => focusChannel(x, true), 80); return; }
   openDetail(x);
 }
-let lastFocusBeforeDetail = null;
+let lastFocusBeforeDetail = null, detailTok = 0;
 async function openDetail(x) {
   lastFocusBeforeDetail = cur;
+  const tok = ++detailTok, alive = () => tok === detailTok && $('#detail').classList.contains('on');
   const isSeries = isSeriesItem(x);
   $('#dBd').style.backgroundImage = x.poster ? `url("${x.poster}")` : '';
   const render = (extra = {}) => {
@@ -1898,18 +2051,19 @@ async function openDetail(x) {
   setTimeout(() => focus($('#dPlay') || $('#dFav'), true), 80);
 
   if (!isSeries && xtOf(x) && x.vid && !x.demo) {
-    try { const p = xtOf(x), j = await getJSON(`${xtBase(p)}&action=get_vod_info&vod_id=${x.vid}`); const i = j.info || {}; render({ plot: i.plot || i.description, cast: i.cast, genre: i.genre, duration: i.duration, year: (i.releasedate || '').slice(0, 4) }); focus($('#dPlay'), true); } catch {}
+    try { const p = xtOf(x), j = await getJSON(`${xtBase(p)}&action=get_vod_info&vod_id=${x.vid}`); if (!alive()) return; const i = j.info || {}; render({ plot: i.plot || i.description, cast: i.cast, genre: i.genre, duration: i.duration, year: (i.releasedate || '').slice(0, 4) }); focus($('#dPlay'), true); } catch {}
   }
   if (isSeries) {
     let eps = x.episodes || [];
     if (xtOf(x) && x.seriesId && !eps.length) {
       try {
         const p = xtOf(x), j = await getJSON(`${xtBase(p)}&action=get_series_info&series_id=${x.seriesId}`);
+        if (!alive()) return;
         const U = encodeURIComponent(p.username), P = encodeURIComponent(p.password);
         eps = Object.values(j.episodes || {}).flat().map((e) => ({ id: 'xe' + e.id, season: +e.season, ep: +e.episode_num, title: e.title, url: `${p.host}/series/${U}/${P}/${e.id}.${e.container_extension || 'mp4'}` }));
         x.episodes = eps;
         const i = j.info || {}; render({ plot: i.plot, cast: i.cast, genre: i.genre, year: (i.releaseDate || '').slice(0, 4) });
-      } catch { $('#dEps').innerHTML = '<div class="mut">Episodi non disponibili</div>'; return; }
+      } catch { if (alive() && $('#dEps')) $('#dEps').innerHTML = '<div class="mut">Episodi non disponibili</div>'; return; }
     }
     const seasons = [...new Set(eps.map((e) => e.season))].sort((a, b) => a - b);
     const showSeason = (s) => {
@@ -1960,42 +2114,60 @@ function openFolder(f) {
   if (f.kind === 'live') { S.liveCat = f.name; renderLive(); show('live'); return; }
   openVod(f.kind, f.name);
 }
+/* contenuti per adulti: mai nella Home né tra i consigliati (restano nella loro categoria) */
+const RX_ADULT_G = /(\bxxx\b|adult|adulti|\bporn|erotic|erotik|hentai|\b18\s*\+|\+\s*18\b|\bvm\s*18\b|for adults|\bsexy?\b|\bhot\s*club\b|playboy|brazzers|private\s*tv)/i;
+const RX_ADULT_N = /(\bxxx\b|\bporn|hentai|brazzers|playboy\s*tv|\b18\s*\+)/i;
+function isAdult(x) {
+  if (!x) return false;
+  if (x._ad === undefined) x._ad = RX_ADULT_G.test(x.group || '') || RX_ADULT_N.test(x.name || '');
+  return x._ad;
+}
+const showAdult = () => store.get('adultHome', false) === true;
+const safe = (arr) => (showAdult() ? arr : arr.filter((x) => !isAdult(x)));
+const safeCats = (cats) => (showAdult() ? cats : cats.filter((c) => !RX_ADULT_G.test(c.name)));
+function upcomingEvents() {
+  const t = Date.now();
+  return (S.events || []).filter((e) => e.live || +new Date(e.start) > t - 150 * 60e3).sort((a, b) => (+!!b.live - +!!a.live) || (+new Date(a.start) - +new Date(b.start)));
+}
 function makeRows(kind) {
   const L = S.lib, R = [];
-  // cartelle in primo piano
-  if (kind === 'all' && S.events && S.events.length && S.settings.showFootball !== false) R.push({ title: 'Prossimi eventi · Calcio', type: 'ev', items: S.events });
+  // eventi sportivi sempre per primi nella Home
+  const ev = kind === 'all' && S.settings.showFootball !== false ? upcomingEvents() : [];
+  if (ev.length) R.push({ title: ev.some((e) => e.live) ? '● In corso e prossimi eventi sportivi' : 'Prossimi eventi sportivi', type: 'ev', items: ev });
   const inKind = (x) => kind === 'all' || (kind === 'movies' ? x.k === 'm' : x.k === 's');
   let rec = S.recent.map((r) => S.byId && S.byId.get(r.id)).filter((x) => x && inKind(x));
   if (S.demo && !rec.length) rec = [L.movies[2], L.series[0], L.movies[5], L.live[0], L.movies[9], L.series[3]].filter((x) => x && inKind(x));
   if (rec.length) R.push({ title: 'Continua a guardare', type: 'cont', items: rec });
   if (kind === 'all' && L.live.length) {
-    const lv = S.favs.size ? [...L.live.filter((c) => S.favs.has(c.id)), ...L.live.filter((c) => !S.favs.has(c.id))] : L.live;
+    const base = safe(L.live);
+    const lv = S.favs.size ? [...base.filter((c) => S.favs.has(c.id)), ...base.filter((c) => !S.favs.has(c.id))] : base;
     R.push({ title: 'In diretta ora', sub: L.live.length.toLocaleString('it') + ' canali', type: 'live', items: lv.slice(0, 30), more: { go: 'live' } });
   }
-  const topSrc = kind === 'series' ? L.series : L.movies;
-  const top = [...topSrc].filter((x) => x.poster).sort((a, b) => (+b.rating || 0) - (+a.rating || 0)).slice(0, 10);
+  const topSrc = safe(kind === 'series' ? L.series : L.movies);
+  const top = topSrc.filter((x) => x.poster && +x.rating).sort((a, b) => (+b.rating || 0) - (+a.rating || 0)).slice(0, 10);
   if (top.length >= 5) R.push({ title: kind === 'series' ? 'Top 10 serie' : 'Top 10 film di oggi', type: 'top', items: top });
   if (kind === 'all') { const f = [...L.movies, ...L.series].filter((x) => S.favs.has(x.id)); if (f.length) R.push({ title: 'La mia lista', type: 'poster', items: f }); }
-  const catRows = (arr, cats, label, k) => cats.forEach((c) => R.push({ title: (label ? label + ' · ' : '') + c.name, type: 'poster', items: arr.filter((x) => x.group === c.name), more: { kind: k, cat: c.name } }));
-  const recent = (arr) => (arr.some((x) => x.added) ? [...arr].sort((a, b) => (b.added || 0) - (a.added || 0)) : arr.slice().reverse()).slice(0, 40);
+  const catRows = (arr, cats, label, k) => cats.forEach((c) => R.push({ title: (label ? label + ' · ' : '') + c.name, type: 'poster', items: (S.byGroup && S.byGroup.get((k === 'movies' ? 'm' : 's') + c.name)) || arr.filter((x) => x.group === c.name), more: { kind: k, cat: c.name } }));
+  const recent = (arr) => { arr = safe(arr); return (arr.some((x) => x.added) ? [...arr].sort((a, b) => (b.added || 0) - (a.added || 0)) : arr.slice().reverse()).slice(0, 40); };
   if (kind === 'all') {
     if (L.movies.length) R.push({ title: 'Film aggiunti di recente', type: 'poster', items: recent(L.movies), more: { kind: 'movies', cat: 'all' } });
     if (L.series.length) R.push({ title: 'Serie aggiunte di recente', type: 'poster', items: recent(L.series), more: { kind: 'series', cat: 'all' } });
-    catRows(L.movies, L.movieCats.slice(0, 8), 'Film', 'movies');
-    catRows(L.series, L.seriesCats.slice(0, 6), 'Serie', 'series');
+    catRows(L.movies, safeCats(L.movieCats).slice(0, 8), 'Film', 'movies');
+    catRows(L.series, safeCats(L.seriesCats).slice(0, 6), 'Serie', 'series');
   } else {
-    const arr = kind === 'movies' ? L.movies : L.series;
+    const arr = kind === 'movies' ? L.movies : L.series, cats = kind === 'movies' ? L.movieCats : L.seriesCats;
     if (arr.length > 20) R.splice(R.findIndex((r) => r.type === 'top') >= 0 ? R.findIndex((r) => r.type === 'top') : R.length, 0, { title: 'Aggiunti di recente', type: 'poster', items: recent(arr), more: { kind, cat: 'all' } });
-    catRows(arr, kind === 'movies' ? L.movieCats : L.seriesCats, '', kind);
+    // le categorie per adulti restano raggiungibili, ma in fondo
+    catRows(arr, [...safeCats(cats), ...(showAdult() ? [] : cats.filter((c) => RX_ADULT_G.test(c.name)))], '', kind);
   }
   return R.filter((r) => r.items.length);
 }
 function featured(kind) {
-  const L = S.lib, pool = kind === 'movies' ? L.movies : kind === 'series' ? L.series : [...L.movies, ...L.series];
+  const L = S.lib, pool = safe(kind === 'movies' ? L.movies : kind === 'series' ? L.series : [...L.movies, ...L.series]);
+  if (kind === 'all') { const ev = upcomingEvents(); if (ev.length) return ev.slice(0, 6); }
   const f = pool.filter((x) => x.backdrop || x.poster).sort((a, b) => (+!!b.backdrop - +!!a.backdrop) || (+b.rating || 0) - (+a.rating || 0)).slice(0, 8);
   if (f.length) return f;
-  if (kind === 'all' && S.events && S.events.length) return S.events.slice(0, 6);
-  return L.live.slice(0, 6);
+  return safe(L.live).slice(0, 6);
 }
 function evWhen(e) {
   const d = new Date(e.start), now = new Date();
@@ -2048,7 +2220,7 @@ function buildBrowse(scr, kind) {
   const curNav = kind === 'all' ? 'home' : kind;
   scr.innerHTML = `<div class="navslot"></div><div class="dhandle" data-drawer title="Categorie"></div>
   <div class="browse">
-    <div class="hero"><div class="hbg"><img class="blur" alt=""><img class="main" alt=""></div><div class="hshade"></div>
+    <div class="hero"><div class="hbg"><img class="blur" alt=""><img class="main fade" alt="" decoding="async"><img class="main fade" alt="" decoding="async"></div><div class="hshade"></div>
       <div class="htop"><b class="hbrand brandName">${esc((S.settings.brand || 'KAIROS').toUpperCase())}</b>${kind !== 'all' ? `<span class="hsec">${kind === 'movies' ? 'Film' : 'Serie TV'}</span>` : ''}${S.demo ? '<span class="dtag">DEMO</span>' : ''}${S.settings.announcement ? `<span class="annc"><span class="mq">${esc(S.settings.announcement)}</span></span>` : ''}<span class="sp"></span><b class="clk2"></b></div>
       <div class="hinfo"><div class="hkind"></div><h1 class="htitle"></h1><div class="hmeta"></div><div class="hrate"></div><p class="hplot"></p>
         <div class="hbtns"><button class="nbtn play" data-hplay><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg><span>Riproduci</span></button><button class="nbtn info" data-hinfo><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Altre info</button></div></div>
@@ -2063,6 +2235,8 @@ function buildBrowse(scr, kind) {
   scr._feat = featured(kind); scr._fi = 0;
   setHero(scr, scr._rows.length ? scr._rows[0].items[0] : scr._feat[0], true);
   tick();
+  // la riga delle righe viene ricreata a ogni costruzione: l'ascoltatore va agganciato ogni volta
+  scr.querySelector('.rows').addEventListener('scroll', (e) => { const l = e.target; if (l.scrollTop + l.clientHeight > l.scrollHeight - 500 && scr._rendered < scr._rows.length) moreRows(scr, 3); });
   if (scr._wired) return;
   scr._wired = true;
   const item = (k) => { const [ri, ii] = k.split(':'); return ii === 'more' ? null : scr._rows[+ri].items[+ii]; };
@@ -2079,12 +2253,31 @@ function buildBrowse(scr, kind) {
     scr.classList.toggle('inrows', !!c);
     if (c) {
       const x = item(c.dataset.k); if (x) heroQueue(scr, x);
-      const row = c.closest('.nrow'); if (!mouse && Math.abs(rows.scrollTop - (row.offsetTop - 6)) > 2) rows.scrollTo({ top: row.offsetTop - 6, behavior: NATIVE ? 'auto' : 'smooth' });
+      const row = c.closest('.nrow'); if (!mouse && Math.abs(rows.scrollTop - (row.offsetTop - 6)) > 2) rows.scrollTo({ top: row.offsetTop - 6, behavior: 'smooth' });
       const ri = +c.dataset.k.split(':')[0];
       if (ri >= scr._rendered - 2) moreRows(scr, 4);
-    } else if (t.closest('.tnav') && !mouse) rows.scrollTo({ top: 0, behavior: 'auto' });
+    } else if (t.closest('.tnav') && !mouse) rows.scrollTo({ top: 0, behavior: 'smooth' });
   });
-  scr.querySelector('.rows').addEventListener('scroll', (e) => { const l = e.target; if (l.scrollTop + l.clientHeight > l.scrollHeight - 500 && scr._rendered < scr._rows.length) moreRows(scr, 3); });
+
+}
+/* immagine grande: la nuova si carica dietro e compare in dissolvenza sopra la vecchia (niente schermo nero) */
+function heroImg(hero, src, mode, blurBg) {
+  const imgs = hero.querySelectorAll('img.main'), blur = hero.querySelector('img.blur');
+  const fi = hero._fi || 0, front = imgs[fi], backI = imgs[1 - fi];
+  if (blur) { blur.style.display = blurBg && src ? '' : 'none'; if (blurBg && src && blur.getAttribute('src') !== src) blur.src = src; }
+  if (!src) { hero._tok = (hero._tok || 0) + 1; imgs.forEach((i) => i.classList.add('fade')); hero._src = ''; return; }
+  if (hero._src === src) return;
+  hero._src = src;
+  const tok = (hero._tok = (hero._tok || 0) + 1);
+  backI.className = 'main fade' + (mode ? ' ' + mode : '');
+  const reveal = () => {
+    if (hero._tok !== tok) return;
+    requestAnimationFrame(() => { backI.classList.remove('fade'); front.classList.add('fade'); hero._fi = 1 - fi; });
+  };
+  backI.onload = () => { if (backI.decode) backI.decode().then(reveal, reveal); else reveal(); };
+  backI.onerror = () => { if (hero._tok === tok) front.classList.add('fade'); };
+  backI.src = src;
+  if (backI.complete && backI.naturalWidth) backI.onload();
 }
 let heroT;
 function heroQueue(scr, x) { clearTimeout(heroT); heroT = setTimeout(() => setHero(scr, x), 180); }
@@ -2098,12 +2291,8 @@ function setHero(scr, x, instant) {
   scr._hero = x;
   const live = isLiveItem(x), ser = isSeriesItem(x);
   const src = x.backdrop || x.poster || x.logo || '';
-  const main = hero.querySelector('img.main'), blur = hero.querySelector('img.blur');
+  heroImg(hero, src, live ? 'lv' : !x.backdrop && x.poster ? 'ph' : '', !x.backdrop);
   const apply = () => {
-    hero.classList.toggle('lv', live);
-    hero.classList.toggle('ph', !live && !x.backdrop && !!x.poster);
-    [main, blur].forEach((im) => { if (src && im.getAttribute('src') === src && im.complete) im.classList.remove('fade'); else if (src) { im.onload = () => im.classList.remove('fade'); im.onerror = () => im.classList.add('fade'); im.src = src; } else im.removeAttribute('src'); });
-    blur.style.display = x.backdrop ? 'none' : '';
     scr.querySelector('.hkind').innerHTML = `<i class="kb">K</i>${live ? 'IN DIRETTA' : ser ? 'SERIE' : 'FILM'}`;
     scr.querySelector('.htitle').textContent = x.name;
     const sep = '<i>|</i>', parts = [];
@@ -2124,7 +2313,7 @@ function setHero(scr, x, instant) {
     info.classList.remove('sw');
   };
   if (instant) apply();
-  else { info.classList.add('sw'); [main, blur].forEach((im) => im.classList.add('fade')); setTimeout(apply, 200); }
+  else { info.classList.add('sw'); clearTimeout(scr._swT); scr._swT = setTimeout(apply, 140); }
   if (xtOf(x) && !x._info && !live) fetchInfo(x).then(() => { if (scr._hero === x) setHero(scr, x, true); });
 }
 function setFolderHero(scr, f, instant) {
@@ -2132,12 +2321,8 @@ function setFolderHero(scr, f, instant) {
   scr._hero = f;
   const info = scr.querySelector('.hinfo'), hero = scr.querySelector('.hero');
   const y = f.rep || {}, src = y.backdrop || y.poster || y.logo || '';
-  const main = hero.querySelector('img.main'), blur = hero.querySelector('img.blur');
+  heroImg(hero, src, f.kind === 'live' ? 'lv' : !y.backdrop && y.poster ? 'ph' : '', !y.backdrop);
   const apply = () => {
-    hero.classList.toggle('lv', f.kind === 'live');
-    hero.classList.toggle('ph', f.kind !== 'live' && !y.backdrop && !!y.poster);
-    [main, blur].forEach((im) => { if (src) { im.onload = () => im.classList.remove('fade'); im.src = src; } else im.removeAttribute('src'); });
-    blur.style.display = y.backdrop ? 'none' : '';
     scr.querySelector('.hkind').innerHTML = `<i class="kb">K</i>CARTELLA · ${f.kind === 'live' ? 'LIVE TV' : f.kind === 'movies' ? 'FILM' : 'SERIE TV'}`;
     scr.querySelector('.htitle').textContent = f.name;
     scr.querySelector('.hmeta').innerHTML = `<span class="m">${f.count.toLocaleString('it')} ${f.kind === 'live' ? 'canali' : 'titoli'}</span>`;
@@ -2146,17 +2331,14 @@ function setFolderHero(scr, f, instant) {
     scr.querySelector('[data-hplay] span').textContent = 'Apri';
     info.classList.remove('sw');
   };
-  if (instant) apply(); else { info.classList.add('sw'); [main, blur].forEach((im) => im.classList.add('fade')); setTimeout(apply, 240); }
+  if (instant) apply(); else { info.classList.add('sw'); clearTimeout(scr._swT); scr._swT = setTimeout(apply, 140); }
 }
 function setEventHero(scr, e, instant) {
   if (scr._hero === e && !instant) return;
   scr._hero = e;
   const info = scr.querySelector('.hinfo'), hero = scr.querySelector('.hero');
-  const main = hero.querySelector('img.main'), blur = hero.querySelector('img.blur');
+  heroImg(hero, e.home.logo || e.away.logo || '', 'lv', true);
   const apply = () => {
-    hero.classList.add('lv'); hero.classList.remove('ph');
-    const src = e.home.logo || e.away.logo || '';
-    [main, blur].forEach((im) => { if (src) { im.onload = () => im.classList.remove('fade'); im.src = src; } else im.removeAttribute('src'); });
     scr.querySelector('.hkind').innerHTML = `<i class="kb">K</i>${e.live ? 'IN CORSO · ' : ''}${esc(e.league.toUpperCase())}`;
     scr.querySelector('.htitle').textContent = `${e.home.name} – ${e.away.name}`;
     scr.querySelector('.hmeta').innerHTML = `<span class="m">${esc(evWhen(e))}</span>${e.venue ? `<span>${esc(e.venue)}</span>` : ''}`;
@@ -2165,7 +2347,7 @@ function setEventHero(scr, e, instant) {
     scr.querySelector('[data-hplay] span').textContent = 'Cerca canale';
     info.classList.remove('sw');
   };
-  if (instant) apply(); else { info.classList.add('sw'); [main, blur].forEach((im) => im.classList.add('fade')); setTimeout(apply, 240); }
+  if (instant) apply(); else { info.classList.add('sw'); clearTimeout(scr._swT); scr._swT = setTimeout(apply, 140); }
 }
 async function loadEvents() {
   if (S.demo) { S.events = demoEvents(); return; }
@@ -2174,9 +2356,22 @@ async function loadEvents() {
     const url = baseServer() + '/api/player/events';
     const text = hasNativeHttp() ? (await nativeFetch(url)).text : await (await fetch(url)).text();
     const j = JSON.parse(text);
-    S.events = (j.events || []).slice(0, 30);
+    const evs = (j.events || []).slice(0, 30), sig = evs.map((e) => e.id + (e.live ? 'L' : '')).join();
+    if (sig !== S.evSig) { S.evSig = sig; S.events = evs; onEventsChanged(); }
   } catch {}
 }
+/* eventi arrivati dopo l'apertura della Home: si aggiungono in cima senza disturbare chi sta navigando */
+function onEventsChanged() {
+  const h = $('#home');
+  if (!h._rows || !h.classList.contains('on') || $('#detail').classList.contains('on')) return;
+  const rows = [...h.querySelectorAll('.nrow')], row = cur && cur.closest('.nrow');
+  if (cur && !cur.closest('.tnav') && row && rows.indexOf(row) > 0) return; // l'utente è più in basso: si aggiornerà al prossimo ritorno in Home
+  const onNav = cur && cur.closest('.tnav') ? cur.dataset.go : null;
+  buildBrowse(h, 'all');
+  const f = onNav ? h.querySelector(`.tnav [data-go="${onNav}"]`) : h.querySelector('[data-autof]');
+  f && focus(f, true);
+}
+setInterval(() => { if (!S.demo && !S.inPlayer) loadEvents(); }, 10 * 60e3);
 function demoEvents() {
   const T = [['Inter', 'Milan', 'Serie A'], ['Juventus', 'Napoli', 'Serie A'], ['Real Madrid', 'Bayern', 'Champions League'], ['Roma', 'Lazio', 'Serie A'], ['Atalanta', 'Arsenal', 'Champions League'], ['Fiorentina', 'Bologna', 'Serie A']];
   const base = new Date(); base.setMinutes(0, 0, 0);
@@ -2357,9 +2552,12 @@ function renderSettings(sec) {
       <div class="snote">Lo speed test misura la velocità reale della tua linea e ti consiglia le impostazioni migliori per il lettore.</div>`,
     look: `<h3>Generali</h3><div class="sr" data-f id="sSound"><span>Effetti sonori</span><b>${S.sound ? 'Sì' : 'No'}</b></div>
       <div class="sr" data-f id="sTheme"><span>Colore</span><b><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(THEMES[theme] || THEMES.cinema)[0]};margin-right:8px"></span>${theme}</b></div>
+      <div class="sr" data-f id="sAdult"><span>Contenuti per adulti nella Home e nei consigliati</span><b>${showAdult() ? 'Sì' : 'No'}</b></div>
+      <div class="sr" data-f id="sLogo"><span>Loghi dei canali automatici</span><b>${store.get('autoLogo', true) === false ? 'No' : 'Sì'}</b></div>
       <div class="sr" data-f id="sClear"><span>Svuota preferiti e cronologia</span><b>›</b></div>
       <div class="sr" data-f id="sCache"><span>Svuota la memoria dei contenuti</span><b>›</b></div>`,
-    info: `<h3>Informazioni</h3>${kv('App', esc((S.settings.brand || 'KAIROS') + ' TV'))}${kv('Versione', esc((NATIVE && NATIVE.version && NATIVE.version()) || 'web'))}${kv('Interfaccia', esc((NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || 'inclusa'))}${kv('Dispositivo', esc((NATIVE && NATIVE.model && NATIVE.model()) || 'browser'))}${kv('Codice', `<span class="orb">${esc(S.code)}</span>`)}`,
+    info: `<h3>Informazioni</h3>${kv('App', esc((S.settings.brand || 'KAIROS') + ' TV'))}${kv('Versione', esc((NATIVE && NATIVE.version && NATIVE.version()) || 'web'))}${kv('Interfaccia', esc((NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || 'inclusa'))}${kv('Dispositivo', esc((NATIVE && NATIVE.model && NATIVE.model()) || 'browser'))}${kv('Codice', `<span class="orb">${esc(S.code)}</span>`)}
+      <div class="sbtns"><button class="btn pri" data-f id="sUpd">⟳ Cerca aggiornamenti</button></div><div class="snote" id="sUpdTxt"></div>`,
   };
   $('#settBody').innerHTML = `<div class="smenu">${MENU.map(([k, l]) => `<div class="sm ${k === S.setSec ? 'sel' : ''}" data-f data-sec="${k}">${SET_IC[k]}<span>${l}</span></div>`).join('')}</div>
     <div class="spanel">${MENU.map(([k]) => `<div class="card ${k === S.setSec ? 'on' : ''}" data-card="${k}">${cards[k]}</div>`).join('')}</div>`;
@@ -2382,12 +2580,8 @@ function renderSettings(sec) {
     };
   }
   $$('[data-del]').forEach((b) => (b.onclick = async () => { S.local = S.local.filter((p) => p.id !== b.dataset.del); store.set('localPl', S.local); await loadLibrary(); renderSettings('pl'); focus($('.sm.sel'), true); }));
-  $('#sReload').onclick = async () => {
-    toast('Aggiornamento…');
-    try { if (!S.demo && baseServer()) await register(); } catch {}
-    if (S.demo) setLib(demoLib()); else { S.libSig = ''; await refreshLibrary(true); }
-    toast('Contenuti aggiornati'); renderSettings('dev'); focus($('#sReload'), true);
-  };
+  $('#sReload').onclick = () => manualRefresh();
+
   $('#sSpeed').onclick = () => speedTest();
   $('#sTest').onclick = async () => {
     const b = baseServer(); if (!b) return toast('Nessun server impostato');
@@ -2408,6 +2602,18 @@ function renderSettings(sec) {
   }));
   $('#sSound').onclick = () => { S.sound = !S.sound; store.set('sound', S.sound); $('#sSound b').textContent = S.sound ? 'Sì' : 'No'; };
   $('#sTheme').onclick = () => { const ks = Object.keys(THEMES), nx = ks[(ks.indexOf(store.get('theme') || S.settings.accent || 'cinema') + 1) % ks.length]; store.set('theme', nx); applyTheme(nx); $('#sTheme b').innerHTML = `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${THEMES[nx][0]};margin-right:8px"></span>${nx}`; };
+  $('#sAdult').onclick = () => { const on = !showAdult(); store.set('adultHome', on); $('#sAdult b').textContent = on ? 'Sì' : 'No'; buildBrowse($('#home'), 'all'); };
+  $('#sUpd').onclick = async () => {
+    const t = $('#sUpdTxt'); t.textContent = 'Controllo in corso…';
+    if (!NATIVE || !hasNativeHttp()) { t.textContent = 'Gli aggiornamenti si controllano nell\'app installata.'; return; }
+    const u = await fetchUpdateInfo();
+    if (!u) { t.textContent = 'Server non raggiungibile, riprova più tardi.'; return; }
+    S.lastUpdCheck = Date.now();
+    if (apkNewer(u.apk)) { S.apkUpdate = u.apk; t.textContent = 'Nuova versione ' + (u.apk.version || '') + ' disponibile.'; offerApkUpdate(true); return; }
+    if (u.ui && u.ui.version && u.ui.version !== curUi() && NATIVE.applyUi && !badUi(u.ui.version)) { t.textContent = 'Nuova interfaccia trovata: riavvio…'; const html = await fetchUi(u); if (html) { NATIVE.applyUi(html, u.ui.version); return; } }
+    t.textContent = '✓ Hai già l\'ultima versione' + (NATIVE.version ? ' (' + NATIVE.version() + ')' : '') + '.';
+  };
+  $('#sLogo').onclick = () => { const on = store.get('autoLogo', true) === false; store.set('autoLogo', on); $('#sLogo b').textContent = on ? 'Sì' : 'No'; if (on) { applyLogos(S.lib.live, true); autoLogos(); } else toast('Valido dal prossimo avvio'); };
   $('#sClear').onclick = () => { S.favs.clear(); S.recent = []; store.set('favs', []); store.set('recent', []); store.set('pos', {}); updFavCount(); toast('Preferiti e cronologia svuotati'); };
   $('#sCache').onclick = async () => { await LibCache.clear(); toast('Memoria svuotata: al prossimo avvio i contenuti verranno riscaricati'); };
 }
@@ -2472,35 +2678,85 @@ async function afterActive() {
   if (S.fromCache) setTimeout(() => refreshLibrary(), 3000);
 }
 /* Aggiornamenti automatici: interfaccia (subito, senza reinstallare) e APK (proposto all'utente) */
+async function fetchUpdateInfo() {
+  if (!baseServer() || !hasNativeHttp()) return null;
+  try { return JSON.parse((await nativeFetch(baseServer() + '/api/player/update?t=' + Date.now())).text); } catch { return null; }
+}
+const apkNewer = (a) => !!(a && a.url && a.versionCode && NATIVE && NATIVE.versionCode && NATIVE.installApk && a.versionCode > NATIVE.versionCode());
+async function fetchUi(u) {
+  try {
+    const r = await nativeFetch(baseServer() + u.ui.url + '?v=' + encodeURIComponent(u.ui.version));
+    if (r.status === 200 && r.text.length > 40000 && r.text.includes('</html>') && r.text.includes('kxBack')) return r.text;
+  } catch {}
+  return null;
+}
+const badUi = (v) => {
+  try { if (NATIVE && NATIVE.uiBad && NATIVE.uiBad() === v) return true; } catch {}
+  // anche con le app più vecchie: una versione già tentata 2 volte di fila senza successo non si riprova
+  const t = store.get('uiTry', {}); return t.v === v && t.n >= 2 && Date.now() - t.t < 6 * 3600e3;
+};
+const markUiTry = (v) => { const t = store.get('uiTry', {}); store.set('uiTry', { v, n: t.v === v ? (t.n || 0) + 1 : 1, t: Date.now() }); };
+const curUi = () => (NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || '';
+/* all'avvio: nuova interfaccia applicata subito (l'app si ricarica da sola) */
 async function checkUpdates() {
-  if (!baseServer() || !hasNativeHttp()) return false;
-  let u;
-  try { u = JSON.parse((await nativeFetch(baseServer() + '/api/player/update')).text); } catch { return false; }
-  if (u && u.apk && u.apk.url && u.apk.versionCode && NATIVE.versionCode && u.apk.versionCode > NATIVE.versionCode() && NATIVE.installApk) S.apkUpdate = u.apk;
-  if (u && u.ui && u.ui.version && NATIVE.applyUi) {
-    const curV = (NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || '';
-    if (u.ui.version !== curV) {
-      bootMsg('Aggiornamento');
-      try {
-        const r = await nativeFetch(baseServer() + u.ui.url + '?v=' + encodeURIComponent(u.ui.version));
-        if (r.status === 200 && r.text.length > 40000 && r.text.includes('</html>') && r.text.includes('kxBack')) { NATIVE.applyUi(r.text, u.ui.version); return true; }
-      } catch {}
+  const u = await fetchUpdateInfo(); if (!u) return false;
+  S.lastUpdCheck = Date.now();
+  if (apkNewer(u.apk)) S.apkUpdate = u.apk;
+  if (u.ui && u.ui.version && NATIVE.applyUi && u.ui.version !== curUi() && !badUi(u.ui.version)) {
+    bootMsg('Aggiornamento');
+    const html = await fetchUi(u);
+    if (html) {
+      markUiTry(u.ui.version);
+      NATIVE.applyUi(html, u.ui.version);
+      // se l'app non si ricarica (scrittura non riuscita) si continua con questa interfaccia
+      await sleep(8000);
+      return false;
     }
   }
   return false;
 }
-function offerApkUpdate() {
-  const a = S.apkUpdate; if (!a) return;
+/* mentre l'app è aperta (le TV restano accese per giorni): controllo ogni 3 ore e al ritorno nell'app */
+async function backgroundUpdateCheck() {
+  if (S.demo || S.inPlayer || S.updChecking) return;
+  S.updChecking = true;
+  try {
+    const u = await fetchUpdateInfo(); if (!u) return;
+    S.lastUpdCheck = Date.now();
+    if (u.ui && u.ui.version && u.ui.version !== curUi() && NATIVE.stageUi && !badUi(u.ui.version)) {
+      const html = await fetchUi(u);
+      if (html) NATIVE.stageUi(html, u.ui.version); // pronta per il prossimo avvio, senza interrompere la visione
+    }
+    if (apkNewer(u.apk)) { S.apkUpdate = u.apk; if (!$('#updM') && !$('.speedm.on') && !S.inPlayer && !$('#boot').classList.contains('on') && !$('#activate').classList.contains('on')) offerApkUpdate(); }
+  } finally { S.updChecking = false; }
+}
+setInterval(backgroundUpdateCheck, 3 * 3600e3);
+window.kxResume = () => {
+  // tornando nell'app l'anteprima della Live riparte (Android la ferma quando l'app va in pausa)
+  if (HAS_PREVIEW && S.previewing && $('#live').classList.contains('on') && !$('#drawer').classList.contains('on') && !$('.speedm.on') && !S.inPlayer) setTimeout(() => S.previewing && nativePreview(S.previewing), 300);
+  if (Date.now() - (S.lastUpdCheck || 0) > 45 * 60e3) setTimeout(backgroundUpdateCheck, 2500);
+};
+function offerApkUpdate(force) {
+  const a = S.apkUpdate; if (!a || $('#updM')) return;
+  const skip = store.get('apkSkip', {});
+  if (!force && skip.v === a.versionCode && Date.now() - skip.t < 12 * 3600e3) return;
+  if ($('#live').classList.contains('on')) stopPreview(); // l'anteprima nativa coprirebbe la finestra
   document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="updM"><div class="sbox"><div class="orb mut" style="font-size:12px;letter-spacing:.35em">AGGIORNAMENTO</div>
-    <h2 style="margin:14px 0 8px;font-size:26px">Nuova versione disponibile</h2><p class="mut" style="line-height:1.5">Contiene miglioramenti al player. L'installazione richiede pochi secondi.</p>
-    <div class="ubar"><i id="uBar"></i></div><div class="mut" id="uTxt" style="font-size:13px;min-height:18px"></div>
+    <h2 style="margin:14px 0 8px;font-size:26px">Nuova versione ${esc(a.version || '')} disponibile</h2><p class="mut" style="line-height:1.5">Contiene miglioramenti e correzioni. Il download richiede pochi secondi, poi conferma l'installazione.</p>
+    <div class="ubar"><i id="uBar"></i></div><div class="mut" id="uTxt" style="font-size:13px;min-height:18px;line-height:1.4"></div>
     <div class="sbtn"><button class="btn pri" data-f id="uGo">Aggiorna ora</button><button class="btn" data-f id="uLater">Più tardi</button></div></div></div>`);
   setTimeout(() => focus($('#uGo'), true), 80);
-  $('#uLater').onclick = () => { $('#updM').remove(); S.apkUpdate = null; placeRing(); };
+  $('#uLater').onclick = () => { store.set('apkSkip', { v: a.versionCode, t: Date.now() }); $('#updM').remove(); focus(visibleF($('.screen.on')).find((e) => !e.closest('.tnav')) || visibleF($('.screen.on'))[0], true); };
   $('#uGo').onclick = () => {
-    $('#uTxt').textContent = 'Download in corso…';
-    window.kxApkCb = (p) => { if (p < 0) { $('#uTxt').textContent = 'Download non riuscito. Riprova più tardi.'; return; } $('#uBar').style.width = p + '%'; $('#uTxt').textContent = p >= 100 ? 'Conferma l\'installazione nella schermata di Android.' : `Download ${p}%`; };
-    try { NATIVE.installApk(a.url); } catch { $('#uTxt').textContent = 'Aggiornamento non disponibile'; }
+    if (S.apkDl) return;
+    S.apkDl = true;
+    $('#uTxt').textContent = 'Download in corso…'; $('#uBar').style.width = '2%';
+    window.kxApkCb = (p, msg) => {
+      if (p === -2) { $('#uTxt').innerHTML = 'Abilita <b>Installa app sconosciute</b> per questa app nelle impostazioni che si sono aperte, poi torna qui: l\'installazione partirà da sola.'; return; }
+      if (p < 0 || p >= 100) S.apkDl = false;
+      if (p < 0) { $('#uTxt').textContent = 'Download non riuscito' + (msg ? ': ' + msg : '') + '. Riprova più tardi.'; $('#uGo').textContent = 'Riprova'; return; }
+      $('#uBar').style.width = p + '%'; $('#uTxt').textContent = p >= 100 ? 'Conferma l\'installazione nella schermata di Android.' : `Download ${p}%`;
+    };
+    try { NATIVE.installApk(a.url); } catch { S.apkDl = false; $('#uTxt').textContent = 'Aggiornamento non disponibile su questo dispositivo'; }
   };
 }
 let warpStop = null;
@@ -2541,6 +2797,7 @@ async function enterHome() {
   b.classList.remove('out');
   warpStop && warpStop();
   if (S.apkUpdate) setTimeout(offerApkUpdate, 900);
+  setTimeout(autoLogos, S.fromCache ? 9000 : 5000);
 }
 function startDemo() {
   S.demo = true; clearInterval(pollT);
