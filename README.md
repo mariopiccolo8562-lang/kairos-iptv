@@ -73,9 +73,10 @@ Il pannello ha già le sue protezioni interne (vedi `SICUREZZA.md`). Queste aggi
    - Dashboard → Turnstile → *Add widget* con il dominio del pannello.
    - Variabile `TURNSTILE_SITEKEY` = la Site Key; secret `TURNSTILE_SECRET` = la Secret Key. Poi rilancia il workflow.
 3. **Security → WAF** del dominio:
-   - Bot Fight Mode **attivo**;
-   - Security Level **High**;
-   - regola personalizzata: *se URI path contiene `/panel` e Paese non è Italia → Block* (adatta i paesi alle tue esigenze).
+   - ⚠️ **Bot Fight Mode: SPENTO.** Blocca anche le richieste delle app (che non possono risolvere le sfide anti-bot) e l'app non si collega più al pannello.
+   - Security Level **Medium** (non High, per lo stesso motivo).
+   - regola personalizzata 1 — *se URI Path inizia con `/api/player` → **Skip*** (salta: Security Level, Browser Integrity Check, regole successive): così le app non vengono mai bloccate;
+   - regola personalizzata 2 — *se URI Path contiene `/panel` e Paese non è Italia → Block* (adatta i paesi alle tue esigenze).
 4. **SSL/TLS**: modalità *Full (strict)*, **Always Use HTTPS** attivo, **HSTS** attivo, TLS minimo 1.2.
 
 ## Come funziona per i clienti

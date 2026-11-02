@@ -14,8 +14,15 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.concurrent.thread
 
 /**
  * KAIROS Player — contenitore Android del player.
@@ -26,6 +33,12 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var web: WebView
     private var lastBack = 0L
+
+    /** ritorno dal player nativo: posizione, durata, motore scelto */
+    private val playerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val r = res.data?.getStringExtra(PlayerActivity.RESULT) ?: return@registerForActivityResult
+        if (::web.isInitialized) web.evaluateJavascript("window.kxPlayerClosed && window.kxPlayerClosed(${JSONObject.quote(r)})", null)
+    }
 
     companion object {
         private const val HOME = "file:///android_asset/www/index.html"
@@ -136,5 +149,68 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface fun version(): String = BuildConfig.VERSION_NAME
         @JavascriptInterface fun model(): String = "${Build.MANUFACTURER} ${Build.MODEL}".trim().take(70)
         @JavascriptInterface fun exit() { runOnUiThread { finish() } }
+
+        /** Avvia il player nativo (ExoPlayer / VLC) */
+        @JavascriptInterface fun play(payload: String) {
+            PlayerActivity.pending = payload
+            runOnUiThread { playerLauncher.launch(Intent(this@MainActivity, PlayerActivity::class.java)) }
+        }
+
+        /** Richiesta HTTP fatta dall'app (senza limiti CORS). Risposta in window.kxHttpCb(id, status, body). */
+        @JavascriptInterface fun http(id: String, method: String, url: String, body: String, ua: String) {
+            thread(name = "kx-http") {
+                var status = -1
+                var text: String
+                try {
+                    var target = URL(url)
+                    var hops = 0
+                    var conn: HttpURLConnection = target.openConnection() as HttpURLConnection
+                    while (true) {
+                        conn.instanceFollowRedirects = false
+                        conn.connectTimeout = 15_000
+                        conn.readTimeout = 30_000
+                        conn.requestMethod = if (method == "POST") "POST" else "GET"
+                        conn.setRequestProperty("User-Agent", ua.ifBlank { "KairosPlayer/" + BuildConfig.VERSION_NAME })
+                        conn.setRequestProperty("Accept", "application/json, text/plain, */*")
+                        if (method == "POST") {
+                            conn.doOutput = true
+                            conn.setRequestProperty("Content-Type", "application/json")
+                            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                        }
+                        val code = conn.responseCode
+                        val loc = conn.getHeaderField("Location")
+                        if (code in 300..399 && loc != null && hops < 5 && method != "POST") {
+                            conn.disconnect()
+                            target = URL(target, loc)
+                            hops++
+                            conn = target.openConnection() as HttpURLConnection
+                            continue
+                        }
+                        status = code
+                        break
+                    }
+                    val stream = if (status >= 400) conn.errorStream else conn.inputStream
+                    val out = ByteArrayOutputStream()
+                    stream?.use { input ->
+                        val buf = ByteArray(64 * 1024)
+                        var total = 0
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            total += n
+                            if (total > 80 * 1024 * 1024) break
+                            out.write(buf, 0, n)
+                        }
+                    }
+                    conn.disconnect()
+                    text = out.toString("UTF-8")
+                } catch (e: Exception) {
+                    status = -1
+                    text = e.javaClass.simpleName + (e.message?.let { ": $it" } ?: "")
+                }
+                val js = "window.kxHttpCb && window.kxHttpCb(${JSONObject.quote(id)}, $status, ${JSONObject.quote(text)})"
+                runOnUiThread { if (::web.isInitialized) web.evaluateJavascript(js, null) }
+            }
+        }
     }
 }

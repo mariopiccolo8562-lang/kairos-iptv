@@ -402,6 +402,91 @@ img{display:block}
   .clock b{font-size:20px}
   .detail .in{flex-direction:column}
 }
+
+/* =====================================================================
+   v1.1 — cartelle, misure per TV, marchio, splash, modalità leggera
+   ===================================================================== */
+.hero{height:min(54vh,620px)}
+.htitle{font-size:clamp(32px,min(6.2vw,9.5vh),112px)}
+.hero.lv .hbg img.main{object-position:right center;padding:10vh 7vw 16vh 18vw}
+.bscr.inrows .hbtns{display:none}
+.bscr.inrows .hinfo{bottom:12%}
+.nc.more.fm{aspect-ratio:auto;height:clamp(80px,min(7.6vw,15.5vh),138px);width:clamp(110px,min(9vw,20vh),170px);border-radius:12px}
+.hplot{-webkit-line-clamp:2}
+@media (min-height:760px){.hplot{-webkit-line-clamp:3}}
+.hinfo{bottom:15%}
+.hmeta{margin:10px 0 8px}
+.hbtns{margin-top:16px}
+.rows{margin-top:-4vh}
+.nc.p,.nc.more{width:clamp(96px,min(10.2vw,19vh),192px)}
+.nc.t .pp{width:clamp(88px,min(9.2vw,17vh),172px)}
+.nc.t .big{font-size:clamp(104px,min(12.5vw,25vh),240px)}
+.nc.l{width:clamp(168px,min(15.5vw,30vh),290px)}
+.nrow h3{font-size:clamp(15px,min(1.35vw,3vh),23px)}
+/* marchio K sulle copertine */
+.nc.p::after,.nc.t .pp::after{content:'K';position:absolute;top:7px;left:9px;font-family:'Bebas Neue',Orbitron,sans-serif;font-size:clamp(15px,min(1.5vw,3vh),24px);line-height:1;color:var(--a1);text-shadow:0 1px 6px rgba(0,0,0,.9),0 0 12px color-mix(in srgb,var(--a1) 55%,transparent);z-index:2;pointer-events:none}
+.nc.p .tg{top:auto;bottom:10px}
+/* cartelle */
+.nrow.fold h3 .fi{display:inline-grid;place-items:center;width:1.5em;height:1.5em;border-radius:7px;background:color-mix(in srgb,var(--a1) 22%,transparent);color:var(--a1);margin-right:2px}
+.nrow.fold h3 .fi svg{width:65%;height:65%}
+.nc.f{width:clamp(160px,min(15vw,31vh),270px);height:clamp(80px,min(7.6vw,15.5vh),138px);border-radius:12px;display:flex;flex-direction:column;justify-content:flex-end;padding:12px 14px;
+  background:linear-gradient(135deg,hsl(var(--h),58%,34%),hsl(var(--h2),62%,14%) 72%);border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+.nc.f::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 88% 12%,rgba(255,255,255,.28),transparent 46%),linear-gradient(0deg,rgba(0,0,0,.35),transparent 60%);pointer-events:none}
+.nc.f .fsv{position:absolute;right:-6%;top:-12%;width:52%;opacity:.16;color:#fff}
+.nc.f .fsv svg{width:100%;height:auto;display:block}
+.nc.f b{position:relative;font-size:clamp(13px,min(1.2vw,2.6vh),20px);font-weight:700;line-height:1.12;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-shadow:0 2px 10px rgba(0,0,0,.5)}
+.nc.f small{position:relative;color:rgba(255,255,255,.78);font-size:clamp(10px,1.7vh,12px);margin-top:3px;font-weight:600;letter-spacing:.04em}
+.nc.f .fk{position:absolute;top:9px;left:12px;font-size:clamp(8px,1.4vh,10px);font-weight:800;letter-spacing:.2em;color:rgba(255,255,255,.82)}
+.nc.f.focused,.nc.f:hover{transform:scale(1.07)}
+/* scheda titolo: sempre dentro lo schermo */
+.detail .in{max-height:92vh;width:min(1000px,92vw)}
+.dm .dhero{aspect-ratio:auto;height:min(52vh,540px)}
+.dm .dht h1{font-size:clamp(28px,min(5vw,9vh),76px);margin-bottom:12px}
+.dm .dbody .plot{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+.dm .brandmark{position:absolute;top:16px;left:clamp(20px,4vw,48px);z-index:3;font-family:'Bebas Neue',Orbitron,sans-serif;font-size:clamp(18px,3.4vh,26px);letter-spacing:.14em;color:var(--a1);text-shadow:0 0 14px color-mix(in srgb,var(--a1) 55%,transparent)}
+.dm .nbtn{padding:clamp(8px,1.6vh,13px) clamp(16px,2.2vw,30px)}
+.dm .rbtn{width:clamp(38px,6.5vh,46px);height:clamp(38px,6.5vh,46px)}
+/* anteprima canale nell'app (senza video) */
+.pv-logo{display:flex;flex-direction:column;align-items:center;gap:12px}
+.pv-logo img{max-height:min(16vh,120px);max-width:60%;object-fit:contain;filter:drop-shadow(0 6px 20px rgba(0,0,0,.6))}
+/* ---------- splash ---------- */
+#boot{background:radial-gradient(ellipse at center,#16060a 0%,#000 72%);justify-content:center;align-items:center;overflow:hidden;padding:0!important}
+#warp{position:absolute;inset:0;width:100%;height:100%}
+.sp-core{position:relative;width:min(32vh,250px);aspect-ratio:1;z-index:2;animation:spIn 1.2s cubic-bezier(.2,.8,.2,1) both;transition:transform .9s cubic-bezier(.7,0,.84,0),opacity .8s}
+@keyframes spIn{from{transform:scale(.35) rotate(-40deg);opacity:0;filter:blur(14px)}to{transform:none;opacity:1;filter:none}}
+.sp-hex{width:100%;height:100%;overflow:visible;filter:drop-shadow(0 0 16px var(--a1)) drop-shadow(0 0 40px color-mix(in srgb,var(--a1) 45%,transparent))}
+.sp-hex path{fill:none;stroke:url(#spg);stroke-linecap:round;stroke-linejoin:round}
+.sp-hex .h1{stroke-width:5;stroke-dasharray:540;stroke-dashoffset:540;animation:draw 1.4s .15s cubic-bezier(.6,0,.2,1) forwards}
+.sp-hex .h2{stroke-width:1.4;opacity:.45;stroke-dasharray:420;stroke-dashoffset:-420;animation:draw 1.5s .45s ease forwards}
+.sp-hex .k{stroke:#fff;stroke-width:13;stroke-dasharray:210;stroke-dashoffset:210;animation:draw .9s 1.05s cubic-bezier(.6,0,.2,1) forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.sp-ring{position:absolute;inset:-14%;border-radius:50%;border:1.5px solid color-mix(in srgb,var(--a1) 55%,transparent);opacity:0;animation:ring 2.6s 1.3s ease-out infinite}
+.sp-ring.r2{animation-delay:2.6s}
+@keyframes ring{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.7);opacity:0}}
+.sp-word{position:relative;z-index:2;margin-top:4.5vh;font-family:'Bebas Neue',Orbitron,sans-serif;font-size:clamp(46px,11vh,124px);line-height:1;letter-spacing:.34em;margin-right:-.34em;opacity:0;
+  background:linear-gradient(100deg,#fff 42%,var(--a1) 50%,#fff 58%);background-size:320% 100%;background-position:100% 0;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  animation:word 1.3s 1.35s cubic-bezier(.2,.8,.2,1) forwards,shine 2.4s 2.7s ease-in-out infinite;transition:opacity .3s}
+@keyframes word{0%{opacity:0;letter-spacing:1.1em;filter:blur(12px)}60%{opacity:1;filter:none}100%{opacity:1;letter-spacing:.34em}}
+@keyframes shine{from{background-position:100% 0}to{background-position:-60% 0}}
+.sp-tag{position:relative;z-index:2;margin-top:1.6vh;font-size:clamp(9px,1.6vh,13px);letter-spacing:.62em;margin-right:-.62em;color:rgba(255,255,255,.55);opacity:0;animation:fadein .8s 2.1s forwards;transition:opacity .3s}
+#boot .boot-bar{position:relative;z-index:2;width:min(220px,40vw);height:2px;margin:4.5vh 0 0;opacity:.85;transition:opacity .3s}
+#boot .boot-msg{display:block;position:relative;z-index:2;margin-top:10px;font-size:10px;letter-spacing:.38em;color:rgba(255,255,255,.4);transition:opacity .3s}
+#boot.out .sp-core{transform:scale(9);opacity:0}
+#boot.out .sp-word,#boot.out .sp-tag,#boot.out .boot-bar,#boot.out .boot-msg{opacity:0!important}
+#boot.out::after{content:'';position:absolute;inset:0;z-index:3;pointer-events:none;background:radial-gradient(circle,color-mix(in srgb,var(--a1) 55%,#fff) 0%,transparent 62%);animation:flash .9s ease-out forwards}
+@keyframes flash{0%{opacity:0}35%{opacity:.85}100%{opacity:0}}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+/* ---------- modalità leggera (app su TV): niente effetti costosi, più fluidità ---------- */
+.lite .glass,.lite .annc,.lite .detail{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+.lite .glass{background:rgba(24,24,30,.94)}
+.lite .aurora,.lite .hbg img.blur{display:none!important}
+.lite .screen.on{animation:fadein .28s ease forwards}
+.lite .detail{background:rgba(0,0,0,.9)}
+.lite .detail.on{animation:fadein .25s ease forwards}
+.lite .nc.focused,.lite .nc:hover{box-shadow:none}
+.lite .hbg img{transform:none;transition:opacity .35s}
+.lite .htitle,.lite .hplot{text-shadow:none}
+.lite .sp-hex{filter:drop-shadow(0 0 12px var(--a1))}
 </style>
 </head>
 <body>
@@ -415,16 +500,18 @@ img{display:block}
 
   <!-- BOOT -->
   <section class="screen on" id="boot">
-    <div class="ribbons" id="ribbons"></div>
-    <div class="core">
-      <svg viewBox="0 0 200 200"><defs><linearGradient id="g1" x1="0" x2="1"><stop offset="0" stop-color="var(--a1)"/><stop offset="1" stop-color="var(--a3)"/></linearGradient></defs>
-        <g class="r1" style="transform-origin:100px 100px"><circle cx="100" cy="100" r="92" fill="none" stroke="url(#g1)" stroke-width="2" stroke-dasharray="120 40 10 40" stroke-linecap="round"/></g>
-        <g class="r2" style="transform-origin:100px 100px"><circle cx="100" cy="100" r="76" fill="none" stroke="var(--a2)" stroke-width="1.5" stroke-dasharray="4 10" opacity=".8"/></g>
-        <g class="r3" style="transform-origin:100px 100px"><circle cx="100" cy="100" r="62" fill="none" stroke="var(--a1)" stroke-width="3" stroke-dasharray="60 330" stroke-linecap="round"/></g>
+    <canvas id="warp"></canvas>
+    <div class="sp-core">
+      <svg class="sp-hex" viewBox="0 0 200 200">
+        <defs><linearGradient id="spg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".4" stop-color="var(--a1)"/><stop offset="1" stop-color="var(--a3)"/></linearGradient></defs>
+        <path class="h1" d="M100 12 176 56v88l-76 44-76-44V56z"/>
+        <path class="h2" d="M100 32 158 66v68l-58 34-58-34V66z"/>
+        <path class="k" d="M82 64v72M82 101l40-37M92 93l33 43"/>
       </svg>
-      <div class="k grad" id="bootK">K</div>
+      <div class="sp-ring"></div><div class="sp-ring r2"></div>
     </div>
-    <div class="boot-title grad" id="bootTitle"></div>
+    <div class="sp-word" id="bootTitle">KAIROS</div>
+    <div class="sp-tag">STREAMING · ULTRA HD</div>
     <div class="boot-bar"><i id="bootBar"></i></div>
     <div class="boot-msg" id="bootMsg">Inizializzazione</div>
   </section>
@@ -463,7 +550,7 @@ img{display:block}
         <div class="screen-box" id="pvBox"><video id="pv" playsinline muted></video><div class="demo-sig"><b id="pvDemo"></b></div><div class="ph" id="pvPh">Seleziona un canale</div><span class="badge-live">● LIVE</span><div class="spinner"></div></div>
         <div class="now"><h2 id="pvName">—</h2><div class="meta" id="pvMeta"></div></div>
         <div class="epg" id="pvEpg"></div>
-        <div class="hint"><span><kbd>OK</kbd>anteprima · 2× schermo intero</span><span><kbd>▲▼</kbd>scorri</span><span><kbd>★</kbd>tieni premuto OK = preferito</span></div>
+        <div class="hint"><span id="hintOk"><kbd>OK</kbd>anteprima · 2× schermo intero</span><span><kbd>▲▼</kbd>scorri</span><span><kbd>★</kbd>tieni premuto OK = preferito</span></div>
       </div>
     </div>
   </section>
@@ -570,6 +657,9 @@ if (!S.secret) {
   store.set('secret', S.secret);
 }
 const NATIVE = window.KairosNative || null;
+const HAS_PLAYER = !!(NATIVE && NATIVE.play);
+if (NATIVE) document.body.classList.add('lite');
+const playPrefs = () => ({ engine: 'exo', quality: 'auto', buffer: 'balanced', aspect: 'fit', ...store.get('play', {}) });
 
 /* ---------------- audio FX (WebAudio, nessun file) ---------------- */
 let AC;
@@ -754,21 +844,53 @@ function go(where, fromRail) {
 /* =====================================================================
    RETE: server Kairos, proxy, parser M3U / Xtream
    ===================================================================== */
-const baseServer = () => (S.server || (location.protocol.startsWith('http') && !S.demo ? location.origin : '')).replace(/\/+$/, '');
+const baseServer = () => String(S.server || (location.protocol.startsWith('http') && !S.demo ? location.origin : '')).trim().replace(/\/+$/, '').replace(/\/panel$/i, '').replace(/\/+$/, '');
 // Nell'app Android le richieste partono direttamente dal dispositivo (nessun blocco CORS),
 // quindi non serve far passare playlist e video da un server.
 const viaProxy = (url) => url;
-async function getText(url) { const r = await fetch(viaProxy(url)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }
-async function getJSON(url) { const r = await fetch(viaProxy(url)); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
+// Richieste HTTP fatte dall'app Android (più affidabili della WebView: niente CORS, redirect gestiti)
+const nreq = {}; let nseq = 0;
+window.kxHttpCb = (id, status, body) => { const f = nreq[id]; if (f) { delete nreq[id]; f({ status, text: body }); } };
+const hasNativeHttp = () => !!(NATIVE && NATIVE.http);
+function nativeFetch(url, method = 'GET', body = '') {
+  return new Promise((res, rej) => {
+    const id = 'r' + (++nseq);
+    nreq[id] = (r) => (r.status < 0 ? rej(new Error(r.text || 'errore di rete')) : res(r));
+    setTimeout(() => { if (nreq[id]) { delete nreq[id]; rej(new Error('tempo scaduto')); } }, 30000);
+    try { NATIVE.http(id, method, url, body || '', navigator.userAgent); } catch (e) { delete nreq[id]; rej(e); }
+  });
+}
+async function getText(url) {
+  try { const r = await fetch(viaProxy(url)); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.text(); }
+  catch (e) {
+    if (!hasNativeHttp()) throw e;
+    const r = await nativeFetch(url);
+    if (r.status >= 400) throw new Error('HTTP ' + r.status);
+    return r.text;
+  }
+}
+async function getJSON(url) { return JSON.parse(await getText(url)); }
 
 async function register() {
-  const r = await fetch(baseServer() + '/api/player/register', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code: S.code, secret: S.secret, model: (NATIVE && NATIVE.model && NATIVE.model()) || navigator.userAgent.match(/\(([^)]+)\)/)?.[1]?.slice(0, 70) || '' }),
-  });
-  const j = await r.json().catch(() => ({}));
-  if (r.status === 403 && j.status === 'locked') { S.status = 'locked'; S.playlists = []; return j; }
-  if (!r.ok) throw new Error('server');
+  const url = baseServer() + '/api/player/register';
+  const body = JSON.stringify({ code: S.code, secret: S.secret, model: (NATIVE && NATIVE.model && NATIVE.model()) || navigator.userAgent.match(/\(([^)]+)\)/)?.[1]?.slice(0, 70) || '' });
+  let status = 0, text = '';
+  try {
+    if (hasNativeHttp()) ({ status, text } = await nativeFetch(url, 'POST', body));
+    else { const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }); status = r.status; text = await r.text(); }
+  } catch (e) {
+    S.lastError = 'Impossibile raggiungere il server (' + (e.message || 'errore di rete') + ').';
+    throw new Error('net');
+  }
+  let j = null; try { j = JSON.parse(text); } catch {}
+  if (!j) {
+    S.lastError = `Il server ha risposto con una pagina non valida (HTTP ${status}). Di solito è un blocco di Cloudflare (Zero Trust su tutto il dominio, Bot Fight Mode, livello di sicurezza alto) oppure l'indirizzo del server è sbagliato.`;
+    throw new Error('bad');
+  }
+  if (status === 403 && j.status === 'locked') { S.status = 'locked'; S.playlists = []; S.lastError = ''; return j; }
+  if (status === 429) { S.lastError = 'Troppe richieste: riprovo tra poco.'; throw new Error('rate'); }
+  if (status >= 400) { S.lastError = `Errore del server (HTTP ${status})${j.error ? ': ' + j.error : ''}.`; throw new Error('server'); }
+  S.lastError = '';
   S.status = j.status; S.expires = j.expires; S.playlists = j.playlists || [];
   S.settings = { ...S.settings, ...j.settings };
   applyBrand();
@@ -777,6 +899,7 @@ async function register() {
 function applyBrand() {
   applyTheme(store.get('theme') || S.settings.accent);
   $$('.brandName').forEach((e) => (e.textContent = (S.settings.brand || 'KAIROS').toUpperCase()));
+  $('#bootTitle').textContent = (S.settings.brand || 'KAIROS').toUpperCase();
   document.title = (S.settings.brand || 'KAIROS') + ' Player';
   $$('.annc .mq').forEach((e) => (e.textContent = S.settings.announcement || ''));
 }
@@ -903,9 +1026,15 @@ function playUrl(v, item, box) {
   const low = item.url.toLowerCase();
   if (/\.m3u8(\?|$)|\/live\/|mpegurl/.test(low) && !/\.ts(\?|$)/.test(low)) {
     if (window.Hls && Hls.isSupported()) {
-      const h = new Hls({ maxBufferLength: 30, enableWorker: true, lowLatencyMode: true });
+      const h = new Hls({ enableWorker: true, lowLatencyMode: false, maxBufferLength: 30, maxMaxBufferLength: 60, backBufferLength: 30, startLevel: -1,
+        abrEwmaDefaultEstimate: 3e6, abrBandWidthFactor: 0.8, abrBandWidthUpFactor: 0.6, fragLoadingMaxRetry: 6, manifestLoadingMaxRetry: 4, levelLoadingMaxRetry: 4 });
       h.loadSource(url); h.attachMedia(v); engines.set(v, h);
-      h.on(Hls.Events.MANIFEST_PARSED, () => v.play().catch(() => {}));
+      h.on(Hls.Events.MANIFEST_PARSED, () => {
+        const q = playPrefs().quality, lv = h.levels || [];
+        if (lv.length > 1 && q === 'max') { h.currentLevel = lv.length - 1; }
+        else if (lv.length > 1 && /^\d+$/.test(q)) { let cap = -1; lv.forEach((l, i) => { if ((l.height || 0) <= +q) cap = i; }); if (cap >= 0) h.autoLevelCapping = cap; }
+        v.play().catch(() => {});
+      });
       h.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) { if (d.type === 'networkError' && !item._retry) { item._retry = 1; h.startLoad(); } else { h.destroy(); engines.delete(v); fail(); } } });
       return;
     }
@@ -949,11 +1078,17 @@ $('#liveList').addEventListener('scroll', (e) => { const l = e.target; if (l.scr
 $('#liveList').addEventListener('click', (e) => {
   const el = e.target.closest('.ch'); if (!el) return;
   const ch = S.liveIndex[+el.dataset.i];
-  if (S.playingLive && S.playingLive.id === ch.id) return openFs(ch, 'live');
+  if (HAS_PLAYER || (S.playingLive && S.playingLive.id === ch.id)) return openFs(ch, 'live');
   preview(ch);
 });
 $('#liveList').addEventListener('klong', (e) => { const el = e.target.closest('.ch'); if (el) toggleFav(S.liveIndex[+el.dataset.i], el); });
-document.addEventListener('kfocus', (e) => { const el = e.target; if (el.classList.contains('ch') && +el.dataset.i > chRendered - 12 && chRendered < S.liveIndex.length) moreChannels(); });
+let pvT;
+document.addEventListener('kfocus', (e) => {
+  const el = e.target;
+  if (!el.classList.contains('ch')) return;
+  if (+el.dataset.i > chRendered - 12 && chRendered < S.liveIndex.length) moreChannels();
+  if (HAS_PLAYER) { clearTimeout(pvT); pvT = setTimeout(() => { const ch = S.liveIndex[+el.dataset.i]; if (ch && cur === el) preview(ch); }, 350); }
+});
 
 function toggleFav(item, el) {
   if (S.favs.has(item.id)) { S.favs.delete(item.id); toast('Rimosso dai preferiti'); } else { S.favs.add(item.id); toast('★ Aggiunto ai preferiti'); }
@@ -968,8 +1103,10 @@ function preview(ch) {
   $('#pvName').textContent = ch.name;
   $('#pvDemo').textContent = ch.name;
   $('#pvMeta').innerHTML = `<span class="pill">CH ${ch.num}</span><span>${esc(ch.group)}</span>${S.favs.has(ch.id) ? '<span style="color:var(--warn)">★ Preferito</span>' : ''}`;
-  const v = $('#pv'); v.muted = false;
-  playUrl(v, ch, $('#pvBox'));
+  if (HAS_PLAYER) {
+    $('#pvBox').classList.add('demo');
+    $('#pvDemo').innerHTML = `<div class="pv-logo">${ch.logo ? `<img src="${esc(ch.logo)}" onerror="this.remove()">` : ''}<span>${esc(ch.name)}</span></div>`;
+  } else { const v = $('#pv'); v.muted = false; playUrl(v, ch, $('#pvBox')); }
   addRecent(ch, 'live');
   loadEpg(ch);
 }
@@ -1014,8 +1151,43 @@ function numZap(d) {
    FULLSCREEN + OSD
    ===================================================================== */
 let fsItem = null, fsKind = '', osdT;
-function openFs(item, kind) {
+function nativePlay(item, kind, fromSec) {
+  if (!HAS_PLAYER) return false;
+  const P = playPrefs();
+  let items, index = 0;
+  if (kind === 'live') {
+    const list = S.liveIndex.length && S.liveIndex.includes(item) ? S.liveIndex : S.lib.live;
+    index = Math.max(0, list.indexOf(item));
+    items = list.map((c) => ({ id: c.id, t: c.name, u: c.url, a: c.alt || '', n: c.num || 0, g: c.group || '' }));
+  } else items = [{ id: item.id, t: item.name, u: item.url, a: '', n: 0, g: item.group || '' }];
+  const stored = kind === 'live' ? 0 : store.get('pos', {})[item.id] || 0;
+  const start = fromSec != null ? fromSec : stored;
+  try {
+    NATIVE.play(JSON.stringify({ kind, items, index, start: Math.floor(start * 1000), engine: P.engine, quality: P.quality, buffer: P.buffer, aspect: P.aspect, brand: S.settings.brand || 'KAIROS' }));
+  } catch (e) { return false; }
+  if (kind === 'live') { S.playingLive = item; addRecent(item, 'live'); }
+  return true;
+}
+// chiamata dall'app quando si chiude il player nativo
+window.kxPlayerClosed = (r) => {
+  try { r = typeof r === 'string' ? JSON.parse(r) : r; } catch { return; }
+  if (!r) return;
+  if (r.engine) { const P = playPrefs(); P.engine = r.engine; store.set('play', P); }
+  if (r.kind === 'vod' && r.id && r.dur > 0) {
+    const pos = store.get('pos', {}), du = store.get('dur', {});
+    if (r.pos > 5 && r.pos < r.dur - 30) pos[r.id] = r.pos; else delete pos[r.id];
+    du[r.id] = r.dur; store.set('pos', pos); store.set('dur', du);
+  }
+  if (r.kind === 'live' && r.id && S.byId) {
+    const ch = S.byId.get(r.id);
+    if (ch) { S.playingLive = ch; addRecent(ch, 'live'); if ($('#live').classList.contains('on')) preview(ch); }
+  }
+  setTimeout(placeRing, 100);
+};
+function openFs(item, kind, fromSec) {
+  if (nativePlay(item, kind, fromSec)) return;
   fsItem = item; fsKind = kind;
+  if (fromSec > 0) $('#fv').addEventListener('loadedmetadata', () => ($('#fv').currentTime = fromSec), { once: true });
   stopPreview();
   $('#fs').classList.add('on');
   ring.classList.remove('on');
@@ -1102,6 +1274,7 @@ $('#vodGrid').addEventListener('klong', (e) => { const el = e.target.closest('.p
 
 function openItem(x) {
   if (!x) return;
+  if (x.folder) return openFolder(x);
   if (S.lib.live.includes(x)) { S.liveCat = 'all'; renderLive(); show('live'); preview(x); return; }
   openDetail(x);
 }
@@ -1116,6 +1289,7 @@ async function openDetail(x) {
     const bg = x.backdrop || x.poster || '';
     $('#dIn').innerHTML = `<div class="dm">
       <div class="dhero ${x.backdrop ? '' : 'ph'}" style="background-image:url('${esc(bg)}')">${x.backdrop ? '' : `<div class="dblur"></div><div class="dpost" style="background-image:url('${esc(x.poster || '')}')"></div>`}<div class="dfade"></div>
+        <span class="brandmark">${esc((S.settings.brand || 'KAIROS').toUpperCase())}</span>
         <button class="dx" data-f data-back>✕</button>
         <div class="dht"><div class="hkind"><i class="kb">K</i>${isSeries ? 'SERIE' : 'FILM'}</div><h1>${esc(x.name)}</h1>
           <div class="acts">${isSeries ? `<button class="nbtn play" data-f data-autof id="dEp1"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>Episodi</button>` : `<button class="nbtn play" data-f data-autof id="dPlay"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>${pos ? 'Riprendi' : 'Riproduci'}</button>${pos ? '<button class="nbtn info" data-f id="dRestart">↺ Dall\'inizio</button>' : ''}`}
@@ -1126,7 +1300,7 @@ async function openDetail(x) {
         <div class="side">${ex.cast ? `<p><span>Cast:</span> ${esc(ex.cast)}</p>` : ''}${ex.genre ? `<p><span>Generi:</span> ${esc(ex.genre)}</p>` : ''}<p><span>Categoria:</span> ${esc(x.group)}</p></div></div>
       ${isSeries ? '<div class="dsec"><div class="dsh"><h3>Episodi</h3><div class="seasons" id="dSeas"></div></div><div class="eps" id="dEps"><div class="mut">Caricamento episodi…</div></div></div>' : ''}</div>`;
     $('#dEp1') && ($('#dEp1').onclick = () => { const f = $('#dEps .ep'); f && focus(f); });
-    const play = (from) => { $('#detail').classList.remove('on'); openFs(x, 'vod'); addRecent(x, 'movie'); if (from) $('#fv').addEventListener('loadedmetadata', () => ($('#fv').currentTime = from), { once: true }); };
+    const play = (from) => { $('#detail').classList.remove('on'); openFs(x, 'vod', from || 0); addRecent(x, 'movie'); };
     $('#dPlay') && ($('#dPlay').onclick = () => play(pos));
     $('#dRestart') && ($('#dRestart').onclick = () => play(0));
     $('#dFav').onclick = () => { toggleFav(x); $('#dFav').textContent = S.favs.has(x.id) ? '✓' : '+'; };
@@ -1181,8 +1355,34 @@ const svgI = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 const isLiveItem = (x) => S.lib.live.includes(x);
 const isSeriesItem = (x) => S.lib.series.includes(x);
 
+const FOLD_IC = {
+  live: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="6" width="20" height="14" rx="2.5"/><path d="m8 2 4 4 4-4"/></svg>',
+  movies: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4"/></svg>',
+  series: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M10 9l4 2-4 2z"/></svg>',
+};
+const FOLDER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+const hueOf = (t) => { let h = 0; for (const c of String(t)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+function folderItems(kind, cats) {
+  const arr = kind === 'live' ? S.lib.live : kind === 'movies' ? S.lib.movies : S.lib.series;
+  const rep = new Map();
+  for (const x of arr) if (!rep.has(x.group) && (x.poster || x.logo || x.backdrop)) rep.set(x.group, x);
+  return cats.map((c) => ({ folder: true, id: 'fold:' + kind + ':' + c.name, kind, name: c.name, count: c.count, rep: rep.get(c.name) }));
+}
+function openFolder(f) {
+  if (f.kind === 'live') { S.liveCat = f.name; renderLive(); show('live'); return; }
+  openVod(f.kind, f.name);
+}
 function makeRows(kind) {
   const L = S.lib, R = [];
+  // cartelle in primo piano
+  if (kind === 'all') {
+    if (L.liveCats.length) R.push({ title: 'Cartelle · Live TV', type: 'fold', items: folderItems('live', L.liveCats), more: { go: 'live' } });
+    if (L.movieCats.length) R.push({ title: 'Cartelle · Film', type: 'fold', items: folderItems('movies', L.movieCats), more: { kind: 'movies', cat: 'all' } });
+    if (L.seriesCats.length) R.push({ title: 'Cartelle · Serie TV', type: 'fold', items: folderItems('series', L.seriesCats), more: { kind: 'series', cat: 'all' } });
+  } else {
+    const cats = kind === 'movies' ? L.movieCats : L.seriesCats;
+    if (cats.length) R.push({ title: 'Cartelle', type: 'fold', items: folderItems(kind, cats), more: { kind, cat: 'all' } });
+  }
   const inKind = (x) => kind === 'all' || (kind === 'movies' ? L.movies.includes(x) : L.series.includes(x));
   let rec = S.recent.map((r) => S.byId && S.byId.get(r.id)).filter((x) => x && inKind(x));
   if (S.demo && !rec.length) rec = [L.movies[2], L.series[0], L.movies[5], L.live[0], L.movies[9], L.series[3]].filter((x) => x && inKind(x));
@@ -1210,6 +1410,10 @@ function featured(kind) {
   return f.length ? f : L.live.slice(0, 6);
 }
 function cardHTML(type, x, k, i) {
+  if (type === 'fold') {
+    const h = hueOf(x.name);
+    return `<div class="nc f" data-f data-k="${k}" style="--h:${h};--h2:${(h + 50) % 360}"><span class="fk">${x.kind === 'live' ? 'LIVE TV' : x.kind === 'movies' ? 'FILM' : 'SERIE TV'}</span><span class="fsv">${FOLD_IC[x.kind]}</span><b>${esc(x.name)}</b><small>${x.count.toLocaleString('it')} ${x.kind === 'live' ? 'canali' : 'titoli'}</small></div>`;
+  }
   const img = x.poster || x.logo, ft = `<div class="ft">${esc(x.name)}</div>`;
   const onerr = `onerror="this.parentNode.classList.add('noimg');this.remove()"`;
   if (type === 'live') return `<div class="nc l" data-f data-k="${k}"><span class="tg">LIVE</span>${x.logo ? `<img loading="lazy" src="${esc(x.logo)}" onerror="this.outerHTML='<span class=lini>${esc(x.name.slice(0, 2).toUpperCase())}</span>'">` : `<span class="lini">${esc(x.name.slice(0, 2).toUpperCase())}</span>`}<div class="ln"><b>${x.num}</b>${esc(x.name)}</div></div>`;
@@ -1228,8 +1432,8 @@ function cardHTML(type, x, k, i) {
 function rowHTML(r, ri) {
   const max = 40;
   const cards = r.items.slice(0, max).map((x, i) => cardHTML(r.type, x, `${ri}:${i}`, i)).join('');
-  const more = r.more ? `<div class="nc more ${r.type === 'live' ? 'lm' : ''}" data-f data-k="${ri}:more">Vedi tutto<br>→</div>` : '';
-  return `<div class="nrow"><h3>${esc(r.title)}${r.sub ? `<small>${esc(r.sub)}</small>` : r.items.length > max ? `<small>${r.items.length}</small>` : ''}</h3><div class="track">${cards}${more}</div></div>`;
+  const more = r.more ? `<div class="nc more ${r.type === 'live' ? 'lm' : r.type === 'fold' ? 'fm' : ''}" data-f data-k="${ri}:more">Vedi tutto<br>→</div>` : '';
+  return `<div class="nrow ${r.type === 'fold' ? 'fold' : ''}"><h3>${r.type === 'fold' ? `<span class="fi">${FOLDER_SVG}</span>` : ''}${esc(r.title)}${r.sub ? `<small>${esc(r.sub)}</small>` : r.items.length > max ? `<small>${r.items.length}</small>` : ''}</h3><div class="track">${cards}${more}</div></div>`;
 }
 function moreRows(scr, n) {
   const rows = scr._rows.slice(scr._rendered, scr._rendered + n);
@@ -1262,13 +1466,14 @@ function buildBrowse(scr, kind) {
     const c = e.target.closest('[data-k]');
     if (c) { const [ri, ii] = c.dataset.k.split(':'); const r = scr._rows[+ri]; if (ii === 'more') return r.more.go ? go(r.more.go) : openVod(r.more.kind, r.more.cat); return openItem(r.items[+ii]); }
     if (e.target.closest('[data-hplay]')) return heroPlay(scr);
-    if (e.target.closest('[data-hinfo]')) { const x = scr._hero; if (x) isLiveItem(x) ? openItem(x) : openDetail(x); }
+    if (e.target.closest('[data-hinfo]')) { const x = scr._hero; if (x) x.folder ? openFolder(x) : isLiveItem(x) ? openItem(x) : openDetail(x); }
   });
-  scr.addEventListener('klong', (e) => { const c = e.target.closest('[data-k]'); if (c) { const x = item(c.dataset.k); x && toggleFav(x); } });
+  scr.addEventListener('klong', (e) => { const c = e.target.closest('[data-k]'); if (c) { const x = item(c.dataset.k); x && !x.folder && toggleFav(x); } });
   scr.addEventListener('kfocus', (e) => {
     const t = e.target, rail = scr.querySelector('.rail');
     rail.classList.toggle('open', !!t.closest('.rail') && innerWidth > 900);
     const c = t.closest('[data-k]'), rows = scr.querySelector('.rows');
+    scr.classList.toggle('inrows', !!c);
     if (c) {
       const x = item(c.dataset.k); if (x) heroQueue(scr, x);
       const row = c.closest('.nrow'); rows.scrollTo({ top: row.offsetTop - 6, behavior: 'smooth' });
@@ -1281,6 +1486,7 @@ function buildBrowse(scr, kind) {
 let heroT;
 function heroQueue(scr, x) { clearTimeout(heroT); heroT = setTimeout(() => setHero(scr, x), 230); }
 function setHero(scr, x, instant) {
+  if (x && x.folder) return setFolderHero(scr, x, instant);
   const info = scr.querySelector('.hinfo'), hero = scr.querySelector('.hero');
   if (!x) { info.style.visibility = 'hidden'; return; }
   info.style.visibility = '';
@@ -1309,6 +1515,26 @@ function setHero(scr, x, instant) {
   else { info.classList.add('sw'); [main, blur].forEach((im) => im.classList.add('fade')); setTimeout(apply, 260); }
   if (x.xt && !x._info && !live) fetchInfo(x).then(() => { if (scr._hero === x) setHero(scr, x, true); });
 }
+function setFolderHero(scr, f, instant) {
+  if (scr._hero === f && !instant) return;
+  scr._hero = f;
+  const info = scr.querySelector('.hinfo'), hero = scr.querySelector('.hero');
+  const y = f.rep || {}, src = y.backdrop || y.poster || y.logo || '';
+  const main = hero.querySelector('img.main'), blur = hero.querySelector('img.blur');
+  const apply = () => {
+    hero.classList.toggle('lv', f.kind === 'live');
+    hero.classList.toggle('ph', f.kind !== 'live' && !y.backdrop && !!y.poster);
+    [main, blur].forEach((im) => { if (src) { im.onload = () => im.classList.remove('fade'); im.src = src; } else im.removeAttribute('src'); });
+    blur.style.display = y.backdrop ? 'none' : '';
+    scr.querySelector('.hkind').innerHTML = `<i class="kb">K</i>CARTELLA · ${f.kind === 'live' ? 'LIVE TV' : f.kind === 'movies' ? 'FILM' : 'SERIE TV'}`;
+    scr.querySelector('.htitle').textContent = f.name;
+    scr.querySelector('.hmeta').innerHTML = `<span class="m">${f.count.toLocaleString('it')} ${f.kind === 'live' ? 'canali' : 'titoli'}</span>`;
+    scr.querySelector('.hplot').textContent = y.name ? `Dentro trovi ${y.name} e molto altro. Premi Apri per entrare nella cartella.` : 'Premi Apri per entrare nella cartella.';
+    scr.querySelector('[data-hplay] span').textContent = 'Apri';
+    info.classList.remove('sw');
+  };
+  if (instant) apply(); else { info.classList.add('sw'); [main, blur].forEach((im) => im.classList.add('fade')); setTimeout(apply, 240); }
+}
 async function fetchInfo(x) {
   x._info = 1;
   try {
@@ -1324,11 +1550,11 @@ async function fetchInfo(x) {
 }
 function heroPlay(scr) {
   const x = scr._hero; if (!x) return;
+  if (x.folder) return openFolder(x);
   if (isLiveItem(x)) { S.liveIndex = S.lib.live; addRecent(x, 'live'); return openFs(x, 'live'); }
   if (isSeriesItem(x)) return openDetail(x);
   const pos = store.get('pos', {})[x.id];
-  openFs(x, 'vod'); addRecent(x, 'movie');
-  if (pos) $('#fv').addEventListener('loadedmetadata', () => ($('#fv').currentTime = pos), { once: true });
+  openFs(x, 'vod', pos || 0); addRecent(x, 'movie');
 }
 setInterval(() => {
   const scr = $('.bscr.on'); if (!scr || !scr._feat || scr._feat.length < 2) return;
@@ -1363,12 +1589,17 @@ function renderSettings() {
     <div class="kv"><span>Server</span><b style="font-size:13px;word-break:break-all;text-align:right">${esc(baseServer() || 'nessuno')}</b></div>
     <div class="kv"><span>Contenuti</span><b>${S.lib.live.length} canali · ${S.lib.movies.length} film · ${S.lib.series.length} serie</b></div>
     ${S.settings.supportContact ? `<div class="kv"><span>Assistenza</span><b>${esc(S.settings.supportContact)}</b></div>` : ''}
-    <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap"><button class="btn pri" data-f id="sReload">↻ Aggiorna contenuti</button><button class="btn" data-f id="sServer">Cambia server</button></div>
+    <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap"><button class="btn pri" data-f id="sReload">↻ Aggiorna contenuti</button><button class="btn" data-f id="sTest">Test connessione</button><button class="btn" data-f id="sServer">Cambia server</button></div>
   </div>
   <div class="card glass"><h3>PLAYLIST</h3>
     ${allPl.map((p) => `<div class="plrow"><div><b>${esc(p.name)}</b><small>${p.type === 'xtream' ? 'Xtream Codes · ' + esc(p.host) : 'M3U'}${p.srv ? ' · dal gestore' : ' · personale'}</small></div>${p.srv ? '' : `<button class="btn" data-f data-del="${p.id}" style="padding:8px 12px">✕</button>`}</div>`).join('') || '<div class="mut" style="margin-bottom:12px">Nessuna playlist</div>'}
     ${S.settings.allowLocalPlaylists ? `<div class="seg" style="margin-top:14px"><button data-f class="sel" id="tM3U">M3U</button><button data-f id="tXT">Xtream Codes</button></div>
     <div id="plForm"></div><button class="btn pri" data-f id="plAdd" style="width:100%;justify-content:center">+ Aggiungi playlist</button>` : '<div class="mut" style="font-size:14px">Le playlist sono gestite dal tuo fornitore.</div>'}
+  </div>
+  <div class="card glass"><h3>RIPRODUZIONE</h3>
+    ${HAS_PLAYER ? '' : '<p class="mut" style="font-size:13px;margin-bottom:12px">Queste opzioni valgono nell\'app Android (Fire TV, Android TV, telefoni).</p>'}
+    ${[['engine', 'Motore video', [['exo', 'ExoPlayer'], ['vlc', 'VLC']]], ['quality', 'Qualità video', [['auto', 'Automatica'], ['max', 'Massima'], ['1080', '1080p'], ['720', '720p'], ['480', '480p']]], ['buffer', 'Buffer di rete', [['fast', 'Veloce'], ['balanced', 'Bilanciato'], ['stable', 'Stabile']]], ['aspect', 'Formato immagine', [['fit', 'Adatta'], ['fill', 'Riempi'], ['zoom', 'Zoom']]]].map(([k, lbl, opts]) => `<div class="mut" style="margin:10px 0 8px;font-size:14px">${lbl}</div><div class="seg" style="flex-wrap:wrap">${opts.map(([v, t]) => `<button data-f data-pk="${k}" data-pv="${v}" class="${playPrefs()[k] === v ? 'sel' : ''}">${t}</button>`).join('')}</div>`).join('')}
+    <p class="mut" style="font-size:12px;line-height:1.5;margin-top:6px">ExoPlayer è il più fluido sulla maggior parte dei dispositivi; VLC legge più formati: usalo se un canale non parte. <b>Stabile</b> accumula più video in anticipo: ideale con connessioni medie. Durante la visione premi <b>OK</b> per cambiare traccia audio, qualità e sottotitoli.</p>
   </div>
   <div class="card glass"><h3>ESPERIENZA</h3>
     <div class="switch ${S.sound ? 'on' : ''}" data-f id="sSound"><span>Effetti sonori</span><i></i></div>
@@ -1395,6 +1626,19 @@ function renderSettings() {
   $$('[data-del]').forEach((b) => (b.onclick = async () => { S.local = S.local.filter((p) => p.id !== b.dataset.del); store.set('localPl', S.local); await loadLibrary(); renderSettings(); }));
   $('#sReload').onclick = async () => { toast('Aggiornamento…'); try { if (!S.demo && baseServer()) await register(); } catch {} if (S.demo) setLib(demoLib()); else await loadLibrary(); toast('Contenuti aggiornati'); renderSettings(); focus($('#sReload'), true); };
   $('#sServer').onclick = () => { showActivate(true); };
+  $('#sTest').onclick = async () => {
+    const b = baseServer(); if (!b) return toast('Nessun server impostato');
+    const t0 = performance.now();
+    try {
+      let st, tx;
+      if (hasNativeHttp()) ({ status: st, text: tx } = await nativeFetch(b + '/api/player/ping'));
+      else { const r = await fetch(b + '/api/player/ping'); st = r.status; tx = await r.text(); }
+      let j = null; try { j = JSON.parse(tx); } catch {}
+      if (j && j.ok) toast(`✓ Pannello raggiungibile (${Math.round(performance.now() - t0)} ms)`, 4000);
+      else toast(`✗ Risposta non valida (HTTP ${st}): controlla le protezioni Cloudflare e l'indirizzo`, 7000);
+    } catch (e) { toast('✗ Server non raggiungibile: ' + (e.message || 'errore di rete'), 7000); }
+  };
+  $$('[data-pk]').forEach((b) => (b.onclick = () => { const P = playPrefs(); P[b.dataset.pk] = b.dataset.pv; store.set('play', P); $$(`[data-pk="${b.dataset.pk}"]`).forEach((x) => x.classList.toggle('sel', x === b)); }));
   $('#sSound').onclick = () => { S.sound = !S.sound; store.set('sound', S.sound); $('#sSound').classList.toggle('on', S.sound); };
   $$('[data-theme]').forEach((b) => (b.onclick = () => { store.set('theme', b.dataset.theme); applyTheme(b.dataset.theme); $$('[data-theme]').forEach((x) => x.classList.toggle('sel', x === b)); }));
   $('#sClear').onclick = () => { S.favs.clear(); S.recent = []; store.set('favs', []); store.set('recent', []); store.set('pos', {}); updFavCount(); toast('Fatto'); };
@@ -1413,18 +1657,20 @@ function showActivate(serverMode) {
     expired: '<b style="color:var(--bad)">Abbonamento scaduto.</b> Contatta il tuo fornitore per rinnovarlo indicando il codice qui sopra.',
     disabled: '<b style="color:var(--bad)">Dispositivo disattivato.</b> Contatta il tuo fornitore.',
     locked: '<b style="color:var(--bad)">Questo codice è già usato da un altro dispositivo.</b> Chiedi al tuo fornitore di sbloccarlo dal pannello.',
-    offline: '<b style="color:var(--warn)">Nessuna connessione al server.</b> Controlla internet: riprovo da solo tra pochi secondi.',
+    offline: '<b style="color:var(--warn)">Non riesco a collegarmi al server.</b> Riprovo da solo ogni pochi secondi.' + `<br><span class="mut" style="font-size:14px;display:block;margin-top:8px">${esc(S.lastError || 'Controlla la connessione a internet.')}<br>Server: ${esc(baseServer() || 'non impostato')}</span>`,
     noserver: 'Nessun server collegato. Inserisci l\'indirizzo del server del tuo fornitore, oppure prova la demo.',
   };
   const key = serverMode ? 'noserver' : S.status;
   $('#actMsg').innerHTML = (msgs[key] || msgs.pending) + (S.settings.supportContact && !serverMode ? `<br><span class="mut">Assistenza: ${esc(S.settings.supportContact)}</span>` : '');
   $('#srvBox').style.display = serverMode ? 'block' : 'none';
   $('#srvInput').value = S.server || '';
-  $('#actBtns').innerHTML = (serverMode ? '' : '<button class="btn" data-f id="aSrv">Cambia server</button>') + (S.settings.allowLocalPlaylists ? '<button class="btn" data-f id="aLocal">Usa una mia playlist</button>' : '') + (window.KAIROS_SERVER ? '' : '<button class="btn" data-f id="aDemo">✦ Modalità demo</button>');
+  $('#actBtns').innerHTML = (!serverMode && S.status === 'offline' ? '<button class="btn pri" data-f id="aRetry">↻ Riprova ora</button>' : '') + (serverMode ? '' : '<button class="btn" data-f id="aSrv">Cambia server</button>') + (S.settings.allowLocalPlaylists ? '<button class="btn" data-f id="aLocal">Usa una mia playlist</button>' : '') + (window.KAIROS_SERVER ? '' : '<button class="btn" data-f id="aDemo">✦ Modalità demo</button>');
   $('#aSrv') && ($('#aSrv').onclick = () => showActivate(true));
+  $('#aRetry') && ($('#aRetry').onclick = async () => { toast('Connessione in corso…'); try { await register(); } catch { S.status = 'offline'; } if (S.status === 'active') { clearInterval(pollT); await afterActive(); } else showActivate(false); });
   $('#aDemo') && ($('#aDemo').onclick = () => startDemo());
   $('#aLocal') && ($('#aLocal').onclick = async () => { clearInterval(pollT); setLib({ live: [], movies: [], series: [] }); enterHome(); go('settings'); });
   show('activate', false);
+  warpStop && warpStop();
   clearInterval(pollT);
   if (!serverMode) pollT = setInterval(async () => {
     const prev = S.status;
@@ -1435,15 +1681,42 @@ function showActivate(serverMode) {
 }
 $('#srvSave').onclick = async () => {
   S.server = $('#srvInput').value.trim().replace(/\/+$/, ''); store.set('server', S.server); S.demo = false;
-  try { await register(); S.status === 'active' ? afterActive() : showActivate(false); } catch { fx('err'); toast('Server non raggiungibile'); }
+  try { await register(); S.status === 'active' ? afterActive() : showActivate(false); } catch { fx('err'); toast(S.lastError || 'Server non raggiungibile', 6000); }
 };
 async function afterActive() {
-  show('boot', false); bootMsg('Sincronizzazione');
+  show('boot', false); startWarp(); bootMsg('Sincronizzazione');
   $('#bootBar').style.width = '70%';
   await loadLibrary();
   $('#bootBar').style.width = '100%';
   await sleep(300);
   enterHome();
+}
+let warpStop = null;
+function startWarp() {
+  if (warpStop) return;
+  const c = $('#warp'); if (!c || !c.getContext) return;
+  const x = c.getContext('2d');
+  let W = 0, H = 0, run = true;
+  const rs = () => { W = c.width = innerWidth; H = c.height = innerHeight; };
+  rs(); addEventListener('resize', rs);
+  const col = getComputedStyle(document.documentElement).getPropertyValue('--a1').trim() || '#e5202b';
+  const stars = Array.from({ length: NATIVE ? 200 : 380 }, () => ({ x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2, z: Math.random(), c: Math.random() < 0.3 ? col : '#ffffff' }));
+  const t0 = performance.now();
+  (function frame(t) {
+    if (!run) return;
+    const el = (t - t0) / 1000, speed = Math.min(0.03, 0.0025 + el * el * 0.0035);
+    x.globalAlpha = 1; x.fillStyle = 'rgba(0,0,0,0.32)'; x.fillRect(0, 0, W, H);
+    const cx = W / 2, cy = H / 2;
+    for (const s of stars) {
+      const pz = s.z; s.z -= speed;
+      if (s.z <= 0.02) { s.x = (Math.random() - 0.5) * 2; s.y = (Math.random() - 0.5) * 2; s.z = 1; continue; }
+      const sx = cx + (s.x / s.z) * W * 0.5, sy = cy + (s.y / s.z) * H * 0.5, px = cx + (s.x / pz) * W * 0.5, py = cy + (s.y / pz) * H * 0.5;
+      x.globalAlpha = Math.min(1, (1 - s.z) * 1.5); x.strokeStyle = s.c; x.lineWidth = (1 - s.z) * 2.4;
+      x.beginPath(); x.moveTo(px, py); x.lineTo(sx, sy); x.stroke();
+    }
+    requestAnimationFrame(frame);
+  })(t0);
+  warpStop = () => { run = false; removeEventListener('resize', rs); warpStop = null; };
 }
 async function enterHome() {
   clearInterval(pollT);
@@ -1453,6 +1726,7 @@ async function enterHome() {
   if (b.classList.contains('on')) { b.classList.add('out'); fx('boot'); await sleep(950); }
   show('home', false);
   b.classList.remove('out');
+  warpStop && warpStop();
 }
 function startDemo() {
   S.demo = true; clearInterval(pollT);
@@ -1461,14 +1735,13 @@ function startDemo() {
 }
 
 async function boot() {
-  $('#ribbons').innerHTML = Array.from({ length: 46 }, (_, i) => `<i style="background:linear-gradient(180deg,transparent,${['var(--a1)', 'var(--a2)', 'var(--a3)', '#fff'][i % 7 === 0 ? 3 : i % 3]} ${20 + (i * 13) % 40}%,${['var(--a3)', 'var(--a1)', 'var(--a2)'][i % 3]},transparent);animation-delay:${Math.abs(i - 23) * 14}ms"></i>`).join('');
   const t = store.get('theme'); applyTheme(t || 'cinema');
-  const brand = 'KAIROS';
-  $('#bootTitle').innerHTML = brand.split('').map((c, i) => `<span style="animation-delay:${.15 + i * .09}s">${c}</span>`).join('');
+  startWarp();
+  if (HAS_PLAYER) $('#hintOk').innerHTML = '<kbd>OK</kbd>guarda a schermo intero';
   const bar = $('#bootBar');
   setTimeout(() => (bar.style.width = '25%'), 100);
   bootMsg('Connessione al server');
-  await sleep(900);
+  await sleep(2300); // lascia completare l'animazione del logo
   let ok = false;
   if (baseServer()) { try { await register(); ok = true; } catch {} }
   if (t) applyTheme(t);

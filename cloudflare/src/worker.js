@@ -270,6 +270,7 @@ async function route(req, env, ctx) {
   if (path.startsWith('/api/player/')) {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204 });
     if (path === '/api/player/register' && req.method === 'POST') return playerRegister(req, env, ip, ctx);
+    if (path === '/api/player/ping' && req.method === 'GET') return json({ ok: true, service: 'kairos', time: now() });
     return json({ error: 'Non trovato' }, 404);
   }
 
