@@ -116,6 +116,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        thread(name = "kx-clean") { try { netDir.listFiles()?.forEach { it.delete() } } catch (_: Exception) {} }
         loadUi()
         web.requestFocus()
 
@@ -283,47 +284,125 @@ class MainActivity : ComponentActivity() {
     /* ------------------------------------------------------------------ */
     /* Speed test                                                          */
     /* ------------------------------------------------------------------ */
+    @Volatile private var speedRunning = false
+
     private fun runSpeedTest() {
+        if (speedRunning) return
+        speedRunning = true
         thread(name = "kx-speed") {
             fun send(o: JSONObject) = js("window.kxSpeedCb && kxSpeedCb(${JSONObject.quote(o.toString())})")
+            val ua = userAgent()
+            fun open(u: String, timeout: Int): HttpURLConnection = (URL(u).openConnection() as HttpURLConnection).apply {
+                connectTimeout = timeout; readTimeout = timeout; useCaches = false
+                setRequestProperty("User-Agent", ua)
+                setRequestProperty("Accept-Encoding", "identity")
+            }
             try {
-                // latenza: media di 3 richieste vuote
-                var pingSum = 0L
-                repeat(3) {
+                // latenza: la migliore di 4 richieste vuote (la prima apre la connessione)
+                var best = Double.MAX_VALUE
+                repeat(4) {
                     val t0 = System.nanoTime()
-                    val c = URL("https://speed.cloudflare.com/__down?bytes=0").openConnection() as HttpURLConnection
-                    c.connectTimeout = 8000; c.readTimeout = 8000
-                    c.inputStream.use { it.read() }
+                    val c = open("https://speed.cloudflare.com/__down?bytes=0", 8000)
+                    c.inputStream.use { it.readBytes() }
                     c.disconnect()
-                    pingSum += (System.nanoTime() - t0) / 1_000_000
+                    best = minOf(best, (System.nanoTime() - t0) / 1e6)
                 }
-                val ping = pingSum / 3.0
-                send(JSONObject().put("ping", ping).put("mbps", 0))
-                // download: fino a 8 secondi
-                val c = URL("https://speed.cloudflare.com/__down?bytes=200000000").openConnection() as HttpURLConnection
-                c.connectTimeout = 10_000; c.readTimeout = 10_000
+                val ping = best
+                send(JSONObject().put("phase", "download").put("ping", ping).put("mbps", 0))
+                // download: 4 connessioni in parallelo per 8 secondi (misura più vicina alla velocità reale)
+                val total = java.util.concurrent.atomic.AtomicLong(0)
+                val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+                val errors = java.util.concurrent.atomic.AtomicInteger(0)
                 val start = System.nanoTime()
-                var got = 0L
-                var lastSend = 0L
-                c.inputStream.use { input ->
-                    val buf = ByteArray(128 * 1024)
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        got += n
-                        val el = (System.nanoTime() - start) / 1_000_000
-                        if (el - lastSend > 250) { lastSend = el; send(JSONObject().put("ping", ping).put("mbps", got * 8.0 / (el / 1000.0) / 1e6)) }
-                        if (el > 8000) break
+                val workers = (1..4).map {
+                    thread(name = "kx-speed-$it") {
+                        val buf = ByteArray(128 * 1024)
+                        while (!stop.get()) {
+                            try {
+                                val c = open("https://speed.cloudflare.com/__down?bytes=25000000", 10_000)
+                                c.inputStream.use { input ->
+                                    while (!stop.get()) {
+                                        val n = input.read(buf)
+                                        if (n < 0) break
+                                        total.addAndGet(n.toLong())
+                                    }
+                                }
+                                c.disconnect()
+                            } catch (e: Exception) {
+                                if (errors.incrementAndGet() > 6) break
+                                Thread.sleep(200)
+                            }
+                        }
                     }
                 }
-                c.disconnect()
+                while (true) {
+                    Thread.sleep(250)
+                    val el = (System.nanoTime() - start) / 1e9
+                    val mbps = total.get() * 8.0 / el / 1e6
+                    if (el >= 8.0 || errors.get() > 6) { stop.set(true); break }
+                    send(JSONObject().put("phase", "download").put("ping", ping).put("mbps", mbps).put("p", (el / 8.0 * 100).toInt()))
+                }
+                workers.forEach { it.join(3000) }
                 val sec = (System.nanoTime() - start) / 1e9
-                send(JSONObject().put("done", true).put("ping", ping).put("mbps", got * 8.0 / sec / 1e6))
+                if (total.get() == 0L) throw Exception("nessun dato ricevuto")
+                send(JSONObject().put("done", true).put("ping", ping).put("mbps", total.get() * 8.0 / sec / 1e6))
             } catch (e: Exception) {
-                send(JSONObject().put("error", e.javaClass.simpleName))
+                send(JSONObject().put("error", e.message ?: e.javaClass.simpleName))
+            } finally {
+                speedRunning = false
             }
         }
     }
+
+    /* ------------------------------------------------------------------ */
+    /* Download su file (playlist grandi) + cache dei contenuti            */
+    /* ------------------------------------------------------------------ */
+    private val netDir: File get() = File(cacheDir, "net").apply { mkdirs() }
+    private val libDir: File get() = File(filesDir, "lib").apply { mkdirs() }
+    private val httpPool = java.util.concurrent.Executors.newFixedThreadPool(6)
+
+    /** scarica [url] in un file e restituisce (stato, percorso). Il testo non passa dal ponte JS: molto più veloce. */
+    private fun fetchToFile(id: String, url: String, ua: String) {
+        httpPool.execute {
+            var status = -1
+            var path = ""
+            var err = ""
+            try {
+                var target = URL(url)
+                var hops = 0
+                var conn = target.openConnection() as HttpURLConnection
+                while (true) {
+                    conn.instanceFollowRedirects = false
+                    conn.connectTimeout = 15_000
+                    conn.readTimeout = 45_000
+                    conn.setRequestProperty("User-Agent", ua.ifBlank { userAgent() })
+                    conn.setRequestProperty("Accept", "*/*")
+                    conn.setRequestProperty("Accept-Encoding", "gzip")
+                    val code = conn.responseCode
+                    val loc = conn.getHeaderField("Location")
+                    if (code in 300..399 && loc != null && hops < 6) {
+                        conn.disconnect(); target = URL(target, loc); hops++
+                        conn = target.openConnection() as HttpURLConnection
+                        continue
+                    }
+                    status = code
+                    break
+                }
+                val raw = (if (status >= 400) conn.errorStream else conn.inputStream)
+                val input = if (raw != null && "gzip".equals(conn.contentEncoding, true)) java.util.zip.GZIPInputStream(raw, 64 * 1024) else raw
+                val out = File(netDir, id.replace(Regex("[^A-Za-z0-9_-]"), "_") + ".txt")
+                input?.use { inp -> FileOutputStream(out).use { fo -> inp.copyTo(fo, 128 * 1024) } }
+                conn.disconnect()
+                path = "file://" + out.absolutePath
+            } catch (e: Exception) {
+                status = -1
+                err = e.javaClass.simpleName + (e.message?.let { ": $it" } ?: "")
+            }
+            js("window.kxFileCb && window.kxFileCb(${JSONObject.quote(id)}, $status, ${JSONObject.quote(path)}, ${JSONObject.quote(err)})")
+        }
+    }
+
+    private fun libFile(key: String) = File(libDir, key.replace(Regex("[^A-Za-z0-9_-]"), "_").take(80) + ".json")
 
     /* ------------------------------------------------------------------ */
 
@@ -378,6 +457,7 @@ class MainActivity : ComponentActivity() {
         ui.removeCallbacksAndMessages(null)
         previewEngine?.release()
         previewEngine = null
+        httpPool.shutdownNow()
         web.destroy()
         super.onDestroy()
     }
@@ -419,6 +499,19 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface fun previewStop() { runOnUiThread { stopPreview() } }
         @JavascriptInterface fun installApk(url: String) { downloadAndInstall(url) }
         @JavascriptInterface fun speedTest() { runSpeedTest() }
+
+        /** scarica un indirizzo in un file locale; risposta in window.kxFileCb(id, status, path, error) */
+        @JavascriptInterface fun httpFile(id: String, url: String, ua: String) { fetchToFile(id, url, ua) }
+        /** cancella un file scaricato con httpFile */
+        @JavascriptInterface fun dropFile(path: String) {
+            try { val f = File(Uri.parse(path).path ?: return); if (f.absolutePath.startsWith(netDir.absolutePath)) f.delete() } catch (_: Exception) {}
+        }
+        /** cache della libreria (canali, film, serie) per un avvio istantaneo */
+        @JavascriptInterface fun cachePut(key: String, data: String) {
+            try { val f = libFile(key); val t = File(f.path + ".tmp"); t.writeText(data, Charsets.UTF_8); t.renameTo(f) } catch (_: Exception) {}
+        }
+        @JavascriptInterface fun cachePath(key: String): String { val f = libFile(key); return if (f.exists()) "file://" + f.absolutePath else "" }
+        @JavascriptInterface fun cacheClear() { try { libDir.deleteRecursively() } catch (_: Exception) {} }
 
         /** Richiesta HTTP fatta dall'app (senza limiti CORS). Risposta in window.kxHttpCb(id, status, body). */
         @JavascriptInterface fun http(id: String, method: String, url: String, body: String, ua: String) {
