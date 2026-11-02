@@ -39,15 +39,36 @@ interface EngineListener {
     fun onReady()
     fun onError(message: String)
     fun onEnded()
+    /** primo fotogramma disegnato (per le animazioni del cambio canale) */
+    fun onFirstFrame() {}
+}
+
+/** Passaggio del video tra anteprima e schermo intero senza interruzioni (stesso player, nessun nuovo caricamento). */
+object Handoff {
+    /** anteprima → schermo intero */
+    @Volatile var engine: ExoEngine? = null
+    /** schermo intero → anteprima */
+    @Volatile var back: ExoEngine? = null
+    @Volatile var id: String = ""
+    /** riquadro dell'anteprima sullo schermo (x, y, larghezza, altezza) */
+    @Volatile var box: IntArray? = null
+}
+
+object NoopListener : EngineListener {
+    override fun onBuffering(buffering: Boolean) {}
+    override fun onReady() {}
+    override fun onError(message: String) {}
+    override fun onEnded() {}
 }
 
 /** Impostazioni di riproduzione scelte nell'app. */
-data class PlayPrefs(val quality: String, val buffer: String, val aspect: String) {
-    /** millisecondi di video da accumulare prima di partire / dopo un'interruzione */
-    val startMs: Int get() = when (buffer) { "fast" -> 1200; "stable" -> 4000; else -> 2000 }
+data class PlayPrefs(val quality: String, val buffer: String, val aspect: String, val live: Boolean = false) {
+    /** millisecondi di video da accumulare prima di partire / dopo un'interruzione.
+     *  In diretta si parte prima: il cambio canale è molto più rapido. */
+    val startMs: Int get() = if (live) when (buffer) { "fast" -> 500; "stable" -> 2000; else -> 900 } else when (buffer) { "fast" -> 1200; "stable" -> 4000; else -> 2000 }
     val rebufferMs: Int get() = when (buffer) { "fast" -> 2500; "stable" -> 8000; else -> 4000 }
     val maxMs: Int get() = when (buffer) { "fast" -> 30000; "stable" -> 90000; else -> 50000 }
-    val vlcCacheMs: Int get() = when (buffer) { "fast" -> 1000; "stable" -> 5000; else -> 2500 }
+    val vlcCacheMs: Int get() = if (live) when (buffer) { "fast" -> 600; "stable" -> 3000; else -> 1200 } else when (buffer) { "fast" -> 1000; "stable" -> 5000; else -> 2500 }
     val maxHeight: Int get() = quality.toIntOrNull() ?: 0
 }
 
@@ -94,7 +115,7 @@ private fun langName(code: String?): String {
 /* ExoPlayer                                                               */
 /* ======================================================================= */
 @OptIn(UnstableApi::class)
-class ExoEngine(ctx: Context, private val l: EngineListener, ua: String, private val prefs: PlayPrefs, overlay: Boolean = false) : Engine {
+class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, private val prefs: PlayPrefs, overlay: Boolean = false) : Engine {
     override val name = "exo"
     private val selector = DefaultTrackSelector(
         ctx,
@@ -117,7 +138,7 @@ class ExoEngine(ctx: Context, private val l: EngineListener, ua: String, private
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
         val sources = DefaultMediaSourceFactory(DefaultDataSource.Factory(ctx, http), extractors)
         val load = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(maxOf(15_000, prefs.startMs), prefs.maxMs, prefs.startMs, prefs.rebufferMs)
+            .setBufferDurationsMs(maxOf(15_000, prefs.startMs + 1000), prefs.maxMs, prefs.startMs, prefs.rebufferMs)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
         val renderers = DefaultRenderersFactory(ctx)
@@ -150,6 +171,8 @@ class ExoEngine(ctx: Context, private val l: EngineListener, ua: String, private
                 }
             }
 
+            override fun onRenderedFirstFrame() { l.onFirstFrame() }
+
             override fun onPlayerError(error: PlaybackException) {
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     player.seekToDefaultPosition(); player.prepare(); return
@@ -162,13 +185,20 @@ class ExoEngine(ctx: Context, private val l: EngineListener, ua: String, private
     override fun play(url: String, startMs: Long) {
         val b = MediaItem.Builder().setUri(Uri.parse(url))
         mimeOf(url)?.let { b.setMimeType(it) }
-        b.setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(10_000).build())
+        b.setLiveConfiguration(MediaItem.LiveConfiguration.Builder().setTargetOffsetMs(6_000).build())
+        playingUrl = url
         player.setMediaItem(b.build(), maxOf(0L, startMs))
         player.prepare()
         player.playWhenReady = true
     }
 
-    override fun stop() { player.stop() }
+    /** indirizzo in riproduzione (serve per passare lo stesso video dall'anteprima allo schermo intero) */
+    @Volatile var playingUrl: String = ""
+    fun isActive(): Boolean = player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING
+    /** la superficie video va sopra (anteprima) o sotto (schermo intero, con i menu sopra) la finestra */
+    fun setOverlay(on: Boolean) { (pv.videoSurfaceView as? android.view.SurfaceView)?.setZOrderMediaOverlay(on) }
+
+    override fun stop() { player.stop(); playingUrl = "" }
     override fun togglePause() { player.playWhenReady = !player.playWhenReady }
     override fun isPlaying(): Boolean = player.playWhenReady
     override fun position(): Long = maxOf(0L, player.currentPosition)
@@ -322,6 +352,7 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
                 MediaPlayer.Event.Playing -> { l.onBuffering(false); l.onReady() }
                 MediaPlayer.Event.EncounteredError -> l.onError("VLC_ERROR")
                 MediaPlayer.Event.EndReached -> l.onEnded()
+                MediaPlayer.Event.Vout -> if (e.voutCount > 0) l.onFirstFrame()
                 else -> {}
             }
         }

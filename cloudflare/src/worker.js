@@ -267,27 +267,46 @@ const LEAGUES = [
   ['ita.coppa_italia', 'Coppa Italia'], ['eng.1', 'Premier League'], ['esp.1', 'LaLiga'], ['ger.1', 'Bundesliga'], ['fra.1', 'Ligue 1'],
 ];
 const ymd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
-async function footballEvents(ctx) {
-  const cache = typeof caches !== 'undefined' ? caches.default : null;
-  const key = new Request('https://kairos.cache/football-v1');
-  if (cache) { const hit = await cache.match(key); if (hit) return hit.json(); }
-  const from = new Date(), to = new Date(Date.now() + 8 * 86400e3);
-  const all = await Promise.all(LEAGUES.map(async ([code, label]) => {
-    try {
-      const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${code}/scoreboard?dates=${ymd(from)}-${ymd(to)}&limit=60`, { cf: { cacheTtl: 900 } });
-      if (!r.ok) return [];
-      const j = await r.json();
-      return (j.events || []).map((e) => {
-        const c = (e.competitions || [])[0] || {};
-        const team = (side) => { const t = ((c.competitors || []).find((x) => x.homeAway === side) || {}).team || {}; return { name: t.shortDisplayName || t.displayName || '', logo: t.logo || '' }; };
-        const state = (e.status && e.status.type && e.status.type.state) || 'pre';
-        return { id: String(e.id), league: label, start: e.date, home: team('home'), away: team('away'), venue: (c.venue && c.venue.fullName) || '', live: state === 'in', state };
-      }).filter((e) => e.state !== 'post' && e.home.name && e.away.name);
-    } catch { return []; }
-  }));
-  const events = all.flat().sort((a, b) => new Date(a.start) - new Date(b.start)).slice(0, 40);
-  const body = { events, updated: now() };
-  if (cache && events.length) ctx.waitUntil(cache.put(key, new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=900' } })));
+/* Eventi di calcio da ESPN.
+   ESPN rifiuta gli intervalli di date: si chiede un giorno alla volta per ogni campionato.
+   Ogni "campionato+giorno" viene salvato in D1 (la cache di Cloudflare non funziona su workers.dev)
+   e riscaricato solo quando è vecchio, restando sotto il limite di 50 richieste del piano gratuito. */
+let evMem = { t: 0, body: null };
+async function espnDay(code, label, day) {
+  const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${code}/scoreboard?dates=${day}`, { headers: { 'User-Agent': 'Mozilla/5.0 KairosPanel' } });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  return (j.events || []).map((e) => {
+    const c = (e.competitions || [])[0] || {};
+    const team = (side) => { const t = ((c.competitors || []).find((x) => x.homeAway === side) || {}).team || {}; return { name: t.shortDisplayName || t.displayName || '', logo: t.logo || '' }; };
+    const score = (side) => ((c.competitors || []).find((x) => x.homeAway === side) || {}).score;
+    const state = (e.status && e.status.type && e.status.type.state) || 'pre';
+    return { id: String(e.id), league: label, start: e.date, home: { ...team('home'), score: score('home') }, away: { ...team('away'), score: score('away') }, venue: (c.venue && c.venue.fullName) || '', live: state === 'in', state, clock: (e.status && e.status.type && e.status.type.shortDetail) || '' };
+  }).filter((e) => e.home.name && e.away.name);
+}
+async function footballEvents(env, ctx) {
+  if (evMem.body && now() - evMem.t < 3 * 60e3) return evMem.body;
+  const days = [...Array(8)].map((_, i) => ymd(new Date(now() + i * 86400e3)));
+  const rows = ((await env.DB.prepare("SELECT k, v FROM settings WHERE k LIKE 'ev:%'").all()).results) || [];
+  const have = new Map(rows.map((r) => { try { return [r.k, JSON.parse(r.v)]; } catch { return [r.k, null]; } }));
+  // validità: oggi 5 minuti (risultati in diretta), domani 1 ora, gli altri giorni 6 ore
+  const ttl = (di) => (di === 0 ? 5 * 60e3 : di === 1 ? 3600e3 : 6 * 3600e3);
+  const todo = [];
+  days.forEach((day, di) => LEAGUES.forEach(([code, label]) => { const k = `ev:${code}:${day}`, h = have.get(k); if (!h || now() - h.t > ttl(di)) todo.push({ k, code, label, day, di }); }));
+  todo.sort((a, b) => a.di - b.di);
+  const batch = todo.slice(0, 40);
+  const got = await Promise.all(batch.map(async (x) => { try { return { ...x, ev: await espnDay(x.code, x.label, x.day) }; } catch { return null; } }));
+  const writes = [];
+  for (const g of got) if (g) { const v = { t: now(), ev: g.ev }; have.set(g.k, v); writes.push(env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(g.k, JSON.stringify(v))); }
+  const old = [...have.keys()].filter((k) => !days.includes(k.split(':')[2]));
+  for (const k of old) { writes.push(env.DB.prepare('DELETE FROM settings WHERE k = ?').bind(k)); have.delete(k); }
+  if (writes.length) { const w = env.DB.batch(writes).catch(() => {}); ctx && ctx.waitUntil ? ctx.waitUntil(w) : await w; }
+  const seen = new Set(), t = now();
+  const events = [...have.values()].flatMap((v) => (v && v.ev) || [])
+    .filter((e) => { if (seen.has(e.id)) return false; seen.add(e.id); return e.state !== 'post' && +new Date(e.start) > t - 4 * 3600e3; })
+    .sort((a, b) => (+b.live - +a.live) || (new Date(a.start) - new Date(b.start))).slice(0, 40);
+  const body = { events, updated: t };
+  evMem = { t, body };
   return body;
 }
 async function log(env, type, text, ip = '') {
@@ -332,7 +351,7 @@ async function route(req, env, ctx) {
     if (path === '/api/player/ping' && req.method === 'GET') return json({ ok: true, service: 'kairos', time: now() });
     if (path === '/api/player/events' && req.method === 'GET') {
       if (await limited(env.RL_DEVICE, 'ev:' + ip)) return json({ events: [] }, 429);
-      return json(await footballEvents(ctx));
+      return json(await footballEvents(env, ctx));
     }
     if (path === '/api/player/update' && req.method === 'GET') {
       const s = await getSettings(env);

@@ -540,7 +540,7 @@ img{display:block}
 .lite .nc.ev.live{box-shadow:none}
 
 /* =====================================================================
-   v1.4 — barra in alto, selezione disegnata sull'elemento, cassetto
+   v1.5 — barra in alto, selezione disegnata sull'elemento, cassetto
    ===================================================================== */
 :root{--navh:clamp(64px,11vh,108px);--padx:clamp(22px,3.2vw,60px)}
 .focus-ring{display:none!important}
@@ -601,6 +601,25 @@ img{display:block}
 .hinfo.sw{opacity:0;transform:translateX(-14px)}
 .rows{scroll-behavior:smooth}
 .nrow{transition:opacity .3s}
+/* animazioni Live */
+.lpan.upd>*{animation:panIn .28s cubic-bezier(.2,.8,.2,1) both}
+.lpan.upd>*:nth-child(2){animation-delay:.03s}.lpan.upd>*:nth-child(3){animation-delay:.06s}.lpan.upd>*:nth-child(n+4){animation-delay:.09s}
+@keyframes panIn{from{opacity:0;transform:translateY(8px)}}
+#liveList .ch{transition:background .15s,border-color .15s,box-shadow .15s,transform .15s}
+#liveList .ch.focused{transform:translateX(4px)}
+.pvph>*{animation:panIn .3s both}
+.screen-box.has video{animation:fadein .35s}
+#fs.on{animation:fsIn .32s cubic-bezier(.2,.8,.2,1)}
+@keyframes fsIn{from{transform:scale(.45);opacity:.2;border-radius:24px}}
+.osd{transition:opacity .25s,transform .25s}
+/* conferma di uscita */
+.exitbox{text-align:center}.exitbox .tlogo{width:70px;height:70px;margin:0 auto 6px;display:block}
+.exitbox h2{font-size:clamp(20px,3.6vh,28px);margin:8px 0}
+.exitbox .sbtn{margin-top:20px}
+.speedm .sbox{animation:popIn .22s cubic-bezier(.2,.9,.3,1.2)}
+@keyframes popIn{from{transform:scale(.92);opacity:0}}
+#exitM.bye .sbox{transform:scale(.9);opacity:0;transition:.2s}
+.nc.ev .vs .sc{font-style:normal;color:#fff;font-size:1.25em;letter-spacing:.04em}
 /* cassetto (categorie / righe) */
 .drawer{position:fixed;inset:0;z-index:32;display:none}
 .drawer.on{display:block}
@@ -1133,8 +1152,22 @@ document.addEventListener('click', (e) => {
 window.kxBack = () => {
   if ($('#fs').classList.contains('on')) { fx('back'); closeFs(); return true; }
   if ($('.speedm.on') || $('#drawer').classList.contains('on') || $('#detail').classList.contains('on') || S.stack.length) { back(); return true; }
-  return false;
+  const scr = $('.screen.on');
+  if (scr && scr.id === 'boot') return false;
+  confirmExit(); return true;
 };
+function confirmExit() {
+  if ($('#exitM')) return;
+  const wasPv = S.previewing;
+  if ($('#live').classList.contains('on') && wasPv) { try { NATIVE && NATIVE.previewStop && NATIVE.previewStop(); } catch {} }
+  S.exitPv = wasPv;
+  fx('ok');
+  document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="exitM"><div class="sbox exitbox">${LOGO_SVG('kgX')}<h2>Vuoi uscire da ${esc(S.settings.brand || 'KAIROS')}?</h2><p class="mut">Potrai tornare quando vuoi: i tuoi canali restano salvati.</p>
+    <div class="sbtn"><button class="btn" data-f id="exNo">Annulla</button><button class="btn pri" data-f id="exYes">Esci</button></div></div></div>`);
+  setTimeout(() => focus($('#exNo'), true), 30);
+  $('#exNo').onclick = () => back();
+  $('#exYes').onclick = () => { $('#exitM').classList.add('bye'); setTimeout(() => { try { NATIVE && NATIVE.exit ? NATIVE.exit() : $('#exitM').remove(); } catch {} }, 220); };
+}
 
 /* ---------------- barra in alto ---------------- */
 const LOGO_SVG = (id) => `<svg class="tlogo" viewBox="0 0 200 200"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><circle cx="100" cy="100" r="84" fill="none" stroke="url(#${id})" stroke-width="9" stroke-linecap="round" stroke-dasharray="400 128" transform="rotate(-38 100 100)"/><rect x="62" y="52" width="22" height="96" rx="4" fill="#fff"/><path d="M90 104 L128 52 H156 L116 108 Z" fill="url(#${id})"/><path d="M104 98 L122 92 L158 148 H130 Z" fill="#fff"/><circle cx="171" cy="62" r="8" fill="#fff"/></svg>`;
@@ -1231,10 +1264,20 @@ function show(id, push = true) {
 function back() {
   fx('back');
   const m = $$('.speedm.on').pop();
-  if (m) { if (m.id === 'speedM') { m.classList.remove('on'); speedRun++; focus($('#sSpeed') || visibleF($('.screen.on'))[0], true); } else { m.remove(); S.apkUpdate = null; focus(visibleF($('.screen.on'))[0], true); } return; }
+  if (m) {
+    if (m.id === 'speedM') { m.classList.remove('on'); speedRun++; focus($('#sSpeed') || visibleF($('.screen.on'))[0], true); return; }
+    if (m.id === 'updM') S.apkUpdate = null;
+    m.remove();
+    const s = $('.screen.on');
+    focus((s && s.querySelector('.focused')) || (s && (s.querySelector('[data-autof]') || visibleF(s).find((e) => !e.closest('.tnav')))) || visibleF(s)[0], true);
+    if (m.id === 'exitM' && S.exitPv) { S.previewing = S.exitPv; S.exitPv = null; }
+    if (s && s.id === 'live' && S.previewing && HAS_PREVIEW) nativePreview(S.previewing);
+    return;
+  }
   if ($('#drawer').classList.contains('on')) return closeDrawer();
   if ($('#detail').classList.contains('on')) { $('#detail').classList.remove('on'); focus(lastFocusBeforeDetail, true); return; }
   // da una cartella/scheda torna alla schermata precedente; dalle sezioni principali torna alla Home
+  if (!S.stack.length) { const sc = $('.screen.on'); if (sc && !['boot', 'activate'].includes(sc.id)) confirmExit(); return; }
   const prev = S.stack.pop();
   if (prev) { if (prev === 'home') buildBrowse($('#home'), 'all'); if ($('#live').classList.contains('on')) stopPreview(); show(prev, false); }
 }
@@ -1274,7 +1317,7 @@ function nativeFetch(url, method = 'GET', body = '') {
     try { NATIVE.http(id, method, url, body || '', navigator.userAgent); } catch (e) { delete nreq[id]; rej(e); }
   });
 }
-// Download su file fatto dall'app (APK 1.4+): il testo enorme di una playlist non passa più dal ponte JS
+// Download su file fatto dall'app (APK 1.5+): il testo enorme di una playlist non passa più dal ponte JS
 const freq = {}; let fseq = 0;
 window.kxFileCb = (id, status, path, err) => { const f = freq[id]; if (f) { delete freq[id]; f({ status, path, err }); } };
 const hasFileHttp = () => !!(NATIVE && NATIVE.httpFile);
@@ -1358,6 +1401,9 @@ function parseM3U(text, plId) {
   const out = { live: [], movies: [], series: [] };
   let meta = null, n = 0, pos = 0;
   const seriesMap = new Map(), len = text.length;
+  // intestazione: #EXTM3U url-tvg="…" x-tvg-url="…" (guida TV indicata dal fornitore)
+  const head = text.slice(0, Math.min(len, 2000)).split('\n')[0] || '';
+  out.epg = [m3uAttr(head, 'url-tvg'), m3uAttr(head, 'x-tvg-url'), m3uAttr(head, 'tvg-url')].join(',').split(',').map((u) => u.trim()).filter((u) => /^https?:\/\//i.test(u));
   while (pos < len) {
     let nl = text.indexOf('\n', pos); if (nl < 0) nl = len;
     let l = text.slice(pos, nl); pos = nl + 1;
@@ -1389,6 +1435,13 @@ function parseM3U(text, plId) {
   }
   return out;
 }
+/* un link M3U "get.php?username=…&password=…" è un server Xtream: se ne ricavano le credenziali (guida TV, info) */
+function xtCreds(p) {
+  if (!p) return null;
+  if (p.type === 'xtream' && p.host && p.username) return { host: fixUrl(p.host).replace(/\/+$/, ''), username: p.username, password: p.password || '' };
+  try { const u = new URL(fixUrl(p.url)); const us = u.searchParams.get('username'), pw = u.searchParams.get('password'); if (us && pw && /\.php$/i.test(u.pathname)) return { host: u.origin, username: us, password: pw }; } catch {}
+  return null;
+}
 const xtOf = (x) => (x && x.pl && S.plMap && S.plMap.get(x.pl)) || null;
 const xtBase = (p) => `${p.host.replace(/\/+$/, '')}/player_api.php?username=${encodeURIComponent(p.username)}&password=${encodeURIComponent(p.password)}`;
 async function loadXtream(p) {
@@ -1401,7 +1454,7 @@ async function loadXtream(p) {
   if (!ls.length && !vs.length && !ss.length) throw new Error('nessun contenuto: controlla server, utente e password');
   const U = encodeURIComponent(p.username), P = encodeURIComponent(p.password), pl = p.id;
   return {
-    live: ls.map((s, i) => ({ id: 'x' + s.stream_id, k: 'l', sid: s.stream_id, num: +s.num || i + 1, name: String(s.name ?? ''), logo: s.stream_icon, group: lc.get(String(s.category_id)) || 'Altro', url: `${h}/live/${U}/${P}/${s.stream_id}.m3u8`, alt: `${h}/live/${U}/${P}/${s.stream_id}.ts`, pl })),
+    live: ls.map((s, i) => ({ id: 'x' + s.stream_id, k: 'l', sid: s.stream_id, num: +s.num || i + 1, name: String(s.name ?? ''), logo: s.stream_icon, epgId: s.epg_channel_id || '', group: lc.get(String(s.category_id)) || 'Altro', url: `${h}/live/${U}/${P}/${s.stream_id}.m3u8`, alt: `${h}/live/${U}/${P}/${s.stream_id}.ts`, pl })),
     movies: vs.map((s) => ({ id: 'xm' + s.stream_id, k: 'm', vid: s.stream_id, name: String(s.name ?? ''), poster: s.stream_icon, group: vc.get(String(s.category_id)) || 'Altro', rating: s.rating, added: +s.added || 0, url: `${h}/movie/${U}/${P}/${s.stream_id}.${s.container_extension || 'mp4'}`, pl })),
     series: ss.map((s) => ({ id: 'xs' + s.series_id, k: 's', seriesId: s.series_id, name: String(s.name ?? ''), poster: s.cover, group: sc.get(String(s.category_id)) || 'Altro', rating: s.rating, plot: s.plot, genre: s.genre, cast: s.cast, added: +s.last_modified || 0, backdrop: (Array.isArray(s.backdrop_path) ? s.backdrop_path[0] : s.backdrop_path) || '', year: (s.releaseDate || s.release_date || '').slice(0, 4), pl })),
   };
@@ -1422,6 +1475,9 @@ async function fetchLibrary(onMsg) {
     } catch (e) { S.loadErrors.push(`${p.name}: ${e.message || 'errore'}`); return null; }
   }));
   const lib = { live: [], movies: [], series: [] };
+  const m3uEpg = store.get('m3uEpg', {});
+  parts.forEach((part, i) => { if (part && part.epg) m3uEpg[all[i].id] = part.epg.slice(0, 3); });
+  store.set('m3uEpg', m3uEpg);
   // niente push(...lista): con 150.000+ titoli supererebbe il limite dello stack
   for (const part of parts) if (part) for (const k of ['live', 'movies', 'series']) { const src = part[k], dst = lib[k]; for (let i = 0; i < src.length; i++) dst.push(src[i]); }
   return { lib, ok: parts.some(Boolean), total: all.length };
@@ -1501,7 +1557,16 @@ function setLib(lib) {
   S.lib = { live: lib.live, movies: lib.movies, series: lib.series, liveCats: cats(lib.live, 'l'), movieCats: cats(lib.movies, 'm'), seriesCats: cats(lib.series, 's') };
   S.byId = new Map();
   for (const arr of [lib.live, lib.movies, lib.series]) for (const x of arr) S.byId.set(x.id, x);
-  S.plMap = new Map(activePlaylists().map((p) => [p.id, { ...p, host: fixUrl(p.host) }]));
+  S.plMap = new Map(activePlaylists().map((p) => { const c = xtCreds(p); return [p.id, c ? { ...p, ...c } : { ...p, host: fixUrl(p.host) }]; }));
+  // canali di liste M3U che arrivano da un server Xtream: id del flusso per la guida breve
+  const plOk = new Set([...S.plMap.values()].filter((p) => p.username).map((p) => p.id));
+  for (const ch of lib.live) {
+    if (ch.sid || !ch.url) continue;
+    const plid = ch.pl || [...plOk].find((id) => ch.id.endsWith(id));
+    if (!plid || !plOk.has(plid)) continue;
+    const m = ch.url.match(/\/(\d+)(?:\.[a-z0-9]+)?(?:\?.*)?$/i);
+    if (m) { ch.sid = m[1]; ch.pl = plid; }
+  }
   applyLogos(lib.live);
 }
 /* ---------------- loghi automatici dei canali (banca dati pubblica iptv-org) ---------------- */
@@ -1509,7 +1574,7 @@ const LOGO_DB = 'https://iptv-org.github.io/api/';
 const logoMap = store.get('logoMap', {}); // "PAESE|nome normalizzato" -> url del logo ('' = non trovato)
 const CC3 = { ITA: 'IT', UK: 'GB', USA: 'US', ESP: 'ES', FRA: 'FR', GER: 'DE', DEU: 'DE', ALB: 'AL', POR: 'PT', NLD: 'NL', POL: 'PL', ROM: 'RO', TUR: 'TR', SUI: 'CH', AUT: 'AT', BEL: 'BE', GRE: 'GR' };
 const RX_CC = /^[\s|[\](){}#*.]*([A-Z]{2}|ITA|UK|USA|ESP|FRA|GER|DEU|ALB|POR|NLD|POL|ROM|TUR|SUI|AUT|BEL|GRE)\s*[|:\])-]+\s*/;
-const RX_QUAL = /\b(fhd|uhd|hd|sd|4k|8k|hevc|h ?26[45]|1080[pi]?|720p?|576[pi]?|480p?|2160p?|\d{2}fps|fps|backup|bkp|raw|multi|vip|hq|lq|low|high|test|new|nuovo|orig|original|feed|direct|dash)\b/g;
+const RX_QUAL = /(?<![a-z0-9_])(fhd|uhd|hd|sd|4k|8k|hevc|h ?26[45]|1080[pi]?|720p?|576[pi]?|480p?|2160p?|[0-9]{2}fps|fps|backup|bkp|raw|multi|vip|hq|lq|low|high|test|new|nuovo|orig|original|feed|direct|dash)(?![a-z0-9_])/g;
 function logoKey(name) {
   let s = String(name || '').normalize('NFKD').replace(/[̀-ͯ]/g, '');
   let cc = '';
@@ -1711,7 +1776,8 @@ function renderChannels(from = 0) {
   moreChannels();
   const f = $('#liveList .ch'); if (f) f.setAttribute('data-autof', '');
 }
-const nowOf = (ch) => { const e = S.epg.get(ch.id); if (!e) return null; const t = Date.now(); return e.items.find((x) => x.start <= t && x.end > t) || null; };
+const epgOf = (ch) => xepgItems(ch) || (S.epg.get(ch.id) || {}).items || null;
+const nowOf = (ch) => { const it = epgOf(ch); if (!it) return null; const t = Date.now(); return it.find((x) => x.start <= t && x.end > t) || null; };
 function chHTML(ch, i) {
   const n = nowOf(ch);
   return `<div class="ch ${S.previewing && S.previewing.id === ch.id ? 'playing' : ''}" data-f data-i="${i}"><div class="lg" data-lg="${esc(ch.id)}">${logoHTML(ch)}</div><div class="nm"><b>${esc(ch.name)}</b><small>${qBadge(ch)}<span data-now="${esc(ch.id)}">${esc(n ? n.title : ch.group || '')}</span></small></div><span class="cn">${ch.num}</span><svg class="star ${S.favs.has(ch.id) ? 'on' : ''}" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></div>`;
@@ -1805,6 +1871,7 @@ function stopPreview() {
 /* ---------------- guida TV (Xtream: get_short_epg) ---------------- */
 S.epg = new Map();
 async function loadEpg(ch) {
+  const xi = xepgItems(ch); if (xi && xi.length) return xi;
   const c = S.epg.get(ch.id);
   if (c && Date.now() - c.t < 10 * 60e3) return c.items;
   let items = [];
@@ -1827,11 +1894,78 @@ async function loadEpg(ch) {
   if (n) $$(`[data-now="${CSS.escape(ch.id)}"]`).forEach((e) => (e.textContent = n.title));
   return items;
 }
+/* ---------------- guida TV completa (XMLTV), letta dall'app ---------------- */
+S.xepg = null; S.xepgVer = Date.now();
+const XE = new WeakMap(); // canale → programmi (fuori dall'oggetto: non finisce nella cache della libreria)
+function xepgItems(ch) {
+  const X = S.xepg; if (!X || !ch) return null;
+  const c = XE.get(ch); if (c && c.v === S.xepgVer) return c.items;
+  const arr = (ch.epgId && X.byId.get(String(ch.epgId).toLowerCase())) || X.byName.get(logoKey(ch.name).key) || null;
+  const items = arr ? arr.map((x) => ({ start: x[0] * 1000, end: x[1] * 1000, title: x[2] || '', desc: x[3] || '' })).filter((x) => x.end > Date.now() - 600e3) : null;
+  XE.set(ch, { v: S.xepgVer, items });
+  return items;
+}
+function epgSources() {
+  const urls = new Set(), m3u = store.get('m3uEpg', {});
+  for (const p of activePlaylists()) {
+    const c = xtCreds(p);
+    if (c) urls.add(`${c.host}/xmltv.php?username=${encodeURIComponent(c.username)}&password=${encodeURIComponent(c.password)}`);
+    for (const u of m3u[p.id] || []) urls.add(u);
+  }
+  const custom = String(store.get('epgUrl', '') || '').trim(); if (custom) urls.add(fixUrl(custom));
+  return [...urls].slice(0, 4);
+}
+async function loadXepgFile(path) {
+  const j = JSON.parse(await readLocal(path));
+  const byId = new Map(), byName = new Map();
+  for (const [xid, keys] of Object.entries(j.map || {})) {
+    const pr = (j.p || {})[xid]; if (!pr || !pr.length) continue;
+    pr.sort((a, b) => a[0] - b[0]);
+    for (const k of keys) { if (k.startsWith('id:')) byId.set(k.slice(3), pr); else if (k.startsWith('n:') && !byName.has(k.slice(2))) byName.set(k.slice(2), pr); }
+  }
+  S.xepg = { byId, byName, t: j.t * 1000 }; S.xepgVer++;
+  // aggiorna ciò che è già a schermo
+  for (const e of document.querySelectorAll('[data-now]')) { const ch = S.byId && S.byId.get(e.dataset.now); const n = ch && nowOf(ch); if (n) e.textContent = n.title; }
+  if (S.infoCh && $('#live').classList.contains('on')) showInfo(S.infoCh);
+  return byId.size + byName.size;
+}
+let epgSeq = 0;
+window.kxEpgCb = (id, ok, path, n, err) => { const f = S.epgWait && S.epgWait[id]; if (f) { delete S.epgWait[id]; f({ ok, path, n, err }); } };
+async function buildXmltv(force) {
+  if (S.demo || !NATIVE || !NATIVE.epgBuild || S.epgRunning || !S.lib.live.length) return { ok: false, err: 'non disponibile' };
+  const urls = epgSources();
+  if (!urls.length) return { ok: false, err: 'nessuna sorgente della guida: aggiungi un indirizzo EPG nelle impostazioni' };
+  const sig = hashStr(urls.join('|') + '|' + S.libSig), meta = store.get('epgMeta', {});
+  const path = NATIVE.epgPath && NATIVE.epgPath();
+  // la guida resta valida 8 ore: all'avvio si legge quella salvata, senza riscaricare
+  if (!force && path && meta.sig === sig && Date.now() - meta.t < 8 * 3600e3) {
+    if (!S.xepg) try { await loadXepgFile(path); } catch {}
+    if (S.xepg) return { ok: true, cached: true };
+  }
+  const ids = new Set(), names = new Set();
+  for (const ch of S.lib.live) { if (ch.epgId) ids.add(String(ch.epgId).toLowerCase()); const k = logoKey(ch.name).key; if (k) names.add(k); }
+  S.epgRunning = true;
+  try {
+    const id = 'e' + (++epgSeq);
+    S.epgWait = S.epgWait || {};
+    const r = await new Promise((res) => {
+      S.epgWait[id] = res;
+      setTimeout(() => { if (S.epgWait[id]) { delete S.epgWait[id]; res({ ok: false, err: 'tempo scaduto' }); } }, 6 * 60e3);
+      try { NATIVE.epgBuild(id, JSON.stringify(urls), JSON.stringify({ ids: [...ids], names: [...names] }), 24); } catch (e) { delete S.epgWait[id]; res({ ok: false, err: e.message }); }
+    });
+    if (r.ok) { store.set('epgMeta', { sig, t: Date.now(), n: r.n }); await loadXepgFile(r.path); }
+    return r;
+  } finally { S.epgRunning = false; }
+}
+setInterval(() => { if (!S.inPlayer) buildXmltv(); }, 3 * 3600e3);
+
 const hhmm = (t) => new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 const durTxt = (ms) => { const m = Math.round(ms / 60000), h = Math.floor(m / 60); return h ? `${h} h ${m % 60} min` : `${m} min`; };
 const NOEPG_IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="m8 2 4 4 4-4M3 3l18 18"/></svg>';
 function showInfo(ch) {
+  const changed = S.infoCh !== ch;
   S.infoCh = ch;
+  if (changed) for (const e of [$('#pvNow'), $('#pvNext')]) { e.classList.remove('upd'); void e.offsetWidth; e.classList.add('upd'); }
   if (!S.previewing) {
     const b = $('#pvBox');
     if (!b.classList.contains('has')) $('#pvPh').innerHTML = `${ch.logo ? `<img src="${esc(ch.logo)}" onerror="this.remove()">` : ''}<b>${esc(ch.name)}</b><small>Premi <kbd>OK</kbd> per l'anteprima · <kbd>OK</kbd> di nuovo per lo schermo intero</small>`;
@@ -1847,6 +1981,8 @@ function showInfo(ch) {
       ? next.map((x) => `<div class="nx"><em>${new Date(x.start).toDateString() === new Date().toDateString() ? 'OGGI' : 'DOMANI'}<i>${hhmm(x.start)}</i></em><span>${esc(x.title)}</span><small>${durTxt(x.end - x.start)}</small></div>`).join('')
       : `<div class="noepg">${loading ? '' : `${NOEPG_IC}<b>Nessuna informazione sui prossimi programmi</b>`}</div>`);
   };
+  const xi = xepgItems(ch);
+  if (xi && xi.length) return draw(xi, false);
   const c = S.epg.get(ch.id);
   draw(c ? c.items : [], !c);
   if (!c || Date.now() - c.t > 10 * 60e3) loadEpg(ch).then((items) => draw(items, false));
@@ -1887,7 +2023,13 @@ function nativePlay(item, kind, fromSec) {
     // al player si passa al massimo una finestra di 3000 canali attorno a quello scelto (liste enormi = JSON enorme)
     let from = 0, sub = list;
     if (list.length > 3000) { from = Math.max(0, Math.min(index - 1500, list.length - 3000)); sub = list.slice(from, from + 3000); index -= from; }
-    items = sub.map((c) => ({ id: c.id, t: c.name, u: c.url, a: c.alt || '', n: c.num || 0, g: c.group || '' }));
+    const t = Date.now();
+    items = sub.map((c) => {
+      const o = { id: c.id, t: c.name, u: c.url, a: c.alt || '', n: c.num || 0, g: c.group || '' };
+      const ep = epgOf(c);
+      if (ep && ep.length) { const i = ep.findIndex((x) => x.start <= t && x.end > t); if (i >= 0) { const a = ep[i], b = ep[i + 1]; o.e = [a.title, Math.floor(a.start / 1000), Math.floor(a.end / 1000), b ? b.title : '', b ? Math.floor(b.start / 1000) : 0]; } }
+      return o;
+    });
   } else items = [{ id: item.id, t: item.name, u: item.url, a: '', n: 0, g: item.group || '' }];
   const stored = kind === 'live' ? 0 : store.get('pos', {})[item.id] || 0;
   const start = fromSec != null ? fromSec : stored;
@@ -2174,7 +2316,7 @@ function evWhen(e) {
   const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diff = Math.round((day(d) - day(now)) / 864e5);
   const hm = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-  if (e.live) return 'IN CORSO';
+  if (e.live) return e.clock ? '● ' + e.clock : '● IN CORSO';
   if (diff === 0) return 'Oggi · ' + hm;
   if (diff === 1) return 'Domani · ' + hm;
   return d.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + hm;
@@ -2183,7 +2325,7 @@ const teamLogo = (t) => t.logo ? `<img loading="lazy" decoding="async" src="${es
 function cardHTML(type, x, k, i) {
   if (type === 'ev') {
     return `<div class="nc ev ${x.live ? 'live' : ''}" data-f data-k="${k}"><div class="evh"><span class="evl">${esc(x.league)}</span><span class="evt">${esc(evWhen(x))}</span></div>
-      <div class="evm"><div class="evs"><i>${teamLogo(x.home)}</i><b>${esc(x.home.name)}</b></div><span class="vs">VS</span><div class="evs"><i>${teamLogo(x.away)}</i><b>${esc(x.away.name)}</b></div></div></div>`;
+      <div class="evm"><div class="evs"><i>${teamLogo(x.home)}</i><b>${esc(x.home.name)}</b></div><span class="vs">${x.live && x.home.score != null ? `<em class="sc">${esc(x.home.score)} - ${esc(x.away.score)}</em>` : 'VS'}</span><div class="evs"><i>${teamLogo(x.away)}</i><b>${esc(x.away.name)}</b></div></div></div>`;
   }
   if (type === 'fold') {
     const h = hueOf(x.name);
@@ -2523,6 +2665,7 @@ async function speedTest() {
 
 /* ---------------- impostazioni (menu a sinistra, pannello a destra) ---------------- */
 const SET_IC = {
+  tv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="6" width="20" height="14" rx="2.5"/><path d="m8 2 4 4 4-4M6 11h7M6 15h10"/></svg>',
   dev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>',
   pl: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 9h10M7 13h10M7 17h6"/></svg>',
   play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4v16l14-8z"/></svg>',
@@ -2537,7 +2680,7 @@ function renderSettings(sec) {
   const st = { active: ['Attivo', 'var(--ok)'], pending: ['In attesa', 'var(--warn)'], expired: ['Scaduto', 'var(--bad)'], disabled: ['Disattivato', 'var(--bad)'], demo: ['Demo', 'var(--a1)'] }[S.demo ? 'demo' : S.status] || ['—', 'var(--mut)'];
   const allPl = [...S.playlists.map((p) => ({ ...p, srv: 1 })), ...(S.settings.allowLocalPlaylists ? S.local : [])];
   const P = playPrefs(), theme = store.get('theme') || S.settings.accent || 'cinema';
-  const MENU = [['dev', 'Account'], ['pl', 'Gestione playlist'], ['play', 'Lettore'], ['net', 'Rete e speed test'], ['look', 'Generali'], ['info', 'Informazioni']];
+  const MENU = [['dev', 'Account'], ['pl', 'Gestione playlist'], ['play', 'Lettore'], ['tv', 'TV in diretta e guida TV'], ['net', 'Rete e speed test'], ['look', 'Generali'], ['info', 'Informazioni']];
   const kv = (k, v) => `<div class="sr static"><span>${k}</span><b>${v}</b></div>`;
   const cards = {
     dev: `<h3>Account</h3>${kv('Codice dispositivo', `<span class="orb">${esc(S.code)}</span>`)}${kv('Stato', `<span style="color:${st[1]}">${st[0]}</span>`)}${kv('Scadenza', S.expires ? new Date(S.expires).toLocaleDateString('it-IT') : 'Illimitata')}${kv('Contenuti', `${S.lib.live.length.toLocaleString('it')} canali · ${S.lib.movies.length.toLocaleString('it')} film · ${S.lib.series.length.toLocaleString('it')} serie`)}${S.settings.supportContact ? kv('Assistenza', esc(S.settings.supportContact)) : ''}
@@ -2547,6 +2690,14 @@ function renderSettings(sec) {
     play: `<h3>Lettore</h3>${HAS_PLAYER ? '' : '<div class="snote">Queste opzioni valgono nell\'app (Fire TV, Android TV, telefoni).</div>'}
       ${PLAY_OPTS.map(([k, lbl, opts]) => `<div class="sr" data-f data-pk="${k}"><span>${lbl}</span><b>${(opts.find((o) => o[0] === P[k]) || opts[0])[1]}</b></div>`).join('')}
       <div class="snote">Premi OK su una voce per cambiarla. ExoPlayer è il più fluido; VLC legge più formati: usalo se un canale non parte. <b>Stabile</b> accumula più video in anticipo. Durante la visione premi OK per cambiare audio, qualità e sottotitoli.</div>`,
+    tv: (() => {
+      const m = store.get('epgMeta', {}), src = epgSources();
+      const st = S.epgRunning ? 'In aggiornamento…' : S.xepg ? `Attiva · ${(m.n || 0).toLocaleString('it')} programmi · aggiornata alle ${new Date(m.t || S.xepg.t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : NATIVE && NATIVE.epgBuild ? 'Non ancora scaricata' : 'Guida breve (aggiorna l\'app alla 1.5 per la guida completa)';
+      return `<h3>TV in diretta e guida TV</h3>${kv('Guida TV (EPG)', `<span id="eStat">${esc(st)}</span>`)}${kv('Sorgenti', src.length ? src.length + (src.length > 1 ? ' trovate' : ' trovata') : 'nessuna')}
+      <div class="sbtns"><button class="btn pri" data-f id="eUpd">↻ Aggiorna guida TV</button></div>
+      <div class="snote">La guida viene presa dal tuo server (Xtream) o dall'indirizzo indicato nella lista M3U, e si aggiorna da sola ogni 3 ore. Se il tuo fornitore ti ha dato un link EPG diverso, inseriscilo qui:</div>
+      <input class="inp" data-f id="eUrl" placeholder="Indirizzo EPG (XMLTV), es. http://server/epg.xml.gz" value="${esc(store.get('epgUrl', ''))}"><button class="btn" data-f id="eSave">Salva indirizzo EPG</button>`;
+    })(),
     net: `<h3>Rete e speed test</h3>${kv('Ultimo speed test', `<span id="sLast">${speedLast ? `${speedLast.mbps.toFixed(1)} Mbps · ${Math.round(speedLast.ping)} ms` : '—'}</span>`)}
       <div class="sbtns"><button class="btn pri" data-f id="sSpeed">⚡ Avvia speed test</button><button class="btn" data-f id="sTest">Test connessione al server</button></div>
       <div class="snote">Lo speed test misura la velocità reale della tua linea e ti consiglia le impostazioni migliori per il lettore.</div>`,
@@ -2583,6 +2734,14 @@ function renderSettings(sec) {
   $('#sReload').onclick = () => manualRefresh();
 
   $('#sSpeed').onclick = () => speedTest();
+  const epgRun = async (force) => {
+    $('#eStat').textContent = 'Scarico e leggo la guida… (può richiedere fino a un minuto)';
+    const r = await buildXmltv(force);
+    if ($('#eStat')) $('#eStat').textContent = r.ok ? `Attiva · ${(store.get('epgMeta', {}).n || 0).toLocaleString('it')} programmi` : 'Non riuscita: ' + (r.err || 'errore');
+    toast(r.ok ? '✓ Guida TV aggiornata' : 'Guida TV non aggiornata: ' + (r.err || ''), 5000);
+  };
+  $('#eUpd').onclick = () => epgRun(true);
+  $('#eSave').onclick = () => { store.set('epgUrl', $('#eUrl').value.trim()); toast('Indirizzo EPG salvato'); epgRun(true); };
   $('#sTest').onclick = async () => {
     const b = baseServer(); if (!b) return toast('Nessun server impostato');
     const t0 = performance.now();
@@ -2798,6 +2957,7 @@ async function enterHome() {
   warpStop && warpStop();
   if (S.apkUpdate) setTimeout(offerApkUpdate, 900);
   setTimeout(autoLogos, S.fromCache ? 9000 : 5000);
+  setTimeout(() => buildXmltv(), S.fromCache ? 2500 : 4000);
 }
 function startDemo() {
   S.demo = true; clearInterval(pollT);

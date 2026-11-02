@@ -41,7 +41,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         private val ACCENT = Color.parseColor("#E5202B")
     }
 
-    private data class Item(val id: String, val title: String, val url: String, val alt: String, val num: Int, val group: String)
+    /** e = guida: [titolo ora, inizio, fine (secondi), titolo dopo, inizio dopo] */
+    private data class Item(val id: String, val title: String, val url: String, val alt: String, val num: Int, val group: String, val epg: org.json.JSONArray?)
 
     private val ui = Handler(Looper.getMainLooper())
     private lateinit var root: FrameLayout
@@ -58,6 +59,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private lateinit var bEngine: TextView
     private lateinit var zapView: TextView
     private lateinit var msgView: TextView
+    private lateinit var veil: View
+    private lateinit var tEpg: TextView
 
     private var engine: Engine? = null
     private var items: List<Item> = emptyList()
@@ -80,9 +83,11 @@ class PlayerActivity : ComponentActivity(), EngineListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val handed = Handoff.engine
+        Handoff.engine = null
         val payload = pending
         pending = null
-        if (payload == null) { finish(); return }
+        if (payload == null) { handed?.release(); finish(); return }
         try {
             val j = JSONObject(payload)
             kind = j.optString("kind", "live")
@@ -90,22 +95,37 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             engineName = j.optString("engine", "exo")
             aspect = j.optString("aspect", "fit")
             brand = j.optString("brand", "KAIROS")
-            prefs = PlayPrefs(j.optString("quality", "auto"), j.optString("buffer", "balanced"), aspect)
+            prefs = PlayPrefs(j.optString("quality", "auto"), j.optString("buffer", "balanced"), aspect, live = kind == "live")
             resumeMs = j.optLong("start", 0L)
             val arr = j.getJSONArray("items")
             items = (0 until arr.length()).map {
                 val o = arr.getJSONObject(it)
-                Item(o.optString("id"), o.optString("t"), o.optString("u"), o.optString("a"), o.optInt("n"), o.optString("g"))
+                Item(o.optString("id"), o.optString("t"), o.optString("u"), o.optString("a"), o.optInt("n"), o.optString("g"), o.optJSONArray("e"))
             }
-        } catch (e: Exception) { finish(); return }
-        if (items.isEmpty()) { finish(); return }
+        } catch (e: Exception) { handed?.release(); finish(); return }
+        if (items.isEmpty()) { handed?.release(); finish(); return }
         index = index.coerceIn(0, items.size - 1)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        @Suppress("DEPRECATION") overridePendingTransition(0, 0)
         buildUi()
         hideSystemUi()
-        startEngine(engineName)
-        playCurrent(resumeMs)
+        // stesso video dell'anteprima: nessun nuovo caricamento, continua senza interruzioni
+        val h = handed
+        if (h != null && isLive && engineName != "vlc" && Handoff.id == item.id) {
+            h.l = this
+            engine = h
+            adopted = h
+            if (prefs.quality != "auto") h.selectQuality(prefs.quality) // rispetta la qualità scelta nelle impostazioni
+            engineName = h.name
+            currentUrl = h.playingUrl.ifEmpty { item.url }
+            h.setAspect(aspect)
+            root.addView(h.view, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
+        } else {
+            h?.release()
+            startEngine(engineName)
+            playCurrent(resumeMs)
+        }
         showOsd(false)
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -169,6 +189,11 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(28), dp(40), 0) }
             visibility = View.GONE
         }
+        veil = View(this).apply {
+            setBackgroundColor(Color.BLACK)
+            alpha = 0f
+            layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
         brandView = text(26f, ACCENT, true).apply {
             text = brand.uppercase(Locale.ROOT)
             letterSpacing = 0.18f
@@ -190,6 +215,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         val badgeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; addView(tBadge) }
         tTitle = text(30f, Color.WHITE, true).apply { maxLines = 1; setPadding(0, dp(8), 0, 0) }
         tSub = text(16f, Color.argb(200, 255, 255, 255))
+        tEpg = text(17f, Color.WHITE).apply { setPadding(0, dp(8), 0, 0); maxLines = 3 }
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 1000
             progressTintList = ColorStateList.valueOf(ACCENT)
@@ -216,10 +242,12 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         osd.addView(badgeRow)
         osd.addView(tTitle)
         osd.addView(tSub)
+        osd.addView(tEpg)
         osd.addView(progress)
         osd.addView(tTime)
         osd.addView(scroller)
 
+        root.addView(veil)
         root.addView(osd)
         root.addView(brandView)
         root.addView(zapView)
@@ -245,8 +273,18 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     }
 
     private fun showOsd(focusBar: Boolean) {
+        if (closing) return
         updateInfo()
-        osd.visibility = View.VISIBLE
+        // annulla una chiusura in corso (altrimenti al termine lo nasconderebbe)
+        osd.animate().cancel(); brandView.animate().cancel()
+        if (osd.visibility == View.VISIBLE && osd.alpha < 1f) { osd.alpha = 1f; osd.translationY = 0f; brandView.alpha = 1f }
+        if (osd.visibility != View.VISIBLE) {
+            osd.visibility = View.VISIBLE
+            osd.alpha = 0f; osd.translationY = dp(40).toFloat()
+            osd.animate().alpha(1f).translationY(0f).setDuration(220).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+            brandView.alpha = 0f
+            brandView.animate().alpha(1f).setDuration(220).start()
+        }
         brandView.visibility = View.VISIBLE
         if (focusBar && bar.childCount > 0 && !bar.hasFocus()) bar.getChildAt(0).requestFocus()
         ui.removeCallbacks(tickRunnable); ui.post(tickRunnable)
@@ -259,10 +297,11 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     }
 
     private fun hideOsd() {
-        osd.visibility = View.GONE
-        brandView.visibility = View.GONE
         ui.removeCallbacks(tickRunnable)
         root.requestFocus()
+        if (osd.visibility != View.VISIBLE) return
+        osd.animate().alpha(0f).translationY(dp(30).toFloat()).setDuration(180).withEndAction { osd.visibility = View.GONE; osd.alpha = 1f; osd.translationY = 0f }.start()
+        brandView.animate().alpha(0f).setDuration(180).withEndAction { brandView.visibility = View.GONE; brandView.alpha = 1f }.start()
     }
 
     private fun engineLabel(n: String) = if (n == "vlc") "VLC" else "ExoPlayer"
@@ -271,8 +310,18 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         tBadge.text = if (isLive) "● IN DIRETTA" else "FILM · SERIE"
         tTitle.text = if (isLive && item.num > 0) "${item.num}  ${item.title}" else item.title
         tSub.text = listOf(item.group, engineLabel(engineName)).filter { it.isNotBlank() }.joinToString("  ·  ")
+        val e = item.epg
+        if (isLive && e != null && e.length() >= 3 && e.optString(0).isNotBlank()) {
+            val f = java.text.SimpleDateFormat("HH:mm", Locale.ITALIAN)
+            val s0 = e.optLong(1) * 1000; val e0 = e.optLong(2) * 1000
+            val now = System.currentTimeMillis()
+            var t = "Ora  ${f.format(java.util.Date(s0))}–${f.format(java.util.Date(e0))}   ${e.optString(0)}"
+            if (e.length() >= 5 && e.optString(3).isNotBlank()) t += "\nDopo  ${f.format(java.util.Date(e.optLong(4) * 1000))}   ${e.optString(3)}"
+            tEpg.text = t; tEpg.visibility = View.VISIBLE
+            if (e0 > s0) { progress.visibility = View.VISIBLE; progress.progress = (((now - s0) * 1000) / (e0 - s0)).toInt().coerceIn(0, 1000) }
+        } else tEpg.visibility = View.GONE
         bEngine.text = "Motore: ${engineLabel(engineName)}"
-        progress.visibility = if (isLive) View.GONE else View.VISIBLE
+        if (!isLive) progress.visibility = View.VISIBLE else if (tEpg.visibility != View.VISIBLE) progress.visibility = View.GONE
         updatePauseLabel()
         updateTime()
     }
@@ -334,17 +383,28 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         engine?.play(url, startMs)
     }
 
+    /** cambio canale: numero e nome cambiano subito, il video parte quando smetti di premere (più veloce) */
+    private var zapPending = false
+    private val zapPlay = Runnable { zapPending = false; playCurrent(0) }
     private fun zap(delta: Int) {
         if (items.size < 2) return
         index = (index + delta + items.size) % items.size
-        playCurrent(0)
+        veil.animate().cancel()
+        veil.animate().alpha(0.55f).setDuration(120).start()
+        ui.removeCallbacks(zapPlay)
+        zapPending = true
+        ui.postDelayed(zapPlay, 280)
         showOsd(false)
+        osd.translationY = (if (delta > 0) dp(18) else -dp(18)).toFloat()
+        osd.animate().translationY(0f).setDuration(200).start()
         flashNumber(if (item.num > 0) item.num.toString() else "")
     }
 
     private fun flashNumber(t: String) {
         if (t.isEmpty()) return
         zapView.text = t; zapView.visibility = View.VISIBLE
+        zapView.scaleX = 1.35f; zapView.scaleY = 1.35f; zapView.alpha = 0.4f
+        zapView.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(200).start()
         ui.removeCallbacks(hideZap); ui.postDelayed(hideZap, 1500)
     }
     private val hideZap = Runnable { zapView.visibility = View.GONE }
@@ -353,7 +413,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         val n = numBuf.toIntOrNull(); numBuf = ""
         zapView.visibility = View.GONE
         val i = items.indexOfFirst { it.num == n }
-        if (i >= 0 && i != index) { index = i; playCurrent(0); showOsd(false) } else if (n != null) toast("Canale $n non trovato")
+        if (i >= 0 && i != index) { index = i; veil.animate().alpha(0.55f).setDuration(120).start(); playCurrent(0); showOsd(false) } else if (n != null) toast("Canale $n non trovato")
     }
 
     private fun switchEngine(name: String, byUser: Boolean) {
@@ -367,10 +427,12 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     /* EngineListener */
     override fun onBuffering(buffering: Boolean) { ui.post { spinner.visibility = if (buffering) View.VISIBLE else View.GONE } }
 
-    override fun onReady() { ui.post { spinner.visibility = View.GONE; showMsg(null); retries = 0 } }
+    override fun onReady() { ui.post { spinner.visibility = View.GONE; showMsg(null); retries = 0; veil.animate().alpha(0f).setDuration(260).start() } }
+    override fun onFirstFrame() { ui.post { veil.animate().alpha(0f).setDuration(260).start() } }
 
     override fun onEnded() {
         ui.post {
+            if (closing) return@post
             if (isLive) { if (retries < 3) { retries++; startUrl(currentUrl, 0) } }
             else finishWithResult()
         }
@@ -378,6 +440,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
 
     override fun onError(message: String) {
         ui.post {
+            if (closing) return@post
             val pos = if (isLive) 0L else engine?.position() ?: 0L
             when {
                 !triedAlt && item.alt.isNotEmpty() && currentUrl != item.alt -> { triedAlt = true; startUrl(item.alt, pos) }
@@ -437,6 +500,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     /* Telecomando                                                         */
     /* ------------------------------------------------------------------ */
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (closing) return true
         val barFocused = osd.visibility == View.VISIBLE && bar.hasFocus()
         if (barFocused) {
             touchOsd()
@@ -473,6 +537,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
 
     override fun onStop() {
         super.onStop()
+        if (zapPending) { ui.removeCallbacks(zapPlay); zapPending = false; currentUrl = item.url }
         val e = engine ?: return
         stoppedAt = if (isLive) 0L else e.position()
         e.stop()
@@ -484,7 +549,13 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         stoppedAt = -1L
     }
 
+    private var closing = false
+    /** il player arrivato dall'anteprima: solo questo può tornare nel riquadro (gli altri appartengono a questa schermata) */
+    private var adopted: ExoEngine? = null
     private fun finishWithResult() {
+        if (closing) return
+        closing = true
+        ui.removeCallbacks(zapPlay)
         val e = engine
         val r = JSONObject()
             .put("kind", kind)
@@ -494,7 +565,43 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             .put("height", e?.videoHeight() ?: 0)
         if (userChangedEngine) r.put("engine", engineName)
         setResult(android.app.Activity.RESULT_OK, Intent().putExtra(RESULT, r.toString()))
+        val box = Handoff.box
+        val v = e?.view
+        if (isLive && !zapPending && e is ExoEngine && e === adopted && e.isActive() && box != null && v != null && root.width > 0) {
+            // il video torna nel riquadro dell'anteprima e continua lì
+            osd.visibility = View.GONE; brandView.visibility = View.GONE; zapView.visibility = View.GONE; spinner.visibility = View.GONE; veil.alpha = 0f
+            root.setBackgroundColor(Color.TRANSPARENT)
+            val W = root.width; val H = root.height
+            android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 280
+                interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+                addUpdateListener { a ->
+                    val f = a.animatedValue as Float
+                    v.layoutParams = FrameLayout.LayoutParams((W + (box[2] - W) * f).toInt(), (H + (box[3] - H) * f).toInt()).apply {
+                        gravity = Gravity.TOP or Gravity.START; leftMargin = (box[0] * f).toInt(); topMargin = (box[1] * f).toInt()
+                    }
+                }
+                addListener(object : android.animation.AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: android.animation.Animator) {
+                        try {
+                            if (engine === e && !isDestroyed) {
+                                root.removeView(v)
+                                e.l = NoopListener
+                                Handoff.id = item.id
+                                Handoff.back = e
+                                engine = null
+                            }
+                        } catch (_: Exception) {}
+                        finish()
+                        @Suppress("DEPRECATION") overridePendingTransition(0, 0)
+                    }
+                })
+                start()
+            }
+            return
+        }
         finish()
+        @Suppress("DEPRECATION") overridePendingTransition(0, 0)
     }
 
     override fun onDestroy() {

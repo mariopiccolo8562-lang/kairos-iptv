@@ -60,9 +60,32 @@ class MainActivity : ComponentActivity() {
 
     /** ritorno dal player nativo: posizione, durata, motore scelto, risoluzione */
     private val playerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        adoptBack()
         val r = res.data?.getStringExtra(PlayerActivity.RESULT) ?: return@registerForActivityResult
         js("window.kxPlayerClosed && window.kxPlayerClosed(${JSONObject.quote(r)})")
     }
+
+    /** il video tornato dallo schermo intero continua nel riquadro dell'anteprima senza ricaricarsi */
+    private fun adoptBack() {
+        val b = Handoff.back ?: return
+        Handoff.back = null
+        val box = Handoff.box
+        if (previewEngine != null && previewEngine !== b) { previewEngine?.release(); previewBox.removeAllViews() }
+        previewEngine = b
+        b.l = previewListener
+        previewId = Handoff.id
+        previewAlt = ""
+        previewTriedAlt = false
+        if (b.view.parent == null) { b.setOverlay(true); previewBox.addView(b.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)) }
+        if (box != null) {
+            previewBox.layoutParams = FrameLayout.LayoutParams(box[2], box[3]).apply { leftMargin = box[0]; topMargin = box[1] }
+            previewBox.visibility = View.VISIBLE
+        }
+        // se entro pochi secondi la pagina non chiede di nuovo l'anteprima (utente uscito dalla Live), si ferma
+        ui.postDelayed({ if (previewEngine === b && !previewWanted) stopPreview() }, 4000)
+        previewWanted = false
+    }
+    @Volatile private var previewWanted = false
 
     private fun js(code: String) { runOnUiThread { if (::web.isInitialized) web.evaluateJavascript(code, null) } }
 
@@ -193,19 +216,85 @@ class MainActivity : ComponentActivity() {
         lp.topMargin = (o.optInt("y") * scale).toInt()
         previewBox.layoutParams = lp
         previewBox.visibility = View.VISIBLE
-        val e = previewEngine ?: ExoEngine(this, previewListener, userAgent(), PlayPrefs("auto", "fast", "fit"), overlay = true).also {
+        previewWanted = true
+        Handoff.box = intArrayOf(lp.leftMargin, lp.topMargin, lp.width, lp.height)
+        val e = previewEngine ?: ExoEngine(this, previewListener, userAgent(), PlayPrefs("auto", "fast", "fit", live = true), overlay = true).also {
             previewEngine = it
             previewBox.addView(it.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         }
-        previewId = o.optString("id")
+        val id = o.optString("id")
+        if (id == previewId && e.isActive()) { js("window.kxPreviewState && kxPreviewState('ready')"); return } // già in onda
+        previewId = id
         previewAlt = o.optString("a")
         previewTriedAlt = false
         e.play(o.optString("u"), 0)
     }
 
     private fun stopPreview() {
+        boxAnim?.cancel()
         previewEngine?.stop()
+        previewId = ""
         previewBox.visibility = View.GONE
+    }
+
+    /* il riquadro dell'anteprima si allarga fino a riempire lo schermo (come nelle app TV) */
+    private var boxAnim: android.animation.ValueAnimator? = null
+    private fun growBox(done: () -> Unit) {
+        val lp0 = previewBox.layoutParams as FrameLayout.LayoutParams
+        val x0 = lp0.leftMargin; val y0 = lp0.topMargin; val w0 = lp0.width; val h0 = lp0.height
+        val W = root.width; val H = root.height
+        if (W <= 0 || w0 <= 0) { done(); return }
+        boxAnim?.cancel()
+        boxAnim = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 300
+            interpolator = android.view.animation.DecelerateInterpolator(1.6f)
+            addUpdateListener { a ->
+                val f = a.animatedValue as Float
+                previewBox.layoutParams = FrameLayout.LayoutParams((w0 + (W - w0) * f).toInt(), (h0 + (H - h0) * f).toInt()).apply {
+                    leftMargin = (x0 * (1 - f)).toInt(); topMargin = (y0 * (1 - f)).toInt()
+                }
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                private var cancelled = false
+                override fun onAnimationCancel(animation: android.animation.Animator) { cancelled = true }
+                override fun onAnimationEnd(animation: android.animation.Animator) { if (!cancelled) done() }
+            })
+            start()
+        }
+    }
+
+    private fun launchPlayer(noAnim: Boolean) {
+        val i = Intent(this@MainActivity, PlayerActivity::class.java)
+        if (noAnim) playerLauncher.launch(i, androidx.core.app.ActivityOptionsCompat.makeCustomAnimation(this, 0, 0))
+        else playerLauncher.launch(i)
+    }
+
+    /** schermo intero: se l'anteprima mostra già quel canale, lo stesso video si allarga e continua */
+    private fun startPlayer(payload: String) {
+        val o = try { JSONObject(payload) } catch (e: Exception) { null }
+        val e = previewEngine
+        var handed = false
+        try {
+            if (o != null && o.optString("kind") == "live" && o.optString("engine") != "vlc" && e != null && previewBox.visibility == View.VISIBLE && e.isActive()) {
+                val it = o.optJSONArray("items")?.optJSONObject(o.optInt("index"))
+                if (it != null && it.optString("id") == previewId) {
+                    handed = true
+                    growBox {
+                        try {
+                            previewBox.removeView(e.view)
+                            e.setOverlay(false)
+                            e.l = NoopListener
+                            Handoff.engine = e
+                            Handoff.id = previewId
+                            previewEngine = null
+                            previewId = ""
+                            launchPlayer(noAnim = true)
+                        } catch (x: Exception) { stopPreview(); launchPlayer(false) }
+                    }
+                }
+            }
+        } catch (x: Exception) { handed = false }
+        if (!handed) { Handoff.box = null; stopPreview(); launchPlayer(false) } // uscendo, nessun riquadro in cui tornare
     }
 
     private fun userAgent(): String = try {
@@ -420,6 +509,184 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
+    /* ------------------------------------------------------------------ */
+    /* Guida TV completa (XMLTV): letta in streaming, si tengono solo i     */
+    /* canali della lista e le prossime ore → file JSON piccolo per l'app   */
+    /* ------------------------------------------------------------------ */
+    @Volatile private var epgRunning = false
+    private val epgFile: File get() = File(filesDir, "epg.json")
+    private val RX_CC = Regex("^[\\s|\\[\\](){}#*.]*([A-Z]{2}|ITA|UK|USA|ESP|FRA|GER|DEU|ALB|POR|NLD|POL|ROM|TUR|SUI|AUT|BEL|GRE)\\s*[|:\\])-]+\\s*")
+    private val RX_BR = Regex("\\([^)]*\\)|\\[[^\\]]*\\]|\\{[^}]*\\}")
+    private val RX_QUAL = Regex("(?<![a-z0-9_])(fhd|uhd|hd|sd|4k|8k|hevc|h ?26[45]|1080[pi]?|720p?|576[pi]?|480p?|2160p?|[0-9]{2}fps|fps|backup|bkp|raw|multi|vip|hq|lq|low|high|test|new|nuovo|orig|original|feed|direct|dash)(?![a-z0-9_])")
+    private val RX_MARKS = Regex("\\p{M}+")
+    private val RX_NONALNUM = Regex("[^a-z0-9+]+")
+
+    /** stessa normalizzazione dei nomi usata dall'app (logoKey): "IT| RAI 1 HD" → "rai1" */
+    private fun epgKey(name: String): String {
+        var s = java.text.Normalizer.normalize(name, java.text.Normalizer.Form.NFKD).replace(RX_MARKS, "")
+        RX_CC.find(s)?.let { s = s.substring(it.range.last + 1) }
+        s = s.lowercase(java.util.Locale.ROOT).replace(RX_BR, " ").replace("&", " and ").replace(RX_QUAL, " ").replace(RX_NONALNUM, "")
+        return if (s.length >= 2) s else ""
+    }
+
+    /** "20261102033500 +0100" → secondi UTC */
+    private fun xmltvTime(v: String?): Long {
+        if (v == null || v.length < 12) return 0
+        return try {
+            val c = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+            c.clear()
+            c.set(v.substring(0, 4).toInt(), v.substring(4, 6).toInt() - 1, v.substring(6, 8).toInt(), v.substring(8, 10).toInt(), v.substring(10, 12).toInt(), if (v.length >= 14 && v[12].isDigit()) v.substring(12, 14).toInt() else 0)
+            var t = c.timeInMillis / 1000
+            val si = (12 until v.length).firstOrNull { v[it] == '+' || v[it] == '-' }
+            val tz = if (si != null) v.substring(si).trim() else ""
+            if (tz.length >= 5 && (tz[0] == '+' || tz[0] == '-')) {
+                val sign = if (tz[0] == '-') -1 else 1
+                t -= sign * (tz.substring(1, 3).toInt() * 3600 + tz.substring(3, 5).toInt() * 60)
+            }
+            t
+        } catch (e: Exception) { 0 }
+    }
+
+    private fun downloadTo(url: String, out: File) {
+        var target = URL(url)
+        var hops = 0
+        var conn = target.openConnection() as HttpURLConnection
+        while (true) {
+            conn.instanceFollowRedirects = false
+            conn.connectTimeout = 20_000
+            conn.readTimeout = 60_000
+            conn.setRequestProperty("User-Agent", userAgent())
+            conn.setRequestProperty("Accept-Encoding", "gzip")
+            val code = conn.responseCode
+            val loc = conn.getHeaderField("Location")
+            if (code in 300..399 && loc != null && hops < 6) { conn.disconnect(); target = URL(target, loc); hops++; conn = target.openConnection() as HttpURLConnection; continue }
+            if (code != 200) throw Exception("HTTP $code")
+            break
+        }
+        val raw = conn.inputStream
+        val input = if ("gzip".equals(conn.contentEncoding, true)) java.util.zip.GZIPInputStream(raw, 64 * 1024) else raw
+        input.use { inp -> FileOutputStream(out).use { fo -> inp.copyTo(fo, 256 * 1024) } }
+        conn.disconnect()
+    }
+
+    private class Prog(val s: Long, val e: Long, val t: String, val d: String)
+    private val EPG_MAX_TOTAL = 90_000
+    private val EPG_MAX_CH = 48
+
+    private fun parseXmltv(f: File, ids: Set<String>, names: Set<String>, map: JSONObject, progs: HashMap<String, ArrayList<Prog>>, from: Long, to: Long, already: Int): Int {
+        val raw = java.io.BufferedInputStream(java.io.FileInputStream(f), 256 * 1024)
+        raw.mark(4)
+        val b1 = raw.read(); val b2 = raw.read()
+        raw.reset()
+        val input: java.io.InputStream = if (b1 == 0x1f && b2 == 0x8b) java.util.zip.GZIPInputStream(raw, 256 * 1024) else raw // file .xml.gz
+        var n = 0
+        input.use { stream ->
+            val p = android.util.Xml.newPullParser()
+            p.setFeature(org.xmlpull.v1.XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
+            p.setInput(stream, null)
+            val matched = HashSet<String>()
+            var chId: String? = null
+            var chKeys = ArrayList<String>()
+            var inProg = false
+            var pCh = ""; var pStart = 0L; var pStop = 0L; var title = ""; var desc = ""
+            var ev = p.eventType
+            while (ev != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                if (ev == org.xmlpull.v1.XmlPullParser.START_TAG) {
+                    when (p.name) {
+                        "channel" -> { chId = p.getAttributeValue(null, "id"); chKeys = ArrayList() }
+                        "display-name" -> if (chId != null) { val k = epgKey(p.nextText() ?: ""); if (k.isNotEmpty()) chKeys.add(k) }
+                        "programme" -> {
+                            pCh = p.getAttributeValue(null, "channel") ?: ""
+                            inProg = false
+                            if (pCh in matched) {
+                                pStart = xmltvTime(p.getAttributeValue(null, "start")); pStop = xmltvTime(p.getAttributeValue(null, "stop"))
+                                inProg = pStop > from && pStart < to && pStop > pStart
+                                title = ""; desc = ""
+                            }
+                        }
+                        "title" -> if (inProg && title.isEmpty()) title = (p.nextText() ?: "").trim()
+                        "desc" -> if (inProg && desc.isEmpty()) desc = (p.nextText() ?: "").trim().take(200)
+                    }
+                } else if (ev == org.xmlpull.v1.XmlPullParser.END_TAG) {
+                    when (p.name) {
+                        "channel" -> {
+                            val id = chId
+                            if (id != null) {
+                                val keys = ArrayList<String>()
+                                val low = id.lowercase(java.util.Locale.ROOT)
+                                if (low in ids) keys.add("id:$low")
+                                for (k in chKeys) if (k in names) keys.add("n:$k")
+                                val k2 = epgKey(id.substringBeforeLast('.'))
+                                if (k2.isNotEmpty() && k2 in names) keys.add("n:$k2")
+                                if (keys.isNotEmpty()) { matched.add(id); map.put(id, org.json.JSONArray(keys.distinct())) }
+                            }
+                            chId = null
+                        }
+                        "programme" -> if (inProg) {
+                            inProg = false
+                            val list = progs.getOrPut(pCh) { ArrayList() }
+                            // niente doppioni (due sorgenti con lo stesso canale) e limiti per non esaurire la memoria
+                            if (list.size < EPG_MAX_CH && already + n < EPG_MAX_TOTAL && list.none { it.s == pStart }) { list.add(Prog(pStart, pStop, title, desc)); n++ }
+                        }
+                    }
+                }
+                ev = p.next()
+            }
+        }
+        return n
+    }
+
+    private fun buildEpg(id: String, urlsJson: String, wantJson: String, hoursAhead: Int) {
+        fun cb(ok: Boolean, n: Int, err: String) = js("window.kxEpgCb && kxEpgCb(${JSONObject.quote(id)}, $ok, ${JSONObject.quote(if (ok) "file://" + epgFile.absolutePath else "")}, $n, ${JSONObject.quote(err)})")
+        if (epgRunning) { cb(false, 0, "già in corso"); return }
+        epgRunning = true
+        thread(name = "kx-epg") {
+            var n = 0
+            val errs = ArrayList<String>()
+            try {
+                val urls = org.json.JSONArray(urlsJson)
+                val want = JSONObject(wantJson)
+                val ids = HashSet<String>(); val names = HashSet<String>()
+                want.optJSONArray("ids")?.let { a -> for (i in 0 until a.length()) ids.add(a.optString(i).lowercase(java.util.Locale.ROOT)) }
+                want.optJSONArray("names")?.let { a -> for (i in 0 until a.length()) names.add(a.optString(i)) }
+                val now = System.currentTimeMillis() / 1000
+                val map = JSONObject()
+                val progs = HashMap<String, ArrayList<Prog>>()
+                for (u in 0 until urls.length()) {
+                    val f = File(cacheDir, "epg_$u.xml")
+                    try { downloadTo(urls.getString(u), f); n += parseXmltv(f, ids, names, map, progs, now - 2 * 3600, now + hoursAhead * 3600L, n) }
+                    catch (e: Throwable) { errs.add(if (e is OutOfMemoryError) "guida troppo grande" else e.message ?: e.javaClass.simpleName) }
+                    finally { f.delete() }
+                }
+                if (n > 0) {
+                    // scrittura in streaming: nessuna stringa gigante in memoria
+                    val tmp = File(filesDir, "epg.tmp")
+                    android.util.JsonWriter(java.io.BufferedWriter(java.io.OutputStreamWriter(FileOutputStream(tmp), Charsets.UTF_8), 128 * 1024)).use { w ->
+                        w.beginObject()
+                        w.name("t").value(now)
+                        w.name("map").beginObject()
+                        val it = map.keys()
+                        while (it.hasNext()) { val k = it.next(); val a = map.getJSONArray(k); w.name(k).beginArray(); for (i in 0 until a.length()) w.value(a.getString(i)); w.endArray() }
+                        w.endObject()
+                        w.name("p").beginObject()
+                        for ((k, list) in progs) {
+                            if (list.isEmpty()) continue
+                            w.name(k).beginArray()
+                            for (pr in list.sortedBy { it.s }) { w.beginArray(); w.value(pr.s); w.value(pr.e); w.value(pr.t); w.value(pr.d); w.endArray() }
+                            w.endArray()
+                        }
+                        w.endObject()
+                        w.endObject()
+                    }
+                    tmp.renameTo(epgFile)
+                    cb(true, n, "")
+                } else cb(false, 0, errs.firstOrNull() ?: "nessun programma trovato per i tuoi canali")
+            } catch (e: Throwable) { cb(false, 0, if (e is OutOfMemoryError) "guida troppo grande per questo dispositivo" else e.message ?: e.javaClass.simpleName) }
+            finally { epgRunning = false }
+        }
+    }
+
     private fun libFile(key: String) = File(libDir, key.replace(Regex("[^A-Za-z0-9_-]"), "_").take(80) + ".json")
 
     /* ------------------------------------------------------------------ */
@@ -524,14 +791,11 @@ class MainActivity : ComponentActivity() {
         /** Avvia il player nativo (ExoPlayer / VLC) */
         @JavascriptInterface fun play(payload: String) {
             PlayerActivity.pending = payload
-            runOnUiThread {
-                stopPreview()
-                playerLauncher.launch(Intent(this@MainActivity, PlayerActivity::class.java))
-            }
+            runOnUiThread { startPlayer(payload) }
         }
 
         @JavascriptInterface fun preview(json: String) { runOnUiThread { showPreview(json) } }
-        @JavascriptInterface fun previewStop() { runOnUiThread { stopPreview() } }
+        @JavascriptInterface fun previewStop() { runOnUiThread { previewWanted = false; stopPreview() } }
         @JavascriptInterface fun installApk(url: String) { downloadAndInstall(url) }
         @JavascriptInterface fun speedTest() { runSpeedTest() }
 
@@ -546,6 +810,9 @@ class MainActivity : ComponentActivity() {
             try { val f = libFile(key); val t = File(f.path + ".tmp"); t.writeText(data, Charsets.UTF_8); t.renameTo(f) } catch (_: Exception) {}
         }
         @JavascriptInterface fun cachePath(key: String): String { val f = libFile(key); return if (f.exists()) "file://" + f.absolutePath else "" }
+        /** guida TV completa: urls = sorgenti XMLTV, want = {ids:[tvg-id], names:[nomi normalizzati]} */
+        @JavascriptInterface fun epgBuild(id: String, urls: String, want: String, hours: Int) { buildEpg(id, urls, want, hours.coerceIn(6, 72)) }
+        @JavascriptInterface fun epgPath(): String = if (epgFile.exists()) "file://" + epgFile.absolutePath else ""
         @JavascriptInterface fun cacheClear() { try { libDir.deleteRecursively() } catch (_: Exception) {} }
 
         /** Richiesta HTTP fatta dall'app (senza limiti CORS). Risposta in window.kxHttpCb(id, status, body). */

@@ -91,7 +91,7 @@ Così ogni nuova versione arriva da sola su tutte le TV, senza scrivere nulla ne
 2. Nel repository **kairos-iptv** → Settings → Secrets and variables → Actions → **New repository secret**: nome `STORE_TOKEN`, valore il token copiato.
 3. (Solo se lo store ha un nome diverso da `kairos-store`) nella scheda *Variables* crea `STORE_REPO` = `tuo-utente/nome-store`.
 
-Da quel momento, quando pubblichi una versione (tag `v1.4.0`, `v1.5.0`, …):
+Da quel momento, quando pubblichi una versione (tag `v1.5.0`, `v1.6.0`, …):
 - l'APK viene copiato nella release fissa **kairos-tv** dello store (pubblica) con il file `kairos-tv.json`;
 - il pannello lo legge da solo (Impostazioni mostra "Aggiornamento automatico attivo");
 - le app installate propongono l'aggiornamento all'avvio e ogni 3 ore se restano accese.
