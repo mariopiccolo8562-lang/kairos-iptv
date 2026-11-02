@@ -3013,7 +3013,7 @@ window.kxPlayerClosed = (r) => {
   setTimeout(() => heartbeat(true), 800);
   try { r = typeof r === 'string' ? JSON.parse(r) : r; } catch { r = null; }
   if (!r) { evReturn(); return; }
-  if (r.engine && r.engineKey && OPT[r.engineKey]) store.set('o_' + r.engineKey, r.engine); // scelta fatta nel player: ricordata per quel tipo di contenuto
+  if (r.engine && r.engineKey && OPT[r.engineKey] && !panelEng(r.engineKey)) store.set('o_' + r.engineKey, r.engine); // scelta fatta nel player: ricordata per quel tipo di contenuto (non se il lettore lo decide il fornitore)
   if (r.kind === 'vod' && r.id && r.dur > 0) {
     const pos = store.get('pos', {}), du = store.get('dur', {});
     if (r.pos > 5 && r.pos < r.dur - 30) pos[r.id] = r.pos; else delete pos[r.id];
@@ -3636,9 +3636,12 @@ const OPT = {
   orient: ['Layout orizzontale (telefoni e tablet)', [['auto', 'Automatico'], ['land', 'Sempre orizzontale']], 'auto', (v) => applyOrient(v)],
   lockAdult: ['Blocca contenuti per adulti', YN, true],
 };
-const opt = (k) => { const v = store.get('o_' + k, null); return v === null ? (k === 'startScr' ? store.get('startScr', OPT[k][2]) : k === 'sfx' && store.get('sound', true) === false ? 'off' : OPT[k][2]) : v; };
+/* lettore scelto dal fornitore nel pannello per questo cliente (vince sulla scelta fatta nell'app) */
+const ENG_KIND = { engLive: 'live', engMovie: 'movie', engSeries: 'series' };
+const panelEng = (k) => { const p = S.account && S.account.player, m = ENG_KIND[k], v = p && m && p[m]; return v === 'auto' || v === 'exo' || v === 'vlc' ? v : ''; };
+const opt = (k) => { const pe = panelEng(k); if (pe) return pe; const v = store.get('o_' + k, null); return v === null ? (k === 'startScr' ? store.get('startScr', OPT[k][2]) : k === 'sfx' && store.get('sound', true) === false ? 'off' : OPT[k][2]) : v; };
 const optLabel = (k) => { const [, o] = OPT[k], v = opt(k); return (o.find((x) => x[0] === v) || o[0])[1]; };
-const optRow = (k) => `<div class="sr" data-f data-opt="${k}"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))}</b></div>`;
+const optRow = (k) => panelEng(k) ? `<div class="sr static"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))} <small class="mut">· scelto dal fornitore</small></b></div>` : `<div class="sr" data-f data-opt="${k}"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))}</b></div>`;
 function cycleOpt(k, el) {
   const [, o, , after] = OPT[k], v = opt(k), i = o.findIndex((x) => x[0] === v), nx = o[(i + 1) % o.length];
   store.set('o_' + k, nx[0]);
@@ -4972,8 +4975,12 @@ async function heartbeat(force) {
     const offNow = S.perms ? Object.keys(S.perms).filter((k) => S.perms[k] === false).sort().join(',') : '';
     let offSrv = ''; try { offSrv = j.ph ? Object.keys(JSON.parse(j.ph)).sort().join(',') : ''; } catch {}
     const pmNow = S.account ? (S.account.plMode === 'split' ? 'split' : 'merge') + '|' + (S.account.plDefault || '') : '';
-    const plChanged = typeof j.pm === 'string' && j.pm && S.account && j.pm !== pmNow;
-    const changed = plChanged || (j.vm && j.vm !== (S.vpn ? S.vpn.mode : 'off')) || (j.ph !== undefined && offSrv !== offNow) || (j.ms !== undefined && S.account && (+S.account.maxStreams || 0) !== j.ms);
+    // pm = modalità|playlist da usare|lettore scelto dal pannello (le versioni vecchie del pannello mandano solo le prime due parti)
+    const pmSrv = typeof j.pm === 'string' ? j.pm : '', pmCut = pmSrv.split('|').slice(0, 2).join('|');
+    const playerNow = JSON.stringify((S.account && S.account.player) || {}), playerSrv = pmSrv.split('|').slice(2).join('|');
+    const plChanged = !!(pmSrv && S.account && pmCut !== pmNow);
+    const playerChanged = !!(pmSrv && S.account && playerSrv && playerSrv !== playerNow);
+    const changed = plChanged || playerChanged || (j.vm && j.vm !== (S.vpn ? S.vpn.mode : 'off')) || (j.ph !== undefined && offSrv !== offNow) || (j.ms !== undefined && S.account && (+S.account.maxStreams || 0) !== j.ms);
     // server delle playlist cambiato dal pannello (DNS): si riscrivono gli indirizzi, la lista non si ricarica
     const dnsNew = typeof j.pv === 'string' && j.pv && hbPlv && j.pv !== hbPlv;
     if (typeof j.pv === 'string' && j.pv) hbPlv = j.pv;

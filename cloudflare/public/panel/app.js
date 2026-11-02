@@ -56,7 +56,7 @@ async function demoApi(method, path, body) {
   const log = (type, text) => DEMO.activity.unshift({ t: Date.now(), type, text });
   const used = (id) => 1 + DEMO.devices.filter((x) => x.parent === id).length;
   // come il server: la configurazione VPN non viene mai conservata/rimandata in chiaro
-  const accIn = (d, b) => { if (b.vpnConfClear) d.vpnConf = false; else if (typeof b.vpnConf === 'string' && b.vpnConf.trim()) d.vpnConf = true; delete b.vpnConf; delete b.vpnConfClear; if (Array.isArray(b.profiles)) b.profiles = b.profiles.map((p, i) => ({ ...p, id: p.id || 'np' + Date.now().toString(36) + i })); };
+  const accIn = (d, b) => { if (b.vpnConfClear) d.vpnConf = false; else if (typeof b.vpnConf === 'string' && b.vpnConf.trim()) d.vpnConf = true; delete b.vpnConf; delete b.vpnConfClear; if (Array.isArray(b.profiles)) b.profiles = b.profiles.map((p, i) => ({ ...p, id: p.id || 'np' + Date.now().toString(36) + i })); if (b.player && typeof b.player === 'object') b.player = Object.fromEntries(Object.entries(b.player).filter(([k, v]) => ['live', 'movie', 'series'].includes(k) && ['auto', 'exo', 'vlc'].includes(v))); };
   if (path === '/admin/login') return { ok: true, user: body.user || 'admin' };
   if (path === '/admin/privacy-template') return { text: '# Informativa sulla privacy e condizioni del servizio\n\n# 1. Chi fornisce il servizio\n{nome} è fornito dal rivenditore che ti ha attivato l\'app.\nContatti: {contatti}\n\n# 8. Condizioni del servizio\n- Prezzo: {prezzo}.\n- (modello dimostrativo: sul server trovi il testo completo)' };
   if (path === '/admin/state') { const ap = DEMO.settings, mc = verCode(ap.apkVersion); return { settings: DEMO.settings, devices: DEMO.devices.map(pub), activity: DEMO.activity, messages: DEMO.messages || [], user: 'admin', wgConf: !!DEMO.wgConf, apkFeed: DEMO.apkFeed, apk: ap.apkUrl && mc > DEMO.apkFeed.versionCode ? { versionCode: mc, version: ap.apkVersion, url: ap.apkUrl, auto: false } : { ...DEMO.apkFeed, auto: true }, security: DEMO.sec || (DEMO.sec = { totp: false, encryption: true, access: true, turnstile: true, sessions: 1 }) }; }
@@ -336,7 +336,6 @@ function renderDrawer() {
   })();
   const linkedBox = !linked ? '' : `<div class="lnk"><b>🔗 Connessione di ${esc(P ? P.name || P.code : 'un cliente eliminato')}</b><small>Abbonamento, scadenza, playlist, profili e limiti sono quelli del cliente principale${P ? ` (${1 + kidsOf(P.id).length} di ${esc(P.maxConn || 1)} connessioni)` : ''}.</small><div style="display:flex;gap:8px">${P ? '<button class="btn sm" id="eOpenP">Apri il cliente principale</button>' : ''}<button class="btn sm danger" id="eUnlink">Scollega</button></div></div>`;
   const accBox = linked ? '' : `
-    <label class="lbl">Account del cliente</label>
     <div class="row"><div><small class="mut">Connessioni massime</small><input class="inp" type="number" min="1" max="20" id="eMaxC" value="${esc(edit.maxConn ?? 1)}"></div><div><small class="mut">Profili massimi</small><input class="inp" type="number" min="0" max="12" id="eMaxP" value="${esc(maxP)}"></div></div>
     <div style="margin-top:10px"><small class="mut">Visioni contemporanee (0 = senza limite)</small><input class="inp" type="number" min="0" max="20" id="eMaxS" value="${esc(edit.maxStreams ?? 0)}"><small class="mut" style="display:block;margin-top:4px;font-size:11px">Quanti dispositivi di questo abbonamento possono guardare nello stesso momento</small></div>
     <div class="tog ${edit.lockProfiles ? 'on' : ''}" id="eLockP" style="margin-top:10px"><div><b>Blocca modifica profili</b><small>Il cliente usa i profili ma non può crearli, modificarli o eliminarli dall'app</small></div><i></i></div>
@@ -346,27 +345,27 @@ function renderDrawer() {
     ${isNew ? '' : `<label class="lbl">Dispositivi su questo abbonamento <span class="cnt">${1 + kids.length} di ${esc(edit.maxConn ?? 1)}</span></label>
     ${kids.map((k) => `<div class="mini"><div class="ic">${ICO_TV}</div><div class="tx"><b>${esc(k.name || k.model || k.code)}</b><small><span class="mono">${esc(k.code)}</span>${k.model ? ' · ' + esc(k.model) : ''} · ${ago(k.lastSeen)}</small></div><button class="btn sm" data-unlink="${esc(k.id)}">Scollega</button></div>`).join('') || '<p class="mut" style="font-size:12px">Solo questo dispositivo. Il cliente può aggiungerne altri dall\'app con un codice a 6 cifre (se le connessioni lo permettono), oppure puoi collegarli tu: apri un dispositivo in attesa → "Collega a un cliente".</p>'}`}`;
   const vpnBox = `
-    <label class="lbl">VPN</label>
     ${linked ? `<p class="mut" style="font-size:13px;margin-bottom:8px">Modalità del cliente principale: <b>${VPN_L[effVpn]}</b></p>` : `<div class="seg" id="eVpn">${VPN_L.map((l, v) => `<button data-vpn="${v}" class="${effVpn === v ? 'on' : ''}">${l}</button>`).join('')}</div><p class="mut" style="font-size:12px;margin:6px 0 10px">${VPN_H[effVpn]}${effVpn && !ownConf && !edit.wgText && !D.wgConf ? ' <span class="warnx">⚠️ Nessuna configurazione WireGuard: incollala qui sotto o in Impostazioni.</span>' : ''}</p>`}
     ${effVpn || ownConf || edit.vpnConfClear ? `<div class="kvst"><span>WireGuard di questo dispositivo (facoltativa): ${ownConf ? '<b>✓ configurata</b>' : edit.vpnConfClear ? '<span class="warnx">verrà rimossa al salvataggio</span>' : D.wgConf ? 'usa quella generale' : 'non impostata'}</span>${ownConf ? '<button class="btn sm danger" id="eWgClr">Rimuovi</button>' : ''}</div>
     <textarea class="inp mono" id="eWg" rows="4" spellcheck="false" autocomplete="off" placeholder="${ownConf ? 'Incolla una nuova configurazione per sostituirla' : '[Interface]&#10;PrivateKey = …&#10;Address = …&#10;&#10;[Peer]&#10;PublicKey = …&#10;Endpoint = …'}">${esc(edit.wgText || '')}</textarea>` : ''}`;
   // località VPN, permessi e codice di collegamento (1.8)
   const locs = (window.KC && KC.vpnLocs) || [];
+  const locBox = linked || !locs.length ? '' : `<label class="lbl">Località VPN</label><select class="inp" id="eLoc"><option value="">Configurazione generale / del dispositivo</option>${locs.map((l) => `<option value="${esc(l.id)}" ${edit.vpnLoc === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select>`;
+  // lettore per tipo di contenuto (2.0): '' = lo sceglie il cliente nell'app
+  const pl = edit.player || {};
+  const playerBox = linked ? '' : [['live', 'TV in diretta', '📡'], ['movie', 'Film', '🎬'], ['series', 'Serie TV', '🎞️']].map(([k, l, ic]) => `<div class="pl-eng"><span class="ic">${ic}</span><b>${l}</b><div class="seg">${[['', 'Sceglie il cliente'], ['auto', 'Automatico'], ['exo', 'ExoPlayer'], ['vlc', 'VLC']].map(([v, t]) => `<button class="${(pl[k] || '') === v ? 'on' : ''}" data-peng="${k}" data-v="${v}">${t}</button>`).join('')}</div></div>`).join('');
   const extraBox = linked ? '' : `
-    ${locs.length ? `<label class="lbl">Località VPN</label><select class="inp" id="eLoc"><option value="">Configurazione generale / del dispositivo</option>${locs.map((l) => `<option value="${esc(l.id)}" ${edit.vpnLoc === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select>` : ''}
-    <label class="lbl">Permessi del cliente</label>
     <div class="perms">${PERM_L.map(([k, l, d]) => `<div class="tog ${!edit.perms || edit.perms[k] !== false ? 'on' : ''}" data-perm="${k}"><div><b>${l}</b><small>${d}</small></div><i></i></div>`).join('')}</div>
     ${isNew ? '' : `<label class="lbl">Collegare un altro dispositivo</label><button class="btn" id="eLinkCode" style="width:100%">🔗 Genera codice di collegamento (6 cifre)</button><small class="mut" style="display:block;margin-top:6px;font-size:12px">Sulla nuova TV il cliente sceglie «Ho già un abbonamento» e scrive il codice. Vale 10 minuti.</small>`}`;
-  $('#dBody').innerHTML = `
-    ${isNew ? `<label class="lbl">Codice dispositivo</label><input class="inp mono" id="eCode" placeholder="Vuoto = generato, oppure quello mostrato dall'app (KXAB-12CD)" value="${esc(edit.code)}">` : `<div class="tog" style="cursor:default"><div><b>${edit.bound ? '🔒 Collegato al dispositivo' : '🔓 Non ancora collegato'}</b><small>${edit.bound ? 'Il codice funziona solo sul dispositivo che l\'ha generato. Se il cliente cambia TV o reinstalla l\'app, sblocca il collegamento.' : 'Il primo dispositivo che usa questo codice verrà collegato.'}</small></div>${edit.bound ? '<button class="btn sm" id="eReset">Sblocca</button>' : ''}</div>`}
+  // scheda a sezioni numerate, con un menu rapido in alto per saltare alla sezione
+  const sec = (id, n, t, sub, html) => html.trim() ? `<section class="dsec" id="ds-${id}"><div class="dsh"><i>${n}</i><div><b>${t}</b>${sub ? `<small>${sub}</small>` : ''}</div></div>${html}</section>` : '';
+  const S1 = `${isNew ? `<label class="lbl">Codice dispositivo</label><input class="inp mono" id="eCode" placeholder="Vuoto = generato, oppure quello mostrato dall'app (KXAB-12CD)" value="${esc(edit.code)}">` : `<div class="tog" style="cursor:default"><div><b>${edit.bound ? '🔒 Collegato al dispositivo' : '🔓 Non ancora collegato'}</b><small>${edit.bound ? 'Il codice funziona solo sul dispositivo che l\'ha generato. Se il cliente cambia TV o reinstalla l\'app, sblocca il collegamento.' : 'Il primo dispositivo che usa questo codice verrà collegato.'}</small></div>${edit.bound ? '<button class="btn sm" id="eReset">Sblocca</button>' : ''}</div>`}
     ${linkedBox}${linkBox}
-    <label class="lbl">${linked ? 'Nome del dispositivo' : 'Nome cliente'}</label><input class="inp" id="eName" placeholder="${linked ? 'es. Camera da letto' : 'es. Mario Rossi'}" value="${esc(edit.name)}">
-    ${linked ? '' : `<label class="lbl">Abbonamento</label>
-    <div class="tog ${edit.active ? 'on' : ''}" id="eAct"><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
+    <label class="lbl">${linked ? 'Nome del dispositivo' : 'Nome cliente'}</label><input class="inp" id="eName" placeholder="${linked ? 'es. Camera da letto' : 'es. Mario Rossi'}" value="${esc(edit.name)}">`;
+  const S2 = linked ? '' : `<div class="tog ${edit.active ? 'on' : ''}" id="eAct"><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
     <div class="row"><input class="inp" type="date" id="eExp" value="${esc(edit.expires)}"><button class="btn" id="eInf">${edit.expires ? 'Rendi illimitato' : 'Illimitato ✓'}</button></div>
-    <div class="quick">${[1, 3, 6, 12].map((m) => `<button class="btn sm" data-m="${m}">+${m} ${m === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>
-    <label class="lbl">Playlist assegnate</label>
-    <div id="pls">${edit.playlists.map((p, i) => `<div class="pl" data-i="${i}">
+    <div class="quick">${[1, 3, 6, 12].map((m) => `<button class="btn sm" data-m="${m}">+${m} ${m === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>`;
+  const S3 = linked ? '' : `<div id="pls">${edit.playlists.map((p, i) => `<div class="pl" data-i="${i}">
       <div class="ph"><input class="inp" data-k="name" value="${esc(p.name)}" placeholder="Nome"><input class="inp pltag" data-k="tag" value="${esc(p.tag || '')}" maxlength="6" placeholder="Sigla" title="Sigla mostrata nell'app sui contenuti di questa playlist quando sono unite (es. SKY, A, B)"><div class="seg"><button class="${p.type === 'm3u' ? 'on' : ''}" data-t="m3u">M3U</button><button class="${p.type === 'xtream' ? 'on' : ''}" data-t="xtream">Xtream</button></div><button class="icb" data-rm><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button></div>
       ${p.type === 'm3u' ? `<input class="inp mono" data-k="url" value="${esc(p.url)}" placeholder="http://…/get.php?…&type=m3u_plus">` : `<input class="inp mono" data-k="host" value="${esc(p.host)}" placeholder="http://host:porta"><div class="row"><input class="inp" data-k="username" value="${esc(p.username)}" placeholder="Username"><input class="inp" data-k="password" value="${esc(p.password)}" placeholder="Password"></div>`}
     </div>`).join('')}</div>
@@ -375,12 +374,21 @@ function renderDrawer() {
       <div class="seg wide"><button class="${edit.plMode !== 'split' ? 'on' : ''}" data-plm="merge">Unite</button><button class="${edit.plMode === 'split' ? 'on' : ''}" data-plm="split">Divise</button></div>
       <small>${edit.plMode === 'split' ? 'Il cliente vede una playlist alla volta. Con il permesso «Cambiare playlist» passa all\'altra con il pulsante vicino a «Guida TV».' : 'Tutti i contenuti insieme; ogni film, serie e canale mostra la sigla colorata della sua playlist. Con «Cambiare playlist» il cliente può anche filtrarne una sola.'}</small>
       ${edit.plMode === 'split' ? `<label class="lbl">Playlist da usare</label><select class="inp" id="ePlDef"><option value="">La prima (${esc(edit.playlists[0].name || 'Playlist 1')})</option>${edit.playlists.filter((p) => p.id).map((p) => `<option value="${esc(p.id)}" ${edit.plDefault === p.id ? 'selected' : ''}>${esc(p.name || 'Playlist')}</option>`).join('')}</select><small>Se il cliente non può cambiare playlist, usa sempre questa.</small>` : ''}
-    </div>` : ''}`}
-    ${accBox}
-    ${vpnBox}
-    ${extraBox}
-    <label class="lbl">Note interne</label><textarea class="inp" id="eNotes" placeholder="Pagamento, contatto, dettagli…">${esc(edit.notes)}</textarea>
-    ${!isNew ? `<p class="mut" style="font-size:12px;margin-top:14px">Registrato ${fmtD(edit.createdAt)} · ultimo accesso ${ago(edit.lastSeen)}${edit.model ? ' · ' + esc(edit.model) : ''}</p>` : ''}`;
+    </div>` : ''}`;
+  const S8 = `<textarea class="inp" id="eNotes" placeholder="Pagamento, contatto, dettagli…">${esc(edit.notes)}</textarea>
+    ${!isNew ? `<p class="mut" style="font-size:12px;margin-top:10px">Registrato ${fmtD(edit.createdAt)} · ultimo accesso ${ago(edit.lastSeen)}${edit.model ? ' · ' + esc(edit.model) : ''}</p>` : ''}`;
+  const SECS = linked
+    ? [['cli', 'Dispositivo', 'Codice e nome', S1], ['vpn', 'VPN', '', vpnBox], ['note', 'Note', 'Solo per te, il cliente non le vede', S8]]
+    : [['cli', 'Cliente', 'Codice, collegamento e nome', S1], ['abb', 'Abbonamento', 'Attivo e scadenza', S2], ['pl', 'Playlist', 'Liste M3U o Xtream del cliente', S3],
+      ['ply', 'Lettore', 'Quale lettore usa l\'app per ogni tipo di contenuto', playerBox], ['acc', 'Account e profili', 'Dispositivi, profili e visioni insieme', accBox],
+      ['vpn', 'VPN', 'Modalità e località', vpnBox + locBox], ['perm', 'Permessi', 'Cosa può fare il cliente nell\'app', extraBox], ['note', 'Note', 'Solo per te, il cliente non le vede', S8]];
+  const shown = SECS.filter((x) => String(x[3]).trim());
+  $('#dBody').innerHTML = `<nav class="dnav">${shown.map(([id, t], i) => `<button data-ds="${id}"><i>${i + 1}</i>${t}</button>`).join('')}</nav>`
+    + shown.map(([id, t, sub, html], i) => sec(id, i + 1, t, sub, html)).join('');
+  $$('#dBody [data-ds]').forEach((b) => (b.onclick = () => { const el = $('#ds-' + b.dataset.ds), body = $('#dBody'); if (el) body.scrollTo({ top: body.scrollTop + el.getBoundingClientRect().top - body.getBoundingClientRect().top - $('#dBody .dnav').offsetHeight - 6, behavior: 'smooth' }); }));
+  // il menu in alto segue la sezione che si sta guardando
+  $('#dBody').onscroll = () => { const body = $('#dBody'), nav = $('#dBody .dnav'); if (!nav) return; const lim = body.getBoundingClientRect().top + nav.offsetHeight + 40; let curS = ''; for (const el of $$('#dBody .dsec')) if (el.getBoundingClientRect().top <= lim) curS = el.id.slice(3); $$('#dBody [data-ds]').forEach((b) => b.classList.toggle('on', b.dataset.ds === curS)); };
+  $$('#dBody [data-peng]').forEach((b) => (b.onclick = () => { sync(); edit.player = { ...(edit.player || {}), [b.dataset.peng]: b.dataset.v }; if (!b.dataset.v) delete edit.player[b.dataset.peng]; $$(`#dBody [data-peng="${b.dataset.peng}"]`).forEach((x) => x.classList.toggle('on', x === b)); }));
   $('#eReset') && ($('#eReset').onclick = async () => { if (await ask('Sbloccare il collegamento?', 'Il prossimo dispositivo che usa questo codice verrà collegato al suo posto.', 'Sblocca')) { try { await api('POST', '/admin/devices/' + edit.id + '/reset'); edit.bound = false; renderDrawer(); await load(); toast('Collegamento sbloccato'); } catch (e) { toast(e.message, 1); } } });
   const sync = () => {
     edit.name = $('#eName').value; edit.notes = $('#eNotes').value;
@@ -443,7 +451,7 @@ function renderDrawer() {
   $('#dSave').onclick = async () => {
     sync();
     const vpnPart = edit.wgText && edit.wgText.trim() ? { vpnConf: edit.wgText } : edit.vpnConfClear ? { vpnConfClear: true } : {};
-    const acc = { maxConn: edit.maxConn, maxProfiles: edit.maxProfiles, maxStreams: +edit.maxStreams || 0, vpnLoc: edit.vpnLoc || '', perms: Object.fromEntries(PERM_L.map(([k]) => [k, !edit.perms || edit.perms[k] !== false])), lockProfiles: !!edit.lockProfiles, vpn: +edit.vpn || 0, plMode: edit.plMode === 'split' ? 'split' : 'merge', plDefault: edit.plDefault || '', profiles: edit.profiles.map((p) => ({ id: p.id || undefined, name: p.name, avatar: p.avatar, kids: !!p.kids, pl: p.pl || 'all' })) };
+    const acc = { maxConn: edit.maxConn, maxProfiles: edit.maxProfiles, maxStreams: +edit.maxStreams || 0, vpnLoc: edit.vpnLoc || '', perms: Object.fromEntries(PERM_L.map(([k]) => [k, !edit.perms || edit.perms[k] !== false])), lockProfiles: !!edit.lockProfiles, vpn: +edit.vpn || 0, plMode: edit.plMode === 'split' ? 'split' : 'merge', plDefault: edit.plDefault || '', player: { live: (edit.player || {}).live || '', movie: (edit.player || {}).movie || '', series: (edit.player || {}).series || '' }, profiles: edit.profiles.map((p) => ({ id: p.id || undefined, name: p.name, avatar: p.avatar, kids: !!p.kids, pl: p.pl || 'all' })) };
     try {
       if (isNew) await api('POST', '/admin/devices', { code: edit.code, name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, ...acc, ...vpnPart });
       else if (edit.parent) await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, ...vpnPart });
@@ -524,14 +532,14 @@ $('#sLocal').onclick = () => { $('#sLocal').classList.toggle('on'); $('#sLocal')
 $('#sFoot').onclick = () => { $('#sFoot').classList.toggle('on'); $('#sFoot').dataset.dirty = '1'; };
 $('#sSave').onclick = async () => {
   const wg = $('#sWg').value.trim();
-  try { const r = await api('PUT', '/admin/settings', { brand: $('#sBrand').value.trim() || 'KAIROS', tagline: $('#sTag').value, accent: tmpAccent, announcement: $('#sAnn').value, supportContact: $('#sSup').value, allowLocalPlaylists: $('#sLocal').classList.contains('on'), apkUrl: $('#sApk').value.trim(), downloaderCode: $('#sDl').value.trim(), showFootball: $('#sFoot').classList.contains('on'), serverUrl: $('#sSrv').value.trim(), apkVersionCode: $('#sVer').value.trim(), price: $('#sPrice').value.trim(), privacy: $('#sPriv').value, ...(wg ? { wgConf: wg } : {}) }); D.settings = r.settings; $('#sWg').value = ''; clearDirty(); await load(); toast('Impostazioni salvate — i player si aggiornano al prossimo avvio'); } catch (e) { toast(e.message, 1); }
+  try { const r = await api('PUT', '/admin/settings', { brand: $('#sBrand').value.trim() || 'KAIROS', tagline: $('#sTag').value, accent: tmpAccent, announcement: $('#sAnn').value, supportContact: $('#sSup').value, allowLocalPlaylists: $('#sLocal').classList.contains('on'), apkUrl: $('#sApk').value.trim(), downloaderCode: $('#sDl').value.trim(), showFootball: $('#sFoot').classList.contains('on'), serverUrl: $('#sSrv').value.trim(), apkVersionCode: $('#sVer').value.trim(), price: $('#sPrice').value.trim(), privacy: $('#sPriv').value, ...(wg ? { wgConf: wg } : {}) }); D.settings = r.settings; $('#sWg').value = ''; clearDirty(); await load(); toast('Impostazioni salvate — le app si aggiornano da sole'); if (window.stDirtyUpd) stDirtyUpd(); } catch (e) { toast(e.message, 1); }
 };
 function renderSecurity() {
   const x = D.security || {};
   const row = (ok, t, d) => `<div class="sec"><i class="${ok ? 'y' : 'n'}">${ok ? '✓' : '!'}</i><div><b>${t}</b><small>${d}</small></div></div>`;
   $('#secList').innerHTML = [
     row(true, 'Password cifrate (PBKDF2)', 'Le password non sono mai salvate in chiaro'),
-    row(true, 'Sessione protetta', 'Cookie sicuro, scadenza 12 ore, protezione CSRF e blocco dopo 5 tentativi falliti'),
+    row(true, 'Sessione protetta', 'Cookie sicuro, valido 30 giorni dall\'ultimo uso, protezione CSRF e blocco dopo 5 tentativi falliti'),
     row(x.encryption, 'Playlist cifrate (AES-256)', x.encryption ? 'Le credenziali delle playlist sono cifrate nel database' : 'Manca il segreto ENC_KEY sul Worker'),
     row(x.totp, 'Verifica in due passaggi', x.totp ? 'Attiva sul tuo account' : 'Consigliata: attivala qui sotto'),
     row(x.turnstile, 'Anti-bot Turnstile', x.turnstile ? 'Attivo sulla pagina di accesso' : 'Non configurato (vedi guida)'),

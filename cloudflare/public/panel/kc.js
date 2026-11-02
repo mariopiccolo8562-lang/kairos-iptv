@@ -1,4 +1,4 @@
-/* KAIROS Control 1.9 — pagine: Online ora, Segnalazioni, Richieste contenuti, Videoteca, Server DNS e VPN.
+/* KAIROS Control 2.0 — pagine: Online ora, Segnalazioni, Richieste contenuti, Videoteca, Server DNS e VPN; Dispositivi a schede, Impostazioni a schede.
    Usa le funzioni di app.js ($, $$, esc, api, toast, ask, ago, D, TITLES, view, openDrawer, load). In demo usa dati di esempio. */
 (() => {
   const KC = (window.KC = { vpnLocs: [], live: null, req: { report: null, content: null }, dns: null, cat: { src: '', kind: 'movies', cat: '', q: '', page: 1 } });
@@ -130,6 +130,68 @@
 .kc-key{margin:10px 0;color:#fff;user-select:all}
 .kc-ep{width:100%;border-collapse:collapse;margin-bottom:12px}.kc-ep td{padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:top}.kc-ep td.mono{white-space:nowrap}
 .kc-m{display:inline-block;min-width:56px;text-align:center;font:800 11px/1 ui-monospace,monospace;padding:4px 6px;border-radius:6px;background:rgba(61,220,132,.16);color:#7ef0ab}.kc-m.post{background:rgba(63,180,255,.16);color:#8fd0ff}.kc-m.put{background:rgba(255,194,61,.16);color:#ffd37a}.kc-m.delete{background:rgba(255,74,85,.16);color:#ff8f96}
+.st-tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;margin-bottom:18px}
+.st-tab{all:unset;cursor:pointer;display:flex;gap:10px;align-items:center;padding:12px 12px;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.03);transition:background .15s,border-color .15s}
+.st-tab:hover{background:rgba(255,255,255,.06)}
+.st-tab.on{border-color:rgba(255,90,60,.55);background:linear-gradient(135deg,rgba(255,60,60,.16),rgba(255,255,255,.03));box-shadow:0 0 24px rgba(255,60,60,.12)}
+.st-tab i{font-style:normal;font-size:22px;width:40px;height:40px;display:grid;place-items:center;border-radius:12px;background:rgba(255,255,255,.06);flex:none}
+.st-tab.on i{background:linear-gradient(135deg,#ff7a45,#ff2a3d)}
+.st-tab b{display:block;font-size:15px}.st-tab small{display:block;color:var(--mut);font-size:12px;margin-top:2px}
+.st-tab .dot{width:8px;height:8px;border-radius:50%;background:var(--warn);margin-left:auto;display:none}.st-tab.dirty .dot{display:block}
+.st-pane{display:none}.st-pane.on{display:block;animation:kcIn .25s ease}
+@keyframes kcIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.st-g{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);gap:18px;align-items:start}
+@media (max-width:1100px){.st-g{grid-template-columns:1fr}}
+.st-row{display:grid;grid-template-columns:minmax(200px,1fr) minmax(0,1.6fr);gap:18px;align-items:center;padding:16px 0;border-bottom:1px solid var(--line)}
+.st-row:last-child{border-bottom:0}.st-row.col{grid-template-columns:1fr;gap:10px}
+.st-l b{display:block;font-size:15px}.st-l small{display:block;color:var(--mut);font-size:12.5px;line-height:1.5;margin-top:3px}
+.st-c .inp,.st-row textarea{margin:0}.st-two{display:grid;grid-template-columns:1fr 130px;gap:10px}
+.st-tog{padding:18px}.st-tog b{font-size:15px}
+.st-note{font-size:13px;line-height:1.55;color:var(--mut);padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--line);margin:8px 0}
+.st-note.warn{border-color:rgba(255,194,61,.35);background:rgba(255,194,61,.07);color:#f2d9a0}
+.st-adv{margin-top:10px;border:1px dashed var(--line);border-radius:14px;padding:4px 16px}
+.st-adv summary{cursor:pointer;padding:12px 0;font-weight:700;color:var(--mut)}
+.st-save{position:sticky;bottom:14px;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding:12px 14px 12px 20px;border-radius:16px;border:1px solid var(--line);background:rgba(12,12,18,.92);backdrop-filter:blur(10px)}
+.st-save.dirty{border-color:rgba(255,194,61,.5);box-shadow:0 10px 40px rgba(0,0,0,.5)}.st-save.dirty #stDirty{color:#ffd37a}
+.st-save.hide{display:none}
+.dnav{position:sticky;top:-22px;z-index:4;display:flex;gap:6px;overflow-x:auto;padding:20px 0 12px;margin:-22px 0 6px;background:#0d0e1f;box-shadow:0 10px 14px -6px #0d0e1f;scrollbar-width:none}
+.dnav::-webkit-scrollbar{display:none}
+.dnav button{all:unset;cursor:pointer;flex:none;display:flex;align-items:center;gap:6px;padding:7px 11px 7px 7px;border-radius:99px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:12.5px;font-weight:700;white-space:nowrap}
+.dnav button:hover{background:rgba(255,255,255,.09)}.dnav button.on{border-color:rgba(255,90,60,.6);background:rgba(255,60,60,.15)}.dnav button.on i{background:linear-gradient(135deg,#ff7a45,#ff2a3d)}
+.dnav button i{font-style:normal;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;background:rgba(255,255,255,.1)}
+.dsec{padding:16px;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.025);margin-bottom:14px}
+.dsec .lbl:first-of-type{margin-top:6px}
+.dsh{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+.dsh>i{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:800;background:linear-gradient(135deg,#ff7a45,#ff2a3d);color:#fff;box-shadow:0 0 16px rgba(255,60,60,.35)}
+.dsh b{display:block;font-size:16px}.dsh small{display:block;color:var(--mut);font-size:12px;margin-top:1px}
+.pl-eng{display:grid;grid-template-columns:28px 110px 1fr;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}.pl-eng:last-child{border-bottom:0}
+.pl-eng .ic{font-size:18px}.pl-eng .seg{display:grid;grid-template-columns:1fr 1fr;gap:2px}.pl-eng .seg button{white-space:nowrap}
+.dv-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px}
+.dv-tile{all:unset;cursor:pointer;display:flex;gap:12px;align-items:center;padding:14px;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.03);transition:background .15s,border-color .15s}
+.dv-tile:hover{background:rgba(255,255,255,.06)}.dv-tile i{font-style:normal;font-size:20px;width:40px;height:40px;display:grid;place-items:center;border-radius:12px;background:rgba(255,255,255,.06);flex:none}
+.dv-tile b{display:block;font-size:24px;line-height:1}.dv-tile em{display:block;font-style:normal;font-weight:700;font-size:14px;margin-top:3px}.dv-tile small{display:block;color:var(--mut);font-size:11.5px}
+.dv-tile.on{border-color:rgba(255,90,60,.55);background:linear-gradient(135deg,rgba(255,60,60,.16),rgba(255,255,255,.03));box-shadow:0 0 24px rgba(255,60,60,.12)}
+.dv-tile.pending b{color:#ffd37a}.dv-tile.soon b{color:#ffd37a}.dv-tile.expired b,.dv-tile.disabled b{color:#ff8f96}.dv-tile.active b{color:#7ef0ab}
+.dv-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.dv-q{flex:1;min-width:240px;position:relative}.dv-q svg{position:absolute;left:14px;top:50%;width:18px;height:18px;transform:translateY(-50%);color:var(--mut)}.dv-q .inp{margin:0;padding-left:42px}
+#dvSort{width:auto;margin:0;flex:0 0 220px}
+#v-devices.dv-cardsview #filters,#v-devices.dv-cardsview .tbl,#v-devices.dv-cardsview #noRows{display:none!important}
+.dv-pend{margin-bottom:18px}.dv-pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.dv-pc{display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:14px;border:1px solid rgba(255,194,61,.35);background:linear-gradient(135deg,rgba(255,194,61,.08),rgba(255,255,255,.02))}
+.dv-pc .code.big{font-size:17px;padding:5px 10px}.dv-pc small{display:block;color:var(--mut);font-size:12px;margin-top:6px}
+.dv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+.dv-card{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:18px;border:1px solid var(--line);background:rgba(255,255,255,.03);cursor:pointer;transition:transform .15s,background .15s,border-color .15s}
+.dv-card:hover{background:rgba(255,255,255,.055);border-color:rgba(255,255,255,.18);transform:translateY(-2px)}
+.dv-card.expired,.dv-card.disabled{border-color:rgba(255,74,85,.28)}
+.dv-top{display:flex;gap:12px;align-items:center}.dv-n{flex:1;min-width:0}.dv-n b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dv-n .code{display:inline-block;margin-top:4px}
+.dv-av{flex:none;width:42px;height:42px;border-radius:14px;display:grid;place-items:center;font-weight:800;font-size:18px;color:#fff;background:linear-gradient(135deg,hsl(var(--h,0) 75% 55%),hsl(calc(var(--h,0) + 40) 75% 42%))}
+.dv-exp>div{display:flex;justify-content:space-between;gap:8px;font-size:13px}.dv-exp em{font-style:normal;font-weight:700}
+.dv-exp>i{display:block;height:6px;border-radius:6px;background:rgba(255,255,255,.07);margin-top:7px;overflow:hidden}.dv-exp s{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,#3ddc84,#7ef0ab)}
+.dv-exp.warn em{color:#ffd37a}.dv-exp.warn s{background:linear-gradient(90deg,#ffb23d,#ffd37a)}.dv-exp.bad em{color:#ff8f96}.dv-exp.bad s{background:linear-gradient(90deg,#ff2a3d,#ff7a45)}
+.dv-info{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:12.5px;color:var(--mut)}.dv-info span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dv-kids{display:flex;flex-wrap:wrap;gap:6px}.dv-kids button{all:unset;cursor:pointer;font-size:12px;padding:4px 9px;border-radius:99px;background:rgba(255,255,255,.06);border:1px solid var(--line)}.dv-kids button:hover{background:rgba(255,255,255,.12)}
+.dv-note{font-size:12.5px;color:var(--mut);padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03)}
+.dv-act{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}.dv-act .btn{flex:1}
 .kc-dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
 .kc-dns{display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.02)}
 .kc-dns.saved{border-color:rgba(255,90,60,.35);background:linear-gradient(135deg,rgba(255,60,60,.08),rgba(255,255,255,.02))}
@@ -399,7 +461,7 @@
       ['GET', '/devices?status=active&q=mario', 'Elenco dei dispositivi (status: active, pending, expired, disabled)'],
       ['GET', '/devices/KXAB-12CD', 'Un dispositivo (codice o id)'],
       ['POST', '/devices', 'Crea un cliente: { code?, name, expires, active, playlists, maxConn, … }'],
-      ['PUT', '/devices/KXAB-12CD', 'Modifica: name, notes, expires, active, playlists, maxConn, maxStreams, maxProfiles, plMode, plDefault, perms, vpn, vpnLoc'],
+      ['PUT', '/devices/KXAB-12CD', 'Modifica: name, notes, expires, active, playlists, maxConn, maxStreams, maxProfiles, plMode, plDefault, player ({live, movie, series}: auto · exo · vlc · "" = sceglie il cliente), perms, vpn, vpnLoc'],
       ['POST', '/devices/KXAB-12CD/activate', 'Attiva: { months | days | expires | unlimited, playlists? }'],
       ['POST', '/devices/KXAB-12CD/extend', 'Rinnova dalla scadenza attuale: { months | days }'],
       ['POST', '/devices/KXAB-12CD/disable', 'Disattiva (enable per riattivare)'],
@@ -439,6 +501,113 @@
     $('#whTest').onclick = async () => { try { const r = await kapi('POST', '/admin/webhook/test'); toast(r.ok ? `✓ Prova ricevuta (HTTP ${r.status})` : `Il tuo server ha risposto ${r.status > 0 ? 'HTTP ' + r.status : 'nulla'}`, !r.ok); apiLoad(); } catch (e) { toast(e.message, 1); } };
   }
 
+  /* ---------- Impostazioni: schede tematiche e avviso delle modifiche non salvate ---------- */
+  (function settingsTabs() {
+    const V = $('#v-settings'); if (!V || !$('#stTabs')) return;
+    const paneOf = (el) => { const p = el.closest('.st-pane'); return p && p.dataset.pane; };
+    $$('.st-tab', V).forEach((t) => { t.insertAdjacentHTML('beforeend', '<span class="dot"></span>'); t.onclick = () => stShow(t.dataset.st); });
+    window.stShow = (k) => {
+      $$('.st-tab', V).forEach((t) => t.classList.toggle('on', t.dataset.st === k));
+      $$('.st-pane', V).forEach((p) => p.classList.toggle('on', p.dataset.pane === k));
+      $('#stSave').classList.toggle('hide', k === 'sec');
+      try { sessionStorage.setItem('kc_st', k); } catch {}
+    };
+    window.stDirtyUpd = () => {
+      const dirty = new Set($$('[data-dirty="1"]', V).map(paneOf).filter(Boolean));
+      if ($('#sWg').value.trim()) dirty.add('vpn');
+      $$('.st-tab', V).forEach((t) => t.classList.toggle('dirty', dirty.has(t.dataset.st)));
+      $('#stSave').classList.toggle('dirty', dirty.size > 0);
+      $('#stDirty').textContent = dirty.size ? `Modifiche non salvate in ${dirty.size === 1 ? '1 scheda' : dirty.size + ' schede'}` : 'Nessuna modifica da salvare';
+    };
+    V.addEventListener('input', () => setTimeout(stDirtyUpd, 0));
+    V.addEventListener('click', (e) => { if (e.target.closest('.tog, [data-th]')) setTimeout(stDirtyUpd, 0); const g = e.target.closest('[data-goto]'); if (g) { e.preventDefault(); view(g.dataset.goto); } });
+    let k0 = 'look'; try { k0 = sessionStorage.getItem('kc_st') || 'look'; } catch {}
+    stShow($(`.st-tab[data-st="${k0}"]`, V) ? k0 : 'look');
+  })();
+  /* ---------- Dispositivi (2.0): riquadri-filtro, clienti in schede, dispositivi da attivare in evidenza ---------- */
+  (function devicesCards() {
+    const V = $('#v-devices'); if (!V) return;
+    V.insertAdjacentHTML('afterbegin', `<div class="dv-tiles" id="dvTiles"></div>
+      <div class="dv-bar"><div class="dv-q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input class="inp" id="dvQ" placeholder="Cerca per nome, codice, note o modello"></div>
+        <select class="inp" id="dvSort"><option value="exp">Scadenza più vicina</option><option value="name">Nome A–Z</option><option value="seen">Ultimo accesso</option><option value="new">Aggiunti di recente</option></select>
+        <div class="seg" id="dvView"><button data-dv="cards">Schede</button><button data-dv="list">Elenco</button></div></div>
+      <div id="dvPend"></div><div class="dv-grid" id="dvCards"></div><div id="dvMore"></div>`);
+    const st = { view: 'cards', sort: 'exp', limit: 60 };
+    try { st.view = localStorage.getItem('kc_dv') || 'cards'; st.sort = localStorage.getItem('kc_dvs') || 'exp'; } catch {}
+    $('#dvSort').value = st.sort;
+    const TILES = [
+      ['all', 'Tutti', '👥', 'Ogni dispositivo'], ['active', 'Attivi', '✅', 'Abbonamento in corso'], ['soon', 'In scadenza', '⏳', 'Entro 14 giorni'],
+      ['pending', 'Da attivare', '🆕', 'Aspettano te'], ['expired', 'Scaduti', '⌛', 'Da rinnovare'], ['disabled', 'Disattivati', '⏸️', 'Spenti da te'],
+    ];
+    const soon = (d) => d.status === 'active' && !d.parent && daysLeft(d) !== null && daysLeft(d) <= 14;
+    const fit = (d, f) => f === 'all' || (f === 'soon' ? soon(d) : d.status === f);
+    const initial = (t) => (String(t || '?').trim()[0] || '?').toUpperCase();
+    const hue = (t) => { let h = 0; for (const c of String(t || '')) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+    const hostsOf = (d) => [...new Set((d.playlists || []).map((p) => { try { return new URL(p.type === 'xtream' ? p.host : p.url).hostname; } catch { return ''; } }).filter(Boolean))];
+    function card(d) {
+      const kids = kidsOf(d.id), dl = daysLeft(d), tot = 365;
+      const pct = dl === null ? 100 : Math.max(0, Math.min(100, (dl / tot) * 100));
+      const tone = d.status !== 'active' ? 'bad' : dl !== null && dl <= 3 ? 'bad' : dl !== null && dl <= 14 ? 'warn' : 'ok';
+      const name = d.name || '— senza nome —';
+      return `<div class="dv-card ${d.status}" data-id="${esc(d.id)}">
+        <div class="dv-top"><div class="dv-av" style="--h:${hue(d.name || d.code)}">${esc(initial(d.name || d.code))}</div>
+          <div class="dv-n"><b>${esc(name)}</b><span class="code">${esc(d.code)}</span></div>${stPill(d.status)}</div>
+        <div class="dv-exp ${tone}"><div><span>${d.expires ? 'Scade il <b>' + esc(fmtD(d.expires)) + '</b>' : '<b>Senza scadenza</b>'}</span><em>${dl === null ? '∞' : dl < 0 ? 'scaduto da ' + -dl + ' g' : dl === 0 ? 'oggi' : 'tra ' + dl + ' g'}</em></div><i><s style="width:${pct}%"></s></i></div>
+        <div class="dv-info">
+          <span title="Modello">📺 ${esc(d.model || '—')}</span>
+          <span title="Ultimo accesso">🕒 ${esc(ago(d.lastSeen))}</span>
+          <span title="Connessioni">🔗 ${1 + kids.length} di ${esc(d.maxConn || 1)}</span>
+          <span title="Playlist">📋 ${(d.playlists || []).length ? (d.playlists || []).length + ' · ' + esc(hostsOf(d).slice(0, 2).join(', ') || '') : 'nessuna'}</span>
+        </div>
+        ${kids.length ? `<div class="dv-kids">${kids.map((k) => `<button data-open="${esc(k.id)}" title="${esc(k.code)}">↳ ${esc(k.name || k.model || k.code)}</button>`).join('')}</div>` : ''}
+        ${d.notes ? `<div class="dv-note">📝 ${esc(d.notes.slice(0, 90))}</div>` : ''}
+        <div class="dv-act"><button class="btn sm" data-act="ext1">+1 mese</button><button class="btn sm" data-act="ext12">+12 mesi</button><button class="btn sm ${d.active ? '' : 'pri'}" data-act="tog">${d.active ? 'Disattiva' : 'Riattiva'}</button><button class="btn sm pri" data-act="open">Apri scheda</button></div>
+      </div>`;
+    }
+    function pendCard(d) {
+      return `<div class="dv-pc" data-id="${esc(d.id)}"><div><span class="code big">${esc(d.code)}</span><small>${esc(d.model || 'Dispositivo')} · si è collegato ${esc(ago(d.lastSeen || d.createdAt))}</small></div>
+        <div class="dv-act"><button class="btn sm pri" data-act="activate">Attiva</button><button class="btn sm" data-act="link">Collega a un cliente</button></div></div>`;
+    }
+    function render() {
+      const f = D.filter || 'all', q = ($('#dvQ').value || D.q || '').toLowerCase().trim();
+      $('#dvTiles').innerHTML = TILES.map(([k, l, ic, sub]) => `<button class="dv-tile ${k} ${f === k ? 'on' : ''}" data-fl2="${k}"><i>${ic}</i><span><b>${D.devices.filter((d) => fit(d, k)).length}</b><em>${l}</em><small>${sub}</small></span></button>`).join('');
+      $$('#dvView [data-dv]').forEach((b) => b.classList.toggle('on', b.dataset.dv === st.view));
+      V.classList.toggle('dv-cardsview', st.view === 'cards');
+      if (st.view !== 'cards') { $('#dvPend').innerHTML = $('#dvCards').innerHTML = $('#dvMore').innerHTML = ''; return; }
+      const hay = (d) => [d.code, d.name, d.notes, d.model].join(' ').toLowerCase();
+      const pend = D.devices.filter((d) => d.status === 'pending' && !d.parent && (f === 'all' || f === 'pending') && (!q || hay(d).includes(q)));
+      $('#dvPend').innerHTML = pend.length ? `<div class="card glass dv-pend"><div class="hd"><h3>🆕 Da attivare <span class="cnt">${pend.length}</span><small>Il cliente apre l'app e ti legge il codice: premi <b>Attiva</b>, scegli durata e playlist. Se è una TV in più di un cliente che hai già, usa <b>Collega a un cliente</b>.</small></h3></div><div class="dv-pgrid">${pend.slice(0, 24).map(pendCard).join('')}</div></div>` : '';
+      let list = D.devices.filter((d) => !d.parent && d.status !== 'pending' && fit(d, f) && (!q || hay(d).includes(q) || kidsOf(d.id).some((k) => hay(k).includes(q))));
+      // connessioni che corrispondono alla ricerca ma il cui cliente principale non c'è (o è eliminato)
+      const orphans = D.devices.filter((d) => d.parent && !parentOf(d) && (!q || hay(d).includes(q)) && f === 'all');
+      const by = { exp: (a, b) => (daysLeft(a) ?? 1e9) - (daysLeft(b) ?? 1e9), name: (a, b) => String(a.name || a.code).localeCompare(String(b.name || b.code), 'it'), seen: (a, b) => (b.lastSeen || 0) - (a.lastSeen || 0), new: (a, b) => (b.createdAt || 0) - (a.createdAt || 0) }[st.sort];
+      list = list.sort(by);
+      const shown = list.slice(0, st.limit);
+      $('#dvCards').innerHTML = shown.map(card).join('') + orphans.map((d) => `<div class="dv-card" data-id="${esc(d.id)}"><div class="dv-top"><div class="dv-av">?</div><div class="dv-n"><b>${esc(d.name || d.model || d.code)}</b><span class="code">${esc(d.code)}</span></div></div><p class="mut" style="font-size:13px">Connessione di un cliente eliminato</p><div class="dv-act"><button class="btn sm pri" data-act="open">Apri scheda</button></div></div>`).join('')
+        || (pend.length ? '' : `<div class="emptyc" style="display:block;grid-column:1/-1">${q ? 'Nessun cliente trovato per «' + esc(q) + '»' : 'Nessun cliente in questo elenco'}</div>`);
+      $('#dvMore').innerHTML = list.length > st.limit ? `<button class="btn" id="dvMoreB" style="width:100%;margin-top:14px">Mostra altri ${Math.min(60, list.length - st.limit)} (${list.length - st.limit} rimanenti)</button>` : '';
+      $('#dvMoreB') && ($('#dvMoreB').onclick = () => { st.limit += 60; render(); });
+    }
+    V.addEventListener('click', async (e) => {
+      const t = e.target.closest('[data-fl2]'); if (t) { D.filter = t.dataset.fl2; st.limit = 60; return renderDevices(); }
+      const v = e.target.closest('[data-dv]'); if (v) { st.view = v.dataset.dv; try { localStorage.setItem('kc_dv', st.view); } catch {} return renderDevices(); }
+      const o = e.target.closest('[data-open]'); if (o) { const k = D.devices.find((x) => x.id === o.dataset.open); if (k) openDrawer(k, false); return; }
+      const c = e.target.closest('.dv-card, .dv-pc'); if (!c) return;
+      const d = D.devices.find((x) => x.id === c.dataset.id); if (!d) return;
+      const act = (e.target.closest('[data-act]') || {}).dataset?.act;
+      if (act === 'ext1') return extend(d, 1);
+      if (act === 'ext12') return extend(d, 12);
+      if (act === 'tog') { if (d.active && !(await ask('Disattivare il cliente?', `<b>${esc(d.name || d.code)}</b> non potrà più guardare finché non lo riattivi.`, 'Disattiva'))) return; await save(d, { active: !d.active }); return toast(d.active ? 'Cliente disattivato' : 'Cliente riattivato'); }
+      if (act === 'activate') return openDrawer(d, true);
+      if (act === 'link') { openDrawer(d, false); setTimeout(() => { const s = $('#eLinkTo'); if (s) { s.scrollIntoView({ block: 'center' }); s.focus(); } }, 350); return; }
+      if (act === 'open' || !e.target.closest('button')) openDrawer(d, d.status === 'pending');
+    });
+    $('#dvQ').addEventListener('input', () => { st.limit = 60; render(); });
+    $('#dvSort').onchange = (e) => { st.sort = e.target.value; try { localStorage.setItem('kc_dvs', st.sort); } catch {} render(); };
+    const orig = window.renderDevices;
+    window.renderDevices = renderDevices = function () { orig(); render(); };
+    KC.dvRender = render;
+  })();
   /* ---------- Dashboard: i riquadri aprono la pagina giusta ---------- */
   const origDash = window.renderDash;
   const linkDash = () => {

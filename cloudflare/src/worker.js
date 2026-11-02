@@ -408,6 +408,20 @@ function cleanHost(h) {
   return u.origin;
 }
 /** stessa playlist con un altro server (percorso e parametri invariati) */
+/* lettore per tipo di contenuto scelto dal pannello ('' = decide il cliente) */
+const PLAYER_ENG = ['auto', 'exo', 'vlc'];
+function playerParse(v) {
+  let o = {}; try { o = v ? JSON.parse(v) : {}; } catch {}
+  const out = {};
+  for (const k of ['live', 'movie', 'series']) if (PLAYER_ENG.includes(o && o[k])) out[k] = o[k];
+  return out;
+}
+function playerInput(v) {
+  if (!v || typeof v !== 'object') throw new HttpErr(400, 'Lettore non valido');
+  const out = {};
+  for (const k of ['live', 'movie', 'series']) { const x = v[k]; if (x === '' || x == null) continue; if (!PLAYER_ENG.includes(x)) throw new HttpErr(400, 'Lettore non valido: usa auto, exo o vlc'); out[k] = x; }
+  return Object.keys(out).length ? JSON.stringify(out) : '';
+}
 /* DNS salvati dal pannello (elenco indipendente dai clienti) */
 async function dnsList(env) {
   const r = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('dnsl').first();
@@ -469,7 +483,7 @@ async function primaryOf(env, d) {
 const linkedOf = async (env, id) => ((await env.DB.prepare('SELECT id, code, name, model, last_seen, vpn_conf FROM devices WHERE parent = ? ORDER BY created_at LIMIT 100').bind(id).all()).results) || [];
 async function accountOf(env, P, me, pls) {
   const conns = [P, ...(await linkedOf(env, P.id))].map((x) => ({ name: x.name || '', model: x.model || '', seen: x.id === me.id ? now() : +x.last_seen || 0, me: x.id === me.id }));
-  return { primary: me.id === P.id, owner: P.name || '', maxConn: P.max_conn ?? 1, conns, maxProfiles: P.max_profiles ?? 3, profiles: readProfiles(P, pls.map((p) => p.id)), canEdit: !P.lock_profiles, maxStreams: +P.max_streams || 0, plMode: P.pl_mode === 'split' ? 'split' : 'merge', plDefault: pls.some((p) => p.id === P.pl_default) ? P.pl_default : '' };
+  return { primary: me.id === P.id, owner: P.name || '', maxConn: P.max_conn ?? 1, conns, maxProfiles: P.max_profiles ?? 3, profiles: readProfiles(P, pls.map((p) => p.id)), canEdit: !P.lock_profiles, maxStreams: +P.max_streams || 0, plMode: P.pl_mode === 'split' ? 'split' : 'merge', plDefault: pls.some((p) => p.id === P.pl_default) ? P.pl_default : '', player: playerParse(P.player) };
 }
 /* ---------------- VPN (WireGuard) ---------------- */
 /** controlla una configurazione wg-quick; '' = nessuna */
@@ -864,7 +878,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
   const vm = P ? (+P.vpn === 2 ? 'force' : +P.vpn === 1 ? 'allow' : 'off') : 'off';
   // impronta dei server delle playlist: se cambia (DNS cambiato dal pannello) l'app aggiorna gli indirizzi senza ricaricare la lista
   const pv = pls.length ? (await sha256(pls.map((p) => p.id + '|' + hostOf(p) + '|' + (p.username || '')).join(','))).slice(0, 12) : '';
-  return json({ ok: true, unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (P.pl_default || '') : '' });
+  return json({ ok: true, unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (P.pl_default || '') + '|' + JSON.stringify(playerParse(P.player)) : '' });
 }
 /** vista pannello: chi è collegato e cosa guarda */
 /* visioni contemporanee: prima di iniziare a guardare l'app chiede il permesso (solo se il pannello ha messo un limite) */
@@ -1651,7 +1665,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const perms = b.perms !== undefined ? permsJson({ ...permsParse((await getSettings(env)).permsDefault), ...permsInput(b.perms) }) : defaultPermsJson(await getSettings(env));
     await env.DB.prepare('INSERT INTO devices (id, code, name, notes, active, expires, playlists, created_at, max_conn, max_profiles, profiles, lock_profiles, vpn, vpn_conf, perms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(id, code, str(b.name, 60), str(b.notes, 500), b.active ? 1 : 0, str(b.expires, 10), await seal(env, pls), now(), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, perms).run();
-    await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, id).run();
+    await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, id).run();
     await log(env, 'new', `${who}: creato dispositivo ${str(b.name, 60) || code}`, ip);
     return json({ ok: true, id, code });
   }
@@ -1738,7 +1752,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       const perms = b.perms !== undefined ? permsJson({ ...permsParse(d.perms), ...permsInput(b.perms) }) : d.perms || '';
       await env.DB.prepare('UPDATE devices SET name = ?, notes = ?, expires = ?, active = ?, playlists = ?, max_conn = ?, max_profiles = ?, profiles = ?, lock_profiles = ?, vpn = ?, vpn_conf = ?, perms = ? WHERE id = ?')
         .bind(name, notes, expires, active, await seal(env, pls), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, perms, d.id).run();
-      await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, d.id).run();
+      await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, d.id).run();
       if (JSON.stringify(pls) !== JSON.stringify(await unseal(env, d.playlists).catch(() => []))) srcMem.map = null;
       const after = statusOf({ active, expires }, pls);
       if (before !== after && after === 'active') ctx.waitUntil(webhookSend(env, 'device.activated', { id: d.id, code: d.code, name, expires }));
@@ -1823,7 +1837,7 @@ async function apiV1(req, env, url, ip, ctx) {
         body.expires = base.toISOString().slice(0, 10);
       }
       body.active = true;
-      for (const f of ['playlists', 'name', 'notes', 'maxConn', 'maxStreams', 'maxProfiles', 'plMode', 'plDefault', 'perms', 'vpn', 'vpnLoc']) if (b[f] !== undefined) body[f] = b[f];
+      for (const f of ['playlists', 'name', 'notes', 'maxConn', 'maxStreams', 'maxProfiles', 'plMode', 'plDefault', 'perms', 'vpn', 'vpnLoc', 'player']) if (b[f] !== undefined) body[f] = b[f];
     }
     const sub = new Request(new URL('/api/v1/devices/' + d.id, url).href, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     await adminRoutes(sub, env, url, '/devices/' + d.id, who, ip, ctx, null);
@@ -1927,7 +1941,7 @@ async function apiAdmin(req, env, path, who, ip, ctx) {
 async function deviceOut(env, d) {
   const pls = await unseal(env, d.playlists).catch(() => []);
   return { id: d.id, code: d.code, name: d.name, model: d.model, notes: d.notes, active: !!d.active, expires: d.expires, playlists: pls, hosts: [...new Set(pls.map(hostOf).filter(Boolean))], createdAt: d.created_at, lastSeen: d.last_seen, lastIp: d.last_ip, bound: !!d.secret_hash, status: statusOf(d, pls),
-    parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '' };
+    parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '', player: playerParse(d.player) };
 }
 /** campi "account" inviati dal pannello: connessioni, profili, VPN (cur = valori attuali del dispositivo) */
 async function accountFields(env, b, cur, pls) {
@@ -1945,6 +1959,8 @@ async function accountFields(env, b, cur, pls) {
   o.pl_mode = cur.pl_mode || ''; o.pl_default = plIds.includes(cur.pl_default) ? cur.pl_default : '';
   if (b.plMode !== undefined) o.pl_mode = b.plMode === 'split' ? 'split' : 'merge';
   if (b.plDefault !== undefined) { const v = str(b.plDefault, 40); if (v && !plIds.includes(v)) throw new HttpErr(400, 'Playlist da usare non trovata'); o.pl_default = v; }
+  o.player = cur.player || '';
+  if (b.player !== undefined) o.player = playerInput(b.player);
   if (b.profiles !== undefined) o.profiles = JSON.stringify(cleanProfiles(b.profiles, o.max_profiles, plIds));
   else if (o.profiles && o.max_profiles < (cur.max_profiles ?? 3)) o.profiles = JSON.stringify(readProfiles({ profiles: o.profiles, max_profiles: o.max_profiles }, plIds));
   return o;

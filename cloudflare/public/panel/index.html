@@ -324,47 +324,81 @@ canvas{display:block;width:100%}
 
     <!-- IMPOSTAZIONI -->
     <section class="view" id="v-settings">
-      <div class="g2">
-        <div class="card glass">
-          <div class="hd"><h3>Brand e aspetto<small>Quello che vedono i tuoi clienti nel player</small></h3></div>
-          <div class="row"><div><label class="lbl">Nome app</label><input class="inp" id="sBrand"></div><div><label class="lbl">Slogan</label><input class="inp" id="sTag"></div></div>
-          <label class="lbl">Tema colori</label><div class="themes" id="themes"></div>
-          <label class="lbl">Messaggio scorrevole (home del player)</label><textarea class="inp" id="sAnn"></textarea>
-          <label class="lbl">Contatto assistenza (mostrato ai clienti)</label><input class="inp" id="sSup" placeholder="es. WhatsApp +39 …">
-          <label class="lbl">Opzioni</label>
-          <div class="tog" id="sLocal"><div><b>Playlist personali</b><small>I clienti possono aggiungere una propria M3U/Xtream dal player</small></div><i></i></div>
-          <div class="tog" id="sFoot"><div><b>Eventi di calcio in home</b><small>Mostra nell'app le prossime partite (Serie A, Champions, coppe e campionati europei)</small></div><i></i></div>
-          <label class="lbl">Indirizzo server per le app</label><input class="inp mono" id="sSrv" placeholder="Vuoto = quello attuale. Es. https://tv.tuodominio.it">
-          <p class="mut" style="font-size:12px;margin-top:-4px">Serve solo quando passi a un nuovo dominio: le app installate si spostano da sole al nuovo indirizzo. Prima di cambiarlo assicurati che il pannello risponda già sul nuovo indirizzo.</p>
-          <div class="row"><div><label class="lbl">Link download APK</label><input class="inp mono" id="sApk" placeholder="https://github.com/…/releases/latest/download/kairos.apk"></div><div><label class="lbl">Codice Downloader</label><input class="inp mono" id="sDl" placeholder="es. 1234567"></div></div>
-          <div class="row" style="grid-template-columns:1fr 150px"><div><label class="lbl">Ultima versione APK pubblicata</label><input class="inp mono" id="sVer" placeholder="es. 1.3.0 — la stessa della release su GitHub"></div><div><label class="lbl">Codice versione</label><input class="inp mono" id="sVerCode" readonly tabindex="-1" title="Calcolato da solo: X.Y.Z → X·10000 + Y·100 + Z, come nella build su GitHub"></div></div>
-          <div id="apkAuto" class="mut" style="font-size:13px;margin:2px 0 8px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.1)"></div>
-          <p class="mut" style="font-size:12px;margin-top:-4px">Con l'aggiornamento automatico attivo non serve scrivere nulla: ogni nuova release su GitHub viene proposta da sola alle app. I due campi sopra servono solo se pubblichi l'APK a mano, e la versione scritta a mano vale solo se è più nuova di quella automatica. L'interfaccia dell'app si aggiorna sempre in automatico.</p>
-          <label class="lbl">Prezzo mostrato ai clienti</label><input class="inp" id="sPrice" maxlength="60" placeholder="es. 22 € / anno">
-          <label class="lbl">Privacy e condizioni del servizio <span class="cnt"><a href="/privacy" target="_blank" rel="noopener" style="color:var(--a1)">Apri la pagina</a> · <a href="#" id="sPrivTpl" style="color:var(--a1)">Usa il modello</a></span></label>
-          <textarea class="inp" id="sPriv" rows="6" maxlength="10000" placeholder="Vuoto = testo predefinito (pagina /privacy). Righe con # = titoli, righe con - = elenchi. {prezzo} {contatti} {nome} vengono sostituiti da soli."></textarea>
-          <p class="mut" style="font-size:12px;margin-top:6px">Il testo predefinito è un <b>modello generico</b>: fallo verificare da un professionista (avvocato o consulente privacy) e completalo con i tuoi dati prima di usarlo. L'app lo mostra prima del codice di attivazione.</p>
-          <label class="lbl">VPN (WireGuard) per tutti i dispositivi <span class="cnt" id="wgSt"></span></label>
-          <textarea class="inp mono" id="sWg" rows="5" spellcheck="false" autocomplete="off" placeholder="[Interface]&#10;PrivateKey = …&#10;Address = 10.0.0.2/32&#10;DNS = 1.1.1.1&#10;&#10;[Peer]&#10;PublicKey = …&#10;Endpoint = vpn.tuoserver.it:51820&#10;AllowedIPs = 0.0.0.0/0"></textarea>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn sm danger" id="wgClear" style="display:none">Rimuovi configurazione</button><p class="mut" style="font-size:12px;flex:1">Usata dai dispositivi con VPN "Consentita" o "Sempre attiva" che non hanno una configurazione propria. Per sicurezza non viene più mostrata dopo il salvataggio: per cambiarla incollane una nuova. Ogni chiave WireGuard dovrebbe essere usata da un solo dispositivo alla volta.</p></div>
-          <button class="btn pri" id="sSave" style="margin-top:14px">Salva impostazioni</button>
-        </div>
-        <div>
-          <div class="card glass" style="margin-bottom:18px"><div class="hd"><h3>Anteprima live<small>Home del player</small></h3></div>
+      <div class="st-tabs" id="stTabs">
+        <button class="st-tab on" data-st="look"><i>🎨</i><span><b>Aspetto</b><small>Nome, colori, messaggi</small></span></button>
+        <button class="st-tab" data-st="app"><i>📺</i><span><b>Funzioni dell'app</b><small>Cosa vedono i clienti</small></span></button>
+        <button class="st-tab" data-st="upd"><i>⬆️</i><span><b>App e aggiornamenti</b><small>APK, Downloader, dominio</small></span></button>
+        <button class="st-tab" data-st="price"><i>💶</i><span><b>Prezzo e privacy</b><small>Prima dell'attivazione</small></span></button>
+        <button class="st-tab" data-st="vpn"><i>🛡️</i><span><b>VPN generale</b><small>WireGuard per tutti</small></span></button>
+        <button class="st-tab" data-st="sec"><i>🔐</i><span><b>Account e sicurezza</b><small>Password, 2FA, sessioni</small></span></button>
+      </div>
+
+      <div class="st-pane on" data-pane="look">
+        <div class="st-g">
+          <div class="card glass"><div class="hd"><h3>Aspetto dell'app<small>Quello che vedono i tuoi clienti nel player. L'anteprima a destra cambia mentre scrivi.</small></h3></div>
+            <div class="st-row"><div class="st-l"><b>Nome dell'app</b><small>Il marchio in alto e all'avvio</small></div><div class="st-c"><input class="inp" id="sBrand" maxlength="20"></div></div>
+            <div class="st-row"><div class="st-l"><b>Slogan</b><small>Frase breve sotto il nome</small></div><div class="st-c"><input class="inp" id="sTag" maxlength="60"></div></div>
+            <div class="st-row col"><div class="st-l"><b>Tema colori</b><small>Colore principale dell'app e del pannello</small></div><div class="themes" id="themes"></div></div>
+            <div class="st-row col"><div class="st-l"><b>Messaggio scorrevole</b><small>Compare nella home del player (vuoto = nessun messaggio)</small></div><textarea class="inp" id="sAnn" rows="2"></textarea></div>
+            <div class="st-row"><div class="st-l"><b>Contatto assistenza</b><small>Mostrato ai clienti nell'app e nella privacy</small></div><div class="st-c"><input class="inp" id="sSup" placeholder="es. WhatsApp +39 …"></div></div>
+          </div>
+          <div class="card glass st-side"><div class="hd"><h3>Anteprima<small>Home del player</small></h3></div>
             <div class="tv" id="tv"><div class="a" id="tvA"></div><div class="c"><b class="n" id="tvN">KAIROS</b><h4>Buonasera,<br><span class="grad">cosa guardiamo?</span></h4><div class="tk" id="tvT"></div><div class="tiles"><i></i><i></i><i></i></div></div></div>
           </div>
-          <div class="card glass"><div class="hd"><h3>Account amministratore</h3></div>
-            <label class="lbl">Utente</label><input class="inp" id="aUser" autocomplete="username">
-            <div class="row"><div><label class="lbl">Password attuale</label><input class="inp" type="password" id="aCur" autocomplete="current-password"></div><div><label class="lbl">Nuova password</label><input class="inp" type="password" id="aNew" autocomplete="new-password" placeholder="min. 10 caratteri"></div></div>
-            <button class="btn" id="aSave" style="margin-top:14px">Aggiorna credenziali</button>
-          </div>
-          <div class="card glass" style="margin-top:18px"><div class="hd"><h3>Sicurezza<small>Stato delle protezioni attive</small></h3></div>
+        </div>
+      </div>
+
+      <div class="st-pane" data-pane="app">
+        <div class="card glass"><div class="hd"><h3>Funzioni dell'app<small>Valgono per tutti i clienti. Per il singolo cliente usa i <b>Permessi</b> nella sua scheda.</small></h3></div>
+          <div class="tog st-tog" id="sLocal"><div><b>Playlist personali</b><small>I clienti possono aggiungere una loro lista M3U o Xtream dall'app (oltre a quelle che assegni tu)</small></div><i></i></div>
+          <div class="tog st-tog" id="sFoot"><div><b>Eventi sportivi nella home</b><small>Le prossime partite (Serie A, Champions, coppe e campionati europei) con «Dove vederla»</small></div><i></i></div>
+        </div>
+      </div>
+
+      <div class="st-pane" data-pane="upd">
+        <div class="card glass"><div class="hd"><h3>App e aggiornamenti<small>Con l'aggiornamento automatico non serve scrivere nulla: ogni release su GitHub arriva da sola alle TV.</small></h3></div>
+          <div id="apkAuto" class="st-note"></div>
+          <div class="st-row"><div class="st-l"><b>Link per scaricare l'APK</b><small>Quello che dai ai clienti nuovi</small></div><div class="st-c"><input class="inp mono" id="sApk" placeholder="https://github.com/…/releases/latest/download/kairos.apk"></div></div>
+          <div class="st-row"><div class="st-l"><b>Codice Downloader</b><small>Il numero da scrivere nell'app Downloader</small></div><div class="st-c"><input class="inp mono" id="sDl" placeholder="es. 1234567"></div></div>
+          <details class="st-adv"><summary>Avanzate: versione a mano e cambio di dominio</summary>
+            <div class="st-row"><div class="st-l"><b>Versione APK pubblicata a mano</b><small>Solo se non usi l'aggiornamento automatico; vale solo se è più nuova</small></div><div class="st-c st-two"><input class="inp mono" id="sVer" placeholder="es. 1.9.1"><input class="inp mono" id="sVerCode" readonly tabindex="-1" title="Calcolato da solo: X.Y.Z → X·10000 + Y·100 + Z"></div></div>
+            <div class="st-row"><div class="st-l"><b>Indirizzo del pannello per le app</b><small>Solo quando passi a un nuovo dominio: le app si spostano da sole. Prima controlla che il pannello risponda già lì.</small></div><div class="st-c"><input class="inp mono" id="sSrv" placeholder="Vuoto = quello attuale. Es. https://tv.tuodominio.it"></div></div>
+          </details>
+        </div>
+      </div>
+
+      <div class="st-pane" data-pane="price">
+        <div class="card glass"><div class="hd"><h3>Prezzo e privacy<small>L'app li mostra prima del codice di attivazione: il cliente deve accettare per continuare.</small></h3></div>
+          <div class="st-row"><div class="st-l"><b>Prezzo</b><small>Es. «22 € / anno»</small></div><div class="st-c"><input class="inp" id="sPrice" maxlength="60" placeholder="es. 22 € / anno"></div></div>
+          <div class="st-row col"><div class="st-l"><b>Privacy e condizioni del servizio</b><small>Vuoto = modello predefinito. Righe con # = titoli, con - = elenchi; {prezzo} {contatti} {nome} si sostituiscono da soli. · <a href="/privacy" target="_blank" rel="noopener" style="color:var(--a1)">Apri la pagina</a> · <a href="#" id="sPrivTpl" style="color:var(--a1)">Usa il modello</a></small></div><textarea class="inp" id="sPriv" rows="10" maxlength="10000"></textarea></div>
+          <div class="st-note warn">Il modello predefinito è <b>generico</b>: fallo verificare da un professionista (avvocato o consulente privacy) e completalo con i tuoi dati prima di usarlo.</div>
+        </div>
+      </div>
+
+      <div class="st-pane" data-pane="vpn">
+        <div class="card glass"><div class="hd"><h3>VPN generale <span class="cnt" id="wgSt"></span><small>La configurazione WireGuard usata dai clienti con VPN «Consentita» o «Sempre attiva» che non hanno una località o una configurazione propria. Più località: pagina <a href="#" data-goto="dns" style="color:var(--a1)">Server DNS e VPN</a>.</small></h3></div>
+          <textarea class="inp mono" id="sWg" rows="9" spellcheck="false" autocomplete="off" placeholder="[Interface]&#10;PrivateKey = …&#10;Address = 10.0.0.2/32&#10;DNS = 1.1.1.1&#10;&#10;[Peer]&#10;PublicKey = …&#10;Endpoint = vpn.tuoserver.it:51820&#10;AllowedIPs = 0.0.0.0/0"></textarea>
+          <div class="st-note">Dopo il salvataggio è cifrata e non viene più mostrata: per cambiarla incollane una nuova. Ogni chiave WireGuard dovrebbe essere usata da un solo dispositivo alla volta.</div>
+          <button class="btn sm danger" id="wgClear" style="display:none;margin-top:10px">Rimuovi configurazione</button>
+        </div>
+      </div>
+
+      <div class="st-pane" data-pane="sec">
+        <div class="st-g">
+          <div class="card glass"><div class="hd"><h3>Sicurezza<small>Stato delle protezioni del pannello</small></h3></div>
             <div id="secList"></div>
             <div id="totpBox" style="margin-top:14px"></div>
             <button class="btn sm" id="killSes" style="margin-top:14px">Chiudi le altre sessioni</button>
           </div>
+          <div class="card glass"><div class="hd"><h3>Account amministratore<small>Nome utente e password per entrare nel pannello</small></h3></div>
+            <label class="lbl">Utente</label><input class="inp" id="aUser" autocomplete="username">
+            <div class="row"><div><label class="lbl">Password attuale</label><input class="inp" type="password" id="aCur" autocomplete="current-password"></div><div><label class="lbl">Nuova password</label><input class="inp" type="password" id="aNew" autocomplete="new-password" placeholder="min. 10 caratteri"></div></div>
+            <button class="btn" id="aSave" style="margin-top:14px">Aggiorna credenziali</button>
+          </div>
         </div>
       </div>
+
+      <div class="st-save" id="stSave"><span class="mut" id="stDirty">Nessuna modifica da salvare</span><button class="btn pri" id="sSave">Salva impostazioni</button></div>
     </section>
   </main>
 </div>
