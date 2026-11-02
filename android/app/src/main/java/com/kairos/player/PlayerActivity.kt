@@ -10,6 +10,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -46,6 +47,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     companion object {
         /** payload passato in memoria (le liste canali possono essere troppo grandi per un Intent) */
         @Volatile var pending: String? = null
+        /** lista già analizzata (dal thread del ponte JS, non da quello dell'interfaccia) */
+        @Volatile var pendingJson: JSONObject? = null
         const val RESULT = "kx_result"
         private val ACCENT = Color.parseColor("#E5202B")
     }
@@ -99,18 +102,21 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private var prevIndex = -1
 
     private val item: Item get() = items[index]
+    private val hmFmt by lazy { java.text.SimpleDateFormat("HH:mm", Locale.ITALIAN) }
+    /** numeri dei canali come testo (per la digitazione diretta), calcolati una volta */
+    private val numStrs by lazy { items.map { if (it.num > 0) it.num.toString() else "" } }
     private val isLive: Boolean get() = kind == "live"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val handed = Handoff.engine
         Handoff.engine = null
-        val payload = pending
-        pending = null
+        val payload = pending; val pre = pendingJson
+        pending = null; pendingJson = null
         // chiusura immediata: nessun tasto o evento deve toccare l'interfaccia mai costruita
-        if (payload == null) { closing = true; handed?.release(); finish(); return }
+        if (payload == null && pre == null) { closing = true; handed?.release(); finish(); return }
         try {
-            val j = JSONObject(payload)
+            val j = pre ?: JSONObject(payload!!)
             kind = j.optString("kind", "live")
             index = j.optInt("index", 0)
             engineName = j.optString("engine", "exo")
@@ -164,6 +170,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             }
             startEngine(engineName)
             playCurrent(resumeMs)
+            setOpaque(true)
         }
         showOsd(false)
 
@@ -187,6 +194,9 @@ class PlayerActivity : ComponentActivity(), EngineListener {
 
     /** il video è visibile qui (o è scaduta l'attesa): vista a tutto schermo, poi via l'anteprima che sta sotto.
      *  [now] = subito (chiusura, cambio motore, uscita dall'app), senza attendere il disegno del fotogramma. */
+    /** finestra opaca durante la visione: la WebView sotto non viene più composta a ogni frame (meno lavoro per la GPU della Fire TV);
+     *  traslucida solo per le animazioni di entrata e uscita (Android 8+; prima non c'è l'API) */
+    private fun setOpaque(opaque: Boolean) { if (Build.VERSION.SDK_INT >= 26) try { setTranslucent(!opaque) } catch (_: Throwable) {} }
     private fun completeHandoff(now: Boolean) {
         if (handoffPending) {
             handoffPending = false
@@ -194,6 +204,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             val v = e?.view
             if (v != null && v.parent === root) v.layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER)
             root.setBackgroundColor(Color.BLACK)
+            setOpaque(true)
             val r = Runnable { dropPending = null; e?.dropOldView(); Handoff.host?.fullShown() }
             dropPending = r
             // un attimo per far arrivare sullo schermo questa finestra a tutto schermo, poi l'anteprima (coperta) sparisce
@@ -256,7 +267,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(64), dp(40), 0) }
             visibility = View.GONE
         }
-        veil = View(this).apply {
+        // niente "overlapping rendering": l'alpha del velo non crea un layer a schermo intero a ogni frame (pesante su Fire TV)
+        veil = object : View(this) { override fun hasOverlappingRendering(): Boolean = false }.apply {
             setBackgroundColor(Color.BLACK)
             alpha = 0f
             layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
@@ -426,7 +438,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         tSub.text = listOf(item.group, engineLabel(engineName)).filter { it.isNotBlank() }.joinToString("  ·  ")
         val e = item.epg
         if (isLive && e != null && e.length() >= 3 && e.optString(0).isNotBlank()) {
-            val f = java.text.SimpleDateFormat("HH:mm", Locale.ITALIAN)
+            val f = hmFmt
             val s0 = e.optLong(1) * 1000; val e0 = e.optLong(2) * 1000
             val now = System.currentTimeMillis()
             var t = "Ora  ${f.format(java.util.Date(s0))}–${f.format(java.util.Date(e0))}   ${e.optString(0)}"
@@ -535,7 +547,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         veil.animate().alpha(0.55f).setDuration(120).start()
         ui.removeCallbacks(zapPlay)
         zapPending = true
-        ui.postDelayed(zapPlay, 200)
+        ui.postDelayed(zapPlay, 150)
         showOsd(false)
         osd.translationY = (if (delta > 0) dp(18) else -dp(18)).toFloat()
         osd.animate().translationY(0f).setDuration(200).start()
@@ -710,7 +722,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
                 ui.removeCallbacks(numRunnable)
                 // se nessun canale ha un numero più lungo che inizia così, si parte quasi subito
                 val b = numBuf
-                val more = items.any { it.num > 0 && it.num.toString().let { s -> s.length > b.length && s.startsWith(b) } }
+                val more = numStrs.any { s -> s.length > b.length && s.startsWith(b) }
                 ui.postDelayed(numRunnable, if (more) 1500L else 400L)
             }
             else -> return super.onKeyDown(keyCode, event)
@@ -1054,10 +1066,9 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private val logos: LogoCache get() = logosLazy.value
 
     private inner class LogoCache(private val ua: String) {
-        private val mem = object : android.util.LruCache<String, Bitmap>(6 * 1024 * 1024) {
-            override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
-        }
-        private val failed = HashSet<String>()
+        // condivisa tra le aperture del player: i loghi non si riscaricano e non si ridecodificano ogni volta
+        private val mem = LogoMem.mem
+        private val failed = LogoMem.failed
         private val loading = HashSet<String>()
         private var refreshQueued = false
         private val pool = java.util.concurrent.ThreadPoolExecutor(
@@ -1190,6 +1201,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             osd.visibility = View.GONE; brandView.visibility = View.GONE; zapView.visibility = View.GONE; spinner.visibility = View.GONE; veil.alpha = 0f; resView.visibility = View.GONE
             if (::listPanel.isInitialized) listPanel.visibility = View.GONE
             msgView.visibility = View.GONE
+            setOpaque(false)
             root.setBackgroundColor(Color.TRANSPARENT)
             val W = root.width; val H = root.height
             android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
@@ -1223,7 +1235,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
                         finishNow()
                     }
                 })
-                start()
+                // un frame perché la finestra sotto torni visibile (è stata resa traslucida ora), poi l'animazione
+                root.post { start() }
             }
             return
         }
@@ -1241,6 +1254,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     }
 
     override fun onDestroy() {
+        closing = true // un errore tardivo del motore non deve crearne un altro su un'activity distrutta
         ui.removeCallbacksAndMessages(null)
         PlayStats.stop()
         if (::osd.isInitialized) completeHandoff(true)
@@ -1251,4 +1265,12 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         engine = null
         super.onDestroy()
     }
+}
+
+/** cache dei loghi dei canali per tutto il processo (solo bitmap, nessun riferimento alle activity) */
+object LogoMem {
+    val mem = object : android.util.LruCache<String, Bitmap>(6 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+    }
+    val failed: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
 }

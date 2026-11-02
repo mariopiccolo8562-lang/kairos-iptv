@@ -175,6 +175,7 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
         val sources = DefaultMediaSourceFactory(DefaultDataSource.Factory(ctx, http), extractors)
         val load = DefaultLoadControl.Builder()
             .setBufferDurationsMs(maxOf(15_000, prefs.startMs + 1000, prefs.rebufferMs), prefs.maxMs, prefs.startMs, prefs.rebufferMs)
+            .setTargetBufferBytes(if (prefs.live) 24 shl 20 else 48 shl 20) // tetto in memoria: 24 MB in diretta, 48 MB per i film (Fire TV ha 1 GB)
             .setBackBuffer(prefs.backMs, true)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
@@ -476,6 +477,31 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
 /* VLC                                                                     */
 /* ======================================================================= */
 class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private val prefs: PlayPrefs) : Engine {
+    companion object {
+        // una sola libVLC per tutto il processo: caricarla a ogni cambio motore costava secondi sul thread dell'interfaccia
+        @Volatile private var shared: LibVLC? = null
+        private var sharedUa = ""
+        fun lib(ctx: Context, ua: String): LibVLC {
+            shared?.let { if (sharedUa == ua) return it }
+            synchronized(this) {
+                shared?.let { if (sharedUa == ua) return it }
+                val opts = arrayListOf(
+                    "--file-caching=1500",
+                    "--http-reconnect",
+                    "--clock-jitter=0",
+                    "--clock-synchro=0",
+                    "--drop-late-frames",
+                    "--skip-frames",
+                    "--avcodec-skiploopfilter=1",
+                    "--audio-time-stretch",
+                    "--no-stats",
+                )
+                if (ua.isNotBlank()) opts.add("--http-user-agent=$ua")
+                val old = shared
+                return LibVLC(ctx.applicationContext, opts).also { shared = it; sharedUa = ua; try { old?.release() } catch (_: Exception) {} }
+            }
+        }
+    }
     override val name = "vlc"
     private val layout = VLCVideoLayout(ctx)
     override val view: View get() = layout
@@ -483,23 +509,11 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
     private val mp: MediaPlayer
     private var url = ""
     private var maxH = prefs.maxHeight
+    // cambio media, stop e rilascio sono chiamate native bloccanti (aspettano la rete): su un thread dedicato, non su quello dell'interfaccia
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "kx-vlc").apply { isDaemon = true } }
 
     init {
-        val opts = arrayListOf(
-            "--network-caching=${prefs.vlcCacheMs}",
-            "--live-caching=${prefs.vlcCacheMs}",
-            "--file-caching=1500",
-            "--http-reconnect",
-            "--clock-jitter=0",
-            "--clock-synchro=0",
-            "--drop-late-frames",
-            "--skip-frames",
-            "--avcodec-skiploopfilter=1",
-            "--audio-time-stretch",
-            "--no-stats",
-        )
-        if (ua.isNotBlank()) opts.add("--http-user-agent=$ua")
-        lib = LibVLC(ctx, opts)
+        lib = lib(ctx, ua)
         mp = MediaPlayer(lib)
         mp.attachViews(layout, null, true, false)
         mp.setEventListener { e ->
@@ -517,16 +531,24 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
 
     override fun play(url: String, startMs: Long) {
         this.url = url
-        val m = Media(lib, Uri.parse(url))
-        m.setHWDecoderEnabled(prefs.hw != "off", false)
-        if (maxH > 0) m.addOption(":adaptive-maxheight=$maxH")
-        if (startMs > 0) m.addOption(":start-time=${startMs / 1000.0}")
-        mp.media = m
-        m.release()
-        mp.play()
+        val mh = maxH
+        io.execute {
+            if (released) return@execute
+            try {
+                val m = Media(lib, Uri.parse(url))
+                m.setHWDecoderEnabled(prefs.hw != "off", false)
+                m.addOption(":network-caching=${prefs.vlcCacheMs}")
+                m.addOption(":live-caching=${prefs.vlcCacheMs}")
+                if (mh > 0) m.addOption(":adaptive-maxheight=$mh")
+                if (startMs > 0) m.addOption(":start-time=${startMs / 1000.0}")
+                mp.media = m
+                m.release()
+                mp.play()
+            } catch (_: Exception) {}
+        }
     }
 
-    override fun stop() { mp.stop() }
+    override fun stop() { io.execute { try { if (!released) mp.stop() } catch (_: Exception) {} } }
     override fun togglePause() { if (mp.isPlaying) mp.pause() else mp.play() }
     override fun isPlaying(): Boolean = mp.isPlaying
     override fun position(): Long = maxOf(0L, mp.time)
@@ -578,14 +600,13 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
 
     override fun videoHeight(): Int = try { mp.currentVideoTrack?.height ?: 0 } catch (_: Exception) { 0 }
 
-    private var released = false
+    @Volatile private var released = false
     override fun release() {
         if (released) return
         released = true
         try { mp.setEventListener(null) } catch (_: Exception) {} // nessun evento verso una schermata già chiusa
-        try { mp.stop() } catch (_: Exception) {}
         try { mp.detachViews() } catch (_: Exception) {}
-        mp.release()
-        lib.release()
+        // stop e rilascio aspettano la chiusura dell'input: fuori dal thread dell'interfaccia (la libreria condivisa resta viva)
+        io.execute { try { mp.stop() } catch (_: Exception) {}; try { mp.release() } catch (_: Exception) {}; io.shutdown() }
     }
 }

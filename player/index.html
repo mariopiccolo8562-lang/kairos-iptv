@@ -596,6 +596,7 @@ img{display:block}
 .lite .htitle,.lite .hplot{text-shadow:none}
 .lite .focus-ring{box-shadow:0 0 0 3px #fff}
 .lite .nc.ev.live{box-shadow:none}
+.lite #liveList .ch{transition:none}.lite .ch.focused{transform:none}.lite .nc{transition:transform .12s ease-out}.lite .post,.lite .ch{contain:layout paint}
 
 /* =====================================================================
    v1.5 — barra in alto, selezione disegnata sull'elemento, cassetto
@@ -1037,6 +1038,7 @@ h5.fh{margin-top:16px}
 #dTrailer{flex:none!important;width:auto!important}#dTrailer.busy{opacity:.6}
 .ytm{background:rgba(0,0,0,.92)}.ytbox{width:min(1100px,92vw);display:flex;flex-direction:column;gap:12px}
 .ytbox iframe{width:100%;aspect-ratio:16/9;border:0;border-radius:14px;background:#000;box-shadow:0 20px 80px rgba(0,0,0,.7)}
+.ytold{padding:40px 24px;text-align:center;border-radius:14px;background:rgba(255,255,255,.06);display:flex;flex-direction:column;gap:8px;font-size:18px}
 .ytbar{display:flex;align-items:center;gap:10px}.ytbar b{flex:1;font-size:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* più playlist: sigla colorata della playlist d'origine e pulsante rapido */
 .plb{display:inline-block;font:800 10px/1 'Space Grotesk',sans-serif;letter-spacing:.08em;padding:3px 6px 2px;border-radius:5px;background:var(--pc,#888);color:#07070b;margin-right:6px;vertical-align:1px;box-shadow:0 0 10px color-mix(in srgb,var(--pc,#888) 45%,transparent);font-style:normal;white-space:nowrap}
@@ -1327,8 +1329,10 @@ const playPrefs = () => ({ engine: 'exo', quality: 'auto', buffer: 'balanced', a
 
 /* ---------------- audio FX (WebAudio, nessun file) ---------------- */
 let AC;
+let fxMoveT = 0;
 function fx(type) {
   if (!S.sound) return;
+  if (type === 'move') { const t = performance.now(); if (t - fxMoveT < 60) return; fxMoveT = t; }
   try {
     AC = AC || new (window.AudioContext || window.webkitAudioContext)();
     if (AC.state === 'suspended') AC.resume();
@@ -1416,12 +1420,14 @@ function introSound() {
 /* ---------------- toast / orologio ---------------- */
 let toastT;
 function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms); }
-function tick() {
-  const d = new Date();
-  const hm = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-  $$('.clk2').forEach((e) => (e.textContent = hm));
-  const dd = d.toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: 'short' });
-  $$('.tdate').forEach((e) => (e.textContent = dd + ' · ' + hm));
+const FMT_HM = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' }), FMT_DD = new Intl.DateTimeFormat('it-IT', { weekday: 'short', day: '2-digit', month: 'short' });
+let tickLast = '';
+function tick(force) {
+  const d = new Date(), hm = FMT_HM.format(d);
+  const txt = FMT_DD.format(d) + ' · ' + hm;
+  if (txt === tickLast && !force) return; tickLast = txt;
+  for (const e of document.getElementsByClassName('clk2')) e.textContent = hm;
+  for (const e of document.getElementsByClassName('tdate')) e.textContent = txt;
 }
 setInterval(tick, 10000);
 
@@ -1449,7 +1455,7 @@ function focus(el, silent, mouse) {
   if (cur && cur !== el) cur.classList.remove('focused');
   cur = el; el.classList.add('focused');
   if (el.closest('.screen')) S.lastScreenFocus = el; // per tornarci quando si chiude una finestra
-  if (!mouse) ensureVisible(el);
+  if (!mouse && !el.classList.contains('gp')) ensureVisible(el);
   if (el.tagName === 'INPUT') el.focus({ preventScroll: true }); else if (document.activeElement && document.activeElement.tagName === 'INPUT') document.activeElement.blur();
   if (!silent) fx('move');
   el.dispatchEvent(new CustomEvent('kfocus', { bubbles: true, detail: { mouse: !!mouse } }));
@@ -1457,27 +1463,40 @@ function focus(el, silent, mouse) {
 function placeRing() {}
 const TRACK_PAD = 14;
 /* Scorre solo i contenitori scorrevoli necessari (mai quelli "overflow:hidden", che spostavano tutta la pagina). */
+const scrollerOf = new WeakMap(); // genitore → contenitore che scorre (trovato una volta sola)
+let lastMoveT = 0, fastMove = false;
+function findScroller(el) {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    if (p.classList.contains('rows')) return null;
+    const cs = getComputedStyle(p);
+    if (/(auto|scroll)/.test(cs.overflowY) || /(auto|scroll)/.test(cs.overflowX)) return p;
+  }
+  return null;
+}
 function ensureVisible(el) {
   const tr = el.parentElement;
-  if (tr && tr.classList.contains('track')) {
+  if (!tr) return;
+  if (tr.classList.contains('track')) {
     // stile TV: la card selezionata resta a sinistra della riga
     const x = Math.max(0, el.offsetLeft - TRACK_PAD);
-    if (Math.abs(tr.scrollLeft - x) > 1) tr.scrollTo({ left: x, behavior: 'smooth' });
+    if (Math.abs(tr.scrollLeft - x) > 1) { if (fastMove) tr.scrollLeft = x; else tr.scrollTo({ left: x, behavior: 'smooth' }); }
     return;
   }
-  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
-    if (p.classList.contains('rows')) break;
-    const cs = getComputedStyle(p);
-    if (/(auto|scroll)/.test(cs.overflowY) && p.scrollHeight > p.clientHeight + 2) {
-      const r = el.getBoundingClientRect(), pr = p.getBoundingClientRect(), m = Math.min(70, pr.height * 0.14);
-      if (r.top < pr.top + m) p.scrollTop -= pr.top + m - r.top;
-      else if (r.bottom > pr.bottom - m) p.scrollTop += r.bottom - (pr.bottom - m);
-    }
-    if (/(auto|scroll)/.test(cs.overflowX) && p.scrollWidth > p.clientWidth + 2) {
-      const r = el.getBoundingClientRect(), pr = p.getBoundingClientRect();
-      if (r.left < pr.left + 10) p.scrollLeft -= pr.left + 10 - r.left;
-      else if (r.right > pr.right - 10) p.scrollLeft += r.right - (pr.right - 10);
-    }
+  let p = scrollerOf.get(tr);
+  if (p === undefined) { p = findScroller(el); scrollerOf.set(tr, p); }
+  if (!p || !p.isConnected) { scrollerOf.delete(tr); p = findScroller(el); scrollerOf.set(tr, p); if (!p) return; }
+  // una sola lettura della geometria (niente getComputedStyle per ogni antenato a ogni tasto)
+  const r = el.getBoundingClientRect(), pr = p.getBoundingClientRect();
+  const sb = p.style.scrollBehavior;
+  if (fastMove && sb !== 'auto') p.style.scrollBehavior = 'auto'; else if (!fastMove && sb) p.style.scrollBehavior = '';
+  if (p.scrollHeight > p.clientHeight + 2) {
+    const m = Math.min(70, pr.height * 0.14);
+    if (r.top < pr.top + m) p.scrollTop -= pr.top + m - r.top;
+    else if (r.bottom > pr.bottom - m) p.scrollTop += r.bottom - (pr.bottom - m);
+  }
+  if (p.scrollWidth > p.clientWidth + 2) {
+    if (r.left < pr.left + 10) p.scrollLeft -= pr.left + 10 - r.left;
+    else if (r.right > pr.right - 10) p.scrollLeft += r.right - (pr.right - 10);
   }
 }
 const isF = (e) => !!(e && e.nodeType === 1 && e.hasAttribute('data-f'));
@@ -1522,7 +1541,7 @@ function move(dir) {
   const par = cur.parentElement;
   // 1) card nelle righe orizzontali
   if (par && par.classList.contains('track')) {
-    if (!vert) { const s = sib(cur, d); if (s) return focus(s); if (d < 0) return edgeLeft(); return; }
+    if (!vert) { let s = sib(cur, d); if (!s && d > 0 && trackFill(par, 0)) s = sib(cur, d); if (s) return focus(s); if (d < 0) return edgeLeft(); return; }
     const row = cur.closest('.nrow');
     let nx = d > 0 ? row.nextElementSibling : row.previousElementSibling;
     if (d > 0 && !nx) { const scr = cur.closest('.bscr'); if (scr && scr._rendered < scr._rows.length) { moreRows(scr, 3); nx = row.nextElementSibling; } }
@@ -1579,14 +1598,57 @@ function whenIdle(fn, delay = 0, quiet = 2500, maxWait = 90e3) {
   setTimeout(tick, delay);
 }
 document.addEventListener('visibilitychange', () => { okDown = 0; });
+/* frecce: se arrivano più pressioni prima del prossimo frame (tasto tenuto premuto) si fa un solo spostamento multiplo,
+   così su Fire TV lo scorrimento resta fluido invece di accumulare ritardo */
+let mvDir = '', mvN = 0, mvRaf = 0;
+function queueMove(dir) {
+  const t = performance.now();
+  fastMove = t - lastMoveT < 140; lastMoveT = t;
+  if (!fastMove) { mvDir = ''; mvN = 0; if (mvRaf) { cancelAnimationFrame(mvRaf); mvRaf = 0; } return move(dir); }
+  if (mvRaf && mvDir === dir) { mvN = Math.min(mvN + 1, 6); return; }
+  if (mvRaf) { cancelAnimationFrame(mvRaf); flushMove(); }
+  mvDir = dir; mvN = 1;
+  mvRaf = requestAnimationFrame(flushMove);
+}
+function flushMove() {
+  mvRaf = 0; const dir = mvDir, n = mvN; mvDir = ''; mvN = 0;
+  if (!dir) return;
+  if (n > 1 && cur && cur.parentElement && (cur.parentElement.matches('.list, .dlist, .smenu') || cur.parentElement.classList.contains('track'))) {
+    // più passi in una sola volta nelle liste e nelle righe: un solo aggiornamento dello schermo
+    const vert = dir === 'up' || dir === 'down', d = dir === 'down' || dir === 'right' ? 1 : -1, par = cur.parentElement;
+    if (par.classList.contains('track') ? !vert : vert) {
+      let el = cur, k = 0;
+      for (; k < n; k++) {
+        let nx = sib(el, d);
+        if (!nx && par.id === 'liveList') { if (d > 0 && chRendered < S.liveIndex.length) { moreChannels(); nx = sib(el, d); } else if (d < 0 && chStart > 0) { prevChannels(); nx = sib(el, d); } }
+        else if (!nx && d > 0 && par.classList.contains('track') && trackFill(par, 0)) nx = sib(el, d);
+        if (!nx) break;
+        el = nx;
+      }
+      if (el !== cur) return focus(el);
+      // fine della lista: si passa all'elemento successivo come con una pressione singola
+    }
+  }
+  // guida TV: più righe in un colpo solo (una sola riga disegnata)
+  if (n > 1 && cur && cur.classList.contains('gp') && (dir === 'up' || dir === 'down')) {
+    const i = +cur.dataset.r, s0 = +cur.dataset.s, e0 = +cur.dataset.e;
+    const t = Math.max(G.time || s0, s0, Math.min(Date.now(), e0 - 1));
+    const to = dir === 'up' ? i - n : i + n;
+    if (to >= 0 && to < G.idx.length) return guideFocus(to, Math.min(t, e0 - 1));
+  }
+  const before = cur;
+  move(dir);
+  // altri casi (menu, griglie): le pressioni accorpate si eseguono una dopo l'altra
+  for (let k = 1; k < n && cur !== before; k++) { const c = cur; move(dir); if (cur === c) break; }
+}
 document.addEventListener('keydown', (e) => {
   const k = e.key, kc = e.keyCode;
   const inInput = document.activeElement && document.activeElement.tagName === 'INPUT';
   if ($('#fs').classList.contains('on')) return fsKey(e);
-  if (k === 'ArrowUp') { e.preventDefault(); move('up'); }
-  else if (k === 'ArrowDown') { e.preventDefault(); move('down'); }
-  else if (k === 'ArrowLeft' && !(inInput && document.activeElement.selectionStart > 0)) { e.preventDefault(); move('left'); }
-  else if (k === 'ArrowRight' && !(inInput && document.activeElement.selectionStart < document.activeElement.value.length)) { e.preventDefault(); move('right'); }
+  if (k === 'ArrowUp') { e.preventDefault(); queueMove('up'); }
+  else if (k === 'ArrowDown') { e.preventDefault(); queueMove('down'); }
+  else if (k === 'ArrowLeft' && !(inInput && document.activeElement.selectionStart > 0)) { e.preventDefault(); queueMove('left'); }
+  else if (k === 'ArrowRight' && !(inInput && document.activeElement.selectionStart < document.activeElement.value.length)) { e.preventDefault(); queueMove('right'); }
   else if (k === 'Enter' || kc === 23) {
     if (inInput && cur && cur.id === 'q') return;
     e.preventDefault();
@@ -1695,7 +1757,7 @@ function plRerender() {
 }
 function fillNav(id) {
   const slot = $('#' + id + ' .navslot'); if (!slot) return;
-  slot.innerHTML = navHTML(id === 'cat' ? $('#cat')._kind : id); tick();
+  slot.innerHTML = navHTML(id === 'cat' ? $('#cat')._kind : id); tick(true);
 }
 
 /* ---------------- pulsante "Aggiorna contenuti" ---------------- */
@@ -1977,20 +2039,76 @@ function xtCreds(p) {
 }
 const xtOf = (x) => (x && x.pl && S.plMap && S.plMap.get(x.pl)) || null;
 const xtBase = (p) => `${p.host.replace(/\/+$/, '')}/player_api.php?username=${encodeURIComponent(p.username)}&password=${encodeURIComponent(p.password)}`;
+/* mappatura dei dati Xtream in canali/film/serie (funzione pura: gira anche nel thread di lavoro) */
+function xtreamMap(d, pl) {
+  const cm = (a) => new Map(a.map((x) => [String(x.category_id), x.category_name]));
+  const lc = cm(d.lc), vc = cm(d.vc), sc = cm(d.sc), h = pl.host, U = pl.U, P = pl.P, id = pl.id;
+  return {
+    live: d.ls.map((s, i) => ({ id: 'x' + s.stream_id, k: 'l', sid: s.stream_id, num: +s.num || i + 1, name: String(s.name ?? ''), logo: s.stream_icon, epgId: s.epg_channel_id || '', arch: +s.tv_archive ? +s.tv_archive_duration || 1 : 0, group: lc.get(String(s.category_id)) || 'Altro', url: `${h}/live/${U}/${P}/${s.stream_id}.m3u8`, alt: `${h}/live/${U}/${P}/${s.stream_id}.ts`, pl: id })),
+    movies: d.vs.map((s) => ({ id: 'xm' + s.stream_id, k: 'm', vid: s.stream_id, name: String(s.name ?? ''), poster: s.stream_icon, group: vc.get(String(s.category_id)) || 'Altro', rating: s.rating, added: +s.added || 0, url: `${h}/movie/${U}/${P}/${s.stream_id}.${s.container_extension || 'mp4'}`, pl: id })),
+    series: d.ss.map((s) => ({ id: 'xs' + s.series_id, k: 's', seriesId: s.series_id, name: String(s.name ?? ''), poster: s.cover, group: sc.get(String(s.category_id)) || 'Altro', rating: s.rating, plot: s.plot, genre: s.genre, cast: s.cast, added: +s.last_modified || 0, backdrop: (Array.isArray(s.backdrop_path) ? s.backdrop_path[0] : s.backdrop_path) || '', year: (s.releaseDate || s.release_date || '').slice(0, 4), pl: id })),
+  };
+}
+const xtArr = (t) => { try { const j = JSON.parse(t); return Array.isArray(j) ? j : Object.values(j || {}); } catch { return []; } };
+/* dopo il parse: via i separatori, chiave del logo e numero del flusso già pronti, impronta della lista (funzione pura) */
+function libFinish(out) {
+  if (out.live.some(isSepCh)) out.live = out.live.filter((c) => !isSepCh(c));
+  for (const ch of out.live) {
+    if (!ch.logo) { const k = logoKey(ch.name); ch.lk = k.key ? k.cc + '|' + k.key : ''; }
+    if (!ch.sid && ch.url) { const m = ch.url.match(/\/(\d+)(?:\.[a-z0-9]+)?(?:\?.*)?$/i); if (m) ch.sidc = m[1]; }
+  }
+  // contenuto per adulti già valutato (la home filtra senza regex su 100.000 titoli)
+  if (typeof RX_ADULT_G !== 'undefined') for (const arr of [out.live, out.movies, out.series]) for (const x of arr) x._ad = RX_ADULT_G.test(x.group || '') || RX_ADULT_N.test(x.name || '');
+  out.sig = libSig(out); out.clean = 1;
+  return out;
+}
 async function loadXtream(p) {
   const h = p.host.replace(/\/+$/, ''), q = xtBase(p);
-  const get = async (a) => { try { const j = JSON.parse(await getText(`${q}&action=${a}`)); return Array.isArray(j) ? j : Object.values(j || {}); } catch { return []; } };
+  const get = async (a) => { try { return await getText(`${q}&action=${a}`); } catch { return ''; } };
   // tutte e 6 le richieste partono insieme
-  const [lcA, vcA, scA, ls, vs, ss] = await Promise.all(['get_live_categories', 'get_vod_categories', 'get_series_categories', 'get_live_streams', 'get_vod_streams', 'get_series'].map(get));
-  const cm = (a) => new Map(a.map((x) => [String(x.category_id), x.category_name]));
-  const lc = cm(lcA), vc = cm(vcA), sc = cm(scA);
-  if (!ls.length && !vs.length && !ss.length) throw new Error('nessun contenuto: controlla server, utente e password');
-  const U = encodeURIComponent(p.username), P = encodeURIComponent(p.password), pl = p.id;
-  return {
-    live: ls.map((s, i) => ({ id: 'x' + s.stream_id, k: 'l', sid: s.stream_id, num: +s.num || i + 1, name: String(s.name ?? ''), logo: s.stream_icon, epgId: s.epg_channel_id || '', arch: +s.tv_archive ? +s.tv_archive_duration || 1 : 0, group: lc.get(String(s.category_id)) || 'Altro', url: `${h}/live/${U}/${P}/${s.stream_id}.m3u8`, alt: `${h}/live/${U}/${P}/${s.stream_id}.ts`, pl })),
-    movies: vs.map((s) => ({ id: 'xm' + s.stream_id, k: 'm', vid: s.stream_id, name: String(s.name ?? ''), poster: s.stream_icon, group: vc.get(String(s.category_id)) || 'Altro', rating: s.rating, added: +s.added || 0, url: `${h}/movie/${U}/${P}/${s.stream_id}.${s.container_extension || 'mp4'}`, pl })),
-    series: ss.map((s) => ({ id: 'xs' + s.series_id, k: 's', seriesId: s.series_id, name: String(s.name ?? ''), poster: s.cover, group: sc.get(String(s.category_id)) || 'Altro', rating: s.rating, plot: s.plot, genre: s.genre, cast: s.cast, added: +s.last_modified || 0, backdrop: (Array.isArray(s.backdrop_path) ? s.backdrop_path[0] : s.backdrop_path) || '', year: (s.releaseDate || s.release_date || '').slice(0, 4), pl })),
-  };
+  const texts = await Promise.all(['get_live_categories', 'get_vod_categories', 'get_series_categories', 'get_live_streams', 'get_vod_streams', 'get_series'].map(get));
+  const pl = { id: p.id, host: h, U: encodeURIComponent(p.username), P: encodeURIComponent(p.password) };
+  let out = null;
+  try { out = await libWork('xtream', { texts, pl }); } catch {}
+  if (!out) { const [lc, vc, sc, ls, vs, ss] = texts.map(xtArr); out = libFinish(xtreamMap({ lc, vc, sc, ls, vs, ss }, pl)); }
+  if (!out.live.length && !out.movies.length && !out.series.length) throw new Error('nessun contenuto: controlla server, utente e password');
+  return out;
+}
+/* ---------------- thread di lavoro: parse delle playlist fuori dal thread dell'interfaccia (l'app resta fluida) ---------------- */
+let libWk = null, libWkBad = false, libWkSeq = 0;
+const libWkJobs = new Map();
+function libWorker() {
+  if (libWk || libWkBad) return libWk;
+  try {
+    const src = [
+      `const RX_SE = ${RX_SE}, RX_SE2 = ${RX_SE2}, RX_VOD = ${RX_VOD}, RX_SEP = ${RX_SEP}, CC3 = ${JSON.stringify(CC3)}, RX_CC = ${RX_CC}, RX_QUAL = ${RX_QUAL}, RX_ADULT_G = ${RX_ADULT_G}, RX_ADULT_N = ${RX_ADULT_N};`,
+      m3uAttr, parseM3U, `const isSepCh = ${isSepCh};`, logoKey, libSig, xtreamMap, `const xtArr = ${xtArr};`, libFinish,
+      `self.onmessage = (e) => { const { id, op, data } = e.data; try {
+        let out = null;
+        if (op === 'm3u') out = libFinish(parseM3U(data.text, data.plId));
+        else if (op === 'xtream') { const [lc, vc, sc, ls, vs, ss] = data.texts.map(xtArr); out = libFinish(xtreamMap({ lc, vc, sc, ls, vs, ss }, data.pl)); }
+        postMessage({ id, out });
+      } catch (err) { postMessage({ id, error: String(err && err.message || err) }); } };`,
+    ].map(String).join('\n');
+    libWk = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    libWk.onmessage = (e) => { const j = libWkJobs.get(e.data.id); if (!j) return; libWkJobs.delete(e.data.id); clearTimeout(j.t); e.data.error ? j.rej(new Error(e.data.error)) : j.res(e.data.out); };
+    libWk.onerror = (e) => { libWkBad = true; for (const j of libWkJobs.values()) { clearTimeout(j.t); j.rej(new Error(e.message || 'worker')); } libWkJobs.clear(); try { libWk.terminate(); } catch {} libWk = null; };
+  } catch { libWkBad = true; libWk = null; }
+  return libWk;
+}
+/** esegue un lavoro nel thread di lavoro; se non disponibile o in errore la promessa fallisce e si usa il thread principale */
+function libWork(op, data) {
+  const w = libWorker(); if (!w) return Promise.reject(new Error('no worker'));
+  return new Promise((res, rej) => {
+    const id = ++libWkSeq;
+    const t = setTimeout(() => { if (libWkJobs.has(id)) { libWkJobs.delete(id); rej(new Error('timeout')); } }, 240e3);
+    libWkJobs.set(id, { res, rej, t });
+    try { w.postMessage({ id, op, data }); } catch (e) { clearTimeout(t); libWkJobs.delete(id); rej(e); }
+  });
+}
+async function parseM3UAsync(text, plId) {
+  try { return await libWork('m3u', { text, plId }); } catch {}
+  return libFinish(parseM3U(text, plId));
 }
 const localOk = () => S.settings.allowLocalPlaylists && perm('localPl');
 const allPlaylists = () => [...S.playlists, ...(localOk() ? S.local : [])].map((p) => ({ ...p, id: p.id || 'p' + hashStr((p.url || '') + (p.host || '') + (p.username || '')) }));
@@ -2038,7 +2156,7 @@ async function fetchLibrary(onMsg) {
   let done = 0;
   const parts = await Promise.all(all.map(async (p) => {
     try {
-      const part = p.type === 'xtream' ? await loadXtream({ ...p, host: fixUrl(p.host) }) : parseM3U(await getText(fixUrl(p.url)), p.id);
+      const part = p.type === 'xtream' ? await loadXtream({ ...p, host: fixUrl(p.host) }) : await parseM3UAsync(await getText(fixUrl(p.url)), p.id);
       onMsg && onMsg(++done, all.length);
       return part;
     } catch (e) { S.loadErrors.push(`${p.name}: ${e.message || 'errore'}`); return null; }
@@ -2065,6 +2183,9 @@ async function fetchLibrary(onMsg) {
   });
   delete lib._live; delete lib._movies; delete lib._series;
   S.libPlIds = all.map((p) => p.id).join(',');
+  lib.clean = parts.every((x) => !x || x.clean) ? 1 : 0;
+  // impronta della libreria dalle impronte delle parti (già calcolate nel thread di lavoro)
+  if (parts.every((x) => !x || x.sig)) lib.sig = hashStr(all.map((p, i) => p.id + ':' + (parts[i] ? parts[i].sig : '-')).join('|'));
   return { lib, ok: parts.some(Boolean), total: all.length };
 }
 async function loadLibrary() {
@@ -2073,7 +2194,7 @@ async function loadLibrary() {
   if (r.total && !r.ok) toast('Impossibile caricare la playlist: ' + (S.loadErrors[0] || ''), 6000);
   else if (S.loadErrors.length) toast('Non caricata: ' + S.loadErrors[0], 5000);
   setLib(r.lib);
-  if (r.ok) { S.libSig = libSig(r.lib); await LibCache.save(r.lib); }
+  if (r.ok) { S.libSig = libSig(r.lib); whenIdle(() => S.fullLib && LibCache.save(S.fullLib), 1500, 1500, 30e3); }
 }
 /* aggiornamento silenzioso dopo un avvio da cache */
 async function refreshLibrary(manual) {
@@ -2086,14 +2207,21 @@ async function refreshLibrary(manual) {
     if (S.loadErrors.length) { if (manual) S.refreshPartial = true; return; }
     const sig = libSig(r.lib);
     if (sig !== S.libSig) {
-      setLib(r.lib); S.libSig = sig;
-      const save = () => LibCache.save(r.lib);
-      (window.requestIdleCallback || setTimeout)(save, { timeout: 4000 });
-      if (!manual) toast('Contenuti aggiornati');
+      const prev = S.libSig;
+      // la nuova libreria si applica quando il telecomando è fermo (setLib su 100.000 titoli non deve interrompere chi naviga);
+      // a richiesta manuale si applica subito
+      const apply = () => {
+        if (S.libSig !== prev || S.inPlayer) { if (S.libSig !== prev) return; return whenIdle(apply, 2000, 2000, 120e3); }
+        setLib(r.lib); S.libSig = sig;
+        whenIdle(() => S.fullLib && LibCache.save(S.fullLib), 1000, 2000, 60e3); // si salva quando il telecomando è fermo
+        if (!manual) toast('Contenuti aggiornati');
+      };
+      if (manual) apply(); else whenIdle(apply, 0, 1500, 90e3);
     }
   } finally { S.refreshing = false; }
 }
 function libSig(lib) {
+  if (lib.sig) return lib.sig;
   let h = 2166136261;
   const add = (t) => { t = String(t || ''); for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } };
   add(`${lib.live.length}|${lib.movies.length}|${lib.series.length}`);
@@ -2120,7 +2248,7 @@ const LibCache = {
     return null;
   },
   async save(lib) {
-    const k = this.key(), data = { live: lib.live, movies: lib.movies, series: lib.series, t: Date.now() };
+    const k = this.key(), data = { live: lib.live, movies: lib.movies, series: lib.series, t: Date.now(), sig: lib.sig || S.libSig || '', clean: lib.clean ? 1 : 0 };
     try {
       const db = await this.db();
       await new Promise((res, rej) => { const tx = db.transaction('kv', 'readwrite'), st = tx.objectStore('kv'); st.clear(); st.put(data, k); tx.oncomplete = res; tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); });
@@ -2137,7 +2265,7 @@ const LibCache = {
 const RX_SEP = /^[\s\-=#*_~▬═━─•●◆★☆✦|+<>.:]{3,}|^[\s\-=#*_~▬═━─•●◆★☆✦|+<>.:]{2,}.*[\-=#*_~▬═━─•●◆★☆✦|+<>]{2,}\s*$/;
 const isSepCh = (c) => { const n = String(c.name || '').trim(); return !n || /[\-=#▬═━─_*~]{4,}/.test(n) || (RX_SEP.test(n) && n.replace(/[^\p{L}\p{N}]/gu, '').length < n.length * 0.85); };
 function setLib(lib) {
-  if (lib.live.some(isSepCh)) lib = { ...lib, live: lib.live.filter((c) => !isSepCh(c)) };
+  if (!lib.clean && lib.live.some(isSepCh)) lib = { ...lib, live: lib.live.filter((c) => !isSepCh(c)) };
   S.fullLib = lib; trendCache = null;
   { // contenuti di una cache vecchia senza la playlist d'origine
     const ids = activePlaylists().map((p) => p.id);
@@ -2162,8 +2290,8 @@ function setLib(lib) {
     if (ch.sid || !ch.url) continue;
     const plid = ch.pl || [...plOk].find((id) => ch.id.endsWith(id));
     if (!plid || !plOk.has(plid)) continue;
-    const m = ch.url.match(/\/(\d+)(?:\.[a-z0-9]+)?(?:\?.*)?$/i);
-    if (m) { ch.sid = m[1]; ch.pl = plid; }
+    const sidc = ch.sidc !== undefined ? ch.sidc : (ch.url.match(/\/(\d+)(?:\.[a-z0-9]+)?(?:\?.*)?$/i) || [])[1];
+    if (sidc) { ch.sid = sidc; ch.pl = plid; }
   }
   applyLogos(lib.live);
   if (S.trend) setTimeout(buildTrendIdx, 0); // S.libSig viene aggiornato subito dopo setLib
@@ -2187,8 +2315,10 @@ function applyLogos(list, dom) {
   if (store.get('autoLogo', true) === false) return 0;
   for (const ch of list) {
     if (ch.logo && !ch.logoBad) continue;
-    const k = logoKey(ch.name); if (!k.key) continue;
-    const u = logoMap[k.cc + '|' + k.key];
+    let mk = ch.lk;
+    if (mk === undefined) { const k = logoKey(ch.name); mk = ch.lk = k.key ? k.cc + '|' + k.key : ''; }
+    if (!mk) continue;
+    const u = logoMap[mk];
     if (u && u !== ch.logo) {
       ch.logo = u; ch.logoBad = false; ch.autoLogo = 1; n++;
       if (upd) upd.set(ch.id, ch);
@@ -2216,9 +2346,11 @@ async function autoLogos() {
   const need = new Map();
   for (const ch of S.lib.live) {
     if (ch.logo && !ch.logoBad) continue;
-    const k = logoKey(ch.name); if (!k.key) continue;
-    const mk = k.cc + '|' + k.key;
-    if (!(mk in logoMap)) need.set(mk, k);
+    let mk = ch.lk;
+    if (mk === undefined) { const k = logoKey(ch.name); mk = ch.lk = k.key ? k.cc + '|' + k.key : ''; }
+    if (!mk || mk in logoMap) continue;
+    const i = mk.indexOf('|');
+    need.set(mk, { cc: mk.slice(0, i), key: mk.slice(i + 1) });
   }
   if (!need.size) return;
   S.logoRun = true;
@@ -2248,7 +2380,7 @@ async function autoLogos() {
     }
     store.set('logoMap', logoMap); store.set('logoDbT', Date.now());
     const n = applyLogos(S.lib.live, true);
-    if (n) { (window.requestIdleCallback || setTimeout)(() => LibCache.save(S.lib), { timeout: 5000 }); toast(`Trovati ${n.toLocaleString('it')} loghi dei canali`); }
+    if (n) { whenIdle(() => S.fullLib && LibCache.save(S.fullLib), 500, 2000, 60e3); toast(`Trovati ${n.toLocaleString('it')} loghi dei canali`); }
   } catch {} finally { S.logoRun = false; }
 }
 const updFavCount = () => {};
@@ -2641,6 +2773,7 @@ function guideGeom() {
   G.chW = Math.round(Math.min(300, Math.max(150, innerWidth * 0.17)));
   G.rowH = Math.round(Math.min(76, Math.max(46, innerHeight * 0.078)));
   G.ppm = Math.max(2.5, ((grid.clientWidth || innerWidth) - G.chW) / 150); // circa 2 ore e mezza visibili
+  G.headH = $('#gHead').offsetHeight || 0; G.viewH = grid.clientHeight; G.viewW = grid.clientWidth;
   document.documentElement.style.setProperty('--gcw', G.chW + 'px');
   document.documentElement.style.setProperty('--grh', G.rowH + 'px');
 }
@@ -2713,14 +2846,14 @@ function guideQueue() {
 /* disegna solo le righe nella finestra visibile (più un margine) */
 function guideRange(force) {
   const grid = $('#gGrid'); if (!grid) return;
-  const vis = Math.ceil(grid.clientHeight / G.rowH) + 1;
+  const vis = Math.ceil((G.viewH || grid.clientHeight) / G.rowH) + 1;
   const a = Math.max(0, Math.floor(grid.scrollTop / G.rowH) - 6), b = Math.min(G.idx.length - 1, a + vis + 12);
   if (!force && a === G.first && b === G.last) return;
   G.first = a; G.last = b; // prima di disegnare: la coda della guida breve usa questi limiti
-  const box = $('#gRows');
-  for (const el of [...box.querySelectorAll('.grow')]) { const r = +el.dataset.row; if (r < a || r > b) { if (el.contains(cur)) continue; el.remove(); } }
+  const box = $('#gRows'), have = new Set();
+  for (const el of [...box.querySelectorAll('.grow')]) { const r = +el.dataset.row; if (r < a || r > b) { if (el.contains(cur)) { have.add(r); continue; } el.remove(); } else have.add(r); }
   let html = '';
-  for (let i = a; i <= b; i++) if (!box.querySelector(`.grow[data-row="${i}"]`)) html += guideRow(i);
+  for (let i = a; i <= b; i++) if (!have.has(i)) html += guideRow(i);
   if (html) box.insertAdjacentHTML('beforeend', html);
 }
 function guideBlock(i, t) {
@@ -2731,8 +2864,9 @@ function guideBlock(i, t) {
 function guideFocus(i, t, silent) {
   if (!G.idx.length) return;
   i = Math.max(0, Math.min(G.idx.length - 1, i));
-  const grid = $('#gGrid'), headH = $('#gHead').offsetHeight;
-  const top = i * G.rowH, viewH = grid.clientHeight - headH;
+  const grid = $('#gGrid');
+  if (!G.viewH) { G.headH = $('#gHead').offsetHeight || 0; G.viewH = grid.clientHeight; G.viewW = grid.clientWidth; }
+  const top = i * G.rowH, viewH = G.viewH - G.headH;
   if (top < grid.scrollTop) grid.scrollTop = top;
   else if (top + G.rowH > grid.scrollTop + viewH) grid.scrollTop = top + G.rowH - viewH;
   guideRange();
@@ -2742,7 +2876,7 @@ function guideFocus(i, t, silent) {
 }
 /* scorrimento orizzontale: l'inizio del programma resta visibile accanto alla colonna dei canali */
 function guideScrollX(b) {
-  const grid = $('#gGrid'), l = parseFloat(b.style.left) || 0, w = b.offsetWidth, viewW = grid.clientWidth - G.chW;
+  const grid = $('#gGrid'), l = parseFloat(b.style.left) || 0, w = (parseFloat(b.style.width) || 0) + 3, viewW = (G.viewW || grid.clientWidth) - G.chW;
   if (l < grid.scrollLeft + 10) grid.scrollLeft = Math.max(0, l - 30);
   else if (l + Math.min(w, viewW * 0.6) > grid.scrollLeft + viewW) grid.scrollLeft = Math.max(0, l - 30);
 }
@@ -2944,7 +3078,7 @@ function fsKey(e) {
     fx('move'); fsItem = list[i]; $('#fvDemo').textContent = fsItem.name; playUrl(v, fsItem, $('#fs')); osd(); addRecent(fsItem, 'live'); return;
   }
   if (fsKind !== 'live' && (k === 'ArrowLeft' || k === 'ArrowRight')) { v.currentTime = Math.max(0, v.currentTime + (k === 'ArrowRight' ? 10 : -10)); osd(); return; }
-  if (k === 'Enter' || kc === 23 || k === ' ' || k === 'MediaPlayPause') { if (fsKind !== 'live' && e.type === 'keydown' && !e.repeat) { v.paused ? v.play() : v.pause(); } osd(); return; }
+  if (k === 'Enter' || kc === 23 || k === ' ' || k === 'MediaPlayPause') { if (fsKind !== 'live' && e.type === 'keydown' && !e.repeat) { v.paused ? v.play().catch(() => {}) : v.pause(); } osd(); return; }
   osd();
 }
 $('#fs').addEventListener('click', () => osd());
@@ -3202,11 +3336,27 @@ function cardHTML(type, x, k, i) {
   }
   return `<div class="nc p ${img ? '' : 'noimg'}${isLocked(x) ? ' lk' : ''}" data-f data-k="${k}">${img ? `<img loading="lazy" class="${isLiveItem(x) ? 'lgfit' : ''}" src="${esc(img)}" ${onerr}>` : ''}${ft}${extra}${plBadge(x)}</div>`;
 }
+/* le righe partono con poche card (quelle visibili): le altre si aggiungono scorrendo a destra. Meno DOM = più fluido su Fire TV */
+const ROW_FIRST = 14, ROW_STEP = 12, ROW_MAX = 40;
 function rowHTML(r, ri) {
-  const max = 40;
-  const cards = r.items.slice(0, max).map((x, i) => cardHTML(r.type, x, `${ri}:${i}`, i)).join('');
+  const n = Math.min(r.items.length, ROW_FIRST);
+  const cards = r.items.slice(0, n).map((x, i) => cardHTML(r.type, x, `${ri}:${i}`, i)).join('');
   const more = r.more ? `<div class="nc more ${r.type === 'live' ? 'lm' : r.type === 'fold' ? 'fm' : ''}" data-f data-k="${ri}:more">Vedi tutto<br>→</div>` : '';
-  return `<div class="nrow ${r.type === 'fold' ? 'fold' : ''}"><h3>${r.type === 'fold' ? `<span class="fi">${FOLDER_SVG}</span>` : ''}${esc(r.title)}${r.sub ? `<small>${esc(r.sub)}</small>` : r.items.length > max ? `<small>${r.items.length}</small>` : ''}</h3><div class="track">${cards}${more}</div></div>`;
+  return `<div class="nrow ${r.type === 'fold' ? 'fold' : ''}"><h3>${r.type === 'fold' ? `<span class="fi">${FOLDER_SVG}</span>` : ''}${esc(r.title)}${r.sub ? `<small>${esc(r.sub)}</small>` : r.items.length > ROW_MAX ? `<small>${r.items.length}</small>` : ''}</h3><div class="track" data-ri="${ri}" data-n="${n}">${cards}${more}</div></div>`;
+}
+/** aggiunge card a una riga (fino a `upto`, almeno ROW_STEP); false se non c'è altro da aggiungere */
+function trackFill(track, upto) {
+  if (!track || track.dataset.n === undefined) return false;
+  const scr = track.closest('.bscr'), ri = +track.dataset.ri, r = scr && scr._rows && scr._rows[ri];
+  if (!r) return false;
+  const n = +track.dataset.n, max = Math.min(ROW_MAX, r.items.length);
+  if (n >= max) return false;
+  const to = Math.min(max, Math.max(+upto || 0, n + ROW_STEP));
+  const html = r.items.slice(n, to).map((x, i) => cardHTML(r.type, x, `${ri}:${n + i}`, n + i)).join('');
+  const more = track.querySelector('.nc.more');
+  if (more) more.insertAdjacentHTML('beforebegin', html); else track.insertAdjacentHTML('beforeend', html);
+  track.dataset.n = to;
+  return true;
 }
 function moreRows(scr, n) {
   const rows = scr._rows.slice(scr._rendered, scr._rendered + n);
@@ -3232,7 +3382,7 @@ function buildBrowse(scr, kind) {
   scr.querySelector('.navslot').innerHTML = navHTML(kind === 'all' ? 'home' : kind);
   scr._feat = featured(kind); scr._fi = 0;
   setHero(scr, scr._rows.length ? scr._rows[0].items[0] : scr._feat[0], true);
-  tick();
+  tick(true);
   // la riga delle righe viene ricreata a ogni costruzione: l'ascoltatore va agganciato ogni volta
   scr.querySelector('.rows').addEventListener('scroll', (e) => { const l = e.target; if (l.scrollTop + l.clientHeight > l.scrollHeight - 500 && scr._rendered < scr._rows.length) moreRows(scr, 3); });
   if (scr._wired) return;
@@ -3252,8 +3402,9 @@ function buildBrowse(scr, kind) {
     if (c) {
       const x = item(c.dataset.k); if (x) heroQueue(scr, x);
       const row = c.closest('.nrow'); if (!mouse && Math.abs(rows.scrollTop - (row.offsetTop - 6)) > 2) rows.scrollTo({ top: row.offsetTop - 6, behavior: 'smooth' });
-      const ri = +c.dataset.k.split(':')[0];
-      if (ri >= scr._rendered - 2) moreRows(scr, 4);
+      const [ri, ii] = c.dataset.k.split(':').map(Number);
+      if (ri >= scr._rendered - 2) moreRows(scr, 3);
+      const tr = c.parentElement; if (tr && tr.dataset.n !== undefined && ii >= +tr.dataset.n - 5) trackFill(tr, 0);
     } else if (t.closest('.tnav') && !mouse) rows.scrollTo({ top: 0, behavior: 'smooth' });
   });
 
@@ -3269,7 +3420,8 @@ function browseFind(scr, key) {
   const ri = scr._rows.findIndex((r) => r.title === key.t); if (ri < 0) return null;
   while (scr._rendered <= ri && scr._rendered < scr._rows.length) moreRows(scr, 3);
   let ii = key.id === 'more' ? 'more' : scr._rows[ri].items.findIndex((x) => x.id === key.id);
-  if (ii !== 'more' && (ii < 0 || ii >= 40)) ii = Math.min(+key.ii || 0, scr._rows[ri].items.length - 1, 39);
+  if (ii !== 'more' && (ii < 0 || ii >= ROW_MAX)) ii = Math.min(+key.ii || 0, scr._rows[ri].items.length - 1, ROW_MAX - 1);
+  if (ii !== 'more') { const tr = scr.querySelector(`.track[data-ri="${ri}"]`); if (tr) while (+tr.dataset.n <= ii && trackFill(tr, ii + 1)); }
   return scr.querySelector(`[data-k="${ri}:${ii}"]`) || scr.querySelector(`[data-k^="${ri}:"]`);
 }
 function rebuildBrowse(scr, kind, focusEl) {
@@ -4404,12 +4556,15 @@ async function playTrailer(x, ex) {
 }
 function ytOverlay(id, name) {
   const back = cur;
-  document.body.insertAdjacentHTML('beforeend', `<div class="speedm on ytm" id="ytM"><div class="ytbox"><iframe src="https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&playsinline=1&modestbranding=1&hl=it" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
-    <div class="ytbar"><b>${esc(name)}</b><a class="btn" data-f id="ytApp" href="https://www.youtube.com/watch?v=${id}" target="_blank" rel="noopener">Apri su YouTube</a><button class="btn pri" data-f id="ytNo">Chiudi</button></div></div></div>`);
+  // app Android senza il lettore dei trailer (APK precedente alla 1.9): niente riquadro incorporato, si apre l'app YouTube
+  const frame = NATIVE ? `<div class="ytold"><b>Aggiorna l'app KAIROS per vedere i trailer qui dentro.</b><span class="mut">Intanto puoi aprirlo con l'app YouTube.</span></div>` : `<iframe src="https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&playsinline=1&modestbranding=1&hl=it" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  document.body.insertAdjacentHTML('beforeend', `<div class="speedm on ytm" id="ytM"><div class="ytbox">${frame}
+    <div class="ytbar"><b>${esc(name)}</b><a class="btn${NATIVE ? ' pri' : ''}" data-f id="ytApp" href="https://www.youtube.com/watch?v=${id}" target="_blank" rel="noopener">Apri su YouTube</a><button class="btn${NATIVE ? '' : ' pri'}" data-f id="ytNo">Chiudi</button></div></div></div>`);
   const m = $('#ytM');
   m._onClose = () => { setTimeout(() => back && document.body.contains(back) && focus(back, true), 30); };
   $('#ytNo').onclick = () => { m._onClose(); m.remove(); };
-  setTimeout(() => focus($('#ytNo'), true), 60);
+  $('#ytApp').onclick = (e) => { if (NATIVE && NATIVE.openUrl) { e.preventDefault(); NATIVE.openUrl($('#ytApp').href); } };
+  setTimeout(() => focus(NATIVE ? $('#ytApp') : $('#ytNo'), true), 60);
 }
 /* ---------------- visioni contemporanee (limite impostato dal pannello) ---------------- */
 let streamOkT = 0;
@@ -4924,7 +5079,7 @@ async function enterHome() {
   clearInterval(pollT);
   try { NATIVE && NATIVE.uiReady && NATIVE.uiReady(); } catch {}
   buildBrowse($('#home'), 'all');
-  tick(); S.stack = [];
+  tick(true); S.stack = [];
   const b = $('#boot');
   if (b.classList.contains('on')) { b.classList.add('out'); await sleep(560); }
   // schermata iniziale scelta nelle impostazioni
@@ -4992,7 +5147,8 @@ async function loadOrCache() {
   S.fromCache = false;
   const c = await LibCache.load();
   if (c) {
-    setLib(c); S.libSig = libSig(c); S.fromCache = true;
+    setLib(c); S.fromCache = true;
+    if (c.sig) S.libSig = c.sig; else { S.libSig = ''; whenIdle(() => { if (S.fullLib === c) S.libSig = libSig(c); }, 2000); }
     // il fornitore può aver cambiato il server ("DNS") mentre l'app era chiusa: si riscrivono solo gli indirizzi
     const snap = store.get('plSnap', null);
     if (snap && dnsSwap(snap, activePlaylists())) return;
@@ -5025,7 +5181,7 @@ function dnsSwap(oldPls, newPls) {
     if (x.episodes) for (const e of x.episodes) e.url = sw(e.url, oh, nh);
   }
   setLib(lib); S.libSig = libSig(lib); S.epg.clear(); S.xepgVer++;
-  (window.requestIdleCallback || setTimeout)(() => LibCache.save(lib), { timeout: 3000 });
+  whenIdle(() => S.fullLib && LibCache.save(S.fullLib), 500, 2000, 60e3);
   store.set('plSnap', plSnapOf(newPls));
   if (n) toast('Il fornitore ha aggiornato il server: indirizzi aggiornati');
   if ($('#live').classList.contains('on')) renderChannels();

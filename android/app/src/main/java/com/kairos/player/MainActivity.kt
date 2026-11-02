@@ -49,7 +49,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var prefs: SharedPreferences
     private val ui = Handler(Looper.getMainLooper())
     private var lastBack = 0L
-    private var uiOk = false
+    @Volatile private var uiOk = false
+    private var isResumed = false
 
     companion object {
         private const val HOME = "file:///android_asset/www/index.html"
@@ -153,7 +154,7 @@ class MainActivity : ComponentActivity() {
         try { WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG) } catch (_: Exception) {}
         web = WebView(this)
         web.setBackgroundColor(Color.BLACK)
-        web.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        // nessun layer forzato: la WebView disegna direttamente (un layer hardware aggiunge una copia a schermo intero per ogni frame, pesante su Fire TV)
         root.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         previewBox = FrameLayout(this).apply { setBackgroundColor(Color.BLACK); visibility = View.GONE; isFocusable = false }
         root.addView(previewBox, FrameLayout.LayoutParams(1, 1))
@@ -322,7 +323,7 @@ class MainActivity : ComponentActivity() {
 
     /* il riquadro dell'anteprima si allarga fino a riempire lo schermo (come nelle app TV) */
     private var boxAnim: android.animation.ValueAnimator? = null
-    private fun growBox(done: () -> Unit) {
+    private fun growBox(cancelled: () -> Unit = {}, done: () -> Unit) {
         val lp0 = previewBox.layoutParams as FrameLayout.LayoutParams
         val x0 = lp0.leftMargin; val y0 = lp0.topMargin; val w0 = lp0.width; val h0 = lp0.height
         val W = root.width; val H = root.height
@@ -338,9 +339,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
             addListener(object : android.animation.AnimatorListenerAdapter() {
-                private var cancelled = false
-                override fun onAnimationCancel(animation: android.animation.Animator) { cancelled = true }
-                override fun onAnimationEnd(animation: android.animation.Animator) { if (!cancelled) done() }
+                private var c = false
+                override fun onAnimationCancel(animation: android.animation.Animator) { c = true }
+                override fun onAnimationEnd(animation: android.animation.Animator) { if (c) cancelled() else done() }
             })
             start()
         }
@@ -354,16 +355,18 @@ class MainActivity : ComponentActivity() {
     }
 
     /** schermo intero: se l'anteprima mostra già quel canale, lo stesso video si allarga e continua */
-    private fun startPlayer(payload: String) {
-        val o = try { JSONObject(payload) } catch (e: Exception) { null }
+    private fun startPlayer(o: JSONObject) {
         val e = previewEngine
         var handed = false
         try {
-            if (o != null && o.optString("kind") == "live" && o.optString("engine") != "vlc" && e != null && previewBox.visibility == View.VISIBLE && e.isActive()) {
-                val it = o.optJSONArray("items")?.optJSONObject(o.optInt("index"))
-                if (it != null && it.optString("id") == previewId) {
+            if (o.optString("kind") == "live" && o.optString("engine") != "vlc" && e != null && previewBox.visibility == View.VISIBLE && e.isActive()) {
+                if (o.optString("id") == previewId) {
                     handed = true
-                    growBox {
+                    growBox(cancelled = {
+                        // animazione interrotta (riquadro chiuso o app in pausa): il player parte comunque, oppure si rinuncia
+                        if (isResumed) { Handoff.box = null; stopPreview(); coverUiNow(true); launchPlayer(false) }
+                        else { PlayerActivity.pending = null; PlayerActivity.pendingJson = null }
+                    }) {
                         try {
                             // Il riquadro, ora a tutto schermo, resta qui con il video (poi con l'ultimo fotogramma)
                             // finché il player sopra non ha disegnato il video sulla sua superficie: solo allora
@@ -817,12 +820,14 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        isResumed = false
         stopPreview()
         web.onPause()
         super.onPause()
     }
 
     override fun onResume() {
+        isResumed = true
         super.onResume()
         web.onResume()
         web.requestFocus()
@@ -848,7 +853,7 @@ class MainActivity : ComponentActivity() {
         previewEngine?.release()
         previewEngine = null
         httpPool.shutdownNow()
-        web.destroy()
+        (web.parent as? ViewGroup)?.removeView(web); web.destroy()
         super.onDestroy()
     }
 
@@ -861,6 +866,7 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface fun netInfo(): String = NetInfo.json(applicationContext)
         @JavascriptInterface fun playStats(): String = PlayStats.json()
         @JavascriptInterface fun playYoutube(id: String, title: String) { runOnUiThread { TrailerActivity.start(this@MainActivity, id, title) } }
+        @JavascriptInterface fun openUrl(url: String) { runOnUiThread { try { openExternal(Uri.parse(url)) } catch (_: Exception) {} } }
         /** TV (Android TV / Google TV / Fire TV): la pagina non usa l'interfaccia touch anche se il puntatore è "coarse" */
         @JavascriptInterface fun isTv(): Boolean = try {
             (getSystemService(UI_MODE_SERVICE) as android.app.UiModeManager).currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION ||
@@ -908,8 +914,14 @@ class MainActivity : ComponentActivity() {
 
         /** Avvia il player nativo (ExoPlayer / VLC) */
         @JavascriptInterface fun play(payload: String) {
-            PlayerActivity.pending = payload
-            runOnUiThread { startPlayer(payload) }
+            // la lista (anche migliaia di canali) si analizza qui, sul thread del ponte JS: il thread dell'interfaccia non si blocca
+            val j = try { JSONObject(payload) } catch (e: Exception) { return }
+            PlayerActivity.pendingJson = j
+            PlayerActivity.pending = null
+            // al thread dell'interfaccia servono solo tipo, motore e id del canale
+            val head = JSONObject().put("kind", j.optString("kind")).put("engine", j.optString("engine"))
+                .put("id", j.optJSONArray("items")?.optJSONObject(j.optInt("index"))?.optString("id") ?: "")
+            runOnUiThread { startPlayer(head) }
         }
 
         @JavascriptInterface fun preview(json: String) { runOnUiThread { showPreview(json) } }
@@ -945,7 +957,14 @@ class MainActivity : ComponentActivity() {
         }
         /** cache della libreria (canali, film, serie) per un avvio istantaneo */
         @JavascriptInterface fun cachePut(key: String, data: String) {
-            try { val f = libFile(key); val t = File(f.path + ".tmp"); t.writeText(data, Charsets.UTF_8); t.renameTo(f) } catch (_: Exception) {}
+            // scrittura fuori dal thread del ponte (la pagina non resta bloccata) e in streaming (nessuna seconda copia in memoria)
+            httpPool.execute {
+                try {
+                    val f = libFile(key); val t = File(f.path + ".tmp")
+                    java.io.OutputStreamWriter(java.io.FileOutputStream(t), Charsets.UTF_8).buffered(64 * 1024).use { it.write(data) }
+                    if (!t.renameTo(f)) { f.delete(); t.renameTo(f) }
+                } catch (_: Exception) {}
+            }
         }
         @JavascriptInterface fun cachePath(key: String): String { val f = libFile(key); return if (f.exists()) "file://" + f.absolutePath else "" }
         /** guida TV completa: urls = sorgenti XMLTV, want = {ids:[tvg-id], names:[nomi normalizzati]} */
@@ -955,7 +974,7 @@ class MainActivity : ComponentActivity() {
 
         /** Richiesta HTTP fatta dall'app (senza limiti CORS). Risposta in window.kxHttpCb(id, status, body). */
         @JavascriptInterface fun http(id: String, method: String, url: String, body: String, ua: String) {
-            thread(name = "kx-http") {
+            httpPool.execute { // al massimo 6 richieste insieme (prima un thread nuovo per ogni chiamata)
                 var status = -1
                 var text: String
                 try {

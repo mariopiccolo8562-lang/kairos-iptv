@@ -257,16 +257,19 @@ object Recorder {
         } catch (_: Exception) {}
     }
 
+    private val saveIo = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "kx-rec-io").apply { isDaemon = true } }
+    /** istantanea sotto il lock, scrittura su disco fuori dal thread chiamante (il tasto Registra non aspetta la memoria del dispositivo) */
     private fun saveLocked() {
         val a = app ?: return
-        try {
-            val arr = JSONArray()
-            for (r in recs.values) arr.put(r.json(true))
-            val f = File(a.filesDir, "recordings.json")
-            val t = File(a.filesDir, "recordings.json.tmp")
-            t.writeText(arr.toString(), Charsets.UTF_8)
-            if (!t.renameTo(f)) { f.delete(); t.renameTo(f) }
-        } catch (_: Exception) {}
+        val text = try { JSONArray().also { arr -> for (r in recs.values) arr.put(r.json(true)) }.toString() } catch (_: Exception) { return }
+        saveIo.execute {
+            try {
+                val f = File(a.filesDir, "recordings.json")
+                val t = File(a.filesDir, "recordings.json.tmp")
+                t.writeText(text, Charsets.UTF_8)
+                if (!t.renameTo(f)) { f.delete(); t.renameTo(f) }
+            } catch (_: Exception) {}
+        }
     }
 
     private fun deleteFile(a: Context, path: String) {
