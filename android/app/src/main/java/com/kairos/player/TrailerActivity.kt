@@ -41,6 +41,7 @@ class TrailerActivity : ComponentActivity() {
     private var ready = false
     private var leaving = false
     private var vid = ""
+    private var dead = false
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,13 +52,21 @@ class TrailerActivity : ComponentActivity() {
         vid = intent.getStringExtra("id") ?: ""
         if (!Regex("^[A-Za-z0-9_-]{11}$").matches(vid)) { finish(); return }
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        web = WebView(this).apply {
+        web = try { WebView(this) } catch (_: Throwable) { openYoutubeApp(); return }
+        web.apply {
             setBackgroundColor(Color.BLACK)
             settings.javaScriptEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
             settings.domStorageEnabled = true
             webChromeClient = WebChromeClient()
-            webViewClient = object : WebViewClient() {}
+            webViewClient = object : WebViewClient() {
+                override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                    dead = true
+                    try { (view.parent as? android.view.ViewGroup)?.removeView(view); view.destroy() } catch (_: Throwable) {}
+                    if (!leaving) { leaving = true; finish() }
+                    return true
+                }
+            }
             addJavascriptInterface(Bridge(), "Kx")
             isFocusable = true
         }
@@ -115,14 +124,24 @@ function kx(k){try{if(!pl||!pl.getPlayerState)return;if(k==='ok'){pl.getPlayerSt
                 KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE -> { leaving = true; finish(); return true }
                 else -> null
             }
-            if (k != null) { web.evaluateJavascript("kx('$k')", null); return true }
+            if (k != null) { if (::web.isInitialized && !dead) web.evaluateJavascript("kx('$k')", null); return true }
         } else if (event.keyCode == KeyEvent.KEYCODE_BACK) return true
         return super.dispatchKeyEvent(event)
     }
 
+    // tasto Home o un'altra app davanti: il trailer si ferma (niente audio in sottofondo)
+    override fun onPause() {
+        super.onPause()
+        if (::web.isInitialized && !dead) { try { web.evaluateJavascript("try{pl&&pl.pauseVideo()}catch(e){}", null); web.onPause() } catch (_: Throwable) {} }
+    }
+    override fun onResume() {
+        super.onResume()
+        if (::web.isInitialized && !dead) { try { web.onResume() } catch (_: Throwable) {} }
+    }
+
     override fun onDestroy() {
         ui.removeCallbacksAndMessages(null)
-        if (::web.isInitialized) { try { web.loadUrl("about:blank"); web.destroy() } catch (_: Exception) {} }
+        if (::web.isInitialized && !dead) { try { web.loadUrl("about:blank"); web.destroy() } catch (_: Exception) {} }
         super.onDestroy()
     }
 }

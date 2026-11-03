@@ -22,6 +22,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -140,7 +141,10 @@ class MainActivity : ComponentActivity() {
         v.animate().alpha(0f).setStartDelay(160).setDuration(260).withEndAction { v.visibility = View.GONE }.start()
     }
 
-    private fun js(code: String) { runOnUiThread { if (::web.isInitialized) web.evaluateJavascript(code, null) } }
+    /** WebView pronta: non ancora creata (WebView di sistema in aggiornamento) o morta (processo grafico chiuso) → niente chiamate */
+    private var webDead = false
+    private val webOk: Boolean get() = ::web.isInitialized && !webDead
+    private fun js(code: String) { runOnUiThread { if (webOk) web.evaluateJavascript(code, null) } }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -152,7 +156,14 @@ class MainActivity : ComponentActivity() {
         root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         // ispezione remota (chrome://inspect) solo nelle build di debug, mai nell'APK pubblicato
         try { WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG) } catch (_: Exception) {}
-        web = WebView(this)
+        web = try { WebView(this) } catch (e: Throwable) {
+            // WebView di sistema assente o in aggiornamento (capita dopo un aggiornamento di Fire OS): messaggio invece di un crash
+            setContentView(TextView(this).apply {
+                setBackgroundColor(Color.BLACK); setTextColor(Color.WHITE); textSize = 22f; gravity = android.view.Gravity.CENTER; setPadding(60, 60, 60, 60)
+                text = "Il sistema sta aggiornando un suo componente (WebView).\nAttendi un minuto e riapri l'app."
+            })
+            return
+        }
         web.setBackgroundColor(Color.BLACK)
         // nessun layer forzato: la WebView disegna direttamente (un layer hardware aggiunge una copia a schermo intero per ogni frame, pesante su Fire TV)
         root.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -210,12 +221,23 @@ class MainActivity : ComponentActivity() {
             }
 
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-                recreate()
+                // la WebView morta non si può più usare: tolta e distrutta, poi la schermata si ricrea
+                webDead = true
+                try { (view.parent as? ViewGroup)?.removeView(view); view.destroy() } catch (_: Throwable) {}
+                ui.post { if (!isFinishing && !isDestroyed) recreate() }
                 return true
             }
         }
 
-        thread(name = "kx-clean") { try { netDir.listFiles()?.forEach { it.delete() } } catch (_: Exception) {} }
+        thread(name = "kx-clean") {
+            try { netDir.listFiles()?.forEach { it.delete() } } catch (_: Exception) {}
+            try {
+                for (d in listOfNotNull(File(cacheDir, "apk"), externalCacheDir)) {
+                    val f = File(d, "kairos-update.apk")
+                    if (f.exists() && System.currentTimeMillis() - f.lastModified() > 10 * 60_000L && !apkBusy.get()) f.delete()
+                }
+            } catch (_: Exception) {}
+        }
         // registrazioni e VPN: notifiche verso la pagina; le registrazioni programmate vengono riattivate
         Recorder.ua = userAgent()
         Recorder.listener = recListener
@@ -226,6 +248,7 @@ class MainActivity : ComponentActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                if (!webOk) { finish(); return }
                 web.evaluateJavascript("(window.kxBack && window.kxBack()) ? 1 : 0") { r ->
                     if (r != "1") {
                         val now = System.currentTimeMillis()
@@ -347,6 +370,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val multiLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val r = res.data?.getStringExtra(MultiActivity.RESULT)
+        js("window.kxMultiClosed && window.kxMultiClosed(${JSONObject.quote(r ?: "")})")
+    }
+
     private fun launchPlayer(noAnim: Boolean) {
         Handoff.host = handoffHost
         val i = Intent(this@MainActivity, PlayerActivity::class.java)
@@ -355,7 +383,12 @@ class MainActivity : ComponentActivity() {
     }
 
     /** schermo intero: se l'anteprima mostra già quel canale, lo stesso video si allarga e continua */
+    /** OK premuto due volte di fila: un solo player (due istanze sovrapposte = due video e doppio audio) */
+    private var playerAskT = 0L
     private fun startPlayer(o: JSONObject) {
+        val t = android.os.SystemClock.elapsedRealtime()
+        if (t - playerAskT < 900) return
+        playerAskT = t
         val e = previewEngine
         var handed = false
         try {
@@ -423,7 +456,9 @@ class MainActivity : ComponentActivity() {
                     val code = conn.responseCode
                     val loc = conn.getHeaderField("Location")
                     if (code in 300..399 && loc != null && hops < 8) {
-                        conn.disconnect(); target = URL(target, loc); hops++
+                        val next = URL(target, loc)
+                        if (target.protocol == "https" && next.protocol != "https") throw Exception("il link dell'APK rimanda a un indirizzo non sicuro (http)")
+                        conn.disconnect(); target = next; hops++
                         conn = target.openConnection() as HttpURLConnection
                         continue
                     }
@@ -449,6 +484,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 conn.disconnect()
+                if (total > 0 && done != total) { out.delete(); throw Exception("download interrotto: controlla la connessione e riprova") }
                 // deve essere davvero un APK (un link sbagliato spesso scarica una pagina web)
                 val head = ByteArray(2)
                 java.io.FileInputStream(out).use { it.read(head) }
@@ -796,7 +832,7 @@ class MainActivity : ComponentActivity() {
             else -> null
         }
         if (key != null) {
-            if (event.action == KeyEvent.ACTION_DOWN) {
+            if (event.action == KeyEvent.ACTION_DOWN && webOk) {
                 web.evaluateJavascript("document.dispatchEvent(new KeyboardEvent('keydown',{key:'$key',bubbles:true}))", null)
             }
             return true
@@ -822,13 +858,14 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         isResumed = false
         stopPreview()
-        web.onPause()
+        if (webOk) web.onPause()
         super.onPause()
     }
 
     override fun onResume() {
         isResumed = true
         super.onResume()
+        if (!webOk) return
         web.onResume()
         web.requestFocus()
         js("window.kxResume && kxResume()")
@@ -853,7 +890,7 @@ class MainActivity : ComponentActivity() {
         previewEngine?.release()
         previewEngine = null
         httpPool.shutdownNow()
-        (web.parent as? ViewGroup)?.removeView(web); web.destroy()
+        if (webOk) { (web.parent as? ViewGroup)?.removeView(web); web.destroy() }
         super.onDestroy()
     }
 
@@ -926,6 +963,12 @@ class MainActivity : ComponentActivity() {
             runOnUiThread { startPlayer(head) }
         }
 
+        /** multi-schermo (2 o 4 canali insieme) */
+        @JavascriptInterface fun multi(payload: String) {
+            val j = try { JSONObject(payload) } catch (e: Exception) { return }
+            MultiActivity.pending = j
+            runOnUiThread { previewWanted = false; stopPreview(); try { multiLauncher.launch(Intent(this@MainActivity, MultiActivity::class.java)) } catch (_: Throwable) {} }
+        }
         @JavascriptInterface fun preview(json: String) { runOnUiThread { showPreview(json) } }
         @JavascriptInterface fun previewStop() { runOnUiThread { previewWanted = false; stopPreview() } }
         /** «Disconnetti» dal pannello: chiude il player a schermo intero, se aperto */
@@ -1031,7 +1074,7 @@ class MainActivity : ComponentActivity() {
                 }
                 val js = try { "window.kxHttpCb && window.kxHttpCb(${JSONObject.quote(id)}, $status, ${JSONObject.quote(text)})" }
                     catch (e: OutOfMemoryError) { "window.kxHttpCb && window.kxHttpCb(${JSONObject.quote(id)}, -1, 'risposta troppo grande per la memoria del dispositivo')" }
-                runOnUiThread { if (::web.isInitialized) web.evaluateJavascript(js, null) }
+                runOnUiThread { if (webOk) web.evaluateJavascript(js, null) }
             }
         }
     }

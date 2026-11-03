@@ -349,6 +349,8 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
     fun setOverlay(on: Boolean) { (pv.videoSurfaceView as? SurfaceView)?.setZOrderMediaOverlay(on) }
 
     override fun stop() { player.stop(); playingUrl = "" }
+    /** volume del solo riquadro (multi-schermo): 0 = muto */
+    fun setVolume(v: Float) { player.volume = v }
     override fun togglePause() { player.playWhenReady = !player.playWhenReady }
     override fun isPlaying(): Boolean = player.playWhenReady
     override fun position(): Long = maxOf(0L, player.currentPosition)

@@ -195,6 +195,36 @@ In **Impostazioni** trovi anche il **prezzo** mostrato ai clienti e il testo **P
 - **Diagnostica in *Online ora***: per chi sta guardando, codec del canale (H.264, HEVC, MPEG-2…), decodifica hardware o software, blocchi nell'ultima ora, fotogrammi persi, qualità ridotta in corso, ultimo recupero automatico e un'indicazione del **probabile problema**: *dispositivo* (immagine ferma o errori del decoder), *canale* (lo stesso contenuto ha problemi su più dispositivi), *linea* (Wi-Fi debole, velocità vicina a quella del canale, rete mobile) o *linea o server*.
 - **Nuova voce «Errori applicazione»** nel menu del pannello, con il numero di quelli nuovi: ogni problema con data, cliente, dispositivo, contenuto, lettore, codec, errore, cosa ha fatto l'app ed esito (*risolto da solo*, *non risolto*, *il cliente è uscito*). Filtri per tipo ed esito, ricerca, riepiloghi *contenuti con più problemi* (segnati «canale» se su più dispositivi) e *dispositivi con più problemi* (segnati «dispositivo» se su più contenuti). Si svuota a mano e si cancella da solo dopo 7 giorni. Anche via API: `GET /api/v1/app-errors`.
 
+## 12. Novità 2.1
+
+**Contenuti**
+- **Età consigliata** su film e serie (T, 6+, 14+, 18+, con colore): nel riquadro grande della home e nella scheda del titolo. Viene dalla playlist (Xtream) o da TMDB (classificazione italiana, altrimenti quella americana convertita).
+- **Contenuti speciali** nella scheda: dietro le quinte, clip, speciali, papere e teaser da YouTube, aperti a schermo intero nell'app.
+- **Già guardato**: spunta su poster ed episodi (si segna da solo a fine visione o dal menu del tasto OK tenuto premuto). **Coda di riproduzione** («La tua coda» in home: i titoli partono uno dopo l'altro). **Consigliati per te** in base a cosa guardi.
+- **Tag personali** (righe in home e categorie in TV), **nomi delle categorie personalizzati**, **ordine personalizzato** di categorie e preferiti (*Impostazioni → Organizza*), canali dalla A alla Z, dalla Z alla A o per data di aggiunta, **informazioni modificabili** (titolo, anno, copertina, trama) con ritorno agli originali.
+- **Cerca per attore**: nella ricerca compaiono i titoli della playlist in cui ha recitato.
+- **Guida TV**: **assegnazione EPG manuale** per i canali senza guida, **promemoria** sui programmi (avviso con *Guarda* quando iniziano).
+- **PIN per singola playlist** (*Impostazioni → PIN delle playlist*).
+
+**Lettore (APK 2.1.0)**
+- **Salta intro** sulle serie: segni una volta inizio e fine della sigla (pulsante *Intro* nel lettore) e vale per tutti gli episodi; pulsante «Salta intro» o salto automatico.
+- **Immagine nell'immagine** (PiP) con il tasto Home, dove il dispositivo lo supporta.
+- **Multi-schermo**: 2 o 4 canali insieme (menu del tasto OK su un canale); l'audio segue il riquadro selezionato, OK cambia canale o lo apre a schermo intero. Permesso *Multi-schermo* nel pannello.
+- **Assistente IA** (menu del tasto OK e Guida TV): domande sul titolo («di cosa parla?», «è adatto ai bambini?») senza anticipazioni, con Claude. Permesso *Assistente IA* nel pannello, massimo 40 domande al giorno per dispositivo.
+- **Temi nuovi**: oro, smeraldo, oceano, tramonto, viola, rosa.
+
+**Da impostare (facoltativo)**
+- Età consigliata, contenuti speciali e ricerca per attore usano lo stesso segreto `TMDB_KEY` dei trailer: senza, quelle voci semplicemente non compaiono.
+- Assistente IA: aggiungi il segreto **`ANTHROPIC_API_KEY`** al worker (Cloudflare → Workers → kairos → Impostazioni → Variabili e segreti, tipo *Segreto*). Senza, la voce non compare. Il costo dipende dalle domande fatte (il limite di 40 al giorno per dispositivo lo tiene sotto controllo).
+- **Google Cast non è incluso**: le Fire TV non hanno i Google Play Services, quindi il pulsante non funzionerebbe sui dispositivi dei clienti.
+
+**Controllo e fluidità**
+- Interfaccia più leggera: i lettori web (hls.js, mpegts.js) e i caratteri non bloccano più l'avvio (nell'app non servono), ordinamenti e filtri calcolati una volta sola e riusati, copertina della home senza ordinare tutta la libreria, impostazioni lette dalla memoria, archivi locali (posizioni, durate, loghi) con un limite, attivazione controllata ogni 12 s senza richieste sovrapposte, effetti di vetro tolti anche dai badge in modalità leggera.
+- Correzioni: nomi strani nel menu del tasto OK, scheda che perdeva gli episodi quando arrivava l'età consigliata, contenuti dimostrativi mai mandati al lettore, guida XMLTV rovinata che bloccava lo stato «Scarico…», anteprima che copriva la finestra di uscita in Guida TV.
+- App Android: WebView di sistema in aggiornamento o chiusa dal sistema → messaggio o ripartenza invece di un crash; trailer in pausa con il tasto Home; OK premuto due volte non apre più due lettori; in secondo piano il lettore non fa più lavoro ogni secondo; aggiornamento APK: download interrotto, file rovinato o di un'altra app rifiutati con un messaggio chiaro, niente passaggio da https a http, il vecchio file viene cancellato.
+- Server: la cache di trailer, età e attori salva i «non trovato» solo per dispositivi registrati (titoli inventati non riempiono il database); l'API non restituisce mai password delle playlist (anche dopo *Cambia DNS* o una modifica) e un `PUT` con le playlist **conserva password e indirizzi** delle playlist esistenti invece di cancellarli; corpo `null` → errore 400 invece di 500; limite degli errori dell'app contato per problema; meno query in *Online ora* e nel controllo delle visioni contemporanee; il pannello non interroga il server con la scheda nascosta.
+- Serve la release **2.1.0** per la parte nativa (salta intro, PiP, multi-schermo, correzioni Android); il resto arriva da solo con l'interfaccia.
+
 ## Come funziona per i clienti
 
 1. Installano l'app (codice Downloader) e la aprono: compare un **codice** tipo `KXAB-7Q2M`.

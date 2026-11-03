@@ -13,13 +13,14 @@ import java.security.MessageDigest
  * - deve essere più recente della versione installata (evita il ciclo "aggiorna alla stessa versione")
  * - deve essere firmato con la stessa chiave (altrimenti Android rifiuta l'installazione)
  * Restituisce null se si può installare, altrimenti il messaggio da mostrare.
- * Se un dato non è leggibile su questo dispositivo il controllo viene saltato (decide Android).
+ * Un file non leggibile o di un'altra app viene rifiutato; se manca solo la firma il controllo viene saltato (decide Android).
  */
 object ApkCheck {
     fun verify(ctx: Context, apk: File): String? {
         val pm = ctx.packageManager
-        val info = archiveInfo(pm, apk.absolutePath, 0) ?: return null
-        if (info.packageName != ctx.packageName) return null // non è un aggiornamento di questa app
+        // file non leggibile (download interrotto o rovinato): meglio dirlo subito che far fallire l'installer
+        val info = archiveInfo(pm, apk.absolutePath, 0) ?: return "Il file scaricato è danneggiato: riprova l'aggiornamento"
+        if (info.packageName != ctx.packageName) return "Il file scaricato non è un aggiornamento di questa app: controlla il link dell'APK nel pannello"
         val newCode = code(info)
         val myCode = BuildConfig.VERSION_CODE.toLong()
         if (newCode == myCode) return "È la stessa versione già installata"

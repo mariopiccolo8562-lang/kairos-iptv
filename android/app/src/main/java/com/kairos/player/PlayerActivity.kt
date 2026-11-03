@@ -90,6 +90,80 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private var triedFallback = false
     private var retries = 0
 
+    /* ---------------- salta intro (serie) e immagine nell'immagine ---------------- */
+    private var introKey = ""
+    private var intro: LongArray? = null
+    private var introAuto = false
+    private var introChanged = false
+    private var introDoneFor = ""
+    private var introStartMark = -1L
+    private lateinit var skipView: TextView
+    private var pipOk = true
+
+    /** ogni secondo: mostra «Salta intro» (o la salta da solo) mentre si è dentro l'intro segnata */
+    private fun introTick() {
+        if (!::skipView.isInitialized) return
+        val iv = intro; val e = engine
+        if (iv == null || isLive || e == null || !e.isPlaying() || zapPending) { if (skipView.visibility == View.VISIBLE) skipView.visibility = View.GONE; return }
+        val pos = e.position()
+        val inside = pos >= iv[0] && pos < iv[1] - 3000
+        if (inside && introAuto && introDoneFor != item.id) { introDoneFor = item.id; skipIntro(); toast("Intro saltata"); return }
+        if (inside && introDoneFor != item.id) { if (skipView.visibility != View.VISIBLE) { skipView.visibility = View.VISIBLE; skipView.alpha = 0f; skipView.animate().alpha(1f).setDuration(200).start() } }
+        else if (skipView.visibility == View.VISIBLE) skipView.visibility = View.GONE
+    }
+    private fun skipIntro() {
+        val iv = intro ?: return
+        introDoneFor = item.id
+        skipView.visibility = View.GONE
+        engine?.seekTo(iv[1])
+    }
+    private fun fmtT(ms: Long): String { val t = ms / 1000; return if (t >= 3600) String.format(Locale.ITALIAN, "%d:%02d:%02d", t / 3600, t / 60 % 60, t % 60) else String.format(Locale.ITALIAN, "%d:%02d", t / 60, t % 60) }
+    private fun menuIntro() {
+        val pos = engine?.position() ?: 0L
+        val iv = intro
+        val opts = mutableListOf(
+            Track("start", "Segna INIZIO intro qui (${fmtT(pos)})", false),
+            Track("end", "Segna FINE intro qui (${fmtT(pos)})" + (if (introStartMark < 0 && iv == null) " · dall'inizio" else ""), false),
+            Track("auto", "Salta automaticamente: " + if (introAuto) "Sì" else "No", false),
+        )
+        if (iv != null) opts.add(0, Track("info", "Intro: ${fmtT(iv[0])} – ${fmtT(iv[1])} (vale per tutti gli episodi)", false))
+        if (iv != null) opts.add(Track("del", "Cancella l'intro segnata", false))
+        choose("Salta intro", opts, "") {
+            when (it.id) {
+                "start" -> { introStartMark = pos; toast("Inizio intro segnato: ora vai alla fine e scegli «Segna FINE»") }
+                "end" -> {
+                    val st = if (introStartMark in 0 until pos) introStartMark else if (iv != null && iv[0] < pos) iv[0] else 0L
+                    if (pos - st < 5000) { toast("L'intro deve durare almeno 5 secondi"); return@choose }
+                    intro = longArrayOf(st, pos); introChanged = true; introStartMark = -1L; introDoneFor = item.id
+                    toast("Intro segnata: ${fmtT(st)} – ${fmtT(pos)}. Negli altri episodi comparirà «Salta intro»")
+                }
+                "auto" -> { introAuto = !introAuto; introChanged = true; toast(if (introAuto) "L'intro verrà saltata da sola" else "Comparirà il pulsante «Salta intro»") }
+                "del" -> { intro = null; introChanged = true; toast("Intro cancellata") }
+            }
+        }
+    }
+    private fun canPip(): Boolean = pipOk && Build.VERSION.SDK_INT >= 26 && try { packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE) } catch (_: Throwable) { false }
+    /** tasto Home durante la visione: il video continua in una finestrella (telefoni, Android TV che lo supportano) */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (closing || !canPip() || engine?.isPlaying() != true) return
+        try {
+            if (::osd.isInitialized) { ui.removeCallbacks(hideRunnable); osd.visibility = View.GONE; brandView.visibility = View.GONE }
+            if (listOpen) closeList()
+            setOpaque(true)
+            val w = PlayStats.width.takeIf { it > 0 } ?: 16; val h = PlayStats.height.takeIf { it > 0 } ?: 9
+            val r = android.util.Rational(w, h).let { if (it.toFloat() > 2.39f || it.toFloat() < 0.42f) android.util.Rational(16, 9) else it }
+            enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().setAspectRatio(r).build())
+        } catch (_: Throwable) {}
+    }
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        if (!::osd.isInitialized) return
+        if (isInPictureInPictureMode) { osd.visibility = View.GONE; brandView.visibility = View.GONE; zapView.visibility = View.GONE; if (::skipView.isInitialized) skipView.visibility = View.GONE }
+        // finestrella chiusa con la X: il lettore si chiude
+        else if (stopped) finishWithResult()
+    }
+
     /* ---------------- recupero automatico ---------------- */
     /** qualità adattiva: passa da solo alla versione più leggera del canale se la linea non regge */
     private var adapt = true
@@ -265,6 +339,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     }
 
     private fun watchdog() {
+        try { introTick() } catch (_: Throwable) {}
         if (zapPending || stopped) return
         val now = System.currentTimeMillis()
         val e = engine
@@ -346,6 +421,10 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             showRes = j.optBoolean("res", true)
             autoNext = j.optBoolean("autoNext", false)
             adapt = j.optBoolean("adapt", true)
+            pipOk = j.optBoolean("pip", true)
+            introKey = j.optString("introKey", "")
+            introAuto = j.optBoolean("introAuto", false)
+            j.optJSONArray("intro")?.let { a -> if (a.length() == 2 && a.optLong(1) > a.optLong(0)) intro = longArrayOf(a.optLong(0) * 1000, a.optLong(1) * 1000) }
             engineKey = j.optString("engineKey", "")
             baseEngine = engineName
             resumeMs = j.optLong("start", 0L)
@@ -560,6 +639,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         if (!isLive) {
             bar.addView(button("−10 s") { seekAdd(-10_000) })
             bar.addView(button("+30 s") { seekAdd(30_000) })
+            if (introKey.isNotEmpty()) bar.addView(button("Intro") { menuIntro() })
         }
         val scroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(bar) }
 
@@ -578,6 +658,12 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         root.addView(zapView)
         root.addView(spinner)
         root.addView(msgView)
+        skipView = button("Salta intro  ›") { skipIntro() }.apply {
+            visibility = View.GONE
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+            layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.END).apply { setMargins(0, 0, dp(48), dp(64)) }
+        }
+        root.addView(skipView)
     }
 
     @Suppress("DEPRECATION")
@@ -937,6 +1023,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (closing) return true
         if (listOpen && listKey(keyCode, event)) return true
+        if (::skipView.isInitialized && skipView.visibility == View.VISIBLE && osd.visibility != View.VISIBLE &&
+            (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER)) { skipIntro(); return true }
         val barFocused = osd.visibility == View.VISIBLE && bar.hasFocus()
         if (barFocused) {
             touchOsd()
@@ -1409,6 +1497,9 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         completeHandoff(true)
         stopped = true
         ui.removeCallbacks(watchRunnable); cancelRetry()
+        // in secondo piano niente lavoro inutile ogni secondo (statistiche, orologio dell'OSD)
+        ui.removeCallbacks(statsRunnable); ui.removeCallbacks(tickRunnable)
+        PlayStats.stop()
         isBuffering = false; bufferingSince = 0L; freezeSec = 0; lastFrames = -1L; okSince = 0L
         if (zapPending) { ui.removeCallbacks(zapPlay); zapPending = false; markPlaying(); resetRecovery(); currentUrl = item.url }
         val pendingSeek = seekTarget
@@ -1424,6 +1515,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         if (stoppedAt >= 0 && currentUrl.isNotEmpty()) startUrl(currentUrl, stoppedAt)
         stoppedAt = -1L
         ui.removeCallbacks(watchRunnable); ui.postDelayed(watchRunnable, 1000)
+        if (engine != null) statsStart()
+        if (::osd.isInitialized && osd.visibility == View.VISIBLE) { ui.removeCallbacks(tickRunnable); ui.post(tickRunnable) }
     }
 
     private var closing = false
@@ -1447,6 +1540,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             .put("dur", (e?.duration() ?: 0L) / 1000)
             .put("height", e?.videoHeight() ?: 0)
         if (userChangedEngine) { r.put("engine", engineName); r.put("engineKey", engineKey) }
+        if (introChanged && introKey.isNotEmpty()) { r.put("introKey", introKey); r.put("introAuto", introAuto); intro?.let { r.put("intro", org.json.JSONArray().put(it[0] / 1000).put(it[1] / 1000)) } ?: r.put("intro", org.json.JSONArray()) }
         setResult(android.app.Activity.RESULT_OK, Intent().putExtra(RESULT, r.toString()))
         val box = Handoff.box
         val v = e?.view

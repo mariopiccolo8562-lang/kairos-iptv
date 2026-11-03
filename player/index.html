@@ -8,9 +8,7 @@
 <title>KAIROS Player</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Orbitron:wght@500;700;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Orbitron:wght@500;700;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
 :root{
   --a1:#22e1ff; --a2:#7b5cff; --a3:#ff3df2;
@@ -585,7 +583,7 @@ img{display:block}
 .track{contain:layout paint}
 .rail .rlogo{width:44px;height:44px;top:26px;left:24px}
 /* ---------- modalità leggera (app su TV): niente effetti costosi, più fluidità ---------- */
-.lite .glass,.lite .annc,.lite .detail{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+.lite .glass,.lite .annc,.lite .detail,.lite .post .rt,.lite .hage,.lite .agb{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 .lite .glass{background:rgba(24,24,30,.94)}
 .lite .aurora,.lite .hbg img.blur{display:none!important}
 .lite .screen.on{animation:fadein .28s ease forwards}
@@ -642,6 +640,27 @@ img{display:block}
 .hmeta{gap:10px;font-size:clamp(13px,2.2vh,19px);text-transform:none}
 .hmeta i{font-style:normal;color:#888}
 .hmeta .gen{text-transform:uppercase;letter-spacing:.04em}
+.aichips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:6px 0}
+.aians{text-align:left;max-height:40vh;overflow:auto;margin:10px 0;line-height:1.5}.aians .aiq{color:var(--mut);font-size:13px;margin:0 0 6px}.aians .ait{font-size:15px}
+.rbtn.ai{color:var(--a2)}
+.wv{position:absolute;right:6px;top:6px;z-index:2;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--a1);color:#fff;font-size:12px;font-weight:900;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+.ep.seen>b::after{content:' ✓';color:#3ddc84}
+.tagl{max-height:42vh;overflow:auto}.tagb.on{border-color:var(--a1);background:var(--a1-22)}
+.tagn{display:flex;gap:10px;margin:14px 0 6px}.tagn .inp{flex:1;margin:0}
+.mform{display:grid;gap:10px;text-align:left;margin:10px 0}.mform label{display:grid;gap:4px;font-size:13px;color:var(--mut)}.mform .inp{margin:0}
+.ordl{max-height:52vh;overflow:auto;display:grid;gap:6px;margin:10px 0;padding:2px}
+.ordb{display:flex;align-items:center;gap:12px;justify-content:flex-start;text-align:left}.ordb b{min-width:28px;color:var(--mut);font-variant-numeric:tabular-nums}
+.ordb.mv{background:var(--a1);color:#fff;transform:scale(1.02)}.ordb.mv b{color:#fff}.ordb i{margin-left:auto;font-style:normal;opacity:.9}
+.hage{position:absolute;right:clamp(16px,4vw,60px);top:44%;z-index:3;display:none;align-items:stretch;height:clamp(34px,5.6vh,50px);border-radius:4px;overflow:hidden;background:rgba(40,40,46,.72);backdrop-filter:blur(6px);box-shadow:0 6px 18px rgba(0,0,0,.35);animation:fadein .35s}
+.hage.on{display:flex}.hage i{width:7px;background:var(--a1)}.hage b{display:grid;place-items:center;padding:0 clamp(14px,2vw,26px);font-size:clamp(15px,2.6vh,22px);font-weight:800;color:#fff;letter-spacing:.02em}
+.agb{display:inline-grid;place-items:center;min-width:26px;height:20px;padding:0 6px;border-radius:5px;font-size:12px;font-weight:800;color:#fff;background:#2c8a4b;border:1px solid rgba(255,255,255,.2)}
+.agb.a6{background:#3a7bd5}.agb.a14{background:#e08a1e}.agb.a18{background:#c62828}
+.xtras{display:flex;gap:14px;overflow-x:auto;padding:4px 2px 10px;scrollbar-width:none}
+.xtra{flex:0 0 clamp(180px,22vw,260px);position:relative;text-align:left;background:none;border:0;color:inherit;padding:0;cursor:pointer}
+.xtra img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;display:block;background:#222}
+.xtra i{position:absolute;left:10px;top:10px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:rgba(0,0,0,.6);font-style:normal;font-size:12px}
+.xtra b{display:block;margin-top:8px;font-size:14px;line-height:1.3;max-height:2.6em;overflow:hidden}.xtra small{color:var(--mut);font-size:12px}
+.xtra.focused img,.xtra:focus img{outline:3px solid #fff;outline-offset:2px}
 .hrate{display:flex;align-items:center;gap:12px;color:#ddd;font-weight:600;font-size:clamp(12px,2vh,17px);margin-bottom:8px}
 .hrate .st{color:#ffd23d}
 .hrate .q{border:1px solid rgba(255,255,255,.4);padding:1px 7px;border-radius:4px;font-size:.85em}
@@ -743,6 +762,7 @@ img{display:block}
 .gp b{font-size:calc(clamp(11px,1.9vh,15px) * var(--ts,1));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}
 .gp small{color:#999;font-size:calc(clamp(10px,1.6vh,12px) * var(--ts,1));white-space:nowrap;margin-top:2px}
 .gp.now{background:var(--a1-30)}
+.gp.rem::after{content:"🔔";position:absolute;right:6px;top:4px;font-size:12px}
 .gp.past{opacity:.55}
 .gp.noepg b{color:#999;font-weight:600}
 .gp.focused{background:#fff;color:#000;outline:0;z-index:3}.gp.focused small{color:#444}.gp.focused.noepg b{color:#333}
@@ -1296,11 +1316,21 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 /* i dati personali (preferiti, cronologia, blocchi…) sono separati per ogni profilo */
 let profNs = (() => { try { return JSON.parse(localStorage.getItem('kx_profNs') || '""') || ''; } catch { return ''; } })();
 // il PIN del controllo genitori (pinH) è unico per il dispositivo: è quello del genitore e protegge anche l'uscita dai profili bambini
-const PROF_KEYS = new Set(['favs', 'recent', 'pos', 'dur', 'hidden', 'locked', 'parental', 'adultHome', 'o_lockAdult', 'lastCh']);
+const PROF_KEYS = new Set(['favs', 'recent', 'pos', 'dur', 'hidden', 'locked', 'parental', 'adultHome', 'o_lockAdult', 'lastCh', 'watched', 'queue', 'tags', 'catOrder', 'catNames', 'meta', 'epgMap', 'reminders']);
+const storeMem = new Map(); // impostazioni semplici (sì/no, testi, numeri) già lette: niente localStorage + JSON.parse a ogni chiamata
+/* tiene solo le ultime n voci di un archivio (le più vecchie sono le prime inserite) */
+const capObj = (o, n) => { const k = Object.keys(o); for (let i = 0; i < k.length - n; i++) delete o[k[i]]; return o; };
+const isPrim = (v) => v === undefined || v === null || typeof v !== 'object';
 const store = {
   key(k) { return 'kx_' + (profNs && PROF_KEYS.has(k) ? 'p' + profNs + '_' : '') + k; },
-  get(k, d) { try { const v = localStorage.getItem(store.key(k)); return v == null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(store.key(k), JSON.stringify(v)); } catch {} },
+  get(k, d) {
+    const key = store.key(k);
+    if (storeMem.has(key)) { const v = storeMem.get(key); return v === undefined ? d : v; }
+    let v; try { const r = localStorage.getItem(key); v = r == null ? undefined : JSON.parse(r); } catch { v = undefined; }
+    if (isPrim(v)) storeMem.set(key, v); // gli oggetti restano letti ogni volta (chi li modifica ne ha una copia propria)
+    return v === undefined ? d : v;
+  },
+  set(k, v) { const key = store.key(k); if (isPrim(v)) storeMem.set(key, v); else storeMem.delete(key); try { localStorage.setItem(key, JSON.stringify(v)); } catch {} },
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -1311,6 +1341,12 @@ const THEMES = {
   matrix: ['#3dffb0', '#22e1ff', '#3d7bff'],
   solar:  ['#ffb23d', '#ff3d6e', '#b13dff'],
   ice:    ['#9ef0ff', '#5d9bff', '#c3b5ff'],
+  oro:      ['#f5c542', '#ff9d2e', '#b8860b'],
+  smeraldo: ['#2ee59d', '#13a8a8', '#0b7a4b'],
+  oceano:   ['#2f80ed', '#56ccf2', '#1b3a8f'],
+  tramonto: ['#ff6b35', '#f7c548', '#c2185b'],
+  viola:    ['#9b5cff', '#d86bff', '#5b2bd1'],
+  rosa:     ['#ff5fa2', '#ff9ec7', '#c2185b'],
 };
 function applyTheme(name) {
   const t = THEMES[name] || THEMES.cinema;
@@ -1336,6 +1372,7 @@ const S = {
   lib: { live: [], movies: [], series: [], liveCats: [], movieCats: [], seriesCats: [] },
   favs: new Set(store.get('favs', [])),
   recent: store.get('recent', []),
+  watched: new Set(store.get('watched', [])), queue: store.get('queue', []), tags: store.get('tags', {}),
   sound: store.get('sound', true),
   stack: [],
   liveCat: 'all', liveIndex: [], playingLive: null,
@@ -1719,7 +1756,7 @@ window.kxBack = () => {
 function confirmExit() {
   if ($('#exitM')) return;
   const wasPv = S.previewing;
-  if ($('#live').classList.contains('on') && wasPv) { try { NATIVE && NATIVE.previewStop && NATIVE.previewStop(); } catch {} }
+  if (($('#live').classList.contains('on') || $('#guide').classList.contains('on')) && wasPv) { try { NATIVE && NATIVE.previewStop && NATIVE.previewStop(); } catch {} }
   S.exitPv = wasPv;
   fx('ok');
   document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="exitM"><div class="sbox exitbox">${LOGO_SVG('kgX')}<h2>Vuoi uscire da ${esc(S.settings.brand || 'KAIROS')}?</h2><p class="mut">Potrai tornare quando vuoi: i tuoi canali restano salvati.</p>
@@ -1765,9 +1802,9 @@ function plBtnHTML() {
 function plPickDialog() {
   const l = plList(), sel = plSel(), opts = (plMode() === 'merge' ? [{ id: 'all', name: 'Tutte le playlist (unite)', tag: '', col: '' }] : []).concat(l);
   kxModal('plPickM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">CAMBIA PLAYLIST</div>
-    <div class="plpick">${opts.map((p) => `<button class="btn${p.id === sel ? ' pri' : ''}" data-f data-plp="${esc(p.id)}">${p.tag ? `<i class="plb" style="--pc:${p.col}">${esc(p.tag)}</i>` : '<i class="plb all">TUTTE</i>'}<span>${esc(p.name)}</span>${p.id === sel ? '<b>✓</b>' : ''}</button>`).join('')}</div>`);
-  setTimeout(() => focus($(`#plPickM [data-plp="${sel}"]`) || $('#plPickM [data-plp]'), true), 40);
-  $$('#plPickM [data-plp]').forEach((b) => (b.onclick = () => { kxClose('plPickM'); plUse(b.dataset.plp); }));
+    <div class="plpick">${opts.map((p) => `<button class="btn${p.id === sel ? ' pri' : ''}" data-f data-plp="${esc(p.id)}">${p.tag ? `<i class="plb" style="--pc:${p.col}">${esc(p.tag)}</i>` : '<i class="plb all">TUTTE</i>'}<span>${plLocked(p.id) ? '🔒 ' : ''}${esc(p.name)}</span>${p.id === sel ? '<b>✓</b>' : ''}</button>`).join('')}</div>`);
+  setTimeout(() => focus($(`#plPickM [data-plp="${CSS.escape(sel)}"]`) || $('#plPickM [data-plp]'), true), 40);
+  $$('#plPickM [data-plp]').forEach((b) => (b.onclick = async () => { const id = b.dataset.plp; kxClose('plPickM'); if (id !== 'all' && plLocked(id) && !(await plUnlockAsk(id))) return; plUse(id); }));
 }
 function plUse(id) {
   if (id === plSel()) return;
@@ -2074,7 +2111,7 @@ function xtreamMap(d, pl) {
   const cm = (a) => new Map(a.map((x) => [String(x.category_id), x.category_name]));
   const lc = cm(d.lc), vc = cm(d.vc), sc = cm(d.sc), h = pl.host, U = pl.U, P = pl.P, id = pl.id;
   return {
-    live: d.ls.map((s, i) => ({ id: 'x' + s.stream_id, k: 'l', sid: s.stream_id, num: +s.num || i + 1, name: String(s.name ?? ''), logo: s.stream_icon, epgId: s.epg_channel_id || '', arch: +s.tv_archive ? +s.tv_archive_duration || 1 : 0, group: lc.get(String(s.category_id)) || 'Altro', url: `${h}/live/${U}/${P}/${s.stream_id}.m3u8`, alt: `${h}/live/${U}/${P}/${s.stream_id}.ts`, pl: id })),
+    live: d.ls.map((s, i) => ({ id: 'x' + s.stream_id, k: 'l', sid: s.stream_id, num: +s.num || i + 1, added: +s.added || 0, name: String(s.name ?? ''), logo: s.stream_icon, epgId: s.epg_channel_id || '', arch: +s.tv_archive ? +s.tv_archive_duration || 1 : 0, group: lc.get(String(s.category_id)) || 'Altro', url: `${h}/live/${U}/${P}/${s.stream_id}.m3u8`, alt: `${h}/live/${U}/${P}/${s.stream_id}.ts`, pl: id })),
     movies: d.vs.map((s) => ({ id: 'xm' + s.stream_id, k: 'm', vid: s.stream_id, name: String(s.name ?? ''), poster: s.stream_icon, group: vc.get(String(s.category_id)) || 'Altro', rating: s.rating, added: +s.added || 0, url: `${h}/movie/${U}/${P}/${s.stream_id}.${s.container_extension || 'mp4'}`, pl: id })),
     series: d.ss.map((s) => ({ id: 'xs' + s.series_id, k: 's', seriesId: s.series_id, name: String(s.name ?? ''), poster: s.cover, group: sc.get(String(s.category_id)) || 'Altro', rating: s.rating, plot: s.plot, genre: s.genre, cast: s.cast, added: +s.last_modified || 0, backdrop: (Array.isArray(s.backdrop_path) ? s.backdrop_path[0] : s.backdrop_path) || '', year: (s.releaseDate || s.release_date || '').slice(0, 4), pl: id })),
   };
@@ -2169,6 +2206,38 @@ function plSel() {
 }
 /* divise e senza permesso di cambiarla: si scarica solo la playlist da usare (avvio più veloce) */
 const libPlaylists = () => { const all = activePlaylists(); if (all.length < 2 || plMode() !== 'split' || perm('plSwitch')) return all; const sel = plSel(); return all.filter((p) => p.id === sel); };
+/* playlist protette da PIN: i loro contenuti restano nascosti finché non si inserisce il PIN (vale fino alla chiusura dell'app) */
+S.plUnlocked = new Set();
+const plPins = () => store.get('plPins', {});
+const plLocked = (id) => !!plPins()[id] && !S.plUnlocked.has(id);
+function plLockFilter(lib) {
+  const pins = plPins(); if (!Object.keys(pins).length) return lib;
+  const off = new Set(Object.keys(pins).filter((id) => !S.plUnlocked.has(id))); if (!off.size) return lib;
+  const f = (a) => a.filter((x) => !x.pl || !off.has(x.pl));
+  const out = { ...lib, live: f(lib.live), movies: f(lib.movies), series: f(lib.series) };
+  if (!out.live.length && !out.movies.length && !out.series.length && (lib.live.length || lib.movies.length || lib.series.length) && !S.plAsk) { S.plAsk = true; setTimeout(() => plUnlockAsk([...off][0]), 600); }
+  return out;
+}
+async function plUnlockAsk(id) {
+  const p = plList().find((x) => x.id === id) || allPlaylists().find((x) => x.id === id);
+  const v = await askPin('Playlist protetta', p ? p.name : ''); S.plAsk = false;
+  if (v == null) return false;
+  if (hashStr('plpin:' + id + ':' + v) !== plPins()[id]) { fx('err'); toast('PIN errato'); return false; }
+  S.plUnlocked.add(id); toast('🔓 Playlist sbloccata'); plRerender(); return true;
+}
+async function plPinToggle(id) {
+  const pins = plPins();
+  if (pins[id]) {
+    if (!S.plUnlocked.has(id) && !(await plUnlockAsk(id))) return;
+    delete pins[id]; store.set('plPins', pins); toast('🔓 PIN della playlist tolto');
+  } else {
+    const a = await askPin('PIN per questa playlist', 'Servirà per vederla e per modificarla'); if (a == null) return;
+    const b = await askPin('Ripeti il PIN'); if (b == null) return;
+    if (a !== b) { fx('err'); return toast('I due PIN non coincidono'); }
+    pins[id] = hashStr('plpin:' + id + ':' + a); store.set('plPins', pins); S.plUnlocked.delete(id); toast('🔒 Playlist protetta con PIN'); plRerender();
+  }
+  renderSettings('pl');
+}
 function plFilter(lib) {
   const sel = plSel();
   if (sel === 'all' || (S.prof && S.prof.pl && S.prof.pl !== 'all')) return lib;
@@ -2218,9 +2287,12 @@ async function fetchLibrary(onMsg) {
   if (parts.every((x) => !x || x.sig)) lib.sig = hashStr(all.map((p, i) => p.id + ':' + (parts[i] ? parts[i].sig : '-')).join('|'));
   return { lib, ok: parts.some(Boolean), total: all.length };
 }
+let libLoadGen = 0; // ogni caricamento ha il suo numero: uno più vecchio che finisce dopo non sovrascrive quello nuovo
 async function loadLibrary() {
   bootMsg('Caricamento contenuti');
+  const gen = ++libLoadGen;
   const r = await fetchLibrary((d, t) => bootMsg(`Caricamento contenuti ${d}/${t}`));
+  if (gen !== libLoadGen) return;
   if (r.total && !r.ok) toast('Impossibile caricare la playlist: ' + (S.loadErrors[0] || ''), 6000);
   else if (S.loadErrors.length) toast('Non caricata: ' + S.loadErrors[0], 5000);
   setLib(r.lib);
@@ -2230,8 +2302,10 @@ async function loadLibrary() {
 async function refreshLibrary(manual) {
   if (S.demo || S.refreshing) return;
   S.refreshing = true;
+  const gen = libLoadGen;
   try {
     const r = await fetchLibrary();
+    if (gen !== libLoadGen) return; // nel frattempo è stata caricata un'altra playlist
     if (!r.ok) { if (manual) toast('Aggiornamento non riuscito: ' + (S.loadErrors[0] || ''), 5000); return; }
     // se una playlist non ha risposto si tiene la versione in memoria (altrimenti i suoi contenuti sparirebbero)
     if (S.loadErrors.length) { if (manual) S.refreshPartial = true; return; }
@@ -2241,7 +2315,7 @@ async function refreshLibrary(manual) {
       // la nuova libreria si applica quando il telecomando è fermo (setLib su 100.000 titoli non deve interrompere chi naviga);
       // a richiesta manuale si applica subito
       const apply = () => {
-        if (S.libSig !== prev || S.inPlayer) { if (S.libSig !== prev) return; return whenIdle(apply, 2000, 2000, 120e3); }
+        if (S.libSig !== prev || S.inPlayer || gen !== libLoadGen) { if (S.libSig !== prev || gen !== libLoadGen) return; return whenIdle(apply, 2000, 2000, 120e3); }
         setLib(r.lib); S.libSig = sig;
         whenIdle(() => S.fullLib && LibCache.save(S.fullLib), 1000, 2000, 60e3); // si salva quando il telecomando è fermo
         if (!manual) toast('Contenuti aggiornati');
@@ -2294,9 +2368,27 @@ const LibCache = {
 /* righe "separatore" delle playlist (es. "----DAZN SERIE A*----", "##### SPORT #####"): non sono canali */
 const RX_SEP = /^[\s\-=#*_~▬═━─•●◆★☆✦|+<>.:]{3,}|^[\s\-=#*_~▬═━─•●◆★☆✦|+<>.:]{2,}.*[\-=#*_~▬═━─•●◆★☆✦|+<>]{2,}\s*$/;
 const isSepCh = (c) => { const n = String(c.name || '').trim(); return !n || /[\-=#▬═━─_*~]{4,}/.test(n) || (RX_SEP.test(n) && n.replace(/[^\p{L}\p{N}]/gu, '').length < n.length * 0.85); };
+/* nomi delle categorie e informazioni dei contenuti modificati dall'utente (originali conservati in _g0 / _m0) */
+let editsOn = false;
+function applyUserEdits(lib) {
+  const names = store.get('catNames', {}), meta = store.get('meta', {});
+  const hasN = Object.keys(names).length > 0, hasM = Object.keys(meta).length > 0;
+  if (!hasN && !hasM && !editsOn) return; // nessuna modifica: nessun lavoro
+  editsOn = hasN || hasM;
+  for (const [arr, k] of [[lib.live, 'l'], [lib.movies, 'm'], [lib.series, 's']]) for (const x of arr) {
+    if (hasN && x._g0 === undefined) x._g0 = x.group;
+    if (x._g0 !== undefined) x.group = names[k + '|' + x._g0] || x._g0;
+    const m = hasM ? meta[x.id] : null;
+    if (m || x._m0) {
+      if (!x._m0) x._m0 = { name: x.name, year: x.year || '', poster: x.poster || '', plot: x.plot || '' };
+      Object.assign(x, x._m0);
+      if (m) { for (const f of ['name', 'year', 'poster', 'plot']) if (m[f]) x[f] = m[f]; } else delete x._m0;
+    }
+  }
+}
 function setLib(lib) {
   if (!lib.clean && lib.live.some(isSepCh)) lib = { ...lib, live: lib.live.filter((c) => !isSepCh(c)) };
-  S.fullLib = lib; trendCache = null;
+  S.fullLib = lib; trendCache = null; libGen++; featMemo = null;
   { // contenuti di una cache vecchia senza la playlist d'origine
     const ids = activePlaylists().map((p) => p.id);
     if (ids.length > 1) for (const arr of [lib.live, lib.movies, lib.series]) for (const x of arr) if (!x.pl) { const id = ids.find((i) => String(x.id).endsWith(i)); if (id) x.pl = id; }
@@ -2304,7 +2396,8 @@ function setLib(lib) {
     S.plTags = new Map(pl.map((p) => [p.id, p]));
     S.plBadges = pl.length > 1 && plMode() === 'merge' && plSel() === 'all' && !(S.prof && S.prof.pl && S.prof.pl !== 'all');
   }
-  lib = plFilter(profFilter(lib));
+  lib = plLockFilter(plFilter(profFilter(lib)));
+  applyUserEdits(lib);
   lib.live.forEach((c, i) => { c.num = c.num || i + 1; c.k = 'l'; });
   lib.movies.forEach((x) => (x.k = 'm'));
   lib.series.forEach((x) => (x.k = 's'));
@@ -2408,7 +2501,7 @@ async function autoLogos() {
       a.sort((x, y) => (+(y.cc === want) - +(x.cc === want)) || (x.closed - y.closed));
       logoMap[mk] = a[0].url;
     }
-    store.set('logoMap', logoMap); store.set('logoDbT', Date.now());
+    store.set('logoMap', capObj(logoMap, 6000)); store.set('logoDbT', Date.now());
     const n = applyLogos(S.lib.live, true);
     if (n) { whenIdle(() => S.fullLib && LibCache.save(S.fullLib), 500, 2000, 60e3); toast(`Trovati ${n.toLocaleString('it')} loghi dei canali`); }
   } catch {} finally { S.logoRun = false; }
@@ -2453,11 +2546,21 @@ function demoLib() {
    ===================================================================== */
 const engines = new WeakMap();
 function stopVideo(v) {
+  v._libTok = (v._libTok || 0) + 1; // un caricamento dei lettori web in corso non riparte più
   const e = engines.get(v);
   if (e) { try { e.destroy(); } catch {} engines.delete(v); }
   v.removeAttribute('src'); try { v.load(); } catch {}
 }
+/* librerie dei lettori web: solo nel browser (nell'app il video è nativo), scaricate al primo uso */
+let webLibsP = null;
+function webLibs() {
+  if (webLibsP) return webLibsP;
+  const load = (src) => new Promise((res) => { const sc = document.createElement('script'); sc.src = src; sc.async = true; sc.onload = sc.onerror = () => res(); document.head.appendChild(sc); });
+  webLibsP = Promise.all([load('https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js'), load('https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js')]);
+  return webLibsP;
+}
 function playUrl(v, item, box) {
+  if (!(window.Hls || window.mpegts) && !(item.demo || item.url === 'demo')) { stopVideo(v); box.classList.add('loading'); const tok = (v._libTok = (v._libTok || 0) + 1); webLibs().then(() => { if (v._libTok === tok) playUrl(v, item, box); }); return; }
   stopVideo(v);
   box.classList.toggle('demo', !!item.demo || item.url === 'demo');
   if (item.demo || item.url === 'demo') { box.classList.remove('loading'); return; }
@@ -2499,8 +2602,19 @@ function playUrl(v, item, box) {
    ===================================================================== */
 const logoHTML = (c) => c.logo ? `<img loading="lazy" decoding="async" src="${esc(c.logo)}" data-c="${esc(c.id)}" onerror="kxLogoBad(this.dataset.c,this)">` : esc(c.name.replace(RX_CC, '').trim().slice(0, 2).toUpperCase());
 const recentLive = () => S.recent.filter((r) => r.kind === 'live').map((r) => S.byId && S.byId.get(r.id)).filter((x) => x && x.k === 'l').slice(0, 40);
+/* preferiti nell'ordine scelto (si può riordinare in Impostazioni › Organizza) */
+const favItems = (k) => (S.byId ? [...S.favs].map((id) => S.byId.get(id)).filter((x) => x && (k ? x.k === k : true)) : []);
+const tagItems = (t) => (S.byId ? (S.tags[t] || []).map((id) => S.byId.get(id)).filter(Boolean) : []);
+function chanList(c) {
+  if (c === 'recent') return visLive(recentLive());
+  if (c === 'fav') { const f = visLive(favItems('l')); return opt('sortCh') === 'pl' ? f : sortChannels(f); }
+  if (String(c).startsWith('tag:')) return sortChannels(visLive(tagItems(c.slice(4)).filter((x) => x.k === 'l')));
+  return sortChannels(visLive(c === 'all' ? S.lib.live : (S.byGroup && S.byGroup.get('l' + c)) || S.lib.live.filter((x) => x.group === c)));
+}
+const catLabel = (c) => (c === 'all' ? 'Tutti i canali' : c === 'fav' ? '★ Preferiti' : c === 'recent' ? '⟲ Continua a guardare' : String(c).startsWith('tag:') ? '🏷 ' + c.slice(4) : c);
 function liveCatList() {
-  return [{ name: 'all', label: 'Tutti i canali', count: visLive(S.lib.live).length }, { name: 'fav', label: '★ Preferiti', count: S.lib.live.filter((c) => S.favs.has(c.id)).length }, ...sortCats(S.lib.liveCats).map((c) => ({ ...c, label: c.name }))];
+  const tags = Object.keys(S.tags || {}).sort((a, b) => a.localeCompare(b, 'it')).map((t) => ({ name: 'tag:' + t, label: '🏷 ' + t, count: tagItems(t).filter((x) => x.k === 'l').length })).filter((t) => t.count);
+  return [{ name: 'all', label: 'Tutti i canali', count: visLive(S.lib.live).length }, { name: 'fav', label: '★ Preferiti', count: favItems('l').length }, ...tags, ...sortCats(S.lib.liveCats, 'l').map((c) => ({ ...c, label: c.name }))];
 }
 function renderLive() {
   renderChannels();
@@ -2543,7 +2657,7 @@ function variantsOf(c) {
 const qBadge = (ch) => { const q = qualityOf(ch); return q ? `<span class="qb q${q}" data-q="${esc(ch.id)}">${q}</span>` : `<span class="qb qnone" data-q="${esc(ch.id)}"></span>`; };
 function setMeasuredQuality(id, h) {
   if (!id || !(h > 0)) return;
-  qMap[id] = h; store.set('qmap', qMap);
+  delete qMap[id]; qMap[id] = h; store.set('qmap', capObj(qMap, 1500));
   const ch = S.byId && S.byId.get(id); if (!ch) return;
   const q = qualityOf(ch);
   $$(`.qb[data-q="${CSS.escape(id)}"]`).forEach((e) => { e.className = 'qb q' + q; e.textContent = q; });
@@ -2552,8 +2666,8 @@ window.kxPreviewInfo = (id, h) => setMeasuredQuality(id, +h);
 let chRendered = 0, chStart = 0; // finestra di canali disegnati: [chStart, chRendered)
 function renderChannels(from = 0) {
   const c = S.liveCat;
-  S.liveIndex = c === 'recent' ? visLive(recentLive()) : sortChannels(visLive(c === 'all' ? S.lib.live : c === 'fav' ? S.lib.live.filter((x) => S.favs.has(x.id)) : (S.byGroup && S.byGroup.get('l' + c)) || S.lib.live.filter((x) => x.group === c)));
-  $('#liveCatName').textContent = c === 'all' ? 'Tutti i canali' : c === 'fav' ? '★ Preferiti' : c === 'recent' ? '⟲ Continua a guardare' : c;
+  S.liveIndex = chanList(c);
+  $('#liveCatName').textContent = catLabel(c);
   $('#liveCatCount').textContent = S.liveIndex.length.toLocaleString('it');
   $('#liveList').scrollTop = 0;
   $('#liveList').innerHTML = S.liveIndex.length ? '' : '<div class="mut" style="padding:30px;text-align:center">Nessun canale</div>';
@@ -2561,7 +2675,49 @@ function renderChannels(from = 0) {
   moreChannels();
   const f = $('#liveList .ch'); if (f) f.setAttribute('data-autof', '');
 }
-const epgOf = (ch) => xepgItems(ch) || (S.epg.get(ch.id) || {}).items || null;
+/* guida assegnata a mano (tieni premuto OK sul canale › «Associa la guida TV»): 'x:<id XMLTV>' oppure 'c:<altro canale>' */
+let epgMapV = store.get('epgMap', {});
+function epgOf(ch, depth) {
+  const m = ch && epgMapV[ch.id];
+  if (m) {
+    if (m === '-') return null;
+    if (m.startsWith('c:') && !depth) { const o = S.byId && S.byId.get(m.slice(2)); if (o && o !== ch) return epgOf(o, 1); }
+    if (m.startsWith('x:') && S.xepg) { const it = xepgByKey(ch, m.slice(2)); if (it) return it; }
+  }
+  return xepgItems(ch) || (S.epg.get(ch.id) || {}).items || null;
+}
+const XM = new WeakMap();
+function xepgByKey(ch, key) {
+  const c = XM.get(ch); if (c && c.v === S.xepgVer && c.k === key) return c.items;
+  const X = S.xepg, arr = X.byId.get(key) || X.byName.get(key) || null;
+  const sh = (+opt('epgShift') || 0) * 3600e3;
+  const items = arr ? arr.map((x) => ({ start: x[0] * 1000 + sh, end: x[1] * 1000 + sh, title: x[2] || '', desc: x[3] || '' })).filter((x) => x.end > Date.now() - 2 * 3600e3) : null;
+  XM.set(ch, { v: S.xepgVer, k: key, items });
+  return items;
+}
+function epgMapSet(ch, v) { if (v) epgMapV[ch.id] = v; else delete epgMapV[ch.id]; store.set('epgMap', epgMapV); S.xepgVer++; }
+function epgMapDialog(ch) {
+  const cur0 = epgMapV[ch.id] || '';
+  const ids = S.xepg ? [...S.xepg.byId.keys()] : [];
+  kxModal('epgM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">GUIDA TV DEL CANALE</div><h2>${esc(ch.name)}</h2>
+    <p class="mut" style="font-size:13px">Adesso: ${cur0 === '-' ? 'nessuna guida' : cur0.startsWith('x:') ? 'guida «' + esc(cur0.slice(2)) + '»' : cur0.startsWith('c:') ? 'come «' + esc((S.byId.get(cur0.slice(2)) || {}).name || '?') + '»' : 'automatica'}</p>
+    <input class="inp" data-f id="emQ" maxlength="40" placeholder="Cerca nella guida o tra i canali (es. rai 1)" value="${esc(logoKey(ch.name).key.slice(0, 12))}">
+    <div class="ordl" id="emL"></div>
+    <div class="sbtn"><button class="btn" data-f id="emAuto">Automatica</button><button class="btn" data-f id="emNone">Nessuna guida</button><button class="btn" data-f id="emNo">Chiudi</button></div>`);
+  const draw = () => {
+    const q = $('#emQ').value.trim().toLowerCase(), qk = logoKey(q).key || q.replace(/[^a-z0-9]/g, '');
+    const xs = q ? ids.filter((k) => k.includes(q) || k.replace(/[^a-z0-9]/g, '').includes(qk)).slice(0, 30) : [];
+    const cs = q ? S.lib.live.filter((c) => c !== ch && c.name.toLowerCase().includes(q) && epgOf(c, 1)).slice(0, 20) : [];
+    $('#emL').innerHTML = [...xs.map((k) => `<button class="btn ordb" data-f data-em="x:${esc(k)}">📅 ${esc(k)}</button>`), ...cs.map((c) => { const n = nowOf(c); return `<button class="btn ordb" data-f data-em="c:${esc(c.id)}">📺 come «${esc(c.name)}»${n ? `<small> · ora: ${esc(n.title)}</small>` : ''}</button>`; })].join('')
+      || `<p class="mut">${S.xepg ? 'Nessun risultato: prova un altro nome.' : 'La guida completa (XMLTV) non è ancora caricata: puoi usare la guida di un altro canale. Cerca il suo nome qui sopra.'}</p>`;
+    $$('#emL [data-em]').forEach((b) => (b.onclick = () => done(b.dataset.em)));
+  };
+  const done = (v) => { epgMapSet(ch, v); back(); toast(v === '-' ? 'Guida tolta da questo canale' : v ? '✓ Guida TV associata' : 'Guida automatica'); if ($('#live').classList.contains('on')) { renderChannels(); S.infoCh && showInfo(S.infoCh); } if ($('#guide').classList.contains('on')) guideRender(); };
+  let t; $('#emQ').oninput = () => { clearTimeout(t); t = setTimeout(draw, 200); };
+  $('#emAuto').onclick = () => done(''); $('#emNone').onclick = () => done('-'); $('#emNo').onclick = () => back();
+  draw();
+  setTimeout(() => focus($('#emL [data-em]') || $('#emQ'), true), 40);
+}
 const nowOf = (ch) => { const it = epgOf(ch); if (!it) return null; const t = Date.now(); return it.find((x) => x.start <= t && x.end > t) || null; };
 function chHTML(ch, i) {
   const n = nowOf(ch);
@@ -2708,7 +2864,8 @@ function epgSources() {
   return [...urls].slice(0, 4);
 }
 async function loadXepgFile(path) {
-  const j = JSON.parse(await readLocal(path));
+  let j; try { j = JSON.parse(await readLocal(path)); } catch { return 0; }
+  if (!j || typeof j !== 'object') return 0;
   const byId = new Map(), byName = new Map();
   for (const [xid, keys] of Object.entries(j.map || {})) {
     const pr = (j.p || {})[xid]; if (!pr || !pr.length) continue;
@@ -2837,8 +2994,8 @@ function openGuide(fromStart) {
 function guideRender(first, target) {
   G.q.length = 0; // richieste della guida breve per righe non più a schermo
   const c = S.liveCat;
-  G.idx = c === 'recent' ? visLive(recentLive()) : sortChannels(visLive(c === 'all' ? S.lib.live : c === 'fav' ? S.lib.live.filter((x) => S.favs.has(x.id)) : (S.byGroup && S.byGroup.get('l' + c)) || S.lib.live.filter((x) => x.group === c)));
-  $('#gCatName').textContent = c === 'all' ? 'Tutti i canali' : c === 'fav' ? '★ Preferiti' : c === 'recent' ? '⟲ Continua a guardare' : c;
+  G.idx = chanList(c);
+  $('#gCatName').textContent = catLabel(c);
   $('#gCatCount').textContent = G.idx.length.toLocaleString('it');
   const d = new Date(); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() < 30 ? 0 : 30); G.T0 = +d - 30 * 60e3;
   guideGeom();
@@ -2870,7 +3027,7 @@ function guideRow(i) {
   if (items.length) {
     for (const x of items) {
       const l = Math.max(0, gx(x.start)), r = gx(Math.min(x.end, end)), w = Math.max(6, r - l);
-      blocks += `<div class="gp${x.start <= now && x.end > now ? ' now' : x.end <= now ? ' past' : ''}" data-f data-r="${i}" data-s="${x.start}" data-e="${x.end}" style="left:${l}px;width:${w - 3}px"><b>${esc(x.title)}</b><small>${hhmm(x.start)} – ${hhmm(x.end)}</small></div>`;
+      blocks += `<div class="gp${x.start <= now && x.end > now ? ' now' : x.end <= now ? ' past' : ''}${S.reminders.length && x.start > now && remHas(ch, x) ? ' rem' : ''}" data-f data-r="${i}" data-s="${x.start}" data-e="${x.end}" style="left:${l}px;width:${w - 3}px"><b>${esc(x.title)}</b><small>${hhmm(x.start)} – ${hhmm(x.end)}</small></div>`;
     }
   } else {
     // senza guida: blocchi di un'ora, così ci si muove comunque nel tempo
@@ -3019,7 +3176,7 @@ function engineFor(kind, item) {
   return e === 'auto' ? (RX_VLC_ONLY.test(item.url || '') ? 'vlc' : 'exo') : e;
 }
 function nativePlay(item, kind, fromSec, extra) {
-  if (!HAS_PLAYER) return false;
+  if (!HAS_PLAYER || item.demo || item.url === 'demo') return false;
   // l'anteprima si ferma solo se non mostra già questo canale: in quel caso il video passa allo schermo intero senza interruzioni
   if (HAS_PREVIEW && !(kind === 'live' && S.previewing && S.previewing.id === item.id)) try { NATIVE.previewStop(); } catch {}
   const P = playPrefs();
@@ -3052,7 +3209,8 @@ function nativePlay(item, kind, fromSec, extra) {
   try {
     NATIVE.play(JSON.stringify({ kind: pk, items, index, start: Math.floor(start * 1000), engine: engineFor(kind, item), engineKey: kind === 'live' ? 'engLive' : kind === 'series' ? 'engSeries' : 'engMovie',
       quality: P.quality, buffer: P.buffer, aspect: P.aspect, brand: S.settings.brand || 'KAIROS',
-      hw: opt('hw'), sub: opt('subSize'), res: !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list), adapt: !!opt('adaptQ') }));
+      hw: opt('hw'), sub: opt('subSize'), res: !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list), adapt: !!opt('adaptQ'), pip: !!opt('pip'),
+      ...(extra && extra.parent ? { introKey: String(extra.parent.id), intro: store.get('intro', {})[extra.parent.id] || [], introAuto: !!opt('introAuto') } : {}) }));
   } catch (e) { return false; }
   S.inPlayer = true;
   if (kind === 'live') { S.playingLive = item; S.playingVod = null; addRecent(item, 'live'); store.set('lastCh', item.id); } else { S.playingVod = item; S.playingLive = null; }
@@ -3061,6 +3219,68 @@ function nativePlay(item, kind, fromSec, extra) {
 }
 // chiamata dall'app quando si chiude il player nativo
 /* «Disconnetti» dal pannello: la visione in corso si interrompe (player nativo, schermo intero web, anteprima) e si torna alla home */
+/* ======== multi-schermo: 2 o 4 canali insieme (APK 2.1) ======== */
+const HAS_MULTI = !!(NATIVE && NATIVE.multi);
+function multiDialog(ch) {
+  if (!HAS_MULTI) return toast('Aggiorna l\'app per usare il multi-schermo');
+  if (!perm('multi')) return toast('Il multi-schermo non è attivo sul tuo abbonamento');
+  const ms = (S.account && +S.account.maxStreams) || 0;
+  if (ms && ms < 2) return toast('Il tuo abbonamento permette una sola visione alla volta');
+  kxModal('multiM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">MULTI-SCHERMO</div><h2>Quanti canali insieme?</h2>
+    <p class="mut" style="font-size:13px">Ogni riquadro usa una connessione del tuo abbonamento. Si sente l'audio del riquadro selezionato; con OK cambi canale. Sulle chiavette meno potenti 4 canali possono andare a scatti.</p>
+    <div class="sbtn"><button class="btn pri" data-f data-mn="2">2 canali</button>${!ms || ms >= 4 ? '<button class="btn" data-f data-mn="4">4 canali</button>' : ''}<button class="btn" data-f id="mnNo">Annulla</button></div>`);
+  $$('#multiM [data-mn]').forEach((b) => (b.onclick = () => { const n = +b.dataset.mn; back(); multiStart(ch, n); }));
+  $('#mnNo').onclick = () => back();
+  setTimeout(() => focus($('#multiM [data-mn]'), true), 40);
+}
+function multiStart(ch, n) {
+  let list = S.liveIndex.length && S.liveIndex.includes(ch) ? S.liveIndex : visLive(S.lib.live);
+  if (parentalOn() && !S.unlocked) list = list.filter((c) => c === ch || !isLocked(c));
+  const i = Math.max(0, list.indexOf(ch));
+  const sub = list.length > 3000 ? list.slice(Math.max(0, Math.min(i - 1500, list.length - 3000)), Math.max(0, Math.min(i - 1500, list.length - 3000)) + 3000) : list;
+  // versione più leggera del canale, se c'è: meno banda e meno lavoro per la chiavetta
+  const urlOf = (c) => { const v = variantsOf(c); return liveUrls(v.length ? v[v.length - 1] : c); };
+  const chans = sub.map((c) => { const [u, a] = urlOf(c); return { id: c.id, t: c.name, u, a, n: c.num || 0 }; });
+  const others = [...recentLive(), ...sub].filter((c) => c !== ch && sub.includes(c));
+  const start = [ch, ...others].filter((c, k, a) => a.indexOf(c) === k).slice(0, n).map((c) => c.id);
+  try { NATIVE.multi(JSON.stringify({ layout: n, quality: n >= 4 ? '480' : '720', start, chans })); } catch { return toast('Multi-schermo non disponibile'); }
+  stopPreview();
+  S.inPlayer = true; S.playingLive = ch;
+}
+window.kxMultiClosed = (r) => {
+  S.inPlayer = false;
+  try { r = r ? JSON.parse(r) : null; } catch { r = null; }
+  setTimeout(() => heartbeat(true), 800);
+  const ch = r && r.full && S.byId && S.byId.get(r.full);
+  if (ch) openFs(ch, 'live');
+};
+/* ======== assistente IA: domande su quello che si guarda (se il fornitore l'ha attivato) ======== */
+function aiDialog(x, prog) {
+  if (!perm('ai')) return toast('L\'assistente non è attivo sul tuo abbonamento');
+  if (S.aiOff) return toast('Assistente IA non disponibile su questo server');
+  const live = isLiveItem(x), ser = !live && isSeriesItem(x);
+  const ctx = { title: live ? (prog && prog.title) || '' : x.name, ch: live ? x.name : '', kind: live ? 'live' : ser ? 'series' : 'movie', year: x.year || '', plot: String((live ? prog && prog.desc : x.plot) || '').slice(0, 600), genre: x.genre || '', cast: String(x.cast || '').slice(0, 200) };
+  const chips = live ? ['Di cosa parla questo programma?', 'Chi lo conduce?', 'Quando va in onda di nuovo?'] : ['Di cosa parla? (senza spoiler)', 'Chi sono gli attori principali?', 'È adatto ai bambini?', ser ? 'Serie simili da guardare' : 'Film simili da guardare'];
+  kxModal('aiM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">✦ ASSISTENTE IA</div><h2>${esc(ctx.title || x.name)}</h2>
+    <div class="aichips">${chips.map((c, i) => `<button class="btn" data-f data-aq="${i}">${esc(c)}</button>`).join('')}</div>
+    <div class="tagn"><input class="inp" data-f id="aiIn" maxlength="200" placeholder="Fai una domanda…"><button class="btn pri" data-f id="aiGo">Chiedi</button></div>
+    <div class="aians" id="aiA"></div><div class="sbtn"><button class="btn" data-f id="aiNo">Chiudi</button></div>`);
+  let busy = false;
+  const ask = async (q) => {
+    q = String(q || '').trim(); if (!q || busy) return;
+    busy = true; $('#aiA').innerHTML = '<div class="mut">Sto pensando…</div>';
+    try {
+      const j = await apiPost('/api/player/ai', { q, ctx });
+      if (j && j.off) { S.aiOff = true; $('#aiA').innerHTML = '<div class="mut">Assistente IA non disponibile su questo server.</div>'; return; }
+      $('#aiA').innerHTML = `<p class="aiq">${esc(q)}</p><div class="ait">${esc(j && j.answer || 'Nessuna risposta.').replace(/\n/g, '<br>')}</div>`;
+    } catch (e) { $('#aiA').innerHTML = `<div class="mut">${esc(e.message || 'Non riesco a rispondere adesso')}</div>`; } finally { busy = false; }
+  };
+  $$('#aiM [data-aq]').forEach((b) => (b.onclick = () => ask(chips[+b.dataset.aq])));
+  $('#aiGo').onclick = () => ask($('#aiIn').value);
+  $('#aiIn').onkeydown = (e) => { if (e.key === 'Enter') ask($('#aiIn').value); };
+  $('#aiNo').onclick = () => back();
+  setTimeout(() => focus($('#aiM [data-aq]'), true), 40);
+}
 function kickedByPanel() {
   S.kicked = true;
   try { if (S.inPlayer && NATIVE && NATIVE.playerClose) NATIVE.playerClose(); } catch {}
@@ -3077,11 +3297,15 @@ window.kxPlayerClosed = (r) => {
   try { r = typeof r === 'string' ? JSON.parse(r) : r; } catch { r = null; }
   if (r && r.kicked) { try { stopPreview(); } catch {} if (!$('#home').classList.contains('on')) go('home', true); return; }
   if (!r) { evReturn(); return; }
+  // intro segnata nel lettore: vale per tutti gli episodi della serie
+  if (r.introKey) { const all = store.get('intro', {}); if (Array.isArray(r.intro) && r.intro.length === 2) all[r.introKey] = r.intro; else delete all[r.introKey]; const k = Object.keys(all); if (k.length > 300) delete all[k[0]]; store.set('intro', all); if (typeof r.introAuto === 'boolean') store.set('o_introAuto', r.introAuto); }
   if (r.engine && r.engineKey && OPT[r.engineKey] && !panelEng(r.engineKey)) store.set('o_' + r.engineKey, r.engine); // scelta fatta nel player: ricordata per quel tipo di contenuto (non se il lettore lo decide il fornitore)
   if (r.kind === 'vod' && r.id && r.dur > 0) {
     const pos = store.get('pos', {}), du = store.get('dur', {});
-    if (r.pos > 5 && r.pos < r.dur - 30) pos[r.id] = r.pos; else delete pos[r.id];
-    du[r.id] = r.dur; store.set('pos', pos); store.set('dur', du);
+    delete pos[r.id]; if (r.pos > 5 && r.pos < r.dur - 30) pos[r.id] = r.pos;
+    delete du[r.id]; du[r.id] = r.dur; store.set('pos', capObj(pos, 800)); store.set('dur', capObj(du, 1200));
+    // visto quasi tutto: segnato come già visto e tolto dalla coda
+    if (r.pos >= r.dur * 0.92 || r.dur - r.pos < 90) { setWatched(r.id, true); const qi = S.queue.indexOf(r.id); if (qi >= 0) { S.queue.splice(qi, 1); store.set('queue', S.queue); } }
     const dp = $('#detail').classList.contains('on') && $('#dPlay');
     if (dp && dp.lastChild && dp.lastChild.nodeType === 3) dp.lastChild.textContent = pos[r.id] ? 'Riprendi' : 'Riproduci';
   }
@@ -3128,7 +3352,7 @@ $('#fv').addEventListener('timeupdate', () => {
   if (fsKind === 'live') return; const v = $('#fv');
   const b = $('#osdBar'); if (b && v.duration) b.style.width = (v.currentTime / v.duration) * 100 + '%';
   const a = $('#osdA'); if (a) a.textContent = fmtT(v.currentTime) + ' / ' + fmtT(v.duration);
-  if (fsItem && v.duration && Math.floor(v.currentTime) % 15 === 0) { const pos = store.get('pos', {}); pos[fsItem.id] = v.currentTime; store.set('pos', pos); const du = store.get('dur', {}); du[fsItem.id] = v.duration; store.set('dur', du); }
+  if (fsItem && v.duration && Math.floor(v.currentTime) % 15 === 0) { if (v._posS === Math.floor(v.currentTime)) return; v._posS = Math.floor(v.currentTime); const pos = store.get('pos', {}); delete pos[fsItem.id]; pos[fsItem.id] = v.currentTime; store.set('pos', capObj(pos, 800)); const du = store.get('dur', {}); delete du[fsItem.id]; du[fsItem.id] = v.duration; store.set('dur', capObj(du, 1200)); }
 });
 function fsKey(e) {
   const k = e.key, kc = e.keyCode, v = $('#fv');
@@ -3200,6 +3424,17 @@ function closeDetail() {
   if (!f || !document.body.contains(f)) { const k = lastKeyBeforeDetail; f = k && browseFind(k.scr, k.key); }
   focus(f && isVis(f) ? f : visibleF($('.screen.on'))[0], true);
 }
+/* età e contenuti speciali arrivati dopo l'apertura della scheda: aggiunti al loro posto */
+function detailMeta(x) {
+  const hm = $('#dIn .hmeta');
+  if (hm && x.cert && !hm.querySelector('.agb')) hm.insertAdjacentHTML('afterbegin', ageBadge(x.cert));
+  const ex = (x._extras || []).filter((v) => /^[\w-]{11}$/.test(v.yt));
+  const dm = $('#dIn .dm');
+  if (dm && ex.length && !dm.querySelector('.xtras')) {
+    dm.insertAdjacentHTML('beforeend', `<div class="dsec"><div class="dsh"><h3>Contenuti speciali</h3></div><div class="xtras">${ex.map((v, i) => `<button class="xtra" data-f data-xi="${i}"><img loading="lazy" decoding="async" src="https://i.ytimg.com/vi/${v.yt}/mqdefault.jpg" onerror="this.remove()"><i>▶</i><b>${esc(v.name)}</b><small>${esc(v.type)}</small></button>`).join('')}</div></div>`);
+    $$('#dIn [data-xi]').forEach((b) => (b.onclick = () => { const v = ex[+b.dataset.xi]; if (!v) return; if (NATIVE && NATIVE.playYoutube) NATIVE.playYoutube(v.yt, v.name); else ytOverlay(v.yt, v.name); }));
+  }
+}
 async function openDetail(x) {
   if (isLocked(x) && !(await gate(x))) return;
   lastFocusBeforeDetail = cur;
@@ -3217,12 +3452,14 @@ async function openDetail(x) {
         <button class="dx" data-f data-back>✕</button>
         <div class="dht"><div class="hkind"><i class="kb">K</i>${isSeries ? 'SERIE' : 'FILM'}</div><h1>${esc(x.name)}</h1>
           <div class="acts">${isSeries ? `<button class="nbtn play" data-f data-autof id="dEp1"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>Episodi</button>` : `<button class="nbtn play" data-f data-autof id="dPlay"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>${pos ? 'Riprendi' : 'Riproduci'}</button>${pos ? '<button class="nbtn info" data-f id="dRestart">↺ Dall\'inizio</button>' : ''}`}${!S.demo && baseServer() ? '<button class="nbtn info" data-f id="dTrailer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="m10 9 5 3-5 3z" fill="currentColor"/></svg>Trailer</button>' : ''}
-          <button class="rbtn" data-f id="dFav" title="La mia lista">${S.favs.has(x.id) ? '✓' : '+'}</button></div></div>
+          <button class="rbtn" data-f id="dFav" title="La mia lista">${S.favs.has(x.id) ? '✓' : '+'}</button>${perm('ai') && !S.aiOff && !S.demo ? '<button class="rbtn ai" data-f id="dAi" title="Chiedi all\'assistente IA">✦</button>' : ''}</div></div>
       </div>
-      <div class="dbody"><div><div class="hmeta">${+x.rating ? `<span class="m">★ ${(+x.rating).toFixed(1)}</span>` : ''}${ex.year ? `<span>${esc(ex.year)}</span>` : ''}${ex.duration ? `<span>${esc(ex.duration)}</span>` : ''}<span class="bx">HD</span></div>
+      <div class="dbody"><div><div class="hmeta">${ageBadge(x.cert)}${+x.rating ? `<span class="m">★ ${(+x.rating).toFixed(1)}</span>` : ''}${ex.year ? `<span>${esc(ex.year)}</span>` : ''}${ex.duration ? `<span>${esc(ex.duration)}</span>` : ''}<span class="bx">HD</span></div>
         <p class="plot">${esc(ex.plot || 'Nessuna descrizione disponibile.')}</p></div>
         <div class="side">${ex.cast ? `<p><span>Cast:</span> ${esc(ex.cast)}</p>` : ''}${ex.genre ? `<p><span>Generi:</span> ${esc(ex.genre)}</p>` : ''}<p><span>Categoria:</span> ${esc(x.group)}</p></div></div>
-      ${isSeries ? '<div class="dsec"><div class="dsh"><h3>Episodi</h3><div class="seasons" id="dSeas"></div></div><div class="eps" id="dEps"><div class="mut">Caricamento episodi…</div></div></div>' : ''}</div>`;
+      ${isSeries ? '<div class="dsec"><div class="dsh"><h3>Episodi</h3><div class="seasons" id="dSeas"></div></div><div class="eps" id="dEps"><div class="mut">Caricamento episodi…</div></div></div>' : ''}
+      ${(x._extras || []).some((v) => /^[\w-]{11}$/.test(v.yt)) ? `<div class="dsec"><div class="dsh"><h3>Contenuti speciali</h3></div><div class="xtras">${x._extras.filter((v) => /^[\w-]{11}$/.test(v.yt)).map((v, i) => `<button class="xtra" data-f data-xi="${i}"><img loading="lazy" decoding="async" src="https://i.ytimg.com/vi/${esc(v.yt)}/mqdefault.jpg" onerror="this.remove()"><i>▶</i><b>${esc(v.name)}</b><small>${esc(v.type)}</small></button>`).join('')}</div></div>` : ''}</div>`;
+    $$('#dIn [data-xi]').forEach((b) => (b.onclick = () => { const v = x._extras.filter((y) => /^[\w-]{11}$/.test(y.yt))[+b.dataset.xi]; if (!v) return; if (NATIVE && NATIVE.playYoutube) NATIVE.playYoutube(v.yt, v.name); else ytOverlay(v.yt, v.name); }));
     $('#dEp1') && ($('#dEp1').onclick = () => { const f = $('#dEps .ep'); f && focus(f); });
     // nell'app la scheda resta aperta sotto il lettore: finita la visione si torna qui, e con Indietro alla lista nello stesso punto
     const play = (from) => { if (!HAS_PLAYER) closeDetail(); openFs(x, 'vod', from || 0); addRecent(x, 'movie'); };
@@ -3231,13 +3468,15 @@ async function openDetail(x) {
     $('#dRestart') && ($('#dRestart').onclick = () => play(0));
     $('#dTrailer') && ($('#dTrailer').onclick = () => playTrailer(x, ex));
     $('#dFav').onclick = () => { toggleFav(x); $('#dFav').textContent = S.favs.has(x.id) ? '✓' : '+'; };
+    $('#dAi') && ($('#dAi').onclick = () => aiDialog(x));
   };
   render();
   $('#detail').classList.add('on');
   setTimeout(() => focus($('#dPlay') || $('#dFav'), true), 80);
+  if (!x._extras) metaOf(x).then((j) => { if (j && alive()) detailMeta(x); });
 
   if (!isSeries && xtOf(x) && x.vid && !x.demo) {
-    try { const p = xtOf(x), j = await getJSON(`${xtBase(p)}&action=get_vod_info&vod_id=${x.vid}`); if (!alive()) return; const i = j.info || {}; render({ plot: i.plot || i.description, cast: i.cast, genre: i.genre, duration: i.duration, year: (i.releasedate || '').slice(0, 4) }); focus($('#dPlay'), true); } catch {}
+    try { const p = xtOf(x), j = await getJSON(`${xtBase(p)}&action=get_vod_info&vod_id=${x.vid}`); if (!alive()) return; const i = j.info || {}; if (!x.cert) x.cert = certNorm(i.mpaa_rating || i.age || i.rating_mpaa || i.certification); render({ plot: i.plot || i.description, cast: i.cast, genre: i.genre, duration: i.duration, year: (i.releasedate || '').slice(0, 4) }); focus($('#dPlay'), true); } catch {}
   }
   if (isSeries) {
     let eps = x.episodes || [];
@@ -3255,7 +3494,7 @@ async function openDetail(x) {
     const showSeason = (s) => {
       $$('#dSeas .chip').forEach((c) => c.classList.toggle('sel', +c.dataset.s === s));
       const list = eps.filter((e) => e.season === s).sort((a, b) => a.ep - b.ep);
-      $('#dEps').innerHTML = list.map((e, i) => `<div class="ep" data-f data-i="${i}"><b>${e.ep}</b><div class="et">${x.backdrop || x.poster ? `<img loading="lazy" decoding="async" src="${esc(x.backdrop || x.poster)}" onerror="this.remove()">` : ''}<i>▶</i></div><span>${esc(e.title)}</span></div>`).join('');
+      $('#dEps').innerHTML = list.map((e, i) => `<div class="ep${S.watched.has(e.id || x.id + 's' + e.season + 'e' + e.ep) ? ' seen' : ''}" data-f data-i="${i}"><b>${e.ep}</b><div class="et">${x.backdrop || x.poster ? `<img loading="lazy" decoding="async" src="${esc(x.backdrop || x.poster)}" onerror="this.remove()">` : ''}<i>▶</i></div><span>${esc(e.title)}</span></div>`).join('');
       const epItem = (e) => ({ id: e.id || x.id + 's' + e.season + 'e' + e.ep, ep: 1, name: `${x.name} · S${e.season} E${e.ep}${e.title && !/^episodio/i.test(e.title) ? ' · ' + e.title : ''}`, poster: x.poster, url: e.url, group: x.group, demo: x.episodes && e.url === 'demo' });
       $$('#dEps .ep').forEach((el) => (el.onclick = () => { const i = +el.dataset.i, it = epItem(list[i]); if (!HAS_PLAYER) closeDetail(); openFs(it, 'series', null, { list: list.map(epItem), index: i, parent: x }); addRecent(x, 'series'); }));
     };
@@ -3316,6 +3555,149 @@ function upcomingEvents() {
   const t = Date.now();
   return (S.events || []).filter((e) => e.live || +new Date(e.start) > t - 150 * 60e3).sort((a, b) => (+!!b.live - +!!a.live) || (+new Date(a.start) - +new Date(b.start)));
 }
+/* ======================= organizzazione personale ======================= */
+function saveWatched() { let a = [...S.watched]; if (a.length > 4000) { a = a.slice(-4000); S.watched = new Set(a); } store.set('watched', a); }
+function setWatched(id, on) { if (!id) return; if (on) { S.watched.delete(id); S.watched.add(id); } else S.watched.delete(id); saveWatched(); }
+const watchedMark = (x) => (x && S.watched.has(x.id) ? '<span class="wv" title="Già visto">✓</span>' : '');
+function queueItems() { return S.byId ? S.queue.map((id) => S.byId.get(id)).filter((x) => x && (x.k === 'm' || x.k === 's')) : []; }
+function queueToggle(x) {
+  const i = S.queue.indexOf(x.id);
+  if (i >= 0) { S.queue.splice(i, 1); toast('Tolto dalla coda'); }
+  else { S.queue.push(x.id); if (S.queue.length > 100) S.queue.shift(); toast('＋ Aggiunto alla coda · lo trovi nella Home'); }
+  store.set('queue', S.queue);
+}
+/* coda: i film partono uno dopo l'altro (con «episodio successivo automatico» attivo); una serie apre la sua scheda */
+function playQueue(x) {
+  const q = queueItems(), i = Math.max(0, q.indexOf(x));
+  if (isSeriesItem(q[i] || x)) return openDetail(q[i] || x);
+  const list = [];
+  for (const y of q.slice(i)) { if (isSeriesItem(y)) break; list.push(y); }
+  addRecent(list[0], 'movie');
+  openFs(list[0], 'movie', store.get('pos', {})[list[0].id] || 0, { list: list.map((m) => ({ id: m.id, name: m.name, url: m.url, group: m.group, poster: m.poster })), index: 0, queue: true });
+}
+/* consigliati: dalle categorie e dai generi di quello che si guarda di più, esclusi i titoli già visti */
+function recommended(kind) {
+  if (!S.byGroup) return [];
+  const src = S.recent.map((r) => S.byId && S.byId.get(r.id)).filter((x) => x && (x.k === 'm' || x.k === 's') && (kind === 'all' || (kind === 'movies' ? x.k === 'm' : x.k === 's'))).slice(0, 15);
+  if (src.length < 2) return [];
+  const score = new Map(); src.forEach((x, i) => score.set(x.k + x.group, (score.get(x.k + x.group) || 0) + 15 - i));
+  const gen = [...new Set(src.flatMap((x) => String(x.genre || '').toLowerCase().split(/\s*[,/]\s*/).filter((g) => g.length > 2)))];
+  const seen = new Set([...S.watched, ...S.recent.map((r) => r.id)]), out = new Set();
+  for (const [k] of [...score].sort((a, b) => b[1] - a[1]).slice(0, 4)) { const arr = S.byGroup.get(k) || []; for (let i = 0; i < arr.length && i < 800; i++) { const y = arr[i]; if (!seen.has(y.id) && !isLocked(y)) out.add(y); } }
+  const yr = new Date().getFullYear();
+  const sc = (y) => (+y.rating || 0) + (gen.length && y.genre && gen.some((g) => String(y.genre).toLowerCase().includes(g)) ? 3 : 0) + (+y.year >= yr - 2 ? 1.5 : 0);
+  return safe([...out]).sort((a, b) => sc(b) - sc(a)).slice(0, 30);
+}
+/* tag personali */
+const tagNames = () => Object.keys(S.tags || {}).sort((a, b) => a.localeCompare(b, 'it'));
+function tagSet(t, id, on) { const a = S.tags[t] || (S.tags[t] = []); const i = a.indexOf(id); if (on && i < 0) a.push(id); if (!on && i >= 0) a.splice(i, 1); store.set('tags', S.tags); }
+function tagDialog(x) {
+  const m = kxModal('tagM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">TAG</div><h2>${esc(x.name)}</h2>
+    <div class="replist tagl"></div>
+    <div class="tagn"><input class="inp" data-f id="tagIn" maxlength="24" placeholder="Nuovo tag (es. Da vedere, Bambini, Sport…)"><button class="btn pri" data-f id="tagAdd">Crea</button></div>
+    <div class="sbtn"><button class="btn" data-f id="tagOk">Fatto</button></div>`);
+  const draw = (focusT) => {
+    $('#tagM .tagl').innerHTML = tagNames().map((t) => { const on = S.tags[t].includes(x.id); return `<button class="btn tagb ${on ? 'on' : ''}" data-f data-tg="${esc(t)}">${on ? '✓' : '○'} 🏷 ${esc(t)}</button>`; }).join('') || '<p class="mut">Nessun tag: creane uno qui sotto.</p>';
+    $$('#tagM [data-tg]').forEach((b) => (b.onclick = () => { const t = b.dataset.tg; tagSet(t, x.id, !S.tags[t].includes(x.id)); draw(t); }));
+    if (focusT) { const b = $$('#tagM [data-tg]').find((e) => e.dataset.tg === focusT); b && focus(b, true); }
+  };
+  $('#tagAdd').onclick = () => { const t = $('#tagIn').value.trim().replace(/\s+/g, ' ').slice(0, 24); if (!t) return toast('Scrivi il nome del tag'); tagSet(t, x.id, true); $('#tagIn').value = ''; draw(t); };
+  $('#tagOk').onclick = () => back();
+  draw();
+  setTimeout(() => focus($('#tagM [data-tg]') || $('#tagIn'), true), 40);
+  return m;
+}
+/* informazioni modificate a mano (titolo, anno, locandina, trama) */
+function metaDialog(x) {
+  const o = x._m0 || x, cur0 = store.get('meta', {})[x.id] || {};
+  kxModal('metaM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">MODIFICA INFORMAZIONI</div><h2>${esc(o.name)}</h2>
+    <div class="mform"><label>Titolo<input class="inp" data-f id="mfN" maxlength="120" value="${esc(cur0.name || '')}" placeholder="${esc(o.name)}"></label>
+    <label>Anno<input class="inp" data-f id="mfY" maxlength="4" inputmode="numeric" value="${esc(cur0.year || '')}" placeholder="${esc(o.year || 'es. 2024')}"></label>
+    <label>Locandina (indirizzo dell'immagine)<input class="inp" data-f id="mfP" maxlength="400" value="${esc(cur0.poster || '')}" placeholder="https://…"></label>
+    <label>Trama<input class="inp" data-f id="mfT" maxlength="600" value="${esc(cur0.plot || '')}" placeholder="${esc(String(o.plot || '').slice(0, 80))}"></label></div>
+    <p class="mut" style="font-size:13px">I campi vuoti usano i dati della playlist. Utile anche quando titolo o anno sbagliati fanno trovare informazioni e trailer sbagliati.</p>
+    <div class="sbtn"><button class="btn pri" data-f id="mfOk">Salva</button><button class="btn" data-f id="mfReset">Ripristina originali</button><button class="btn" data-f id="mfNo">Annulla</button></div>`);
+  const save = (v) => {
+    const all = store.get('meta', {});
+    if (v && Object.values(v).some(Boolean)) all[x.id] = v; else delete all[x.id];
+    store.set('meta', all);
+    x._info = 0; x._extras = undefined; x.cert = ''; metaMem.clear();
+    if (S.fullLib) setLib(S.fullLib);
+    back(); toast('✓ Informazioni aggiornate');
+    if ($('#detail').classList.contains('on')) { closeDetail(); openDetail(S.byId.get(x.id) || x); }
+  };
+  $('#mfOk').onclick = () => save({ name: $('#mfN').value.trim(), year: ($('#mfY').value.match(/\d{4}/) || [''])[0], poster: /^https?:\/\//i.test($('#mfP').value.trim()) ? $('#mfP').value.trim() : '', plot: $('#mfT').value.trim() });
+  $('#mfReset').onclick = () => save(null);
+  $('#mfNo').onclick = () => back();
+  setTimeout(() => focus($('#mfN'), true), 40);
+}
+/* riordino con il telecomando: OK prende la voce, ▲▼ la spostano, OK la lascia */
+function reorderDialog(title, items, onSave) {
+  let list = items.slice(), moving = -1;
+  const m = kxModal('ordM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">ORDINA</div><h2>${esc(title)}</h2>
+    <p class="mut" style="font-size:13px">Premi OK su una voce per prenderla, ▲ ▼ per spostarla, OK per lasciarla.</p>
+    <div class="ordl"></div><div class="sbtn"><button class="btn pri" data-f id="ordOk">Salva</button><button class="btn" data-f id="ordAz">A → Z</button><button class="btn" data-f id="ordNo">Annulla</button></div>`, () => document.removeEventListener('keydown', kd, true));
+  const draw = (fi) => {
+    $('#ordM .ordl').innerHTML = list.map((it, i) => `<button class="btn ordb ${i === moving ? 'mv' : ''}" data-f data-oi="${i}"><b>${i + 1}</b>${esc(it.label)}${i === moving ? '<i>▲▼</i>' : ''}</button>`).join('');
+    $$('#ordM [data-oi]').forEach((b) => (b.onclick = () => { const i = +b.dataset.oi; moving = moving === i ? -1 : i; draw(i); }));
+    if (fi != null) { const b = $(`#ordM [data-oi="${fi}"]`); if (b) { focus(b, true); b.scrollIntoView({ block: 'nearest' }); } }
+  };
+  const kd = (e) => {
+    if (moving < 0 || !$('#ordM')) return;
+    const d = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0; if (!d) return;
+    e.preventDefault(); e.stopPropagation();
+    const j = moving + d; if (j < 0 || j >= list.length) return;
+    [list[moving], list[j]] = [list[j], list[moving]]; moving = j; draw(j); fx('move');
+  };
+  document.addEventListener('keydown', kd, true);
+  $('#ordOk').onclick = () => { onSave(list.map((x) => x.id)); back(); toast('✓ Ordine salvato'); };
+  $('#ordAz').onclick = () => { list.sort((a, b) => a.label.localeCompare(b.label, 'it')); moving = -1; draw(0); };
+  $('#ordNo').onclick = () => back();
+  draw(0);
+  return m;
+}
+function orderCats(k) {
+  const cats = k === 'l' ? S.lib.liveCats : k === 'm' ? S.lib.movieCats : S.lib.seriesCats;
+  if (!cats.length) return toast('Nessuna categoria');
+  const all = store.get('catOrder', {});
+  reorderDialog(k === 'l' ? 'Categorie della TV in diretta' : k === 'm' ? 'Categorie dei film' : 'Categorie delle serie', sortCats(cats, k).map((c) => ({ id: c.name, label: c.name })), (ids) => {
+    all[k] = ids; store.set('catOrder', all);
+    if (opt('sortCats') !== 'custom') store.set('o_sortCats', 'custom');
+    renderSettings('org');
+  });
+}
+function orderFavs() {
+  const f = favItems(); if (f.length < 2) return toast('Servono almeno due preferiti');
+  reorderDialog('I tuoi preferiti', f.map((x) => ({ id: x.id, label: (x.k === 'l' ? '📺 ' : x.k === 's' ? '🎞 ' : '🎬 ') + x.name })), (ids) => {
+    const rest = [...S.favs].filter((id) => !ids.includes(id));
+    S.favs = new Set([...ids, ...rest]); store.set('favs', [...S.favs]);
+  });
+}
+function renameCats(k) {
+  const cats = k === 'l' ? S.lib.liveCats : k === 'm' ? S.lib.movieCats : S.lib.seriesCats;
+  if (!cats.length) return toast('Nessuna categoria');
+  const names = store.get('catNames', {});
+  const orig = new Map(); for (const arr of [k === 'l' ? S.lib.live : k === 'm' ? S.lib.movies : S.lib.series]) for (const x of arr) if (!orig.has(x.group)) orig.set(x.group, x._g0 !== undefined ? x._g0 : x.group);
+  kxModal('renM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">RINOMINA CATEGORIE</div><h2>${k === 'l' ? 'TV in diretta' : k === 'm' ? 'Film' : 'Serie TV'}</h2>
+    <div class="ordl">${sortCats(cats, k).map((c) => `<button class="btn ordb" data-f data-rn="${esc(c.name)}">${esc(c.name)}${orig.get(c.name) !== c.name ? `<small> · era «${esc(orig.get(c.name))}»</small>` : ''}</button>`).join('')}</div>
+    <div class="sbtn"><button class="btn" data-f id="renNo">Chiudi</button></div>`);
+  $('#renNo').onclick = () => back();
+  $$('#renM [data-rn]').forEach((b) => (b.onclick = () => {
+    const nowN = b.dataset.rn, o = orig.get(nowN) || nowN;
+    kxModal('ren2M', `<h2>Nuovo nome</h2><p class="mut">Originale: «${esc(o)}» · lascia vuoto per tornare all'originale</p><input class="inp" data-f id="renIn" maxlength="40" value="${esc(nowN !== o ? nowN : '')}" placeholder="${esc(o)}"><div class="sbtn"><button class="btn pri" data-f id="renOk">Salva</button></div>`);
+    $('#renOk').onclick = () => {
+      const v = $('#renIn').value.trim().slice(0, 40);
+      if (v && v !== o) names[k + '|' + o] = v; else delete names[k + '|' + o];
+      store.set('catNames', names);
+      const ord = store.get('catOrder', {}); if (ord[k]) { ord[k] = ord[k].map((n) => (n === nowN ? v || o : n)); store.set('catOrder', ord); }
+      if (S.fullLib) setLib(S.fullLib);
+      $('#ren2M') && $('#ren2M').remove(); $('#renM') && $('#renM').remove(); modalResume();
+      toast('✓ Categoria rinominata'); renameCats(k);
+    };
+    setTimeout(() => focus($('#renIn'), true), 40);
+  }));
+  setTimeout(() => focus($('#renM [data-rn]'), true), 40);
+}
 function makeRows(kind) {
   const L = S.lib, R = [];
   // eventi sportivi sempre per primi nella Home
@@ -3340,29 +3722,44 @@ function makeRows(kind) {
     if (t.hot.length >= 4) R.push({ title: 'Serie TV di tendenza', type: 'poster', items: t.hot });
   }
   if (kind === 'all') { const rc = recItems(); if (rc.length) R.push({ title: 'Le tue registrazioni', type: 'rec', items: rc.slice(0, 30) }); }
-  if (kind === 'all') { const f = [...L.movies, ...L.series].filter((x) => S.favs.has(x.id)); if (f.length) R.push({ title: 'La mia lista', type: 'poster', items: f }); }
+  const inK = (x) => kind === 'all' ? x.k === 'm' || x.k === 's' : kind === 'movies' ? x.k === 'm' : x.k === 's';
+  { const q = queueItems().filter(inK); if (q.length) R.push({ title: 'La tua coda', sub: 'riproduzione una dopo l\'altra', type: 'poster', items: q, queue: true }); }
+  if (kind === 'all') { const f = favItems().filter((x) => x.k === 'm' || x.k === 's'); if (f.length) R.push({ title: 'La mia lista', type: 'poster', items: f }); }
+  { const rc = recommended(kind); if (rc.length >= 4) R.push({ title: 'Consigliati per te', sub: 'in base a cosa guardi', type: 'poster', items: rc }); }
+  for (const t of Object.keys(S.tags || {}).sort((a, b) => a.localeCompare(b, 'it')).slice(0, 8)) { const it = safe(tagItems(t).filter(inK)); if (it.length) R.push({ title: '🏷 ' + t, type: 'poster', items: it }); }
   const catRows = (arr, cats, label, k) => cats.forEach((c) => R.push({ title: (label ? label + ' · ' : '') + c.name, type: 'poster', items: sortVod((S.byGroup && S.byGroup.get((k === 'movies' ? 'm' : 's') + c.name)) || arr.filter((x) => x.group === c.name)), more: { kind: k, cat: c.name } }));
   const recent = (arr) => { arr = safe(arr); return (arr.some((x) => x.added) ? [...arr].sort((a, b) => (b.added || 0) - (a.added || 0)) : arr.slice().reverse()).slice(0, 40); };
   if (kind === 'all') {
     if (L.movies.length) R.push({ title: 'Film aggiunti di recente', type: 'poster', items: recent(L.movies), more: { kind: 'movies', cat: 'all' } });
     if (L.series.length) R.push({ title: 'Serie aggiunte di recente', type: 'poster', items: recent(L.series), more: { kind: 'series', cat: 'all' } });
-    catRows(L.movies, safeCats(sortCats(L.movieCats)).slice(0, 8), 'Film', 'movies');
-    catRows(L.series, safeCats(sortCats(L.seriesCats)).slice(0, 6), 'Serie', 'series');
+    catRows(L.movies, safeCats(sortCats(L.movieCats, 'm')).slice(0, 8), 'Film', 'movies');
+    catRows(L.series, safeCats(sortCats(L.seriesCats, 's')).slice(0, 6), 'Serie', 'series');
   } else {
     const arr = kind === 'movies' ? L.movies : L.series, cats = kind === 'movies' ? L.movieCats : L.seriesCats;
     if (arr.length > 20) R.splice(R.findIndex((r) => r.type === 'top') >= 0 ? R.findIndex((r) => r.type === 'top') : R.length, 0, { title: 'Aggiunti di recente', type: 'poster', items: recent(arr), more: { kind, cat: 'all' } });
     // le categorie per adulti restano raggiungibili, ma in fondo
-    const sc = sortCats(cats);
+    const sc = sortCats(cats, kind === 'movies' ? 'm' : 's');
     catRows(arr, [...safeCats(sc), ...(showAdult() ? [] : sc.filter((c) => RX_ADULT_G.test(c.name)))].filter((c, i, a) => a.indexOf(c) === i), '', kind);
   }
   return R.filter((r) => r.items.length);
 }
+let featMemo = null;
 function featured(kind) {
-  const L = S.lib, pool = safe(kind === 'movies' ? L.movies : kind === 'series' ? L.series : [...L.movies, ...L.series]);
+  const L = S.lib;
   if (kind === 'all') { const ev = upcomingEvents(); if (ev.length) return ev.slice(0, 6); }
-  const f = pool.filter((x) => x.backdrop || x.poster).sort((a, b) => (+!!b.backdrop - +!!a.backdrop) || (+b.rating || 0) - (+a.rating || 0)).slice(0, 8);
-  if (f.length) return f;
-  return safe(L.live).slice(0, 6);
+  const key = kind + '|' + showAdult();
+  if (featMemo && featMemo.lib === L.movies && featMemo.lib2 === L.series && featMemo.key === key) return featMemo.out;
+  // solo i primi 8 con immagine: una passata, senza ordinare tutta la libreria
+  const best = [], sc = (x) => (x.backdrop ? 100 : 0) + (+x.rating || 0);
+  for (const arr of kind === 'movies' ? [L.movies] : kind === 'series' ? [L.series] : [L.movies, L.series]) for (const x of arr) {
+    if (!(x.backdrop || x.poster)) continue;
+    const s0 = sc(x); if (best.length >= 8 && s0 <= best[7].s) continue;
+    best.push({ x, s: s0 }); best.sort((a, b) => b.s - a.s); if (best.length > 8) best.length = 8;
+  }
+  let out = safe(best.map((b) => b.x));
+  if (!out.length) out = safe(L.live).slice(0, 6);
+  featMemo = { lib: L.movies, lib2: L.series, key, out };
+  return out;
 }
 function evWhen(e) {
   const d = new Date(e.start), now = new Date();
@@ -3388,7 +3785,7 @@ function cardHTML(type, x, k, i) {
   const onerr = `onerror="this.parentNode.classList.add('noimg');this.remove()"`;
   if (type === 'live') return `<div class="nc l${isLocked(x) ? ' lk' : ''}" data-f data-k="${k}"><span class="tg">LIVE</span>${x.logo ? `<img loading="lazy" decoding="async" src="${esc(x.logo)}" data-t="${esc(x.name.slice(0, 2).toUpperCase())}" onerror="kxImgTxt(this,'lini')">` : `<span class="lini">${esc(x.name.slice(0, 2).toUpperCase())}</span>`}<div class="ln"><b>${x.num}</b>${esc(x.name)}</div>${qBadge(x).replace('class="qb', 'class="qb qcard')}${plBadge(x)}</div>`;
   if (type === 'rec') return `<div class="nc l rc" data-f data-k="${k}"><span class="tg rec">REC</span>${x.logo ? `<img loading="lazy" decoding="async" src="${esc(x.logo)}" onerror="this.remove()">` : ''}<div class="ft">${esc(x.name)}<small>${esc(dayTime(x.rec.start || x.rec.at))}</small></div></div>`;
-  if (type === 'top') return `<div class="nc t" data-f data-k="${k}"><span class="big">${i + 1}</span><div class="pp ${img ? '' : 'noimg'}">${img ? `<img loading="lazy" decoding="async" src="${esc(img)}" ${onerr}>` : ''}${ft}${plBadge(x)}</div></div>`;
+  if (type === 'top') return `<div class="nc t" data-f data-k="${k}"><span class="big">${i + 1}</span><div class="pp ${img ? '' : 'noimg'}">${img ? `<img loading="lazy" decoding="async" src="${esc(img)}" ${onerr}>` : ''}${ft}${plBadge(x)}${watchedMark(x)}</div></div>`;
   let extra = '';
   if (type === 'cont') {
     if (isLiveItem(x)) extra = '<span class="tg">LIVE</span>';
@@ -3398,7 +3795,7 @@ function cardHTML(type, x, k, i) {
       if (pct) extra = `<div class="pr"><i style="width:${pct}%"></i></div>`;
     }
   }
-  return `<div class="nc p ${img ? '' : 'noimg'}${isLocked(x) ? ' lk' : ''}" data-f data-k="${k}">${img ? `<img loading="lazy" class="${isLiveItem(x) ? 'lgfit' : ''}" src="${esc(img)}" ${onerr}>` : ''}${ft}${extra}${plBadge(x)}</div>`;
+  return `<div class="nc p ${img ? '' : 'noimg'}${isLocked(x) ? ' lk' : ''}" data-f data-k="${k}">${img ? `<img loading="lazy" decoding="async" class="${isLiveItem(x) ? 'lgfit' : ''}" src="${esc(img)}" ${onerr}>` : ''}${ft}${extra}${plBadge(x)}${watchedMark(x)}</div>`;
 }
 /* le righe partono con poche card (quelle visibili): le altre si aggiungono scorrendo a destra. Meno DOM = più fluido su Fire TV */
 const ROW_FIRST = 14, ROW_STEP = 12, ROW_MAX = 40;
@@ -3432,7 +3829,7 @@ function buildBrowse(scr, kind) {
   const curNav = kind === 'all' ? 'home' : kind;
   scr.innerHTML = `<div class="navslot"></div><div class="dhandle" data-drawer title="Categorie"></div>
   <div class="browse">
-    <div class="hero"><div class="hbg"><img class="blur" alt=""><img class="main fade" alt="" decoding="async"><img class="main fade" alt="" decoding="async"></div><div class="hshade"></div>
+    <div class="hero"><div class="hbg"><img class="blur" alt=""><img class="main fade" alt="" decoding="async"><img class="main fade" alt="" decoding="async"></div><div class="hshade"></div><div class="hage"></div>
       <div class="htop"><b class="hbrand brandName" data-b="${esc((S.settings.brand || 'KAIROS').toUpperCase())}">${kxWord((S.settings.brand || 'KAIROS').toUpperCase(), '')}</b>${kind !== 'all' ? `<span class="hsec">${kind === 'movies' ? 'Film' : 'Serie TV'}</span>` : ''}${S.demo ? '<span class="dtag">DEMO</span>' : ''}${S.settings.announcement ? `<span class="annc"><span class="mq">${esc(S.settings.announcement)}</span></span>` : ''}<span class="sp"></span><b class="clk2"></b></div>
       ${S.settings.announcement ? `<div class="hann"><span class="mq">${esc(S.settings.announcement)}</span></div>` : ''}<div class="hinfo"><div class="hkind"></div><h1 class="htitle"></h1><div class="hmeta"></div><div class="hrate"></div><p class="hplot"></p>
         <div class="hbtns"><button class="nbtn play" data-hplay><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg><span>Riproduci</span></button><button class="nbtn info" data-hinfo><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Altre info</button></div></div>
@@ -3454,7 +3851,7 @@ function buildBrowse(scr, kind) {
   const item = (k) => { const [ri, ii] = k.split(':'); return ii === 'more' ? null : scr._rows[+ri].items[+ii]; };
   scr.addEventListener('click', (e) => {
     const c = e.target.closest('[data-k]');
-    if (c) { const [ri, ii] = c.dataset.k.split(':'); const r = scr._rows[+ri]; if (ii === 'more') return r.more.go ? go(r.more.go) : openVod(r.more.kind, r.more.cat); return openItem(r.items[+ii]); }
+    if (c) { const [ri, ii] = c.dataset.k.split(':'); const r = scr._rows[+ri]; if (ii === 'more') return r.more.go ? go(r.more.go) : openVod(r.more.kind, r.more.cat); if (r.queue) return playQueue(r.items[+ii]); return openItem(r.items[+ii]); }
     if (e.target.closest('[data-hplay]')) return heroPlay(scr);
     if (e.target.closest('[data-hinfo]')) { const x = scr._hero; if (x) x.folder ? openFolder(x) : x.home ? openEvent(x) : isLiveItem(x) ? openItem(x) : openDetail(x); }
   });
@@ -3550,6 +3947,7 @@ function setHero(scr, x, instant) {
     scr.querySelector('.hmeta').innerHTML = parts.join(sep);
     scr.querySelector('.hrate').innerHTML = live ? qBadge(x) : `${+x.rating ? `<span><span class="st">★</span> ${(+x.rating).toFixed(1)}/10</span>` : ''}<span class="q">${ser ? 'SERIE' : 'FILM'}</span>${x.genre || x.cast ? `<span>${esc(x.group || '')}</span>` : ''}`;
     scr.querySelector('.hplot').textContent = x.plot || (live ? `In onda adesso su ${x.name}. Premi OK per guardarlo.` : '');
+    const ha = scr.querySelector('.hage'); if (ha) { const c = live ? '' : x.cert || ''; ha.innerHTML = c ? `<i></i><b>${esc(c)}</b>` : ''; ha.classList.toggle('on', !!c); }
     const pos = store.get('pos', {})[x.id];
     scr.querySelector('[data-hplay] span').textContent = live ? 'Guarda' : ser ? 'Episodi' : pos ? 'Riprendi' : 'Riproduci';
     info.classList.remove('sw');
@@ -3559,6 +3957,7 @@ function setHero(scr, x, instant) {
   // dettagli (trama, cast, sfondo) dal server solo se ci si ferma davvero su questo titolo: scorrendo in fretta niente richieste a raffica
   clearTimeout(scr._infoT);
   if (xtOf(x) && !x._info && !live) scr._infoT = setTimeout(() => { if (scr._hero === x && !x._info) fetchInfo(x).then(() => { if (scr._hero === x) setHero(scr, x, true); }); }, instant ? 0 : 420);
+  else if (!live && !x.cert && x._extras === undefined && !S.metaOff) scr._infoT = setTimeout(() => { if (scr._hero === x) metaOf(x).then(() => { if (scr._hero === x && x.cert) setHero(scr, x, true); }); }, 420);
 }
 function setFolderHero(scr, f, instant) {
   if (scr._hero === f && !instant) return;
@@ -3620,6 +4019,32 @@ function demoEvents() {
   const base = new Date(); base.setMinutes(0, 0, 0);
   return T.map(([h, a, l], i) => ({ id: 'dev' + i, league: l, start: new Date(+base + (i * 26 + 3) * 3600e3).toISOString(), home: { name: h, logo: art(h, 0, 0, i) }, away: { name: a, logo: art(a, 0, 0, i + 3) }, venue: '', live: i === 0 }));
 }
+/* età consigliata: «T», «6+», «14+», «18+» (fasce italiane); da Xtream (mpaa/age) o dal server (TMDB) */
+const US_AGE = { G: 'T', 'TV-Y': 'T', 'TV-G': 'T', 'TV-Y7': '6+', PG: '6+', 'TV-PG': '6+', 'PG-13': '14+', 'TV-14': '14+', R: '14+', 'NC-17': '18+', 'TV-MA': '18+' };
+function certNorm(v) {
+  const x = String(v || '').trim().toUpperCase().replace(/^(VM|RATED)\s*/, '');
+  if (!x || x === '0' || x === 'N/A' || x === 'NR' || x === 'UNRATED') return '';
+  if (US_AGE[x]) return US_AGE[x];
+  if (x === 'T' || x === 'TUTTI' || x === 'ALL') return 'T';
+  const n = parseInt(x, 10); return n > 0 && n <= 21 ? n + '+' : '';
+}
+const ageCls = (c) => (c === 'T' ? 'a0' : parseInt(c, 10) >= 18 ? 'a18' : parseInt(c, 10) >= 14 ? 'a14' : 'a6');
+const ageBadge = (c, cls = '') => (c ? `<span class="agb ${ageCls(c)} ${cls}" title="Età consigliata">${esc(c)}</span>` : '');
+const metaMem = new Map();
+/* età consigliata e contenuti speciali dal server (solo se il fornitore ha la chiave TMDB); una richiesta per titolo */
+async function metaOf(x) {
+  if (!x || isLiveItem(x) || S.demo || S.metaOff || !baseServer()) return null;
+  const kind = isSeriesItem(x) ? 'series' : 'movie', k = kind + '|' + (x.name || '') + '|' + (x.year || '');
+  if (metaMem.has(k)) return metaMem.get(k);
+  const p = getJSON(`${baseServer()}/api/player/meta?t=${encodeURIComponent(x.name || '')}&y=${encodeURIComponent(String(x.year || '').slice(0, 4))}&kind=${kind}&c=${encodeURIComponent(S.code || '')}`).catch(() => null);
+  metaMem.set(k, p);
+  if (metaMem.size > 400) metaMem.delete(metaMem.keys().next().value);
+  const j = await p;
+  if (j && j.off) S.metaOff = true; // il server non ha la chiave TMDB: niente altre richieste
+  if (j && j.cert && !x.cert) x.cert = certNorm(j.cert);
+  if (j) x._extras = Array.isArray(j.extras) ? j.extras : [];
+  return j;
+}
 async function fetchInfo(x) {
   x._info = 1;
   try {
@@ -3631,7 +4056,9 @@ async function fetchInfo(x) {
     x.year = x.year || (i.releasedate || i.releaseDate || '').slice(0, 4);
     x.genre = x.genre || i.genre; x.cast = x.cast || i.cast; x.duration = x.duration || i.duration;
     if (!+x.rating && i.rating) x.rating = i.rating;
+    if (!x.cert) x.cert = certNorm(i.mpaa_rating || i.age || i.rating_mpaa || i.certification || i.mpaa);
   } catch {}
+  if (!x.cert) await metaOf(x);
 }
 function heroPlay(scr) {
   const x = scr._hero; if (!x) return;
@@ -3652,7 +4079,32 @@ setInterval(() => {
 
 /* ---------------- ricerca ---------------- */
 let searchRes = [];
-let sT; $('#q').addEventListener('input', () => { clearTimeout(sT); sT = setTimeout(doSearch, 220); });
+let sT, aT; $('#q').addEventListener('input', () => { clearTimeout(sT); sT = setTimeout(doSearch, 220); clearTimeout(aT); aT = setTimeout(actorSearch, 900); });
+/* filmografia dal server (TMDB) confrontata con la libreria: titolo normalizzato + anno */
+let actorRes = null, titleIdx = null;
+const titleKey = (n) => String(n || '').replace(RX_CC, '').replace(/[\[(][^\])]*[\])]/g, ' ').replace(/\b(19|20)\d{2}\b/g, ' ').replace(RX_QUAL, ' ').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+async function actorSearch() {
+  const q = $('#q').value.trim().toLowerCase();
+  if (q.length < 4 || S.metaOff || S.demo || !baseServer() || !$('#search').classList.contains('on')) return;
+  let j; try { j = await getJSON(`${baseServer()}/api/player/person?q=${encodeURIComponent(q)}&c=${encodeURIComponent(S.code || '')}`); } catch { return; }
+  if (j && j.off) { S.metaOff = true; return; }
+  if (!j || !(j.people || []).length || $('#q').value.trim().toLowerCase() !== q) return;
+  if (!titleIdx || titleIdx.src !== S.lib.movies) {
+    const m = new Map();
+    for (const x of [...S.lib.movies, ...S.lib.series]) { const k = titleKey(x.name); if (!k) continue; const a = m.get(k); if (a) a.push(x); else m.set(k, [x]); }
+    titleIdx = { src: S.lib.movies, m };
+  }
+  const p = j.people[0], out = [];
+  for (const c of p.credits || []) {
+    for (const t of [c.t, c.o]) {
+      const a = t && titleIdx.m.get(titleKey(t)); if (!a) continue;
+      for (const x of a) if ((c.k === 'series') === (x.k === 's') && (!c.y || !x.year || Math.abs(+x.year - c.y) <= 1) && !out.includes(x)) out.push(x);
+    }
+    if (out.length >= 60) break;
+  }
+  actorRes = { q, name: p.name, items: out };
+  if (out.length) doSearch();
+}
 $('#q').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); const f = $('#results [data-i]'); f && focus(f); } });
 $('#results').addEventListener('click', (e) => { const el = e.target.closest('[data-i]'); if (el) openItem(searchRes[+el.dataset.i]); });
 $('#results').addEventListener('klong', (e) => { const el = e.target.closest('[data-i]'); if (el) itemMenu(searchRes[+el.dataset.i], el); });
@@ -3690,13 +4142,15 @@ const OPT = {
   hw: ['Accelerazione hardware', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['off', 'Disattivata (software)']], 'auto'],
   adaptQ: ['Qualità adattiva automatica', YN, true],
   autoNext: ['Episodio successivo automatico', YN, true],
+  introAuto: ['Salta l\'intro delle serie da solo', YN, false],
+  pip: ['Immagine nell\'immagine con il tasto Home', YN, true],
   subSize: ['Dimensione sottotitoli', [['small', 'Piccola'], ['medium', 'Media'], ['large', 'Grande'], ['xl', 'Molto grande']], 'medium'],
   resInd: ['Indicatore risoluzione', YN, true],
   liveFmt: ['Formato TV in diretta', [['ts', 'Veloce (TS)'], ['hls', 'HLS']], 'ts'],
   epgShift: ['Spostamento orario guida', [[0, 'Nessuno'], [1, '+1 ora'], [2, '+2 ore'], [-1, '−1 ora'], [-2, '−2 ore']], 0, () => { S.xepgVer++; S.epg.clear(); }],
   showHidden: ['Mostra canali nascosti', [[false, 'No'], [true, 'Sì']], false, () => { if (S.lib.live.length) renderChannels(); }],
-  sortCats: ['Ordina categorie', [['pl', 'Come la playlist'], ['az', 'A → Z'], ['za', 'Z → A']], 'pl'],
-  sortCh: ['Ordina canali', [['pl', 'Come la playlist'], ['num', 'Per numero'], ['az', 'A → Z']], 'pl'],
+  sortCats: ['Ordina categorie', [['pl', 'Come la playlist'], ['az', 'A → Z'], ['za', 'Z → A'], ['custom', 'Personalizzato']], 'pl'],
+  sortCh: ['Ordina canali', [['pl', 'Come la playlist'], ['num', 'Per numero'], ['az', 'A → Z'], ['za', 'Z → A'], ['added', 'Aggiunti di recente']], 'pl'],
   sortVod: ['Ordina film e serie', [['pl', 'Come la playlist'], ['recent', 'Aggiunti di recente'], ['az', 'A → Z'], ['rating', 'Valutazione']], 'pl'],
   startScr: ['Schermata iniziale', [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta'], ['guide', 'Guida TV'], ['lastch', 'Ultimo canale guardato']], 'home'],
   sfx: ['Effetti sonori', [['classic', 'Classici'], ['soft', 'Morbidi'], ['futur', 'Futuristici'], ['retro', 'Retrò'], ['off', 'Disattivati']], 'classic', (v) => { S.sound = v !== 'off'; fx('ok'); }],
@@ -3728,14 +4182,36 @@ function applyTextSize(v) { document.documentElement.style.setProperty('--ts', T
 function applyOrient(v) { try { NATIVE && NATIVE.setOrientation && NATIVE.setOrientation(v); } catch {} }
 
 /* ---------------- ordinamento ---------------- */
-const byName = (a, b) => String(a.name || a.label || '').localeCompare(String(b.name || b.label || ''), 'it', { sensitivity: 'base', numeric: true });
-function sortCats(cats) { const m = opt('sortCats'); if (m === 'pl') return cats; const a = [...cats].sort(byName); return m === 'za' ? a.reverse() : a; }
-function sortChannels(list) { const m = opt('sortCh'); if (m === 'pl') return list; return [...list].sort(m === 'num' ? (a, b) => (a.num || 0) - (b.num || 0) : byName); }
+const COLL = new Intl.Collator('it', { sensitivity: 'base', numeric: true });
+const byName = (a, b) => COLL.compare(String(a.name || a.label || ''), String(b.name || b.label || ''));
+const sortMemo = new WeakMap(); // lista → { m: criterio, out: lista ordinata }
+let libGen = 0; // cambia a ogni nuova libreria (anche dopo una modifica di nomi o informazioni)
+const memoSort = (list, m, f) => { m += '|' + libGen; const c = sortMemo.get(list); if (c && c.m === m) return c.out; const out = f(); sortMemo.set(list, { m, out }); return out; };
+const catKindOf = (cats) => (cats === S.lib.liveCats ? 'l' : cats === S.lib.movieCats ? 'm' : cats === S.lib.seriesCats ? 's' : '');
+function sortCats(cats, kind) {
+  const m = opt('sortCats'); if (m === 'pl') return cats;
+  if (m === 'custom') {
+    const order = (store.get('catOrder', {})[kind || catKindOf(cats)] || []), ix = new Map(order.map((n, i) => [n, i]));
+    if (!ix.size) return cats;
+    return cats.map((c, i) => [c, ix.has(c.name) ? ix.get(c.name) : 1e6 + i]).sort((a, b) => a[1] - b[1]).map((x) => x[0]);
+  }
+  const a = [...cats].sort(byName); return m === 'za' ? a.reverse() : a;
+}
+function sortChannels(list) {
+  const m = opt('sortCh'); if (m === 'pl') return list;
+  return memoSort(list, 'c' + m, () => {
+    if (m === 'added') return list.some((x) => x.added) ? [...list].sort((a, b) => (b.added || 0) - (a.added || 0)) : list;
+    const a = [...list].sort(m === 'num' ? (x, y) => (x.num || 0) - (y.num || 0) : byName);
+    return m === 'za' ? a.reverse() : a;
+  });
+}
 function sortVod(list) {
   const m = opt('sortVod'); if (m === 'pl') return list;
-  if (m === 'az') return [...list].sort(byName);
-  if (m === 'rating') return [...list].sort((a, b) => (+b.rating || 0) - (+a.rating || 0));
-  return list.some((x) => x.added) ? [...list].sort((a, b) => (b.added || 0) - (a.added || 0)) : [...list].reverse();
+  return memoSort(list, 'v' + m, () => {
+    if (m === 'az') return [...list].sort(byName);
+    if (m === 'rating') return [...list].sort((a, b) => (+b.rating || 0) - (+a.rating || 0));
+    return list.some((x) => x.added) ? [...list].sort((a, b) => (b.added || 0) - (a.added || 0)) : [...list].reverse();
+  });
 }
 
 /* l'anteprima nativa è disegnata sopra la pagina: si mette in pausa mentre una finestra è aperta */
@@ -3750,10 +4226,12 @@ function modalResume() {
 
 /* ---------------- canali nascosti ---------------- */
 S.hidden = new Set(store.get('hidden', []));
-const visLive = (arr) => (opt('showHidden') || !S.hidden.size ? arr : arr.filter((c) => !S.hidden.has(c.id)));
+let hidVer = 0;
+const visMemo = new WeakMap();
+const visLive = (arr) => { if (opt('showHidden') || !S.hidden.size) return arr; const c = visMemo.get(arr); if (c && c.v === hidVer && c.n === S.hidden.size) return c.out; const out = arr.filter((x) => !S.hidden.has(x.id)); visMemo.set(arr, { v: hidVer, n: S.hidden.size, out }); return out; };
 function toggleHidden(ch) {
   if (S.hidden.has(ch.id)) { S.hidden.delete(ch.id); toast('Canale di nuovo visibile'); } else { S.hidden.add(ch.id); toast('Canale nascosto · lo ritrovi in Impostazioni › TV in diretta'); }
-  store.set('hidden', [...S.hidden]);
+  store.set('hidden', [...S.hidden]); hidVer++;
 }
 
 /* ---------------- controllo genitori ---------------- */
@@ -3810,11 +4288,20 @@ function itemMenu(x, el) {
   acts.push(['lock', lk ? '🔓  Sblocca (togli il PIN)' : '🔒  Blocca con PIN']);
   if (live || x.group) acts.push(['lockg', S.locked.has('g:' + (x.k || '') + '|' + x.group) ? `🔓  Sblocca la categoria «${x.group}»` : `🔒  Blocca la categoria «${x.group}»`]);
   if (live && canRec()) acts.unshift(['rec', recFor(x.id) ? '■  Ferma la registrazione' : '●  Registra ora']);
+  if (!live) {
+    acts.push(['seen', S.watched.has(x.id) ? '↺  Segna come non visto' : '✓  Segna come già visto']);
+    acts.push(['queue', S.queue.includes(x.id) ? '−  Togli dalla coda' : '＋  Aggiungi alla coda']);
+    acts.push(['meta', '✎  Modifica informazioni']);
+  }
+  acts.push(['tag', '🏷  Tag…']);
+  if (live) acts.push(['epg', '📅  Associa la guida TV…']);
+  if (live && HAS_MULTI && perm('multi')) acts.push(['multi', '⊞  Multi-schermo (2 o 4 canali)…']);
+  if (perm('ai') && !S.aiOff && !S.demo) acts.push(['ai', '✦  Chiedi all\'assistente IA']);
   if (perm('report')) acts.push(['rep', live ? '⚠  Segnala: il canale non funziona' : '⚠  Segnala un problema']);
   fx('ok');
   modalPause();
   document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="menuM"><div class="sbox menubox"><div class="orb mut" style="font-size:12px;letter-spacing:.3em">${live ? 'CANALE' : isSeriesItem(x) ? 'SERIE' : 'FILM'}</div><h2>${esc(x.name)}</h2>
-    <div class="replist">${acts.map(([k, t]) => `<button class="btn" data-f data-ma="${k}">${t}</button>`).join('')}</div></div></div>`);
+    <div class="replist">${acts.map(([k, t]) => `<button class="btn" data-f data-ma="${k}">${esc(t)}</button>`).join('')}</div></div></div>`);
   setTimeout(() => focus($('#menuM [data-ma]'), true), 40);
   const close = () => { const m = $('#menuM'); if (m) m.remove(); const s = $('.screen.on'), lf = S.lastScreenFocus; const f = (el && document.body.contains(el) && el) || (lf && document.body.contains(lf) && lf) || (s && s.querySelector('[data-autof]')); f && focus(f, true); setTimeout(() => { if (!$('.speedm.on')) modalResume(); }, 60); };
   $$('#menuM [data-ma]').forEach((b) => (b.onclick = async () => {
@@ -3823,6 +4310,13 @@ function itemMenu(x, el) {
     if (a === 'hide') { close(); toggleHidden(x); if ($('#live').classList.contains('on')) renderChannels(); if ($('#guide').classList.contains('on')) guideRender(); return; }
     if (a === 'rep') { close(); reportDialog(x.name); return; }
     if (a === 'rec') { close(); recToggle(x); return; }
+    if (a === 'seen') { close(); setWatched(x.id, !S.watched.has(x.id)); toast(S.watched.has(x.id) ? '✓ Segnato come già visto' : 'Segnato come non visto'); if (el) { const w = el.querySelector('.wv'); if (w && !S.watched.has(x.id)) w.remove(); else if (!w && S.watched.has(x.id)) (el.querySelector('.pp') || el).insertAdjacentHTML('beforeend', watchedMark(x)); } return; }
+    if (a === 'queue') { close(); queueToggle(x); return; }
+    if (a === 'tag') { $('#menuM').remove(); tagDialog(x); return; }
+    if (a === 'meta') { $('#menuM').remove(); metaDialog(x); return; }
+    if (a === 'epg') { $('#menuM').remove(); epgMapDialog(x); return; }
+    if (a === 'multi') { $('#menuM').remove(); multiDialog(x); return; }
+    if (a === 'ai') { $('#menuM').remove(); aiDialog(x, live ? nowOf(x) : null); return; }
     // blocchi: serve il PIN
     $('#menuM').remove();
     if (!store.get('pinH', '')) { if (!(await setNewPin())) return close(); store.set('parental', true); }
@@ -3871,7 +4365,7 @@ function renderSettings(sec) {
   const allPl = allPlaylists().map((p) => ({ ...p, srv: !S.local.some((x) => x.id === p.id) }));
   const plCur = plSel(), canSw = perm('plSwitch') && plList().length > 1;
   const P = playPrefs(), theme = store.get('theme') || S.settings.accent || 'cinema';
-  const MENU = [['dev', 'Account'], ['acct', 'Profili e dispositivi'], ['pl', 'Gestione playlist'], ['play', 'Lettore'], ['tv', 'TV in diretta e guida TV'], ['rec', 'Registrazioni'], ['kids', 'Controllo genitori'], ['net', 'Rete e speed test'], ['priv', 'Privacy e VPN'], ['look', 'Generali'], ['info', 'Informazioni']];
+  const MENU = [['dev', 'Account'], ['acct', 'Profili e dispositivi'], ['pl', 'Gestione playlist'], ['org', 'Organizza'], ['play', 'Lettore'], ['tv', 'TV in diretta e guida TV'], ['rec', 'Registrazioni'], ['kids', 'Controllo genitori'], ['net', 'Rete e speed test'], ['priv', 'Privacy e VPN'], ['look', 'Generali'], ['info', 'Informazioni']];
   const kv = (k, v) => `<div class="sr static"><span>${k}</span><b>${v}</b></div>`;
   const cards = {
     acct: acctCard(), rec: recCard(), priv: privCard(),
@@ -3881,12 +4375,24 @@ function renderSettings(sec) {
       ${allPl.map((p) => { const t = plT.get(p.id), hid = plHid.has(p.id); return `<div class="sr static plrow${hid ? ' off' : ''}"><span>${t && plList().length > 1 ? `<i class="plb" style="--pc:${t.col}">${esc(t.tag)}</i>` : ''}<b style="color:#fff">${esc(p.name)}</b><br><small class="mut">${p.type === 'xtream' ? 'Xtream Codes' : 'M3U'}${p.srv ? ' · dal fornitore' : ' · personale'}${hid ? ' · nascosta' : plCur === p.id ? ' · in uso' : ''}</small></span><span class="plact">${canSw && !hid && plCur !== p.id ? `<button class="btn" data-f data-puse="${esc(p.id)}">Usa</button>` : ''}${!p.srv ? `<button class="btn" data-f data-pedit="${esc(p.id)}">Modifica</button><button class="btn" data-f data-del="${esc(p.id)}">Rimuovi</button>` : localOk() && allPl.length > 1 ? `<button class="btn" data-f data-phide="${esc(p.id)}">${hid ? 'Mostra' : 'Nascondi'}</button>` : '<b>✓</b>'}</span></div>`; }).join('') || '<div class="snote">Nessuna playlist collegata.</div>'}
       ${canSw && plMode() === 'merge' && plCur !== 'all' ? '<div class="sbtns"><button class="btn" data-f data-puse="all">Mostra tutte le playlist unite</button></div>' : ''}
       ${localOk() ? `<div class="seg" style="margin-top:18px"><button data-f class="sel" id="tM3U">M3U</button><button data-f id="tXT">Xtream Codes</button></div><div id="plForm"></div><button class="btn pri" data-f id="plAdd" style="width:100%;justify-content:center">+ Aggiungi playlist</button>` : '<div class="snote">Le playlist sono gestite dal tuo fornitore.</div>'}
+      ${allPl.length ? `<h3 style="margin-top:26px">PIN delle playlist</h3><div class="snote">Una playlist protetta resta nascosta finché non inserisci il suo PIN (vale fino alla chiusura dell'app); il PIN serve anche per modificarla.</div>
+      <div class="sbtns">${allPl.map((p) => `<button class="btn" data-f data-plpin="${esc(p.id)}">${plPins()[p.id] ? '🔒' : '🔓'} ${esc(p.name)}</button>`).join('')}</div>` : ''}
       <h3 style="margin-top:26px">Ordinamento</h3>${optRow('sortCats')}${optRow('sortCh')}${optRow('sortVod')}`,
     play: `<h3>Lettore</h3>${HAS_PLAYER ? '' : '<div class="snote">Queste opzioni valgono nell\'app (Fire TV, Android TV, telefoni).</div>'}
       ${optRow('engLive')}${optRow('engMovie')}${optRow('engSeries')}
       ${PLAY_OPTS.filter((o) => o[0] !== 'engine').map(([k, lbl, opts]) => `<div class="sr" data-f data-pk="${k}"><span>${lbl}</span><b>${(opts.find((o) => o[0] === P[k]) || opts[0])[1]}</b></div>`).join('')}
-      ${optRow('hw')}${optRow('adaptQ')}<div class="snote" style="margin:-4px 0 10px">Se la connessione non regge, il canale passa da solo a una sua versione più leggera (es. da FHD a HD) e torna alla qualità piena quando la linea migliora. Se il video si blocca, l'app prova da sola a ripartire, la decodifica software o l'altro lettore.</div>${optRow('autoNext')}${optRow('subSize')}${optRow('resInd')}
+      ${optRow('hw')}${optRow('adaptQ')}<div class="snote" style="margin:-4px 0 10px">Se la connessione non regge, il canale passa da solo a una sua versione più leggera (es. da FHD a HD) e torna alla qualità piena quando la linea migliora. Se il video si blocca, l'app prova da sola a ripartire, la decodifica software o l'altro lettore.</div>${optRow('autoNext')}${optRow('introAuto')}${HAS_PLAYER ? optRow('pip') : ''}${optRow('subSize')}${optRow('resInd')}
       <div class="snote"><b>Automatico avanzato</b> sceglie da solo il lettore migliore per ogni contenuto (ExoPlayer, oppure VLC per i formati che ExoPlayer non legge) e cambia lettore da solo se qualcosa non parte. Disattiva l'accelerazione hardware solo se vedi immagini verdi o a scatti. Durante la visione premi OK per audio, qualità e sottotitoli.</div>`,
+    org: `<h3>Organizza</h3>
+      <div class="snote">Tieni premuto OK su un film, una serie o un canale per: già visto, coda, tag, modifica informazioni, guida TV.</div>
+      ${optRow('sortCats')}${optRow('sortCh')}${optRow('sortVod')}
+      <h3 style="margin-top:22px">Ordine personalizzato</h3>
+      <div class="sbtns"><button class="btn" data-f id="oCatL">Categorie TV in diretta</button><button class="btn" data-f id="oCatM">Categorie film</button><button class="btn" data-f id="oCatS">Categorie serie</button><button class="btn" data-f id="oFav">Preferiti (${S.favs.size})</button></div>
+      <h3 style="margin-top:22px">Nomi delle categorie</h3>
+      <div class="sbtns"><button class="btn" data-f id="rCatL">Rinomina categorie TV</button><button class="btn" data-f id="rCatM">Rinomina categorie film</button><button class="btn" data-f id="rCatS">Rinomina categorie serie</button></div>
+      <h3 style="margin-top:22px">I tuoi elenchi</h3>
+      ${kv('Tag', tagNames().length ? tagNames().map((t) => `${esc(t)} (${S.tags[t].length})`).join(' · ') : 'nessuno')}${kv('Coda di riproduzione', S.queue.length + ' titoli')}${kv('Già visti', S.watched.size + ' titoli')}
+      <div class="sbtns">${tagNames().length ? '<button class="btn" data-f id="oTagDel">Elimina un tag…</button>' : ''}${S.queue.length ? '<button class="btn" data-f id="oQClr">Svuota la coda</button>' : ''}${S.watched.size ? '<button class="btn" data-f id="oWClr">Azzera «già visti»</button>' : ''}${Object.keys(store.get('meta', {})).length ? '<button class="btn" data-f id="oMClr">Ripristina tutte le informazioni modificate</button>' : ''}</div>`,
     tv: (() => {
       const m = store.get('epgMeta', {}), src = epgSources();
       const st = S.epgRunning ? 'In aggiornamento…' : S.xepg ? `Attiva · ${(m.n || 0).toLocaleString('it')} programmi · aggiornata alle ${new Date(m.t || S.xepg.t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : NATIVE && NATIVE.epgBuild ? 'Non ancora scaricata' : 'Guida breve (aggiorna l\'app alla 1.5 per la guida completa)';
@@ -3931,7 +4437,9 @@ function renderSettings(sec) {
     $('#tM3U').onclick = () => { pType = 'm3u'; $('#tM3U').classList.add('sel'); $('#tXT').classList.remove('sel'); form('m3u'); };
     $('#tXT').onclick = () => { pType = 'xtream'; $('#tXT').classList.add('sel'); $('#tM3U').classList.remove('sel'); form('xtream'); };
     let editId = '';
-    $$('[data-pedit]').forEach((b) => (b.onclick = () => {
+    $$('[data-plpin]').forEach((b) => (b.onclick = () => plPinToggle(b.dataset.plpin)));
+    $$('[data-pedit]').forEach((b) => (b.onclick = async () => {
+      if (plLocked(b.dataset.pedit) && !(await plUnlockAsk(b.dataset.pedit))) return;
       const p = S.local.find((x) => x.id === b.dataset.pedit); if (!p) return;
       editId = p.id; pType = p.type === 'xtream' ? 'xtream' : 'm3u';
       $('#tXT').classList.toggle('sel', pType === 'xtream'); $('#tM3U').classList.toggle('sel', pType === 'm3u'); form(pType);
@@ -3949,7 +4457,7 @@ function renderSettings(sec) {
       await loadLibrary(); renderSettings('pl'); focus($('#plAdd') || $('.sm.sel'), true);
     };
   }
-  $$('[data-del]').forEach((b) => (b.onclick = async () => { S.local = S.local.filter((p) => p.id !== b.dataset.del); store.set('localPl', S.local); await loadLibrary(); renderSettings('pl'); focus($('.sm.sel'), true); }));
+  $$('[data-del]').forEach((b) => (b.onclick = async () => { if (plLocked(b.dataset.del) && !(await plUnlockAsk(b.dataset.del))) return; S.local = S.local.filter((p) => p.id !== b.dataset.del); store.set('localPl', S.local); await loadLibrary(); renderSettings('pl'); focus($('.sm.sel'), true); }));
   $$('[data-phide]').forEach((b) => (b.onclick = async () => {
     const h = new Set(store.get('plHidden', [])), id = b.dataset.phide;
     if (h.has(id)) h.delete(id); else { if (allPlaylists().filter((p) => !h.has(p.id)).length <= 1) return toast('Deve restare almeno una playlist'); h.add(id); }
@@ -3986,7 +4494,7 @@ function renderSettings(sec) {
     P2[k] = nx[0]; store.set('play', P2); b.querySelector('b').textContent = nx[1];
   }));
   if ($('#sBug')) $('#sBug').onclick = () => reportDialog();
-  $('#hRestore').onclick = () => { S.hidden.clear(); store.set('hidden', []); $('#hCount').textContent = '0'; toast('Tutti i canali sono di nuovo visibili'); if (S.lib.live.length) renderChannels(); };
+  $('#hRestore').onclick = () => { S.hidden.clear(); store.set('hidden', []); hidVer++; $('#hCount').textContent = '0'; toast('Tutti i canali sono di nuovo visibili'); if (S.lib.live.length) renderChannels(); };
   $('#kPin').onclick = async () => {
     if (store.get('pinH', '') && !(await checkPin('PIN attuale'))) return;
     if (await setNewPin()) renderSettings('kids');
@@ -4106,10 +4614,12 @@ function applyProfile(p, silent) {
   let main = store.get('profMain', '');
   if (p && !main) { main = (profList()[0] || p).id; store.set('profMain', main); }
   profNs = p && p.id !== main ? String(p.id).replace(/[^a-z0-9]/gi, '') : '';
+  storeMem.delete('kx_profNs'); storeMem.delete('kx_profId');
   try { localStorage.setItem('kx_profNs', JSON.stringify(profNs)); localStorage.setItem('kx_profId', JSON.stringify(p ? p.id : '')); } catch {}
   // dati del profilo: preferiti, cronologia, posizioni, canali nascosti, blocchi
   S.favs = new Set(store.get('favs', [])); S.recent = store.get('recent', []);
-  S.hidden = new Set(store.get('hidden', [])); S.locked = new Set(store.get('locked', [])); S.unlocked = false;
+  S.watched = new Set(store.get('watched', [])); S.queue = store.get('queue', []); S.tags = store.get('tags', {}); S.reminders = store.get('reminders', []); epgMapV = store.get('epgMap', {}); S.xepgVer++;
+  hidVer++; S.hidden = new Set(store.get('hidden', [])); S.locked = new Set(store.get('locked', [])); S.unlocked = false;
   if (S.fullLib) setLib(S.fullLib);
   // i risultati di una ricerca fatta nel profilo precedente non devono restare visibili (es. contenuti adulti nel profilo bambini)
   searchRes = []; $('#q').value = ''; $('#results').innerHTML = '';
@@ -4373,12 +4883,42 @@ function playCatchup(ch, prog) {
   if (HAS_PLAYER) nativePlay(it, 'movie', 0); else openFs(it, 'movie', 0);
 }
 /* menu dei programmi della guida (tieni premuto OK su un programma) */
+/* promemoria dei programmi: un avviso un minuto prima dell'inizio, con «Guarda» */
+S.reminders = store.get('reminders', []);
+const remKey = (ch, p) => ch.id + '@' + p.start;
+const remHas = (ch, p) => S.reminders.some((r) => r.k === remKey(ch, p));
+function remToggle(ch, p) {
+  const k = remKey(ch, p), i = S.reminders.findIndex((r) => r.k === k);
+  if (i >= 0) { S.reminders.splice(i, 1); toast('Promemoria tolto'); }
+  else { S.reminders.push({ k, ch: ch.id, chn: ch.name, title: p.title, start: p.start }); S.reminders.sort((a, b) => a.start - b.start); if (S.reminders.length > 60) S.reminders.length = 60; toast(`🔔 Ti avviso alle ${hhmm(p.start - 60e3)}: ${p.title}`); }
+  store.set('reminders', S.reminders);
+  $$(`.gp[data-s="${p.start}"]`).forEach((e) => { if (G.idx[+e.dataset.r] === ch) e.classList.toggle('rem', i < 0); });
+}
+function remCheck() {
+  if (!S.reminders.length) return;
+  const t = Date.now();
+  const due = S.reminders.filter((r) => r.start - t <= 60e3 && t - r.start < 15 * 60e3);
+  const keep = S.reminders.filter((r) => t - r.start < 15 * 60e3 && !due.includes(r));
+  if (!due.length) { if (keep.length !== S.reminders.length) { S.reminders = keep; store.set('reminders', keep); } return; }
+  // mentre si guarda a schermo intero nel lettore dell'app l'avviso aspetta il ritorno (entro 15 minuti dall'inizio)
+  if (S.inPlayer || $('.speedm.on') || $('#boot').classList.contains('on')) return;
+  S.reminders = keep; store.set('reminders', keep);
+  const r = due[0], ch = S.byId && S.byId.get(r.ch);
+  fx('ok');
+  kxModal('remM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">🔔 PROMEMORIA</div><h2>${esc(r.title)}</h2><p class="mut">${r.start > t ? 'Inizia alle ' + hhmm(r.start) : 'È iniziato alle ' + hhmm(r.start)} su ${esc(r.chn)}</p>
+    <div class="sbtn">${ch ? '<button class="btn pri" data-f id="remGo">▶ Guarda</button>' : ''}<button class="btn" data-f id="remNo">Ignora</button></div>`);
+  if (ch) $('#remGo').onclick = () => { back(); openFs(ch, 'live'); };
+  $('#remNo').onclick = () => back();
+  setTimeout(() => focus($('#remGo') || $('#remNo'), true), 40);
+}
+setInterval(remCheck, 20e3);
 function progMenu(ch, prog) {
   const t = Date.now(), fut = prog.start > t, past = prog.end <= t, live = !fut && !past;
   const acts = [];
   if (live) acts.push(['watch', '▶  Guarda il canale']);
   if (past && catchupUrl(ch, prog)) acts.push(['cu', '⟲  Guarda dall\'Archivio TV']);
   if (!past && ch.arch && live && catchupUrl(ch, prog)) acts.push(['cu', '⟲  Guarda dall\'inizio (Archivio TV)']);
+  if (fut) acts.push(['rem', remHas(ch, prog) ? '🔕  Togli il promemoria' : '🔔  Ricordamelo quando inizia']);
   if (fut && canRec()) acts.push(['sched', '⏰  Programma la registrazione']);
   if (live && canRec()) acts.push(['rec', recFor(ch.id) ? '■  Ferma la registrazione' : '●  Registra ora']);
   acts.push(['ch', '☰  Opzioni del canale']);
@@ -4389,6 +4929,7 @@ function progMenu(ch, prog) {
     if (a === 'watch') return openFs(ch, 'live');
     if (a === 'cu') return playCatchup(ch, prog);
     if (a === 'sched') return recToggle(ch, prog);
+    if (a === 'rem') return remToggle(ch, prog);
     if (a === 'rec') return recToggle(ch);
     if (a === 'ch') return setTimeout(() => itemMenu(ch, cur), 60);
   }));
@@ -4527,15 +5068,21 @@ function openEvent(e, fi) {
 function doSearch() {
   const q = $('#q').value.trim().toLowerCase();
   if (q.length < 2) { searchRes = []; $('#results').innerHTML = '<div class="empty">Scrivi almeno 2 lettere</div>'; return; }
-  const m = (x) => x.name.toLowerCase().includes(q);
+  const m = (x) => (x._lc || (x._lc = String(x.name || '').toLowerCase())).includes(q);
   const L = visLive(S.lib.live).filter(m).slice(0, 48), M = S.lib.movies.filter(m).slice(0, 60), Se = S.lib.series.filter(m).slice(0, 60);
-  searchRes = [...L, ...M, ...Se];
+  // attori: dal cast già noto dei titoli (serie, film aperti) e, se il server ha TMDB, dalla filmografia
+  const inRes = new Set([...M, ...Se]);
+  const A = q.length >= 4 ? [...S.lib.series, ...S.lib.movies].filter((x) => x.cast && !inRes.has(x) && String(x.cast).toLowerCase().includes(q)).slice(0, 40) : [];
+  const P = (actorRes && actorRes.q === q ? actorRes.items : []).filter((x) => !inRes.has(x) && !A.includes(x));
+  searchRes = [...L, ...M, ...Se, ...A, ...P];
   let i = 0;
   const sec = (t, n, body) => (n ? `<h4 class="sh">${t} <small>${n}</small></h4>${body}` : '');
   $('#results').innerHTML = searchRes.length
     ? sec('Canali', L.length, `<div class="sgrid">${L.map((c) => { const n = nowOf(c); return `<div class="stile${isLocked(c) ? ' lk' : ''}" data-f data-i="${i++}"><div class="lg">${logoHTML(c)}</div><div class="nm"><b>${esc(c.name)}</b><small>CH ${c.num}${n ? ' · ' + esc(n.title) : c.group ? ' · ' + esc(c.group) : ''}</small></div></div>`; }).join('')}</div>`)
       + sec('Film', M.length, `<div class="pgrid">${M.map((x) => posterHTML(x, i++)).join('')}</div>`)
       + sec('Serie TV', Se.length, `<div class="pgrid">${Se.map((x) => posterHTML(x, i++)).join('')}</div>`)
+      + sec('🎭 Con questo attore', A.length, `<div class="pgrid">${A.map((x) => posterHTML(x, i++)).join('')}</div>`)
+      + sec(`🎭 ${esc(actorRes && actorRes.q === q ? actorRes.name : '')}: nella tua libreria`, P.length, `<div class="pgrid">${P.map((x) => posterHTML(x, i++)).join('')}</div>`)
     : '<div class="empty">Nessun risultato per “' + esc(q) + '”</div>';
 }
 
@@ -4613,7 +5160,7 @@ async function playTrailer(x, ex) {
   toast('Cerco il trailer…', 1500);
   try {
     const y = (ex && ex.year) || x.year || '', kind = isSeriesItem(x) ? 'series' : 'movie';
-    const j = await getJSON(`${baseServer()}/api/player/trailer?t=${encodeURIComponent(x.name)}&y=${encodeURIComponent(String(y).slice(0, 4))}&kind=${kind}`);
+    const j = await getJSON(`${baseServer()}/api/player/trailer?t=${encodeURIComponent(x.name)}&y=${encodeURIComponent(String(y).slice(0, 4))}&kind=${kind}&c=${encodeURIComponent(S.code || '')}`);
     if (j && j.yt && /^[\w-]{11}$/.test(j.yt)) {
       // YouTube: nel lettore dei trailer dell'app (APK 1.9), altrimenti in una finestra della pagina
       if (NATIVE && NATIVE.playYoutube) { NATIVE.playYoutube(j.yt, x.name); return; }
@@ -4626,6 +5173,7 @@ async function playTrailer(x, ex) {
   } catch { toast('Trailer non disponibile in questo momento'); } finally { if (b) b.classList.remove('busy'); }
 }
 function ytOverlay(id, name) {
+  if (!/^[\w-]{11}$/.test(String(id || ''))) return toast('Video non disponibile');
   const back = cur;
   // app Android senza il lettore dei trailer (APK precedente alla 1.9): niente riquadro incorporato, si apre l'app YouTube
   const frame = NATIVE ? `<div class="ytold"><b>Aggiorna l'app KAIROS per vedere i trailer qui dentro.</b><span class="mut">Intanto puoi aprirlo con l'app YouTube.</span></div>` : `<iframe src="https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&playsinline=1&modestbranding=1&hl=it" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
@@ -4678,6 +5226,17 @@ function wireSettingsExtra() {
     if (profCanEdit()) profileEditor(p); else { (p.kids ? Promise.resolve(true) : kidsGate()).then((okp) => { if (!okp) return; applyProfile(p); renderSettings('acct'); focus($('.sm.sel'), true); }); }
   }));
   const on = (id, f) => { const e = $('#' + id); if (e) e.onclick = f; };
+  $$('[data-plpin]').forEach((b) => (b.onclick = () => plPinToggle(b.dataset.plpin)));
+  on('oCatL', () => orderCats('l')); on('oCatM', () => orderCats('m')); on('oCatS', () => orderCats('s')); on('oFav', () => orderFavs());
+  on('rCatL', () => renameCats('l')); on('rCatM', () => renameCats('m')); on('rCatS', () => renameCats('s'));
+  on('oQClr', () => { S.queue = []; store.set('queue', []); toast('Coda svuotata'); renderSettings('org'); });
+  on('oWClr', () => { S.watched = new Set(); store.set('watched', []); toast('«Già visti» azzerati'); renderSettings('org'); });
+  on('oMClr', () => { store.set('meta', {}); if (S.fullLib) setLib(S.fullLib); toast('Informazioni originali ripristinate'); renderSettings('org'); });
+  on('oTagDel', () => {
+    kxModal('tagDM', `<h2>Elimina un tag</h2><div class="replist">${tagNames().map((t) => `<button class="btn" data-f data-td="${esc(t)}">🏷 ${esc(t)} (${S.tags[t].length})</button>`).join('')}</div>`);
+    $$('#tagDM [data-td]').forEach((b) => (b.onclick = () => { delete S.tags[b.dataset.td]; store.set('tags', S.tags); back(); toast('Tag eliminato'); renderSettings('org'); }));
+    setTimeout(() => focus($('#tagDM [data-td]'), true), 40);
+  });
   on('aAsk', () => { const v = store.get('askProf', true) === false; store.set('askProf', v); $('#aAsk b').textContent = v ? 'Sì' : 'No'; });
   on('aSw', () => showProfiles(() => go('home', true)));
   on('aLinkNew', () => linkCodeDialog());
@@ -4866,11 +5425,13 @@ function showActivate(serverMode) {
   try { NATIVE && NATIVE.uiReady && NATIVE.uiReady(); } catch {}
   clearInterval(pollT);
   if (!serverMode) pollT = setInterval(async () => {
+    if (S.regBusy) return;
     const prev = S.status;
-    try { await register(); } catch { S.status = 'offline'; }
+    S.regBusy = true;
+    try { await register(); } catch { S.status = 'offline'; } finally { S.regBusy = false; }
     if (S.status === 'active') { clearInterval(pollT); fx('boot'); toast(prev === 'offline' ? '✓ Connesso' : '✓ Dispositivo attivato!'); await afterActive(); }
     else if (S.status !== prev) showActivate(false);
-  }, 8000);
+  }, 12000);
 }
 $('#srvSave').onclick = async () => {
   S.server = $('#srvInput').value.trim().replace(/\/+$/, ''); store.set('server', S.server); S.demo = false;
@@ -5055,7 +5616,7 @@ async function heartbeat(force) {
   try { if (NATIVE && NATIVE.netInfo) net = JSON.parse(NATIVE.netInfo() || 'null'); } catch {}
   try { if (NATIVE && NATIVE.playStats && it) stats = JSON.parse(NATIVE.playStats() || 'null'); } catch {}
   const n = it && it.k === 'l' ? nowOf(it) : null;
-  const sp = speedLast ? { dl: +speedLast.mbps.toFixed(1), ul: speedLast.ul != null && speedLast.ul >= 0 ? +speedLast.ul.toFixed(1) : null, ping: Math.round(speedLast.ping || 0), jitter: Math.round(speedLast.jitter || 0), t: speedLast.t } : null;
+  const sp = speedLast && isFinite(speedLast.mbps) ? { dl: +(+speedLast.mbps).toFixed(1), ul: speedLast.ul != null && speedLast.ul >= 0 ? +speedLast.ul.toFixed(1) : null, ping: Math.round(speedLast.ping || 0), jitter: Math.round(speedLast.jitter || 0), t: speedLast.t } : null;
   const body = { state, title: it ? (it.k === 'l' ? (n ? n.title : '') : it.name) : '', ch: it && it.k === 'l' ? it.name : '', chId: it ? it.id : '', group: it ? it.group || '' : '', pl: it ? it.pl || '' : '', prof: S.prof ? S.prof.name : '',
     ver: (NATIVE && NATIVE.version && NATIVE.version()) || 'web', ui: (NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || '', model: (NATIVE && NATIVE.model && NATIVE.model()) || 'browser', screen: ($('.screen.on') || {}).id || '',
     net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off', ...(S.kickAck ? { kickAck: S.kickAck } : {}) };

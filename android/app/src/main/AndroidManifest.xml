@@ -45,10 +45,18 @@
 
         <activity
             android:name=".PlayerActivity"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|locale|layoutDirection|fontScale|touchscreen"
             android:exported="false"
             android:launchMode="singleTop"
             android:theme="@style/PlayerTheme" />
+
+        <activity
+            android:name=".MultiActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|locale|layoutDirection|fontScale|touchscreen"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
 
         <activity
             android:name=".TrailerActivity"

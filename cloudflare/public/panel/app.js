@@ -2,7 +2,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ss = { get(k) { try { return sessionStorage.getItem(k); } catch { return null; } }, set(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch {} } };
-const THEMES = { cinema: ['#e5202b', '#ff5a36', '#b3121b'], aurora: ['#22e1ff', '#7b5cff', '#ff3df2'], plasma: ['#ff3d8b', '#ff7a3d', '#ffd23d'], matrix: ['#3dffb0', '#22e1ff', '#3d7bff'], solar: ['#ffb23d', '#ff3d6e', '#b13dff'], ice: ['#9ef0ff', '#5d9bff', '#c3b5ff'] };
+const THEMES = { cinema: ['#e5202b', '#ff5a36', '#b3121b'], aurora: ['#22e1ff', '#7b5cff', '#ff3df2'], plasma: ['#ff3d8b', '#ff7a3d', '#ffd23d'], matrix: ['#3dffb0', '#22e1ff', '#3d7bff'], solar: ['#ffb23d', '#ff3d6e', '#b13dff'], ice: ['#9ef0ff', '#5d9bff', '#c3b5ff'], oro: ['#f5c542', '#ff9d2e', '#b8860b'], smeraldo: ['#2ee59d', '#13a8a8', '#0b7a4b'], oceano: ['#2f80ed', '#56ccf2', '#1b3a8f'], tramonto: ['#ff6b35', '#f7c548', '#c2185b'], viola: ['#9b5cff', '#d86bff', '#5b2bd1'], rosa: ['#ff5fa2', '#ff9ec7', '#c2185b'] };
 const applyTheme = (n) => { const t = THEMES[n] || THEMES.cinema; ['--a1', '--a2', '--a3'].forEach((v, i) => document.documentElement.style.setProperty(v, t[i])); };
 const STL = { active: 'Attivo', pending: 'In attesa', expired: 'Scaduto', disabled: 'Disattivato' };
 const STC = { active: 'var(--ok)', pending: 'var(--warn)', expired: 'var(--bad)', disabled: '#ff7aa0' };
@@ -151,7 +151,7 @@ async function enter() {
   $('#login').style.display = 'none'; $('#app').classList.add('on'); requestAnimationFrame(drawChart);
   $('#copyLink').onclick = () => { const l = D.settings.apkUrl; if (!l) return toast('Imposta il link APK in Impostazioni', 1); navigator.clipboard.writeText(l).then(() => toast('Link copiato'), () => toast('Copia non consentita', 1)); };
   clearInterval(poll);
-  if (!D.demo) poll = setInterval(() => load().catch(() => {}), 20000);
+  if (!D.demo) poll = setInterval(() => { if (!document.hidden && document.querySelector('#app.on')) load().catch(() => {}); }, 20000);
 }
 function renderSide() {
   $('#dlCode').textContent = D.settings.downloaderCode ? 'Downloader ' + D.settings.downloaderCode : '';
@@ -332,6 +332,8 @@ const PERM_L = [
   ['epgUrl', 'Cambiare la guida TV', 'Inserire un indirizzo EPG diverso'],
   ['localPl', 'Aggiungere, modificare ed eliminare playlist', 'Playlist personali nell\'app (oltre alle tue) e nascondere quelle che non usa'],
   ['plSwitch', 'Cambiare playlist', 'Pulsante rapido vicino a «Guida TV» per passare da una playlist all\'altra'],
+  ['multi', 'Multi-schermo', '2 o 4 canali insieme sullo stesso schermo (usa più connessioni)'],
+  ['ai', 'Assistente IA', 'Domande sul film, la serie o il programma che sta guardando'],
 ];
 function renderDrawer() {
   const linked = !!edit.parent, P = linked ? parentOf(edit) : null;

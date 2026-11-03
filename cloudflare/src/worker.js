@@ -61,7 +61,9 @@ async function readJSON(req, max = 64 * 1024) {
   if (len > max) throw new HttpErr(413, 'Richiesta troppo grande');
   const t = await req.text();
   if (t.length > max) throw new HttpErr(413, 'Richiesta troppo grande');
-  try { return JSON.parse(t || '{}'); } catch { throw new HttpErr(400, 'JSON non valido'); }
+  let v; try { v = JSON.parse(t || '{}'); } catch { throw new HttpErr(400, 'JSON non valido'); }
+  if (v === null || typeof v !== 'object') throw new HttpErr(400, 'JSON non valido');
+  return v;
 }
 class HttpErr extends Error { constructor(status, msg) { super(msg); this.status = status; } }
 
@@ -359,7 +361,7 @@ const DATE_RE = { test: (s) => { if (s === '') return true; if (!/^\d{4}-\d{2}-\
 
 /* ---------------- permessi per dispositivo ---------------- */
 // tutte le funzioni sono consentite se non vengono spente: nel DB restano solo le chiavi a false
-const PERM_KEYS = ['report', 'request', 'profiles', 'link', 'rec', 'speed', 'vpn', 'epgUrl', 'localPl', 'plSwitch'];
+const PERM_KEYS = ['report', 'request', 'profiles', 'link', 'rec', 'speed', 'vpn', 'epgUrl', 'localPl', 'plSwitch', 'multi', 'ai'];
 const PERM_MSG = 'Funzione disattivata dal fornitore';
 /** oggetto completo {chiave: bool} a partire dal JSON salvato (o da un oggetto parziale) */
 function permsParse(src) {
@@ -521,11 +523,11 @@ async function vpnOf(env, P, me) {
   return out;
 }
 /* ---------------- contatori anti-abuso su D1 (finestre lunghe, oltre i 60 s del rate limiting nativo) ---------------- */
-async function throttled(env, key, max, windowMs) {
+async function throttled(env, key, max, windowMs, inc = 1) {
   try {
     const t = now();
-    const r = await env.DB.prepare('INSERT INTO throttle (k, n, until) VALUES (?, 1, ?) ON CONFLICT(k) DO UPDATE SET n = CASE WHEN throttle.until < ? THEN 1 ELSE throttle.n + 1 END, until = CASE WHEN throttle.until < ? THEN excluded.until ELSE throttle.until END RETURNING n')
-      .bind(key, t + windowMs, t, t).first();
+    const r = await env.DB.prepare('INSERT INTO throttle (k, n, until) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET n = CASE WHEN throttle.until < ? THEN excluded.n ELSE throttle.n + excluded.n END, until = CASE WHEN throttle.until < ? THEN excluded.until ELSE throttle.until END RETURNING n')
+      .bind(key, inc, t + windowMs, t, t).first();
     return !!r && r.n > max;
   } catch { return false; }
 }
@@ -854,8 +856,8 @@ async function playerErrors(req, env, ip, ctx) {
   if (bad) return bad;
   const items = Array.isArray(b.items) ? b.items.slice(0, 20) : [];
   if (!items.length) return json({ ok: true, saved: 0 });
-  // al massimo 300 problemi l'ora per dispositivo: un'app impazzita non riempie il database
-  if (await throttled(env, 'er:' + d.id, 300, 3600e3)) return json({ ok: true, saved: 0, limited: true });
+  // al massimo 300 problemi l'ora per dispositivo (contati uno per uno): un'app impazzita non riempie il database
+  if (await throttled(env, 'er:' + d.id, 300, 3600e3, items.length)) return json({ ok: true, saved: 0, limited: true });
   const t = now(), model = str(b.model, 80) || d.model || '', ver = str(b.ver, 20);
   const stmts = [];
   for (const x of items) {
@@ -966,7 +968,7 @@ async function playerStream(req, env, ip, ctx) {
   if (max > 0) {
     const ids = [P.id, ...(await linkedOf(env, P.id)).map((x) => x.id)].filter((id) => id !== d.id);
     let busy = 0;
-    for (const id of ids) { const r = await env.DB.prepare('SELECT state, t FROM presence WHERE device_id = ?').bind(id).first(); if (r && r.state !== 'idle' && t - r.t < 150e3) busy++; }
+    for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); const r = await env.DB.prepare(`SELECT COUNT(*) AS n FROM presence WHERE state != 'idle' AND t > ? AND device_id IN (${part.map(() => '?').join(',')})`).bind(t - 150e3, ...part).first(); busy += (r && r.n) || 0; }
     if (busy >= max) {
       ctx.waitUntil(log(env, 'off', `Limite visioni contemporanee raggiunto: ${P.name || P.code} (${max})`, ip));
       return json({ ok: false, error: `Limite di visioni contemporanee raggiunto (${max} su questo abbonamento). Chiudi la visione su un altro dispositivo e riprova.`, max, busy });
@@ -976,6 +978,26 @@ async function playerStream(req, env, ip, ctx) {
   return json({ ok: true, max });
 }
 /* trailer: anteprime ufficiali dalla ricerca di Apple iTunes (senza chiave), conservate 14 giorni */
+/* dispositivo registrato (?c=codice): può riempire la cache; chiunque altro legge solo ciò che c'è già */
+const devSeen = new Map();
+async function knownDevice(env, url) {
+  const code = String(url.searchParams.get('c') || '').toUpperCase();
+  if (!CODE_RE.test(code)) return '';
+  const t = devSeen.get(code);
+  if (t && now() - t < 10 * 60e3) return code;
+  const r = await env.DB.prepare('SELECT 1 AS x FROM devices WHERE code = ?').bind(code).first().catch(() => null);
+  if (!r) return '';
+  if (devSeen.size > 2000) devSeen.clear();
+  devSeen.set(code, now());
+  return code;
+}
+/* scrittura in cache: un risultato trovato si salva sempre (i titoli veri sono pochi);
+   un «non trovato» solo da un dispositivo registrato, al massimo 30 al minuto: titoli inventati non riempiono il database */
+async function cacheOk(env, url, tag, found) {
+  if (found) return true;
+  const code = await knownDevice(env, url);
+  return !!code && !(await limited(env.RL_DEVICE, tag + code));
+}
 async function playerTrailer(req, env, ip, url, ctx) {
   if (await limited(env.RL_DEVICE, 'tr:' + ip)) return json({ error: 'Troppe richieste' }, 429);
   const raw = nameClean(url.searchParams.get('t') || '', 160);
@@ -1003,8 +1025,115 @@ async function playerTrailer(req, env, ip, url, ctx) {
   }
   const res = { url: out && out.url || '', yt: out && out.yt || '', title: out && out.title || '', src: out && out.src || '', t: now() };
   // se tutte le fonti erano irraggiungibili non si salva nulla (si riprova alla prossima richiesta)
-  if (res.url || res.yt || failures < tries.length) ctx.waitUntil(env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(key, JSON.stringify(res)).run());
+  if ((res.url || res.yt || failures < tries.length) && (await cacheOk(env, url, 'cwt:', !!(res.url || res.yt)))) ctx.waitUntil(env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(key, JSON.stringify(res)).run());
   return json({ url: res.url, yt: res.yt, title: res.title, src: res.src });
+}
+/* ---------- età consigliata e contenuti speciali (TMDB, solo se c'è TMDB_KEY) ---------- */
+const tmdbGet = (env) => {
+  const k = String(env.TMDB_KEY || '').trim(), bearer = k.length > 40;
+  const H = { Accept: 'application/json', ...(bearer ? { Authorization: 'Bearer ' + k } : {}) };
+  return async (u) => { const r = await fetch('https://api.themoviedb.org/3' + u + (bearer ? '' : (u.includes('?') ? '&' : '?') + 'api_key=' + encodeURIComponent(k)), { headers: H, signal: AbortSignal.timeout(7000) }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); };
+};
+/* classificazione americana → fascia italiana più vicina */
+const US_CERT = { G: 'T', 'TV-Y': 'T', 'TV-G': 'T', 'TV-Y7': '6+', PG: '6+', 'TV-PG': '6+', 'PG-13': '14+', 'TV-14': '14+', R: '14+', 'NC-17': '18+', 'TV-MA': '18+' };
+const certIt = (c) => { const x = String(c || '').trim().toUpperCase().replace(/^VM\s*/, ''); if (!x) return ''; if (x === 'T' || x === 'TUTTI') return 'T'; const n = parseInt(x, 10); return n ? n + '+' : ''; };
+async function metaTmdb(env, title, year, kind) {
+  const get = tmdbGet(env), t = kind === 'series' ? 'tv' : 'movie';
+  const yq = year ? (t === 'tv' ? '&first_air_date_year=' : '&year=') + year : '';
+  let res = (await get(`/search/${t}?query=${encodeURIComponent(title)}&language=it-IT${yq}`)).results || [];
+  if (!res.length && yq) res = (await get(`/search/${t}?query=${encodeURIComponent(title)}&language=it-IT`)).results || [];
+  const hit = res[0]; if (!hit) return null;
+  const [rd, vids] = await Promise.all([
+    get(t === 'tv' ? `/tv/${hit.id}/content_ratings` : `/movie/${hit.id}/release_dates`).catch(() => ({})),
+    get(`/${t}/${hit.id}/videos?language=it-IT&include_video_language=it,en,null`).catch(() => ({})),
+  ]);
+  const rows = rd.results || [];
+  const country = (cc) => rows.find((r) => r.iso_3166_1 === cc);
+  let cert = '', src = '';
+  const it = country('IT');
+  if (it) { cert = certIt(t === 'tv' ? it.rating : ((it.release_dates || []).find((d) => d.certification) || {}).certification); if (cert) src = 'IT'; }
+  if (!cert) { const us = country('US'); const c = us ? (t === 'tv' ? us.rating : ((us.release_dates || []).find((d) => d.certification) || {}).certification) : ''; if (US_CERT[c]) { cert = US_CERT[c]; src = 'US'; } }
+  const EX = { Featurette: 'Speciale', 'Behind the Scenes': 'Dietro le quinte', Clip: 'Clip', Bloopers: 'Papere', Teaser: 'Teaser', Trailer: 'Trailer' };
+  const extras = (vids.results || []).filter((v) => v.site === 'YouTube' && /^[\w-]{11}$/.test(v.key) && EX[v.type]).slice(0, 12)
+    .map((v) => ({ yt: v.key, name: String(v.name || '').slice(0, 90), type: EX[v.type] }));
+  return { cert, certSrc: src, extras, tmdb: hit.id };
+}
+async function playerMeta(req, env, ip, url, ctx) {
+  if (await limited(env.RL_DEVICE, 'mt:' + ip)) return json({ error: 'Troppe richieste' }, 429);
+  if (!env.TMDB_KEY) return json({ cert: '', extras: [], off: true });
+  const raw = nameClean(url.searchParams.get('t') || '', 160), title = trailerTitle(raw);
+  const year = parseInt(url.searchParams.get('y') || '', 10) || yearIn(raw), kind = url.searchParams.get('kind') === 'series' ? 'series' : 'movie';
+  if (title.length < 2) return json({ cert: '', extras: [] });
+  const key = 'mta:' + (await sha256(kind + '|' + title.toLowerCase() + '|' + year)).slice(0, 24);
+  const c = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(key).first();
+  if (c) { try { const v = JSON.parse(c.v), age = now() - v.t; if ((v.tmdb ? age < 14 * 864e5 : age < 6 * 3600e3)) return json({ cert: v.cert || '', certSrc: v.certSrc || '', extras: v.extras || [] }); } catch {} }
+  let out = null;
+  try { out = await metaTmdb(env, title, year, kind); } catch { return json({ cert: '', extras: [] }); }
+  const v = { cert: out ? out.cert : '', certSrc: out ? out.certSrc : '', extras: out ? out.extras : [], tmdb: out ? out.tmdb : 0, t: now() };
+  if (await cacheOk(env, url, 'cwm:', !!v.tmdb)) ctx.waitUntil(env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(key, JSON.stringify(v)).run());
+  return json({ cert: v.cert, certSrc: v.certSrc, extras: v.extras });
+}
+/* assistente IA (Claude): solo se il fornitore ha messo il segreto ANTHROPIC_API_KEY e il permesso «ai» è acceso */
+const AI_MODEL = 'claude-haiku-5-5';
+async function playerAi(req, env, ip, ctx) {
+  if (await limited(env.RL_DEVICE, 'ai:' + ip)) return json({ error: 'Troppe richieste' }, 429);
+  let b;
+  try { b = await readJSON(req, 8192); } catch (e) { return json({ error: e.message }, e.status || 400); }
+  const [d, bad] = await deviceAuth(env, b);
+  if (bad) return bad;
+  if (!env.ANTHROPIC_API_KEY) return json({ off: true });
+  const [P] = await activeAccount(env, d);
+  if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
+  if (permsParse(P.perms).ai === false) return json({ error: 'Assistente non attivo su questo abbonamento' }, 403);
+  // al massimo 40 domande al giorno per dispositivo (costo sotto controllo)
+  if (await throttled(env, 'ai:' + d.id, 40, 86400e3)) return json({ error: 'Hai fatto molte domande oggi: riprova domani' }, 429);
+  const q = nameClean(b.q, 200), c = b.ctx && typeof b.ctx === 'object' ? b.ctx : {};
+  if (q.length < 2) return json({ error: 'Scrivi una domanda' }, 400);
+  const info = [
+    c.kind === 'live' ? `Canale TV: ${nameClean(c.ch, 80)}` : '', `Titolo: ${nameClean(c.title, 120)}`,
+    `Tipo: ${c.kind === 'series' ? 'serie TV' : c.kind === 'live' ? 'programma in diretta' : 'film'}`,
+    c.year ? `Anno: ${str(c.year, 8)}` : '', c.genre ? `Generi: ${nameClean(c.genre, 100)}` : '', c.cast ? `Cast: ${nameClean(c.cast, 200)}` : '',
+    c.plot ? `Trama dalla playlist: ${nameClean(c.plot, 600)}` : '',
+  ].filter(Boolean).join('\n');
+  let r;
+  try {
+    r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', signal: AbortSignal.timeout(25000),
+      headers: { 'content-type': 'application/json', 'x-api-key': String(env.ANTHROPIC_API_KEY).trim(), 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: env.AI_MODEL || AI_MODEL, max_tokens: 500,
+        system: 'Sei l\'assistente di un\'app per guardare la TV. Rispondi in italiano, in modo breve e chiaro (al massimo 6 frasi), adatto a essere letto sulla TV. Parla solo del contenuto indicato e di argomenti legati (trama, attori, curiosità, titoli simili). Non rivelare colpi di scena o finali se l\'utente non lo chiede esplicitamente. Se non conosci il contenuto, dillo con onestà. Non usare formattazione markdown.',
+        messages: [{ role: 'user', content: `${info}\n\nDomanda: ${q}` }],
+      }),
+    });
+  } catch { return json({ error: 'Assistente non raggiungibile, riprova tra poco' }, 502); }
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j) return json({ error: 'Assistente non disponibile in questo momento' }, 502);
+  const answer = (j.content || []).filter((x) => x.type === 'text').map((x) => x.text).join('\n').trim().slice(0, 2000);
+  return json({ answer: answer || 'Non ho una risposta per questa domanda.' });
+}
+/* ricerca per attore: titoli in cui ha recitato (l'app li confronta con la propria libreria) */
+async function playerPerson(req, env, ip, url, ctx) {
+  if (await limited(env.RL_DEVICE, 'ps:' + ip)) return json({ error: 'Troppe richieste' }, 429);
+  const q = nameClean(url.searchParams.get('q') || '', 60);
+  if (!env.TMDB_KEY) return json({ people: [], off: true });
+  if (q.length < 3) return json({ people: [] });
+  const key = 'prs:' + (await sha256(q.toLowerCase())).slice(0, 24);
+  const c = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(key).first();
+  if (c) { try { const v = JSON.parse(c.v); if (now() - v.t < 7 * 864e5) return json({ people: v.people || [] }); } catch {} }
+  const get = tmdbGet(env);
+  let people = [];
+  try {
+    const res = ((await get(`/search/person?query=${encodeURIComponent(q)}&language=it-IT`)).results || []).filter((p) => p.known_for_department === 'Acting' || !p.known_for_department).slice(0, 3);
+    for (const p of res) {
+      const cr = await get(`/person/${p.id}/combined_credits?language=it-IT`).catch(() => ({}));
+      const credits = (cr.cast || []).filter((x) => x.media_type === 'movie' || x.media_type === 'tv').sort((a, b) => (b.popularity || 0) - (a.popularity || 0)).slice(0, 120)
+        .map((x) => ({ t: String(x.title || x.name || '').slice(0, 120), o: String(x.original_title || x.original_name || '').slice(0, 120), y: +String(x.release_date || x.first_air_date || '').slice(0, 4) || 0, k: x.media_type === 'tv' ? 'series' : 'movie' }));
+      people.push({ name: String(p.name || '').slice(0, 80), credits });
+    }
+  } catch { return json({ people: [] }); }
+  if (await cacheOk(env, url, 'cwp:', people.length > 0)) ctx.waitUntil(env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(key, JSON.stringify({ people, t: now() })).run());
+  return json({ people });
 }
 /* titolo pulito: via prefissi di lingua/qualità ("IT |", "|4K|"), anni, parentesi, "multi-sub", stagioni */
 function trailerTitle(t) {
@@ -1076,7 +1205,11 @@ async function adminPresence(env) {
   const rows = ((await env.DB.prepare('SELECT p.*, d.name, d.code, d.expires, d.active, d.parent, d.playlists AS has_pl, d.model AS dmodel FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ? ORDER BY p.t DESC LIMIT 1000').bind(t - 86400e3).all()).results) || [];
   const pids = [...new Set(rows.filter((r) => r.parent).map((r) => r.parent))];
   const parents = new Map();
-  for (const pid of pids) { const p = await env.DB.prepare('SELECT id, name, code, active, expires, playlists FROM devices WHERE id = ?').bind(pid).first(); if (p) parents.set(pid, p); }
+  // clienti principali delle connessioni collegate: una sola query ogni 90 (il piano gratuito ne concede 50 per richiesta)
+  for (let i = 0; i < pids.length; i += 90) {
+    const part = pids.slice(i, i + 90);
+    for (const p of (await env.DB.prepare(`SELECT id, name, code, active, expires, playlists, parent FROM devices WHERE id IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results || []) parents.set(p.id, p);
+  }
   const stOf = (d) => statusOf(d, d.playlists || d.has_pl ? [1] : []);
   const online = [], recent = [];
   for (const r of rows) {
@@ -1267,6 +1400,9 @@ async function route(req, env, ctx) {
     if (path === '/api/player/errors' && req.method === 'POST') return playerErrors(req, env, ip, ctx);
     if (path === '/api/player/stream' && req.method === 'POST') return playerStream(req, env, ip, ctx);
     if (path === '/api/player/trailer' && req.method === 'GET') return playerTrailer(req, env, ip, url, ctx);
+    if (path === '/api/player/meta' && req.method === 'GET') return playerMeta(req, env, ip, url, ctx);
+    if (path === '/api/player/ai' && req.method === 'POST') return playerAi(req, env, ip, ctx);
+    if (path === '/api/player/person' && req.method === 'GET') return playerPerson(req, env, ip, url, ctx);
     if (path === '/api/player/request' && req.method === 'POST') return playerRequest(req, env, ip, ctx);
     if (path === '/api/player/trending' && req.method === 'GET') {
       if (await limited(env.RL_DEVICE, 'tr:' + ip)) return json({ movies: [], series: [], src: '', updated: 0 }, 429);
@@ -1932,7 +2068,33 @@ async function apiV1(req, env, url, ip, ctx) {
     const j = await (await adminRoutes(req, env, url, path, who, ip, ctx, null)).json();
     return json({ ...j, devices: (j.devices || []).map(apiDevice) });
   }
-  return adminRoutes(req, env, url, path, who, ip, ctx, null);
+  const pm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})$/);
+  if (pm && m === 'PUT') {
+    const b = await readJSON(req, 65536).catch((e) => e);
+    if (b instanceof Error || !b || typeof b !== 'object' || Array.isArray(b)) return json({ error: 'JSON non valido' }, 400);
+    if (b.playlists !== undefined) {
+      if (!Array.isArray(b.playlists)) return json({ error: 'playlists deve essere un elenco' }, 400);
+      const d = await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(pm[1]).first();
+      if (!d) return json({ error: 'Dispositivo non trovato' }, 404);
+      const old = new Map((await unseal(env, d.playlists).catch(() => [])).map((p) => [p.id, p]));
+      // una playlist già esistente (stesso id) tiene i dati che l'API non restituisce: password, indirizzo M3U, EPG
+      b.playlists = b.playlists.map((p) => { const o = p && p.id && old.get(p.id); if (!o) return p; const q = { ...o, ...p }; if (o.type !== 'xtream' && p.host !== undefined && p.url === undefined) delete q.host; return q; });
+    }
+    const sub = new Request(url.href, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+    return apiClean(await adminRoutes(sub, env, url, path, who, ip, ctx, null));
+  }
+  return apiClean(await adminRoutes(req, env, url, path, who, ip, ctx, null));
+}
+/* risposte dell'API che contengono un dispositivo: mai le password delle playlist */
+async function apiClean(r) {
+  if (!r || !(r.headers.get('Content-Type') || '').includes('json')) return r;
+  const j = await r.clone().json().catch(() => null);
+  if (!j || typeof j !== 'object') return r;
+  const isDev = (o) => o && typeof o === 'object' && Array.isArray(o.playlists) && 'code' in o;
+  if (isDev(j)) return json(apiDevice(j), r.status);
+  if (isDev(j.device)) return json({ ...j, device: apiDevice(j.device) }, r.status);
+  if (Array.isArray(j.devices) && j.devices.some(isDev)) return json({ ...j, devices: j.devices.map((o) => (isDev(o) ? apiDevice(o) : o)) }, r.status);
+  return r;
 }
 /* dispositivo per l'API: le password delle playlist non escono mai */
 function apiDevice(o) {
@@ -2111,7 +2273,7 @@ async function cleanup(env) {
   const t = now();
   await env.DB.batch([
     env.DB.prepare('DELETE FROM sessions WHERE expires < ?').bind(t),
-    env.DB.prepare("DELETE FROM settings WHERE (k LIKE 'trl:%' OR k LIKE 'trl2:%') AND CAST(json_extract(v, '$.t') AS INTEGER) < ?").bind(t - 14 * 864e5),
+    env.DB.prepare("DELETE FROM settings WHERE (k LIKE 'trl:%' OR k LIKE 'trl2:%' OR k LIKE 'mta:%' OR k LIKE 'prs:%') AND CAST(json_extract(v, '$.t') AS INTEGER) < ?").bind(t - 14 * 864e5),
     env.DB.prepare('DELETE FROM login_fail WHERE until < ? AND updated < ?').bind(t, t - 86400e3),
     env.DB.prepare('DELETE FROM activity WHERE t < ?').bind(t - 90 * 86400e3),
     // dispositivi mai attivati e non più visti da 30 giorni (non le connessioni collegate a un cliente,
@@ -2119,6 +2281,7 @@ async function cleanup(env) {
     env.DB.prepare("DELETE FROM devices WHERE active = 0 AND playlists = '' AND parent = '' AND name = '' AND notes = '' AND last_seen < ?").bind(t - 30 * 86400e3),
   ]);
   try { await env.DB.prepare('DELETE FROM messages WHERE until > 0 AND until < ?').bind(t).run(); } catch {}
+  try { await env.DB.prepare('DELETE FROM app_errors WHERE t < ?').bind(t - ERR_KEEP_MS).run(); } catch {} // errori dell'app: solo gli ultimi 7 giorni
   try { await env.DB.batch([env.DB.prepare('DELETE FROM link_pins WHERE until < ?').bind(t), env.DB.prepare('DELETE FROM throttle WHERE until < ?').bind(t)]); } catch {}
   // segnalazioni/richieste "fatte" da più di 90 giorni, presenze vecchie di 30 giorni, classifiche di oltre 60 giorni
   try { await env.DB.batch([env.DB.prepare("DELETE FROM requests WHERE status = 'done' AND created < ?").bind(t - 90 * 86400e3), env.DB.prepare('DELETE FROM presence WHERE t < ?').bind(t - 30 * 86400e3), env.DB.prepare('DELETE FROM watch WHERE day < ?').bind(dayIT(t - 60 * 86400e3))]); } catch {}
