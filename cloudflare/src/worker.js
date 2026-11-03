@@ -1719,7 +1719,7 @@ async function playerRegister(req, env, ip, ctx) {
       if (pending && pending.n >= MAX_PENDING) return json({ error: 'Registrazioni temporaneamente sospese' }, 503);
     }
     d = { id: b64url(rand(9)), code, secret_hash: sh, name: '', model, notes: '', active: 0, expires: '', playlists: '', created_at: now(), last_seen: now(), last_ip: ip, perms: defaultPermsJson(await getSettings(env)) };
-    await env.DB.prepare('INSERT INTO devices (id, code, secret_hash, model, created_at, last_seen, last_ip, perms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    await env.DB.prepare('INSERT INTO devices (id, code, secret_hash, model, created_at, last_seen, last_ip, perms, max_streams) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)')
       .bind(d.id, code, sh, model, d.created_at, d.last_seen, ip, d.perms).run();
     ctx.waitUntil(log(env, 'new', `Nuovo dispositivo in attesa: ${code}${model ? ' (' + model + ')' : ''}`, ip));
     ctx.waitUntil(webhookSend(env, 'device.new', { id: d.id, code, model, ip }));
@@ -2869,7 +2869,7 @@ async function accountFields(env, b, cur, pls) {
   if (b.vpn !== undefined) { const v = Number(b.vpn); if (![0, 1, 2].includes(v)) throw new HttpErr(400, 'Modalità VPN non valida'); o.vpn = v; }
   if (b.vpnConfClear === true) o.vpn_conf = '';
   else if (typeof b.vpnConf === 'string' && b.vpnConf.trim()) o.vpn_conf = await seal(env, cleanWg(b.vpnConf));
-  o.max_streams = +cur.max_streams || 0; o.vpn_loc = cur.vpn_loc || '';
+  o.max_streams = cur.max_streams === undefined || cur.max_streams === null ? 1 : +cur.max_streams || 0; o.vpn_loc = cur.vpn_loc || ''; // clienti nuovi: 1 visione alla volta
   if (b.maxStreams !== undefined) o.max_streams = intIn(b.maxStreams, 0, MAX_CONN, 'Visioni contemporanee');
   if (b.vpnLoc !== undefined) { const v = str(b.vpnLoc, 20); if (v && !(await wgLocs(env)).some((x) => x.id === v)) throw new HttpErr(400, 'Località VPN non trovata'); o.vpn_loc = v; }
   const plIds = pls.map((p) => p.id);
