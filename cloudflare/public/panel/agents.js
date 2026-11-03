@@ -109,7 +109,14 @@ body.agent .foot{display:none}
   };
   const FL = [['create', 'Attivare clienti nuovi', 'Con il codice che il cliente vede sulla TV'], ['renew', 'Rinnovare e cambiare la scadenza', ''], ['disable', 'Attivare e disattivare il servizio', ''],
     ['playlists', 'Cambiare server, utente e password', 'Solo tra i server che gli assegni'], ['kick', 'Disconnettere il cliente', 'Interrompe la visione in corso'], ['delete', 'Eliminare clienti', ''],
-    ['clientPerms', 'Cambiare i permessi dell\'app', 'Cosa può fare il cliente nell\'app'], ['vpn', 'Cambiare la VPN del cliente', '']];
+    ['clientPerms', 'Cambiare i permessi dell\'app', 'Cosa può fare il cliente nell\'app'], ['vpn', 'Cambiare la VPN del cliente', ''],
+    ['link', 'Collegare altri dispositivi', 'Codice a 6 cifre, sblocca, scollega'], ['account', 'Profili, lettore e visioni contemporanee', 'Entro le connessioni che gli concedi'], ['ai', 'Assistente IA dei clienti', 'Quale IA, domande al giorno, domande extra']];
+  // pagine del pannello: sempre e solo con i dati dei suoi clienti
+  const FP = [['dash', 'Dashboard', 'Riepilogo dei suoi clienti', 'dash'], ['online', 'Online ora', 'Chi sta guardando, tra i suoi clienti', 'live'], ['errors', 'Errori applicazione', 'Dei suoi clienti', 'apperr'],
+    ['reports', 'Segnalazioni', 'Dei suoi clienti', 'reports'], ['contentReq', 'Richieste contenuti', 'Dei suoi clienti', 'creq'], ['addonReq', 'Richieste temi', 'Assegna solo gli add-on che gli concedi', 'areq'],
+    ['messages', 'Messaggi', 'Solo ai suoi clienti, mai a tutti', 'msgs'], ['store', 'Download store: accettare le richieste', 'Autorizza o rifiuta i download (le impostazioni restano tue)', 'store'],
+    ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity']];
+  const PERM_VIEW = Object.fromEntries(FP.map(([k, , , v]) => [v, k]));
   const isAgent = () => D.role === 'agent';
   const me = () => D.me || {};
   const can = (k) => !isAgent() || !!(me().perms || {})[k];
@@ -143,7 +150,7 @@ body.agent .foot{display:none}
   }
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
-  const AG_OK = /^\/admin\/(login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
+  const AG_OK = /^\/admin\/(presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
   const origApi = api;
   window.api = api = async function (m, p, b) {
     if (isAgent() && !AG_OK.test(p)) throw new Error('Funzione non disponibile per gli agenti');
@@ -157,12 +164,14 @@ body.agent .foot{display:none}
   };
 
   /* ---------- modalità agente ---------- */
+  const agentCan = (v) => !!PERM_VIEW[v] && can(PERM_VIEW[v]);
   const OWNER_ONLY = ['dash', 'live', 'apperr', 'reports', 'creq', 'areq', 'ai', 'vod', 'msgs', 'store', 'dns', 'settings', 'api', 'activity'];
   let modeSet = '';
   function applyMode() {
     const ag = isAgent();
     document.body.classList.toggle('agent', ag);
-    for (const v of OWNER_ONLY) { const b = nav(v); if (b) b.style.display = ag ? 'none' : ''; }
+    for (const v of OWNER_ONLY) { const b = nav(v); if (b) b.style.display = ag && !agentCan(v) ? 'none' : ''; }
+    { const c = $('#sdOn') && $('#sdOn').closest('.card'); if (c) c.style.display = ag ? 'none' : ''; const d = $('#sdDev') && $('#sdDev').closest('.card'); if (d) d.style.display = ag ? 'none' : ''; const k = $('#sdClear'); if (k) k.style.visibility = ag ? 'hidden' : ''; }
     const sb = nav('sec'); if (sb) sb.style.display = ag ? '' : 'none';
     const ab = nav('agents'); if (ab) ab.style.display = !ag || me().canAgents ? '' : 'none';
     layoutMenu();
@@ -174,7 +183,7 @@ body.agent .foot{display:none}
     if (ag && $('#aUser') && !$('#aUser').value) $('#aUser').value = D.user || '';
     $('#newDev').style.display = !ag || can('create') ? '' : 'none';
     if (modeSet !== (ag ? 'a' : 'o')) { modeSet = ag ? 'a' : 'o'; if (ag) view('devices'); }
-    if (ag && OWNER_ONLY.some((v) => $('#v-' + v) && $('#v-' + v).classList.contains('on'))) view('devices');
+    if (ag && OWNER_ONLY.some((v) => !agentCan(v) && $('#v-' + v) && $('#v-' + v).classList.contains('on'))) view('devices');
     let lim = $('#agLim');
     if (ag) {
       if (!lim) { lim = document.createElement('div'); lim.id = 'agLim'; lim.className = 'ag-lim'; $('#newDev').before(lim); }
@@ -183,6 +192,8 @@ body.agent .foot{display:none}
   }
   const origRenderAll = renderAll;
   window.renderAll = renderAll = function () { applyMode(); origRenderAll(); renderAgents(); };
+  const origMsgs = renderMsgs;
+  window.renderMsgs = renderMsgs = function () { origMsgs(); if (isAgent()) { const o = $('#mTo option[value="all"]'); if (o) o.remove(); $$('#mTo option').forEach((x) => { const d = D.devices.find((y) => y.id === x.value); if (d && d.parent) x.remove(); }); } };
   const origSec = renderSecurity;
   window.renderSecurity = renderSecurity = function () {
     origSec();
@@ -193,7 +204,7 @@ body.agent .foot{display:none}
   };
   const view0 = view;
   window.view = view = function (v) {
-    if (isAgent() && OWNER_ONLY.includes(v)) v = 'devices';
+    if (isAgent() && OWNER_ONLY.includes(v) && !agentCan(v)) v = 'devices';
     if (v === 'agents' && isAgent() && !me().canAgents) v = 'devices';
     view0(v);
   };
@@ -268,6 +279,7 @@ body.agent .foot{display:none}
       <div class="ag-c"><h4>Account</h4><small>Le credenziali con cui l'agente entra in questo pannello</small>
         <label class="lbl">Nome utente</label><input class="inp" id="agU" maxlength="40" value="${esc(a ? a.username : '')}" ${a ? 'readonly' : ''} placeholder="es. mario.rossi" autocomplete="off">
         <label class="lbl">Email (facoltativa)</label><input class="inp" id="agE" maxlength="120" value="${esc(a ? a.email : '')}" placeholder="mario@esempio.it" autocomplete="off">
+        ${a && a.password ? `<label class="lbl">Password attuale</label><div class="row" style="grid-template-columns:1fr auto auto"><input class="inp mono" id="agPwNow" type="password" value="${esc(a.password)}" readonly><button class="btn" id="agPwEye" title="Mostra / nascondi">👁</button><button class="btn" id="agPwCp" title="Copia">Copia</button></div>` : ''}
         <label class="lbl">${isNew ? 'Password' : 'Nuova password'}</label><input class="inp" id="agP" type="password" autocomplete="new-password" placeholder="${isNew ? 'almeno 10 caratteri' : 'lascia vuoto per non cambiarla'}">
         <label class="lbl">Note (le vedi solo tu)</label><textarea class="inp" id="agN" maxlength="300" placeholder="Contatto, accordi, pagamenti…">${esc(a ? a.notes : '')}</textarea>
         <div class="tog ${!a || a.active ? 'on' : ''}" id="agA" style="margin-top:14px"><div><b>Account attivo</b><small>Se lo disattivi esce subito dal pannello, insieme ai suoi sotto-agenti. I clienti continuano a funzionare.</small></div><i></i></div>
@@ -286,6 +298,9 @@ body.agent .foot{display:none}
       <div class="ag-c"><h4>Permessi</h4><small>Cosa può fare con i suoi clienti${sub ? ' (solo tra quelli che hai anche tu)' : ''}</small>
         <div class="ag-chk" id="agPm">${FL.map(([k, l, sm]) => chk('perm', k, l, !!P[k], topP && !topP[k], sm)).join('')}</div>
       </div>
+      <div class="ag-c"><h4>Pagine del pannello</h4><small>Cosa vede nel suo pannello: sempre e solo i dati dei suoi clienti. Impostazioni, Server DNS, API, Manutenzione e le impostazioni dell'assistente restano solo tue (valgono per tutti i clienti).</small>
+        <div class="ag-chk" id="agPg">${FP.map(([k, l, sm]) => chk('perm', k, l, !!P[k], topP && !topP[k], sm)).join('')}</div>
+      </div>
       <div class="ag-c"><h4>Add-on che può assegnare</h4><small>Tra quelli che in Impostazioni → Store add-on sono «solo a chi assegno»</small>
         <div class="ag-chk" id="agAd" style="max-height:300px;overflow:auto">${adCat.length ? adCat.map((x) => chk('ad', x.id, esc(x.name), (P.addons || []).includes(x.id), topP && !(topP.addons || []).includes(x.id), x.price ? esc(x.price) : '')).join('') : '<p class="mut">Nessun add-on da assegnare.</p>'}</div>
       </div>
@@ -296,6 +311,8 @@ body.agent .foot{display:none}
     </div>`;
     $('#agFt').innerHTML = `${a ? '<button class="btn danger" id="agDel">Elimina agente</button>' : ''}<div style="flex:1"></div><button class="btn" id="agNo">Annulla</button><button class="btn pri" id="agOk">${isNew ? 'Crea agente' : 'Salva modifiche'}</button>`;
     $('#agA').onclick = () => $('#agA').classList.toggle('on');
+    $('#agPwEye') && ($('#agPwEye').onclick = () => { const i = $('#agPwNow'); i.type = i.type === 'password' ? 'text' : 'password'; });
+    $('#agPwCp') && ($('#agPwCp').onclick = () => navigator.clipboard.writeText(a.password).then(() => toast('Password copiata'), () => toast('Copia non consentita', 1)));
     $$('#agR label').forEach((l) => (l.onclick = () => { $$('#agR label').forEach((x) => x.classList.toggle('on', x === l)); $('input', l).checked = true; }));
     if (sub && !top.canAgents) $$('#agR input').forEach((i) => (i.disabled = true));
     $('#agNo').onclick = closePage;
@@ -303,7 +320,7 @@ body.agent .foot{display:none}
       email: $('#agE').value.trim(), notes: $('#agN').value, active: $('#agA').classList.contains('on'), maxClients: +$('#agM').value || 0,
       canAgents: $('#agR input:checked') ? $('#agR input:checked').value === '1' : false,
       servers: $$('#agS [data-srv]').filter((i) => i.checked).map((i) => i.dataset.srv),
-      perms: { ...Object.fromEntries(FL.map(([k]) => [k, !!($(`#agPm [data-perm="${k}"]`) || {}).checked])), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad) },
+      perms: { ...Object.fromEntries([...FL, ...FP].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"]`) || {}).checked])), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad) },
     });
     $('#agOk').onclick = async () => {
       const b = read(), pw = $('#agP').value;
@@ -348,6 +365,13 @@ body.agent .foot{display:none}
         <label class="lbl">Connessioni (massimo ${P.maxConn || 1})</label><input class="inp" type="number" id="cConn" min="1" max="${P.maxConn || 1}" value="${Math.min(e.maxConn || 1, P.maxConn || 1)}"></div>
       <div class="ag-c" style="grid-column:1/-1"><h4>Linea</h4><small>Scegli il server e scrivi utente e password della linea del cliente</small>
         <div id="cPls">${e.playlists.map(plRow).join('')}</div>${roPl || e.playlists.length >= 10 ? '' : '<button class="btn sm" id="cAddPl">+ Aggiungi linea</button>'}</div>
+      ${P.account ? `<div class="ag-c"><h4>Profili e visioni</h4><small>Quanti profili e quante visioni insieme</small>
+        <div class="row"><div><label class="lbl">Profili massimi</label><input class="inp" type="number" id="cMaxP" min="0" max="10" value="${e.maxProfiles ?? 3}"></div><div><label class="lbl">Visioni insieme (0 = libere)</label><input class="inp" type="number" id="cMaxS" min="0" max="${P.maxConn || 1}" value="${e.maxStreams || 0}"></div></div></div>` : ''}
+      ${P.ai ? `<div class="ag-c"><h4>Assistente IA</h4><small>Quale intelligenza artificiale e quante domande al giorno</small>
+        <label class="lbl">Intelligenza artificiale</label><select class="inp" id="cAiP"><option value="">Quella predefinita</option><option value="claude" ${e.aiProvider === 'claude' ? 'selected' : ''}>Claude</option><option value="gm" ${e.aiProvider === 'gm' ? 'selected' : ''}>Gemini</option></select>
+        <label class="lbl">Domande al giorno</label><input class="inp" type="number" id="cAiL" min="0" max="1000" placeholder="Predefinito" value="${(e.aiLimit ?? -1) >= 0 ? e.aiLimit : ''}">
+        ${isNew ? '' : `<button class="btn sm" id="cAiX" style="margin-top:10px">+10 domande extra oggi</button>${e.aiExtra ? `<span class="mut" style="font-size:12px;margin-left:8px">${e.aiExtra} extra disponibili</span>` : ''}`}</div>` : ''}
+      ${P.link && !isNew && !linked ? `<div class="ag-c"><h4>Collegare un altro dispositivo</h4><small>Sulla nuova TV il cliente sceglie «Ho già un abbonamento» e scrive il codice (vale 10 minuti)</small><button class="btn" id="cLink">🔗 Genera codice di collegamento</button><div id="cLinkOut" class="mono" style="font-size:22px;margin-top:10px"></div></div>` : ''}
       ${adCat.length ? `<div class="ag-c"><h4>Add-on</h4><small>Temi e skin che puoi assegnare</small><div class="ag-chk">${adCat.map((x) => chk('cad', x.id, esc(x.name), (e.addons || []).includes(x.id), false, x.price ? esc(x.price) : '')).join('')}</div></div>` : ''}`}
     </div>`;
     const sync = () => {
@@ -362,6 +386,8 @@ body.agent .foot{display:none}
       $$('[data-cm]').forEach((b) => (b.onclick = () => { $('#cExp').value = addMonths($('#cExp').value, +b.dataset.cm); }));
       $('#cAddPl') && ($('#cAddPl').onclick = () => { sync(); e.playlists.push({ serverId: (D.servers[0] || {}).id || '', username: '', password: '' }); draw(); });
       $$('[data-rm]').forEach((b) => (b.onclick = () => { sync(); e.playlists.splice(+b.dataset.rm, 1); draw(); }));
+      $('#cAiX') && ($('#cAiX').onclick = async () => { try { await api('POST', '/admin/ai/grant', { deviceId: d.id, n: 10 }); toast('+10 domande extra'); } catch (err) { toast(err.message, 1); } });
+      $('#cLink') && ($('#cLink').onclick = async () => { try { const r = await api('POST', '/admin/devices/' + d.id + '/linkcode'); $('#cLinkOut').textContent = r.pin ? r.pin.replace(/(\d{3})(\d{3})/, '$1 $2') : 'Codice non disponibile'; } catch (err) { toast(err.message, 1); } });
     };
     draw();
     $('#agFt').innerHTML = `${!isNew && P.delete ? '<button class="btn danger" id="cDel">Elimina</button>' : ''}${!isNew && P.kick && d.status !== 'pending' ? '<button class="btn" id="cKick">Disconnetti</button>' : ''}<div style="flex:1"></div><button class="btn" id="cNo">Annulla</button><button class="btn pri" id="cOk">${isNew ? 'Attiva cliente' : 'Salva'}</button>`;
@@ -382,6 +408,8 @@ body.agent .foot{display:none}
             if (P.renew && e.expires !== d.expires) b.expires = e.expires;
             if (P.disable && e.active !== d.active) b.active = e.active;
             if (P.playlists) b.playlists = pls;
+            if (P.account && $('#cMaxP')) { b.maxProfiles = +$('#cMaxP').value || 0; b.maxStreams = +$('#cMaxS').value || 0; }
+            if (P.ai && $('#cAiP')) { b.aiProvider = $('#cAiP').value; const v = $('#cAiL').value.trim(); b.aiLimit = v === '' ? -1 : +v; }
             b.maxConn = e.maxConn;
             if ($('.ag-chk [data-cad]')) b.addons = e.addons;
           }
@@ -400,9 +428,9 @@ body.agent .foot{display:none}
   /* ---------- demo: agenti di esempio e accesso come agente (utente "agente") ---------- */
   if (typeof DEMO !== 'undefined') {
     const t = Date.now();
-    const P0 = { create: true, renew: true, disable: true, kick: true, playlists: true, delete: false, clientPerms: false, vpn: false, addons: ['tema-ghiaccio', 'tema-natale'], maxConn: 2 };
+    const P0 = { create: true, renew: true, disable: true, kick: true, playlists: true, delete: false, clientPerms: false, vpn: false, link: true, account: true, ai: true, dash: true, online: true, errors: false, reports: true, contentReq: false, addonReq: true, messages: true, store: false, vod: false, activity: true, addons: ['tema-ghiaccio', 'tema-natale'], maxConn: 2 };
     DEMO.agents = [
-      { id: 2, username: 'mario.rossi', email: 'mario@esempio.it', parentId: 0, maxClients: 50, canAgents: true, perms: P0, servers: ['s1', 's2'], active: true, notes: 'Zona Napoli', lastSeen: t - 40 * 60e3, createdAt: t - 40 * 864e5, totp: true },
+      { id: 2, username: 'mario.rossi', password: 'Mario-2026!', email: 'mario@esempio.it', parentId: 0, maxClients: 50, canAgents: true, perms: P0, servers: ['s1', 's2'], active: true, notes: 'Zona Napoli', lastSeen: t - 40 * 60e3, createdAt: t - 40 * 864e5, totp: true },
       { id: 3, username: 'luca.tv', email: 'luca@esempio.it', parentId: 0, maxClients: 20, canAgents: false, perms: { ...P0, addons: [] }, servers: ['s1'], active: true, notes: '', lastSeen: t - 3 * 3600e3, createdAt: t - 22 * 864e5, totp: false },
       { id: 4, username: 'giulia.stream', email: '', parentId: 2, maxClients: 10, canAgents: false, perms: { ...P0, addons: [] }, servers: ['s2'], active: true, notes: '', lastSeen: t - 2 * 864e5, createdAt: t - 9 * 864e5, totp: false },
       { id: 5, username: 'bar.sport', email: 'info@barsport.it', parentId: 0, maxClients: 5, canAgents: false, perms: P0, servers: [], active: false, notes: 'Sospeso: pagamento', lastSeen: t - 20 * 864e5, createdAt: t - 60 * 864e5, totp: false },

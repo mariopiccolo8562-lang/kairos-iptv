@@ -1826,8 +1826,10 @@ async function adminInner(req, env, url, ip, ctx) {
    AGENTI (reseller): entrano nel pannello con le loro credenziali (2FA facoltativa) e vedono SOLO i propri clienti
    e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
    ====================================================================== */
-const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn'];
-const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, addons: [], maxConn: 1 };
+const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'account', 'ai',
+  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity'];
+const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, account: false, ai: false,
+  dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false, addons: [], maxConn: 1 };
 function agentPerms(src) {
   let o = {}; try { o = typeof src === 'string' ? JSON.parse(src || '{}') : src || {}; } catch {}
   const p = { ...AGENT_DEF };
@@ -1845,7 +1847,7 @@ function agentPermsWithin(req, top) {
   p.maxConn = Math.min(p.maxConn, top.maxConn);
   return p;
 }
-const agentsAll = async (env) => ((await env.DB.prepare("SELECT id, username, email, parent_id, max_clients, can_agents, perms, servers, active, disabled_by, notes, last_seen, created_at, totp_on FROM admins WHERE role = 'agent' ORDER BY id").all()).results) || [];
+const agentsAll = async (env) => ((await env.DB.prepare("SELECT id, username, email, parent_id, max_clients, can_agents, perms, servers, active, disabled_by, notes, last_seen, created_at, totp_on, pw_seal FROM admins WHERE role = 'agent' ORDER BY id").all()).results) || [];
 /** id dell'agente e di tutti i suoi sotto-agenti (a qualsiasi livello) */
 function agentTree(all, rootId) {
   const out = [rootId], seen = new Set(out);
@@ -1858,30 +1860,34 @@ async function agentChainActive(env, id, all) {
   for (let a = by.get(id), n = 0; a && n < 20; a = by.get(a.parent_id), n++) if (!a.active) return false;
   return by.has(id);
 }
+/** nome del server mostrato agli agenti: se il nome è l'indirizzo (DNS salvato senza nome) diventa «Server N» */
+const svName = (x, i) => { const n = String((x && x.name) || ''), h = String((x && x.host) || '').replace(/^https?:\/\//, '').replace(/[:/].*$/, ''); return !n || /[.:/]/.test(n) || (h && n.toLowerCase().includes(h.toLowerCase())) ? 'Server ' + (i + 1) : n; };
 const serverIds = (v) => [...new Set(String(v || '').split(',').map((x) => x.trim()).filter((x) => /^[A-Za-z0-9_-]{4,20}$/.test(x)))];
 async function clientsCount(env, ids) {
   let n = 0;
   for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); n += ((await env.DB.prepare(`SELECT COUNT(*) AS n FROM devices WHERE parent = '' AND owner_id IN (${part.map(() => '?').join(',')})`).bind(...part).first()) || { n: 0 }).n; }
   return n;
 }
-async function agentsOut(env, all, onlyIds) {
-  const dns = await dnsList(env), dn = new Map(dns.map((x) => [x.id, x]));
+async function agentsOut(env, all, onlyIds, forAgent) {
+  const dns = await dnsList(env), dn = new Map(dns.map((x, i) => [x.id, forAgent ? { ...x, name: svName(x, i) } : x]));
   const counts = new Map();
   for (const r of ((await env.DB.prepare("SELECT owner_id, COUNT(*) AS n FROM devices WHERE parent = '' AND owner_id > 0 GROUP BY owner_id").all()).results) || []) counts.set(r.owner_id, r.n);
-  return all.filter((a) => !onlyIds || onlyIds.includes(a.id)).map((a) => {
+  const list = all.filter((a) => !onlyIds || onlyIds.includes(a.id)), out = [];
+  for (const a of list) out.push(await (async () => {
     const tree = agentTree(all, a.id);
     return { id: a.id, username: a.username, email: a.email, parentId: a.parent_id, maxClients: a.max_clients, canAgents: !!a.can_agents, perms: agentPerms(a.perms),
       servers: serverIds(a.servers).filter((x) => dn.has(x)), serverNames: serverIds(a.servers).map((x) => dn.get(x)).filter(Boolean).map((x) => x.name),
-      active: !!a.active, notes: a.notes, lastSeen: a.last_seen, createdAt: a.created_at, totp: !!a.totp_on,
+      active: !!a.active, notes: a.notes, lastSeen: a.last_seen, createdAt: a.created_at, totp: !!a.totp_on, password: a.pw_seal ? await unseal(env, a.pw_seal).catch(() => '') : '',
       clients: tree.reduce((n, id) => n + (counts.get(id) || 0), 0), ownClients: counts.get(a.id) || 0, subAgents: tree.length - 1 };
-  });
+  })());
+  return out;
 }
 /** crea / modifica / elimina agenti. top = agente che sta agendo (null = proprietario) */
 async function agentsAdmin(req, env, path, who, ip, top) {
   const m = req.method;
   const all = await agentsAll(env);
   const scope = top ? agentTree(all, top.id).filter((x) => x !== top.id) : all.map((a) => a.id);
-  if (path === '/agents' && m === 'GET') return json({ agents: await agentsOut(env, all, scope) });
+  if (path === '/agents' && m === 'GET') return json({ agents: await agentsOut(env, all, scope, !!top) });
   const dnsIds = new Set((await dnsList(env)).map((x) => x.id));
   const clean = async (b, cur) => {
     const o = {};
@@ -1895,7 +1901,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
       if (b.active && cur && top && cur.disabled_by && !agentTree(all, top.id).includes(cur.disabled_by)) throw new HttpErr(403, 'Disattivato da chi sta sopra di te: non puoi riattivarlo');
       o.active = b.active ? 1 : 0; o.disabled_by = b.active ? 0 : top ? top.id : -1;
     }
-    if (b.password !== undefined && b.password !== '') { if (typeof b.password !== 'string' || b.password.length < 10 || b.password.length > 200) throw new HttpErr(400, 'Password di almeno 10 caratteri'); o.pass_hash = await hashPass(b.password); }
+    if (b.password !== undefined && b.password !== '') { if (typeof b.password !== 'string' || b.password.length < 10 || b.password.length > 200) throw new HttpErr(400, 'Password di almeno 10 caratteri'); o.pass_hash = await hashPass(b.password); o.pw_seal = await seal(env, b.password); }
     return o;
   };
   if (path === '/agents' && m === 'POST') {
@@ -1907,8 +1913,8 @@ async function agentsAdmin(req, env, path, who, ip, top) {
     if (typeof b.password !== 'string' || b.password.length < 10 || b.password.length > 200) throw new HttpErr(400, 'Password di almeno 10 caratteri');
     if (all.length >= 1000) throw new HttpErr(400, 'Hai raggiunto il massimo di 1000 agenti');
     const o = await clean({ maxClients: top ? Math.min(10, top.max_clients) : 10, perms: {}, servers: [], ...b }, null);
-    const r = await env.DB.prepare("INSERT INTO admins (username, pass_hash, created_at, role, parent_id, email, max_clients, can_agents, perms, servers, active, notes) VALUES (?, ?, ?, 'agent', ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")
-      .bind(user, o.pass_hash, now(), top ? top.id : 0, o.email || '', o.max_clients ?? 10, o.can_agents || 0, o.perms || JSON.stringify(AGENT_DEF), o.servers || '', o.active ?? 1, o.notes || '').first();
+    const r = await env.DB.prepare("INSERT INTO admins (username, pass_hash, created_at, role, parent_id, email, max_clients, can_agents, perms, servers, active, notes, pw_seal) VALUES (?, ?, ?, 'agent', ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")
+      .bind(user, o.pass_hash, now(), top ? top.id : 0, o.email || '', o.max_clients ?? 10, o.can_agents || 0, o.perms || JSON.stringify(AGENT_DEF), o.servers || '', o.active ?? 1, o.notes || '', o.pw_seal || '').first();
     await log(env, 'new', `${who}: creato l'agente ${user}${top ? ' (sotto-agente)' : ''}`, ip);
     return json({ ok: true, id: r.id });
   }
@@ -1960,10 +1966,10 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const tree = agentTree(all, A.id), who = 'Agente ' + A.username;
   const aSes = { ...ses, agent: true };
   if (now() - (+A.last_seen || 0) > 5 * 60e3) ctx.waitUntil(env.DB.prepare('UPDATE admins SET last_seen = ? WHERE id = ?').bind(now(), A.id).run());
-  if (path === '/password' && m === 'PUT') { const b = await readJSON(req, 4096); return adminRoutes(new Request(url.href, { method: 'PUT', body: JSON.stringify({ current: b.current, next: b.next }) }), env, url, path, who, ip, ctx, aSes); } // il nome utente lo cambia solo chi l'ha creato
+  if (path === '/password' && m === 'PUT') { const b = await readJSON(req, 4096); if (typeof b.next === 'string' && b.next.length >= 10 && b.next.length <= 200 && (await checkPass(str(b.current, 200), (await env.DB.prepare('SELECT pass_hash FROM admins WHERE id = ?').bind(A.id).first()).pass_hash))) ctx.waitUntil((async () => { await env.DB.prepare('UPDATE admins SET pw_seal = ? WHERE id = ?').bind(await seal(env, b.next), A.id).run(); })()); return adminRoutes(new Request(url.href, { method: 'PUT', body: JSON.stringify({ current: b.current, next: b.next }) }), env, url, path, who, ip, ctx, aSes); } // il nome utente lo cambia solo chi l'ha creato
   if (AGENT_SELF.test(path) && m !== 'GET') return adminRoutes(req, env, url, path, who, ip, ctx, aSes);
   if (path === '/agents' || path.startsWith('/agents/')) { if (!canAg) throw new HttpErr(403, 'Non puoi gestire agenti'); return agentsAdmin(req, env, path, who, ip, Aeff); }
-  const dns = await dnsList(env), servers = dns.filter((x) => mine.includes(x.id));
+  const dns = (await dnsList(env)).map((x, i) => ({ ...x, name: svName(x, i) })), servers = dns.filter((x) => mine.includes(x.id));
   // l'agente non vede gli indirizzi dei server: solo il nome del server scelto
   const dview = (x) => {
     const dn = new Map(dns.map((y) => [y.host, y]));
@@ -2001,6 +2007,87 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
 
   const apv = path.match(/^\/addon-preview\/([a-z0-9-]{3,40})$/);
   if (apv && m === 'GET') { if (!allowedAddons.has(apv[1])) throw new HttpErr(404, 'Anteprima non disponibile'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
+  const need = (k, msg) => { if (!P[k]) throw new HttpErr(403, msg || 'Funzione non consentita: chiedila a chi ti ha creato'); };
+  // tutti i dispositivi dei suoi clienti (principali e collegati)
+  let scopeMem = null;
+  const scope = async () => {
+    if (scopeMem) return scopeMem;
+    const ids = new Set();
+    for (let i = 0; i < tree.length; i += 90) { const part = tree.slice(i, i + 90); for (const r of ((await env.DB.prepare(`SELECT id FROM devices WHERE parent = '' AND owner_id IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || []) ids.add(r.id); }
+    const pids = [...ids];
+    for (let i = 0; i < pids.length; i += 90) { const part = pids.slice(i, i + 90); for (const r of ((await env.DB.prepare(`SELECT id FROM devices WHERE parent IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || []) ids.add(r.id); }
+    return (scopeMem = ids);
+  };
+  const viaOwner = async (r) => (r instanceof Response ? r.json() : r);
+  const REQ_PERM = { report: 'reports', content: 'contentReq', addon: 'addonReq', ai: 'ai' };
+  // Online ora
+  if (path === '/presence' && m === 'GET') {
+    need('online'); const sc = await scope(), j = await adminPresence(env);
+    const f = (l) => (l || []).filter((x) => sc.has(x.id));
+    return json({ ...j, online: f(j.online), recent: f(j.recent), top: [] });
+  }
+  // Errori dell'applicazione
+  if (path === '/app-errors' && m === 'GET') {
+    need('errors'); const sc = await scope(), j = await viaOwner(await adminErrors(req, env, path, url, who, ip));
+    const items = j.items.filter((x) => sc.has(x.deviceId));
+    const by = (key) => { const mp = new Map(); for (const x of items) { const k = key(x); if (!k) continue; const o = mp.get(k) || { key: k, n: 0, unresolved: 0, devs: new Set(), titles: new Set() }; o.n++; if (x.outcome === 'non risolto') o.unresolved++; o.devs.add(x.deviceId); o.titles.add(x.title); mp.set(k, o); } return [...mp.values()].sort((a, b) => b.n - a.n).slice(0, 10).map((o) => ({ key: o.key, n: o.n, unresolved: o.unresolved, devices: o.devs.size, titles: o.titles.size })); };
+    return json({ items, topTitles: by((x) => x.title), topDevices: by((x) => x.deviceId).map((o) => { const x = items.find((i) => i.deviceId === o.key) || {}; return { ...o, name: x.name, code: x.code, model: x.model }; }), newCount: items.filter((x) => x.isNew).length });
+  }
+  if (path === '/app-errors/seen' && m === 'POST') { need('errors'); return json({ ok: true }); }
+  // Segnalazioni, richieste di contenuti, di temi e di domande all'assistente
+  if (path === '/requests' && m === 'GET') {
+    const kind = ['content', 'addon', 'ai'].includes(url.searchParams.get('kind')) ? url.searchParams.get('kind') : 'report';
+    need(REQ_PERM[kind]); const sc = await scope(), j = await viaOwner(await adminRequests(req, env, path, url, who, ip));
+    return json({ ...j, items: j.items.filter((x) => sc.has(x.deviceId)) });
+  }
+  if (path === '/requests' && m === 'DELETE') {
+    const kind = str(url.searchParams.get('kind') || '', 10), status = url.searchParams.get('status') === 'seen' ? 'seen' : 'done';
+    if (!REQ_PERM[kind]) throw new HttpErr(400, 'Tipo non valido'); need(REQ_PERM[kind]);
+    const ids = [...(await scope())]; let n = 0;
+    for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); const r = await env.DB.prepare(`DELETE FROM requests WHERE kind = ? AND status = ? AND device_id IN (${part.map(() => '?').join(',')})`).bind(kind, status, ...part).run(); n += (r.meta && r.meta.changes) || 0; }
+    return json({ ok: true, deleted: n });
+  }
+  const rqm = path.match(/^\/requests\/(\d{1,10})(\/status)?$/);
+  if (rqm) {
+    const r = await env.DB.prepare('SELECT kind, device_id FROM requests WHERE id = ?').bind(+rqm[1]).first();
+    if (!r || !(await scope()).has(r.device_id)) throw new HttpErr(404, 'Richiesta non trovata');
+    need(REQ_PERM[r.kind] || 'reports');
+    return adminRoutes(req, env, url, path, who, ip, ctx, aSes);
+  }
+  // domande extra all'assistente per i suoi clienti
+  if (path === '/ai/grant' && m === 'POST') {
+    need('ai'); const b = await readJSON(req, 1024);
+    if (!(await own(str(b.deviceId, 20)))) throw new HttpErr(404, 'Cliente non trovato');
+    return adminRoutes(new Request(url.href, { method: 'POST', body: JSON.stringify({ deviceId: b.deviceId, n: b.n }) }), env, url, path, who, ip, ctx, aSes);
+  }
+  // Messaggi: solo ai suoi clienti
+  if (path === '/messages' && m === 'POST') {
+    need('messages'); const b = await readJSON(req, 8192);
+    if (!b.target || b.target === 'all' || !(await own(str(b.target, 20)))) throw new HttpErr(400, 'Scegli uno dei tuoi clienti');
+    return adminRoutes(new Request(url.href, { method: 'POST', body: JSON.stringify(b) }), env, url, path, who, ip, ctx, aSes);
+  }
+  const msm = path.match(/^\/messages\/(\d{1,10})$/);
+  if (msm && m === 'DELETE') {
+    need('messages'); const r = await env.DB.prepare('SELECT target FROM messages WHERE id = ?').bind(+msm[1]).first();
+    if (!r || !(await scope()).has(r.target)) throw new HttpErr(404, 'Messaggio non trovato');
+    return adminRoutes(req, env, url, path, who, ip, ctx, aSes);
+  }
+  // Download store: vedere e decidere le richieste (le impostazioni restano tue)
+  if (path === '/store' && m === 'GET') {
+    need('store'); const j = await viaOwner(await adminRoutes(req, env, url, path, who, ip, ctx, aSes));
+    return json({ requests: j.requests || [], pending: j.pending || 0, settings: { approval: !!(j.settings && j.settings.approval) }, mail: {}, agent: true });
+  }
+  if (/^\/store\/[A-Za-z0-9_-]{12,40}\/(approve|deny|revoke)$/.test(path) && m === 'POST') { need('store'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
+  // Videoteca: solo le linee dei suoi clienti, senza indirizzi
+  if (path === '/catalog/sources' || path === '/catalog') {
+    need('vod');
+    const sc = await scope(), all2 = await catalogSources(env), keys = new Set(), dn = new Map(dns.map((x) => [x.host, x]));
+    const ids = [...sc];
+    for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); for (const d of ((await env.DB.prepare(`SELECT playlists FROM devices WHERE playlists <> '' AND id IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || []) for (const p of await unseal(env, d.playlists).catch(() => [])) { if (p.type !== 'xtream' || !p.host || !p.username) continue; const h = hostOf(p); if (h) keys.add((await sha256(`src:${h}|${p.username}|${p.password}`)).slice(0, 16)); } }
+    if (path === '/catalog/sources') return json([...all2.values()].filter((x) => keys.has(x.key)).map((x) => ({ key: x.key, label: `${(dn.get(x.host) || {}).name || 'Server'} · ${x.user}`, devices: x.devices })));
+    if (!keys.has(str(url.searchParams.get('src') || '', 40))) throw new HttpErr(404, 'Linea non trovata');
+    return adminRoutes(req, env, url, path, who, ip, ctx, aSes);
+  }
   if (path === '/state' && m === 'GET') {
     const rows = [];
     for (let i = 0; i < tree.length; i += 90) { const part = tree.slice(i, i + 90); rows.push(...((await env.DB.prepare(`SELECT * FROM devices WHERE parent = '' AND owner_id IN (${part.map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT 5000`).bind(...part).all()).results || [])); }
@@ -2011,11 +2098,14 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p ? p.status : 'pending'; }
     const s = await getSettings(env);
-    const meOut = (await agentsOut(env, all, [A.id]))[0];
-    return json({ role: 'agent', user: A.username, me: { ...meOut, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices,
-      agents: canAg ? await agentsOut(env, all, tree.filter((x) => x !== A.id)) : [],
+    const meOut = (await agentsOut(env, all, [A.id], true))[0];
+    const { password: _pw, ...meSafe } = meOut;
+    return json({ role: 'agent', user: A.username, me: { ...meSafe, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices,
+      agents: canAg ? await agentsOut(env, all, tree.filter((x) => x !== A.id), true) : [],
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
-      settings: { brand: s.brand, accent: s.accent, downloaderCode: s.downloaderCode || '', storeDownloaderCode: s.storeDownloaderCode || '', apkUrl: s.apkUrl || '' }, permKeys: PERM_KEYS, security: { totp: !!ses.totp_on }, counts: {}, activity: [], messages: [] });
+      settings: { brand: s.brand, accent: s.accent, downloaderCode: s.downloaderCode || '', storeDownloaderCode: s.storeDownloaderCode || '', apkUrl: s.apkUrl || '' }, permKeys: PERM_KEYS, security: { totp: !!ses.totp_on }, counts: {},
+      activity: P.activity ? ((await env.DB.prepare('SELECT t, type, text FROM activity WHERE ' + tree.map(() => 'text LIKE ?').join(' OR ') + ' ORDER BY t DESC LIMIT 200').bind(...tree.map((id) => 'Agente ' + (by.get(id) || {}).username + ':%')).all()).results || []) : [],
+      messages: P.messages ? (((await env.DB.prepare('SELECT id, target, title, body, level, created, until FROM messages ORDER BY id DESC LIMIT 300').all()).results) || []).filter((x) => devices.some((d) => d.id === x.target)) : [] });
   }
   if (path === '/devices' && m === 'POST') {
     if (!P.create) throw new HttpErr(403, 'Non puoi attivare clienti');
@@ -2052,6 +2142,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     if (!d) {
       // collegare una TV nuova (codice libero) a un proprio cliente
       if (dm[2] === '/link' && m === 'POST') {
+        need('link', 'Non puoi gestire i collegamenti dei dispositivi');
         const t = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(dm[1]).first();
         const b = await readJSON(req, 1024);
         if (!t || !(await env.DB.prepare(`SELECT 1 AS x FROM devices WHERE id = ? AND ${FREE_DEV}`).bind(t.id).first()) || !(await own(str(b.primary, 20)))) throw new HttpErr(404, 'Dispositivo non trovato');
@@ -2060,7 +2151,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
       throw new HttpErr(404, 'Dispositivo non trovato');
     }
     if (dm[2] === '/kick') { if (!P.kick) throw new HttpErr(403, 'Non puoi disconnettere'); return forward('POST', path); }
-    if (dm[2] === '/linkcode' || dm[2] === '/reset' || dm[2] === '/unlink') return forward('POST', path);
+    if (dm[2] === '/linkcode' || dm[2] === '/reset' || dm[2] === '/unlink') { need('link', 'Non puoi gestire i collegamenti dei dispositivi'); return forward('POST', path); }
     if (dm[2]) throw new HttpErr(404, 'Non trovato');
     if (m === 'DELETE') { if (!P.delete) throw new HttpErr(403, 'Non puoi eliminare clienti'); return forward('DELETE', path); }
     if (m === 'PUT') {
@@ -2075,7 +2166,11 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
         if (b.addons !== undefined) { if (!Array.isArray(b.addons)) throw new HttpErr(400, 'addons deve essere un elenco'); const keep = addonsList(d.addons).filter((x) => !allowedAddons.has(x)); o.addons = [...keep, ...addonsList(b.addons).filter((x) => allowedAddons.has(x))]; }
         if (b.perms !== undefined) { if (!P.clientPerms) throw new HttpErr(403, 'Non puoi cambiare i permessi dell\'app'); o.perms = b.perms; }
         if (b.vpn !== undefined) { if (!P.vpn) throw new HttpErr(403, 'Non puoi cambiare la VPN'); o.vpn = b.vpn; }
+        for (const k of ['maxProfiles', 'lockProfiles', 'maxStreams', 'plMode', 'plDefault', 'player', 'profiles']) if (b[k] !== undefined) { if (!P.account) throw new HttpErr(403, 'Non puoi cambiare profili, lettore e visioni'); o[k] = b[k]; }
+        if (o.maxStreams !== undefined) o.maxStreams = Math.min(Math.max(0, parseInt(o.maxStreams, 10) || 0), P.maxConn);
+        for (const k of ['aiLimit', 'aiProvider']) if (b[k] !== undefined) { if (!P.ai) throw new HttpErr(403, 'Non puoi cambiare l\'assistente IA'); o[k] = b[k]; }
       }
+      if (o.aiLimit !== undefined || o.aiProvider !== undefined) return adminRoutes(new Request(url.href, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) }), env, url, path, who, ip, ctx, { ...aSes, aiOk: true });
       return forward('PUT', path, o);
     }
     if (m === 'GET') return json(dview(await deviceOut(env, d)));
@@ -2538,8 +2633,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       if (b.addons !== undefined && !Array.isArray(b.addons)) throw new HttpErr(400, 'addons deve essere un elenco');
       const addons = b.addons !== undefined ? addonsList(b.addons).join(',') : d.addons || '';
       let aiLimit = d.ai_limit ?? -1, aiProv = d.ai_provider || '';
-      if (b.aiProvider !== undefined && !ses?.agent) { if (!['', ...AI_PROVIDERS].includes(b.aiProvider)) throw new HttpErr(400, 'Intelligenza artificiale non valida'); aiProv = b.aiProvider; }
-      if (b.aiLimit !== undefined && !ses?.agent) { const n = b.aiLimit === '' || b.aiLimit === null ? -1 : parseInt(b.aiLimit, 10); if (!(n >= -1 && n <= 1000)) throw new HttpErr(400, 'Domande al giorno: da 0 a 1000 (vuoto = predefinito)'); aiLimit = n; }
+      if (b.aiProvider !== undefined && (!ses?.agent || ses.aiOk)) { if (!['', ...AI_PROVIDERS].includes(b.aiProvider)) throw new HttpErr(400, 'Intelligenza artificiale non valida'); aiProv = b.aiProvider; }
+      if (b.aiLimit !== undefined && (!ses?.agent || ses.aiOk)) { const n = b.aiLimit === '' || b.aiLimit === null ? -1 : parseInt(b.aiLimit, 10); if (!(n >= -1 && n <= 1000)) throw new HttpErr(400, 'Domande al giorno: da 0 a 1000 (vuoto = predefinito)'); aiLimit = n; }
       let ownerId = +d.owner_id || 0;
       if (b.ownerId !== undefined && !ses?.agent) {
         ownerId = Math.max(0, parseInt(b.ownerId, 10) || 0);

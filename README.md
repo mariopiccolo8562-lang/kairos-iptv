@@ -312,6 +312,12 @@ Solo server e pannello: **non serve un nuovo APK**.
 - **🔧 Manutenzione** (pulsante in alto nel pannello): blocca l'app a tutti i clienti tranne quelli che scegli (per provare le novità). Chi sta guardando viene fermato entro circa 20 secondi e vede il tuo messaggio; finita la manutenzione l'app si riapre da sola. Le connessioni collegate seguono il loro cliente. Una barra rossa nel pannello ricorda che è attiva, con *Termina manutenzione*.
 - **Assistente IA → «Prova Claude» / «Prova Gemini»**: una domanda di prova che dice subito se funziona o perché no (credito finito, chiave sbagliata, modello non disponibile, servizio sovraccarico). Ogni errore di Claude finisce anche in *Attività*.
 
+## 16. Novità 2.5 — Agenti: tutte le funzioni a scelta
+
+- Nella scheda dell'agente, oltre ai permessi sui clienti (ora anche **collegare dispositivi**, **profili/lettore/visioni**, **assistente IA dei clienti**), c'è **«Pagine del pannello»**: Dashboard, Online ora, Errori applicazione, Segnalazioni, Richieste contenuti, Richieste temi, Messaggi, **Download store (accettare le richieste)**, Videoteca, Attività. Ogni pagina mostra **solo i dati dei suoi clienti** (messaggi solo ai suoi clienti, mai a tutti; videoteca solo con le linee dei suoi clienti; attività solo sue). Impostazioni, Server DNS, API, Manutenzione e impostazioni dell'assistente restano solo tue perché valgono per tutti.
+- **Server nascosti agli agenti**: se un DNS salvato non ha un nome (o il nome è l'indirizzo), l'agente vede «Server 1», «Server 2»… Dai un nome ai DNS in *Server DNS e VPN* per mostrarne uno tuo.
+- **Password degli agenti**: nella scheda dell'agente vedi la password attuale con l'occhio 👁 (mostra/nascondi) e *Copia*. È conservata cifrata; per gli agenti creati prima della 2.5 compare dopo che imposti (o l'agente cambia) la password.
+
 ## Come funziona per i clienti
 
 1. Installano l'app (codice Downloader) e la aprono: compare un **codice** tipo `KXAB-7Q2M`.
