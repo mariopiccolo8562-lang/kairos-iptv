@@ -318,11 +318,11 @@ Solo server e pannello: **non serve un nuovo APK**.
 - **Server nascosti agli agenti**: se un DNS salvato non ha un nome (o il nome è l'indirizzo), l'agente vede «Server 1», «Server 2»… Dai un nome ai DNS in *Server DNS e VPN* per mostrarne uno tuo.
 - **Password degli agenti**: nella scheda dell'agente vedi la password attuale con l'occhio 👁 (mostra/nascondi) e *Copia*. È conservata cifrata; per gli agenti creati prima della 2.5 compare dopo che imposti (o l'agente cambia) la password.
 
-## 17. Kairos Lite — app leggera stile Smarters
+### 2.5.0 (APK) — Smart TV MediaTek, una visione alla volta
 
-Seconda app, **accanto** a KAIROS TV, con lo stesso pannello e gli stessi clienti (codice `KX..-....`). Il codice è nel repository separato **kairos-lite**, con le sue istruzioni.
-
-Il pannello le propone gli aggiornamenti da solo: legge `kairos-lite.json` dall'ultima release di quel repository (`/api/player/update?app=lite`). In *Utenti online* la versione compare come `lite 1.0.0`.
+- **Smart TV (Philips/TPV Google TV come la TA5 e altre TV con chip MediaTek)**: stesso rimedio delle Fire TV al blocco dell'immagine quando il video passa dall'anteprima allo schermo intero (decoder ricreato, 1-3 s). Serve l'APK 2.5.0.
+- **Visioni contemporanee**: di base **1** per i clienti nuovi (0 = senza limite resta possibile dalla scheda cliente).
+- Gli APK nuovi partono già con l'indirizzo **https://panel-kairos.com** (variabile `KAIROS_SERVER_URL`).
 
 ## Come funziona per i clienti
 

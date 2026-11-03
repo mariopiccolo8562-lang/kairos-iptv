@@ -269,24 +269,6 @@ async function apkFeed(env) {
   feedMem = { t: now(), v };
   return v;
 }
-/* Kairos Lite (app leggera stile Smarters, accanto a KAIROS TV, repository kairos-lite):
-   canale di aggiornamento separato, kairos-lite.json dell'ultima release di quel repository. */
-let feedLiteMem = { t: 0, v: null };
-async function apkFeedLite(env) {
-  if (!env.APK_FEED_LITE) return null;
-  if (now() - feedLiteMem.t < 5 * 60e3) return feedLiteMem.v;
-  let v = null;
-  try {
-    const r = await fetch(env.APK_FEED_LITE, { headers: { 'User-Agent': 'KairosPanel' }, cf: { cacheTtl: 300, cacheEverything: true } });
-    if (r.ok) {
-      const j = await r.json();
-      const code = semverCode(j.version) || +j.versionCode;
-      if (code > 0 && /^https:\/\//.test(j.url || '')) v = { versionCode: code, version: String(j.version || '').slice(0, 20), url: String(j.url).slice(0, 500), date: String(j.date || '').slice(0, 40), auto: true };
-    }
-  } catch {}
-  feedLiteMem = { t: now(), v };
-  return v;
-}
 async function latestApk(env, s) {
   // versione manuale valida solo se scritta come X.Y.Z (i vecchi numeri "a mano" senza nome versione vengono ignorati)
   const code = semverCode(s.apkVersion);
@@ -1044,7 +1026,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
     else if (t - +d.kick_t < 180e3) kick = +d.kick_t;
   }
   const mt = maintFor(await getSettings(env), P) ? 1 : 0;
-  return json({ ok: true, mt, unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === P.pl_default) ? P.pl_default : '') + '|' + JSON.stringify(playerParse(P.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
+  return json({ ok: true, mt, unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (P.pl_default || '') + '|' + JSON.stringify(playerParse(P.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
 }
 /** vista pannello: chi è collegato e cosa guarda */
 /* visioni contemporanee: prima di iniziare a guardare l'app chiede il permesso (solo se il pannello ha messo un limite) */
@@ -1659,8 +1641,6 @@ async function route(req, env, ctx) {
     }
     if (path === '/api/player/update' && req.method === 'GET') {
       if (await limited(env.RL_DEVICE, 'up:' + ip)) return json({ ui: null, apk: null }, 429);
-      // Kairos Lite: solo il suo APK (niente interfaccia web da aggiornare)
-      if (url.searchParams.get('app') === 'lite') return json({ ui: null, apk: await apkFeedLite(env) }, 200, { 'Cache-Control': 'no-store' });
       const s = await getSettings(env);
       return json({
         ui: env.UI_VERSION ? { version: env.UI_VERSION, url: '/app/index.html' } : null,
@@ -1739,7 +1719,7 @@ async function playerRegister(req, env, ip, ctx) {
       if (pending && pending.n >= MAX_PENDING) return json({ error: 'Registrazioni temporaneamente sospese' }, 503);
     }
     d = { id: b64url(rand(9)), code, secret_hash: sh, name: '', model, notes: '', active: 0, expires: '', playlists: '', created_at: now(), last_seen: now(), last_ip: ip, perms: defaultPermsJson(await getSettings(env)) };
-    await env.DB.prepare('INSERT INTO devices (id, code, secret_hash, model, created_at, last_seen, last_ip, perms, max_streams) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)')
+    await env.DB.prepare('INSERT INTO devices (id, code, secret_hash, model, created_at, last_seen, last_ip, perms, max_streams) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)') // di base: una visione alla volta
       .bind(d.id, code, sh, model, d.created_at, d.last_seen, ip, d.perms).run();
     ctx.waitUntil(log(env, 'new', `Nuovo dispositivo in attesa: ${code}${model ? ' (' + model + ')' : ''}`, ip));
     ctx.waitUntil(webhookSend(env, 'device.new', { id: d.id, code, model, ip }));
@@ -2548,7 +2528,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (!DATE_RE.test(str(b.expires, 10))) throw new HttpErr(400, 'Data non valida');
     const id = b64url(rand(9));
     const pls = cleanPlaylists(b.playlists);
-    const acc = await accountFields(env, b, {}, pls);
+    const acc = await accountFields(env, b, { max_streams: 1 }, pls); // di base: una visione alla volta
     const perms = b.perms !== undefined ? permsJson({ ...permsParse((await getSettings(env)).permsDefault), ...permsInput(b.perms) }) : defaultPermsJson(await getSettings(env));
     await env.DB.prepare('INSERT INTO devices (id, code, name, notes, active, expires, playlists, created_at, max_conn, max_profiles, profiles, lock_profiles, vpn, vpn_conf, perms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(id, code, str(b.name, 60), str(b.notes, 500), b.active ? 1 : 0, str(b.expires, 10), await seal(env, pls), now(), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, perms).run();
@@ -2889,7 +2869,7 @@ async function accountFields(env, b, cur, pls) {
   if (b.vpn !== undefined) { const v = Number(b.vpn); if (![0, 1, 2].includes(v)) throw new HttpErr(400, 'Modalità VPN non valida'); o.vpn = v; }
   if (b.vpnConfClear === true) o.vpn_conf = '';
   else if (typeof b.vpnConf === 'string' && b.vpnConf.trim()) o.vpn_conf = await seal(env, cleanWg(b.vpnConf));
-  o.max_streams = cur.max_streams === undefined || cur.max_streams === null ? 1 : +cur.max_streams || 0; o.vpn_loc = cur.vpn_loc || ''; // clienti nuovi: 1 visione alla volta
+  o.max_streams = +cur.max_streams || 0; o.vpn_loc = cur.vpn_loc || '';
   if (b.maxStreams !== undefined) o.max_streams = intIn(b.maxStreams, 0, MAX_CONN, 'Visioni contemporanee');
   if (b.vpnLoc !== undefined) { const v = str(b.vpnLoc, 20); if (v && !(await wgLocs(env)).some((x) => x.id === v)) throw new HttpErr(400, 'Località VPN non trovata'); o.vpn_loc = v; }
   const plIds = pls.map((p) => p.id);

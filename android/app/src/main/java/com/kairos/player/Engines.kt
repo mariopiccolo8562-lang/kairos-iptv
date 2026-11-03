@@ -657,7 +657,7 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
 }
 
 /* ======================================================================= */
-/* Renderer video: rimedio al cambio di superficie su alcuni Fire TV        */
+/* Renderer video: rimedio al cambio di superficie (Fire TV e smart TV MediaTek) */
 /* ======================================================================= */
 /**
  * Quando il video passa dall'anteprima allo schermo intero (e ritorno) ExoPlayer cambia la superficie del decoder
@@ -673,8 +673,21 @@ object SurfaceFix {
     private val MODELS = setOf("AFTSSS", "AFTSS", "AFTMM")
     private const val KEY = "surfaceFixLearned"
     @Volatile private var learned: Boolean? = null
+    @Volatile private var tvMtk: Boolean? = null
+    /** Smart TV con chip MediaTek (Philips/TPV Google TV come la TA5, e molte altre Google TV/Android TV):
+     *  stesso tipo di decoder delle Fire TV con il blocco, quindi stesso rimedio */
+    private fun mediatekTv(ctx: Context): Boolean = tvMtk ?: run {
+        val b = android.os.Build.MANUFACTURER.lowercase() + " " + android.os.Build.BRAND.lowercase() + " " + android.os.Build.MODEL.lowercase()
+        val philips = b.contains("tpv") || b.contains("philips")
+        val soc = (if (android.os.Build.VERSION.SDK_INT >= 31) android.os.Build.SOC_MANUFACTURER else "").lowercase()
+        val hw = android.os.Build.HARDWARE.lowercase()
+        val mtk = soc.contains("mediatek") || hw.startsWith("mt") || hw.contains("mediatek")
+        val tv = try { (ctx.getSystemService(Context.UI_MODE_SERVICE) as android.app.UiModeManager).currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION } catch (_: Exception) { false }
+        (philips || (tv && mtk)).also { tvMtk = it }
+    }
     fun needed(ctx: Context): Boolean {
         if (MODELS.contains(android.os.Build.MODEL)) return true
+        if (mediatekTv(ctx)) return true
         val l = learned ?: ctx.applicationContext.getSharedPreferences("kairos", Context.MODE_PRIVATE).getBoolean(KEY, false).also { learned = it }
         return l
     }
