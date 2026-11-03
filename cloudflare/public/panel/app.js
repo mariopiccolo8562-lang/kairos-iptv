@@ -224,12 +224,12 @@ function drawChart() {
       x.save(); x.beginPath(); x.rect(0, 0, pad.l + (W - pad.l) * e, H); x.clip();
       x.beginPath(); arr.forEach((v, i) => { const px = X(i), py = Y(v); if (!i) x.moveTo(px, py); else { const qx = X(i - 1), qy = Y(arr[i - 1]); x.bezierCurveTo((qx + px) / 2, qy, (qx + px) / 2, py, px, py); } });
       const lg = x.createLinearGradient(0, 0, W, 0); lg.addColorStop(0, c1); lg.addColorStop(1, c2);
-      x.strokeStyle = lg; x.lineWidth = 2.5; x.shadowColor = c1; x.shadowBlur = 14; x.stroke(); x.shadowBlur = 0;
+      x.strokeStyle = lg; x.lineWidth = 2.5; x.shadowBlur = 0; x.stroke(); x.shadowBlur = 0;
       if (fill) { x.lineTo(X(n - 1), H - pad.b); x.lineTo(X(0), H - pad.b); x.closePath(); const fg = x.createLinearGradient(0, pad.t, 0, H); fg.addColorStop(0, c1 + '55'); fg.addColorStop(1, c1 + '00'); x.fillStyle = fg; x.fill(); }
       x.restore();
     };
     line(tot, a1, a2, true); line(act, a3, a2, false);
-    if (prog >= 1) { const px = X(n - 1), py = Y(tot[n - 1]); x.fillStyle = a1; x.shadowColor = a1; x.shadowBlur = 16; x.beginPath(); x.arc(px, py, 5, 0, 7); x.fill(); x.shadowBlur = 0; }
+    if (prog >= 1) { const px = X(n - 1), py = Y(tot[n - 1]); x.fillStyle = a1; x.shadowBlur = 0; x.beginPath(); x.arc(px, py, 5, 0, 7); x.fill(); x.shadowBlur = 0; }
     if (prog < 1) requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
@@ -450,7 +450,8 @@ function renderDrawer() {
   const sec = (id, n, t, sub, html) => html.trim() ? `<section class="dsec" id="ds-${id}"><div class="dsh"><i>${n}</i><div><b>${t}</b>${sub ? `<small>${sub}</small>` : ''}</div></div>${html}</section>` : '';
   const S1 = `${isNew ? `<label class="lbl">Codice dispositivo</label><input class="inp mono" id="eCode" placeholder="Vuoto = generato, oppure quello mostrato dall'app (KXAB-12CD)" value="${esc(edit.code)}">` : `<div class="tog" style="cursor:default"><div><b>${edit.bound ? '🔒 Collegato al dispositivo' : '🔓 Non ancora collegato'}</b><small>${edit.bound ? 'Il codice funziona solo sul dispositivo che l\'ha generato. Se il cliente cambia TV o reinstalla l\'app, sblocca il collegamento.' : 'Il primo dispositivo che usa questo codice verrà collegato.'}</small></div>${edit.bound ? '<button class="btn sm" id="eReset">Sblocca</button>' : ''}</div>`}
     ${linkedBox}${linkBox}
-    <label class="lbl">${linked ? 'Nome del dispositivo' : 'Nome cliente'}</label><input class="inp" id="eName" placeholder="${linked ? 'es. Camera da letto' : 'es. Mario Rossi'}" value="${esc(edit.name)}">`;
+    <label class="lbl">${linked ? 'Nome del dispositivo' : 'Nome cliente'}</label><input class="inp" id="eName" placeholder="${linked ? 'es. Camera da letto' : 'es. Mario Rossi'}" value="${esc(edit.name)}">
+    ${!linked && D.role !== 'agent' && (D.agents || []).length ? `<label class="lbl">Responsabile</label><select class="inp" id="eOwner"><option value="0">Tu (nessun agente)</option>${D.agents.map((a) => `<option value="${a.id}" ${+edit.ownerId === a.id ? 'selected' : ''}>${esc(a.username)}${a.active ? '' : ' (disattivato)'}</option>`).join('')}</select><small class="mut" style="display:block;margin-top:6px;font-size:12px">L'agente scelto vede e gestisce questo cliente dal suo pannello.</small>` : ''}`;
   const S2 = linked ? '' : `<div class="tog ${edit.active ? 'on' : ''}" id="eAct"><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
     <div class="row"><input class="inp" type="date" id="eExp" value="${esc(edit.expires)}"><button class="btn" id="eInf">${edit.expires ? 'Rendi illimitato' : 'Illimitato ✓'}</button></div>
     <div class="quick">${[1, 3, 6, 12].map((m) => `<button class="btn sm" data-m="${m}">+${m} ${m === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>`;
@@ -491,6 +492,7 @@ function renderDrawer() {
     edit.name = $('#eName').value; edit.notes = $('#eNotes').value;
     if ($('#eExp')) edit.expires = $('#eExp').value;
     if ($('#eCode')) edit.code = $('#eCode').value.toUpperCase();
+    if ($('#eOwner')) edit.ownerId = +$('#eOwner').value || 0;
     $$('#pls .pl').forEach((el) => { const p = edit.playlists[+el.dataset.i]; $$('[data-k]', el).forEach((i) => (p[i.dataset.k] = i.value)); });
     if ($('#eMaxC')) edit.maxConn = Math.round(+$('#eMaxC').value) || 1;
     if ($('#eMaxP')) edit.maxProfiles = Math.max(0, Math.round(+$('#eMaxP').value) || 0);
@@ -551,9 +553,10 @@ function renderDrawer() {
     const vpnPart = edit.wgText && edit.wgText.trim() ? { vpnConf: edit.wgText } : edit.vpnConfClear ? { vpnConfClear: true } : {};
     const acc = { maxConn: edit.maxConn, maxProfiles: edit.maxProfiles, maxStreams: +edit.maxStreams || 0, vpnLoc: edit.vpnLoc || '', perms: Object.fromEntries(PERM_L.map(([k]) => [k, !edit.perms || edit.perms[k] !== false])), lockProfiles: !!edit.lockProfiles, vpn: +edit.vpn || 0, plMode: edit.plMode === 'split' ? 'split' : 'merge', plDefault: edit.plDefault || '', player: { live: (edit.player || {}).live || '', movie: (edit.player || {}).movie || '', series: (edit.player || {}).series || '' }, profiles: edit.profiles.map((p) => ({ id: p.id || undefined, name: p.name, avatar: p.avatar, kids: !!p.kids, pl: p.pl || 'all' })) };
     try {
-      if (isNew) await api('POST', '/admin/devices', { code: edit.code, name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart });
+      const own = $('#eOwner') ? { ownerId: edit.ownerId || 0 } : {};
+      if (isNew) await api('POST', '/admin/devices', { code: edit.code, name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart, ...own });
       else if (edit.parent) await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, ...vpnPart });
-      else await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart });
+      else await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart, ...own });
       closeDrawer(); await load(); toast(isNew ? 'Dispositivo creato' : 'Modifiche salvate');
     } catch (e) { toast(e.message, 1); }
   };
@@ -600,7 +603,7 @@ function renderSettings() {
   const s = D.settings, setv = (sel, v) => { const el = $(sel); if (el && el.dataset.dirty !== '1') el.value = v; }, sett = (sel, on) => { const el = $(sel); if (el && el.dataset.dirty !== '1') el.classList.toggle('on', on); };
   if ($('#themes').dataset.dirty !== '1') tmpAccent = s.accent || 'cinema';
   setv('#sBrand', s.brand || ''); setv('#sTag', s.tagline || ''); setv('#sAnn', s.announcement || ''); setv('#sSup', s.supportContact || '');
-  sett('#sLocal', !!s.allowLocalPlaylists); setv('#sApk', s.apkUrl || ''); setv('#sDl', s.downloaderCode || '');
+  sett('#sLocal', !!s.allowLocalPlaylists); setv('#sApk', s.apkUrl || ''); setv('#sDl', s.downloaderCode || ''); setv('#sDlStore', s.storeDownloaderCode || '');
   sett('#sFoot', s.showFootball !== false); setv('#sSrv', s.serverUrl || ''); setv('#sVer', s.apkVersion || '');
   setv('#sPrice', typeof s.price === 'string' ? s.price : ''); setv('#sPriv', s.privacy || '');
   showVerCode();
@@ -631,7 +634,7 @@ $('#sLocal').onclick = () => { $('#sLocal').classList.toggle('on'); $('#sLocal')
 $('#sFoot').onclick = () => { $('#sFoot').classList.toggle('on'); $('#sFoot').dataset.dirty = '1'; };
 $('#sSave').onclick = async () => {
   const wg = $('#sWg').value.trim();
-  try { const r = await api('PUT', '/admin/settings', { brand: $('#sBrand').value.trim() || 'KAIROS', tagline: $('#sTag').value, accent: tmpAccent, announcement: $('#sAnn').value, supportContact: $('#sSup').value, allowLocalPlaylists: $('#sLocal').classList.contains('on'), apkUrl: $('#sApk').value.trim(), downloaderCode: $('#sDl').value.trim(), showFootball: $('#sFoot').classList.contains('on'), serverUrl: $('#sSrv').value.trim(), apkVersionCode: $('#sVer').value.trim(), price: $('#sPrice').value.trim(), privacy: $('#sPriv').value, ...(wg ? { wgConf: wg } : {}) }); D.settings = r.settings; $('#sWg').value = ''; clearDirty(); await load(); toast('Impostazioni salvate — le app si aggiornano da sole'); if (window.stDirtyUpd) stDirtyUpd(); } catch (e) { toast(e.message, 1); }
+  try { const r = await api('PUT', '/admin/settings', { brand: $('#sBrand').value.trim() || 'KAIROS', tagline: $('#sTag').value, accent: tmpAccent, announcement: $('#sAnn').value, supportContact: $('#sSup').value, allowLocalPlaylists: $('#sLocal').classList.contains('on'), apkUrl: $('#sApk').value.trim(), downloaderCode: $('#sDl').value.trim(), storeDownloaderCode: $('#sDlStore').value.trim(), showFootball: $('#sFoot').classList.contains('on'), serverUrl: $('#sSrv').value.trim(), apkVersionCode: $('#sVer').value.trim(), price: $('#sPrice').value.trim(), privacy: $('#sPriv').value, ...(wg ? { wgConf: wg } : {}) }); D.settings = r.settings; $('#sWg').value = ''; clearDirty(); await load(); toast('Impostazioni salvate — le app si aggiornano da sole'); if (window.stDirtyUpd) stDirtyUpd(); } catch (e) { toast(e.message, 1); }
 };
 function renderSecurity() {
   const x = D.security || {};

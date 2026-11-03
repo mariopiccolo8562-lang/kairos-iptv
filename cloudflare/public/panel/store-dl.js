@@ -115,7 +115,7 @@
     }
     throw new Error('demo');
   }
-  const sApi = (method, path, body) => (D.demo ? demo(method, path, body) : api(method, '/admin/store' + path, body));
+  const sApi = (method, path, body) => (D.demo && D.role !== 'agent' ? demo(method, path, body) : api(method, '/admin/store' + path, body));
 
   /* ---------------- disegno ---------------- */
   const when = (t) => new Date(t).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });

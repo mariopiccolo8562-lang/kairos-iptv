@@ -35,7 +35,7 @@
     wh: { url: '', events: ['device.new', 'device.activated', 'report.new', 'request.new'], hasSecret: false, last: null },
   };
   async function kapi(method, path, body) {
-    if (!D.demo) return api(method, path, body);
+    if (!D.demo || D.role === 'agent') return api(method, path, body);
     await new Promise((r) => setTimeout(r, 120));
     if (path === '/admin/presence') return DM.pres();
     if (path.startsWith('/admin/app-errors')) {

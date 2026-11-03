@@ -2927,7 +2927,7 @@ function idleBox(ch) {
 }
 function preview(ch, gated) {
   if (isLocked(ch)) { gate(ch).then((ok) => ok && preview(ch)); return; }
-  if (!gated && streamGateNeeded()) { streamGate('live', ch.name).then((ok) => ok && preview(ch, true)); return; }
+  if (!gated && (streamGateNeeded() || lineGateNeeded(ch))) { streamGate('live', ch.name, ch).then((ok) => ok && preview(ch, true)); return; }
   S.previewing = ch; S.playingLive = ch;
   $$('#liveList .ch').forEach((x) => x.classList.toggle('playing', S.liveIndex[+x.dataset.i] === ch));
   const b = $('#pvBox');
@@ -3463,20 +3463,20 @@ function addonDialog(id) {
   const own = addonOwn(id), cur = store.get('theme') === 'x:' + id, price = addonPrice(id);
   const ready = a.cat !== 'tema' || !!adAsset(id);
   if (own && !ready && !S.demo) adAssetsSync().then(() => { if ($('#addonM') && adAsset(id)) { back(); addonDialog(id); } });
-  const avs = a.av && own && ready ? Array.from({ length: a.n || 4 }, (_, i) => `<span class="pav">${avatarSVG('a' + (a.av + i))}</span>`).join('') : '';
+  const avs = a.av && ((own && ready) || a.cat === 'avatar') ? Array.from({ length: a.n || 4 }, (_, i) => `<span class="pav">${avatarSVG('a' + (a.av + i))}</span>`).join('') : '';
   const what = a.cat === 'tema' ? 'Tema speciale: colori, scena di sfondo e 4 avatar per i profili' : a.cat === 'skin' ? 'Skin colorata per tutta l\'app' : `Pacchetto di ${a.n} avatar per i profili`;
   kxModal('addonM', `<div class="adprev"${sceneURI(id) ? ` style="background-image:${sceneURI(id).replace(/"/g, "'")}"` : a.pal ? ` style="background:linear-gradient(120deg,${a.pal[2]},${a.pal[0]} 55%,${a.pal[1]})"` : ''}>${a.pal ? `<div class="adpal">${a.pal.map((c) => `<i style="background:${c}"></i>`).join('')}</div>` : ''}</div>
     <h2>${esc(a.name)}</h2><p class="mut" style="margin:4px 0 10px">${esc(what)} · ${esc(a.desc)}</p>
-    ${avs ? `<div class="adavs">${avs}</div>` : a.cat === 'tema' ? `<div class="snote">${own ? (S.demo ? 'Nella demo il tema mostra solo i colori: scena e avatar arrivano dal server del fornitore.' : 'Scarico la scena e gli avatar del tema…') : 'Scena di sfondo e 4 avatar si scaricano sul dispositivo solo quando il fornitore ti attiva il tema.'}</div>` : ''}
-    ${!own && a.cat === 'tema' ? '<div class="snote pvn">Anteprima a bassa risoluzione: il tema completo arriva quando il fornitore te lo attiva.</div>' : ''}
-    ${own ? '' : `<div class="snote">${price ? `Prezzo: <b>${esc(price)}</b>. ` : ''}Questo add-on lo attiva il tuo fornitore${perm('request') && baseServer() && !S.demo ? ': puoi chiederglielo da qui.' : '.'}</div>`}
-    <div class="sbtn">${own && a.pal ? `<button class="btn pri" data-f id="adUse">${cur ? '✓ In uso · torna al colore base' : 'Applica il tema'}</button>` : ''}${own && a.av && !a.pal ? '<button class="btn pri" data-f id="adProf">Scegli un avatar per il profilo</button>' : ''}${!own && perm('request') && baseServer() && !S.demo ? '<button class="btn pri" data-f id="adReq">Richiedi al fornitore</button>' : ''}<button class="btn" data-f id="adNo">Chiudi</button></div>`);
+    ${avs ? `<div class="adavs${own ? '' : ' pv'}">${avs}${own ? '' : '<small>Anteprima</small>'}</div>` : a.cat === 'tema' ? `<div class="snote">${own ? (S.demo ? 'Nella demo il tema mostra solo i colori: scena e avatar arrivano dal server del fornitore.' : 'Scarico la scena e gli avatar del tema…') : 'Scena di sfondo e 4 avatar si scaricano sul dispositivo solo quando il fornitore ti attiva il tema.'}</div>` : ''}
+    ${!own ? `<div class="snote pvn">${a.cat === 'tema' ? 'Anteprima a bassa risoluzione: il tema completo arriva quando il fornitore te lo attiva.' : a.cat === 'skin' ? 'Anteprima dei colori: potrai applicare la skin quando il fornitore te la attiva.' : 'Anteprima: potrai usare questi avatar quando il fornitore te li attiva.'}</div>` : ''}
+    ${own ? '' : `<div class="snote">${price ? `Prezzo: <b>${esc(price)}</b>. ` : ''}Questo add-on lo attiva il tuo fornitore${baseServer() && !S.demo ? ': puoi chiederglielo da qui.' : '.'}</div>`}
+    <div class="sbtn">${own && a.pal ? `<button class="btn pri" data-f id="adUse">${cur ? '✓ In uso · torna al colore base' : 'Applica il tema'}</button>` : ''}${own && a.av && !a.pal ? '<button class="btn pri" data-f id="adProf">Scegli un avatar per il profilo</button>' : ''}${!own && baseServer() && !S.demo ? '<button class="btn pri" data-f id="adReq">Richiedi al fornitore</button>' : ''}<button class="btn" data-f id="adNo">Chiudi</button></div>`);
   $('#adNo').onclick = () => back();
   if ($('#adUse')) $('#adUse').onclick = () => { const nx = cur ? 'cinema' : 'x:' + id; store.set('theme', nx); applyTheme(nx); fx('ok'); toast(cur ? 'Colore base ripristinato' : `✓ Tema «${a.name}» applicato`); back(); const c = $('#shopCard'); if (c) { c.dataset.ok = ''; shopFill(); } const r = $('#sTheme b'); if (r) r.innerHTML = `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(nx) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(nx))}`; focus($(`#shopCard [data-adid="${id}"]`) || $('.sm.sel'), true); };
   if ($('#adProf')) $('#adProf').onclick = () => { back(); if (S.prof) profileEditor(S.prof); else toast('Apri «Profili e dispositivi» per cambiare avatar'); };
   if ($('#adReq')) $('#adReq').onclick = async () => {
     const b = $('#adReq'); b.disabled = true;
-    try { await apiPost('/api/player/request', { ctype: 'addon', title: 'Add-on: ' + a.name, body: price ? 'Prezzo indicato: ' + price : '' }); fx('ok'); back(); toast('✓ Richiesta inviata al fornitore'); }
+    try { const r = await apiPost('/api/player/request', { ctype: 'addon', addon: id, title: 'Add-on: ' + a.name, body: price ? 'Prezzo indicato: ' + price : '' }); fx('ok'); back(); toast(r && r.already ? 'Hai già chiesto questo add-on: il fornitore la sta guardando' : '✓ Richiesta inviata al fornitore'); }
     catch (e) { b.disabled = false; toast('Non inviata: ' + (e.message || 'riprova')); }
   };
   // tema non posseduto: anteprima (sfondo e avatar in piccolo), senza scaricare il tema
@@ -3525,7 +3525,7 @@ window.kxPlayerClosed = (r) => {
   setTimeout(placeRing, 100);
 };
 function openFs(item, kind, fromSec, extra, gated) {
-  if (!gated && streamGateNeeded()) { streamGate(kind, item && item.name).then((ok) => ok && openFs(item, kind, fromSec, extra, true)); return; }
+  if (!gated && (streamGateNeeded() || lineGateNeeded(item))) { streamGate(kind, item && item.name, item).then((ok) => ok && openFs(item, kind, fromSec, extra, true)); return; }
   if (isLocked(item) || (extra && extra.parent && isLocked(extra.parent))) { gate(extra && extra.parent && isLocked(extra.parent) ? extra.parent : item).then((ok) => ok && openFs(item, kind, fromSec, extra)); return; }
   if (nativePlay(item, kind, fromSec, extra)) return;
   fsItem = item; fsKind = kind;
@@ -5449,14 +5449,39 @@ function ytOverlay(id, name) {
 /* ---------------- visioni contemporanee (limite impostato dal pannello) ---------------- */
 let streamOkT = 0;
 const streamGateNeeded = () => !S.demo && !!S.account && +S.account.maxStreams > 0 && !!baseServer() && Date.now() - streamOkT > 90e3;
-async function streamGate(kind, title) {
+/* connessioni contemporanee della linea Xtream: se sono tutte occupate da altri dispositivi la visione non parte
+   (il server la bloccherebbe comunque) e compare un avviso. Non si controlla mentre si sta già guardando o
+   subito dopo (cambio canale/episodio): la connessione occupata sarebbe la nostra. */
+let lineLiveT = 0;
+const lineGateNeeded = (item) => {
+  if (S.demo || hbState()[0] !== 'idle') { lineLiveT = Date.now(); return false; }
+  const p = xtOf(item);
+  return !!(p && p.type === 'xtream' && p.host && p.username) && Date.now() - lineLiveT > 45e3;
+};
+const BUSY_T = 'C\'è già un altro dispositivo collegato';
+async function lineBusy(item) {
+  const p = xtOf(item);
+  if (!p || p.type !== 'xtream') return null;
   try {
-    const j = await Promise.race([apiPost('/api/player/stream', { state: kind === 'live' ? 'live' : kind === 'series' ? 'series' : 'movie', title: String(title || '').slice(0, 120) }), sleep(2500).then(() => ({ ok: true }))]);
-    if (j && j.ok === false) throw new Error(j.error || 'Limite di visioni contemporanee raggiunto');
+    const j = await Promise.race([getJSON(xtBase(p)), sleep(2500).then(() => null)]);
+    const u = j && j.user_info, max = u ? parseInt(u.max_connections, 10) || 0 : 0, act = u ? parseInt(u.active_cons, 10) || 0 : 0;
+    return max > 0 && act >= max ? { max, act } : null;
+  } catch { return null; } // in caso di dubbio non si blocca
+}
+async function streamGate(kind, title, item) {
+  try {
+    if (streamGateNeeded()) {
+      const j = await Promise.race([apiPost('/api/player/stream', { state: kind === 'live' ? 'live' : kind === 'series' ? 'series' : 'movie', title: String(title || '').slice(0, 120) }), sleep(2500).then(() => ({ ok: true }))]);
+      if (j && j.ok === false) throw new Error(j.error || 'Limite di visioni contemporanee raggiunto');
+    }
   } catch (e) {
-    if (/Limite/i.test(e.message)) { fx('err'); noticeModal('Limite di visioni', e.message, 'warn'); return false; }
+    if (/Limite/i.test(e.message)) { fx('err'); const ms = +(S.account && S.account.maxStreams) || 1; noticeModal(BUSY_T, `Il tuo abbonamento permette ${ms === 1 ? 'una visione' : ms + ' visioni'} alla volta e in questo momento è già in uso su un altro dispositivo. Chiudi la visione sull'altro dispositivo e riprova.`, 'warn'); return false; }
   }
-  streamOkT = Date.now();
+  if (item && lineGateNeeded(item)) {
+    const b = await lineBusy(item);
+    if (b) { fx('err'); noticeModal(BUSY_T, `La tua linea permette ${b.max === 1 ? 'una connessione' : b.max + ' connessioni'} alla volta ed è già in uso su un altro dispositivo. Chiudi la visione sull'altro dispositivo e riprova tra qualche secondo.`, 'warn'); return false; }
+  }
+  streamOkT = Date.now(); lineLiveT = Date.now();
   return true;
 }
 /* ---------------- impostazioni: profili e dispositivi, registrazioni, privacy e VPN ---------------- */

@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#05060f">
+<meta name="theme-color" content="#16181d">
 <title>KAIROS Control</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
 :root{--a1:#22e1ff;--a2:#7b5cff;--a3:#ff3df2;--bg:#05060f;--glass:rgba(255,255,255,.04);--line:rgba(255,255,255,.08);--txt:#eef2ff;--mut:#8b93b8;--ok:#3dffb0;--warn:#ffcc4d;--bad:#ff4d7a}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -245,7 +245,7 @@ canvas{display:block;width:100%}
   <form class="lcard glass" id="lform">
     <div class="hex"><svg viewBox="0 0 200 200"><g class="rot" style="transform-origin:100px 100px"><defs><linearGradient id="kg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><circle cx="100" cy="100" r="84" fill="none" stroke="url(#kg)" stroke-width="7" stroke-linecap="round" stroke-dasharray="400 128" transform="rotate(-38 100 100)"/><circle cx="100" cy="100" r="70" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="1.5" stroke-dasharray="3 7"/><rect x="62" y="52" width="22" height="96" rx="4" fill="#fff"/><path d="M90 104 L128 52 H156 L116 108 Z" fill="url(#kg)"/><path d="M104 98 L122 92 L158 148 H130 Z" fill="#fff"/><circle cx="171" cy="62" r="7" fill="#fff"/></g></svg></div>
     <h1 class="grad">KAIROS</h1>
-    <p class="mut">Control Center · accesso amministratore</p>
+    <p class="mut">Control Center · accesso amministratore e agenti</p>
     <input class="inp" id="lu" placeholder="Utente" value="admin" autocomplete="username">
     <input class="inp" id="lp" type="password" placeholder="Password" autocomplete="current-password">
     <input class="inp mono" id="lt" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Codice a 6 cifre dell'app di autenticazione" style="display:none;text-align:center;letter-spacing:.4em">
@@ -361,6 +361,7 @@ canvas{display:block;width:100%}
           <div id="apkAuto" class="st-note"></div>
           <div class="st-row"><div class="st-l"><b>Link per scaricare l'APK</b><small>Quello che dai ai clienti nuovi</small></div><div class="st-c"><input class="inp mono" id="sApk" placeholder="https://github.com/…/releases/latest/download/kairos.apk"></div></div>
           <div class="st-row"><div class="st-l"><b>Codice Downloader</b><small>Il numero da scrivere nell'app Downloader</small></div><div class="st-c"><input class="inp mono" id="sDl" placeholder="es. 1234567"></div></div>
+          <div class="st-row"><div class="st-l"><b>Codice Downloader del Kairos Store</b><small>Il numero per installare lo store delle tue app: compare in alto nel pannello (anche agli agenti)</small></div><div class="st-c"><input class="inp mono" id="sDlStore" maxlength="20" placeholder="es. 7654321"></div></div>
           <details class="st-adv"><summary>Avanzate: versione a mano e cambio di dominio</summary>
             <div class="st-row"><div class="st-l"><b>Versione APK pubblicata a mano</b><small>Solo se non usi l'aggiornamento automatico; vale solo se è più nuova</small></div><div class="st-c st-two"><input class="inp mono" id="sVer" placeholder="es. 1.9.1"><input class="inp mono" id="sVerCode" readonly tabindex="-1" title="Calcolato da solo: X.Y.Z → X·10000 + Y·100 + Z"></div></div>
             <div class="st-row"><div class="st-l"><b>Indirizzo del pannello per le app</b><small>Solo quando passi a un nuovo dominio: le app si spostano da sole. Prima controlla che il pannello risponda già lì.</small></div><div class="st-c"><input class="inp mono" id="sSrv" placeholder="Vuoto = quello attuale. Es. https://tv.tuodominio.it"></div></div>
@@ -419,5 +420,8 @@ canvas{display:block;width:100%}
 <script src="app.js"></script>
 <script src="store-dl.js"></script>
 <script src="kc.js"></script>
+<script src="addon-data.js"></script>
+<script src="addons-panel.js"></script>
+<script src="agents.js"></script>
 </body>
 </html>

@@ -241,7 +241,7 @@ function harden(res, req) {
 const DEFAULT_SETTINGS = {
   brand: 'KAIROS', tagline: 'Streaming', accent: 'cinema',
   announcement: 'Benvenuto su KAIROS — buona visione!', supportContact: '',
-  allowLocalPlaylists: true, apkUrl: '', apkVersionCode: 0, downloaderCode: '',
+  allowLocalPlaylists: true, apkUrl: '', apkVersionCode: 0, downloaderCode: '', storeDownloaderCode: '',
   serverUrl: '', showFootball: true,
   price: '22 € / anno', privacy: '',
 };
@@ -1154,18 +1154,30 @@ async function playerMeta(req, env, ip, url, ctx) {
   return json({ cert: v.cert, certSrc: v.certSrc, extras: v.extras });
 }
 /* assistente IA (Claude): solo se il fornitore ha messo il segreto ANTHROPIC_API_KEY e il permesso «ai» è acceso */
-const AI_MODEL = 'claude-haiku-5-5';
+/* assistente IA con Google Gemini (piano gratuito): segreto GEMINI_API_KEY; se il modello principale è al limite si usa quello leggero */
+const AI_MODEL = 'gemini-3.8-flash', AI_MODEL_LITE = 'gemini-3.5-flash-lite';
+const AI_SYSTEM = 'Sei l\'assistente di un\'app per guardare la TV. Rispondi in italiano, in modo breve e chiaro (al massimo 6 frasi), adatto a essere letto sulla TV. Parla solo del contenuto indicato e di argomenti legati (trama, attori, curiosità, se è adatto ai bambini, contenuti simili). Non rivelare mai colpi di scena o finali (niente spoiler). Se non sei sicuro di qualcosa, dillo. Non usare markdown, elenchi o asterischi.';
+async function geminiAsk(env, model, text) {
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: 'POST', signal: AbortSignal.timeout(25000),
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': String(env.GEMINI_API_KEY).trim() },
+    body: JSON.stringify({ systemInstruction: { parts: [{ text: AI_SYSTEM }] }, contents: [{ role: 'user', parts: [{ text }] }], generationConfig: { maxOutputTokens: 500, temperature: 0.6 } }),
+  });
+  const j = await r.json().catch(() => null);
+  const answer = j && Array.isArray(j.candidates) && j.candidates[0] && j.candidates[0].content ? (j.candidates[0].content.parts || []).map((p) => p.text || '').join('').trim() : '';
+  return { status: r.status, answer };
+}
 async function playerAi(req, env, ip, ctx) {
   if (await limited(env.RL_DEVICE, 'ai:' + ip)) return json({ error: 'Troppe richieste' }, 429);
   let b;
   try { b = await readJSON(req, 8192); } catch (e) { return json({ error: e.message }, e.status || 400); }
   const [d, bad] = await deviceAuth(env, b);
   if (bad) return bad;
-  if (!env.ANTHROPIC_API_KEY) return json({ off: true });
+  if (!env.GEMINI_API_KEY) return json({ off: true });
   const [P] = await activeAccount(env, d);
   if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
   if (permsParse(P.perms).ai === false) return json({ error: 'Assistente non attivo su questo abbonamento' }, 403);
-  // al massimo 40 domande al giorno per dispositivo (costo sotto controllo)
+  // al massimo 40 domande al giorno per dispositivo (il piano gratuito di Google ha un limite giornaliero)
   if (await throttled(env, 'ai:' + d.id, 40, 86400e3)) return json({ error: 'Hai fatto molte domande oggi: riprova domani' }, 429);
   const q = nameClean(b.q, 200), c = b.ctx && typeof b.ctx === 'object' ? b.ctx : {};
   if (q.length < 2) return json({ error: 'Scrivi una domanda' }, 400);
@@ -1175,22 +1187,19 @@ async function playerAi(req, env, ip, ctx) {
     c.year ? `Anno: ${str(c.year, 8)}` : '', c.genre ? `Generi: ${nameClean(c.genre, 100)}` : '', c.cast ? `Cast: ${nameClean(c.cast, 200)}` : '',
     c.plot ? `Trama dalla playlist: ${nameClean(c.plot, 600)}` : '',
   ].filter(Boolean).join('\n');
-  let r;
-  try {
-    r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST', signal: AbortSignal.timeout(25000),
-      headers: { 'content-type': 'application/json', 'x-api-key': String(env.ANTHROPIC_API_KEY).trim(), 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({
-        model: env.AI_MODEL || AI_MODEL, max_tokens: 500,
-        system: 'Sei l\'assistente di un\'app per guardare la TV. Rispondi in italiano, in modo breve e chiaro (al massimo 6 frasi), adatto a essere letto sulla TV. Parla solo del contenuto indicato e di argomenti legati (trama, attori, curiosità, titoli simili). Non rivelare colpi di scena o finali se l\'utente non lo chiede esplicitamente. Se non conosci il contenuto, dillo con onestà. Non usare formattazione markdown.',
-        messages: [{ role: 'user', content: `${info}\n\nDomanda: ${q}` }],
-      }),
-    });
-  } catch { return json({ error: 'Assistente non raggiungibile, riprova tra poco' }, 502); }
-  const j = await r.json().catch(() => null);
-  if (!r.ok || !j) return json({ error: 'Assistente non disponibile in questo momento' }, 502);
-  const answer = (j.content || []).filter((x) => x.type === 'text').map((x) => x.text).join('\n').trim().slice(0, 2000);
-  return json({ answer: answer || 'Non ho una risposta per questa domanda.' });
+  const text = `${info}\n\nDomanda: ${q}`;
+  const models = [...new Set([str(env.AI_MODEL || '', 60) || AI_MODEL, AI_MODEL_LITE])];
+  let last = 0;
+  for (const model of models) {
+    let r;
+    try { r = await geminiAsk(env, model, text); } catch { last = 502; continue; }
+    if (r.status === 200 && r.answer) return json({ answer: r.answer.slice(0, 2000) });
+    if (r.status === 200) return json({ answer: 'Non ho una risposta per questa domanda.' });
+    last = r.status;
+    if (![429, 404, 500, 503].includes(r.status)) break; // chiave sbagliata o richiesta rifiutata: inutile riprovare
+  }
+  if (last === 429) return json({ error: 'L\'assistente ha finito le risposte gratuite di oggi: riprova più tardi' }, 429);
+  return json({ error: 'Assistente non disponibile in questo momento' }, 502);
 }
 /* ricerca per attore: titoli in cui ha recitato (l'app li confronta con la propria libreria) */
 async function playerPerson(req, env, ip, url, ctx) {
@@ -1323,6 +1332,19 @@ async function addRequest(env, d, kind, f, ip) {
     .bind(d.id, kind, f.ctype || '', f.title || '', f.body || '', f.info || '', 'new', now(), ip).run();
 }
 /* "Richiedi un contenuto" dall'app: film, serie o canale che il cliente vorrebbe */
+async function playerAddonRequest(req, env, ip, ctx, b, d, P) {
+  const id = str(b.addon || '', 40), row = ADDONS.find((x) => x[0] === id), a = row && { id: row[0], name: row[1] };
+  if (!a) return json({ error: 'Add-on non trovato' }, 404);
+  const it = addonsFor(await getSettings(env), P).find((x) => x.id === id);
+  if (!it) return json({ error: 'Add-on non disponibile' }, 404);
+  if (it.own) return json({ ok: true, own: true });
+  if (await env.DB.prepare("SELECT 1 AS x FROM requests WHERE kind = 'addon' AND device_id = ? AND info = ? AND status <> 'done'").bind(P.id, 'addon:' + id).first()) return json({ ok: true, already: true });
+  if (await throttled(env, 'rqa:' + P.id, 10, 3600e3)) return json({ error: 'Hai inviato troppe richieste: riprova tra un\'ora' }, 429);
+  await addRequest(env, P, 'addon', { ctype: 'addon', title: a.name, body: it.p ? 'Prezzo indicato: ' + str(it.p, 40) : '', info: 'addon:' + id }, ip);
+  ctx.waitUntil(webhookSend(env, 'request.new', { code: P.code, name: P.name || '', ctype: 'addon', title: a.name, note: '' }));
+  ctx.waitUntil(log(env, 'req', `Richiesta tema/add-on da ${P.name || P.code}: ${a.name}${d.id !== P.id ? ' (da un dispositivo collegato)' : ''}`, ip));
+  return json({ ok: true });
+}
 async function playerRequest(req, env, ip, ctx) {
   if (await limited(env.RL_DEVICE, 'rq:' + ip)) return json({ error: 'Troppe richieste, riprova tra poco' }, 429);
   let b;
@@ -1331,6 +1353,7 @@ async function playerRequest(req, env, ip, ctx) {
   if (bad) return bad;
   const [P] = await activeAccount(env, d);
   if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
+  if (b.ctype === 'addon' && b.addon) return playerAddonRequest(req, env, ip, ctx, b, d, P); // non dipende dal permesso «richieste»
   if (!permsOf(P).request) return json({ error: PERM_MSG }, 403);
   const title = nameClean(b.title, 120), body = nameClean(b.body, 400), ctype = CTYPES.includes(b.ctype) ? b.ctype : '';
   if (!title) return json({ error: 'Scrivi il titolo' }, 400);
@@ -1341,26 +1364,26 @@ async function playerRequest(req, env, ip, ctx) {
   return json({ ok: true });
 }
 const newCounts = async (env) => {
-  const out = { reports: 0, requests: 0 };
+  const out = { reports: 0, requests: 0, addons: 0 };
   try {
     const r = ((await env.DB.prepare("SELECT kind, COUNT(*) AS n FROM requests WHERE status = 'new' GROUP BY kind").all()).results) || [];
-    for (const x of r) { if (x.kind === 'report') out.reports = x.n; else if (x.kind === 'content') out.requests = x.n; }
+    for (const x of r) { if (x.kind === 'report') out.reports = x.n; else if (x.kind === 'content') out.requests = x.n; else if (x.kind === 'addon') out.addons = x.n; }
   } catch {}
   return out;
 };
 async function adminRequests(req, env, path, url, who, ip) {
   const m = req.method;
   if (path === '/requests' && m === 'GET') {
-    const kind = url.searchParams.get('kind') === 'content' ? 'content' : 'report';
+    const kind = ['content', 'addon'].includes(url.searchParams.get('kind')) ? url.searchParams.get('kind') : 'report';
     const rows = ((await env.DB.prepare('SELECT r.id, r.device_id, r.kind, r.ctype, r.title, r.body, r.info, r.status, r.created, r.ip, r.note, d.name, d.code, d.model FROM requests r LEFT JOIN devices d ON d.id = r.device_id WHERE r.kind = ? ORDER BY r.id DESC LIMIT 300').bind(kind).all()).results) || [];
     return json({ kind, items: rows.map((r) => ({ id: r.id, deviceId: r.device_id, kind: r.kind, ctype: r.ctype, title: r.title, body: r.body, info: r.info, status: r.status, created: r.created, ip: r.ip, note: r.note, name: r.name || '', code: r.code || '', model: r.model || '' })) });
   }
   if (path === '/requests' && m === 'DELETE') {
     const kind = url.searchParams.get('kind') || '', status = url.searchParams.get('status') || 'done';
     if (!['seen', 'done'].includes(status)) throw new HttpErr(400, 'Si possono svuotare solo le richieste viste o fatte');
-    if (kind && !['report', 'content'].includes(kind)) throw new HttpErr(400, 'Tipo non valido');
+    if (kind && !['report', 'content', 'addon'].includes(kind)) throw new HttpErr(400, 'Tipo non valido');
     const r = kind ? await env.DB.prepare('DELETE FROM requests WHERE kind = ? AND status = ?').bind(kind, status).run() : await env.DB.prepare('DELETE FROM requests WHERE status = ?').bind(status).run();
-    await log(env, 'del', `${who}: svuotate ${kind === 'content' ? 'richieste' : kind === 'report' ? 'segnalazioni' : 'segnalazioni e richieste'} (${status === 'done' ? 'fatte' : 'viste'})`, ip);
+    await log(env, 'del', `${who}: svuotate ${kind === 'content' ? 'richieste' : kind === 'addon' ? 'richieste di temi' : kind === 'report' ? 'segnalazioni' : 'segnalazioni e richieste'} (${status === 'done' ? 'fatte' : 'viste'})`, ip);
     return json({ ok: true, deleted: (r.meta && r.meta.changes) || 0 });
   }
   const rm = path.match(/^\/requests\/(\d{1,10})(\/status)?$/);
@@ -1636,7 +1659,7 @@ async function getSession(req, env) {
   const tok = cookieOf(req);
   if (!tok) return null;
   const id = await sha256('ses:' + tok);
-  const s = await env.DB.prepare('SELECT s.id, s.expires, a.id AS admin_id, a.username, a.totp_on FROM sessions s JOIN admins a ON a.id = s.admin_id WHERE s.id = ?').bind(id).first();
+  const s = await env.DB.prepare('SELECT s.id, s.expires, a.id AS admin_id, a.username, a.totp_on, a.role, a.active, a.last_seen FROM sessions s JOIN admins a ON a.id = s.admin_id WHERE s.id = ?').bind(id).first();
   if (!s || s.expires < now()) return null;
   return s;
 }
@@ -1671,8 +1694,270 @@ async function adminInner(req, env, url, ip, ctx) {
     await env.DB.prepare('UPDATE sessions SET expires = ? WHERE id = ?').bind(now() + SESSION_TTL * 1000, ses.id).run();
     RENEW.set(req, cookieOf(req));
   }
+  if (ses.role === 'agent') return agentRoutes(req, env, url, path, ses, ip, ctx);
   return adminRoutes(req, env, url, path, ses.username, ip, ctx, ses);
 }
+/* ======================================================================
+   AGENTI (reseller): entrano nel pannello con le loro credenziali (2FA facoltativa) e vedono SOLO i propri clienti
+   e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
+   ====================================================================== */
+const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn'];
+const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, addons: [], maxConn: 1 };
+function agentPerms(src) {
+  let o = {}; try { o = typeof src === 'string' ? JSON.parse(src || '{}') : src || {}; } catch {}
+  const p = { ...AGENT_DEF };
+  for (const k of AGENT_FLAGS) if (typeof o[k] === 'boolean') p[k] = o[k];
+  p.addons = addonsList(o.addons || []);
+  p.maxConn = Math.max(1, Math.min(MAX_CONN, parseInt(o.maxConn, 10) || 1));
+  return p;
+}
+/** permessi richiesti per un sotto-agente: mai più di quelli di chi lo crea */
+function agentPermsWithin(req, top) {
+  const p = agentPerms(req);
+  if (!top) return p;
+  for (const k of AGENT_FLAGS) if (!top[k]) p[k] = false;
+  p.addons = p.addons.filter((x) => top.addons.includes(x));
+  p.maxConn = Math.min(p.maxConn, top.maxConn);
+  return p;
+}
+const agentsAll = async (env) => ((await env.DB.prepare("SELECT id, username, email, parent_id, max_clients, can_agents, perms, servers, active, disabled_by, notes, last_seen, created_at, totp_on FROM admins WHERE role = 'agent' ORDER BY id").all()).results) || [];
+/** id dell'agente e di tutti i suoi sotto-agenti (a qualsiasi livello) */
+function agentTree(all, rootId) {
+  const out = [rootId], seen = new Set(out);
+  for (let i = 0; i < out.length; i++) for (const a of all) if (a.parent_id === out[i] && !seen.has(a.id)) { seen.add(a.id); out.push(a.id); }
+  return out;
+}
+async function agentChainActive(env, id, all) {
+  all = all || (await agentsAll(env));
+  const by = new Map(all.map((a) => [a.id, a]));
+  for (let a = by.get(id), n = 0; a && n < 20; a = by.get(a.parent_id), n++) if (!a.active) return false;
+  return by.has(id);
+}
+const serverIds = (v) => [...new Set(String(v || '').split(',').map((x) => x.trim()).filter((x) => /^[A-Za-z0-9_-]{4,20}$/.test(x)))];
+async function clientsCount(env, ids) {
+  let n = 0;
+  for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); n += ((await env.DB.prepare(`SELECT COUNT(*) AS n FROM devices WHERE parent = '' AND owner_id IN (${part.map(() => '?').join(',')})`).bind(...part).first()) || { n: 0 }).n; }
+  return n;
+}
+async function agentsOut(env, all, onlyIds) {
+  const dns = await dnsList(env), dn = new Map(dns.map((x) => [x.id, x]));
+  const counts = new Map();
+  for (const r of ((await env.DB.prepare("SELECT owner_id, COUNT(*) AS n FROM devices WHERE parent = '' AND owner_id > 0 GROUP BY owner_id").all()).results) || []) counts.set(r.owner_id, r.n);
+  return all.filter((a) => !onlyIds || onlyIds.includes(a.id)).map((a) => {
+    const tree = agentTree(all, a.id);
+    return { id: a.id, username: a.username, email: a.email, parentId: a.parent_id, maxClients: a.max_clients, canAgents: !!a.can_agents, perms: agentPerms(a.perms),
+      servers: serverIds(a.servers).filter((x) => dn.has(x)), serverNames: serverIds(a.servers).map((x) => dn.get(x)).filter(Boolean).map((x) => x.name),
+      active: !!a.active, notes: a.notes, lastSeen: a.last_seen, createdAt: a.created_at, totp: !!a.totp_on,
+      clients: tree.reduce((n, id) => n + (counts.get(id) || 0), 0), ownClients: counts.get(a.id) || 0, subAgents: tree.length - 1 };
+  });
+}
+/** crea / modifica / elimina agenti. top = agente che sta agendo (null = proprietario) */
+async function agentsAdmin(req, env, path, who, ip, top) {
+  const m = req.method;
+  const all = await agentsAll(env);
+  const scope = top ? agentTree(all, top.id).filter((x) => x !== top.id) : all.map((a) => a.id);
+  if (path === '/agents' && m === 'GET') return json({ agents: await agentsOut(env, all, scope) });
+  const dnsIds = new Set((await dnsList(env)).map((x) => x.id));
+  const clean = async (b, cur) => {
+    const o = {};
+    if (b.email !== undefined) { const e = str(b.email, 120); if (e && !/^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+$/.test(e)) throw new HttpErr(400, 'Email non valida'); o.email = e; }
+    if (b.notes !== undefined) o.notes = str(b.notes, 300);
+    if (b.maxClients !== undefined) { const n = parseInt(b.maxClients, 10); if (!(n >= 0 && n <= 100000)) throw new HttpErr(400, 'Limite clienti non valido'); if (top && n > top.max_clients) throw new HttpErr(400, `Il limite non può superare il tuo (${top.max_clients})`); o.max_clients = n; }
+    if (b.canAgents !== undefined) { if (top && !top.can_agents) throw new HttpErr(403, 'Non puoi creare sotto-agenti'); o.can_agents = b.canAgents === true ? 1 : 0; }
+    if (b.perms !== undefined) o.perms = JSON.stringify(agentPermsWithin(b.perms, top ? agentPerms(top.perms) : null));
+    if (b.servers !== undefined) { if (!Array.isArray(b.servers)) throw new HttpErr(400, 'servers deve essere un elenco'); let l = serverIds(b.servers.join(',')).filter((x) => dnsIds.has(x)); if (top) { const mine = serverIds(top.servers); l = l.filter((x) => mine.includes(x)); } o.servers = l.join(','); }
+    if (typeof b.active === 'boolean' && (!cur || b.active !== !!cur.active)) {
+      if (b.active && cur && top && cur.disabled_by && !agentTree(all, top.id).includes(cur.disabled_by)) throw new HttpErr(403, 'Disattivato da chi sta sopra di te: non puoi riattivarlo');
+      o.active = b.active ? 1 : 0; o.disabled_by = b.active ? 0 : top ? top.id : -1;
+    }
+    if (b.password !== undefined && b.password !== '') { if (typeof b.password !== 'string' || b.password.length < 10 || b.password.length > 200) throw new HttpErr(400, 'Password di almeno 10 caratteri'); o.pass_hash = await hashPass(b.password); }
+    return o;
+  };
+  if (path === '/agents' && m === 'POST') {
+    if (top && !top.can_agents) throw new HttpErr(403, 'Non puoi creare sotto-agenti');
+    const b = await readJSON(req, 16384);
+    const user = str(b.username, 40);
+    if (!/^[A-Za-z0-9._-]{3,40}$/.test(user)) throw new HttpErr(400, 'Nome utente: 3-40 caratteri tra lettere, numeri, punto, trattino');
+    if (await env.DB.prepare('SELECT 1 AS x FROM admins WHERE username = ?').bind(user).first()) throw new HttpErr(400, 'Nome utente già usato');
+    if (typeof b.password !== 'string' || b.password.length < 10 || b.password.length > 200) throw new HttpErr(400, 'Password di almeno 10 caratteri');
+    if (all.length >= 1000) throw new HttpErr(400, 'Hai raggiunto il massimo di 1000 agenti');
+    const o = await clean({ maxClients: top ? Math.min(10, top.max_clients) : 10, perms: {}, servers: [], ...b }, null);
+    const r = await env.DB.prepare("INSERT INTO admins (username, pass_hash, created_at, role, parent_id, email, max_clients, can_agents, perms, servers, active, notes) VALUES (?, ?, ?, 'agent', ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")
+      .bind(user, o.pass_hash, now(), top ? top.id : 0, o.email || '', o.max_clients ?? 10, o.can_agents || 0, o.perms || JSON.stringify(AGENT_DEF), o.servers || '', o.active ?? 1, o.notes || '').first();
+    await log(env, 'new', `${who}: creato l'agente ${user}${top ? ' (sotto-agente)' : ''}`, ip);
+    return json({ ok: true, id: r.id });
+  }
+  const am = path.match(/^\/agents\/(\d{1,9})$/);
+  if (!am) throw new HttpErr(404, 'Non trovato');
+  const id = +am[1], A = all.find((a) => a.id === id);
+  if (!A || !scope.includes(id)) throw new HttpErr(404, 'Agente non trovato');
+  if (m === 'PUT') {
+    const b = await readJSON(req, 16384);
+    const o = await clean(b, A);
+    if (b.resetTotp === true) { o.totp_on = 0; o.totp_secret = ''; o.totp_last = 0; }
+    const keys = Object.keys(o);
+    if (keys.length) await env.DB.prepare(`UPDATE admins SET ${keys.map((k) => k + ' = ?').join(', ')} WHERE id = ? AND role = 'agent'`).bind(...keys.map((k) => o[k]), id).run();
+    if (o.pass_hash || o.active === 0 || b.resetTotp === true) await env.DB.prepare('DELETE FROM sessions WHERE admin_id = ?').bind(id).run(); // nuova password, disattivato o 2FA azzerata: si rientra
+    await log(env, 'edit', `${who}: modificato l'agente ${A.username}${o.active === 0 ? ' (disattivato)' : o.active === 1 ? ' (attivato)' : ''}${b.resetTotp === true ? ' · 2FA azzerata' : ''}`, ip);
+    return json({ ok: true });
+  }
+  if (m === 'DELETE') {
+    // i suoi clienti e i suoi sotto-agenti passano a chi stava sopra di lui
+    const up = A.parent_id;
+    await env.DB.batch([
+      env.DB.prepare('UPDATE devices SET owner_id = ? WHERE owner_id = ?').bind(up, id),
+      env.DB.prepare("UPDATE admins SET parent_id = ? WHERE parent_id = ? AND role = 'agent'").bind(up, id),
+      env.DB.prepare('DELETE FROM sessions WHERE admin_id = ?').bind(id),
+      env.DB.prepare("DELETE FROM admins WHERE id = ? AND role = 'agent'").bind(id),
+    ]);
+    await log(env, 'off', `${who}: eliminato l'agente ${A.username} (clienti e sotto-agenti passati a ${up ? 'chi stava sopra' : 'te'})`, ip);
+    return json({ ok: true });
+  }
+  throw new HttpErr(405, 'Metodo non consentito');
+}
+/** pannello dell'agente: solo queste funzioni, sempre limitate ai suoi clienti */
+const AGENT_SELF = /^\/(logout|logout-all|password|totp\/(setup|enable|disable))$/;
+/** dispositivo "libero": comparso sulla TV ma mai toccato dal pannello (né dal proprietario né da altri agenti) */
+const FREE_DEV = "owner_id = 0 AND parent = '' AND active = 0 AND playlists = '' AND name = '' AND notes = '' AND expires = ''";
+async function agentRoutes(req, env, url, path, ses, ip, ctx) {
+  const m = req.method;
+  const all = await agentsAll(env);
+  if (!(await agentChainActive(env, ses.admin_id, all))) {
+    await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(ses.id).run();
+    throw new HttpErr(401, 'Account disattivato');
+  }
+  const A = all.find((a) => a.id === ses.admin_id);
+  const by = new Map(all.map((a) => [a.id, a]));
+  let P = agentPerms(A.perms), mine = serverIds(A.servers);
+  let canAg = !!A.can_agents;
+  for (let x = by.get(A.parent_id), n = 0; x && n < 20; x = by.get(x.parent_id), n++) { P = agentPermsWithin(P, agentPerms(x.perms)); const up = serverIds(x.servers); mine = mine.filter((y) => up.includes(y)); if (!x.can_agents) canAg = false; }
+  const Aeff = { ...A, can_agents: canAg ? 1 : 0, perms: JSON.stringify(P), servers: mine.join(',') };
+  const tree = agentTree(all, A.id), who = 'Agente ' + A.username;
+  const aSes = { ...ses, agent: true };
+  if (now() - (+A.last_seen || 0) > 5 * 60e3) ctx.waitUntil(env.DB.prepare('UPDATE admins SET last_seen = ? WHERE id = ?').bind(now(), A.id).run());
+  if (path === '/password' && m === 'PUT') { const b = await readJSON(req, 4096); return adminRoutes(new Request(url.href, { method: 'PUT', body: JSON.stringify({ current: b.current, next: b.next }) }), env, url, path, who, ip, ctx, aSes); } // il nome utente lo cambia solo chi l'ha creato
+  if (AGENT_SELF.test(path) && m !== 'GET') return adminRoutes(req, env, url, path, who, ip, ctx, aSes);
+  if (path === '/agents' || path.startsWith('/agents/')) { if (!canAg) throw new HttpErr(403, 'Non puoi gestire agenti'); return agentsAdmin(req, env, path, who, ip, Aeff); }
+  const dns = await dnsList(env), servers = dns.filter((x) => mine.includes(x.id));
+  // l'agente non vede gli indirizzi dei server: solo il nome del server scelto
+  const dview = (x) => {
+    const dn = new Map(dns.map((y) => [y.host, y]));
+    const { hosts, vpnConf, ...rest } = x;
+    return { ...rest, playlists: (x.playlists || []).map((p) => { const sv = dn.get(hostOf(p)); return { id: p.id, name: p.name, type: p.type, serverId: sv ? sv.id : '', serverName: sv ? sv.name : 'Altro server', username: p.username, password: p.password }; }) };
+  };
+  const own = async (id) => {
+    const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(id).first();
+    if (!d) return null;
+    const P0 = d.parent ? await env.DB.prepare('SELECT owner_id FROM devices WHERE id = ?').bind(d.parent).first() : d;
+    return P0 && tree.includes(+P0.owner_id || 0) ? d : null;
+  };
+  const allowedAddons = new Set(addonCfg(await getSettings(env)).filter((a) => a.mode === 'some' && P.addons.includes(a.id)).map((a) => a.id));
+  // playlist scelte dall'agente: solo i server assegnati, con utente e password del cliente
+  const plsFrom = (list, cur) => {
+    if (!Array.isArray(list)) throw new HttpErr(400, 'playlists deve essere un elenco');
+    if (list.length > 10) throw new HttpErr(400, 'Al massimo 10 playlist');
+    return list.map((p, i) => {
+      const old = p && p.id && (cur || []).find((x) => x.id === p.id);
+      const sv = servers.find((x) => x.id === str(p && p.serverId, 20)) || (old && servers.find((x) => x.host === hostOf(old)));
+      if (!sv) throw new HttpErr(400, 'Scegli uno dei server che ti sono stati assegnati');
+      const username = str(p.username, 120) || (old && old.username) || '', password = typeof p.password === 'string' && p.password ? p.password.slice(0, 200) : (old && old.password) || '';
+      if (!username || !password) throw new HttpErr(400, 'Inserisci utente e password della linea');
+      return { id: old ? old.id : undefined, name: str(p.name, 60) || sv.name || 'Playlist ' + (i + 1), type: 'xtream', host: sv.host, username, password };
+    });
+  };
+  const okDate = (e) => { if (!/^\d{4}-\d{2}-\d{2}$/.test(e) || !DATE_RE.test(e)) throw new HttpErr(400, 'Scadenza non valida'); if (new Date(e + 'T00:00:00Z') - Date.now() > 3 * 366 * 864e5) throw new HttpErr(400, 'Scadenza massima: 3 anni'); return e; };
+  const limitCheck = async (after) => {
+    for (let x = A, n = 0; x && n < 20; x = by.get(x.parent_id), n++) {
+      const used = await clientsCount(env, agentTree(all, x.id));
+      if (after ? used > x.max_clients : used >= x.max_clients) throw new HttpErr(400, x.id === A.id ? `Hai raggiunto il limite di ${x.max_clients} clienti` : `Limite di clienti raggiunto (${x.username}: ${x.max_clients})`);
+    }
+  };
+  const forward = (method, p, body) => adminRoutes(new Request(url.href, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }), env, url, p, who, ip, ctx, aSes);
+
+  const apv = path.match(/^\/addon-preview\/([a-z0-9-]{3,40})$/);
+  if (apv && m === 'GET') { if (!allowedAddons.has(apv[1])) throw new HttpErr(404, 'Anteprima non disponibile'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
+  if (path === '/state' && m === 'GET') {
+    const rows = [];
+    for (let i = 0; i < tree.length; i += 90) { const part = tree.slice(i, i + 90); rows.push(...((await env.DB.prepare(`SELECT * FROM devices WHERE parent = '' AND owner_id IN (${part.map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT 5000`).bind(...part).all()).results || [])); }
+    const pids = rows.map((r) => r.id), kids = [];
+    for (let i = 0; i < pids.length; i += 90) { const part = pids.slice(i, i + 90); kids.push(...((await env.DB.prepare(`SELECT * FROM devices WHERE parent IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results || [])); }
+    const devices = [];
+    for (const d of [...rows, ...kids]) devices.push(dview(await deviceOut(env, d)));
+    const byId = new Map(devices.map((x) => [x.id, x]));
+    for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p ? p.status : 'pending'; }
+    const s = await getSettings(env);
+    const meOut = (await agentsOut(env, all, [A.id]))[0];
+    return json({ role: 'agent', user: A.username, me: { ...meOut, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices,
+      agents: canAg ? await agentsOut(env, all, tree.filter((x) => x !== A.id)) : [],
+      servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
+      settings: { brand: s.brand, accent: s.accent, downloaderCode: s.downloaderCode || '', storeDownloaderCode: s.storeDownloaderCode || '', apkUrl: s.apkUrl || '' }, permKeys: PERM_KEYS, security: { totp: !!ses.totp_on }, counts: {}, activity: [], messages: [] });
+  }
+  if (path === '/devices' && m === 'POST') {
+    if (!P.create) throw new HttpErr(403, 'Non puoi attivare clienti');
+    const b = await readJSON(req, 65536);
+    const code = str(b.code, 20).toUpperCase();
+    if (!CODE_RE.test(code)) throw new HttpErr(400, 'Scrivi il codice che il cliente vede sulla TV (es. KXAB-12CD)');
+    await limitCheck();
+    const expires = okDate(str(b.expires, 10));
+    const pls = plsFrom(b.playlists || [], []);
+    if (!pls.length) throw new HttpErr(400, 'Aggiungi almeno una playlist');
+    const maxConn = Math.max(1, Math.min(P.maxConn, parseInt(b.maxConn, 10) || 1));
+    const addons = addonsList(b.addons || []).filter((x) => allowedAddons.has(x));
+    const d = await env.DB.prepare('SELECT * FROM devices WHERE code = ?').bind(code).first();
+    if (d) {
+      // codice già comparso sulla TV: si prende solo se nessuno l'ha mai toccato (né tu né altri agenti)
+      const r0 = await env.DB.prepare(`UPDATE devices SET owner_id = ? WHERE id = ? AND ${FREE_DEV}`).bind(A.id, d.id).run();
+      if (!r0.meta || r0.meta.changes !== 1) throw new HttpErr(400, 'Questo codice è già in uso');
+      const back = () => env.DB.prepare(`UPDATE devices SET owner_id = 0 WHERE id = ? AND owner_id = ? AND ${FREE_DEV.replace('owner_id = 0 AND ', '')}`).bind(d.id, A.id).run();
+      try { await limitCheck(true); } catch (e) { await back(); throw e; }
+      let r;
+      try { r = await forward('PUT', '/devices/' + d.id, { name: str(b.name, 60), notes: str(b.notes, 500), expires, active: true, playlists: pls, maxConn, addons }); } catch (e) { await back(); throw e; }
+      if (r.status !== 200) { await back(); return r; }
+      return json({ ok: true, id: d.id, code });
+    }
+    const r = await forward('POST', '/devices', { code, name: str(b.name, 60), notes: str(b.notes, 500), expires, active: true, playlists: pls, maxConn, addons });
+    if (r.status !== 200) return r;
+    const j = await r.json();
+    try { await limitCheck(true); } catch (e) { await env.DB.prepare('DELETE FROM devices WHERE id = ? AND owner_id = ?').bind(j.id, A.id).run(); throw e; }
+    return json(j);
+  }
+  const dm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})(\/reset|\/kick|\/linkcode|\/unlink|\/link)?$/);
+  if (dm) {
+    const d = await own(dm[1]);
+    if (!d) {
+      // collegare una TV nuova (codice libero) a un proprio cliente
+      if (dm[2] === '/link' && m === 'POST') {
+        const t = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(dm[1]).first();
+        const b = await readJSON(req, 1024);
+        if (!t || !(await env.DB.prepare(`SELECT 1 AS x FROM devices WHERE id = ? AND ${FREE_DEV}`).bind(t.id).first()) || !(await own(str(b.primary, 20)))) throw new HttpErr(404, 'Dispositivo non trovato');
+        return forward('POST', '/devices/' + t.id + '/link', { primary: str(b.primary, 20) });
+      }
+      throw new HttpErr(404, 'Dispositivo non trovato');
+    }
+    if (dm[2] === '/kick') { if (!P.kick) throw new HttpErr(403, 'Non puoi disconnettere'); return forward('POST', path); }
+    if (dm[2] === '/linkcode' || dm[2] === '/reset' || dm[2] === '/unlink') return forward('POST', path);
+    if (dm[2]) throw new HttpErr(404, 'Non trovato');
+    if (m === 'DELETE') { if (!P.delete) throw new HttpErr(403, 'Non puoi eliminare clienti'); return forward('DELETE', path); }
+    if (m === 'PUT') {
+      const b = await readJSON(req, 65536), o = {};
+      if (typeof b.name === 'string') o.name = str(b.name, 60);
+      if (typeof b.notes === 'string') o.notes = str(b.notes, 500);
+      if (!d.parent) {
+        if (b.expires !== undefined && b.expires !== d.expires) { if (!P.renew) throw new HttpErr(403, 'Non puoi cambiare la scadenza'); o.expires = okDate(str(b.expires, 10)); }
+        if (typeof b.active === 'boolean' && b.active !== !!d.active) { if (!P.disable) throw new HttpErr(403, 'Non puoi attivare o disattivare'); o.active = b.active; }
+        if (b.playlists !== undefined) { if (!P.playlists) throw new HttpErr(403, 'Non puoi cambiare le playlist'); o.playlists = plsFrom(b.playlists, await unseal(env, d.playlists).catch(() => [])); }
+        if (b.maxConn !== undefined) o.maxConn = Math.max(1, Math.min(P.maxConn, parseInt(b.maxConn, 10) || 1));
+        if (b.addons !== undefined) { if (!Array.isArray(b.addons)) throw new HttpErr(400, 'addons deve essere un elenco'); const keep = addonsList(d.addons).filter((x) => !allowedAddons.has(x)); o.addons = [...keep, ...addonsList(b.addons).filter((x) => allowedAddons.has(x))]; }
+        if (b.perms !== undefined) { if (!P.clientPerms) throw new HttpErr(403, 'Non puoi cambiare i permessi dell\'app'); o.perms = b.perms; }
+        if (b.vpn !== undefined) { if (!P.vpn) throw new HttpErr(403, 'Non puoi cambiare la VPN'); o.vpn = b.vpn; }
+      }
+      return forward('PUT', path, o);
+    }
+    if (m === 'GET') return json(dview(await deviceOut(env, d)));
+  }
+  throw new HttpErr(403, 'Funzione non disponibile per gli agenti');
+}
+
 /** funzioni del pannello: le usa il pannello (sessione) e l'API di integrazione (chiave API, ses = null) */
 async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   const m = req.method;
@@ -1705,7 +1990,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       settings, devices, activity, messages, user: who, apk: await latestApk(env, settings), apkFeed: await apkFeed(env),
       wgConf: !!(await env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first()),
       security: { totp: !!(ses && ses.totp_on), encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
-      counts: { ...(await newCounts(env)), online: await onlineCount(env) }, permKeys: PERM_KEYS, addonCat: addonCfg(settings),
+      counts: { ...(await newCounts(env)), online: await onlineCount(env) }, permKeys: PERM_KEYS, addonCat: addonCfg(settings), role: 'owner', ...(ses ? { agents: await agentsOut(env, await agentsAll(env)) } : {}),
     });
   }
 
@@ -1860,6 +2145,9 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       return json({ ok: true });
     }
   }
+  if (path === '/agents' || path.startsWith('/agents/')) return agentsAdmin(req, env, path, who, ip, null);
+  const apv = path.match(/^\/addon-preview\/([a-z0-9-]{3,40})$/);
+  if (apv && m === 'GET') { const a = ADDON_ASSETS[apv[1]]; if (!a || !a.prev) throw new HttpErr(404, 'Anteprima non disponibile'); return json({ id: apv[1], bg: a.prev.bg, avs: a.prev.avs }, 200, { 'Cache-Control': 'private, max-age=3600' }); }
   if (path === '/devices/addons' && m === 'POST') {
     const b = await readJSON(req, 16384);
     if (!Array.isArray(b.ids) || !b.ids.length) throw new HttpErr(400, 'Scegli almeno un cliente');
@@ -1910,7 +2198,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path === '/settings' && m === 'PUT') {
     const b = await readJSON(req);
     const s = await getSettings(env);
-    for (const k of ['brand', 'tagline', 'accent', 'announcement', 'supportContact', 'downloaderCode']) if (typeof b[k] === 'string') s[k] = str(b[k], k === 'announcement' ? 300 : 80);
+    for (const k of ['brand', 'tagline', 'accent', 'announcement', 'supportContact', 'downloaderCode', 'storeDownloaderCode']) if (typeof b[k] === 'string') s[k] = str(b[k], k === 'announcement' ? 300 : 80);
     if (typeof b.apkUrl === 'string') { const u = str(b.apkUrl, 500); s.apkUrl = !u || /^https:\/\//.test(u) ? u : s.apkUrl; }
     if (typeof b.allowLocalPlaylists === 'boolean') s.allowLocalPlaylists = b.allowLocalPlaylists;
     if (typeof b.showFootball === 'boolean') s.showFootball = b.showFootball;
@@ -2012,7 +2300,10 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const perms = b.perms !== undefined ? permsJson({ ...permsParse((await getSettings(env)).permsDefault), ...permsInput(b.perms) }) : defaultPermsJson(await getSettings(env));
     await env.DB.prepare('INSERT INTO devices (id, code, name, notes, active, expires, playlists, created_at, max_conn, max_profiles, profiles, lock_profiles, vpn, vpn_conf, perms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(id, code, str(b.name, 60), str(b.notes, 500), b.active ? 1 : 0, str(b.expires, 10), await seal(env, pls), now(), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, perms).run();
-    await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ?, addons = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, Array.isArray(b.addons) ? addonsList(b.addons).join(',') : '', id).run();
+    const newOwner = ses && ses.agent ? ses.admin_id : Math.max(0, parseInt(b.ownerId, 10) || 0);
+    if (newOwner && !(ses && ses.agent) && !(await env.DB.prepare("SELECT 1 AS x FROM admins WHERE id = ? AND role = 'agent'").bind(newOwner).first())) throw new HttpErr(400, 'Agente non trovato');
+    await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ?, addons = ?, owner_id = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, Array.isArray(b.addons) ? addonsList(b.addons).join(',') : '', newOwner, id).run();
+    if (ses && ses.agent) return json({ ok: true, id, code });
     await log(env, 'new', `${who}: creato dispositivo ${str(b.name, 60) || code}`, ip);
     return json({ ok: true, id, code });
   }
@@ -2109,9 +2400,14 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       const perms = b.perms !== undefined ? permsJson({ ...permsParse(d.perms), ...permsInput(b.perms) }) : d.perms || '';
       if (b.addons !== undefined && !Array.isArray(b.addons)) throw new HttpErr(400, 'addons deve essere un elenco');
       const addons = b.addons !== undefined ? addonsList(b.addons).join(',') : d.addons || '';
+      let ownerId = +d.owner_id || 0;
+      if (b.ownerId !== undefined && !ses?.agent) {
+        ownerId = Math.max(0, parseInt(b.ownerId, 10) || 0);
+        if (ownerId && !(await env.DB.prepare("SELECT 1 AS x FROM admins WHERE id = ? AND role = 'agent'").bind(ownerId).first())) throw new HttpErr(400, 'Agente non trovato');
+      }
       await env.DB.prepare('UPDATE devices SET name = ?, notes = ?, expires = ?, active = ?, playlists = ?, max_conn = ?, max_profiles = ?, profiles = ?, lock_profiles = ?, vpn = ?, vpn_conf = ?, perms = ? WHERE id = ?')
         .bind(name, notes, expires, active, await seal(env, pls), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, perms, d.id).run();
-      await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ?, addons = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, addons, d.id).run();
+      await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ?, addons = ?, owner_id = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, addons, ownerId, d.id).run();
       if (JSON.stringify(pls) !== JSON.stringify(await unseal(env, d.playlists).catch(() => []))) srcMem.map = null;
       const after = statusOf({ active, expires }, pls);
       if (before !== after && after === 'active') ctx.waitUntil(webhookSend(env, 'device.activated', { id: d.id, code: d.code, name, expires }));
@@ -2133,7 +2429,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
 /* Espone le stesse funzioni del pannello (tranne accesso, password, 2FA,   */
 /* chiavi e webhook) più alcune scorciatoie per codice dispositivo.         */
 /* ====================================================================== */
-const API_DENY = /^\/(login|logout|logout-all|password|totp|api-keys|webhook)(\/|$)/;
+const API_DENY = /^\/(login|logout|logout-all|password|totp|api-keys|webhook|agents)(\/|$)/;
 const API_KEY_RE = /^kx_[A-Za-z0-9_-]{30,80}$/;
 async function apiV1(req, env, url, ip, ctx) {
   const auth = req.headers.get('Authorization') || '';
@@ -2205,6 +2501,7 @@ async function apiV1(req, env, url, ip, ctx) {
   }
   if (path === '/state' && m === 'GET') {
     const j = await (await adminRoutes(req, env, url, path, who, ip, ctx, null)).json();
+    delete j.agents;
     return json({ ...j, devices: (j.devices || []).map(apiDevice) });
   }
   const pm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})$/);
@@ -2326,7 +2623,7 @@ async function apiAdmin(req, env, path, who, ip, ctx) {
 async function deviceOut(env, d) {
   const pls = await unseal(env, d.playlists).catch(() => []);
   return { id: d.id, code: d.code, name: d.name, model: d.model, notes: d.notes, active: !!d.active, expires: d.expires, playlists: pls, hosts: [...new Set(pls.map(hostOf).filter(Boolean))], createdAt: d.created_at, lastSeen: d.last_seen, lastIp: d.last_ip, bound: !!d.secret_hash, status: statusOf(d, pls),
-    addons: addonsList(d.addons), parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '', player: playerParse(d.player) };
+    addons: addonsList(d.addons), ownerId: +d.owner_id || 0, parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '', player: playerParse(d.player) };
 }
 /** campi "account" inviati dal pannello: connessioni, profili, VPN (cur = valori attuali del dispositivo) */
 async function accountFields(env, b, cur, pls) {
@@ -2381,6 +2678,10 @@ async function login(req, env, ip, ctx) {
       .bind(ip, until ? 0 : c, until, now()).run();
     return until ? ' — IP bloccato 15 min' : '';
   };
+  if (ok && a.role === 'agent' && !(await agentChainActive(env, a.id))) {
+    await log(env, 'off', `Accesso rifiutato all'agente ${a.username}: account disattivato`, ip);
+    throw new HttpErr(403, 'Account disattivato: contatta il tuo fornitore');
+  }
   if (!ok) {
     const blocked = await strike();
     await log(env, 'off', `Accesso fallito per "${user.slice(0, 30)}"${blocked}`, ip);
@@ -2405,7 +2706,7 @@ async function login(req, env, ip, ctx) {
     .bind(await sha256('ses:' + tok), a.id, now() + SESSION_TTL * 1000, ip, str(req.headers.get('User-Agent') || '', 200), now()).run();
   await log(env, 'auth', `Accesso di ${a.username}`, ip);
   ctx.waitUntil(cleanup(env));
-  return json({ ok: true, user: a.username, totp: !!a.totp_on }, 200, { 'Set-Cookie': setCookie(tok, SESSION_TTL) });
+  return json({ ok: true, user: a.username, totp: !!a.totp_on, role: a.role === 'agent' ? 'agent' : 'owner' }, 200, { 'Set-Cookie': setCookie(tok, SESSION_TTL) });
 }
 
 async function cleanup(env) {

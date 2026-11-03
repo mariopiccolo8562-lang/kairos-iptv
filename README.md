@@ -215,7 +215,7 @@ In **Impostazioni** trovi anche il **prezzo** mostrato ai clienti e il testo **P
 
 **Da impostare (facoltativo)**
 - Età consigliata, contenuti speciali e ricerca per attore usano lo stesso segreto `TMDB_KEY` dei trailer: senza, quelle voci semplicemente non compaiono.
-- Assistente IA: aggiungi il segreto **`ANTHROPIC_API_KEY`** al worker (Cloudflare → Workers → kairos → Impostazioni → Variabili e segreti, tipo *Segreto*). Senza, la voce non compare. Il costo dipende dalle domande fatte (il limite di 40 al giorno per dispositivo lo tiene sotto controllo).
+- Assistente IA (Google Gemini, piano gratuito): crea una chiave su **aistudio.google.com → Get API key** e aggiungila al worker come segreto **`GEMINI_API_KEY`** (Cloudflare → Workers → kairos → Impostazioni → Variabili e segreti, tipo *Segreto*). Senza, la voce non compare. Se le risposte gratuite del giorno finiscono, l'app passa al modello più leggero e poi avvisa il cliente; massimo 40 domande al giorno per dispositivo.
 - **Google Cast non è incluso**: le Fire TV non hanno i Google Play Services, quindi il pulsante non funzionerebbe sui dispositivi dei clienti.
 
 **Controllo e fluidità**
@@ -258,6 +258,26 @@ In **Impostazioni** trovi anche il **prezzo** mostrato ai clienti e il testo **P
 - **Scheda cliente** a pagina intera per creare e modificare tutto; la finestra laterale resta per le modifiche veloci (nome, attivo, scadenza, note).
 - **Anteprima dei temi**: aprendo un tema non ancora attivo, il cliente vede in piccolo lo sfondo e i 4 avatar (miniature a bassa risoluzione, endpoint `/api/player/addon-preview`, mai per i temi nascosti). Il tema completo si scarica e si applica solo dopo che il fornitore l'ha assegnato, come prima.
 - **Immagine nell'immagine (PiP) tolta**: sparisce l'opzione dalle impostazioni dell'app e il lettore non la usa più (subito con l'interfaccia; dall'APK 2.2.1 anche nel lettore).
+
+## 14. Novità 2.3 — Agenti (reseller) e pannello più sobrio
+
+Solo server e pannello: **non serve un nuovo APK**.
+
+- **Agenti**: nuova voce *Utenti → Agenti*. Crei un agente con nome utente, password ed email; scegli **clienti massimi**, **connessioni per cliente**, **accesso** (*Solo clienti* oppure *Gestisce agenti*, cioè può creare sotto-agenti), i **server** che può usare e i **permessi** (attivare, rinnovare, attivare/disattivare, cambiare linea, disconnettere, eliminare, permessi dell'app, VPN) e quali **add-on** può assegnare.
+- L'agente entra dallo stesso indirizzo del pannello con le sue credenziali e vede solo **Clienti**, **Agenti** (se può gestirli) e **Sicurezza**. Gestisce **solo i suoi clienti** (e quelli dei suoi sotto-agenti). Per attivare scrive il codice che il cliente vede sulla TV, sceglie uno dei server assegnati e scrive utente e password della linea: **non vede mai gli indirizzi dei server**. Scadenza obbligatoria (massimo 3 anni).
+- Un sotto-agente non può mai avere più permessi, server o clienti di chi lo crea; se togli qualcosa a un agente vale subito anche per tutti quelli sotto di lui. Il limite di clienti conta per tutta la catena.
+- **Verifica in due passaggi facoltativa** per gli agenti (la attivano da *Sicurezza*); dalla scheda dell'agente puoi azzerarla se perde il telefono. Disattivando un agente esce subito dal pannello insieme ai suoi sotto-agenti; i clienti continuano a funzionare. Un agente non può riattivare chi hai disattivato tu.
+- **Responsabile**: nella scheda di ogni cliente scegli a quale agente appartiene; schede e tabella dei clienti mostrano il responsabile. Eliminando un agente, i suoi clienti e sotto-agenti passano a chi stava sopra di lui.
+- **Pannello più serio**: menu a gruppi (Utenti, Monitoraggio, Contenuti, Impostazioni), grigio scuro piatto con accento blu, niente bagliori; *Dispositivi* si chiama *Clienti*.
+- Le chiavi API non vedono né gestiscono gli agenti.
+
+### 2.3.1 — Richieste temi, anteprime, codici Downloader, avviso «altro dispositivo»
+
+- **Richieste temi**: nuova voce del menu (Monitoraggio → *Richieste temi*), separata dalle richieste di film e serie. Ogni richiesta mostra quale tema, skin o pacchetto avatar vuole il cliente, con **Anteprima**, **Assegna** (lo attiva subito sul cliente e chiude la richiesta), *Vista*, *Rifiuta*. Il cliente può chiedere un add-on anche se gli hai tolto le richieste di contenuti; la stessa richiesta non si duplica.
+- **Anteprime degli add-on** (solo da vedere, non si applicano): nell'app anche i pacchetti avatar non posseduti mostrano gli avatar e le skin i colori; nel pannello il pulsante 👁 accanto a ogni add-on (Impostazioni → Store add-on, scheda cliente, schede agente) apre l'anteprima. Le autorizzazioni restano tue: tema completo e uso solo a chi lo assegni.
+- **Codici Downloader in evidenza** in alto nel pannello, con *Copia*: quello dell'app e quello del **Kairos Store** (nuovo campo in Impostazioni → App e aggiornamenti). Li vedono anche gli agenti.
+- **Linea già in uso**: prima di avviare una visione l'app controlla le connessioni della linea Xtream; se sono tutte occupate da altri dispositivi la visione non parte e compare l'avviso *«C'è già un altro dispositivo collegato»* (invece dell'errore o dello schermo nero). Non controlla mentre cambi canale o episodio, e se la linea non risponde la visione parte comunque. Lo stesso avviso vale per il limite di visioni contemporanee impostato dal pannello.
+- Tutto arriva con l'interfaccia che si aggiorna da sola: **non serve un nuovo APK**.
 
 ## Come funziona per i clienti
 
