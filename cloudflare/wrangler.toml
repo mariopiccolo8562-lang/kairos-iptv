@@ -1,9 +1,9 @@
 name = "kairos-panel"
 main = "src/worker.js"
 compatibility_date = "2025-09-01"
-workers_dev = true
-# Se usi un tuo dominio su Cloudflare (consigliato, serve per Cloudflare Access sul solo pannello):
-# routes = [{ pattern = "tv.tuodominio.it", custom_domain = true }]
+workers_dev = true   # il vecchio indirizzo resta acceso finché tutte le app non sono passate al dominio
+# dominio del pannello (deve essere un sito del tuo account Cloudflare)
+routes = [{ pattern = "panel-kairos.com", custom_domain = true }]
 
 [assets]
 directory = "./public"
