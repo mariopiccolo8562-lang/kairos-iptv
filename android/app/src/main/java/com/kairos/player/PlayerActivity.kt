@@ -98,7 +98,6 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private var introDoneFor = ""
     private var introStartMark = -1L
     private lateinit var skipView: TextView
-    private var pipOk = true
 
     /** ogni secondo: mostra «Salta intro» (o la salta da solo) mentre si è dentro l'intro segnata */
     private fun introTick() {
@@ -142,28 +141,6 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             }
         }
     }
-    private fun canPip(): Boolean = pipOk && Build.VERSION.SDK_INT >= 26 && try { packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE) } catch (_: Throwable) { false }
-    /** tasto Home durante la visione: il video continua in una finestrella (telefoni, Android TV che lo supportano) */
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        if (closing || !canPip() || engine?.isPlaying() != true) return
-        try {
-            if (::osd.isInitialized) { ui.removeCallbacks(hideRunnable); osd.visibility = View.GONE; brandView.visibility = View.GONE }
-            if (listOpen) closeList()
-            setOpaque(true)
-            val w = PlayStats.width.takeIf { it > 0 } ?: 16; val h = PlayStats.height.takeIf { it > 0 } ?: 9
-            val r = android.util.Rational(w, h).let { if (it.toFloat() > 2.39f || it.toFloat() < 0.42f) android.util.Rational(16, 9) else it }
-            enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().setAspectRatio(r).build())
-        } catch (_: Throwable) {}
-    }
-    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        if (!::osd.isInitialized) return
-        if (isInPictureInPictureMode) { osd.visibility = View.GONE; brandView.visibility = View.GONE; zapView.visibility = View.GONE; if (::skipView.isInitialized) skipView.visibility = View.GONE }
-        // finestrella chiusa con la X: il lettore si chiude
-        else if (stopped) finishWithResult()
-    }
-
     /* ---------------- recupero automatico ---------------- */
     /** qualità adattiva: passa da solo alla versione più leggera del canale se la linea non regge */
     private var adapt = true
@@ -421,7 +398,6 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             showRes = j.optBoolean("res", true)
             autoNext = j.optBoolean("autoNext", false)
             adapt = j.optBoolean("adapt", true)
-            pipOk = j.optBoolean("pip", true)
             introKey = j.optString("introKey", "")
             introAuto = j.optBoolean("introAuto", false)
             j.optJSONArray("intro")?.let { a -> if (a.length() == 2 && a.optLong(1) > a.optLong(0)) intro = longArrayOf(a.optLong(0) * 1000, a.optLong(1) * 1000) }

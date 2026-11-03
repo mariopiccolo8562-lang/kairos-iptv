@@ -477,6 +477,20 @@ async function mediaTouch(env, id) {
   s.addonMedia = { ...(s.addonMedia || {}), [id]: now() };
   await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('app', JSON.stringify(s)).run();
 }
+/** anteprima di un tema (miniature a bassa risoluzione): per tutti i temi visibili nello store, anche non posseduti */
+async function playerAddonPreview(req, env, ip) {
+  if (await limited(env.RL_DEVICE, 'adp:' + ip)) return json({ error: 'Troppe richieste' }, 429);
+  let b;
+  try { b = await readJSON(req, 2048); } catch (e) { return json({ error: e.message }, e.status || 400); }
+  const [d, bad] = await deviceAuth(env, b);
+  if (bad) return bad;
+  const id = str(b.id, 40), asset = ADDON_ASSETS[id];
+  if (!asset || !asset.prev) return json({ error: 'Add-on non trovato' }, 404);
+  const [P] = await activeAccount(env, d);
+  if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
+  if (!addonsFor(await getSettings(env), P).some((a) => a.id === id)) return json({ error: 'Add-on non disponibile' }, 404); // nascosto dal fornitore
+  return json({ id, bg: asset.prev.bg, avs: asset.prev.avs }, 200, { 'Cache-Control': 'private, max-age=3600' });
+}
 /** disegni di un tema speciale (scena + 4 avatar): solo al cliente che lo ha */
 async function playerAddon(req, env, ip) {
   if (await limited(env.RL_DEVICE, 'ad:' + ip)) return json({ error: 'Troppe richieste' }, 429);
@@ -1468,6 +1482,7 @@ async function route(req, env, ctx) {
     if (path === '/api/player/trailer' && req.method === 'GET') return playerTrailer(req, env, ip, url, ctx);
     if (path === '/api/player/meta' && req.method === 'GET') return playerMeta(req, env, ip, url, ctx);
     if (path === '/api/player/addon' && req.method === 'POST') return playerAddon(req, env, ip);
+    if (path === '/api/player/addon-preview' && req.method === 'POST') return playerAddonPreview(req, env, ip);
     if (path === '/api/player/ai' && req.method === 'POST') return playerAi(req, env, ip, ctx);
     if (path === '/api/player/person' && req.method === 'GET') return playerPerson(req, env, ip, url, ctx);
     if (path === '/api/player/request' && req.method === 'POST') return playerRequest(req, env, ip, ctx);

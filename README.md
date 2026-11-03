@@ -252,6 +252,13 @@ In **Impostazioni** trovi anche il **prezzo** mostrato ai clienti e il testo **P
 
 **Correzioni**: icona mancante della voce «Organizza» nelle impostazioni dell'app; *Permessi a gruppi* con più di 50 dispositivi non superava più il limite di query del piano gratuito.
 
+### 2.2.1 — Pannello più semplice, niente PiP
+
+- **Dispositivi**: schede dei clienti senza quadratini colorati con l'iniziale (anche in tabella e nella scheda), una sola riga di dettagli e due pulsanti: **Rinnova** (mostra +1, +3, +6, +12 mesi) e **Modifica** (scheda completa). Clic sulla scheda = modifica veloce laterale; *Disconnetti* e *Servizio attivo* sono lì. Riquadri in alto senza emoji.
+- **Scheda cliente** a pagina intera per creare e modificare tutto; la finestra laterale resta per le modifiche veloci (nome, attivo, scadenza, note).
+- **Anteprima dei temi**: aprendo un tema non ancora attivo, il cliente vede in piccolo lo sfondo e i 4 avatar (miniature a bassa risoluzione, endpoint `/api/player/addon-preview`, mai per i temi nascosti). Il tema completo si scarica e si applica solo dopo che il fornitore l'ha assegnato, come prima.
+- **Immagine nell'immagine (PiP) tolta**: sparisce l'opzione dalle impostazioni dell'app e il lettore non la usa più (subito con l'interfaccia; dall'APK 2.2.1 anche nel lettore).
+
 ## Come funziona per i clienti
 
 1. Installano l'app (codice Downloader) e la aprono: compare un **codice** tipo `KXAB-7Q2M`.

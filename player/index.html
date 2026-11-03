@@ -912,6 +912,8 @@ img{display:block}
 .adr.lock .ade{filter:saturate(.75)}
 .adprev{height:150px;border-radius:14px;margin:-4px 0 14px;background-size:cover;background-position:center 70%;position:relative;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
 .adpal{position:absolute;right:12px;bottom:12px;display:flex;gap:6px}.adpal i{width:18px;height:18px;border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.4)}
+.adprev.pv::after{content:'ANTEPRIMA';position:absolute;left:12px;top:10px;font-size:11px;letter-spacing:.15em;font-weight:700;padding:4px 8px;border-radius:6px;background:rgba(0,0,0,.55)}
+.adavs.pv{align-items:center}.adavs.pv .pav{overflow:hidden;border-radius:50%;opacity:.9}.adavs.pv img{width:100%;height:100%;object-fit:cover;display:block}.adavs.pv small{opacity:.55;font-size:12px;margin-left:4px}
 .adavs{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 12px}.adavs .pav{width:48px;height:48px}.adavs .pav svg{width:100%;height:100%;display:block}
 .avtabs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:10px 0 4px}.avtabs .chip{padding:7px 14px;font-size:13px;cursor:pointer;color:#fff;background:rgba(255,255,255,.06)}.avtabs .chip.sel{background:#fff;color:#000}
 .avtabs .chip.focused{outline:0;box-shadow:0 0 0 3px #fff}
@@ -3348,7 +3350,7 @@ function nativePlay(item, kind, fromSec, extra) {
   try {
     NATIVE.play(JSON.stringify({ kind: pk, items, index, start: Math.floor(start * 1000), engine: engineFor(kind, item), engineKey: kind === 'live' ? 'engLive' : kind === 'series' ? 'engSeries' : 'engMovie',
       quality: P.quality, buffer: P.buffer, aspect: P.aspect, brand: S.settings.brand || 'KAIROS',
-      hw: opt('hw'), sub: opt('subSize'), res: !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list), adapt: !!opt('adaptQ'), pip: !!opt('pip'),
+      hw: opt('hw'), sub: opt('subSize'), res: !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list), adapt: !!opt('adaptQ'), pip: false,
       ...(extra && extra.parent ? { introKey: String(extra.parent.id), intro: store.get('intro', {})[extra.parent.id] || [], introAuto: !!opt('introAuto') } : {}) }));
   } catch (e) { return false; }
   S.inPlayer = true;
@@ -3447,6 +3449,15 @@ function shopFill(force) {
   $$('#shopCard [data-shf]').forEach((b) => (b.onclick = () => { S.shopF = b.dataset.shf; shopFill(true); focus($(`#shopCard [data-shf="${b.dataset.shf}"]`), true); }));
   $$('#shopCard [data-adid]').forEach((b) => (b.onclick = () => addonDialog(b.dataset.adid)));
 }
+/* anteprima dei temi non posseduti: miniature piccole chieste al server solo aprendo la scheda (tenute in memoria) */
+const adPrev = new Map();
+function addonPreview(id) {
+  if (adPrev.has(id)) return adPrev.get(id);
+  const p = (S.demo || !baseServer() ? Promise.resolve(null) : apiPost('/api/player/addon-preview', { id }).then((j) => (j && typeof j.bg === 'string' && Array.isArray(j.avs) ? j : null)).catch(() => null));
+  adPrev.set(id, p); p.then((j) => { if (!j) adPrev.delete(id); });
+  return p;
+}
+const pvImg = (u) => (/^data:image\/jpeg;base64,/.test(u || '') ? u : '');
 function addonDialog(id) {
   const a = ADDON_UI[id]; if (!a) return;
   const own = addonOwn(id), cur = store.get('theme') === 'x:' + id, price = addonPrice(id);
@@ -3457,6 +3468,7 @@ function addonDialog(id) {
   kxModal('addonM', `<div class="adprev"${sceneURI(id) ? ` style="background-image:${sceneURI(id).replace(/"/g, "'")}"` : a.pal ? ` style="background:linear-gradient(120deg,${a.pal[2]},${a.pal[0]} 55%,${a.pal[1]})"` : ''}>${a.pal ? `<div class="adpal">${a.pal.map((c) => `<i style="background:${c}"></i>`).join('')}</div>` : ''}</div>
     <h2>${esc(a.name)}</h2><p class="mut" style="margin:4px 0 10px">${esc(what)} · ${esc(a.desc)}</p>
     ${avs ? `<div class="adavs">${avs}</div>` : a.cat === 'tema' ? `<div class="snote">${own ? (S.demo ? 'Nella demo il tema mostra solo i colori: scena e avatar arrivano dal server del fornitore.' : 'Scarico la scena e gli avatar del tema…') : 'Scena di sfondo e 4 avatar si scaricano sul dispositivo solo quando il fornitore ti attiva il tema.'}</div>` : ''}
+    ${!own && a.cat === 'tema' ? '<div class="snote pvn">Anteprima a bassa risoluzione: il tema completo arriva quando il fornitore te lo attiva.</div>' : ''}
     ${own ? '' : `<div class="snote">${price ? `Prezzo: <b>${esc(price)}</b>. ` : ''}Questo add-on lo attiva il tuo fornitore${perm('request') && baseServer() && !S.demo ? ': puoi chiederglielo da qui.' : '.'}</div>`}
     <div class="sbtn">${own && a.pal ? `<button class="btn pri" data-f id="adUse">${cur ? '✓ In uso · torna al colore base' : 'Applica il tema'}</button>` : ''}${own && a.av && !a.pal ? '<button class="btn pri" data-f id="adProf">Scegli un avatar per il profilo</button>' : ''}${!own && perm('request') && baseServer() && !S.demo ? '<button class="btn pri" data-f id="adReq">Richiedi al fornitore</button>' : ''}<button class="btn" data-f id="adNo">Chiudi</button></div>`);
   $('#adNo').onclick = () => back();
@@ -3467,6 +3479,13 @@ function addonDialog(id) {
     try { await apiPost('/api/player/request', { ctype: 'addon', title: 'Add-on: ' + a.name, body: price ? 'Prezzo indicato: ' + price : '' }); fx('ok'); back(); toast('✓ Richiesta inviata al fornitore'); }
     catch (e) { b.disabled = false; toast('Non inviata: ' + (e.message || 'riprova')); }
   };
+  // tema non posseduto: anteprima (sfondo e avatar in piccolo), senza scaricare il tema
+  if (!own && a.cat === 'tema') addonPreview(id).then((j) => {
+    if (!j || !$('#addonM')) return;
+    const bg = pvImg(j.bg); if (bg) { const pv = $('#addonM .adprev'); pv.style.background = `#0a0a0c url("${bg}") center 70% / cover no-repeat`; pv.classList.add('pv'); }
+    const avs = j.avs.map(pvImg).filter(Boolean);
+    if (avs.length) { const n = $('#addonM .snote'); const html = `<div class="adavs pv">${avs.map((u) => `<span class="pav"><img src="${u}" alt=""></span>`).join('')}<small>Anteprima</small></div>`; if (n && /si scaricano/.test(n.textContent)) n.outerHTML = html; else $('#addonM h2').insertAdjacentHTML('afterend', html); }
+  });
   setTimeout(() => focus($('#adUse') || $('#adProf') || $('#adReq') || $('#adNo'), true), 40);
 }
 function kickedByPanel() {
@@ -4332,7 +4351,6 @@ const OPT = {
   adaptQ: ['Qualità adattiva automatica', YN, true],
   autoNext: ['Episodio successivo automatico', YN, true],
   introAuto: ['Salta l\'intro delle serie da solo', YN, false],
-  pip: ['Immagine nell\'immagine con il tasto Home', YN, true],
   subSize: ['Dimensione sottotitoli', [['small', 'Piccola'], ['medium', 'Media'], ['large', 'Grande'], ['xl', 'Molto grande']], 'medium'],
   resInd: ['Indicatore risoluzione', YN, true],
   liveFmt: ['Formato TV in diretta', [['ts', 'Veloce (TS)'], ['hls', 'HLS']], 'ts'],
@@ -4570,7 +4588,7 @@ function renderSettings(sec) {
     play: `<h3>Lettore</h3>${HAS_PLAYER ? '' : '<div class="snote">Queste opzioni valgono nell\'app (Fire TV, Android TV, telefoni).</div>'}
       ${optRow('engLive')}${optRow('engMovie')}${optRow('engSeries')}
       ${PLAY_OPTS.filter((o) => o[0] !== 'engine').map(([k, lbl, opts]) => `<div class="sr" data-f data-pk="${k}"><span>${lbl}</span><b>${(opts.find((o) => o[0] === P[k]) || opts[0])[1]}</b></div>`).join('')}
-      ${optRow('hw')}${optRow('adaptQ')}<div class="snote" style="margin:-4px 0 10px">Se la connessione non regge, il canale passa da solo a una sua versione più leggera (es. da FHD a HD) e torna alla qualità piena quando la linea migliora. Se il video si blocca, l'app prova da sola a ripartire, la decodifica software o l'altro lettore.</div>${optRow('autoNext')}${optRow('introAuto')}${HAS_PLAYER ? optRow('pip') : ''}${optRow('subSize')}${optRow('resInd')}
+      ${optRow('hw')}${optRow('adaptQ')}<div class="snote" style="margin:-4px 0 10px">Se la connessione non regge, il canale passa da solo a una sua versione più leggera (es. da FHD a HD) e torna alla qualità piena quando la linea migliora. Se il video si blocca, l'app prova da sola a ripartire, la decodifica software o l'altro lettore.</div>${optRow('autoNext')}${optRow('introAuto')}${optRow('subSize')}${optRow('resInd')}
       <div class="snote"><b>Automatico avanzato</b> sceglie da solo il lettore migliore per ogni contenuto (ExoPlayer, oppure VLC per i formati che ExoPlayer non legge) e cambia lettore da solo se qualcosa non parte. Disattiva l'accelerazione hardware solo se vedi immagini verdi o a scatti. Durante la visione premi OK per audio, qualità e sottotitoli.</div>`,
     shop: '<div id="shopCard"></div>',
     org: `<h3>Organizza</h3>
