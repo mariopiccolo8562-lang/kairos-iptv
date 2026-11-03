@@ -317,10 +317,11 @@ $('#rows').addEventListener('click', async (e) => {
   const tr = e.target.closest('tr'); if (!tr) return;
   const d = D.devices.find((x) => x.id === tr.dataset.id), act = e.target.closest('[data-act]')?.dataset.act;
   if (!d) return;
-  if (d.parent) return openDrawer(d, false); // connessione collegata: abbonamento gestito dal principale
+  if (d.parent) return openQuick(d); // connessione collegata: abbonamento gestito dal principale
   if (act === 'ext') return extend(d, 1);
   if (act === 'tog') { await save(d, { active: !d.active }); return toast(d.active ? 'Dispositivo disattivato' : 'Dispositivo riattivato'); }
-  openDrawer(d, d.status === 'pending');
+  if (act === 'open') return openDrawer(d, d.status === 'pending'); // «Modifica»: scheda completa
+  openQuick(d);
 });
 function addMonths(base, m) { const b = base && new Date(base) > new Date() ? new Date(base) : new Date(); b.setMonth(b.getMonth() + m); return b.toISOString().slice(0, 10); }
 /* «Disconnetti»: interrompe la visione in corso sull'app (entro ~20 s); l'abbonamento resta attivo */
@@ -344,10 +345,46 @@ function openDrawer(d, activating) {
   $('#dDel').style.display = isNew ? 'none' : '';
   $('#dKick').style.display = isNew || d.status === 'pending' ? 'none' : '';
   $('#dKick').onclick = () => kickDev(d);
+  $('#drawer').classList.add('full'); $('#drawer').classList.remove('quick');
   renderDrawer();
+  $('#dBody').scrollTop = 0;
   $('#shade').classList.add('on'); $('#drawer').classList.add('on');
 }
 function closeDrawer() { $('#shade').classList.remove('on'); $('#drawer').classList.remove('on'); }
+/* modifica veloce nel pannello laterale: nome, attivo, scadenza, note (il resto nella scheda completa) */
+function openQuick(d) {
+  if (!d) return openDrawer(null);
+  if (!d.parent && d.status === 'pending') return openDrawer(d, true); // da attivare: serve la scheda completa
+  isNew = false;
+  edit = JSON.parse(JSON.stringify(d));
+  const linked = !!edit.parent, P = linked ? parentOf(edit) : null, dl = daysLeft(edit);
+  $('#drawer').classList.remove('full'); $('#drawer').classList.add('quick');
+  $('#dTitle').innerHTML = `${esc(edit.name || (linked ? edit.model : '') || 'Cliente')} <span class="code" style="margin-left:6px">${esc(edit.code)}</span>`;
+  $('#dAv').textContent = (edit.name || 'K')[0].toUpperCase();
+  $('#dDel').style.display = 'none';
+  $('#dKick').style.display = d.status === 'pending' ? 'none' : '';
+  $('#dKick').onclick = () => kickDev(d);
+  const ST = { active: ['Attivo', 'var(--ok)'], expired: ['Scaduto', 'var(--bad)'], disabled: ['Disattivato', 'var(--bad)'], pending: ['Da attivare', 'var(--warn)'] }[d.status] || [d.status, ''];
+  const kids = linked ? [] : kidsOf(edit.id);
+  $('#dBody').innerHTML = `<div class="qsum"><div><small>Stato</small><b style="color:${ST[1]}">${ST[0]}</b></div><div><small>Scadenza</small><b>${linked ? (P ? fmtD(P.expires) : '—') : fmtD(edit.expires)}</b>${!linked && dl !== null ? `<em style="color:${dl < 0 ? 'var(--bad)' : dl <= 14 ? 'var(--warn)' : ''}">${dl < 0 ? 'scaduto da ' + -dl + ' g' : dl + ' giorni'}</em>` : ''}</div><div><small>Ultimo accesso</small><b>${ago(edit.lastSeen)}</b></div><div><small>${linked ? 'Collegato a' : 'Playlist · dispositivi'}</small><b>${linked ? esc(P ? P.name || P.code : '—') : `${(edit.playlists || []).length} · ${1 + kids.length}/${edit.maxConn || 1}`}</b></div></div>
+    <label class="lbl">${linked ? 'Nome del dispositivo' : 'Nome cliente'}</label><input class="inp" id="qName" maxlength="60" value="${esc(edit.name)}" placeholder="${linked ? 'es. Camera da letto' : 'es. Mario Rossi'}">
+    ${linked ? '' : `<div class="tog ${edit.active ? 'on' : ''}" id="qAct" style="margin-top:16px"><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
+    <label class="lbl">Scadenza</label><div class="row"><input class="inp" type="date" id="qExp" value="${esc(edit.expires)}"><button class="btn" id="qInf">${edit.expires ? 'Rendi illimitato' : 'Illimitato ✓'}</button></div>
+    <div class="quick">${[1, 3, 6, 12].map((m) => `<button class="btn sm" data-qm="${m}">+${m} ${m === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>`}
+    <label class="lbl">Note</label><textarea class="inp" id="qNotes" placeholder="Pagamento, contatto, dettagli…">${esc(edit.notes || '')}</textarea>
+    <button class="btn qfull" id="qFull">Scheda completa →<small>playlist, lettore, profili, VPN, permessi, add-on</small></button>`;
+  if ($('#qAct')) $('#qAct').onclick = () => { edit.active = !edit.active; $('#qAct').classList.toggle('on', edit.active); };
+  if ($('#qInf')) $('#qInf').onclick = () => { $('#qExp').value = ''; $('#qInf').textContent = 'Illimitato ✓'; };
+  $$('#dBody [data-qm]').forEach((b) => (b.onclick = () => { const v = addMonths($('#qExp').value, +b.dataset.qm); $('#qExp').value = v; edit.active = true; if ($('#qAct')) $('#qAct').classList.add('on'); $('#qInf').textContent = 'Rendi illimitato'; }));
+  const read = () => ({ name: $('#qName').value.trim(), notes: $('#qNotes').value, ...(linked ? {} : { expires: $('#qExp').value, active: !!edit.active }) });
+  $('#qFull').onclick = () => { const v = read(); const cur = D.devices.find((x) => x.id === edit.id) || d; openDrawer({ ...cur, ...v }, false); };
+  $('#dSave').onclick = async () => {
+    try { await api('PUT', '/admin/devices/' + edit.id, read()); closeDrawer(); await load(); toast('Modifiche salvate'); } catch (e) { toast(e.message, 1); }
+  };
+  $('#dBody').scrollTop = 0;
+  $('#shade').classList.add('on'); $('#drawer').classList.add('on');
+  setTimeout(() => $('#qName') && $('#qName').focus(), 350);
+}
 $('#shade').onclick = closeDrawer; $('#dClose').onclick = closeDrawer; $('#dCancel').onclick = closeDrawer;
 addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeDrawer(); $('#modal').classList.remove('on'); } });
 const ICO_TV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8"/></svg>';
@@ -440,11 +477,14 @@ function renderDrawer() {
       ['ply', 'Lettore', 'Quale lettore usa l\'app per ogni tipo di contenuto', playerBox], ['acc', 'Account e profili', 'Dispositivi, profili e visioni insieme', accBox],
       ['vpn', 'VPN', 'Modalità e località', vpnBox + locBox], ['perm', 'Permessi', 'Cosa può fare il cliente nell\'app', extraBox], ['add', 'Add-on', 'Temi, skin e avatar dello Store dell\'app', addonBox], ['note', 'Note', 'Solo per te, il cliente non le vede', S8]];
   const shown = SECS.filter((x) => String(x[3]).trim());
+  const dlv = daysLeft(edit), stv = isNew ? '' : (D.devices.find((x) => x.id === edit.id) || {}).status;
+  const STV = { active: ['Attivo', 'var(--ok)'], expired: ['Scaduto', 'var(--bad)'], disabled: ['Disattivato', 'var(--bad)'], pending: ['Da attivare', 'var(--warn)'] }[stv];
+  const sum = linked || isNew ? '' : `<div class="qsum full">${STV ? `<div><small>Stato</small><b style="color:${STV[1]}">${STV[0]}</b></div>` : ''}<div><small>Scadenza</small><b>${fmtD(edit.expires)}</b>${dlv !== null ? `<em style="color:${dlv < 0 ? 'var(--bad)' : dlv <= 14 ? 'var(--warn)' : ''}">${dlv < 0 ? 'scaduto da ' + -dlv + ' g' : dlv + ' giorni'}</em>` : ''}</div><div><small>Playlist</small><b>${edit.playlists.length}</b></div><div><small>Dispositivi</small><b>${1 + kidsOf(edit.id).length}/${edit.maxConn || 1}</b></div><div><small>Add-on</small><b>${(edit.addons || []).length}</b></div><div><small>Ultimo accesso</small><b>${ago(edit.lastSeen)}</b></div></div>`;
   $('#dBody').innerHTML = `<nav class="dnav">${shown.map(([id, t], i) => `<button data-ds="${id}"><i>${i + 1}</i>${t}</button>`).join('')}</nav>`
-    + shown.map(([id, t, sub, html], i) => sec(id, i + 1, t, sub, html)).join('');
-  $$('#dBody [data-ds]').forEach((b) => (b.onclick = () => { const el = $('#ds-' + b.dataset.ds), body = $('#dBody'); if (el) body.scrollTo({ top: body.scrollTop + el.getBoundingClientRect().top - body.getBoundingClientRect().top - $('#dBody .dnav').offsetHeight - 6, behavior: 'smooth' }); }));
+    + `<div class="dmain">${sum}<div class="dsecs">${shown.map(([id, t, sub, html], i) => sec(id, i + 1, t, sub, html)).join('')}</div></div>`;
+  $$('#dBody [data-ds]').forEach((b) => (b.onclick = () => { const el = $('#ds-' + b.dataset.ds), body = $('#dBody'); if (!el) return; if ($('#drawer').classList.contains('full')) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); $$('#dBody [data-ds]').forEach((x) => x.classList.toggle('on', x === b)); return; } body.scrollTo({ top: body.scrollTop + el.getBoundingClientRect().top - body.getBoundingClientRect().top - $('#dBody .dnav').offsetHeight - 8, behavior: 'smooth' }); }));
   // il menu in alto segue la sezione che si sta guardando
-  $('#dBody').onscroll = () => { const body = $('#dBody'), nav = $('#dBody .dnav'); if (!nav) return; const lim = body.getBoundingClientRect().top + nav.offsetHeight + 40; let curS = ''; for (const el of $$('#dBody .dsec')) if (el.getBoundingClientRect().top <= lim) curS = el.id.slice(3); $$('#dBody [data-ds]').forEach((b) => b.classList.toggle('on', b.dataset.ds === curS)); };
+  $('#dBody').onscroll = () => { const body = $('#dBody'), nav = $('#dBody .dnav'); if (!nav || $('#drawer').classList.contains('full')) return; /* pagina intera: sezioni su due colonne, la voce si evidenzia al clic */ const lim = body.getBoundingClientRect().top + ($('#drawer').classList.contains('full') ? 90 : nav.offsetHeight + 40); let curS = ''; for (const el of $$('#dBody .dsec')) if (el.getBoundingClientRect().top <= lim) curS = el.id.slice(3); $$('#dBody [data-ds]').forEach((b) => b.classList.toggle('on', b.dataset.ds === curS)); };
   $$('#dBody [data-peng]').forEach((b) => (b.onclick = () => { sync(); edit.player = { ...(edit.player || {}), [b.dataset.peng]: b.dataset.v }; if (!b.dataset.v) delete edit.player[b.dataset.peng]; $$(`#dBody [data-peng="${b.dataset.peng}"]`).forEach((x) => x.classList.toggle('on', x === b)); }));
   $('#eReset') && ($('#eReset').onclick = async () => { if (await ask('Sbloccare il collegamento?', 'Il prossimo dispositivo che usa questo codice verrà collegato al suo posto.', 'Sblocca')) { try { await api('POST', '/admin/devices/' + edit.id + '/reset'); edit.bound = false; renderDrawer(); await load(); toast('Collegamento sbloccato'); } catch (e) { toast(e.message, 1); } } });
   const sync = () => {

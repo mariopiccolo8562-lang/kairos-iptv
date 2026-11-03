@@ -200,6 +200,23 @@
 .dnav button{all:unset;cursor:pointer;flex:none;display:flex;align-items:center;gap:6px;padding:7px 11px 7px 7px;border-radius:99px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:12.5px;font-weight:700;white-space:nowrap}
 .dnav button:hover{background:rgba(255,255,255,.09)}.dnav button.on{border-color:rgba(255,90,60,.6);background:rgba(255,60,60,.15)}.dnav button.on i{background:linear-gradient(135deg,#ff7a45,#ff2a3d)}
 .dnav button i{font-style:normal;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;background:rgba(255,255,255,.1)}
+/* scheda cliente a pagina intera (crea e modifica completa) */
+#drawer.full{left:250px;width:auto;border-radius:0;background:#0b0c1c}
+#drawer.full .dh{padding:20px 32px 16px}
+#drawer.full .db{display:grid;grid-template-columns:210px minmax(0,1fr);gap:28px;padding:22px 32px}
+#drawer.full .dnav{position:sticky;top:0;align-self:start;flex-direction:column;overflow:visible;margin:0;padding:0;background:none;box-shadow:none;gap:6px}
+#drawer.full .dnav button{padding:10px 12px 10px 10px;font-size:13.5px;border-radius:12px}
+#drawer.full .dsecs{columns:2 440px;column-gap:18px}
+#drawer.full .dsec{break-inside:avoid;display:inline-block;width:100%;vertical-align:top}
+#drawer.full .df{padding:14px 32px}
+#drawer.quick .db{padding:20px 26px}
+.qsum{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:6px}
+.qsum.full{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:18px}
+.qsum>div{padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.03);display:flex;flex-direction:column;gap:3px}
+.qsum small{font-size:11.5px;opacity:.6}.qsum b{font-size:15px}.qsum em{font-style:normal;font-size:12px;opacity:.8}
+.qfull{width:100%;margin-top:18px;justify-content:center;border-style:dashed;white-space:normal;flex-direction:column;gap:2px;text-align:center}.qfull small{font-weight:400;opacity:.65;font-size:12px}
+#drawer>*{min-width:0}
+@media (max-width:900px){#drawer.full{left:0}#drawer.full .db{grid-template-columns:1fr;padding:16px}#drawer.full .dnav{position:sticky;top:-16px;flex-direction:row;overflow-x:auto;background:#0b0c1c;padding:8px 0}#drawer.full .dsecs{columns:1}}
 .dsec{padding:16px;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.025);margin-bottom:14px}
 .dsec .lbl:first-of-type{margin-top:6px}
 .dsh{display:flex;gap:12px;align-items:center;margin-bottom:12px}
@@ -378,7 +395,7 @@
         </div>
       </div>`;
     $('#kLiveR').onclick = liveLoad;
-    $$('[data-kopen]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.kopen); d ? openDrawer(d) : toast('Dispositivo non trovato', 1); }));
+    $$('[data-kopen]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.kopen); d ? openQuick(d) : toast('Dispositivo non trovato', 1); }));
     $$('[data-kkick]', V).forEach((b) => (b.onclick = async () => { const d = D.devices.find((x) => x.id === b.dataset.kkick); if (d && (await kickDev(d))) { b.disabled = true; b.textContent = 'Disconnessione…'; } }));
     $$('[data-kvpn]', V).forEach((b) => (b.onclick = async () => {
       if (!(await ask('Spegnere la VPN?', 'La VPN verrà disattivata su questo abbonamento: l\'app la chiude al prossimo controllo (entro qualche minuto).', 'Spegni'))) return;
@@ -441,7 +458,7 @@
     $$('[data-ep]', V).forEach((b) => (b.onclick = () => { F.p = b.dataset.ep; errRender(); }));
     $$('[data-eo]', V).forEach((b) => (b.onclick = () => { F.o = b.dataset.eo; errRender(); }));
     $$('[data-eq]', V).forEach((b) => (b.onclick = () => { F.q = b.dataset.eq; errRender(); }));
-    $$('[data-eopen]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.eopen); d ? openDrawer(d) : toast('Dispositivo non trovato', 1); }));
+    $$('[data-eopen]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.eopen); d ? openQuick(d) : toast('Dispositivo non trovato', 1); }));
     const c = $('#eClr'); if (c) c.onclick = async () => { if (!(await ask('Svuotare gli errori?', 'Tutti gli errori registrati verranno cancellati. Quelli nuovi continueranno ad arrivare.', 'Svuota'))) return; try { await kapi('DELETE', '/admin/app-errors'); errLoad(); } catch (e) { toast(e.message, 1); } };
   }
 
@@ -472,7 +489,7 @@
       if (status === 'done' && kind === 'content') note = 'Aggiunto';
       try { await kapi('POST', `/admin/requests/${id}/status`, note ? { status, note } : { status }); reqLoad(kind); } catch (e) { toast(e.message, 1); }
     }));
-    $$('[data-ro]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.ro); d ? openDrawer(d) : toast('Dispositivo non trovato', 1); }));
+    $$('[data-ro]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.ro); d ? openQuick(d) : toast('Dispositivo non trovato', 1); }));
     $$('[data-rd]', V).forEach((b) => (b.onclick = async () => { try { await kapi('DELETE', '/admin/requests/' + b.dataset.rd); reqLoad(kind); } catch (e) { toast(e.message, 1); } }));
     const rc = $('#rClr', V); if (rc) rc.onclick = async () => { try { await kapi('DELETE', `/admin/requests?kind=${kind}&status=done`); reqLoad(kind); } catch (e) { toast(e.message, 1); } };
   }
@@ -840,7 +857,7 @@
     V.addEventListener('click', async (e) => {
       const t = e.target.closest('[data-fl2]'); if (t) { D.filter = t.dataset.fl2; st.limit = st.view === 'table' ? 100 : 60; return renderDevices(); }
       const v = e.target.closest('[data-dv]'); if (v) { st.view = v.dataset.dv; st.limit = st.view === 'table' ? 100 : 60; try { localStorage.setItem('kc_dv', st.view); } catch {} return renderDevices(); }
-      const o = e.target.closest('[data-open]'); if (o) { const k = D.devices.find((x) => x.id === o.dataset.open); if (k) openDrawer(k, false); return; }
+      const o = e.target.closest('[data-open]'); if (o) { const k = D.devices.find((x) => x.id === o.dataset.open); if (k) openQuick(k); return; }
       const bk = e.target.closest('[data-bulk]'); if (bk) return bulk(bk.dataset.bulk);
       const cp = e.target.closest('[data-copy]'); if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); toast('Codice copiato: ' + cp.dataset.copy); } catch { toast(cp.dataset.copy); } return; }
       const sl = e.target.closest('[data-sel]'); if (sl) { sl.checked ? st.sel.add(sl.dataset.sel) : st.sel.delete(sl.dataset.sel); sl.closest('tr').classList.toggle('sel', sl.checked); const all = $('#dvtAll'); if (all && !sl.checked) all.checked = false; return bulkBar(); }
@@ -873,7 +890,8 @@
         }
         if (a === 'activate') return openDrawer(d, true);
         if (a === 'link') { openDrawer(d, false); setTimeout(() => { const s2 = $('#eLinkTo'); if (s2) { s2.scrollIntoView({ block: 'center' }); s2.focus(); } }, 350); return; }
-        if (a === 'edit' || !e.target.closest('button,input')) return openDrawer(d, d.status === 'pending');
+        if (a === 'edit') return openDrawer(d, d.status === 'pending');
+        if (!e.target.closest('button,input')) return openQuick(d);
         return;
       }
       const c = e.target.closest('.dv-card, .dv-pc'); if (!c) return;
@@ -885,7 +903,8 @@
       if (act === 'tog') { if (d.active && !(await ask('Disattivare il cliente?', `<b>${esc(d.name || d.code)}</b> non potrà più guardare finché non lo riattivi.`, 'Disattiva'))) return; await save(d, { active: !d.active }); return toast(d.active ? 'Cliente disattivato' : 'Cliente riattivato'); }
       if (act === 'activate') return openDrawer(d, true);
       if (act === 'link') { openDrawer(d, false); setTimeout(() => { const s = $('#eLinkTo'); if (s) { s.scrollIntoView({ block: 'center' }); s.focus(); } }, 350); return; }
-      if (act === 'open' || !e.target.closest('button')) openDrawer(d, d.status === 'pending');
+      if (act === 'open') return openDrawer(d, d.status === 'pending');
+      if (!e.target.closest('button')) openQuick(d);
     });
     $('#dvQ').addEventListener('input', () => { st.limit = st.view === 'table' ? 100 : 60; render(); });
     $('#dvSort').onchange = (e) => { st.sort = e.target.value; try { localStorage.setItem('kc_dvs', st.sort); } catch {} render(); };
