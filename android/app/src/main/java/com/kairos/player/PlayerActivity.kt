@@ -158,7 +158,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             // fotogramma; allora l'anteprima sotto viene tolta. Niente sparizione/ricomparsa del video.
             root.setBackgroundColor(Color.TRANSPARENT)
             handoffPending = true
-            val v = h.moveTo(this, false, 1500L) { completeHandoff(false) }
+            val v = h.moveTo(this, false, if (SurfaceFix.needed(this)) 3500L else 1500L) { completeHandoff(false) }
             h.setAspect(aspect)
             h.setSubtitleScale(subScale)
             root.addView(v, 0, FrameLayout.LayoutParams(4, 4, Gravity.TOP or Gravity.START))

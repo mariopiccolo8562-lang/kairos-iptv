@@ -3401,7 +3401,7 @@ function buildBrowse(scr, kind) {
     scr.classList.toggle('inrows', !!c);
     if (c) {
       const x = item(c.dataset.k); if (x) heroQueue(scr, x);
-      const row = c.closest('.nrow'); if (!mouse && Math.abs(rows.scrollTop - (row.offsetTop - 6)) > 2) rows.scrollTo({ top: row.offsetTop - 6, behavior: 'smooth' });
+      const row = c.closest('.nrow'); if (!mouse && Math.abs(rows.scrollTop - (row.offsetTop - 6)) > 2) { if (fastMove) rows.scrollTop = row.offsetTop - 6; else rows.scrollTo({ top: row.offsetTop - 6, behavior: 'smooth' }); }
       const [ri, ii] = c.dataset.k.split(':').map(Number);
       if (ri >= scr._rendered - 2) moreRows(scr, 3);
       const tr = c.parentElement; if (tr && tr.dataset.n !== undefined && ii >= +tr.dataset.n - 5) trackFill(tr, 0);
@@ -3457,7 +3457,8 @@ function heroImg(hero, src, mode, blurBg) {
   if (backI.complete && backI.naturalWidth) backI.onload();
 }
 let heroT;
-function heroQueue(scr, x) { clearTimeout(heroT); heroT = setTimeout(() => setHero(scr, x), 180); }
+// a spostamento rapido (tasto tenuto premuto) il riquadro grande aspetta di più: niente immagine di sfondo caricata a ogni sosta
+function heroQueue(scr, x) { clearTimeout(heroT); heroT = setTimeout(() => setHero(scr, x), fastMove ? 360 : 180); }
 function setHero(scr, x, instant) {
   if (x && x.folder) return setFolderHero(scr, x, instant);
   if (x && x.home && x.away) return setEventHero(scr, x, instant);
@@ -3491,7 +3492,9 @@ function setHero(scr, x, instant) {
   };
   if (instant) apply();
   else { info.classList.add('sw'); clearTimeout(scr._swT); scr._swT = setTimeout(apply, 140); }
-  if (xtOf(x) && !x._info && !live) fetchInfo(x).then(() => { if (scr._hero === x) setHero(scr, x, true); });
+  // dettagli (trama, cast, sfondo) dal server solo se ci si ferma davvero su questo titolo: scorrendo in fretta niente richieste a raffica
+  clearTimeout(scr._infoT);
+  if (xtOf(x) && !x._info && !live) scr._infoT = setTimeout(() => { if (scr._hero === x && !x._info) fetchInfo(x).then(() => { if (scr._hero === x) setHero(scr, x, true); }); }, instant ? 0 : 420);
 }
 function setFolderHero(scr, f, instant) {
   if (scr._hero === f && !instant) return;

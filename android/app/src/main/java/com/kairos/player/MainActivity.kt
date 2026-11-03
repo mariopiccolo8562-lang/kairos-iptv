@@ -91,7 +91,7 @@ class MainActivity : ComponentActivity() {
             previewBox.visibility = View.VISIBLE
         }
         if (b.view.parent !== previewBox) {
-            val v = b.moveTo(this, true, 1200L) { b.dropOldView(); onShown?.run() }
+            val v = b.moveTo(this, true, if (SurfaceFix.needed(this)) 3500L else 1200L) { b.dropOldView(); onShown?.run() }
             previewBox.addView(v, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         } else onShown?.run()
         // se entro pochi secondi la pagina non chiede di nuovo l'anteprima (utente uscito dalla Live), si ferma

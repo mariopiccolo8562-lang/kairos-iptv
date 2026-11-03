@@ -142,6 +142,12 @@ private fun langName(code: String?): String {
 /* ======================================================================= */
 @OptIn(UnstableApi::class)
 class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, private val prefs: PlayPrefs, overlay: Boolean = false) : Engine {
+    companion object {
+        /** dopo un cambio di superficie: quanto aspettare un fotogramma prima di considerare il decoder bloccato.
+         *  Senza rimedio il fotogramma arriva subito (nessun keyframe da aspettare): 2,5 s bastano. Con il decoder
+         *  ricreato il primo fotogramma arriva al keyframe successivo, anche 2-4 s nelle dirette: si aspetta di più. */
+        fun frozenMs(ctx: Context): Long = if (SurfaceFix.needed(ctx)) 6000L else 2500L
+    }
     override val name = "exo"
     private val selector = DefaultTrackSelector(
         ctx,
@@ -163,6 +169,19 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
     private var moveCb: (() -> Unit)? = null
     private var moveArmed = false
     private val moveTimeout = Runnable { fireMoved() }
+    /** fotogramma visto sulla superficie attuale dopo l'ultimo [moveTo] */
+    private var moveFrameSeen = true
+    // superficie cambiata, player pronto e in riproduzione, ma dopo alcuni secondi nessun fotogramma sulla nuova vista:
+    // il decoder si è bloccato nel passaggio (audio che prosegue, immagine ferma). Si ricarica il flusso.
+    private val appCtx = ctx.applicationContext
+    private val frozenCheck = Runnable {
+        if (moveFrameSeen || released || !player.playWhenReady || player.playbackState != Player.STATE_READY) return@Runnable
+        // questo dispositivo si è bloccato nel cambio di superficie: da ora il rimedio vale anche qui
+        SurfaceFix.learn(appCtx)
+        val pos = if (prefs.live || player.isCurrentMediaItemLive) 0L else maxOf(0L, player.currentPosition)
+        val url = playingUrl
+        if (url.isNotEmpty()) try { player.stop(); play(url, pos) } catch (_: Exception) {}
+    }
 
     init {
         val http = DefaultHttpDataSource.Factory()
@@ -179,7 +198,7 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
             .setBackBuffer(prefs.backMs, true)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
-        val renderers = DefaultRenderersFactory(ctx)
+        val renderers = KxRenderersFactory(ctx)
             .setEnableDecoderFallback(true)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
         // accelerazione hardware: "off" preferisce i decoder software, "on" quelli hardware
@@ -215,7 +234,7 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
 
             // arriva di nuovo dopo ogni cambio di superficie (solo per la superficie attuale):
             // è il segnale che il video è davvero visibile nella nuova schermata
-            override fun onRenderedFirstFrame() { if (moveArmed) fireMoved(); l.onFirstFrame() }
+            override fun onRenderedFirstFrame() { moveFrameSeen = true; main.removeCallbacks(frozenCheck); if (moveArmed) fireMoved(); l.onFirstFrame() }
 
             override fun onPlayerError(error: PlaybackException) {
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
@@ -268,6 +287,9 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
         })
         main.removeCallbacks(moveTimeout)
         main.postDelayed(moveTimeout, timeoutMs)
+        moveFrameSeen = false
+        main.removeCallbacks(frozenCheck)
+        main.postDelayed(frozenCheck, frozenMs(appCtx))
         return n
     }
 
@@ -465,7 +487,7 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
     override fun release() {
         if (released) return
         released = true
-        main.removeCallbacks(moveTimeout)
+        main.removeCallbacks(moveTimeout); main.removeCallbacks(frozenCheck)
         moveCb = null; moveArmed = false
         dropOldView()
         pv.player = null
@@ -608,5 +630,51 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
         try { mp.detachViews() } catch (_: Exception) {}
         // stop e rilascio aspettano la chiusura dell'input: fuori dal thread dell'interfaccia (la libreria condivisa resta viva)
         io.execute { try { mp.stop() } catch (_: Exception) {}; try { mp.release() } catch (_: Exception) {}; io.shutdown() }
+    }
+}
+
+/* ======================================================================= */
+/* Renderer video: rimedio al cambio di superficie su alcuni Fire TV        */
+/* ======================================================================= */
+/**
+ * Quando il video passa dall'anteprima allo schermo intero (e ritorno) ExoPlayer cambia la superficie del decoder
+ * senza ricrearlo. Su alcuni Fire TV con chip MediaTek MT8695 il decoder non lo regge e si blocca: audio che continua,
+ * immagine ferma. ExoPlayer ha il rimedio (decoder ricreato: l'immagine riparte al keyframe successivo, 1-3 s) ma lo
+ * applica solo a un elenco di modelli Amazon più vecchi (AFTA, AFTN, AFTS, AFTR…) dove questi mancano.
+ * Il rimedio costa quei secondi a ogni apertura, perciò vale solo per i modelli in elenco e per quelli in cui il
+ * blocco è stato osservato davvero ([SurfaceFix.learn]); le chiavette nuove non ne risentono.
+ */
+object SurfaceFix {
+    /** modelli con il blocco: Fire TV Stick 3ª gen 2020 (AFTSSS, segnalato), Stick Lite 2020 e Stick HD 2024 (AFTSS,
+     *  stesso identico chip MT8695D), Stick 4K 2018 (AFTMM, MT8695) */
+    private val MODELS = setOf("AFTSSS", "AFTSS", "AFTMM")
+    private const val KEY = "surfaceFixLearned"
+    @Volatile private var learned: Boolean? = null
+    fun needed(ctx: Context): Boolean {
+        if (MODELS.contains(android.os.Build.MODEL)) return true
+        val l = learned ?: ctx.applicationContext.getSharedPreferences("kairos", Context.MODE_PRIVATE).getBoolean(KEY, false).also { learned = it }
+        return l
+    }
+    fun learn(ctx: Context) {
+        if (learned == true) return
+        learned = true
+        try { ctx.applicationContext.getSharedPreferences("kairos", Context.MODE_PRIVATE).edit().putBoolean(KEY, true).apply() } catch (_: Exception) {}
+    }
+}
+
+@OptIn(UnstableApi::class)
+class KxRenderersFactory(private val ctx: Context) : DefaultRenderersFactory(ctx) {
+    override fun buildVideoRenderers(
+        context: Context, extensionRendererMode: Int, mediaCodecSelector: androidx.media3.exoplayer.mediacodec.MediaCodecSelector,
+        enableDecoderFallback: Boolean, eventHandler: Handler, eventListener: androidx.media3.exoplayer.video.VideoRendererEventListener,
+        allowedVideoJoiningTimeMs: Long, out: ArrayList<androidx.media3.exoplayer.Renderer>,
+    ) {
+        if (!SurfaceFix.needed(ctx)) { super.buildVideoRenderers(context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback, eventHandler, eventListener, allowedVideoJoiningTimeMs, out); return }
+        out.add(object : androidx.media3.exoplayer.video.MediaCodecVideoRenderer(
+            context, codecAdapterFactory, mediaCodecSelector, allowedVideoJoiningTimeMs, enableDecoderFallback, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY,
+        ) {
+            // decoder hardware: ricreato al cambio di superficie; quelli software (Google) non hanno il problema
+            override fun codecNeedsSetOutputSurfaceWorkaround(name: String): Boolean = !(name.startsWith("OMX.google") || name.startsWith("c2.android")) || super.codecNeedsSetOutputSurfaceWorkaround(name)
+        })
     }
 }

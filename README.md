@@ -175,6 +175,13 @@ In **Impostazioni** trovi anche il **prezzo** mostrato ai clienti e il testo **P
 - **Impostazioni a schede**: *Aspetto, App, Aggiornamenti, Prezzo e privacy, VPN generale, Sicurezza*. Ogni campo ha la sua spiegazione; le schede con modifiche non salvate hanno un pallino e la barra **Salva impostazioni** resta sempre in fondo. Le voci tecniche (versione manuale, indirizzo del server) sono in *Opzioni avanzate*.
 - Il database si aggiorna da solo al primo deploy (migrazione `0007_player.sql`). Il lettore scelto dal pannello funziona già con l'APK 1.9.1 (è nell'interfaccia che si aggiorna da sola); la release 2.0.0 serve per avere tutto nell'APK.
 
+### 2.0.1 — Fire TV: immagine ferma con audio che continua; scorrimento rapido
+
+- **Fire TV Stick 3ª gen (AFTSSS), Stick Lite 2020 e Stick HD 2024 (AFTSS), Stick 4K 2018 (AFTMM)**: all'apertura di un canale l'immagine restava ferma mentre l'audio proseguiva. Il video passa dall'anteprima allo schermo intero cambiando la superficie del decoder senza ricrearlo e il chip MediaTek MT8695 di queste chiavette non lo regge. ExoPlayer ha il rimedio (decoder ricreato nel passaggio) ma lo applica solo a modelli Amazon più vecchi: ora vale anche per questi tre. Il rimedio costa 1-3 s all'apertura (si aspetta il keyframe successivo), perciò **non** viene applicato alle chiavette nuove (4K Max, 4K/4K Max 2ª gen, Cube) né ad altri dispositivi.
+- **Rete di sicurezza che impara**: su qualsiasi dispositivo, se dopo il passaggio a schermo intero il video non si disegna entro 2,5 s mentre l'audio va, l'app ricarica il canale e **si ricorda** che quel dispositivo ha il problema: dalle aperture successive applica il rimedio solo lì.
+- **Scorrimento rapido in film e serie**: con il tasto tenuto premuto le righe scorrono senza animazione, il riquadro grande in alto aspetta che ci si fermi prima di caricare l'immagine di sfondo, e i dettagli del titolo (trama, cast) vengono chiesti al server solo dopo una sosta vera, non a raffica a ogni titolo attraversato.
+- Serve l'APK 2.0.1 (lo scorrimento è già nell'interfaccia che si aggiorna da sola).
+
 ## Come funziona per i clienti
 
 1. Installano l'app (codice Downloader) e la aprono: compare un **codice** tipo `KXAB-7Q2M`.
