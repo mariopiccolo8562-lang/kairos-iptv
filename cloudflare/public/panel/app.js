@@ -555,6 +555,7 @@ function renderDrawer() {
     try {
       const own = $('#eOwner') ? { ownerId: edit.ownerId || 0 } : {};
       if (edit.aiLimitIn !== undefined) own.aiLimit = edit.aiLimitIn;
+      if (edit.aiProviderIn !== undefined) own.aiProvider = edit.aiProviderIn;
       if (isNew) await api('POST', '/admin/devices', { code: edit.code, name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart, ...own });
       else if (edit.parent) await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, ...vpnPart });
       else await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart, ...own });

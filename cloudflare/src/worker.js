@@ -244,7 +244,7 @@ const DEFAULT_SETTINGS = {
   allowLocalPlaylists: true, apkUrl: '', apkVersionCode: 0, downloaderCode: '', storeDownloaderCode: '',
   serverUrl: '', showFootball: true,
   price: '22 € / anno', privacy: '',
-  aiDaily: 20, aiModel: 'gemma', aiProvider: 'cf', aiClaude: 'haiku',
+  aiDaily: 20, aiProvider: 'gm', aiClaude: 'haiku', aiGemini: 'flash',
 };
 /* Versione dell'APK da proporre alle app: quella pubblicata in automatico da GitHub (kairos-tv.json)
    oppure, solo se strettamente più recente, quella scritta a mano nel pannello.
@@ -1155,19 +1155,24 @@ async function playerMeta(req, env, ip, url, ctx) {
   return json({ cert: v.cert, certSrc: v.certSrc, extras: v.extras });
 }
 /* ======================================================================
-   ASSISTENTE IA: Cloudflare Workers AI (veloce, gratis fino a 10.000 neuroni al giorno), Google Gemini di riserva
-   se c'è il segreto GEMINI_API_KEY. Ogni cliente ha un numero di domande al giorno (dal pannello) + domande extra.
+   ASSISTENTE IA: Claude (Anthropic, a pagamento) o Google Gemini (gratis). Il servizio si sceglie nel pannello per tutti
+   e, se serve, per il singolo cliente; se quello scelto non risponde, risponde l'altro (se collegato).
+   Ogni cliente ha un numero di domande al giorno (dal pannello) + domande extra.
    ====================================================================== */
-const AI_CF_MODELS = {
-  gemma: { id: '@cf/google/gemma-4-26b-a4b-it', name: 'Gemma 4 (consigliato)', inN: 9091, outN: 27273 },
-  llama: { id: '@cf/meta/llama-3.1-8b-instruct-fp8-fast', name: 'Llama 3.1 8B (più veloce, italiano meno curato)', inN: 4119, outN: 34868 },
-};
-const AI_CF_FREE = 10000;
-// prezzi in dollari per milione di parole (token), dalla pagina dei modelli di Anthropic: servono solo per stimare la spesa nel pannello
+const AI_PROVIDERS = ['claude', 'gm'];
+const AI_NAMES = { claude: 'Claude', gm: 'Gemini' };
+// prezzi in dollari per milione di parole (token), dalla pagina prezzi di Anthropic: servono solo per stimare la spesa nel pannello
 const AI_CLAUDE_MODELS = {
   haiku: { id: 'claude-haiku-5-5', name: 'Claude Haiku 5.5 (veloce, costa pochissimo)', pin: 0.10, pout: 0.50 },
   sonnet: { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5 (più preciso, costa circa 20 volte di più)', pin: 2, pout: 10 },
 };
+// Gemini: «thinkingLevel» basso = risponde subito (senza, la versione Flash ragiona a lungo ed è lenta)
+const AI_GEMINI_MODELS = {
+  flash: { name: 'Gemini 3.8 Flash (risposte migliori)', list: [['gemini-3.8-flash', 'low'], ['gemini-3.5-flash-lite', '']] },
+  lite: { name: 'Gemini 3.5 Flash-Lite (più veloce)', list: [['gemini-3.5-flash-lite', ''], ['gemini-3.8-flash', 'low']] },
+};
+const AI_SYSTEM = 'Sei l\'assistente di un\'app per guardare la TV. Rispondi in italiano, in modo breve e chiaro: al massimo 5 frasi brevi, adatte a essere lette sulla TV. Parla solo del contenuto indicato e di argomenti legati (trama, attori, genere, età consigliata, titoli simili). Non rivelare il finale se non te lo chiedono. Se non conosci il titolo dillo chiaramente in una frase, non inventare. Non usare markdown, elenchi puntati o simboli.';
+const utcDay = (t = now()) => new Date(t).toISOString().slice(0, 10);
 async function claudeAsk(env, model, text) {
   const m = AI_CLAUDE_MODELS[model] || AI_CLAUDE_MODELS.haiku;
   const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1180,42 +1185,24 @@ async function claudeAsk(env, model, text) {
   const u = (j && j.usage) || {};
   return { status: r.status, answer, tin: +u.input_tokens || 0, tout: +u.output_tokens || 0, err: (j && j.error && j.error.message) || '' };
 }
-const AI_MODEL = 'gemini-3.8-flash', AI_MODEL_LITE = 'gemini-3.5-flash-lite';
-const AI_SYSTEM = 'Sei l\'assistente di un\'app per guardare la TV. Rispondi in italiano, in modo breve e chiaro: al massimo 5 frasi brevi, adatte a essere lette sulla TV. Parla solo del contenuto indicato e di argomenti legati (trama, attori, genere, età consigliata, titoli simili). Non rivelare il finale se non te lo chiedono. Se non sei sicuro di qualcosa dillo, non inventare. Non usare markdown, elenchi puntati o simboli.';
-const utcDay = (t = now()) => new Date(t).toISOString().slice(0, 10);
-let cfOutDay = ''; // giorno in cui il limite gratuito di Cloudflare è finito (si riparte a mezzanotte UTC)
-async function cfAsk(env, model, text) {
-  const m = AI_CF_MODELS[model] || AI_CF_MODELS.gemma;
-  const r = await Promise.race([
-    env.AI.run(m.id, { messages: [{ role: 'system', content: AI_SYSTEM }, { role: 'user', content: text }], max_tokens: 350, temperature: 0.6 }),
-    new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 20000)),
-  ]);
-  const answer = String((r && (typeof r.response === 'string' ? r.response : r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content)) || '').trim();
-  const u = (r && r.usage) || {};
-  const tin = +u.prompt_tokens || Math.ceil((AI_SYSTEM.length + text.length) / 3.5), tout = +u.completion_tokens || Math.ceil(answer.length / 3.5);
-  return { answer, neu: (tin * m.inN + tout * m.outN) / 1e6 };
-}
-async function geminiAsk(env, model, text) {
+async function geminiAsk(env, model, text, think) {
+  const gc = { maxOutputTokens: 1024, temperature: 0.6 };
+  if (think) gc.thinkingConfig = { thinkingLevel: think };
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST', signal: AbortSignal.timeout(25000),
     headers: { 'content-type': 'application/json', 'x-goog-api-key': String(env.GEMINI_API_KEY).trim() },
-    body: JSON.stringify({ systemInstruction: { parts: [{ text: AI_SYSTEM }] }, contents: [{ role: 'user', parts: [{ text }] }], generationConfig: { maxOutputTokens: 400, temperature: 0.6 } }),
+    body: JSON.stringify({ systemInstruction: { parts: [{ text: AI_SYSTEM }] }, contents: [{ role: 'user', parts: [{ text }] }], generationConfig: gc }),
   });
   const j = await r.json().catch(() => null);
-  const answer = j && Array.isArray(j.candidates) && j.candidates[0] && j.candidates[0].content ? (j.candidates[0].content.parts || []).map((p) => p.text || '').join('').trim() : '';
+  const answer = j && Array.isArray(j.candidates) && j.candidates[0] && j.candidates[0].content ? (j.candidates[0].content.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('').trim() : '';
   return { status: r.status, answer };
 }
 const aiLimitOf = (P, set) => (+P.ai_limit >= 0 ? +P.ai_limit : Math.max(0, parseInt(set.aiDaily ?? 20, 10) || 0));
+const aiProvOf = (set) => (AI_PROVIDERS.includes(set.aiProvider) ? set.aiProvider : 'gm');
 async function aiUsed(env, id) { return ((await env.DB.prepare('SELECT n FROM ai_usage WHERE day = ? AND device_id = ?').bind(utcDay(), id).first()) || { n: 0 }).n; }
-async function aiCount(env, id, f, neu, tin = 0, tout = 0) {
-  await env.DB.prepare(`INSERT INTO ai_usage (day, device_id, n, cf, gm, neu, cl, cl_in, cl_out) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?) ON CONFLICT(day, device_id) DO UPDATE SET n = n + 1, cf = cf + excluded.cf, gm = gm + excluded.gm, neu = neu + excluded.neu, cl = cl + excluded.cl, cl_in = cl_in + excluded.cl_in, cl_out = cl_out + excluded.cl_out`)
-    .bind(utcDay(), id, f === 'cf' ? 1 : 0, f === 'gm' ? 1 : 0, neu || 0, f === 'cl' ? 1 : 0, tin, tout).run();
-}
-async function cfIsOut(env) {
-  if (cfOutDay === utcDay()) return true;
-  const r = await env.DB.prepare("SELECT 1 AS x FROM ai_usage WHERE day = ? AND device_id = '_cf' AND n > 0").bind(utcDay()).first().catch(() => null);
-  if (r) cfOutDay = utcDay();
-  return !!r;
+async function aiCount(env, id, f, tin = 0, tout = 0) {
+  await env.DB.prepare(`INSERT INTO ai_usage (day, device_id, n, gm, cl, cl_in, cl_out) VALUES (?, ?, 1, ?, ?, ?, ?) ON CONFLICT(day, device_id) DO UPDATE SET n = n + 1, gm = gm + excluded.gm, cl = cl + excluded.cl, cl_in = cl_in + excluded.cl_in, cl_out = cl_out + excluded.cl_out`)
+    .bind(utcDay(), id, f === 'gm' ? 1 : 0, f === 'claude' ? 1 : 0, tin, tout).run();
 }
 async function playerAi(req, env, ip, ctx) {
   if (await limited(env.RL_DEVICE, 'ai:' + ip)) return json({ error: 'Troppe richieste' }, 429);
@@ -1223,7 +1210,7 @@ async function playerAi(req, env, ip, ctx) {
   try { b = await readJSON(req, 8192); } catch (e) { return json({ error: e.message }, e.status || 400); }
   const [d, bad] = await deviceAuth(env, b);
   if (bad) return bad;
-  if (!env.AI && !env.GEMINI_API_KEY && !env.ANTHROPIC_API_KEY) return json({ off: true });
+  if (!env.GEMINI_API_KEY && !env.ANTHROPIC_API_KEY) return json({ off: true });
   const [P] = await activeAccount(env, d);
   if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
   if (permsParse(P.perms).ai === false) return json({ error: 'Assistente non attivo su questo abbonamento' }, 403);
@@ -1245,46 +1232,34 @@ async function playerAi(req, env, ip, ctx) {
     c.plot ? `Trama dalla playlist: ${nameClean(c.plot, 600)}` : '',
   ].filter(Boolean).join('\n');
   const text = `${info}\n\nDomanda: ${q}`;
-  const left = (n) => Math.max(0, limit - used - 1) + Math.max(0, +P.ai_extra - (extra ? 1 : 0));
-  const ok = (answer, f, neu, tin, tout) => { ctx.waitUntil(aiCount(env, P.id, f, neu, tin, tout)); return json({ answer: (answer || 'Non ho una risposta per questa domanda.').slice(0, 2000), left: left() }); };
-  const order = set.aiProvider === 'claude' ? ['claude', 'cf', 'gm'] : set.aiProvider === 'gm' ? ['gm', 'cf', 'claude'] : ['cf', 'claude', 'gm'];
-  for (const prov of order) {
+  const left = () => Math.max(0, limit - used - 1) + Math.max(0, +P.ai_extra - (extra ? 1 : 0));
+  const ok = (answer, f, tin, tout) => { ctx.waitUntil(aiCount(env, P.id, f, tin, tout)); return json({ answer: (answer || 'Non ho una risposta per questa domanda.').slice(0, 2000), left: left(), by: AI_NAMES[f] }); };
+  const first = AI_PROVIDERS.includes(P.ai_provider) ? P.ai_provider : aiProvOf(set);
+  for (const prov of [first, ...AI_PROVIDERS.filter((x) => x !== first)]) {
     if (prov === 'claude' && env.ANTHROPIC_API_KEY) {
       let r = null;
       try { r = await claudeAsk(env, set.aiClaude, text); } catch {}
-      if (r && r.status === 200) return ok(r.answer, 'cl', 0, r.tin, r.tout);
+      if (r && r.status === 200 && r.answer) return ok(r.answer, 'claude', r.tin, r.tout);
       if (r && [401, 403].includes(r.status)) ctx.waitUntil(log(env, 'off', `Assistente IA: Anthropic ha rifiutato la chiave ANTHROPIC_API_KEY (errore ${r.status}). Controlla di aver copiato la chiave giusta da console.anthropic.com`, ip));
-      else if (r && r.status === 400 && /credit|balance|billing/i.test(r.err)) ctx.waitUntil(log(env, 'off', 'Assistente IA: credito di Anthropic finito. Ricarica su console.anthropic.com → Billing (intanto risponde il servizio di riserva, se c\'è)', ip));
-    }
-    if (prov === 'cf' && env.AI && !(await cfIsOut(env))) {
-      try {
-        const r = await cfAsk(env, set.aiModel, text);
-        return ok(r.answer, 'cf', r.neu);
-      } catch (e) {
-        const msg = String((e && e.message) || e);
-        if (/4006|daily free allocation|neurons|exceeded|quota/i.test(msg)) {
-          cfOutDay = utcDay();
-          ctx.waitUntil(env.DB.prepare("INSERT INTO ai_usage (day, device_id, n) VALUES (?, '_cf', 1) ON CONFLICT(day, device_id) DO UPDATE SET n = n + 1").bind(utcDay()).run());
-          ctx.waitUntil(log(env, 'off', `Assistente IA: finite le risposte gratuite di Cloudflare per oggi${env.GEMINI_API_KEY || env.ANTHROPIC_API_KEY ? ' (si usa il servizio di riserva)' : ''}`, ip));
-        }
-      }
+      else if (r && r.status === 400 && /credit|balance|billing/i.test(r.err)) ctx.waitUntil(log(env, 'off', 'Assistente IA: credito di Claude finito. Ricarica su console.anthropic.com → Billing (intanto risponde Gemini, se è collegato)', ip));
     }
     if (prov === 'gm' && env.GEMINI_API_KEY) {
-      const models = [...new Set([str(env.AI_MODEL || '', 60) || AI_MODEL, AI_MODEL_LITE])];
+      const list = (AI_GEMINI_MODELS[set.aiGemini] || AI_GEMINI_MODELS.flash).list;
       let last = 0;
-      for (const model of models) {
+      for (const [model, think] of list) {
         let r;
-        try { r = await geminiAsk(env, model, text); } catch { last = 502; continue; }
-        if (r.status === 200) return ok(r.answer, 'gm', 0);
+        try { r = await geminiAsk(env, model, text, think); } catch { last = 502; continue; }
+        if (r.status === 200 && r.answer) return ok(r.answer, 'gm');
         last = r.status;
-        if (![429, 404, 500, 503].includes(r.status)) break;
+        if (r.status === 200 || [429, 404, 500, 503].includes(r.status)) continue;
+        break;
       }
-      if ([400, 401, 403].includes(last)) ctx.waitUntil(log(env, 'off', `Assistente IA: Google ha rifiutato la chiave GEMINI_API_KEY (errore ${last}). Controlla di aver copiato la chiave giusta da aistudio.google.com`, ip));
+      if ([400, 401, 403].includes(last)) ctx.waitUntil(log(env, 'off', `Assistente IA: Google ha rifiutato la chiave GEMINI_API_KEY o la richiesta (errore ${last}). Controlla la chiave su aistudio.google.com`, ip));
+      if (last === 429) ctx.waitUntil(log(env, 'off', 'Assistente IA: Gemini ha finito le risposte gratuite per ora (riprova più tardi o collega Claude)', ip));
     }
   }
   await back();
-  if (await cfIsOut(env) && !env.ANTHROPIC_API_KEY) return json({ error: 'L\'assistente ha finito le risposte gratuite di oggi: riprova domani o chiedi al fornitore.', limit: true, global: true }, 429);
-  return json({ error: 'Assistente non disponibile in questo momento' }, 502);
+  return json({ error: 'L\'assistente non riesce a rispondere adesso: riprova tra poco.' }, 502);
 }
 /* richiesta di altre domande all'assistente (dall'app, quando finiscono quelle del giorno) */
 async function playerAiMore(env, d, P, ip, ctx) {
@@ -1292,7 +1267,7 @@ async function playerAiMore(env, d, P, ip, ctx) {
   if (await env.DB.prepare("SELECT 1 AS x FROM requests WHERE kind = 'ai' AND device_id = ? AND status <> 'done'").bind(P.id).first()) return json({ ok: true, already: true });
   if (await throttled(env, 'rqi:' + P.id, 5, 86400e3)) return json({ error: 'Hai già chiesto più volte oggi: aspetta la risposta del fornitore' }, 429);
   const set = await getSettings(env), limit = aiLimitOf(P, set), used = await aiUsed(env, P.id);
-  await addRequest(env, P, 'ai', { ctype: 'ai', title: 'Altre domande all\'assistente IA', body: `Oggi ha usato ${used} domande su ${limit}${await cfIsOut(env) ? ' · il limite gratuito di Cloudflare è finito per oggi' : ''}`, info: 'ai' }, ip);
+  await addRequest(env, P, 'ai', { ctype: 'ai', title: 'Altre domande all\'assistente IA', body: `Oggi ha usato ${used} domande su ${limit}`, info: 'ai' }, ip);
   ctx.waitUntil(log(env, 'req', `Richiesta di altre domande all'assistente da ${P.name || P.code}`, ip));
   return json({ ok: true });
 }
@@ -1301,18 +1276,18 @@ async function adminAi(req, env, path, who, ip) {
   const m = req.method;
   if (path === '/ai' && m === 'GET') {
     const day = utcDay(), set = await getSettings(env);
-    const days = ((await env.DB.prepare("SELECT day, SUM(n) AS n, SUM(cf) AS cf, SUM(gm) AS gm, SUM(neu) AS neu, SUM(cl) AS cl, SUM(cl_in) AS cl_in, SUM(cl_out) AS cl_out FROM ai_usage WHERE device_id <> '_cf' AND day >= ? GROUP BY day ORDER BY day").bind(utcDay(now() - 29 * 864e5)).all()).results) || [];
+    const days = ((await env.DB.prepare("SELECT day, SUM(n) AS n, SUM(gm) AS gm, SUM(cl) AS cl, SUM(cl_in) AS cl_in, SUM(cl_out) AS cl_out FROM ai_usage WHERE device_id <> '_cf' AND day >= ? GROUP BY day ORDER BY day").bind(utcDay(now() - 29 * 864e5)).all()).results) || [];
     const cm = AI_CLAUDE_MODELS[set.aiClaude] || AI_CLAUDE_MODELS.haiku, cost = (r) => ((+r.cl_in || 0) * cm.pin + (+r.cl_out || 0) * cm.pout) / 1e6;
-    const rows = ((await env.DB.prepare("SELECT u.device_id AS id, u.n, d.name, d.code, d.ai_limit, d.ai_extra FROM ai_usage u LEFT JOIN devices d ON d.id = u.device_id WHERE u.day = ? AND u.device_id <> '_cf' ORDER BY u.n DESC LIMIT 200").bind(day).all()).results) || [];
-    const t = days.find((x) => x.day === day) || { n: 0, cf: 0, gm: 0, neu: 0 };
+    const rows = ((await env.DB.prepare("SELECT u.device_id AS id, u.n, u.gm, u.cl, d.name, d.code, d.ai_limit, d.ai_extra, d.ai_provider FROM ai_usage u LEFT JOIN devices d ON d.id = u.device_id WHERE u.day = ? AND u.device_id <> '_cf' ORDER BY u.n DESC LIMIT 200").bind(day).all()).results) || [];
+    const t = days.find((x) => x.day === day) || { n: 0, gm: 0, cl: 0 };
     return json({
-      status: { cf: !!env.AI, gemini: !!env.GEMINI_API_KEY, claude: !!env.ANTHROPIC_API_KEY, cfOut: await cfIsOut(env), freeNeurons: AI_CF_FREE, resetUtc: '00:00 UTC' },
-      today: { day, n: t.n || 0, cf: t.cf || 0, gm: t.gm || 0, cl: t.cl || 0, neu: Math.round(t.neu || 0), usd: +cost(t).toFixed(4) },
+      status: { gemini: !!env.GEMINI_API_KEY, claude: !!env.ANTHROPIC_API_KEY },
+      today: { day, n: t.n || 0, gm: t.gm || 0, cl: t.cl || 0, usd: +cost(t).toFixed(4) },
       month: { n: days.reduce((a, r) => a + (+r.n || 0), 0), cl: days.reduce((a, r) => a + (+r.cl || 0), 0), usd: +days.reduce((a, r) => a + cost(r), 0).toFixed(4) },
-      days: days.slice(-14).map((r) => ({ day: r.day, n: r.n, cf: r.cf, gm: r.gm, cl: r.cl })),
-      clients: rows.map((r) => ({ id: r.id, name: r.name || '', code: r.code || '', n: r.n, limit: r.ai_limit >= 0 ? r.ai_limit : set.aiDaily ?? 20, own: r.ai_limit >= 0, extra: r.ai_extra || 0 })),
-      settings: { aiDaily: set.aiDaily ?? 20, aiModel: AI_CF_MODELS[set.aiModel] ? set.aiModel : 'gemma', aiProvider: ['claude', 'gm'].includes(set.aiProvider) ? set.aiProvider : 'cf', aiClaude: AI_CLAUDE_MODELS[set.aiClaude] ? set.aiClaude : 'haiku' },
-      models: Object.entries(AI_CF_MODELS).map(([k, v]) => ({ id: k, name: v.name })), claudeModels: Object.entries(AI_CLAUDE_MODELS).map(([k, v]) => ({ id: k, name: v.name })),
+      days: days.slice(-14).map((r) => ({ day: r.day, n: r.n, gm: r.gm, cl: r.cl })),
+      clients: rows.map((r) => ({ id: r.id, name: r.name || '', code: r.code || '', n: r.n, gm: r.gm || 0, cl: r.cl || 0, limit: r.ai_limit >= 0 ? r.ai_limit : set.aiDaily ?? 20, own: r.ai_limit >= 0, extra: r.ai_extra || 0, provider: AI_PROVIDERS.includes(r.ai_provider) ? r.ai_provider : '' })),
+      settings: { aiDaily: set.aiDaily ?? 20, aiProvider: aiProvOf(set), aiClaude: AI_CLAUDE_MODELS[set.aiClaude] ? set.aiClaude : 'haiku', aiGemini: AI_GEMINI_MODELS[set.aiGemini] ? set.aiGemini : 'flash' },
+      claudeModels: Object.entries(AI_CLAUDE_MODELS).map(([k, v]) => ({ id: k, name: v.name })), geminiModels: Object.entries(AI_GEMINI_MODELS).map(([k, v]) => ({ id: k, name: v.name })),
     });
   }
   if (path === '/ai/grant' && m === 'POST') {
@@ -2330,8 +2305,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (typeof b.allowLocalPlaylists === 'boolean') s.allowLocalPlaylists = b.allowLocalPlaylists;
     if (typeof b.showFootball === 'boolean') s.showFootball = b.showFootball;
     if (b.aiDaily !== undefined) { const n = parseInt(b.aiDaily, 10); if (!(n >= 0 && n <= 1000)) throw new HttpErr(400, 'Domande al giorno: da 0 a 1000'); s.aiDaily = n; }
-    if (b.aiModel !== undefined) { if (!AI_CF_MODELS[b.aiModel]) throw new HttpErr(400, 'Modello non valido'); s.aiModel = b.aiModel; }
-    if (b.aiProvider !== undefined) { if (!['cf', 'claude', 'gm'].includes(b.aiProvider)) throw new HttpErr(400, 'Servizio non valido'); s.aiProvider = b.aiProvider; }
+    if (b.aiProvider !== undefined) { if (!AI_PROVIDERS.includes(b.aiProvider)) throw new HttpErr(400, 'Servizio non valido'); s.aiProvider = b.aiProvider; }
+    if (b.aiGemini !== undefined) { if (!AI_GEMINI_MODELS[b.aiGemini]) throw new HttpErr(400, 'Modello Gemini non valido'); s.aiGemini = b.aiGemini; }
     if (b.aiClaude !== undefined) { if (!AI_CLAUDE_MODELS[b.aiClaude]) throw new HttpErr(400, 'Modello Claude non valido'); s.aiClaude = b.aiClaude; }
     if (b.apkVersionCode !== undefined) {
       // si scrive la versione pubblicata, es. "1.3.0" (→ 10300, lo stesso numero che calcola la build su GitHub)
@@ -2531,7 +2506,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       const perms = b.perms !== undefined ? permsJson({ ...permsParse(d.perms), ...permsInput(b.perms) }) : d.perms || '';
       if (b.addons !== undefined && !Array.isArray(b.addons)) throw new HttpErr(400, 'addons deve essere un elenco');
       const addons = b.addons !== undefined ? addonsList(b.addons).join(',') : d.addons || '';
-      let aiLimit = d.ai_limit ?? -1;
+      let aiLimit = d.ai_limit ?? -1, aiProv = d.ai_provider || '';
+      if (b.aiProvider !== undefined && !ses?.agent) { if (!['', ...AI_PROVIDERS].includes(b.aiProvider)) throw new HttpErr(400, 'Intelligenza artificiale non valida'); aiProv = b.aiProvider; }
       if (b.aiLimit !== undefined && !ses?.agent) { const n = b.aiLimit === '' || b.aiLimit === null ? -1 : parseInt(b.aiLimit, 10); if (!(n >= -1 && n <= 1000)) throw new HttpErr(400, 'Domande al giorno: da 0 a 1000 (vuoto = predefinito)'); aiLimit = n; }
       let ownerId = +d.owner_id || 0;
       if (b.ownerId !== undefined && !ses?.agent) {
@@ -2540,7 +2516,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       }
       await env.DB.prepare('UPDATE devices SET name = ?, notes = ?, expires = ?, active = ?, playlists = ?, max_conn = ?, max_profiles = ?, profiles = ?, lock_profiles = ?, vpn = ?, vpn_conf = ?, perms = ? WHERE id = ?')
         .bind(name, notes, expires, active, await seal(env, pls), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, perms, d.id).run();
-      await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ?, addons = ?, owner_id = ?, ai_limit = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, addons, ownerId, aiLimit, d.id).run();
+      await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ?, addons = ?, owner_id = ?, ai_limit = ?, ai_provider = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, addons, ownerId, aiLimit, aiProv, d.id).run();
       if (JSON.stringify(pls) !== JSON.stringify(await unseal(env, d.playlists).catch(() => []))) srcMem.map = null;
       const after = statusOf({ active, expires }, pls);
       if (before !== after && after === 'active') ctx.waitUntil(webhookSend(env, 'device.activated', { id: d.id, code: d.code, name, expires }));
@@ -2756,7 +2732,7 @@ async function apiAdmin(req, env, path, who, ip, ctx) {
 async function deviceOut(env, d) {
   const pls = await unseal(env, d.playlists).catch(() => []);
   return { id: d.id, code: d.code, name: d.name, model: d.model, notes: d.notes, active: !!d.active, expires: d.expires, playlists: pls, hosts: [...new Set(pls.map(hostOf).filter(Boolean))], createdAt: d.created_at, lastSeen: d.last_seen, lastIp: d.last_ip, bound: !!d.secret_hash, status: statusOf(d, pls),
-    addons: addonsList(d.addons), ownerId: +d.owner_id || 0, aiLimit: d.ai_limit ?? -1, aiExtra: +d.ai_extra || 0, parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '', player: playerParse(d.player) };
+    addons: addonsList(d.addons), ownerId: +d.owner_id || 0, aiLimit: d.ai_limit ?? -1, aiExtra: +d.ai_extra || 0, aiProvider: d.ai_provider || '', parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '', player: playerParse(d.player) };
 }
 /** campi "account" inviati dal pannello: connessioni, profili, VPN (cur = valori attuali del dispositivo) */
 async function accountFields(env, b, cur, pls) {

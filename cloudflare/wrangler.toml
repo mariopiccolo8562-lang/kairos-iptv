@@ -27,10 +27,6 @@ name = "RL_DEVICE"
 namespace_id = "7102"
 simple = { limit = 30, period = 60 }
 
-# Assistente IA nell'app: Cloudflare Workers AI (gratis fino a 10.000 neuroni al giorno, nessuna chiave)
-[ai]
-binding = "AI"
-
 # Pulizia notturna (sessioni scadute, log vecchi, dispositivi abbandonati)
 [triggers]
 crons = ["17 3 * * *"]

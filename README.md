@@ -298,6 +298,15 @@ Solo server e pannello: **non serve un nuovo APK**.
 - **Collegare Claude**: console.anthropic.com → **Billing** (carta e un piccolo credito) → **API Keys → Create Key** → copia la chiave `sk-ant-…` → Cloudflare → Workers → kairos-panel → Impostazioni → Variabili e segreti → **Aggiungi**, tipo **Segreto**, nome **`ANTHROPIC_API_KEY`** (in alternativa: segreto di GitHub con lo stesso nome). Puoi mettere un tetto di spesa mensile su console.anthropic.com → Limits.
 - La pagina mostra la **spesa stimata** di Claude (oggi e ultimi 30 giorni); chiave sbagliata o credito finito compaiono in *Attività*.
 
+### 2.4.2 — Solo Claude e Gemini, IA scelta per cliente
+
+- **Cloudflare Workers AI tolto** (rispondeva male): l'assistente usa **Claude** (a pagamento, più preciso) o **Gemini** (gratis). Il permesso «Workers AI» sul token di Cloudflare non serve più (puoi lasciarlo o toglierlo).
+- **Pannello → Assistente IA**: IA predefinita per tutti (Claude o Gemini), modello Claude (Haiku 5.5 / Sonnet 5.5), modello Gemini (3.8 Flash / 3.5 Flash-Lite più veloce), domande al giorno. Se l'IA scelta non risponde (credito finito, limite, chiave sbagliata) risponde l'altra, se collegata; il motivo compare in *Attività*.
+- **Scheda cliente → Permessi**: per ogni cliente scegli **quale IA** usa (o quella predefinita) e **quante domande al giorno**.
+- Gemini ora risponde più in fretta (ragionamento ridotto).
+- Nell'app, sotto la risposta, si vede **chi ha risposto** (Claude o Gemini) e quante domande restano.
+- **Claude risponde solo se** su Cloudflare c'è il segreto `ANTHROPIC_API_KEY` **e** su console.anthropic.com c'è del credito; altrimenti risponde Gemini.
+
 ## Come funziona per i clienti
 
 1. Installano l'app (codice Downloader) e la aprono: compare un **codice** tipo `KXAB-7Q2M`.

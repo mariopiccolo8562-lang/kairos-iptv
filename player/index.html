@@ -3416,7 +3416,7 @@ function aiDialog(x, prog) {
     try {
       const j = await apiPost('/api/player/ai', { q, ctx });
       if (j && j.off) { S.aiOff = Date.now(); $('#aiA').innerHTML = '<div class="mut">Assistente IA non disponibile su questo server.</div>'; return; }
-      $('#aiA').innerHTML = `<p class="aiq">${esc(q)}</p><div class="ait">${esc(j && j.answer || 'Nessuna risposta.').replace(/\n/g, '<br>')}</div>${j && j.left != null ? `<small class="aileft">${j.left === 0 ? 'Era l\'ultima domanda di oggi' : 'Domande rimaste oggi: ' + j.left}</small>` : ''}`;
+      $('#aiA').innerHTML = `<p class="aiq">${esc(q)}</p><div class="ait">${esc(j && j.answer || 'Nessuna risposta.').replace(/\n/g, '<br>')}</div>${j && (j.left != null || j.by) ? `<small class="aileft">${[j.by ? 'Risponde ' + esc(j.by) : '', j.left == null ? '' : j.left === 0 ? 'era l\'ultima domanda di oggi' : 'domande rimaste oggi: ' + j.left].filter(Boolean).join(' · ')}</small>` : ''}`;
     } catch (e) {
       const lim = /domande di oggi|risposte gratuite/i.test(e.message || '');
       $('#aiA').innerHTML = `<div class="mut">${esc(e.message || 'Non riesco a rispondere adesso')}</div>${lim ? '<button class="btn pri" data-f id="aiMore" style="margin-top:1vh">Chiedi altre domande al fornitore</button>' : ''}`;
