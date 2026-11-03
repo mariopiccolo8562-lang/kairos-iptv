@@ -1,3 +1,4 @@
+import { ADDON_ASSETS } from './addon-assets.js';
 /*  KAIROS — Cloudflare Worker
  *  - /panel/*            pannello (asset statici) — protetto da Cloudflare Access se configurato
  *  - /api/admin/*        API del pannello — sessione + 2FA + CSRF + Access JWT
@@ -441,7 +442,63 @@ function swapHost(p, host) {
 /* ====================================================================== */
 /* Account: connessioni (più dispositivi), profili personali, VPN           */
 /* ====================================================================== */
-const AVATAR_RE = /^a([1-9]|[1-3]\d|4[0-8])$/; // 48 avatar: classici, animali, sport, spazio
+const AV_MAX = 144; // 48 avatar (classici, animali, sport, spazio) + 4 per ognuno dei 24 temi speciali
+const AVATAR_RE = { test: (v) => /^a\d{1,3}$/.test(String(v)) && +String(v).slice(1) >= 1 && +String(v).slice(1) <= AV_MAX };
+
+/* ---------------- add-on: temi speciali, skin colorate, pacchetti avatar ----------------
+   Il disegno è nell'app; qui solo l'elenco. Per ognuno il fornitore sceglie nel pannello:
+   all = per tutti i clienti · some = solo a chi lo assegna · off = nascosto (e un prezzo da mostrare, facoltativo) */
+const ADDONS = [
+  ['tema-ghiaccio', 'Regno di Ghiaccio', 'tema'], ['tema-draghi', 'Terra dei Draghi', 'tema'], ['tema-magia', 'Accademia di Magia', 'tema'],
+  ['tema-eroi', 'Lega degli Eroi', 'tema'], ['tema-cyber', 'Città Cyber', 'tema'], ['tema-vichinghi', 'Saga Vichinga', 'tema'],
+  ['tema-dei', "Dei dell'Olimpo", 'tema'], ['tema-neon', 'Notti al Neon', 'tema'], ['tema-pirati', 'Mari dei Pirati', 'tema'], ['tema-western', 'Frontiera Western', 'tema'],
+  ['tema-halloween', 'Halloween', 'tema'], ['tema-muertos', 'Día de los Muertos', 'tema'], ['tema-natale', 'Natale', 'tema'],
+  ['tema-capodanno', 'Capodanno', 'tema'], ['tema-sanvalentino', 'San Valentino', 'tema'], ['tema-carnevale', 'Carnevale', 'tema'],
+  ['tema-fantasy', 'Regni Fantasy', 'tema'], ['tema-corse', 'Gran Premio', 'tema'], ['tema-arcade', 'Galassia Arcade', 'tema'], ['tema-pixel', 'Pixel Retrò', 'tema'], ['tema-isola', 'Isola della Sfida', 'tema'], ['tema-horror', 'Città Abbandonata', 'tema'], ['tema-torneo', 'Torneo dei Campioni', 'tema'], ['tema-giungla', 'Giungla Perduta', 'tema'],
+  ['skin-rubino', 'Rubino', 'skin'], ['skin-zaffiro', 'Zaffiro', 'skin'], ['skin-ambra', 'Ambra', 'skin'], ['skin-giada', 'Giada', 'skin'],
+  ['skin-lavanda', 'Lavanda', 'skin'], ['skin-corallo', 'Corallo', 'skin'], ['skin-grafite', 'Grafite', 'skin'], ['skin-menta', 'Menta', 'skin'],
+  ['av-animali', 'Avatar Animali', 'avatar', 'all'], ['av-sport', 'Avatar Sport', 'avatar', 'all'], ['av-spazio', 'Avatar Spazio', 'avatar', 'all'],
+];
+const ADDON_IDS = new Set(ADDONS.map((a) => a[0]));
+const ADDON_MODES = ['all', 'some', 'off'];
+const addonsList = (v) => [...new Set((Array.isArray(v) ? v : String(v || '').split(',')).map((x) => String(x).trim()).filter((x) => ADDON_IDS.has(x)))];
+/** catalogo con le scelte del fornitore (modo e prezzo) */
+function addonCfg(s) {
+  const c = s && s.addons && typeof s.addons === 'object' ? s.addons : {};
+  return ADDONS.map(([id, name, cat, def = 'some']) => { const x = c[id] || {}; return { id, name, cat, mode: ADDON_MODES.includes(x.m) ? x.m : def, price: str(x.p || '', 20) }; });
+}
+/* immagini dei temi caricate dal fornitore (sfondo + 4 avatar): sostituiscono i disegni.
+   Salvate in D1 come data URL JPEG/PNG/WebP (già ridimensionate dal pannello), al massimo 1,5 MB l'una. */
+const MEDIA_SLOTS = ['bg', 'a1', 'a2', 'a3', 'a4'];
+const MEDIA_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+const mediaVer = (s, id) => (s && s.addonMedia && +s.addonMedia[id]) || 0;
+async function mediaTouch(env, id) {
+  const s = await getSettings(env);
+  s.addonMedia = { ...(s.addonMedia || {}), [id]: now() };
+  await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('app', JSON.stringify(s)).run();
+}
+/** disegni di un tema speciale (scena + 4 avatar): solo al cliente che lo ha */
+async function playerAddon(req, env, ip) {
+  if (await limited(env.RL_DEVICE, 'ad:' + ip)) return json({ error: 'Troppe richieste' }, 429);
+  let b;
+  try { b = await readJSON(req, 2048); } catch (e) { return json({ error: e.message }, e.status || 400); }
+  const [d, bad] = await deviceAuth(env, b);
+  if (bad) return bad;
+  const id = str(b.id, 40), asset = ADDON_ASSETS[id];
+  if (!asset) return json({ error: 'Add-on non trovato' }, 404);
+  const [P] = await activeAccount(env, d);
+  if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
+  const it = addonsFor(await getSettings(env), P).find((a) => a.id === id);
+  if (!it || !it.own) return json({ error: 'Questo tema non è attivo per te: chiedilo al tuo fornitore' }, 403);
+  const img = { ...(asset.img || {}) };
+  try { for (const r of ((await env.DB.prepare('SELECT slot, data FROM addon_media WHERE addon = ?').bind(id).all()).results) || []) img[r.slot] = r.data; } catch {}
+  return json({ id, avs: asset.avs, scene: asset.scene, img, v: mediaVer(await getSettings(env), id) }, 200, { 'Cache-Control': 'private, no-store' });
+}
+/** per l'app: add-on visibili, con prezzo e se il cliente li ha */
+function addonsFor(s, P) {
+  const own = new Set(addonsList(P && P.addons));
+  return addonCfg(s).filter((a) => a.mode !== 'off').map((a) => { const own2 = a.mode === 'all' || own.has(a.id), v = mediaVer(s, a.id); return { id: a.id, p: a.price, own: own2, ...(own2 && v ? { m: v } : {}) }; });
+}
 const PROFILE_ID_RE = /^[a-z0-9]{4,12}$/;
 const MAX_CONN = 20, MAX_PROFILES = 12;
 const intIn = (v, lo, hi, label) => { const n = Number(v); if (!Number.isInteger(n) || n < lo || n > hi) throw new HttpErr(400, `${label}: scegli un numero da ${lo} a ${hi}`); return n; };
@@ -952,7 +1009,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
     if (b.kickAck && +b.kickAck === +d.kick_t) await env.DB.prepare('UPDATE devices SET kick_t = 0 WHERE id = ? AND kick_t = ?').bind(d.id, +d.kick_t).run();
     else if (t - +d.kick_t < 180e3) kick = +d.kick_t;
   }
-  return json({ ok: true, unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (P.pl_default || '') + '|' + JSON.stringify(playerParse(P.player)) : '', ...(kick ? { kick } : {}) });
+  return json({ ok: true, unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (P.pl_default || '') + '|' + JSON.stringify(playerParse(P.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
 }
 /** vista pannello: chi è collegato e cosa guarda */
 /* visioni contemporanee: prima di iniziare a guardare l'app chiede il permesso (solo se il pannello ha messo un limite) */
@@ -997,6 +1054,15 @@ async function cacheOk(env, url, tag, found) {
   if (found) return true;
   const code = await knownDevice(env, url);
   return !!code && !(await limited(env.RL_DEVICE, tag + code));
+}
+/** dispositivi per id, una query ogni 90 */
+async function devicesByIds(env, ids, cols) {
+  const out = [];
+  for (let i = 0; i < ids.length; i += 90) {
+    const part = ids.slice(i, i + 90);
+    out.push(...(((await env.DB.prepare(`SELECT ${cols} FROM devices WHERE id IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || []));
+  }
+  return out;
 }
 async function playerTrailer(req, env, ip, url, ctx) {
   if (await limited(env.RL_DEVICE, 'tr:' + ip)) return json({ error: 'Troppe richieste' }, 429);
@@ -1236,7 +1302,7 @@ const onlineCount = async (env) => { try { return (await env.DB.prepare('SELECT 
 /* ====================================================================== */
 /* Segnalazioni e richieste di contenuti                                   */
 /* ====================================================================== */
-const CTYPES = ['movie', 'series', 'live'];
+const CTYPES = ['movie', 'series', 'live', 'addon'];
 const REQ_STATUS = ['new', 'seen', 'done'];
 async function addRequest(env, d, kind, f, ip) {
   await env.DB.prepare('INSERT INTO requests (device_id, kind, ctype, title, body, info, status, created, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
@@ -1401,6 +1467,7 @@ async function route(req, env, ctx) {
     if (path === '/api/player/stream' && req.method === 'POST') return playerStream(req, env, ip, ctx);
     if (path === '/api/player/trailer' && req.method === 'GET') return playerTrailer(req, env, ip, url, ctx);
     if (path === '/api/player/meta' && req.method === 'GET') return playerMeta(req, env, ip, url, ctx);
+    if (path === '/api/player/addon' && req.method === 'POST') return playerAddon(req, env, ip);
     if (path === '/api/player/ai' && req.method === 'POST') return playerAi(req, env, ip, ctx);
     if (path === '/api/player/person' && req.method === 'GET') return playerPerson(req, env, ip, url, ctx);
     if (path === '/api/player/request' && req.method === 'POST') return playerRequest(req, env, ip, ctx);
@@ -1518,6 +1585,7 @@ async function playerRegister(req, env, ip, ctx) {
     out.account = await accountOf(env, P, d, pls);
     out.vpn = await vpnOf(env, P, d);
     out.perms = permsOf(P); // i collegati ereditano i permessi del principale
+    out.addons = addonsFor(s, P); out.adg = P.addons || ''; // add-on (i collegati usano quelli del principale)
   }
   return json(out);
 }
@@ -1622,7 +1690,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       settings, devices, activity, messages, user: who, apk: await latestApk(env, settings), apkFeed: await apkFeed(env),
       wgConf: !!(await env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first()),
       security: { totp: !!(ses && ses.totp_on), encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
-      counts: { ...(await newCounts(env)), online: await onlineCount(env) }, permKeys: PERM_KEYS,
+      counts: { ...(await newCounts(env)), online: await onlineCount(env) }, permKeys: PERM_KEYS, addonCat: addonCfg(settings),
     });
   }
 
@@ -1741,12 +1809,58 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (!Object.keys(set).length) throw new HttpErr(400, 'Scegli almeno un permesso da cambiare');
     const ids = [...new Set(b.ids.map((x) => str(x, 20)).filter((x) => /^[A-Za-z0-9_-]{6,20}$/.test(x)))];
     const stmts = [];
-    for (const id of ids) {
-      const d = await env.DB.prepare('SELECT id, perms FROM devices WHERE id = ?').bind(id).first();
-      if (d) stmts.push(env.DB.prepare('UPDATE devices SET perms = ? WHERE id = ?').bind(permsJson({ ...permsParse(d.perms), ...set }), d.id));
-    }
+    for (const d of await devicesByIds(env, ids, 'id, perms')) stmts.push(env.DB.prepare('UPDATE devices SET perms = ? WHERE id = ?').bind(permsJson({ ...permsParse(d.perms), ...set }), d.id));
     for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
     await log(env, 'edit', `${who}: permessi (${Object.entries(set).map(([k, v]) => k + (v ? ' on' : ' off')).join(', ')}) su ${stmts.length} dispositivi`, ip);
+    return json({ changed: stmts.length });
+  }
+
+  // add-on a più clienti insieme: { ids, add: [...], remove: [...] } (solo clienti principali: i collegati usano quelli del principale)
+  if (path === '/addon-media' && m === 'GET') {
+    const rows = ((await env.DB.prepare('SELECT addon, slot, updated, LENGTH(data) AS size FROM addon_media ORDER BY addon, slot').all()).results) || [];
+    return json({ items: rows, slots: MEDIA_SLOTS });
+  }
+  const amm = path.match(/^\/addon-media\/([a-z0-9-]{3,40})\/(bg|a[1-4])$/);
+  if (amm) {
+    const [, id, slot] = amm;
+    if (!ADDON_ASSETS[id]) throw new HttpErr(404, 'Tema non trovato');
+    if (m === 'GET') {
+      const r = await env.DB.prepare('SELECT data FROM addon_media WHERE addon = ? AND slot = ?').bind(id, slot).first();
+      if (!r) throw new HttpErr(404, 'Nessuna immagine');
+      return json({ data: r.data });
+    }
+    if (m === 'PUT') {
+      const b = await readJSON(req, 2200 * 1024);
+      const data = typeof b.data === 'string' ? b.data : '';
+      if (!MEDIA_RE.test(data)) throw new HttpErr(400, 'Immagine non valida: usa JPG, PNG o WebP');
+      if (data.length > 2000 * 1024) throw new HttpErr(413, 'Immagine troppo grande (massimo 1,5 MB)');
+      await env.DB.prepare('INSERT INTO addon_media (addon, slot, data, updated) VALUES (?, ?, ?, ?) ON CONFLICT(addon, slot) DO UPDATE SET data = excluded.data, updated = excluded.updated').bind(id, slot, data, now()).run();
+      await mediaTouch(env, id);
+      await log(env, 'edit', `${who}: immagine ${slot === 'bg' ? 'di sfondo' : 'avatar ' + slot.slice(1)} del tema ${(ADDONS.find((a) => a[0] === id) || [id, id])[1]}`, ip);
+      return json({ ok: true });
+    }
+    if (m === 'DELETE') {
+      await env.DB.prepare('DELETE FROM addon_media WHERE addon = ? AND slot = ?').bind(id, slot).run();
+      await mediaTouch(env, id);
+      return json({ ok: true });
+    }
+  }
+  if (path === '/devices/addons' && m === 'POST') {
+    const b = await readJSON(req, 16384);
+    if (!Array.isArray(b.ids) || !b.ids.length) throw new HttpErr(400, 'Scegli almeno un cliente');
+    if (b.ids.length > 500) throw new HttpErr(400, 'Puoi modificare al massimo 500 clienti alla volta');
+    const add = addonsList(b.add), del = new Set(addonsList(b.remove));
+    if (!add.length && !del.size) throw new HttpErr(400, 'Scegli almeno un add-on da dare o togliere');
+    const ids = [...new Set(b.ids.map((x) => str(x, 20)).filter((x) => /^[A-Za-z0-9_-]{6,20}$/.test(x)))];
+    const stmts = [];
+    for (const d of await devicesByIds(env, ids, 'id, parent, addons')) {
+      if (d.parent) continue;
+      const next = addonsList([...addonsList(d.addons).filter((x) => !del.has(x)), ...add]).join(',');
+      if (next !== (d.addons || '')) stmts.push(env.DB.prepare('UPDATE devices SET addons = ? WHERE id = ?').bind(next, d.id));
+    }
+    for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
+    const nm = (l) => l.map((id) => (ADDONS.find((a) => a[0] === id) || [id, id])[1]).join(', ');
+    await log(env, 'edit', `${who}: add-on${add.length ? ' dati: ' + nm(add) : ''}${del.size ? ' tolti: ' + nm([...del]) : ''} (${stmts.length} clienti)`, ip);
     return json({ changed: stmts.length });
   }
 
@@ -1794,6 +1908,14 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       else throw new HttpErr(400, 'Versione APK non valida: scrivila come 1.3.0');
     }
     if (typeof b.price === 'string') s.price = nameClean(b.price, 60);
+    if (b.addons && typeof b.addons === 'object' && !Array.isArray(b.addons)) {
+      const cur = s.addons && typeof s.addons === 'object' ? { ...s.addons } : {};
+      for (const [id, v] of Object.entries(b.addons)) {
+        if (!ADDON_IDS.has(id) || !v || typeof v !== 'object') continue;
+        cur[id] = { m: ADDON_MODES.includes(v.m) ? v.m : (cur[id] && cur[id].m) || (ADDONS.find((a) => a[0] === id)[3] || 'some'), p: nameClean(String(v.p ?? (cur[id] && cur[id].p) ?? '').replace(/[<>"'`]/g, ''), 20) };
+      }
+      s.addons = cur;
+    }
     if (b.permsDefault !== undefined) s.permsDefault = { ...permsParse(s.permsDefault), ...permsInput(b.permsDefault) }; // permessi dei nuovi dispositivi
     if (typeof b.privacy === 'string') {
       const p = b.privacy.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim();
@@ -1875,7 +1997,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const perms = b.perms !== undefined ? permsJson({ ...permsParse((await getSettings(env)).permsDefault), ...permsInput(b.perms) }) : defaultPermsJson(await getSettings(env));
     await env.DB.prepare('INSERT INTO devices (id, code, name, notes, active, expires, playlists, created_at, max_conn, max_profiles, profiles, lock_profiles, vpn, vpn_conf, perms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(id, code, str(b.name, 60), str(b.notes, 500), b.active ? 1 : 0, str(b.expires, 10), await seal(env, pls), now(), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, perms).run();
-    await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, id).run();
+    await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ?, addons = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, Array.isArray(b.addons) ? addonsList(b.addons).join(',') : '', id).run();
     await log(env, 'new', `${who}: creato dispositivo ${str(b.name, 60) || code}`, ip);
     return json({ ok: true, id, code });
   }
@@ -1950,7 +2072,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (m === 'PUT' && d.parent) {
       // connessione di un altro cliente: abbonamento, playlist, profili e limiti si cambiano dal principale
       const b = await readJSON(req);
-      if (['active', 'expires', 'playlists', 'profiles', 'maxConn', 'maxProfiles', 'lockProfiles', 'vpn', 'perms'].some((k) => b[k] !== undefined)) throw new HttpErr(400, 'Questo dispositivo è una connessione di un altro cliente: abbonamento, playlist, profili e permessi si modificano dal cliente principale');
+      if (['active', 'expires', 'playlists', 'profiles', 'maxConn', 'maxProfiles', 'lockProfiles', 'vpn', 'perms', 'addons'].some((k) => b[k] !== undefined)) throw new HttpErr(400, 'Questo dispositivo è una connessione di un altro cliente: abbonamento, playlist, profili e permessi si modificano dal cliente principale');
       const acc = await accountFields(env, { vpnConf: b.vpnConf, vpnConfClear: b.vpnConfClear }, d, []);
       await env.DB.prepare('UPDATE devices SET name = ?, notes = ?, vpn_conf = ? WHERE id = ?')
         .bind(typeof b.name === 'string' ? str(b.name, 60) : d.name, typeof b.notes === 'string' ? str(b.notes, 500) : d.notes, acc.vpn_conf, d.id).run();
@@ -1970,9 +2092,11 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       const used = await connCount(env, d);
       if (acc.max_conn < used) throw new HttpErr(400, `Su questo abbonamento ci sono già ${used} dispositivi: scollegane qualcuno prima di ridurre le connessioni`);
       const perms = b.perms !== undefined ? permsJson({ ...permsParse(d.perms), ...permsInput(b.perms) }) : d.perms || '';
+      if (b.addons !== undefined && !Array.isArray(b.addons)) throw new HttpErr(400, 'addons deve essere un elenco');
+      const addons = b.addons !== undefined ? addonsList(b.addons).join(',') : d.addons || '';
       await env.DB.prepare('UPDATE devices SET name = ?, notes = ?, expires = ?, active = ?, playlists = ?, max_conn = ?, max_profiles = ?, profiles = ?, lock_profiles = ?, vpn = ?, vpn_conf = ?, perms = ? WHERE id = ?')
         .bind(name, notes, expires, active, await seal(env, pls), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, perms, d.id).run();
-      await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, d.id).run();
+      await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ?, addons = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, addons, d.id).run();
       if (JSON.stringify(pls) !== JSON.stringify(await unseal(env, d.playlists).catch(() => []))) srcMem.map = null;
       const after = statusOf({ active, expires }, pls);
       if (before !== after && after === 'active') ctx.waitUntil(webhookSend(env, 'device.activated', { id: d.id, code: d.code, name, expires }));
@@ -2057,7 +2181,7 @@ async function apiV1(req, env, url, ip, ctx) {
         body.expires = base.toISOString().slice(0, 10);
       }
       body.active = true;
-      for (const f of ['playlists', 'name', 'notes', 'maxConn', 'maxStreams', 'maxProfiles', 'plMode', 'plDefault', 'perms', 'vpn', 'vpnLoc', 'player']) if (b[f] !== undefined) body[f] = b[f];
+      for (const f of ['playlists', 'name', 'notes', 'maxConn', 'maxStreams', 'maxProfiles', 'plMode', 'plDefault', 'perms', 'vpn', 'vpnLoc', 'player', 'addons']) if (b[f] !== undefined) body[f] = b[f];
     }
     const sub = new Request(new URL('/api/v1/devices/' + d.id, url).href, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     await adminRoutes(sub, env, url, '/devices/' + d.id, who, ip, ctx, null);
@@ -2187,7 +2311,7 @@ async function apiAdmin(req, env, path, who, ip, ctx) {
 async function deviceOut(env, d) {
   const pls = await unseal(env, d.playlists).catch(() => []);
   return { id: d.id, code: d.code, name: d.name, model: d.model, notes: d.notes, active: !!d.active, expires: d.expires, playlists: pls, hosts: [...new Set(pls.map(hostOf).filter(Boolean))], createdAt: d.created_at, lastSeen: d.last_seen, lastIp: d.last_ip, bound: !!d.secret_hash, status: statusOf(d, pls),
-    parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '', player: playerParse(d.player) };
+    addons: addonsList(d.addons), parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '', player: playerParse(d.player) };
 }
 /** campi "account" inviati dal pannello: connessioni, profili, VPN (cur = valori attuali del dispositivo) */
 async function accountFields(env, b, cur, pls) {

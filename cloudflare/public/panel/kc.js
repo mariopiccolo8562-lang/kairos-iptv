@@ -271,6 +271,14 @@
 .dvt-ib.r{color:#ff5470;border-color:rgba(255,84,112,.3);background:rgba(255,84,112,.06)}
 .dvt-bulk{display:none;position:sticky;top:8px;z-index:5;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;padding:10px 14px;border-radius:14px;background:linear-gradient(90deg,rgba(124,92,255,.25),rgba(255,59,90,.18));border:1px solid rgba(124,92,255,.45);box-shadow:0 10px 30px rgba(0,0,0,.35)}
 .dvt-bulk.on{display:flex}
+.adbulk{display:grid;gap:6px;max-height:50vh;overflow:auto;text-align:left}.adbulk label{display:flex;align-items:center;justify-content:space-between;gap:10px}.adbulk small{display:block;opacity:.6;font-size:11px}.adbulk select{width:110px;padding:6px 8px}
+.adcfg{display:grid;gap:4px}.adcfg h4{margin:14px 0 6px;font-size:13px;opacity:.7;letter-spacing:.04em;text-transform:uppercase}
+.adrow{display:grid;grid-template-columns:1fr 210px 130px 70px;gap:10px;align-items:center;padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.03)}
+.adrow b{font-size:14px}.adrow small{display:block;opacity:.6;font-size:12px}.adrow .cnt{text-align:right;opacity:.75;font-size:12px}
+.adrow select,.adrow input{padding:7px 9px}
+@media (max-width:760px){.adrow{grid-template-columns:1fr 1fr}.adrow .cnt{text-align:left}}
+.adsw{display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:6px;vertical-align:-2px}
+.tog.fixed{opacity:.6;cursor:default}
 @media (max-width:900px){.dvt th:nth-child(6),.dvt td:nth-child(6),.dvt th:nth-child(7),.dvt td:nth-child(7),.dvt th:nth-child(8),.dvt td:nth-child(8){display:none}}
 .kc-dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
 .kc-dns{display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.02)}
@@ -439,7 +447,7 @@
 
   /* ---------- Segnalazioni e Richieste contenuti ---------- */
   const RS = { new: ['Nuova', 'pending'], seen: ['Vista', 'active'], done: ['Fatta', 'active'] };
-  const CT = { movie: '🎬 Film', series: '🎞 Serie TV', live: '📺 Canale', '': '' };
+  const CT = { movie: '🎬 Film', series: '🎞 Serie TV', live: '📺 Canale', addon: '🧩 Add-on', '': '' };
   async function reqLoad(kind, quiet) {
     const V = $(kind === 'report' ? '#v-reports' : '#v-creq');
     if (!quiet && !KC.req[kind]) V.innerHTML = '<div class="card glass"><p class="mut">Caricamento…</p></div>';
@@ -668,7 +676,7 @@
     window.stShow = (k) => {
       $$('.st-tab', V).forEach((t) => t.classList.toggle('on', t.dataset.st === k));
       $$('.st-pane', V).forEach((p) => p.classList.toggle('on', p.dataset.pane === k));
-      $('#stSave').classList.toggle('hide', k === 'sec');
+      $('#stSave').classList.toggle('hide', k === 'sec' || k === 'addon'); // gli add-on hanno il loro pulsante
       try { sessionStorage.setItem('kc_st', k); } catch {}
     };
     window.stDirtyUpd = () => {
@@ -770,13 +778,24 @@
     function bulkBar() {
       for (const i of [...st.sel]) if (!D.devices.some((d) => d.id === i)) st.sel.delete(i);
       const n = st.sel.size;
-      $('#dvBulk').innerHTML = n && st.view === 'table' ? `<b>${n} selezionat${n === 1 ? 'o' : 'i'}</b><button class="btn sm" data-bulk="ext1">+1 mese</button><button class="btn sm" data-bulk="ext12">+12 mesi</button><button class="btn sm danger" data-bulk="kick">⛔ Disconnetti</button><button class="btn sm" data-bulk="off">Disattiva</button><button class="btn sm" data-bulk="on">Riattiva</button><span style="flex:1"></span><button class="btn sm" data-bulk="clear">Deseleziona</button>` : '';
+      $('#dvBulk').innerHTML = n && st.view === 'table' ? `<b>${n} selezionat${n === 1 ? 'o' : 'i'}</b><button class="btn sm" data-bulk="ext1">+1 mese</button><button class="btn sm" data-bulk="addon">🧩 Add-on</button><button class="btn sm" data-bulk="ext12">+12 mesi</button><button class="btn sm danger" data-bulk="kick">⛔ Disconnetti</button><button class="btn sm" data-bulk="off">Disattiva</button><button class="btn sm" data-bulk="on">Riattiva</button><span style="flex:1"></span><button class="btn sm" data-bulk="clear">Deseleziona</button>` : '';
       $('#dvBulk').classList.toggle('on', !!n && st.view === 'table');
     }
     async function bulk(act) {
       if (act === 'clear') { st.sel.clear(); return render(); }
       const ds = [...st.sel].map((i) => D.devices.find((d) => d.id === i)).filter((d) => d && !d.parent && d.status !== 'pending');
       if (!ds.length) return toast('Nessun cliente attivabile tra quelli selezionati', 1);
+      if (act === 'addon') {
+        const cat = addonCatNow().filter((a) => a.mode === 'some');
+        if (!cat.length) return toast('Nessun add-on «solo a chi assegno»: sceglilo in Impostazioni → Store add-on', 1);
+        const names2 = ds.slice(0, 6).map((d) => esc(d.name || d.code)).join(', ') + (ds.length > 6 ? ` e altri ${ds.length - 6}` : '');
+        const okA = await ask('Add-on per ' + ds.length + ' client' + (ds.length === 1 ? 'e' : 'i'), `<p class="mut" style="margin:0 0 10px">${names2}</p><div class="adbulk">${cat.map((a) => `<label><span>${esc(a.name)}<small>${ADDON_GRP[a.cat]}</small></span><select class="inp" data-adb="${a.id}"><option value="">—</option><option value="add">Dai</option><option value="del">Togli</option></select></label>`).join('')}</div>`, 'Applica');
+        if (!okA) return;
+        const add = $$('#mB [data-adb]').filter((x) => x.value === 'add').map((x) => x.dataset.adb), remove = $$('#mB [data-adb]').filter((x) => x.value === 'del').map((x) => x.dataset.adb);
+        if (!add.length && !remove.length) return toast('Non hai scelto nessun add-on', 1);
+        try { const r = await api('POST', '/admin/devices/addons', { ids: ds.map((d) => d.id), add, remove }); st.sel.clear(); await load(); toast(`Add-on aggiornati su ${r.changed} client${r.changed === 1 ? 'e' : 'i'}`); } catch (e) { toast(e.message, 1); }
+        return;
+      }
       const L = { ext1: ['Aggiungere 1 mese?', 'Aggiungi'], ext12: ['Aggiungere 12 mesi?', 'Aggiungi'], kick: ['Disconnettere?', 'Disconnetti'], off: ['Disattivare?', 'Disattiva'], on: ['Riattivare?', 'Riattiva'] }[act];
       const names = ds.slice(0, 8).map((d) => esc(d.name || d.code)).join(', ') + (ds.length > 8 ? ` e altri ${ds.length - 8}` : '');
       if (!(await ask(L[0], `<b>${ds.length}</b> client${ds.length === 1 ? 'e' : 'i'}: ${names}${act === 'kick' ? '<br><span class="mut">La visione in corso si interrompe entro una ventina di secondi; gli abbonamenti restano attivi.</span>' : ''}`, L[1]))) return;

@@ -329,6 +329,7 @@ canvas{display:block;width:100%}
         <button class="st-tab" data-st="app"><i>📺</i><span><b>Funzioni dell'app</b><small>Cosa vedono i clienti</small></span></button>
         <button class="st-tab" data-st="upd"><i>⬆️</i><span><b>App e aggiornamenti</b><small>APK, Downloader, dominio</small></span></button>
         <button class="st-tab" data-st="price"><i>💶</i><span><b>Prezzo e privacy</b><small>Prima dell'attivazione</small></span></button>
+        <button class="st-tab" data-st="addon"><i>🧩</i><span><b>Store add-on</b><small>Temi, skin e avatar</small></span></button>
         <button class="st-tab" data-st="vpn"><i>🛡️</i><span><b>VPN generale</b><small>WireGuard per tutti</small></span></button>
         <button class="st-tab" data-st="sec"><i>🔐</i><span><b>Account e sicurezza</b><small>Password, 2FA, sessioni</small></span></button>
       </div>
@@ -372,6 +373,13 @@ canvas{display:block;width:100%}
           <div class="st-row"><div class="st-l"><b>Prezzo</b><small>Es. «22 € / anno»</small></div><div class="st-c"><input class="inp" id="sPrice" maxlength="60" placeholder="es. 22 € / anno"></div></div>
           <div class="st-row col"><div class="st-l"><b>Privacy e condizioni del servizio</b><small>Vuoto = modello predefinito. Righe con # = titoli, con - = elenchi; {prezzo} {contatti} {nome} si sostituiscono da soli. · <a href="/privacy" target="_blank" rel="noopener" style="color:var(--a1)">Apri la pagina</a> · <a href="#" id="sPrivTpl" style="color:var(--a1)">Usa il modello</a></small></div><textarea class="inp" id="sPriv" rows="10" maxlength="10000"></textarea></div>
           <div class="st-note warn">Il modello predefinito è <b>generico</b>: fallo verificare da un professionista (avvocato o consulente privacy) e completalo con i tuoi dati prima di usarlo.</div>
+        </div>
+      </div>
+
+      <div class="st-pane" data-pane="addon">
+        <div class="card glass"><div class="hd"><h3>Store add-on<small>Temi speciali (colori, scena di sfondo e 4 avatar), skin colorate e pacchetti di avatar che i clienti vedono in «Impostazioni → Store add-on». Per ognuno scegli chi lo ha: <b>tutti i clienti</b>, <b>solo quelli a cui lo assegni</b> (dalla scheda del cliente, sezione Add-on, o a gruppi dalla vista Tabella) oppure <b>nascosto</b>. Il prezzo è facoltativo: l'app lo mostra accanto a quelli non ancora attivi, con il pulsante «Richiedi al fornitore» (le richieste arrivano in Richieste).</small></h3></div>
+          <div id="adCfg"></div>
+          <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn" id="adAllSome">Tutti «solo a chi assegno»</button><button class="btn pri" id="adSave">Salva add-on</button></div>
         </div>
       </div>
 

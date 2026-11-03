@@ -24,6 +24,9 @@ img{display:block}
 
 /* ===== sfondo vivo ===== */
 #bg{position:fixed;top:0;right:0;bottom:0;left:0;z-index:0;pointer-events:none}
+.skinbg{position:fixed;top:0;right:0;bottom:0;left:0;z-index:0;pointer-events:none;background:center bottom/cover no-repeat;opacity:0;transition:opacity .4s}
+.skinbg.on{opacity:.55}
+.skinned .aurora{display:none}
 .aurora{position:fixed;top:-20%;right:-20%;bottom:-20%;left:-20%;z-index:0;pointer-events:none;filter:blur(90px) saturate(140%);opacity:.55}
 .aurora i{position:absolute;width:45vw;height:45vw;border-radius:50%;mix-blend-mode:screen;animation:float 22s ease-in-out infinite alternate}
 .aurora i:nth-child(1){background:var(--a1);left:5%;top:10%;opacity:.35}
@@ -898,6 +901,18 @@ img{display:block}
 .pav.big svg{width:100%;height:100%}
 .pedit .inp{margin:0;flex:1}
 .avgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:6px 0 14px}
+.shopf{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px}.shopf .chip{cursor:pointer;color:#fff;padding:8px 16px;font-size:13px}.shopf .chip.sel{background:#fff;color:#000}.shopf .chip.focused{outline:0;box-shadow:0 0 0 3px #fff}
+.shopg{font-weight:700;font-size:14px;opacity:.65;margin:16px 4px 8px}
+.shopl{border-radius:18px;overflow:hidden;display:flex;flex-direction:column;gap:2px}
+.adr{display:flex;align-items:center;gap:16px;width:100%;padding:12px 18px;border:0;color:#fff;text-align:left;cursor:pointer;min-height:86px;background:linear-gradient(90deg,rgba(10,10,14,.92) 35%,rgba(10,10,14,.55)),var(--sc,linear-gradient(110deg,var(--pc2,#222),var(--pc,#444)));background-size:cover;background-position:center 70%}
+.adr.focused{outline:0;box-shadow:inset 0 0 0 3px #fff}
+.ade{flex:none;width:58px;height:58px;border-radius:50%;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.5)}.ade svg{width:100%;height:100%;display:block}
+.adt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}.adt b{font-size:16px}.adt small{opacity:.7;font-size:12.5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ads{flex:none;font-size:15px;white-space:nowrap}.ads.own{color:var(--ok,#3ddc84)}.ads.on{color:var(--a1)}.ads.pr{font-size:17px}
+.adr.lock .ade{filter:saturate(.75)}
+.adprev{height:150px;border-radius:14px;margin:-4px 0 14px;background-size:cover;background-position:center 70%;position:relative;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.adpal{position:absolute;right:12px;bottom:12px;display:flex;gap:6px}.adpal i{width:18px;height:18px;border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.4)}
+.adavs{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 12px}.adavs .pav{width:48px;height:48px}.adavs .pav svg{width:100%;height:100%;display:block}
 .avtabs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:10px 0 4px}.avtabs .chip{padding:7px 14px;font-size:13px;cursor:pointer;color:#fff;background:rgba(255,255,255,.06)}.avtabs .chip.sel{background:#fff;color:#000}
 .avtabs .chip.focused{outline:0;box-shadow:0 0 0 3px #fff}
 .avb{border:0;padding:0;background:none;border-radius:50%;width:100%;aspect-ratio:1;overflow:hidden;opacity:.72;transition:transform .15s,opacity .15s;cursor:pointer}
@@ -1125,7 +1140,7 @@ h5.fh{margin-top:16px}
 </head>
 <body>
 <canvas id="bg"></canvas>
-<div class="aurora"><i></i><i></i><i></i></div>
+<div class="skinbg" id="skinBg"></div><div class="aurora"><i></i><i></i><i></i></div>
 <div class="floor"></div>
 <div class="noise"></div><div class="scan"></div>
 <div class="focus-ring" id="ring"></div>
@@ -1350,8 +1365,125 @@ const THEMES = {
   viola:    ['#9b5cff', '#d86bff', '#5b2bd1'],
   rosa:     ['#ff5fa2', '#ff9ec7', '#c2185b'],
 };
+/* =====================================================================
+   ADD-ON (2.2): temi speciali (colori + scena di sfondo + 4 avatar), skin colorate, pacchetti avatar.
+   Il fornitore decide dal pannello a chi darli; tutto è disegnato qui (niente immagini da scaricare).
+   ===================================================================== */
+const ADDON_UI = {
+  'tema-ghiaccio': { cat: 'tema', grp: 'Film e serie TV', name: 'Regno di Ghiaccio', desc: 'Montagne innevate sotto l\'aurora boreale, colori del ghiaccio e 4 avatar esclusivi.', pal: ['#6fd3ff', '#c9f1ff', '#2a6fb0'], sc: 'ice', av: 49 },
+  'tema-draghi': { cat: 'tema', grp: 'Film e serie TV', name: 'Terra dei Draghi', desc: 'Castelli, braci e una luna di fuoco: un tema epico con 4 avatar esclusivi.', pal: ['#ff7a2f', '#ffb347', '#8a1010'], sc: 'dragon', av: 53 },
+  'tema-magia': { cat: 'tema', grp: 'Film e serie TV', name: 'Accademia di Magia', desc: 'Torri, stelle e incantesimi: viola profondo e oro con 4 avatar esclusivi.', pal: ['#b58cff', '#ffd36b', '#4b1f9e'], sc: 'magic', av: 57 },
+  'tema-eroi': { cat: 'tema', grp: 'Film e serie TV', name: 'Lega degli Eroi', desc: 'Grattacieli e fari nella notte: rosso e oro da supereroi, con 4 avatar esclusivi.', pal: ['#ff3b3b', '#ffd166', '#1d3fbf'], sc: 'hero', av: 61 },
+  'tema-cyber': { cat: 'tema', grp: 'Film e serie TV', name: 'Città Cyber', desc: 'Neon, griglie e grattacieli del futuro: ciano e viola con 4 avatar esclusivi.', pal: ['#00f0ff', '#ff2bd6', '#5b00a8'], sc: 'cyber', av: 65 },
+  'tema-vichinghi': { cat: 'tema', grp: 'Film e serie TV', name: 'Saga Vichinga', desc: 'Fiordi, onde e navi lunghe: toni del legno e del mare del Nord, con 4 avatar esclusivi.', pal: ['#e3b778', '#7fb3c9', '#5a3b1c'], sc: 'viking', av: 69 },
+  'tema-dei': { cat: 'tema', grp: 'Film e serie TV', name: 'Dei dell\'Olimpo', desc: 'Templi tra le nuvole e raggi dorati: un tema mitologico con 4 avatar esclusivi.', pal: ['#f5c542', '#fff1b8', '#a0761a'], sc: 'olympus', av: 73 },
+  'tema-neon': { cat: 'tema', grp: 'Film e serie TV', name: 'Notti al Neon', desc: 'Tramonto anni \'80, palme e griglie luminose: rosa e viola con 4 avatar esclusivi.', pal: ['#ff4fd8', '#ffb86b', '#3a0ca3'], sc: 'neon', av: 77 },
+  'tema-pirati': { cat: 'tema', grp: 'Film e serie TV', name: 'Mari dei Pirati', desc: 'Velieri al chiaro di luna e mare in tempesta, con 4 avatar esclusivi.', pal: ['#4fb3ff', '#ffd27a', '#0b2545'], sc: 'pirate', av: 81 },
+  'tema-western': { cat: 'tema', grp: 'Film e serie TV', name: 'Frontiera Western', desc: 'Canyon, cactus e sole del deserto: toni caldi della frontiera, con 4 avatar esclusivi.', pal: ['#ff9f43', '#ffd9ad', '#8a3b0c'], sc: 'western', av: 85 },
+  'tema-halloween': { cat: 'tema', grp: 'Festività ed eventi', name: 'Halloween', desc: 'Luna piena, pipistrelli e zucche: arancio e viola da brivido, con 4 avatar esclusivi.', pal: ['#ff8c1a', '#b15cff', '#3b0a45'], sc: 'halloween', av: 89 },
+  'tema-muertos': { cat: 'tema', grp: 'Festività ed eventi', name: 'Día de los Muertos', desc: 'Festoni di carta, fiori e candele in colori vivaci, con 4 avatar esclusivi.', pal: ['#ff9f1c', '#e83f6f', '#7b2cbf'], sc: 'muertos', av: 93 },
+  'tema-natale': { cat: 'tema', grp: 'Festività ed eventi', name: 'Natale', desc: 'Neve, abeti e la stella più luminosa: rosso e verde delle feste, con 4 avatar esclusivi.', pal: ['#e63946', '#2ecc71', '#0b5d1e'], sc: 'xmas', av: 97 },
+  'tema-capodanno': { cat: 'tema', grp: 'Festività ed eventi', name: 'Capodanno', desc: 'Fuochi d\'artificio sulla città a mezzanotte: oro e blu notte, con 4 avatar esclusivi.', pal: ['#ffd166', '#7aa2ff', '#1d1d4f'], sc: 'newyear', av: 101 },
+  'tema-sanvalentino': { cat: 'tema', grp: 'Festività ed eventi', name: 'San Valentino', desc: 'Cuori che fluttuano in rosa e cremisi, con 4 avatar esclusivi.', pal: ['#ff4d6d', '#ffb3c6', '#a4133c'], sc: 'valentine', av: 105 },
+  'tema-carnevale': { cat: 'tema', grp: 'Festività ed eventi', name: 'Carnevale', desc: 'Coriandoli, stelle filanti e rombi d\'Arlecchino, con 4 avatar esclusivi.', pal: ['#7ae582', '#ff5ccd', '#6a00f4'], sc: 'carnival', av: 109 },
+  'tema-fantasy': { cat: 'tema', grp: 'Videogiochi', name: 'Regni Fantasy', desc: "Castelli lontani, foreste e rune luminose: un'avventura da gioco di ruolo, con 4 avatar esclusivi.", pal: ['#52d68a', '#ffd166', '#1b5e3a'], sc: 'fantasy', av: 113 },
+  'tema-corse': { cat: 'tema', grp: 'Videogiochi', name: 'Gran Premio', desc: 'Pista, bandiera a scacchi e luci della tribuna: velocità pura, con 4 avatar esclusivi.', pal: ['#ff3b30', '#ffd60a', '#7a0b0b'], sc: 'racing', av: 117 },
+  'tema-arcade': { cat: 'tema', grp: 'Videogiochi', name: 'Galassia Arcade', desc: "Astronavi, laser e pianeti: uno sparatutto spaziale anni '90, con 4 avatar esclusivi.", pal: ['#4cc9f0', '#f72585', '#3c096c'], sc: 'arcade', av: 121 },
+  'tema-pixel': { cat: 'tema', grp: 'Videogiochi', name: 'Pixel Retrò', desc: 'Sole, montagne e nuvole a pixel come nelle console a 8 bit, con 4 avatar esclusivi.', pal: ['#ff6ad5', '#8be9fd', '#2d1b69'], sc: 'pixel', av: 125 },
+  'tema-isola': { cat: 'tema', grp: 'Videogiochi', name: 'Isola della Sfida', desc: "Un'isola, la zona che si stringe e i paracadute in cielo: stile battle royale, con 4 avatar esclusivi.", pal: ['#74c69d', '#ffd166', '#1b4332'], sc: 'island', av: 129 },
+  'tema-horror': { cat: 'tema', grp: 'Videogiochi', name: 'Città Abbandonata', desc: 'Nebbia, palazzi vuoti e una luna rossa: horror di sopravvivenza, con 4 avatar esclusivi.', pal: ['#e5383b', '#ced4da', '#370617'], sc: 'horror', av: 133 },
+  'tema-torneo': { cat: 'tema', grp: 'Videogiochi', name: 'Torneo dei Campioni', desc: 'Ring, riflettori e pubblico in piedi: da picchiaduro, con 4 avatar esclusivi.', pal: ['#ffba08', '#e85d04', '#6a040f'], sc: 'fight', av: 137 },
+  'tema-giungla': { cat: 'tema', grp: 'Videogiochi', name: 'Giungla Perduta', desc: 'Templi tra le liane e tesori nascosti: avventura nella giungla, con 4 avatar esclusivi.', pal: ['#80b918', '#ffd166', '#2b4a0e'], sc: 'jungle', av: 141 },
+  'skin-rubino': { cat: 'skin', name: 'Rubino', desc: 'Rosso rubino intenso con riflessi cremisi.', pal: ['#e0115f', '#ff6b8b', '#7a0a2e'] },
+  'skin-zaffiro': { cat: 'skin', name: 'Zaffiro', desc: 'Blu zaffiro profondo e luminoso.', pal: ['#2f5bff', '#6ea8ff', '#122a8a'] },
+  'skin-ambra': { cat: 'skin', name: 'Ambra', desc: 'Ambra calda e dorata.', pal: ['#ffb000', '#ffd36b', '#a35c00'] },
+  'skin-giada': { cat: 'skin', name: 'Giada', desc: 'Verde giada elegante.', pal: ['#00a86b', '#5be3b0', '#00553a'] },
+  'skin-lavanda': { cat: 'skin', name: 'Lavanda', desc: 'Lavanda morbida e rilassante.', pal: ['#a78bfa', '#d8c8ff', '#5b3fbf'] },
+  'skin-corallo': { cat: 'skin', name: 'Corallo', desc: 'Corallo vivace e solare.', pal: ['#ff6f61', '#ffb199', '#b3342a'] },
+  'skin-grafite': { cat: 'skin', name: 'Grafite', desc: 'Grigio grafite sobrio con accenti argento.', pal: ['#b8c0cc', '#e6eaf0', '#4a5260'] },
+  'skin-menta': { cat: 'skin', name: 'Menta', desc: 'Menta fresca e brillante.', pal: ['#3ee6b4', '#a6ffe4', '#0f8a6a'] },
+  'av-animali': { cat: 'avatar', name: 'Avatar Animali', short: 'Animali', desc: '12 avatar: gatto, cane, volpe, gufo, pesce, farfalla, coniglio, tartaruga, pinguino, leone, balena, ape.', av: 13, n: 12 },
+  'av-sport': { cat: 'avatar', name: 'Avatar Sport', short: 'Sport', desc: '12 avatar: calcio, basket, tennis, coppa, bici, auto da corsa, medaglia, bersaglio, golf, pesi, scarpa, ping pong.', av: 25, n: 12 },
+  'av-spazio': { cat: 'avatar', name: 'Avatar Spazio', short: 'Spazio', desc: '12 avatar: razzo, pianeta, luna, astronauta, disco volante, stella cadente, satellite, sole, costellazione, telescopio, alieno, scintille.', av: 37, n: 12 },
+};
+/* add-on del cliente, come li manda il server ({ id, p: prezzo, own }); senza server (demo o prima del collegamento):
+   demo = tutti, altrimenti solo i pacchetti avatar (come nella 2.1.1) */
+const addonList = () => S.addons || store.get('addons', null);
+function addonOwn(id) {
+  if (S.demo) return true;
+  const l = addonList();
+  if (!Array.isArray(l)) return !!(ADDON_UI[id] && ADDON_UI[id].cat === 'avatar');
+  const x = l.find((a) => a.id === id);
+  return !!(x && x.own);
+}
+const addonShown = (id) => { if (S.demo) return true; const l = addonList(); return Array.isArray(l) ? l.some((a) => a.id === id) : !!(ADDON_UI[id] && ADDON_UI[id].cat === 'avatar'); };
+const addonPrice = (id) => { const l = addonList(); const x = Array.isArray(l) && l.find((a) => a.id === id); return (x && x.p) || ''; };
+/* colori di un tema: base (cinema, aurora…) o add-on «x:id» se il cliente ce l'ha */
+function themePal(name) {
+  name = String(name || '');
+  if (name.startsWith('x:')) { const a = ADDON_UI[name.slice(2)]; return a && a.pal && addonOwn(name.slice(2)) ? a.pal : null; }
+  return THEMES[name] || null;
+}
+const themeLabel = (name) => (String(name || '').startsWith('x:') ? (ADDON_UI[name.slice(2)] || {}).name || 'cinema' : name || 'cinema');
+const themeList = () => [...Object.keys(THEMES), ...Object.entries(ADDON_UI).filter(([id, a]) => a.pal && addonOwn(id)).map(([id]) => 'x:' + id)];
+
+/* temi speciali: disegni (scena + 4 avatar) e immagini realistiche li manda il server SOLO se il tema è del cliente;
+   restano nella memoria interna dell'app (IndexedDB, non nelle impostazioni). Un tema tolto dal fornitore viene cancellato. */
+const AVX = {}; // avatar dei temi scaricati: indice → disegno oppure { img }
+const AD = {}; // temi scaricati in memoria: id → { avs, scene, img, v }
+const AdDB = {
+  db: null,
+  open() { if (this.db) return this.db; this.db = new Promise((res) => { try { const r = indexedDB.open('kx_addons', 1); r.onupgradeneeded = () => r.result.createObjectStore('a'); r.onsuccess = () => res(r.result); r.onerror = () => res(null); } catch { res(null); } }); return this.db; },
+  async tx(mode, f) { const db = await this.open(); if (!db) return null; return new Promise((res) => { try { const t = db.transaction('a', mode), st = t.objectStore('a'), q = f(st); t.oncomplete = () => res(q && q.result); t.onerror = () => res(null); } catch { res(null); } }); },
+  all() { return this.tx('readonly', (st) => st.getAll()); },
+  put(v) { return this.tx('readwrite', (st) => st.put(v, v.id)); },
+  del(id) { return this.tx('readwrite', (st) => st.delete(id)); },
+};
+const adAsset = (id) => { const v = AD[id]; return v && Array.isArray(v.avs) && typeof v.scene === 'string' ? v : null; };
+function adAssetsApply() {
+  for (const k of Object.keys(AVX)) delete AVX[k];
+  for (const [id, a] of Object.entries(ADDON_UI)) {
+    if (a.cat !== 'tema') continue; const x = adAsset(id); if (!x || !addonOwn(id)) continue;
+    x.avs.forEach((v, i) => { const im = x.img && x.img['a' + (i + 1)]; AVX[a.av - 1 + i] = im ? { img: im } : v; });
+  }
+}
+let adLoaded = null;
+const adLoad = () => adLoaded || (adLoaded = AdDB.all().then((l) => { for (const v of l || []) if (v && v.id) AD[v.id] = v; adAssetsApply(); const t = store.get('theme') || ''; if (t.startsWith('x:')) applyTheme(t); }));
+let adSyncP = null;
+/** scarica i temi del cliente che mancano (o le immagini aggiornate) e cancella quelli che non ha più */
+function adAssetsSync() {
+  if (adSyncP) return adSyncP;
+  adSyncP = (async () => {
+    await adLoad();
+    let changed = false;
+    const list = addonList();
+    for (const [id, a] of Object.entries(ADDON_UI)) {
+      if (a.cat !== 'tema') continue;
+      const own = addonOwn(id) && !S.demo, has = adAsset(id), it = Array.isArray(list) && list.find((x) => x.id === id);
+      if (!own && has && Array.isArray(list)) { delete AD[id]; sceneMem.delete(id); AdDB.del(id); changed = true; }
+      if (own && baseServer() && (!has || (it && (+it.m || 0) !== (+has.v || 0)))) {
+        try { const j = await apiPost('/api/player/addon', { id }); if (j && Array.isArray(j.avs) && typeof j.scene === 'string') { const v = { id, avs: j.avs, scene: j.scene, img: j.img || {}, v: +j.v || 0 }; AD[id] = v; sceneMem.delete(id); AdDB.put(v); changed = true; } } catch {}
+      }
+    }
+    adAssetsApply();
+    if (changed) { const t = store.get('theme') || ''; if (t.startsWith('x:')) applyTheme(t); const c = $('#shopCard'); if (c) { c.dataset.ok = ''; if (S.setSec === 'shop' && $('#settings').classList.contains('on')) shopFill(); } }
+  })().finally(() => { adSyncP = null; });
+  return adSyncP;
+}
+const sceneMem = new Map();
+function sceneURI(id) {
+  const x = adAsset(id); if (!x || !addonOwn(id)) return '';
+  if (!sceneMem.has(id)) sceneMem.set(id, x.img && /^data:image\/(jpeg|png|webp);base64,/.test(x.img.bg || '') ? `url("${x.img.bg}")` : `url("data:image/svg+xml,${encodeURIComponent(x.scene)}")`);
+  return sceneMem.get(id);
+}
+adLoad();
+
 function applyTheme(name) {
-  const t = THEMES[name] || THEMES.cinema;
+  const t = themePal(name) || THEMES.cinema;
+  // scena del tema speciale dietro all'interfaccia (immagine fissa: nessuna animazione, nessun lavoro durante lo scorrimento)
+  const sid = String(name || '').startsWith('x:') && t !== THEMES.cinema ? name.slice(2) : '';
+  const bg = document.getElementById('skinBg');
+  if (bg) { const u = sid ? sceneURI(sid) : ''; bg.style.backgroundImage = u || 'none'; bg.classList.toggle('on', !!u); document.documentElement.classList.toggle('skinned', !!u); }
   const st = document.documentElement.style;
   ['--a1', '--a2', '--a3'].forEach((v, i) => st.setProperty(v, t[i]));
   // tinte trasparenti calcolate qui (color-mix non esiste nelle WebView delle TV meno recenti)
@@ -2035,6 +2167,11 @@ async function register() {
   S.status = j.status; S.expires = j.expires; S.playlists = j.playlists || [];
   S.messages = Array.isArray(j.messages) ? j.messages : [];
   S.perms = j.perms && typeof j.perms === 'object' ? j.perms : null;
+  if (Array.isArray(j.addons)) { S.addons = j.addons; store.set('addons', j.addons); } else if (j.status === 'active') { S.addons = null; }
+  S.adg = typeof j.adg === 'string' ? j.adg : '';
+  { const th = store.get('theme') || ''; if (th.startsWith('x:') && !themePal(th)) { store.set('theme', 'cinema'); applyTheme('cinema'); } } // add-on tolto dal fornitore
+  { const c = $('#shopCard'); if (c) c.dataset.ok = ''; }
+  adAssetsApply(); setTimeout(() => adAssetsSync(), 1500); // con calma, dopo l'avvio
   if (j.status === 'active') {
     if (j.account) { S.account = j.account; store.set('acctCache', j.account); }
     S.vpn = j.vpn || { mode: 'off' }; store.set('vpnCache', S.vpn.mode === 'off' ? null : S.vpn);
@@ -3283,6 +3420,55 @@ function aiDialog(x, prog) {
   $('#aiNo').onclick = () => back();
   setTimeout(() => focus($('#aiM [data-aq]'), true), 40);
 }
+/* ======== Store add-on (impostazioni): temi speciali, skin colorate, pacchetti avatar ======== */
+const SHOP_F = [['all', 'Tutti'], ['tema', 'Temi speciali'], ['skin', 'Skin colorate'], ['avatar', 'Pacchetti avatar']];
+function addonEmblem(id) {
+  const a = ADDON_UI[id];
+  if (a.av && (a.cat !== 'tema' || (addonOwn(id) && adAsset(id)))) return avatarSVG('a' + a.av);
+  if (!a.pal) return avatarSVG('a1');
+  return `<svg viewBox="0 0 100 100"><defs><linearGradient id="sw${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a.pal[1]}"/><stop offset=".5" stop-color="${a.pal[0]}"/><stop offset="1" stop-color="${a.pal[2]}"/></linearGradient></defs><circle cx="50" cy="50" r="50" fill="url(#sw${id})"/><circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.5" stroke-dasharray="3 5"/></svg>`;
+}
+function addonState(id) {
+  const cur = store.get('theme') || '';
+  if (addonOwn(id)) return ADDON_UI[id].pal ? (cur === 'x:' + id ? '<b class="ads on">● In uso</b>' : '<b class="ads own">✓ Tuo</b>') : '<b class="ads own">✓ Incluso</b>';
+  const p = addonPrice(id);
+  return p ? `<b class="ads pr">${esc(p)}</b>` : '<b class="ads">🔒</b>';
+}
+function shopFill(force) {
+  const box = $('#shopCard'); if (!box || (box.dataset.ok && !force)) return;
+  const f = S.shopF || 'all';
+  const ids = Object.keys(ADDON_UI).filter((id) => addonShown(id) && (f === 'all' || ADDON_UI[id].cat === f));
+  const groups = [];
+  for (const id of ids) { const a = ADDON_UI[id], g = a.cat === 'tema' ? a.grp : a.cat === 'skin' ? 'Skin colorate' : 'Pacchetti avatar'; let G = groups.find((x) => x[0] === g); if (!G) groups.push((G = [g, []])); G[1].push(id); }
+  box.innerHTML = `<h3>Store add-on</h3><div class="snote">Temi speciali con scena di sfondo e avatar esclusivi, skin colorate e pacchetti di avatar. Quelli con ✓ sono già tuoi: aprili per usarli. Gli altri li attiva il tuo fornitore.</div>
+    <div class="shopf">${SHOP_F.map(([k, l]) => `<button class="chip${k === f ? ' sel' : ''}" data-f data-shf="${k}">${l}</button>`).join('')}</div>
+    ${groups.length ? groups.map(([g, l]) => `<div class="shopg">${esc(g)}</div><div class="shopl">${l.map((id) => { const a = ADDON_UI[id]; return `<button class="adr${addonOwn(id) ? '' : ' lock'}" data-f data-adid="${id}"${sceneURI(id) ? ` style="--sc:${sceneURI(id).replace(/"/g, "'")}"` : a.pal ? ` style="--pc:${a.pal[0]};--pc2:${a.pal[2]}"` : ''}><span class="ade">${addonEmblem(id)}</span><span class="adt"><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></span>${addonState(id)}</button>`; }).join('')}</div>`).join('') : '<div class="snote">Nessun add-on disponibile al momento.</div>'}`;
+  box.dataset.ok = '1';
+  $$('#shopCard [data-shf]').forEach((b) => (b.onclick = () => { S.shopF = b.dataset.shf; shopFill(true); focus($(`#shopCard [data-shf="${b.dataset.shf}"]`), true); }));
+  $$('#shopCard [data-adid]').forEach((b) => (b.onclick = () => addonDialog(b.dataset.adid)));
+}
+function addonDialog(id) {
+  const a = ADDON_UI[id]; if (!a) return;
+  const own = addonOwn(id), cur = store.get('theme') === 'x:' + id, price = addonPrice(id);
+  const ready = a.cat !== 'tema' || !!adAsset(id);
+  if (own && !ready && !S.demo) adAssetsSync().then(() => { if ($('#addonM') && adAsset(id)) { back(); addonDialog(id); } });
+  const avs = a.av && own && ready ? Array.from({ length: a.n || 4 }, (_, i) => `<span class="pav">${avatarSVG('a' + (a.av + i))}</span>`).join('') : '';
+  const what = a.cat === 'tema' ? 'Tema speciale: colori, scena di sfondo e 4 avatar per i profili' : a.cat === 'skin' ? 'Skin colorata per tutta l\'app' : `Pacchetto di ${a.n} avatar per i profili`;
+  kxModal('addonM', `<div class="adprev"${sceneURI(id) ? ` style="background-image:${sceneURI(id).replace(/"/g, "'")}"` : a.pal ? ` style="background:linear-gradient(120deg,${a.pal[2]},${a.pal[0]} 55%,${a.pal[1]})"` : ''}>${a.pal ? `<div class="adpal">${a.pal.map((c) => `<i style="background:${c}"></i>`).join('')}</div>` : ''}</div>
+    <h2>${esc(a.name)}</h2><p class="mut" style="margin:4px 0 10px">${esc(what)} · ${esc(a.desc)}</p>
+    ${avs ? `<div class="adavs">${avs}</div>` : a.cat === 'tema' ? `<div class="snote">${own ? (S.demo ? 'Nella demo il tema mostra solo i colori: scena e avatar arrivano dal server del fornitore.' : 'Scarico la scena e gli avatar del tema…') : 'Scena di sfondo e 4 avatar si scaricano sul dispositivo solo quando il fornitore ti attiva il tema.'}</div>` : ''}
+    ${own ? '' : `<div class="snote">${price ? `Prezzo: <b>${esc(price)}</b>. ` : ''}Questo add-on lo attiva il tuo fornitore${perm('request') && baseServer() && !S.demo ? ': puoi chiederglielo da qui.' : '.'}</div>`}
+    <div class="sbtn">${own && a.pal ? `<button class="btn pri" data-f id="adUse">${cur ? '✓ In uso · torna al colore base' : 'Applica il tema'}</button>` : ''}${own && a.av && !a.pal ? '<button class="btn pri" data-f id="adProf">Scegli un avatar per il profilo</button>' : ''}${!own && perm('request') && baseServer() && !S.demo ? '<button class="btn pri" data-f id="adReq">Richiedi al fornitore</button>' : ''}<button class="btn" data-f id="adNo">Chiudi</button></div>`);
+  $('#adNo').onclick = () => back();
+  if ($('#adUse')) $('#adUse').onclick = () => { const nx = cur ? 'cinema' : 'x:' + id; store.set('theme', nx); applyTheme(nx); fx('ok'); toast(cur ? 'Colore base ripristinato' : `✓ Tema «${a.name}» applicato`); back(); const c = $('#shopCard'); if (c) { c.dataset.ok = ''; shopFill(); } const r = $('#sTheme b'); if (r) r.innerHTML = `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(nx) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(nx))}`; focus($(`#shopCard [data-adid="${id}"]`) || $('.sm.sel'), true); };
+  if ($('#adProf')) $('#adProf').onclick = () => { back(); if (S.prof) profileEditor(S.prof); else toast('Apri «Profili e dispositivi» per cambiare avatar'); };
+  if ($('#adReq')) $('#adReq').onclick = async () => {
+    const b = $('#adReq'); b.disabled = true;
+    try { await apiPost('/api/player/request', { ctype: 'addon', title: 'Add-on: ' + a.name, body: price ? 'Prezzo indicato: ' + price : '' }); fx('ok'); back(); toast('✓ Richiesta inviata al fornitore'); }
+    catch (e) { b.disabled = false; toast('Non inviata: ' + (e.message || 'riprova')); }
+  };
+  setTimeout(() => focus($('#adUse') || $('#adProf') || $('#adReq') || $('#adNo'), true), 40);
+}
 function kickedByPanel() {
   S.kicked = true;
   try { if (S.inPlayer && NATIVE && NATIVE.playerClose) NATIVE.playerClose(); } catch {}
@@ -4124,6 +4310,7 @@ let speedRun = 0, speedLast = store.get('speedLast', null);
 
 /* ---------------- impostazioni (menu a sinistra, pannello a destra) ---------------- */
 const SET_IC = {
+  shop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h16l-1.5 12h-13z"/><path d="M8.5 8a3.5 3.5 0 0 1 7 0"/><path d="M10 13l1.5 1.5L14.5 11"/></svg>',
   tv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="6" width="20" height="14" rx="2.5"/><path d="m8 2 4 4 4-4M6 11h7M6 15h10"/></svg>',
   dev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>',
   pl: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M7 9h10M7 13h10M7 17h6"/></svg>',
@@ -4367,7 +4554,7 @@ function renderSettings(sec) {
   const allPl = allPlaylists().map((p) => ({ ...p, srv: !S.local.some((x) => x.id === p.id) }));
   const plCur = plSel(), canSw = perm('plSwitch') && plList().length > 1;
   const P = playPrefs(), theme = store.get('theme') || S.settings.accent || 'cinema';
-  const MENU = [['dev', 'Account'], ['acct', 'Profili e dispositivi'], ['pl', 'Gestione playlist'], ['org', 'Organizza'], ['play', 'Lettore'], ['tv', 'TV in diretta e guida TV'], ['rec', 'Registrazioni'], ['kids', 'Controllo genitori'], ['net', 'Rete e speed test'], ['priv', 'Privacy e VPN'], ['look', 'Generali'], ['info', 'Informazioni']];
+  const MENU = [['dev', 'Account'], ['acct', 'Profili e dispositivi'], ['pl', 'Gestione playlist'], ['org', 'Organizza'], ['shop', 'Store add-on'], ['play', 'Lettore'], ['tv', 'TV in diretta e guida TV'], ['rec', 'Registrazioni'], ['kids', 'Controllo genitori'], ['net', 'Rete e speed test'], ['priv', 'Privacy e VPN'], ['look', 'Generali'], ['info', 'Informazioni']];
   const kv = (k, v) => `<div class="sr static"><span>${k}</span><b>${v}</b></div>`;
   const cards = {
     acct: acctCard(), rec: recCard(), priv: privCard(),
@@ -4385,6 +4572,7 @@ function renderSettings(sec) {
       ${PLAY_OPTS.filter((o) => o[0] !== 'engine').map(([k, lbl, opts]) => `<div class="sr" data-f data-pk="${k}"><span>${lbl}</span><b>${(opts.find((o) => o[0] === P[k]) || opts[0])[1]}</b></div>`).join('')}
       ${optRow('hw')}${optRow('adaptQ')}<div class="snote" style="margin:-4px 0 10px">Se la connessione non regge, il canale passa da solo a una sua versione più leggera (es. da FHD a HD) e torna alla qualità piena quando la linea migliora. Se il video si blocca, l'app prova da sola a ripartire, la decodifica software o l'altro lettore.</div>${optRow('autoNext')}${optRow('introAuto')}${HAS_PLAYER ? optRow('pip') : ''}${optRow('subSize')}${optRow('resInd')}
       <div class="snote"><b>Automatico avanzato</b> sceglie da solo il lettore migliore per ogni contenuto (ExoPlayer, oppure VLC per i formati che ExoPlayer non legge) e cambia lettore da solo se qualcosa non parte. Disattiva l'accelerazione hardware solo se vedi immagini verdi o a scatti. Durante la visione premi OK per audio, qualità e sottotitoli.</div>`,
+    shop: '<div id="shopCard"></div>',
     org: `<h3>Organizza</h3>
       <div class="snote">Tieni premuto OK su un film, una serie o un canale per: già visto, coda, tag, modifica informazioni, guida TV.</div>
       ${optRow('sortCats')}${optRow('sortCh')}${optRow('sortVod')}
@@ -4417,7 +4605,7 @@ function renderSettings(sec) {
       <div class="sbtns">${perm('speed') ? '<button class="btn pri" data-f id="sSpeed">⚡ Avvia speed test</button>' : ''}<button class="btn" data-f id="sTest">Test connessione al server</button></div>
       <div class="snote">Lo speed test misura la velocità reale della tua linea e ti consiglia le impostazioni migliori per il lettore.</div>`,
     look: `<h3>Generali</h3>${optRow('startScr')}${optRow('sfx')}${optRow('textSize')}
-      <div class="sr" data-f id="sTheme"><span>Colore</span><b><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(THEMES[theme] || THEMES.cinema)[0]};margin-right:8px"></span>${theme}</b></div>
+      <div class="sr" data-f id="sTheme"><span>Colore</span><b><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(theme) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(theme))}</b></div>
       ${optRow('orient')}
       <div class="sr" data-f id="sAdult"><span>Contenuti per adulti nella Home e nei consigliati</span><b>${showAdult() ? 'Sì' : 'No'}</b></div>
       <div class="sr" data-f id="sLogo"><span>Loghi dei canali automatici</span><b>${store.get('autoLogo', true) === false ? 'No' : 'Sì'}</b></div>
@@ -4511,7 +4699,7 @@ function renderSettings(sec) {
     if (store.get('pinH', '') && !(await checkPin('PIN per sbloccare tutto'))) return focus($('#kClear'), true);
     S.locked.clear(); store.set('locked', []); $('#kCount').textContent = '0'; toast('Tutti i contenuti sbloccati'); focus($('#kClear'), true);
   };
-  $('#sTheme').onclick = () => { const ks = Object.keys(THEMES), nx = ks[(ks.indexOf(store.get('theme') || S.settings.accent || 'cinema') + 1) % ks.length]; store.set('theme', nx); applyTheme(nx); $('#sTheme b').innerHTML = `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${THEMES[nx][0]};margin-right:8px"></span>${nx}`; };
+  $('#sTheme').onclick = () => { const ks = themeList(), nx = ks[(ks.indexOf(store.get('theme') || S.settings.accent || 'cinema') + 1) % ks.length]; store.set('theme', nx); applyTheme(nx); $('#sTheme b').innerHTML = `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(nx) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(nx))}`; };
   $('#sAdult').onclick = () => { const on = !showAdult(); store.set('adultHome', on); $('#sAdult b').textContent = on ? 'Sì' : 'No'; buildBrowse($('#home'), 'all'); };
   $('#sUpd').onclick = async () => {
     const t = $('#sUpdTxt'); t.textContent = 'Controllo in corso…';
@@ -4527,6 +4715,7 @@ function renderSettings(sec) {
   $('#sClear').onclick = () => { S.favs.clear(); S.recent = []; store.set('favs', []); store.set('recent', []); store.set('pos', {}); updFavCount(); toast('Preferiti e cronologia svuotati'); };
   $('#sCache').onclick = async () => { await LibCache.clear(); toast('Memoria svuotata: al prossimo avvio i contenuti verranno riscaricati'); };
   wireSettingsExtra();
+  if (S.setSec === 'shop') shopFill();
 }
 /* il pannello di destra segue la voce del menu selezionata */
 document.addEventListener('kfocus', (e) => {
@@ -4534,6 +4723,7 @@ document.addEventListener('kfocus', (e) => {
   S.setSec = m.dataset.sec;
   $$('#settBody .sm').forEach((x) => x.classList.toggle('sel', x === m));
   $$('#settBody .card').forEach((c) => c.classList.toggle('on', c.dataset.card === S.setSec));
+  if (S.setSec === 'shop') shopFill(); // lo store si disegna solo quando lo apri
 });
 document.addEventListener('click', (e) => { const m = e.target.closest('.sm'); if (m && !m.classList.contains('focused')) focus(m, true); else if (m) { const f = $('#settBody .card.on [data-f]'); f && focus(f); } });
 
@@ -4580,8 +4770,9 @@ function kxModal(id, html, onClose, cls = '') {
 function kxClose(id) { const m = $('#' + id); if (!m || !m.classList.contains('on')) return; if (cur && m.contains(cur)) back(); else { if (m._onClose) m._onClose(); m.remove(); modalResume(); } }
 
 /* ---------------- avatar dei profili (disegnati qui, nessuna immagine da scaricare) ---------------- */
-const AV_PACKS = [['Classici', 0], ['Animali', 12], ['Sport', 24], ['Spazio', 36]];
-const avPack = (av) => Math.min(AV_PACKS.length - 1, Math.floor(((parseInt(String(av || 'a1').slice(1), 10) || 1) - 1) / 12));
+/* pacchetti di avatar mostrati nella modifica del profilo: [nome, primo indice, quanti] */
+const avPacks = () => [['Classici', 0, 12], ...Object.entries(ADDON_UI).filter(([id, a]) => a.av && addonOwn(id) && (a.cat !== 'tema' || adAsset(id))).map(([, a]) => [a.short || a.name, a.av - 1, a.n || 4])];
+const avPack = (av, packs = avPacks()) => { const n = (parseInt(String(av || 'a1').slice(1), 10) || 1) - 1; return Math.max(0, packs.findIndex(([, a, c]) => n >= a && n < a + c)); };
 const AVS = [
   ['#ff3d6e', '#7b1fff', 'M50 22l7 18 19 1-15 12 5 19-16-11-16 11 5-19-15-12 19-1z'],
   ['#22e1ff', '#3d5bff', 'M30 66c4-20 14-34 20-44 6 10 16 24 20 44-6-4-13-6-20-6s-14 2-20 6z'],
@@ -4634,7 +4825,10 @@ const AVS = [
   ["#e0e7ff", "#1e1b4b", "M40.0 28.0 L42.8 41.2 L56.0 44.0 L42.8 46.8 L40.0 60.0 L37.2 46.8 L24.0 44.0 L37.2 41.2ZM66.0 54.0 L68.1 61.9 L76.0 64.0 L68.1 66.1 L66.0 74.0 L63.9 66.1 L56.0 64.0 L63.9 61.9ZM68.0 21.0 L69.4 26.6 L75.0 28.0 L69.4 29.4 L68.0 35.0 L66.6 29.4 L61.0 28.0 L66.6 26.6Z", 1]
 ];
 function avatarSVG(av, label) {
-  const i = Math.max(0, Math.min(AVS.length - 1, (parseInt(String(av || 'a1').slice(1), 10) || 1) - 1)), [c1, c2, d, eo, ln] = AVS[i], gid = 'av' + i + Math.random().toString(36).slice(2, 6);
+  const n = Math.max(0, (parseInt(String(av || 'a1').slice(1), 10) || 1) - 1), i = AVS[n] || AVX[n] ? n : n < AVS.length ? n : -1;
+  const e = i < 0 ? null : AVS[i] || AVX[i];
+  if (e && e.img && /^data:image\/(jpeg|png|webp);base64,/.test(e.img)) { const cid = 'ai' + i + Math.random().toString(36).slice(2, 6); return `<svg viewBox="0 0 100 100" aria-label="${esc(label || '')}"><defs><clipPath id="${cid}"><circle cx="50" cy="50" r="50"/></clipPath></defs><image href="${e.img}" width="100" height="100" preserveAspectRatio="xMidYMid slice" clip-path="url(#${cid})"/></svg>`; }
+  const [c1, c2, d, eo, ln] = e || ['#8a90a0', '#3a3f4c', 'M50 30a11 11 0 1 0 .1 0Z M30 72Q30 52 50 52Q70 52 70 72Z'], gid = 'av' + (i < 0 ? 'x' : i) + Math.random().toString(36).slice(2, 6);
   return `<svg viewBox="0 0 100 100" aria-label="${esc(label || '')}"><defs><radialGradient id="${gid}" cx=".35" cy=".3" r=".9"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></radialGradient></defs><circle cx="50" cy="50" r="50" fill="url(#${gid})"/><circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.5" stroke-dasharray="3 5"/><path d="${d}"${eo ? ' fill-rule="evenodd"' : ''} fill="rgba(255,255,255,.92)" stroke="rgba(255,255,255,.95)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${ln ? `<path d="${ln}" fill="none" stroke="rgba(255,255,255,.95)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>` : ''}</svg>`;
 }
 
@@ -4748,21 +4942,22 @@ function profileEditorOpen(p) {
   const pls = activePlaylists();
   const d = { id: p ? p.id : '', name: p ? p.name : '', avatar: p ? p.avatar : 'a' + (1 + (l.length * 5) % 12), kids: !!(p && p.kids), pl: (p && p.pl) || 'all' };
   const plLabel = () => (d.pl === 'all' ? 'Tutte' : (pls.find((x) => x.id === d.pl) || {}).name || 'Tutte');
+  const avPk = avPacks();
   const m = kxModal('profM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">${isNew ? 'NUOVO PROFILO' : 'MODIFICA PROFILO'}</div>
     <div class="pedit"><div class="pav big" id="peAv">${avatarSVG(d.avatar)}</div>
     <input class="inp" data-f id="peName" maxlength="24" placeholder="Nome del profilo" value="${esc(d.name)}"></div>
-    <div class="avtabs">${AV_PACKS.map(([n], k) => `<button class="chip${k === avPack(d.avatar) ? ' sel' : ''}" data-f data-avp="${k}">${n}</button>`).join('')}</div>
+    <div class="avtabs">${avPk.map(([n], k) => `<button class="chip${k === avPack(d.avatar, avPk) ? ' sel' : ''}" data-f data-avp="${k}">${esc(n)}</button>`).join('')}</div>
     <div class="avgrid" id="avGrid"></div>
     <div class="sr" data-f id="peKids"><span>${ICX.kids} Profilo bambini (niente contenuti per adulti)</span><b>${d.kids ? 'Sì' : 'No'}</b></div>
     ${pls.length > 1 ? `<div class="sr" data-f id="pePl"><span>Playlist del profilo</span><b>${esc(plLabel())}</b></div>` : ''}
     <div class="sbtn"><button class="btn pri" data-f id="peSave">Salva</button>${!isNew && l.length > 1 ? '<button class="btn" data-f id="peDel">Elimina</button>' : ''}<button class="btn" data-f id="peNo">Annulla</button></div>`, null, 'profm');
   setTimeout(() => focus($('#peName'), true), 60);
   const avGrid = (k) => {
-    const a = AV_PACKS[k][1];
-    $('#avGrid').innerHTML = AVS.slice(a, a + 12).map((_, i) => `<button class="avb ${'a' + (a + i + 1) === d.avatar ? 'sel' : ''}" data-f data-av="a${a + i + 1}">${avatarSVG('a' + (a + i + 1))}</button>`).join('');
+    const [, a, c] = avPk[k] || avPk[0];
+    $('#avGrid').innerHTML = Array.from({ length: c }, (_, i) => `<button class="avb ${'a' + (a + i + 1) === d.avatar ? 'sel' : ''}" data-f data-av="a${a + i + 1}">${avatarSVG('a' + (a + i + 1))}</button>`).join('');
     $$('#profM [data-av]').forEach((b) => (b.onclick = () => { d.avatar = b.dataset.av; $$('#profM [data-av]').forEach((x) => x.classList.toggle('sel', x === b)); $('#peAv').innerHTML = avatarSVG(d.avatar); }));
   };
-  avGrid(avPack(d.avatar));
+  avGrid(avPack(d.avatar, avPk));
   $$('#profM [data-avp]').forEach((b) => (b.onclick = () => { $$('#profM [data-avp]').forEach((x) => x.classList.toggle('sel', x === b)); avGrid(+b.dataset.avp); focus($('#profM [data-av]'), true); }));
   $('#peKids').onclick = () => { d.kids = !d.kids; $('#peKids b').textContent = d.kids ? 'Sì' : 'No'; };
   if ($('#pePl')) $('#pePl').onclick = () => { const ids = ['all', ...pls.map((x) => x.id)]; d.pl = ids[(ids.indexOf(d.pl) + 1) % ids.length]; $('#pePl b').textContent = plLabel(); };
@@ -5247,7 +5442,7 @@ async function streamGate(kind, title) {
   return true;
 }
 /* ---------------- impostazioni: profili e dispositivi, registrazioni, privacy e VPN ---------------- */
-Object.assign(SET_IC, { kids: ICX.kids, acct: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c.8-3.3 3.2-5 6-5s5.2 1.7 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c2.6-.4 4.6 1.2 5.5 4.3"/></svg>', rec: ICX.rec, priv: ICX.shield });
+Object.assign(SET_IC, { org: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M4 12h16M4 18h7"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="18" r="2"/></svg>', kids: ICX.kids, acct: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 19c.8-3.3 3.2-5 6-5s5.2 1.7 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c2.6-.4 4.6 1.2 5.5 4.3"/></svg>', rec: ICX.rec, priv: ICX.shield });
 const kv2 = (k, v) => `<div class="sr static"><span>${k}</span><b>${v}</b></div>`;
 function acctCard() {
   const a = S.account, l = profList(), canAdd = profCanEdit() && l.length < profMax(), conns = (a && a.conns) || [];
@@ -5680,7 +5875,7 @@ async function heartbeat(force) {
     const playerNow = JSON.stringify((S.account && S.account.player) || {}), playerSrv = pmSrv.split('|').slice(2).join('|');
     const plChanged = !!(pmSrv && S.account && pmCut !== pmNow);
     const playerChanged = !!(pmSrv && S.account && playerSrv && playerSrv !== playerNow);
-    const changed = plChanged || playerChanged || (j.vm && j.vm !== (S.vpn ? S.vpn.mode : 'off')) || (j.ph !== undefined && offSrv !== offNow) || (j.ms !== undefined && S.account && (+S.account.maxStreams || 0) !== j.ms);
+    const changed = plChanged || playerChanged || (typeof j.adg === 'string' && S.adg !== undefined && j.adg !== S.adg) || (j.vm && j.vm !== (S.vpn ? S.vpn.mode : 'off')) || (j.ph !== undefined && offSrv !== offNow) || (j.ms !== undefined && S.account && (+S.account.maxStreams || 0) !== j.ms);
     // server delle playlist cambiato dal pannello (DNS): si riscrivono gli indirizzi, la lista non si ricarica
     const dnsNew = typeof j.pv === 'string' && j.pv && hbPlv && j.pv !== hbPlv;
     if (typeof j.pv === 'string' && j.pv) hbPlv = j.pv;

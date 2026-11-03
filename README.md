@@ -231,6 +231,27 @@ In **Impostazioni** trovi anche il **prezzo** mostrato ai clienti e il testo **P
 - **Fino a 100 playlist per cliente** (prima 20).
 - Arriva da sola con l'interfaccia e il pannello: non serve un APK nuovo.
 
+## 13. Novità 2.2 — Store add-on
+
+**Nell'app** (*Impostazioni → Store add-on*), come uno store vero: elenco diviso in *Film e serie TV*, *Festività ed eventi*, *Skin colorate*, *Pacchetti avatar*, con filtri, emblema, descrizione e a destra lo stato (**✓ Tuo**, **● In uso**, il **prezzo** o 🔒). Aprendo un add-on: anteprima della scena, colori, avatar inclusi e **Applica il tema** (se è tuo) oppure **Richiedi al fornitore** (la richiesta arriva nel pannello in *Richieste*, tipo «🧩 Add-on»).
+- **24 temi speciali** (colori di tutta l'app + scena di sfondo disegnata + 4 avatar esclusivi): Regno di Ghiaccio, Terra dei Draghi, Accademia di Magia, Lega degli Eroi, Città Cyber, Saga Vichinga, Dei dell'Olimpo, Notti al Neon, Mari dei Pirati, Frontiera Western; Halloween, Día de los Muertos, Natale, Capodanno, San Valentino, Carnevale; e 8 in stile **Videogiochi**: Regni Fantasy (gioco di ruolo), Gran Premio (corse), Galassia Arcade (sparatutto spaziale), Pixel Retrò (8 bit), Isola della Sfida (battle royale), Città Abbandonata (horror di sopravvivenza), Torneo dei Campioni (picchiaduro), Giungla Perduta (avventura). Sono **originali**, ispirati ai generi: nessun personaggio, attore o immagine di film e serie (sono protetti da diritti).
+- **8 skin colorate**: Rubino, Zaffiro, Ambra, Giada, Lavanda, Corallo, Grafite, Menta. Si scelgono anche da *Generali → Colore*.
+- **Pacchetti avatar**: Animali, Sport, Spazio (12 ciascuno) + i 4 avatar di ogni tema. Nella modifica del profilo compaiono solo i pacchetti che il cliente ha.
+- **I temi si scaricano solo se il cliente li ha**: scena e avatar di ogni tema stanno sul server (`cloudflare/src/addon-assets.js`) e l'app li chiede solo per i temi che le hai dato (il server controlla codice, abbonamento e assegnazione). Se togli un tema, l'app lo cancella dal dispositivo. Nello store i temi non posseduti mostrano solo nome, descrizione, colori e prezzo. Skin colorate (3 colori) e pacchetti avatar Animali/Sport/Spazio restano nell'app.
+- **Immagini realistiche** (generate dal fornitore con Gemini, personaggi inventati): sfondo e avatar dove ci sono, al posto dei disegni; dove mancano restano i disegni. Sfondi fotografici per Regno di Ghiaccio, Terra dei Draghi, Accademia di Magia, Lega degli Eroi, Città Cyber, Saga Vichinga, Dei dell'Olimpo, Frontiera Western, Halloween; avatar per quasi tutti i temi. Sul dispositivo stanno nella memoria interna dell'app (IndexedDB). Il server accetta anche immagini caricate per tema (API `PUT /api/admin/addon-media/{tema}/{bg|a1..a4}`, tabella `addon_media`, migrazione `0011`), che hanno la precedenza su quelle incluse.
+- La scena è un'immagine fissa (al posto delle luci animate dello sfondo), quindi non pesa durante lo scorrimento.
+
+**Nel pannello**
+- *Impostazioni → Store add-on*: per ogni add-on **Tutti i clienti / Solo a chi lo assegno / Nascosto**, il **prezzo** da mostrare (facoltativo) e quanti clienti lo hanno. Pulsante proprio **Salva add-on**.
+- Scheda del cliente, nuova sezione **Add-on**: interruttori per dare o togliere ogni add-on (quelli «per tutti» sono già accesi). I dispositivi collegati usano quelli del cliente principale.
+- Vista *Tabella* in *Dispositivi*: seleziona più clienti → **🧩 Add-on** → per ognuno *Dai* o *Togli*.
+- API: campo `addons` (elenco di id) in `GET/PUT /api/v1/devices/{codice}`.
+- Il cliente vede le modifiche entro un minuto (il battito dell'app se ne accorge). Se togli un tema in uso, l'app torna al colore base.
+- Il database si aggiorna da solo al primo deploy (migrazione `0010_addons.sql`). Arriva con l'interfaccia: non serve un APK nuovo.
+- Non incluso: **cambio dell'icona dell'app** (serve un APK nuovo e su Fire TV il launcher non sempre la aggiorna).
+
+**Correzioni**: icona mancante della voce «Organizza» nelle impostazioni dell'app; *Permessi a gruppi* con più di 50 dispositivi non superava più il limite di query del piano gratuito.
+
 ## Come funziona per i clienti
 
 1. Installano l'app (codice Downloader) e la aprono: compare un **codice** tipo `KXAB-7Q2M`.

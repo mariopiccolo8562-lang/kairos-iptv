@@ -83,6 +83,7 @@ async function demoApi(method, path, body) {
     if (b.apkVersionCode !== undefined) { const v = String(b.apkVersionCode).trim(), c = verCode(v); if (v && !c) throw new Error('Versione APK non valida: scrivila come 1.3.0'); b.apkVersion = c ? v.replace(/^v/i, '') : ''; b.apkVersionCode = c; }
     Object.assign(DEMO.settings, b); log('settings', 'Impostazioni aggiornate'); return { settings: DEMO.settings };
   }
+  if (path === '/admin/devices/addons') { let n = 0; for (const id of body.ids || []) { const d = DEMO.devices.find((x) => x.id === id); if (!d || d.parent) continue; d.addons = [...new Set([...(d.addons || []).filter((x) => !(body.remove || []).includes(x)), ...(body.add || [])])]; n++; } return { changed: n }; }
   if (path === '/admin/password') return { ok: true };
   if (path === '/admin/devices' && method === 'POST') { const b = { ...body }; const d = { parent: '', maxConn: 1, maxProfiles: 3, profiles: [], lockProfiles: false, vpn: 0, vpnConf: false, id: 'x' + Date.now(), code: b.code || rndCode(), createdAt: Date.now(), lastSeen: 0, model: '' }; accIn(d, b); Object.assign(d, b, { code: b.code || d.code }); DEMO.devices.unshift(d); log('new', 'Dispositivo creato: ' + (d.name || d.code)); return pub(d); }
   const m = path.match(/^\/admin\/devices\/(.+)$/);
@@ -270,6 +271,40 @@ function renderDevices() {
 }
 const parentOf = (d) => (d && d.parent ? D.devices.find((x) => x.id === d.parent) || null : null);
 const kidsOf = (id) => D.devices.filter((x) => x.parent === id);
+/* add-on dello Store dell'app (stesso elenco del server) */
+const ADDON_CAT = [
+  ['tema-ghiaccio', 'Regno di Ghiaccio', 'tema'], ['tema-draghi', 'Terra dei Draghi', 'tema'], ['tema-magia', 'Accademia di Magia', 'tema'],
+  ['tema-eroi', 'Lega degli Eroi', 'tema'], ['tema-cyber', 'Città Cyber', 'tema'], ['tema-vichinghi', 'Saga Vichinga', 'tema'],
+  ['tema-dei', "Dei dell'Olimpo", 'tema'], ['tema-neon', 'Notti al Neon', 'tema'], ['tema-pirati', 'Mari dei Pirati', 'tema'], ['tema-western', 'Frontiera Western', 'tema'],
+  ['tema-halloween', 'Halloween', 'tema'], ['tema-muertos', 'Día de los Muertos', 'tema'], ['tema-natale', 'Natale', 'tema'],
+  ['tema-capodanno', 'Capodanno', 'tema'], ['tema-sanvalentino', 'San Valentino', 'tema'], ['tema-carnevale', 'Carnevale', 'tema'],
+  ['tema-fantasy', 'Regni Fantasy', 'tema'], ['tema-corse', 'Gran Premio', 'tema'], ['tema-arcade', 'Galassia Arcade', 'tema'], ['tema-pixel', 'Pixel Retrò', 'tema'], ['tema-isola', 'Isola della Sfida', 'tema'], ['tema-horror', 'Città Abbandonata', 'tema'], ['tema-torneo', 'Torneo dei Campioni', 'tema'], ['tema-giungla', 'Giungla Perduta', 'tema'],
+  ['skin-rubino', 'Rubino', 'skin'], ['skin-zaffiro', 'Zaffiro', 'skin'], ['skin-ambra', 'Ambra', 'skin'], ['skin-giada', 'Giada', 'skin'],
+  ['skin-lavanda', 'Lavanda', 'skin'], ['skin-corallo', 'Corallo', 'skin'], ['skin-grafite', 'Grafite', 'skin'], ['skin-menta', 'Menta', 'skin'],
+  ['av-animali', 'Avatar Animali', 'avatar', 'all'], ['av-sport', 'Avatar Sport', 'avatar', 'all'], ['av-spazio', 'Avatar Spazio', 'avatar', 'all'],
+];
+const ADDON_GRP = { tema: 'Temi speciali', skin: 'Skin colorate', avatar: 'Pacchetti avatar' };
+const ADDON_SW = { 'tema-fantasy': '#52d68a', 'tema-corse': '#ff3b30', 'tema-arcade': '#4cc9f0', 'tema-pixel': '#ff6ad5', 'tema-isola': '#74c69d', 'tema-horror': '#e5383b', 'tema-torneo': '#ffba08', 'tema-giungla': '#80b918', 'tema-ghiaccio': '#6fd3ff', 'tema-draghi': '#ff7a2f', 'tema-magia': '#b58cff', 'tema-eroi': '#ff3b3b', 'tema-cyber': '#00f0ff', 'tema-vichinghi': '#e3b778', 'tema-dei': '#f5c542', 'tema-neon': '#ff4fd8', 'tema-pirati': '#4fb3ff', 'tema-western': '#ff9f43', 'tema-halloween': '#ff8c1a', 'tema-muertos': '#e83f6f', 'tema-natale': '#e63946', 'tema-capodanno': '#ffd166', 'tema-sanvalentino': '#ff4d6d', 'tema-carnevale': '#7ae582', 'skin-rubino': '#e0115f', 'skin-zaffiro': '#2f5bff', 'skin-ambra': '#ffb000', 'skin-giada': '#00a86b', 'skin-lavanda': '#a78bfa', 'skin-corallo': '#ff6f61', 'skin-grafite': '#b8c0cc', 'skin-menta': '#3ee6b4', 'av-animali': '#ffb36b', 'av-sport': '#16a34a', 'av-spazio': '#6d28d9' };
+function addonCatNow() {
+  const c = (D.settings && D.settings.addons) || {};
+  return ADDON_CAT.map(([id, name, cat, def = 'some']) => { const x = c[id] || {}; return { id, name, cat, mode: ['all', 'some', 'off'].includes(x.m) ? x.m : def, price: x.p || '' }; });
+}
+function renderAddonCfg() {
+  const box = $('#adCfg'); if (!box || box.dataset.dirty === '1') return;
+  const cat = addonCatNow(), prim = D.devices.filter((d) => !d.parent);
+  box.innerHTML = `<div class="adcfg">${Object.entries(ADDON_GRP).map(([g, gl]) => `<h4>${gl}</h4>${cat.filter((a) => a.cat === g).map((a) => { const n = prim.filter((d) => (d.addons || []).includes(a.id)).length; return `<div class="adrow"><div><b><span class="adsw" style="background:${ADDON_SW[a.id] || '#888'}"></span>${esc(a.name)}</b></div>
+    <select class="inp" data-adm="${a.id}"><option value="all" ${a.mode === 'all' ? 'selected' : ''}>Tutti i clienti</option><option value="some" ${a.mode === 'some' ? 'selected' : ''}>Solo a chi lo assegno</option><option value="off" ${a.mode === 'off' ? 'selected' : ''}>Nascosto</option></select>
+    <input class="inp" data-adp="${a.id}" maxlength="20" placeholder="Prezzo (es. 13,99 €)" value="${esc(a.price)}">
+    <span class="cnt" title="Clienti a cui è assegnato">${a.mode === 'all' ? 'tutti' : n + ' clienti'}</span></div>`; }).join('')}`).join('')}</div>`;
+}
+$('#adCfg') && $('#adCfg').addEventListener('input', () => { $('#adCfg').dataset.dirty = '1'; });
+$('#adCfg') && $('#adCfg').addEventListener('change', () => { $('#adCfg').dataset.dirty = '1'; });
+$('#adAllSome') && ($('#adAllSome').onclick = () => { $$('#adCfg [data-adm]').forEach((s) => { if (!s.dataset.adm.startsWith('av-')) s.value = 'some'; }); $('#adCfg').dataset.dirty = '1'; toast('Temi e skin impostati su «solo a chi assegno»: premi Salva add-on'); });
+$('#adSave') && ($('#adSave').onclick = async () => {
+  const addons = {};
+  $$('#adCfg [data-adm]').forEach((s) => { addons[s.dataset.adm] = { m: s.value, p: ($(`#adCfg [data-adp="${s.dataset.adm}"]`).value || '').trim() }; });
+  try { await api('PUT', '/admin/settings', { addons }); $('#adCfg').dataset.dirty = ''; await load(); toast('Add-on salvati: i clienti li vedono entro 20 minuti (o subito riaprendo l\'app)'); } catch (e) { toast(e.message, 1); }
+});
 /* 48 avatar dell'app (4 pacchetti da 12): nel pannello un pallino colorato numerato */
 const AVC = ['#e5202b', '#ff7a3d', '#e0a800', '#1fbf75', '#13a8d8', '#3d6bff', '#7b5cff', '#b13dff', '#e535c8', '#ff3d7a', '#5f9e2f', '#7a839e'];
 const AV_PACKS = [['Classici', Array.from({ length: 12 }, (_, i) => 'Classico ' + (i + 1))],
@@ -392,13 +427,18 @@ function renderDrawer() {
       <small>${edit.plMode === 'split' ? 'Il cliente vede una playlist alla volta. Con il permesso «Cambiare playlist» passa all\'altra con il pulsante vicino a «Guida TV».' : 'Tutti i contenuti insieme; ogni film, serie e canale mostra la sigla colorata della sua playlist. Con «Cambiare playlist» il cliente può anche filtrarne una sola.'}</small>
       ${edit.plMode === 'split' ? `<label class="lbl">Playlist da usare</label><select class="inp" id="ePlDef"><option value="">La prima (${esc(edit.playlists[0].name || 'Playlist 1')})</option>${edit.playlists.filter((p) => p.id).map((p) => `<option value="${esc(p.id)}" ${edit.plDefault === p.id ? 'selected' : ''}>${esc(p.name || 'Playlist')}</option>`).join('')}</select><small>Se il cliente non può cambiare playlist, usa sempre questa.</small>` : ''}
     </div>` : ''}`;
+  if (!Array.isArray(edit.addons)) edit.addons = [];
+  const adCat = addonCatNow().filter((a) => a.mode !== 'off');
+  const addonBox = linked ? '' : `<div class="perms">${adCat.map((a) => a.mode === 'all' ? `<div class="tog on fixed" title="Incluso per tutti i clienti (si cambia in Impostazioni → Store add-on)"><div><b><span class="adsw" style="background:${ADDON_SW[a.id] || '#888'}"></span>${esc(a.name)}</b><small>${ADDON_GRP[a.cat]} · incluso per tutti</small></div><i></i></div>`
+    : `<div class="tog ${edit.addons.includes(a.id) ? 'on' : ''}" data-addon="${a.id}"><div><b><span class="adsw" style="background:${ADDON_SW[a.id] || '#888'}"></span>${esc(a.name)}</b><small>${ADDON_GRP[a.cat]}${a.price ? ' · ' + esc(a.price) : ''}</small></div><i></i></div>`).join('')}</div>
+    ${adCat.length ? '' : '<p class="mut">Tutti gli add-on sono nascosti (Impostazioni → Store add-on).</p>'}`;
   const S8 = `<textarea class="inp" id="eNotes" placeholder="Pagamento, contatto, dettagli…">${esc(edit.notes)}</textarea>
     ${!isNew ? `<p class="mut" style="font-size:12px;margin-top:10px">Registrato ${fmtD(edit.createdAt)} · ultimo accesso ${ago(edit.lastSeen)}${edit.model ? ' · ' + esc(edit.model) : ''}</p>` : ''}`;
   const SECS = linked
     ? [['cli', 'Dispositivo', 'Codice e nome', S1], ['vpn', 'VPN', '', vpnBox], ['note', 'Note', 'Solo per te, il cliente non le vede', S8]]
     : [['cli', 'Cliente', 'Codice, collegamento e nome', S1], ['abb', 'Abbonamento', 'Attivo e scadenza', S2], ['pl', 'Playlist', 'Liste M3U o Xtream del cliente', S3],
       ['ply', 'Lettore', 'Quale lettore usa l\'app per ogni tipo di contenuto', playerBox], ['acc', 'Account e profili', 'Dispositivi, profili e visioni insieme', accBox],
-      ['vpn', 'VPN', 'Modalità e località', vpnBox + locBox], ['perm', 'Permessi', 'Cosa può fare il cliente nell\'app', extraBox], ['note', 'Note', 'Solo per te, il cliente non le vede', S8]];
+      ['vpn', 'VPN', 'Modalità e località', vpnBox + locBox], ['perm', 'Permessi', 'Cosa può fare il cliente nell\'app', extraBox], ['add', 'Add-on', 'Temi, skin e avatar dello Store dell\'app', addonBox], ['note', 'Note', 'Solo per te, il cliente non le vede', S8]];
   const shown = SECS.filter((x) => String(x[3]).trim());
   $('#dBody').innerHTML = `<nav class="dnav">${shown.map(([id, t], i) => `<button data-ds="${id}"><i>${i + 1}</i>${t}</button>`).join('')}</nav>`
     + shown.map(([id, t, sub, html], i) => sec(id, i + 1, t, sub, html)).join('');
@@ -419,6 +459,7 @@ function renderDrawer() {
     if ($('#eMaxS')) edit.maxStreams = Math.max(0, Math.round(+$('#eMaxS').value) || 0);
     if ($('#eLoc')) edit.vpnLoc = $('#eLoc').value;
   };
+  $$('[data-addon]').forEach((b) => (b.onclick = () => { const k = b.dataset.addon; edit.addons = edit.addons.includes(k) ? edit.addons.filter((x) => x !== k) : [...edit.addons, k]; b.classList.toggle('on', edit.addons.includes(k)); }));
   $$('[data-perm]').forEach((b) => (b.onclick = () => { const k = b.dataset.perm; edit.perms = { ...(edit.perms || {}) }; edit.perms[k] = edit.perms[k] === false; b.classList.toggle('on', edit.perms[k] !== false); }));
   $('#eLinkCode') && ($('#eLinkCode').onclick = async () => {
     try {
@@ -470,9 +511,9 @@ function renderDrawer() {
     const vpnPart = edit.wgText && edit.wgText.trim() ? { vpnConf: edit.wgText } : edit.vpnConfClear ? { vpnConfClear: true } : {};
     const acc = { maxConn: edit.maxConn, maxProfiles: edit.maxProfiles, maxStreams: +edit.maxStreams || 0, vpnLoc: edit.vpnLoc || '', perms: Object.fromEntries(PERM_L.map(([k]) => [k, !edit.perms || edit.perms[k] !== false])), lockProfiles: !!edit.lockProfiles, vpn: +edit.vpn || 0, plMode: edit.plMode === 'split' ? 'split' : 'merge', plDefault: edit.plDefault || '', player: { live: (edit.player || {}).live || '', movie: (edit.player || {}).movie || '', series: (edit.player || {}).series || '' }, profiles: edit.profiles.map((p) => ({ id: p.id || undefined, name: p.name, avatar: p.avatar, kids: !!p.kids, pl: p.pl || 'all' })) };
     try {
-      if (isNew) await api('POST', '/admin/devices', { code: edit.code, name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, ...acc, ...vpnPart });
+      if (isNew) await api('POST', '/admin/devices', { code: edit.code, name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart });
       else if (edit.parent) await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, ...vpnPart });
-      else await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, ...acc, ...vpnPart });
+      else await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart });
       closeDrawer(); await load(); toast(isNew ? 'Dispositivo creato' : 'Modifiche salvate');
     } catch (e) { toast(e.message, 1); }
   };
@@ -514,6 +555,7 @@ document.addEventListener('click', async (e) => {
 /* ---------------- impostazioni ---------------- */
 let tmpAccent = 'cinema';
 function renderSettings() {
+  renderAddonCfg();
   // l'aggiornamento automatico ogni 20 s non deve cancellare quello che si sta scrivendo: i campi modificati restano
   const s = D.settings, setv = (sel, v) => { const el = $(sel); if (el && el.dataset.dirty !== '1') el.value = v; }, sett = (sel, on) => { const el = $(sel); if (el && el.dataset.dirty !== '1') el.classList.toggle('on', on); };
   if ($('#themes').dataset.dirty !== '1') tmpAccent = s.accent || 'cinema';
