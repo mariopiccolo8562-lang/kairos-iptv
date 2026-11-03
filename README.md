@@ -318,6 +318,12 @@ Solo server e pannello: **non serve un nuovo APK**.
 - **Server nascosti agli agenti**: se un DNS salvato non ha un nome (o il nome è l'indirizzo), l'agente vede «Server 1», «Server 2»… Dai un nome ai DNS in *Server DNS e VPN* per mostrarne uno tuo.
 - **Password degli agenti**: nella scheda dell'agente vedi la password attuale con l'occhio 👁 (mostra/nascondi) e *Copia*. È conservata cifrata; per gli agenti creati prima della 2.5 compare dopo che imposti (o l'agente cambia) la password.
 
+## 17. Kairos Lite — app leggera stile Smarters
+
+Seconda app, **accanto** a KAIROS TV, con lo stesso pannello e gli stessi clienti (codice `KX..-....`). Il codice è nel repository separato **kairos-lite**, con le sue istruzioni.
+
+Il pannello le propone gli aggiornamenti da solo: legge `kairos-lite.json` dall'ultima release di quel repository (`/api/player/update?app=lite`). In *Utenti online* la versione compare come `lite 1.0.0`.
+
 ## Come funziona per i clienti
 
 1. Installano l'app (codice Downloader) e la aprono: compare un **codice** tipo `KXAB-7Q2M`.
