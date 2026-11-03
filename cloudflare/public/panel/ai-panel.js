@@ -35,7 +35,7 @@
     const ds = D.devices.filter((d) => !d.parent && d.status === 'active');
     const t = Date.now(), day = (k) => new Date(t - k * 864e5).toISOString().slice(0, 10);
     const clients = ds.slice(0, 7).map((d, i) => ({ id: d.id, name: d.name, code: d.code, n: [20, 14, 9, 6, 4, 2, 1][i], cl: i === 1 ? 14 : 0, gm: i === 1 ? 0 : [20, 14, 9, 6, 4, 2, 1][i], limit: i === 1 ? 30 : 20, own: i === 1, extra: i === 0 ? 5 : 0, provider: i === 1 ? 'claude' : '' }));
-    return { status: { gemini: true, claude: false }, today: { day: day(0), n: 56, gm: 42, cl: 14, usd: 0.003 }, month: { n: 640, cl: 210, usd: 0.04 },
+    return { status: { gemini: true, claude: true }, today: { day: day(0), n: 56, gm: 42, cl: 14, usd: 0.003 }, month: { n: 640, cl: 210, usd: 0.04 },
       days: Array.from({ length: 14 }, (_, k) => ({ day: day(13 - k), n: [12, 18, 25, 22, 30, 41, 38, 35, 44, 52, 48, 61, 49, 56][k] })), clients, settings: { aiDaily: 20, aiProvider: 'gm', aiClaude: 'haiku', aiGemini: 'flash' },
       claudeModels: [{ id: 'haiku', name: 'Claude Haiku 5.5 (veloce, costa pochissimo)' }, { id: 'sonnet', name: 'Claude Sonnet 5.5 (più preciso, costa circa 20 volte di più)' }],
       geminiModels: [{ id: 'flash', name: 'Gemini 3.8 Flash (risposte migliori)' }, { id: 'lite', name: 'Gemini 3.5 Flash-Lite (più veloce)' }] };
@@ -48,6 +48,7 @@
     if (!D.demo) return api(m, p, b);
     if (p === '/admin/ai') return A.demo || (A.demo = demoData());
     if (p.startsWith('/admin/requests?kind=ai') && m === 'GET') return { items: A.demoR || (A.demoR = demoReqs()) };
+    if (p === '/admin/ai/test') return b.provider === 'claude' ? { ok: false, status: 400, error: 'Credito finito o mai caricato: console.anthropic.com → Billing' } : { ok: true, model: 'gemini-3.8-flash', ms: 1400 };
     if (p === '/admin/ai/grant') { const c = (A.demo || demoData()).clients.find((x) => x.id === b.deviceId); if (c) c.extra += b.n; return { ok: true }; }
     const sm = p.match(/requests\/(\d+)\/status$/); if (sm) { const x = (A.demoR || []).find((r) => r.id === +sm[1]); if (x) { x.status = b.status; x.note = b.note || ''; } return { ok: true }; }
     const dm = p.match(/requests\/(\d+)$/); if (dm) { A.demoR = (A.demoR || []).filter((r) => r.id !== +dm[1]); return { ok: true }; }
@@ -83,8 +84,8 @@
     V.innerHTML = `<div class="ai-k">
       <div class="c ${svc[0]}"><small>Risponde ai clienti (predefinito)</small><b>${esc(svc[1])}</b><em>${esc(svc[2] || '')}</em></div>
       <div class="c"><small>Domande oggi</small><b>${t.n}</b><em>${[t.cl ? t.cl + ' Claude' : '', t.gm ? t.gm + ' Gemini' : ''].filter(Boolean).join(' · ') || 'nessuna'}</em></div>
-      <div class="c ${st.claude ? 'ok' : ''}"><small>Claude · spesa stimata</small><b>${st.claude ? usd(t.usd || 0) : 'Non collegato'}</b><em>${st.claude ? `oggi · ultimi 30 giorni: ${usd((x.month && x.month.usd) || 0)} (${(x.month && x.month.cl) || 0} domande)` : 'A pagamento: serve la chiave ANTHROPIC_API_KEY e del credito'}</em></div>
-      <div class="c ${st.gemini ? 'ok' : ''}"><small>Gemini</small><b>${st.gemini ? 'Collegato' : 'Non collegato'}</b><em>${st.gemini ? 'Gratis, con un limite giornaliero di Google' : 'Gratis: serve la chiave GEMINI_API_KEY'}</em></div>
+      <div class="c ${st.claude ? 'ok' : ''}"><small>Claude · spesa stimata</small><b>${st.claude ? usd(t.usd || 0) : 'Non collegato'}</b><em>${st.claude ? `oggi · ultimi 30 giorni: ${usd((x.month && x.month.usd) || 0)} (${(x.month && x.month.cl) || 0} domande)` : 'A pagamento: serve la chiave ANTHROPIC_API_KEY e del credito'}</em>${st.claude ? '<button class="btn sm" data-aitest="claude" style="margin-top:8px">Prova Claude</button><em id="aiT_claude"></em>' : ''}</div>
+      <div class="c ${st.gemini ? 'ok' : ''}"><small>Gemini</small><b>${st.gemini ? 'Collegato' : 'Non collegato'}</b><em>${st.gemini ? 'Gratis, con un limite giornaliero di Google' : 'Gratis: serve la chiave GEMINI_API_KEY'}</em>${st.gemini ? '<button class="btn sm" data-aitest="gm" style="margin-top:8px">Prova Gemini</button><em id="aiT_gm"></em>' : ''}</div>
     </div>
     <div class="ai-g">
       <div class="card glass"><div class="hd"><h3>Richieste di altre domande<small>I clienti le inviano dall'app quando finiscono le domande del giorno</small></h3>
@@ -125,6 +126,15 @@
     $$('[data-aidel]', V).forEach((b) => (b.onclick = async () => { try { await aapi('DELETE', '/admin/requests/' + b.dataset.aidel); aiLoad(); } catch (e) { toast(e.message, 1); } }));
     $$('[data-aiga]', V).forEach((b) => (b.onclick = async () => { const [id, n] = b.dataset.aiga.split(':'); try { await aapi('POST', '/admin/ai/grant', { deviceId: id, n: +n }); toast(`+${n} domande`); aiLoad(); } catch (e) { toast(e.message, 1); } }));
     $$('[data-aiopen]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((y) => y.id === b.dataset.aiopen); d ? openDrawer(d, false) : toast('Cliente non trovato', 1); }));
+    $$('[data-aitest]', V).forEach((b) => (b.onclick = async () => {
+      const k = b.dataset.aitest, out = $('#aiT_' + k); b.disabled = true; out.textContent = 'Provo…'; out.style.color = '';
+      try {
+        const r = await aapi('POST', '/admin/ai/test', { provider: k });
+        out.innerHTML = r.ok ? `✓ Funziona (${esc(r.model)}, ${(r.ms / 1000).toFixed(1).replace('.', ',')} s)` : '✗ ' + esc(r.error || 'Non risponde');
+        out.style.color = r.ok ? 'var(--ok)' : 'var(--bad)';
+      } catch (e) { out.textContent = '✗ ' + e.message; out.style.color = 'var(--bad)'; }
+      b.disabled = false;
+    }));
     let prov = def;
     $$('#aiProv [data-prov]', V).forEach((b) => (b.onclick = () => { prov = b.dataset.prov; $$('#aiProv [data-prov]', V).forEach((y) => y.classList.toggle('on', y === b)); if (!on(prov)) toast(PROV[prov] + ' non è ancora collegato: segui la guida in fondo alla pagina', 1); }));
     $('#aiSave').onclick = async () => { try { await aapi('PUT', '/admin/settings', { aiDaily: +$('#aiDaily').value, aiProvider: prov, aiClaude: $('#aiClaude').value, aiGemini: $('#aiGemini').value }); toast('Impostazioni dell\'assistente salvate'); aiLoad(); } catch (e) { toast(e.message, 1); } };

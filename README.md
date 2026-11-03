@@ -307,6 +307,11 @@ Solo server e pannello: **non serve un nuovo APK**.
 - Nell'app, sotto la risposta, si vede **chi ha risposto** (Claude o Gemini) e quante domande restano.
 - **Claude risponde solo se** su Cloudflare c'è il segreto `ANTHROPIC_API_KEY` **e** su console.anthropic.com c'è del credito; altrimenti risponde Gemini.
 
+### 2.4.3 — Manutenzione e «Prova Claude / Gemini»
+
+- **🔧 Manutenzione** (pulsante in alto nel pannello): blocca l'app a tutti i clienti tranne quelli che scegli (per provare le novità). Chi sta guardando viene fermato entro circa 20 secondi e vede il tuo messaggio; finita la manutenzione l'app si riapre da sola. Le connessioni collegate seguono il loro cliente. Una barra rossa nel pannello ricorda che è attiva, con *Termina manutenzione*.
+- **Assistente IA → «Prova Claude» / «Prova Gemini»**: una domanda di prova che dice subito se funziona o perché no (credito finito, chiave sbagliata, modello non disponibile, servizio sovraccarico). Ogni errore di Claude finisce anche in *Attività*.
+
 ## Come funziona per i clienti
 
 1. Installano l'app (codice Downloader) e la aprono: compare un **codice** tipo `KXAB-7Q2M`.

@@ -89,6 +89,20 @@ img{display:block}
 
 /* ===== attivazione ===== */
 #activate{align-items:center;justify-content:center;text-align:center;gap:22px}
+#activate.maint .radar,#activate.maint #actBtns,#activate.maint #srvBox{display:none!important}
+#activate.maint{background:radial-gradient(ellipse at 50% 38%,var(--a1-22,rgba(229,32,43,.14)),transparent 62%)}
+.mtbox{display:flex;flex-direction:column;align-items:center;gap:2.2vh;max-width:min(760px,90vw)}
+.mtico{position:relative;width:clamp(110px,22vh,170px);height:clamp(110px,22vh,170px)}
+.mtico svg{position:absolute;inset:0;width:100%;height:100%}
+.mtico .g1{animation:spin 9s linear infinite;transform-origin:50% 50%;color:var(--a1);filter:drop-shadow(0 0 18px var(--a1))}
+.mtico .g2{animation:spin 6s linear infinite reverse;transform-origin:50% 50%;color:#fff;opacity:.85;width:46%;height:46%;left:auto;top:auto;right:-4%;bottom:-2%}
+.mtbrand{font-size:clamp(13px,2.2vh,16px);letter-spacing:.45em;color:var(--mut);text-transform:uppercase}
+.mtbox .mth{display:block;color:#fff;font-weight:800;font-size:clamp(28px,6.4vh,52px);line-height:1.05;margin:0;letter-spacing:-.01em}
+.mtbox .mtp{display:block;margin:0;font-size:clamp(15px,2.8vh,21px);line-height:1.45;color:#d8dcf0}
+.mtbox .mtsub{font-size:clamp(12px,2.1vh,15px);color:var(--mut)}
+.mtbar{width:min(420px,70vw);height:4px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:1vh}
+.mtbar i{display:block;width:35%;height:100%;border-radius:4px;background:linear-gradient(90deg,transparent,var(--a1),transparent);animation:mtslide 1.8s ease-in-out infinite}
+@keyframes mtslide{from{transform:translateX(-110%)}to{transform:translateX(310%)}}
 .radar{width:150px;height:150px;border-radius:50%;position:relative;border:1px solid var(--line);
   background:radial-gradient(circle,transparent 30%,rgba(34,225,255,.06) 31%,transparent 32%,transparent 60%,rgba(34,225,255,.06) 61%,transparent 62%)}
 .radar::before{content:'';position:absolute;top:0;right:0;bottom:0;left:0;border-radius:50%;background:conic-gradient(from 0deg,transparent 70%,var(--a1-70));animation:spin 2.4s linear infinite}
@@ -2168,7 +2182,7 @@ async function register() {
   if (status === 429) { S.lastError = 'Troppe richieste: riprovo tra poco.'; throw new Error('rate'); }
   if (status >= 400) { S.lastError = `Errore del server (HTTP ${status})${j.error ? ': ' + j.error : ''}.`; throw new Error('server'); }
   S.lastError = '';
-  S.status = j.status; S.expires = j.expires; S.playlists = j.playlists || [];
+  S.status = j.status; S.expires = j.expires; S.playlists = j.playlists || []; S.maintMsg = j.maintMsg || '';
   S.messages = Array.isArray(j.messages) ? j.messages : [];
   S.perms = j.perms && typeof j.perms === 'object' ? j.perms : null;
   if (Array.isArray(j.addons)) { S.addons = j.addons; store.set('addons', j.addons); } else if (j.status === 'active') { S.addons = null; }
@@ -5692,17 +5706,25 @@ function showActivate(serverMode) {
     pending: 'Comunica questo codice al tuo fornitore per attivare il servizio.<br><span class="mut">La schermata si aggiornerà da sola appena il dispositivo sarà attivo.</span>',
     expired: '<b style="color:var(--bad)">Abbonamento scaduto.</b> Contatta il tuo fornitore per rinnovarlo indicando il codice qui sopra.',
     disabled: '<b style="color:var(--bad)">Dispositivo disattivato.</b> Contatta il tuo fornitore.',
+    maintenance: `<b style="color:var(--warn)">🔧 ${esc(S.maintMsg || 'Servizio in manutenzione: torna disponibile a breve.')}</b><br><span class="mut">L'app si riapre da sola appena la manutenzione finisce.</span>`,
     locked: '<b style="color:var(--bad)">Questo codice è già usato da un altro dispositivo.</b> Chiedi al tuo fornitore di sbloccarlo dal pannello.',
     offline: '<b style="color:var(--warn)">Non riesco a collegarmi al server.</b> Riprovo da solo ogni pochi secondi.' + `<br><span class="mut" style="font-size:14px;display:block;margin-top:8px">${esc(S.lastError || 'Controlla la connessione a internet.')}<br>Server: ${esc(baseServer() || 'non impostato')}</span>`,
     noserver: 'Nessun server collegato. Inserisci l\'indirizzo del server del tuo fornitore, oppure prova la demo.',
   };
   const key = serverMode ? 'noserver' : S.status;
   const priv = !serverMode && key === 'pending' && !store.get('privOk', 0);
-  box.parentElement.style.display = priv ? 'none' : '';
-  $('#actMsg').innerHTML = (msgs[key] || msgs.pending) + (S.settings.supportContact && !serverMode ? `<br><span class="mut">Assistenza: ${esc(S.settings.supportContact)}</span>` : '');
+  const mt = key === 'maintenance';
+  $('#activate').classList.toggle('maint', mt);
+  box.parentElement.style.display = priv || mt ? 'none' : '';
+  $('#actMsg').innerHTML = mt
+    ? `<span class="mtbox"><span class="mtico"><svg class="g1" viewBox="0 0 100 100"><path fill="currentColor" fill-rule="evenodd" d="M43 6h14l2 11a34 34 0 0 1 9 4l9-7 10 10-7 9a34 34 0 0 1 4 9l11 2v14l-11 2a34 34 0 0 1-4 9l7 9-10 10-9-7a34 34 0 0 1-9 4l-2 11H43l-2-11a34 34 0 0 1-9-4l-9 7-10-10 7-9a34 34 0 0 1-4-9L5 57V43l11-2a34 34 0 0 1 4-9l-7-9 10-10 9 7a34 34 0 0 1 9-4zM50 34a16 16 0 1 0 .1 0z"/></svg><svg class="g2" viewBox="0 0 100 100"><path fill="currentColor" fill-rule="evenodd" d="M43 6h14l2 11a34 34 0 0 1 9 4l9-7 10 10-7 9a34 34 0 0 1 4 9l11 2v14l-11 2a34 34 0 0 1-4 9l7 9-10 10-9-7a34 34 0 0 1-9 4l-2 11H43l-2-11a34 34 0 0 1-9-4l-9 7-10-10 7-9a34 34 0 0 1-4-9L5 57V43l11-2a34 34 0 0 1 4-9l-7-9 10-10 9 7a34 34 0 0 1 9-4zM50 34a16 16 0 1 0 .1 0z"/></svg></span>
+      <span class="mtbrand">${esc(S.settings.brand || 'KAIROS')}</span><span class="mth">Manutenzione in corso</span>
+      <span class="mtp">${esc(S.maintMsg || 'Stiamo migliorando il servizio: torniamo disponibili a breve. Grazie per la pazienza!')}</span>
+      <span class="mtbar"><i></i></span><span class="mtsub">L'app si riaprirà da sola appena abbiamo finito${S.settings.supportContact ? ' · Assistenza: ' + esc(S.settings.supportContact) : ''}</span></span>`
+    : (msgs[key] || msgs.pending) + (S.settings.supportContact && !serverMode ? `<br><span class="mut">Assistenza: ${esc(S.settings.supportContact)}</span>` : '');
   $('#srvBox').style.display = serverMode ? 'block' : 'none';
   $('#srvInput').value = S.server || '';
-  $('#actBtns').innerHTML = (!serverMode && S.status === 'offline' ? '<button class="btn pri" data-f id="aRetry">↻ Riprova ora</button>' : '') + (serverMode || window.KAIROS_SERVER ? '' : '<button class="btn" data-f id="aSrv">Imposta server</button>') + (S.settings.allowLocalPlaylists ? '<button class="btn" data-f id="aLocal">Usa una mia playlist</button>' : '') + (window.KAIROS_SERVER ? '' : '<button class="btn" data-f id="aDemo">✦ Modalità demo</button>');
+  $('#actBtns').innerHTML = mt ? '' : (!serverMode && S.status === 'offline' ? '<button class="btn pri" data-f id="aRetry">↻ Riprova ora</button>' : '') + (serverMode || window.KAIROS_SERVER ? '' : '<button class="btn" data-f id="aSrv">Imposta server</button>') + (S.settings.allowLocalPlaylists ? '<button class="btn" data-f id="aLocal">Usa una mia playlist</button>' : '') + (window.KAIROS_SERVER ? '' : '<button class="btn" data-f id="aDemo">✦ Modalità demo</button>');
   if (!serverMode && key === 'pending') $('#actBtns').insertAdjacentHTML('beforeend', '<button class="btn" data-f id="aLink">' + ICX.link + ' Ho già un abbonamento</button><button class="btn" data-f id="aPriv">Privacy e condizioni</button>');
   $('#aLink') && ($('#aLink').onclick = () => linkEnterDialog());
   $('#aPriv') && ($('#aPriv').onclick = () => privacyDialog());
@@ -5917,6 +5939,10 @@ async function heartbeat(force) {
     const j = await apiPost('/api/player/heartbeat', body); if (!j) return;
     sendPlayEvents();
     if (j.kick) { S.kickAck = j.kick; if (j.kick !== store.get('kickSeen', 0)) { store.set('kickSeen', j.kick); kickedByPanel(); } }
+    if (j.mt && S.status === 'active') { // manutenzione appena attivata dal fornitore: si interrompe la visione e si mostra l'avviso
+      register().then(() => { if (S.status !== 'active') { try { if (S.inPlayer && NATIVE && NATIVE.playerClose) NATIVE.playerClose(); } catch {} try { if ($('#fs').classList.contains('on')) closeFs(); } catch {} try { stopPreview(); stopVideo($('#pv')); } catch {} vpnApply(); showActivate(false); } }).catch(() => {});
+      return;
+    }
     const offNow = S.perms ? Object.keys(S.perms).filter((k) => S.perms[k] === false).sort().join(',') : '';
     let offSrv = ''; try { offSrv = j.ph ? Object.keys(JSON.parse(j.ph)).sort().join(',') : ''; } catch {}
     const pmNow = S.account ? (S.account.plMode === 'split' ? 'split' : 'merge') + '|' + (S.account.plDefault || '') : '';

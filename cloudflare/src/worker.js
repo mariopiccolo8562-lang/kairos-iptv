@@ -245,6 +245,7 @@ const DEFAULT_SETTINGS = {
   serverUrl: '', showFootball: true,
   price: '22 € / anno', privacy: '',
   aiDaily: 20, aiProvider: 'gm', aiClaude: 'haiku', aiGemini: 'flash',
+  maint: { on: false, msg: '', allow: [] },
 };
 /* Versione dell'APK da proporre alle app: quella pubblicata in automatico da GitHub (kairos-tv.json)
    oppure, solo se strettamente più recente, quella scritta a mano nel pannello.
@@ -1024,7 +1025,8 @@ async function playerHeartbeat(req, env, ip, ctx) {
     if (b.kickAck && +b.kickAck === +d.kick_t) await env.DB.prepare('UPDATE devices SET kick_t = 0 WHERE id = ? AND kick_t = ?').bind(d.id, +d.kick_t).run();
     else if (t - +d.kick_t < 180e3) kick = +d.kick_t;
   }
-  return json({ ok: true, unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (P.pl_default || '') + '|' + JSON.stringify(playerParse(P.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
+  const mt = maintFor(await getSettings(env), P) ? 1 : 0;
+  return json({ ok: true, mt, unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (P.pl_default || '') + '|' + JSON.stringify(playerParse(P.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
 }
 /** vista pannello: chi è collegato e cosa guarda */
 /* visioni contemporanee: prima di iniziare a guardare l'app chiede il permesso (solo se il pannello ha messo un limite) */
@@ -1178,7 +1180,7 @@ async function claudeAsk(env, model, text) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST', signal: AbortSignal.timeout(25000),
     headers: { 'content-type': 'application/json', 'x-api-key': String(env.ANTHROPIC_API_KEY).trim(), 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: m.id, max_tokens: 400, temperature: 0.6, system: AI_SYSTEM, messages: [{ role: 'user', content: text }] }),
+    body: JSON.stringify({ model: m.id, max_tokens: 400, system: AI_SYSTEM, messages: [{ role: 'user', content: text }] }), // niente «temperature»: Haiku 5.5 e Sonnet 5.5 rispondono con errore 400 se c'è
   });
   const j = await r.json().catch(() => null);
   const answer = j && Array.isArray(j.content) ? j.content.map((p) => (p && p.type === 'text' ? p.text : '')).join('').trim() : '';
@@ -1242,6 +1244,7 @@ async function playerAi(req, env, ip, ctx) {
       if (r && r.status === 200 && r.answer) return ok(r.answer, 'claude', r.tin, r.tout);
       if (r && [401, 403].includes(r.status)) ctx.waitUntil(log(env, 'off', `Assistente IA: Anthropic ha rifiutato la chiave ANTHROPIC_API_KEY (errore ${r.status}). Controlla di aver copiato la chiave giusta da console.anthropic.com`, ip));
       else if (r && r.status === 400 && /credit|balance|billing/i.test(r.err)) ctx.waitUntil(log(env, 'off', 'Assistente IA: credito di Claude finito. Ricarica su console.anthropic.com → Billing (intanto risponde Gemini, se è collegato)', ip));
+      else if (!(await throttled(env, 'aierr:claude', 1, 600e3))) ctx.waitUntil(log(env, 'off', `Assistente IA: Claude non ha risposto (${r ? 'errore ' + r.status + (r.err ? ': ' + str(r.err, 160) : '') : 'nessuna risposta dal server di Anthropic'}); ha risposto l'altra IA`, ip));
     }
     if (prov === 'gm' && env.GEMINI_API_KEY) {
       const list = (AI_GEMINI_MODELS[set.aiGemini] || AI_GEMINI_MODELS.flash).list;
@@ -1289,6 +1292,23 @@ async function adminAi(req, env, path, who, ip) {
       settings: { aiDaily: set.aiDaily ?? 20, aiProvider: aiProvOf(set), aiClaude: AI_CLAUDE_MODELS[set.aiClaude] ? set.aiClaude : 'haiku', aiGemini: AI_GEMINI_MODELS[set.aiGemini] ? set.aiGemini : 'flash' },
       claudeModels: Object.entries(AI_CLAUDE_MODELS).map(([k, v]) => ({ id: k, name: v.name })), geminiModels: Object.entries(AI_GEMINI_MODELS).map(([k, v]) => ({ id: k, name: v.name })),
     });
+  }
+  if (path === '/ai/test' && m === 'POST') {
+    // «Prova»: una domanda di prova per vedere subito se la chiave e il credito funzionano (e perché no)
+    const b = await readJSON(req, 1024), set = await getSettings(env), t0 = now(), text = 'Titolo: Prova\n\nDomanda: rispondi solo con la parola OK';
+    if (b.provider === 'claude') {
+      if (!env.ANTHROPIC_API_KEY) return json({ ok: false, error: 'Manca il segreto ANTHROPIC_API_KEY su Cloudflare' });
+      let r; try { r = await claudeAsk(env, set.aiClaude, text); } catch (e) { return json({ ok: false, error: 'Il server di Anthropic non risponde: ' + str(String(e && e.message), 120) }); }
+      const why = r.status === 401 ? 'Chiave sbagliata o revocata: creane una nuova su console.anthropic.com → API Keys' : r.status === 400 && /credit|balance|billing/i.test(r.err) ? 'Credito finito o mai caricato: console.anthropic.com → Billing' : r.status === 404 ? 'Modello non disponibile per il tuo account: prova Claude Haiku' : r.status === 429 ? 'Troppe richieste o limite di spesa raggiunto (console.anthropic.com → Limits)' : r.status === 529 ? 'Anthropic è sovraccarico in questo momento: riprova tra poco' : '';
+      return json({ ok: r.status === 200 && !!r.answer, status: r.status, ms: now() - t0, model: (AI_CLAUDE_MODELS[set.aiClaude] || AI_CLAUDE_MODELS.haiku).id, answer: str(r.answer, 200), error: r.status === 200 ? '' : why || ('Errore ' + r.status + (r.err ? ': ' + str(r.err, 200) : '')) });
+    }
+    if (b.provider === 'gm') {
+      if (!env.GEMINI_API_KEY) return json({ ok: false, error: 'Manca il segreto GEMINI_API_KEY su Cloudflare' });
+      const [model, think] = (AI_GEMINI_MODELS[set.aiGemini] || AI_GEMINI_MODELS.flash).list[0];
+      let r; try { r = await geminiAsk(env, model, text, think); } catch (e) { return json({ ok: false, error: 'Il server di Google non risponde' }); }
+      return json({ ok: r.status === 200 && !!r.answer, status: r.status, ms: now() - t0, model, answer: str(r.answer, 200), error: r.status === 200 ? '' : r.status === 429 ? 'Limite gratuito di Google raggiunto per ora' : [400, 401, 403].includes(r.status) ? 'Chiave sbagliata: controllala su aistudio.google.com' : 'Errore ' + r.status });
+    }
+    throw new HttpErr(400, 'Servizio non valido');
   }
   if (path === '/ai/grant' && m === 'POST') {
     const b = await readJSON(req, 1024), n = parseInt(b.n, 10), id = str(b.deviceId, 20);
@@ -1672,6 +1692,9 @@ async function route(req, env, ctx) {
 }
 
 /* ---------------- app: registrazione / sync ---------------- */
+/** manutenzione: l'app è bloccata per tutti tranne i clienti scelti nel pannello (P = abbonamento principale) */
+const maintFor = (s, P) => !!(s.maint && s.maint.on && P && !(s.maint.allow || []).includes(P.id));
+const MAINT_MSG = 'Servizio in manutenzione: torna disponibile a breve. Grazie per la pazienza!';
 async function playerRegister(req, env, ip, ctx) {
   if (await limited(env.RL_DEVICE, 'dev:' + ip)) return json({ error: 'Troppe richieste, riprova tra poco' }, 429);
   let b;
@@ -1717,9 +1740,10 @@ async function playerRegister(req, env, ip, ctx) {
   // un dispositivo collegato usa stato, scadenza, playlist, profili e limiti del suo principale
   const P = await primaryOf(env, d);
   const pls = P ? await unseal(env, P.playlists).catch(() => []) : [];
-  const status = P ? statusOf(P, pls) : 'pending';
   const s = await getSettings(env);
-  const out = { status, name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? pls : [], messages: await deviceMessages(env, d.id, P && P.id) };
+  let status = P ? statusOf(P, pls) : 'pending';
+  if (status === 'active' && maintFor(s, P)) status = 'maintenance';
+  const out = { status, ...(status === 'maintenance' ? { maintMsg: (s.maint && s.maint.msg) || MAINT_MSG } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? pls : [], messages: await deviceMessages(env, d.id, P && P.id) };
   if (status === 'active') {
     out.account = await accountOf(env, P, d, pls);
     out.vpn = await vpnOf(env, P, d);
@@ -2247,7 +2271,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     }
   }
   if (path === '/agents' || path.startsWith('/agents/')) return agentsAdmin(req, env, path, who, ip, null);
-  if (path === '/ai' || path === '/ai/grant') { const r = await adminAi(req, env, path, who, ip); if (r) return r; }
+  if (path === '/ai' || path === '/ai/grant' || path === '/ai/test') { const r = await adminAi(req, env, path, who, ip); if (r) return r; }
   const apv = path.match(/^\/addon-preview\/([a-z0-9-]{3,40})$/);
   if (apv && m === 'GET') { const a = ADDON_ASSETS[apv[1]]; if (!a || !a.prev) throw new HttpErr(404, 'Anteprima non disponibile'); return json({ id: apv[1], bg: a.prev.bg, avs: a.prev.avs }, 200, { 'Cache-Control': 'private, max-age=3600' }); }
   if (path === '/devices/addons' && m === 'POST') {
@@ -2306,6 +2330,13 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (typeof b.showFootball === 'boolean') s.showFootball = b.showFootball;
     if (b.aiDaily !== undefined) { const n = parseInt(b.aiDaily, 10); if (!(n >= 0 && n <= 1000)) throw new HttpErr(400, 'Domande al giorno: da 0 a 1000'); s.aiDaily = n; }
     if (b.aiProvider !== undefined) { if (!AI_PROVIDERS.includes(b.aiProvider)) throw new HttpErr(400, 'Servizio non valido'); s.aiProvider = b.aiProvider; }
+    if (b.maint !== undefined) {
+      const mt = b.maint && typeof b.maint === 'object' ? b.maint : {};
+      if (mt.allow !== undefined && !Array.isArray(mt.allow)) throw new HttpErr(400, 'allow deve essere un elenco');
+      const was = !!(s.maint && s.maint.on);
+      s.maint = { on: mt.on === true, msg: str(mt.msg || '', 300), allow: [...new Set((mt.allow || []).map((x) => str(x, 20)).filter((x) => /^[A-Za-z0-9_-]{6,20}$/.test(x)))].slice(0, 500) };
+      if (was !== s.maint.on) await log(env, s.maint.on ? 'off' : 'on', `${who}: manutenzione ${s.maint.on ? 'ATTIVATA (app bloccata tranne ' + s.maint.allow.length + ' clienti)' : 'terminata: app di nuovo disponibile per tutti'}`, ip);
+    }
     if (b.aiGemini !== undefined) { if (!AI_GEMINI_MODELS[b.aiGemini]) throw new HttpErr(400, 'Modello Gemini non valido'); s.aiGemini = b.aiGemini; }
     if (b.aiClaude !== undefined) { if (!AI_CLAUDE_MODELS[b.aiClaude]) throw new HttpErr(400, 'Modello Claude non valido'); s.aiClaude = b.aiClaude; }
     if (b.apkVersionCode !== undefined) {
