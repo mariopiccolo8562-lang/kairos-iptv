@@ -69,7 +69,12 @@ jobs:
           done
           ARGS+=(--var "UI_VERSION:${UI_VERSION}")
           ARGS+=(--var "APK_FEED:https://github.com/${STORE_REPO}/releases/download/kairos-tv/kairos-tv.json")
-          wrangler deploy "${ARGS[@]}"
+          if ! wrangler deploy "${ARGS[@]}"; then
+            # il token di GitHub senza il permesso "Workers AI" non può collegare l'assistente: si pubblica il resto
+            echo "::warning::Pubblicato senza Workers AI: aggiungi al token CLOUDFLARE_API_TOKEN il permesso Account → Workers AI → Modifica (vedi README, Assistente IA)"
+            sed -i '/^\[ai\]$/,/^binding = "AI"$/d' wrangler.toml
+            wrangler deploy "${ARGS[@]}"
+          fi
 
       - name: Carica i segreti
         env:

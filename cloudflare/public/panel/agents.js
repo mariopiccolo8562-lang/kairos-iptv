@@ -126,7 +126,7 @@ body.agent .foot{display:none}
   // "Dispositivi" diventa "Clienti"
   { const b = nav('devices'); if (b) for (const n of b.childNodes) if (n.nodeType === 3 && /Dispositivi/.test(n.textContent)) n.textContent = 'Clienti'; }
   Object.assign(TITLES, { devices: 'Clienti', agents: 'Agenti', sec: 'Sicurezza' });
-  const GROUPS = [['', ['dash']], ['Utenti', ['devices', 'agents']], ['Monitoraggio', ['live', 'apperr', 'reports', 'creq', 'areq']], ['Contenuti', ['vod', 'msgs', 'store']], ['Impostazioni', ['dns', 'settings', 'api', 'activity', 'sec']]];
+  const GROUPS = [['', ['dash']], ['Utenti', ['devices', 'agents']], ['Monitoraggio', ['live', 'apperr', 'reports', 'creq', 'areq', 'ai']], ['Contenuti', ['vod', 'msgs', 'store']], ['Impostazioni', ['dns', 'settings', 'api', 'activity', 'sec']]];
   function layoutMenu() {
     const foot = $('aside .foot'), brand = $('aside .brand');
     $$('.nav-h', side).forEach((h) => h.remove());
@@ -157,7 +157,7 @@ body.agent .foot{display:none}
   };
 
   /* ---------- modalità agente ---------- */
-  const OWNER_ONLY = ['dash', 'live', 'apperr', 'reports', 'creq', 'areq', 'vod', 'msgs', 'store', 'dns', 'settings', 'api', 'activity'];
+  const OWNER_ONLY = ['dash', 'live', 'apperr', 'reports', 'creq', 'areq', 'ai', 'vod', 'msgs', 'store', 'dns', 'settings', 'api', 'activity'];
   let modeSet = '';
   function applyMode() {
     const ag = isAgent();

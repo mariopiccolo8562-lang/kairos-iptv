@@ -554,6 +554,7 @@ function renderDrawer() {
     const acc = { maxConn: edit.maxConn, maxProfiles: edit.maxProfiles, maxStreams: +edit.maxStreams || 0, vpnLoc: edit.vpnLoc || '', perms: Object.fromEntries(PERM_L.map(([k]) => [k, !edit.perms || edit.perms[k] !== false])), lockProfiles: !!edit.lockProfiles, vpn: +edit.vpn || 0, plMode: edit.plMode === 'split' ? 'split' : 'merge', plDefault: edit.plDefault || '', player: { live: (edit.player || {}).live || '', movie: (edit.player || {}).movie || '', series: (edit.player || {}).series || '' }, profiles: edit.profiles.map((p) => ({ id: p.id || undefined, name: p.name, avatar: p.avatar, kids: !!p.kids, pl: p.pl || 'all' })) };
     try {
       const own = $('#eOwner') ? { ownerId: edit.ownerId || 0 } : {};
+      if (edit.aiLimitIn !== undefined) own.aiLimit = edit.aiLimitIn;
       if (isNew) await api('POST', '/admin/devices', { code: edit.code, name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart, ...own });
       else if (edit.parent) await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, ...vpnPart });
       else await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart, ...own });

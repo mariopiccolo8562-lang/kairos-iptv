@@ -215,7 +215,7 @@ In **Impostazioni** trovi anche il **prezzo** mostrato ai clienti e il testo **P
 
 **Da impostare (facoltativo)**
 - Età consigliata, contenuti speciali e ricerca per attore usano lo stesso segreto `TMDB_KEY` dei trailer: senza, quelle voci semplicemente non compaiono.
-- Assistente IA (Google Gemini, piano gratuito): crea una chiave su **aistudio.google.com → Get API key**, poi aggiungila in **uno** di questi due modi: (a) GitHub → repository → Settings → Secrets and variables → Actions → *New repository secret* con nome **`GEMINI_API_KEY`** (viene caricata sul worker a ogni pubblicazione); oppure (b) Cloudflare → Workers → kairos-panel → Impostazioni → Variabili e segreti, tipo **Segreto** (non *Testo*: le variabili di testo vengono cancellate a ogni pubblicazione). Senza, la voce non compare. Se Google rifiuta la chiave lo vedi in *Attività*. Se le risposte gratuite del giorno finiscono, l'app passa al modello più leggero e poi avvisa il cliente; massimo 40 domande al giorno per dispositivo.
+- Assistente IA: vedi la sezione **15** (Cloudflare Workers AI; Gemini resta solo come riserva facoltativa con il segreto `GEMINI_API_KEY`).
 - **Google Cast non è incluso**: le Fire TV non hanno i Google Play Services, quindi il pulsante non funzionerebbe sui dispositivi dei clienti.
 
 **Controllo e fluidità**
@@ -278,6 +278,19 @@ Solo server e pannello: **non serve un nuovo APK**.
 - **Codici Downloader in evidenza** in alto nel pannello, con *Copia*: quello dell'app e quello del **Kairos Store** (nuovo campo in Impostazioni → App e aggiornamenti). Li vedono anche gli agenti.
 - **Linea già in uso**: prima di avviare una visione l'app controlla le connessioni della linea Xtream; se sono tutte occupate da altri dispositivi la visione non parte e compare l'avviso *«C'è già un altro dispositivo collegato»* (invece dell'errore o dello schermo nero). Non controlla mentre cambi canale o episodio, e se la linea non risponde la visione parte comunque. Lo stesso avviso vale per il limite di visioni contemporanee impostato dal pannello.
 - Tutto arriva con l'interfaccia che si aggiorna da sola: **non serve un nuovo APK**.
+
+## 15. Novità 2.4 — Assistente IA con Cloudflare Workers AI
+
+- L'assistente ora usa **Cloudflare Workers AI** (modello **Gemma 4**, molto più veloce di Gemini): nessuna chiave da copiare, gratis fino a **10.000 neuroni al giorno** (circa 900 domande), che ripartono a mezzanotte UTC (01:00 in Italia). Se il limite gratuito finisce e hai messo anche `GEMINI_API_KEY`, risponde Gemini come riserva.
+- **Come attivarlo (una volta sola)**:
+  1. Cloudflare → in alto a destra **My Profile → API Tokens** → accanto al token che usi per GitHub (quello salvato come `CLOUDFLARE_API_TOKEN`) premi **⋯ → Edit**.
+  2. In *Permissions* premi **+ Add more** → scegli **Account** → **Workers AI** → **Edit**. Premi **Continue to summary → Update token**. Il token resta lo stesso: non devi ricopiarlo su GitHub.
+  3. GitHub → **Actions → Pannello Cloudflare → Run workflow** (oppure aspetta la prossima pubblicazione). Nel pannello, *Assistente IA* deve dire **Servizio: Attivo**.
+  Se il token non ha ancora il permesso, il pannello si pubblica lo stesso (senza assistente) e GitHub mostra un avviso giallo.
+- **Pannello → Monitoraggio → Assistente IA**: stato del servizio, domande di oggi, quanta parte del gratuito di Cloudflare è stata usata (con le domande che restano), grafico degli ultimi 14 giorni, clienti che l'hanno usato oggi, impostazioni (**domande al giorno per cliente**, modello) e le **richieste di altre domande** dei clienti con **+10 / +25 / +50** o *Rifiuta*.
+- **Domande al giorno per singolo cliente**: nella scheda del cliente (sezione Permessi). Vuoto = valore predefinito, 0 = niente assistente. Le domande extra concesse si usano dopo quelle del giorno e non scadono.
+- **App**: quando le domande finiscono (o finisce il gratuito di Cloudflare) compare il pulsante **«Chiedi altre domande al fornitore»**; sotto ogni risposta c'è quante domande restano oggi. Le finestre dell'assistente e del menu (tasto OK lungo) sono più piccole e non escono più dallo schermo della TV (menu su due colonne).
+- Tutto arriva con l'aggiornamento automatico dell'interfaccia: **non serve un nuovo APK**.
 
 ## Come funziona per i clienti
 

@@ -570,7 +570,9 @@ img{display:block}
 /* ---------- speed test / aggiornamento ---------- */
 .speedm{position:fixed;top:0;right:0;bottom:0;left:0;z-index:70;display:none;place-items:center;background:rgba(0,0,0,.82)}
 .speedm.on{display:grid;animation:fadein .2s}
-.speedm .sbox{width:min(520px,92vw);padding:28px;border-radius:18px;background:#14141a;border:1px solid rgba(255,255,255,.1);text-align:center}
+.speedm .sbox{width:min(520px,92vw);max-height:94vh;overflow:auto;padding:28px;border-radius:18px;background:#14141a;border:1px solid rgba(255,255,255,.1);text-align:center}
+.speedm .sbox.menubox{width:min(780px,94vw);padding:2.6vh 2.4vw}.menubox h2{font-size:clamp(15px,3.2vh,22px)!important;margin:.6vh 0 1.6vh!important}.menubox .replist{display:grid;grid-template-columns:1fr 1fr;gap:1.1vh}.menubox .replist .btn{padding:1.3vh 1.2vw;font-size:clamp(11px,2.4vh,15px);min-height:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.speedm.aim .sbox{width:min(900px,94vw);padding:2.2vh 2.4vw}.aim h2{font-size:clamp(15px,3.2vh,22px);margin:.4vh 0 1.2vh}.aim .orb{font-size:clamp(10px,1.8vh,12px)!important}.aim .aichips{display:grid;grid-template-columns:1fr 1fr;gap:1vh;margin:0}.aim .aichips .btn{padding:1.1vh 1vw;font-size:clamp(11px,2.2vh,15px);min-height:0}.aim .tagn{margin:1.2vh 0 .4vh}.aim .tagn .inp,.aim .tagn .btn{padding:1.1vh 1.2vw;font-size:clamp(11px,2.3vh,15px);min-height:0}.aim .aians{max-height:40vh;margin:1vh 0 .4vh}.aim .aians .ait{font-size:clamp(12px,2.5vh,17px);line-height:1.45;font-weight:500}.aim .aians .aiq{font-size:clamp(10px,2vh,13px)}.aim .aians .aileft{display:block;margin-top:.8vh;color:var(--mut);font-size:clamp(10px,1.9vh,13px)}.aim .sbtn{margin-top:.6vh}.aim .sbtn .btn{padding:1.1vh 1.6vw;font-size:clamp(11px,2.2vh,15px);min-height:0}
 .speedm .gauge{width:min(320px,70%);margin:10px auto 0;display:block}
 .speedm .snum{display:flex;align-items:baseline;justify-content:center;gap:8px;margin-top:-6px}
 .speedm .snum b{font-family:'Bebas Neue',Orbitron;font-size:clamp(44px,10vh,72px);line-height:1}
@@ -3399,14 +3401,14 @@ window.kxMultiClosed = (r) => {
 const aiOffNow = () => !!S.aiOff && Date.now() - S.aiOff < 10 * 60e3; // «non disponibile» si ricontrolla dopo 10 minuti (es. chiave appena aggiunta)
 function aiDialog(x, prog) {
   if (!perm('ai')) return toast('L\'assistente non è attivo sul tuo abbonamento');
-  if (S.aiOff) return toast('Assistente IA non disponibile su questo server');
+  if (aiOffNow()) return toast('Assistente IA non disponibile su questo server');
   const live = isLiveItem(x), ser = !live && isSeriesItem(x);
   const ctx = { title: live ? (prog && prog.title) || '' : x.name, ch: live ? x.name : '', kind: live ? 'live' : ser ? 'series' : 'movie', year: x.year || '', plot: String((live ? prog && prog.desc : x.plot) || '').slice(0, 600), genre: x.genre || '', cast: String(x.cast || '').slice(0, 200) };
   const chips = live ? ['Di cosa parla questo programma?', 'Chi lo conduce?', 'Quando va in onda di nuovo?'] : ['Di cosa parla? (senza spoiler)', 'Chi sono gli attori principali?', 'È adatto ai bambini?', ser ? 'Serie simili da guardare' : 'Film simili da guardare'];
   kxModal('aiM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">✦ ASSISTENTE IA</div><h2>${esc(ctx.title || x.name)}</h2>
     <div class="aichips">${chips.map((c, i) => `<button class="btn" data-f data-aq="${i}">${esc(c)}</button>`).join('')}</div>
     <div class="tagn"><input class="inp" data-f id="aiIn" maxlength="200" placeholder="Fai una domanda…"><button class="btn pri" data-f id="aiGo">Chiedi</button></div>
-    <div class="aians" id="aiA"></div><div class="sbtn"><button class="btn" data-f id="aiNo">Chiudi</button></div>`);
+    <div class="aians" id="aiA"></div><div class="sbtn"><button class="btn" data-f id="aiNo">Chiudi</button></div>`, null, 'aim');
   let busy = false;
   const ask = async (q) => {
     q = String(q || '').trim(); if (!q || busy) return;
@@ -3414,8 +3416,12 @@ function aiDialog(x, prog) {
     try {
       const j = await apiPost('/api/player/ai', { q, ctx });
       if (j && j.off) { S.aiOff = Date.now(); $('#aiA').innerHTML = '<div class="mut">Assistente IA non disponibile su questo server.</div>'; return; }
-      $('#aiA').innerHTML = `<p class="aiq">${esc(q)}</p><div class="ait">${esc(j && j.answer || 'Nessuna risposta.').replace(/\n/g, '<br>')}</div>`;
-    } catch (e) { $('#aiA').innerHTML = `<div class="mut">${esc(e.message || 'Non riesco a rispondere adesso')}</div>`; } finally { busy = false; }
+      $('#aiA').innerHTML = `<p class="aiq">${esc(q)}</p><div class="ait">${esc(j && j.answer || 'Nessuna risposta.').replace(/\n/g, '<br>')}</div>${j && j.left != null ? `<small class="aileft">${j.left === 0 ? 'Era l\'ultima domanda di oggi' : 'Domande rimaste oggi: ' + j.left}</small>` : ''}`;
+    } catch (e) {
+      const lim = /domande di oggi|risposte gratuite/i.test(e.message || '');
+      $('#aiA').innerHTML = `<div class="mut">${esc(e.message || 'Non riesco a rispondere adesso')}</div>${lim ? '<button class="btn pri" data-f id="aiMore" style="margin-top:1vh">Chiedi altre domande al fornitore</button>' : ''}`;
+      if ($('#aiMore')) { $('#aiMore').onclick = async () => { const bt = $('#aiMore'); bt.disabled = true; try { const r = await apiPost('/api/player/request', { ctype: 'ai' }); fx('ok'); bt.textContent = r && r.already ? 'Richiesta già inviata ✓' : 'Richiesta inviata ✓'; } catch (er) { bt.disabled = false; toast('Non inviata: ' + (er.message || 'riprova')); } }; focus($('#aiMore'), true); }
+    } finally { busy = false; }
   };
   $$('#aiM [data-aq]').forEach((b) => (b.onclick = () => ask(chips[+b.dataset.aq])));
   $('#aiGo').onclick = () => ask($('#aiIn').value);
