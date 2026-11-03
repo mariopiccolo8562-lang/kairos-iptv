@@ -1153,7 +1153,6 @@ async function playerMeta(req, env, ip, url, ctx) {
   if (await cacheOk(env, url, 'cwm:', !!v.tmdb)) ctx.waitUntil(env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(key, JSON.stringify(v)).run());
   return json({ cert: v.cert, certSrc: v.certSrc, extras: v.extras });
 }
-/* assistente IA (Claude): solo se il fornitore ha messo il segreto ANTHROPIC_API_KEY e il permesso «ai» è acceso */
 /* assistente IA con Google Gemini (piano gratuito): segreto GEMINI_API_KEY; se il modello principale è al limite si usa quello leggero */
 const AI_MODEL = 'gemini-3.8-flash', AI_MODEL_LITE = 'gemini-3.5-flash-lite';
 const AI_SYSTEM = 'Sei l\'assistente di un\'app per guardare la TV. Rispondi in italiano, in modo breve e chiaro (al massimo 6 frasi), adatto a essere letto sulla TV. Parla solo del contenuto indicato e di argomenti legati (trama, attori, curiosità, se è adatto ai bambini, contenuti simili). Non rivelare mai colpi di scena o finali (niente spoiler). Se non sei sicuro di qualcosa, dillo. Non usare markdown, elenchi o asterischi.';
@@ -1199,6 +1198,7 @@ async function playerAi(req, env, ip, ctx) {
     if (![429, 404, 500, 503].includes(r.status)) break; // chiave sbagliata o richiesta rifiutata: inutile riprovare
   }
   if (last === 429) return json({ error: 'L\'assistente ha finito le risposte gratuite di oggi: riprova più tardi' }, 429);
+  if ([400, 401, 403].includes(last)) ctx.waitUntil(log(env, 'off', `Assistente IA: Google ha rifiutato la chiave GEMINI_API_KEY (errore ${last}). Controlla di aver copiato la chiave giusta da aistudio.google.com`, ip));
   return json({ error: 'Assistente non disponibile in questo momento' }, 502);
 }
 /* ricerca per attore: titoli in cui ha recitato (l'app li confronta con la propria libreria) */

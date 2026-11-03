@@ -3396,6 +3396,7 @@ window.kxMultiClosed = (r) => {
   if (ch) openFs(ch, 'live');
 };
 /* ======== assistente IA: domande su quello che si guarda (se il fornitore l'ha attivato) ======== */
+const aiOffNow = () => !!S.aiOff && Date.now() - S.aiOff < 10 * 60e3; // «non disponibile» si ricontrolla dopo 10 minuti (es. chiave appena aggiunta)
 function aiDialog(x, prog) {
   if (!perm('ai')) return toast('L\'assistente non è attivo sul tuo abbonamento');
   if (S.aiOff) return toast('Assistente IA non disponibile su questo server');
@@ -3412,7 +3413,7 @@ function aiDialog(x, prog) {
     busy = true; $('#aiA').innerHTML = '<div class="mut">Sto pensando…</div>';
     try {
       const j = await apiPost('/api/player/ai', { q, ctx });
-      if (j && j.off) { S.aiOff = true; $('#aiA').innerHTML = '<div class="mut">Assistente IA non disponibile su questo server.</div>'; return; }
+      if (j && j.off) { S.aiOff = Date.now(); $('#aiA').innerHTML = '<div class="mut">Assistente IA non disponibile su questo server.</div>'; return; }
       $('#aiA').innerHTML = `<p class="aiq">${esc(q)}</p><div class="ait">${esc(j && j.answer || 'Nessuna risposta.').replace(/\n/g, '<br>')}</div>`;
     } catch (e) { $('#aiA').innerHTML = `<div class="mut">${esc(e.message || 'Non riesco a rispondere adesso')}</div>`; } finally { busy = false; }
   };
@@ -3659,7 +3660,7 @@ async function openDetail(x) {
         <button class="dx" data-f data-back>✕</button>
         <div class="dht"><div class="hkind"><i class="kb">K</i>${isSeries ? 'SERIE' : 'FILM'}</div><h1>${esc(x.name)}</h1>
           <div class="acts">${isSeries ? `<button class="nbtn play" data-f data-autof id="dEp1"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>Episodi</button>` : `<button class="nbtn play" data-f data-autof id="dPlay"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>${pos ? 'Riprendi' : 'Riproduci'}</button>${pos ? '<button class="nbtn info" data-f id="dRestart">↺ Dall\'inizio</button>' : ''}`}${!S.demo && baseServer() ? '<button class="nbtn info" data-f id="dTrailer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="m10 9 5 3-5 3z" fill="currentColor"/></svg>Trailer</button>' : ''}
-          <button class="rbtn" data-f id="dFav" title="La mia lista">${S.favs.has(x.id) ? '✓' : '+'}</button>${perm('ai') && !S.aiOff && !S.demo ? '<button class="rbtn ai" data-f id="dAi" title="Chiedi all\'assistente IA">✦</button>' : ''}</div></div>
+          <button class="rbtn" data-f id="dFav" title="La mia lista">${S.favs.has(x.id) ? '✓' : '+'}</button>${perm('ai') && !aiOffNow() && !S.demo ? '<button class="rbtn ai" data-f id="dAi" title="Chiedi all\'assistente IA">✦</button>' : ''}</div></div>
       </div>
       <div class="dbody"><div><div class="hmeta">${ageBadge(x.cert)}${+x.rating ? `<span class="m">★ ${(+x.rating).toFixed(1)}</span>` : ''}${ex.year ? `<span>${esc(ex.year)}</span>` : ''}${ex.duration ? `<span>${esc(ex.duration)}</span>` : ''}<span class="bx">HD</span></div>
         <p class="plot">${esc(ex.plot || 'Nessuna descrizione disponibile.')}</p></div>
@@ -4503,7 +4504,7 @@ function itemMenu(x, el) {
   acts.push(['tag', '🏷  Tag…']);
   if (live) acts.push(['epg', '📅  Associa la guida TV…']);
   if (live && HAS_MULTI && perm('multi')) acts.push(['multi', '⊞  Multi-schermo (2 o 4 canali)…']);
-  if (perm('ai') && !S.aiOff && !S.demo) acts.push(['ai', '✦  Chiedi all\'assistente IA']);
+  if (perm('ai') && !aiOffNow() && !S.demo) acts.push(['ai', '✦  Chiedi all\'assistente IA']);
   if (perm('report')) acts.push(['rep', live ? '⚠  Segnala: il canale non funziona' : '⚠  Segnala un problema']);
   fx('ok');
   modalPause();

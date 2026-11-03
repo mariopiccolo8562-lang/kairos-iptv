@@ -215,7 +215,7 @@ In **Impostazioni** trovi anche il **prezzo** mostrato ai clienti e il testo **P
 
 **Da impostare (facoltativo)**
 - Età consigliata, contenuti speciali e ricerca per attore usano lo stesso segreto `TMDB_KEY` dei trailer: senza, quelle voci semplicemente non compaiono.
-- Assistente IA (Google Gemini, piano gratuito): crea una chiave su **aistudio.google.com → Get API key** e aggiungila al worker come segreto **`GEMINI_API_KEY`** (Cloudflare → Workers → kairos → Impostazioni → Variabili e segreti, tipo *Segreto*). Senza, la voce non compare. Se le risposte gratuite del giorno finiscono, l'app passa al modello più leggero e poi avvisa il cliente; massimo 40 domande al giorno per dispositivo.
+- Assistente IA (Google Gemini, piano gratuito): crea una chiave su **aistudio.google.com → Get API key**, poi aggiungila in **uno** di questi due modi: (a) GitHub → repository → Settings → Secrets and variables → Actions → *New repository secret* con nome **`GEMINI_API_KEY`** (viene caricata sul worker a ogni pubblicazione); oppure (b) Cloudflare → Workers → kairos-panel → Impostazioni → Variabili e segreti, tipo **Segreto** (non *Testo*: le variabili di testo vengono cancellate a ogni pubblicazione). Senza, la voce non compare. Se Google rifiuta la chiave lo vedi in *Attività*. Se le risposte gratuite del giorno finiscono, l'app passa al modello più leggero e poi avvisa il cliente; massimo 40 domande al giorno per dispositivo.
 - **Google Cast non è incluso**: le Fire TV non hanno i Google Play Services, quindi il pulsante non funzionerebbe sui dispositivi dei clienti.
 
 **Controllo e fluidità**
