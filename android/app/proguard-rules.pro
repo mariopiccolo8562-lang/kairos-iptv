@@ -14,3 +14,9 @@
 # annotazioni JSR-305 usate dalla libreria solo in compilazione (compileOnly)
 -dontwarn javax.annotation.**
 -dontwarn com.google.errorprone.annotations.**
+
+# OkHttp (speed test M-Lab): avvisi su classi opzionali (Conscrypt, BouncyCastle, OpenJSSE) non presenti
+-dontwarn okhttp3.internal.platform.**
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**

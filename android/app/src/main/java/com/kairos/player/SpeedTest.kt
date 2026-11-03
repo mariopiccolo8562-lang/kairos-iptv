@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 
 /**
- * Speed test su speed.cloudflare.com:
+ * Speed test: prima M-Lab (vedi Ndt7.kt), poi, se non raggiungibile, speed.cloudflare.com:
  * - latenza: 13 richieste vuote in sequenza sulla stessa connessione (la prima la apre e non conta);
  *   ping = mediana, jitter = media delle differenze tra misure consecutive
  * - download: 6 connessioni in parallelo per 8 s; i primi 1,5 s (avvio) non contano
@@ -29,6 +29,10 @@ object SpeedTest {
     private const val UL_MS = 6000.0
     private val lock = Any()
     private var current: Run? = null
+    /** chiavette con poca CPU (1 GB, MediaTek MT8695/MT8127): molte connessioni cifrate insieme abbassano il risultato */
+    private val LOW_END = setOf("AFTSSS", "AFTSS", "AFTMM", "AFTT", "AFTM")
+    private val DL_CONNS: Int get() = if (LOW_END.contains(android.os.Build.MODEL)) 3 else 6
+    private val UL_CONNS: Int get() = if (LOW_END.contains(android.os.Build.MODEL)) 2 else 4
 
     fun start(ua: String, cb: (String) -> Unit) {
         val r = Run(ua, cb)
@@ -107,17 +111,40 @@ object SpeedTest {
 
         fun run() {
             try {
-                measurePing()
+                // 1) M-Lab (NDT7): server più vicino scelto dal servizio pubblico; un solo flusso, adatto anche alle chiavette lente
+                val srv = if (!cancelled) Ndt7.locate(ua) else null
+                var label = ""
+                if (srv != null) {
+                    try {
+                        send(JSONObject().put("phase", "ping").put("p", 0).put("mbps", 0).put("server", srv.label))
+                        val pj = Ndt7.ping(srv, { cancelled }) { pg, jt, i, n -> ping = pg; jitter = jt; progress("ping", i * 10.0 / n, 0.0) }
+                        ping = pj.first; jitter = pj.second
+                        if (cancelled) return
+                        dl = Ndt7.download(srv, ua, { cancelled }) { m, f -> progress("download", 10.0 + 55.0 * f, m) }
+                        if (cancelled) return
+                        ul = try { Ndt7.upload(srv, ua, { cancelled }) { m, f -> progress("upload", 65.0 + 35.0 * f, m) } } catch (e: Exception) { -1.0 }
+                        label = srv.label
+                    } catch (e: Exception) {
+                        if (cancelled) return
+                        dl = -1.0; ul = -1.0; ping = -1.0; jitter = -1.0 // M-Lab non raggiungibile: si passa alla riserva
+                    }
+                }
                 if (cancelled) return
-                dl = measureDownload()
-                if (cancelled) return
-                ul = try { measureUpload() } catch (e: Exception) { -1.0 }
-                if (cancelled) return
+                // 2) riserva: Cloudflare (più connessioni; poche sulle chiavette con poca CPU)
+                if (dl < 0) {
+                    measurePing()
+                    if (cancelled) return
+                    dl = measureDownload()
+                    if (cancelled) return
+                    ul = try { measureUpload() } catch (e: Exception) { -1.0 }
+                    if (cancelled) return
+                    label = if (colo.isNotEmpty()) "Cloudflare $colo" else "Cloudflare"
+                }
                 send(
                     JSONObject().put("done", true).put("mbps", r1(dl)).put("dl", r1(dl))
                         .put("ul", if (ul < 0) -1.0 else r1(ul))
                         .put("ping", r1(ping)).put("jitter", r1(jitter))
-                        .put("server", if (colo.isNotEmpty()) "Cloudflare $colo" else "Cloudflare")
+                        .put("server", label)
                 )
             } catch (e: Throwable) {
                 if (!cancelled) send(JSONObject().put("error", e.message ?: "errore di rete"))
@@ -194,7 +221,7 @@ object SpeedTest {
             val total = AtomicLong(0)
             val errors = AtomicInteger(0)
             val stop = AtomicBoolean(false)
-            val workers = (1..6).map { k ->
+            val workers = (1..DL_CONNS).map { k ->
                 thread(name = "kx-dl-$k", isDaemon = true) {
                     val buf = ByteArray(64 * 1024)
                     while (!stop.get() && !cancelled) {
@@ -261,7 +288,7 @@ object SpeedTest {
             val stop = AtomicBoolean(false)
             val chunk = ByteArray(64 * 1024).also { rnd.nextBytes(it) } // dati casuali: non comprimibili
             val size = 2_000_000
-            val workers = (1..4).map { k ->
+            val workers = (1..UL_CONNS).map { k ->
                 thread(name = "kx-ul-$k", isDaemon = true) {
                     while (!stop.get() && !cancelled) {
                         var c: HttpURLConnection? = null

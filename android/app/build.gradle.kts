@@ -59,6 +59,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
     implementation("androidx.media3:media3-ui:1.4.1")
     implementation("org.videolan.android:libvlc-all:3.6.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0") // speed test M-Lab (WebSocket NDT7)
     // VPN WireGuard (libreria ufficiale). 1.0.20250531 = ultima con minSdk 21 (la 1.0.20260102 richiede
     // Android 7+, stesso motore wireguard-go): così la VPN funziona anche su Fire TV con Fire OS 5
     implementation("com.wireguard.android:tunnel:1.0.20250531")

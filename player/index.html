@@ -968,15 +968,45 @@ h5.fh{margin-top:16px}
 .ptext.focused{box-shadow:0 0 0 2px #fff}
 .pdesc{text-align:left;max-height:24vh;overflow:hidden;color:#cfd6ee;font-size:14px;line-height:1.5;margin:0 0 12px}
 /* ===== speed test ===== */
-.spbox{width:min(560px,58vw,94vw)!important;padding:clamp(14px,2.4vh,24px) clamp(16px,2.6vw,28px)!important;max-height:94vh;overflow:hidden}
-.spbox .gauge{width:min(240px,34vh,60%);margin:0 auto}
-.spbox .snum b{font-size:clamp(34px,7vh,56px)}
-.spbox .sphase{font-size:clamp(10px,1.6vh,12px);margin-top:2px}
-.spbox .tbar{margin:8px auto 0}
-.spbox .s4{margin:10px 0 4px;gap:8px}.spbox .s4>div{padding:6px 4px}.spbox .s4 small{font-size:clamp(9px,1.4vh,11px)}.spbox .s4 b{font-size:clamp(13px,2.2vh,16px);margin-top:2px}
-.spbox .sfit{margin:6px 0 0;min-height:22px}.spbox .sfit span{font-size:clamp(11px,1.7vh,13px);padding:4px 10px}
-.spbox .sverd{font-size:clamp(12px,1.9vh,15px);margin:6px 0 10px;line-height:1.35}
-.spbox .sbtn .btn{padding:clamp(8px,1.4vh,12px) clamp(12px,1.6vw,18px);font-size:clamp(12px,1.9vh,15px)}
+.speedm{background:radial-gradient(ellipse at 50% 30%,rgba(60,40,120,.45),rgba(0,0,0,.9) 70%),rgba(0,0,0,.88)}
+.sp2{position:relative;width:min(900px,94vw);max-height:94vh;overflow:hidden;padding:clamp(14px,2.4vh,22px) clamp(18px,3vw,30px);border-radius:22px;background:linear-gradient(160deg,rgba(26,26,46,.96),rgba(12,12,22,.98));border:1px solid rgba(255,255,255,.1);box-shadow:0 30px 80px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.08);animation:popIn .22s cubic-bezier(.2,.9,.3,1.2)}
+.sp2::before{content:'';position:absolute;inset:0;background:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:28px 28px;mask-image:radial-gradient(ellipse at 30% 50%,#000 20%,transparent 75%);pointer-events:none}
+.sp2>*{position:relative}
+.sp2h{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:6px}
+.sp2t{font-family:Orbitron,'Bebas Neue',sans-serif;font-size:clamp(11px,1.7vh,13px);letter-spacing:.38em;color:#cfd3ff;display:flex;align-items:center;gap:10px}
+.sp2t i{width:8px;height:8px;border-radius:50%;background:#2bd4ff;box-shadow:0 0 12px #2bd4ff;animation:spPulse 1.4s ease-in-out infinite}
+.sp2srv{font-size:clamp(10px,1.6vh,12px);color:#9aa0c8;padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);min-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}
+.sp2srv:empty{opacity:0}
+.sp2g{display:grid;grid-template-columns:minmax(220px,38%) 1fr;gap:clamp(12px,2.6vw,30px);align-items:center}
+.sp2gauge{position:relative;aspect-ratio:1;max-height:56vh;margin:0 auto;width:100%}
+.sp2gauge .gauge{width:100%;height:100%;display:block;margin:0}
+.sp2gauge .ring{fill:none;stroke:rgba(255,255,255,.05);stroke-width:1;stroke-dasharray:2 6}
+.sp2gauge .trk{fill:none;stroke:rgba(255,255,255,.08);stroke-width:10;stroke-linecap:round}
+.sp2gauge #gArc{fill:none;stroke:url(#gg);stroke-width:10;stroke-linecap:round;transition:stroke-dasharray .3s ease-out}
+.sp2gauge .tk line{stroke:rgba(255,255,255,.28);stroke-width:1.2}
+.sp2gauge .tk text{fill:rgba(255,255,255,.42);font-size:7px;text-anchor:middle;font-family:Orbitron,sans-serif}
+.sp2gauge .dot{fill:#fff;opacity:.35;filter:url(#gglow)}
+.sp2num{position:absolute;left:0;right:0;top:50%;transform:translateY(-44%);text-align:center;pointer-events:none}
+.sp2num b{display:block;font-family:Orbitron,'Bebas Neue',sans-serif;font-size:clamp(30px,7.5vh,58px);line-height:1;letter-spacing:.02em;background:linear-gradient(180deg,#fff,#b9c2ff);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 24px rgba(120,140,255,.35)}
+.sp2num span{display:block;color:#8d93bd;font-weight:700;font-size:clamp(10px,1.7vh,13px);letter-spacing:.25em;margin-top:4px}
+.sp2num em{display:block;font-style:normal;font-size:clamp(9px,1.5vh,11px);letter-spacing:.3em;color:#2bd4ff;margin-top:8px;min-height:12px;text-shadow:0 0 10px rgba(43,212,255,.6)}
+.sp2steps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.sp2steps>div{position:relative;padding:clamp(8px,1.4vh,12px) 6px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);text-align:center;transition:all .25s}
+.sp2steps>div.act{background:linear-gradient(180deg,rgba(43,212,255,.14),rgba(122,92,255,.1));border-color:rgba(43,212,255,.55);box-shadow:0 0 22px rgba(43,212,255,.18),inset 0 0 0 1px rgba(43,212,255,.15)}
+.sp2steps>div.act::after{content:'';position:absolute;left:18%;right:18%;bottom:-1px;height:2px;border-radius:2px;background:#2bd4ff;box-shadow:0 0 10px #2bd4ff;animation:spPulse 1s ease-in-out infinite}
+.sp2steps small{display:block;color:#8d93bd;font-size:clamp(9px,1.4vh,11px);letter-spacing:.14em;text-transform:uppercase}
+.sp2steps b{display:block;font-family:Orbitron,'Bebas Neue',sans-serif;font-size:clamp(13px,2.3vh,18px);margin-top:5px;color:#fff;font-variant-numeric:tabular-nums}
+.sp2 .tbar{width:100%;height:3px;margin:12px 0 0;background:rgba(255,255,255,.07)}
+.sp2 .tbar i{background:linear-gradient(90deg,#2bd4ff,#7a5cff,#ff3d6e);box-shadow:0 0 10px rgba(122,92,255,.7)}
+.sp2 .sfit{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 0;min-height:24px}
+.sp2 .sfit span{font-size:clamp(11px,1.7vh,13px);padding:4px 11px;border-radius:999px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#9aa0c8}
+.sp2 .sfit span.ok{color:#5ff0b1;border-color:rgba(95,240,177,.4);background:rgba(95,240,177,.08)}
+.sp2 .sfit span.no{color:#ff7a93;border-color:rgba(255,122,147,.3)}
+.sp2 .sverd{text-align:left;font-size:clamp(12px,1.9vh,15px);line-height:1.4;color:#e4e6ff;min-height:22px;margin:10px 0 14px;font-weight:500}
+.sp2 .sbtn{justify-content:flex-start}
+.sp2 .sbtn .btn{padding:clamp(8px,1.4vh,12px) clamp(12px,1.6vw,18px);font-size:clamp(12px,1.9vh,15px)}
+@keyframes spPulse{0%,100%{opacity:1}50%{opacity:.35}}
+@media (max-width:760px),(orientation:portrait){.sp2g{grid-template-columns:1fr}.sp2gauge{max-width:min(300px,60vw);max-height:40vh}.sp2gauge .tk text{display:none}.sp2steps{grid-template-columns:repeat(2,1fr)}.sp2steps small{white-space:nowrap}.sp2 .sbtn{justify-content:center}.sp2 .sverd{text-align:center}.sp2 .sfit{justify-content:center}.sp2srv{max-width:60%}}
 .s4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0 6px}
 .s4>div{padding:10px 6px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--line);transition:border-color .2s,background .2s}
 .s4 small{display:block;font-size:11px;letter-spacing:.12em;color:var(--mut);text-transform:uppercase}
@@ -3597,8 +3627,8 @@ $('#results').addEventListener('klong', (e) => { const el = e.target.closest('[d
 function speedShow(mbps, ping) {
   mbps = isFinite(mbps) && mbps > 0 ? mbps : 0;
   const max = 300, frac = Math.min(1, Math.log10(1 + mbps) / Math.log10(1 + max));
-  $('#gArc').setAttribute('stroke-dasharray', `${(252 * frac).toFixed(1)} 252`);
-  $('#gNd').style.transform = `rotate(${-90 + 180 * frac}deg)`;
+  $('#gArc').setAttribute('stroke-dasharray', `${(395.8 * frac).toFixed(1)} 395.8`);
+  $('#gNd').style.transform = `rotate(${-135 + 270 * frac}deg)`;
   $('#sMb').textContent = mbps >= 100 ? Math.round(mbps) : mbps.toFixed(1);
   if (ping != null && isFinite(ping)) $('#sPing').textContent = Math.round(ping) + ' ms';
 }
@@ -4627,21 +4657,31 @@ function wireSettingsExtra() {
 function speedUI() {
   let m = $('#speedM');
   if (!m) {
-    document.body.insertAdjacentHTML('beforeend', `<div class="speedm" id="speedM"><div class="sbox spbox">
-      <div class="orb mut" style="font-size:12px;letter-spacing:.35em">SPEED TEST</div>
-      <svg class="gauge" viewBox="0 0 200 130"><defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" style="stop-color:var(--a2)"/><stop offset="1" style="stop-color:var(--a1)"/></linearGradient></defs>
-        <path d="M20 115 A80 80 0 0 1 180 115" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="12" stroke-linecap="round"/>
-        <path id="gArc" d="M20 115 A80 80 0 0 1 180 115" fill="none" stroke="url(#gg)" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 252"/>
-        <g id="gNd" style="transform-origin:100px 115px;transform:rotate(-90deg);transition:transform .3s ease-out"><line x1="100" y1="115" x2="100" y2="45" stroke="#fff" stroke-width="3" stroke-linecap="round"/></g>
-        <circle cx="100" cy="115" r="6" fill="#fff"/></svg>
-      <div class="snum"><b id="sMb">0</b><span>Mbps</span></div>
-      <div class="sphase" id="sPhase"></div>
-      <div class="tbar"><i id="sBar"></i></div>
-      <div class="s4"><div id="kPing"><small>Ping</small><b id="sPing">–</b></div><div id="kJit"><small>Jitter</small><b id="sJit">–</b></div><div id="kDl"><small>↓ Download</small><b id="sDl">–</b></div><div id="kUl"><small>↑ Upload</small><b id="sUl">–</b></div></div>
-      <div class="sfit" id="sFit"></div>
-      <div class="sverd" id="sVerd"></div>
-      <div class="mut" id="sSrv" style="font-size:12px;min-height:14px"></div>
-      <div class="sbtn"><button class="btn pri" data-f id="sAgain">↻ Ripeti</button><button class="btn" data-f id="sApply" style="display:none">Applica impostazioni consigliate</button><button class="btn" data-f id="sClose">Chiudi</button></div>
+    const L = 395.8; // lunghezza dell'arco (270° di raggio 84)
+    const ticks = [[0, '0'], [1, '1'], [5, '5'], [10, '10'], [25, '25'], [50, '50'], [100, '100'], [300, '300']].map(([v, t]) => { const f = Math.log10(1 + v) / Math.log10(301), a = (-135 + 270 * f) * Math.PI / 180; const r1 = 70, r2 = 64; return `<line x1="${(100 + r1 * Math.sin(a)).toFixed(1)}" y1="${(100 - r1 * Math.cos(a)).toFixed(1)}" x2="${(100 + r2 * Math.sin(a)).toFixed(1)}" y2="${(100 - r2 * Math.cos(a)).toFixed(1)}"/><text x="${(100 + 55 * Math.sin(a)).toFixed(1)}" y="${(100 - 55 * Math.cos(a) + 2.5).toFixed(1)}">${t}</text>`; }).join('');
+    document.body.insertAdjacentHTML('beforeend', `<div class="speedm" id="speedM"><div class="sp2">
+      <div class="sp2h"><span class="sp2t"><i></i>SPEED TEST</span><span class="sp2srv" id="sSrv"></span></div>
+      <div class="sp2g">
+        <div class="sp2gauge">
+          <svg class="gauge" viewBox="0 0 200 200"><defs>
+            <linearGradient id="gg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#2bd4ff"/><stop offset=".55" stop-color="#7a5cff"/><stop offset="1" stop-color="#ff3d6e"/></linearGradient>
+            <filter id="gglow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+            <circle class="ring" cx="100" cy="100" r="92"/>
+            <path class="trk" d="M40.6 159.4 A84 84 0 1 1 159.4 159.4" pathLength="${L}"/>
+            <path id="gArc" d="M40.6 159.4 A84 84 0 1 1 159.4 159.4" pathLength="${L}" stroke-dasharray="0 ${L}" filter="url(#gglow)"/>
+            <g class="tk">${ticks}</g>
+            <g id="gNd" style="transform-origin:100px 100px;transform:rotate(-135deg);transition:transform .3s ease-out"><circle cx="100" cy="16" r="6" class="dot"/><circle cx="100" cy="16" r="2.6" fill="#fff"/></g>
+          </svg>
+          <div class="sp2num"><b id="sMb">0</b><span>Mbps</span><em id="sPhase"></em></div>
+        </div>
+        <div class="sp2r">
+          <div class="sp2steps"><div id="kPing"><small>Latenza</small><b id="sPing">–</b></div><div id="kJit"><small>Jitter</small><b id="sJit">–</b></div><div id="kDl"><small>↓ Download</small><b id="sDl">–</b></div><div id="kUl"><small>↑ Upload</small><b id="sUl">–</b></div></div>
+          <div class="tbar"><i id="sBar"></i></div>
+          <div class="sfit" id="sFit"></div>
+          <div class="sverd" id="sVerd"></div>
+          <div class="sbtn"><button class="btn pri" data-f id="sAgain">↻ Ripeti</button><button class="btn" data-f id="sApply" style="display:none">Applica impostazioni consigliate</button><button class="btn" data-f id="sClose">Chiudi</button></div>
+        </div>
+      </div>
     </div></div>`);
     m = $('#speedM');
     $('#sClose').onclick = () => { m.classList.remove('on'); speedRun++; speedStopNative(); focus($('#sSpeed') || visibleF($('.screen.on'))[0], true); };
@@ -4679,7 +4719,7 @@ async function speedTest() {
     const rec = dl >= 25 && jit < 25 ? { quality: 'auto', buffer: 'fast' } : dl >= 10 ? { quality: 'auto', buffer: jit > 30 ? 'stable' : 'balanced' } : dl >= 5 ? { quality: '720', buffer: 'stable' } : { quality: '480', buffer: 'stable' };
     const head = dl >= 25 ? 'Perfetta: anche i canali 4K andranno fluidi.' : dl >= 10 ? 'Ottima per il Full HD.' : dl >= 5 ? 'Buona per l\'HD. Consiglio qualità 720p e buffer Stabile.' : 'Connessione lenta: consiglio qualità 480p e buffer Stabile.';
     $('#sVerd').textContent = head + (notes.length ? ' Attenzione: ' + notes.join('; ') + '.' : '');
-    if (R.server) $('#sSrv').textContent = 'Server di misura: ' + R.server;
+    if (R.server) $('#sSrv').textContent = R.server;
     const b = $('#sApply'); b.style.display = '';
     b.onclick = () => { const P = playPrefs(); Object.assign(P, rec); store.set('play', P); toast('Impostazioni di riproduzione aggiornate'); m.classList.remove('on'); speedRun++; renderSettings('play'); };
     const r = $('#sLast'); if (r) r.innerHTML = speedLastTxt();
@@ -4695,7 +4735,7 @@ async function speedTest() {
         seen = true;
         if (o.error && !o.done) { clearTimeout(guard); return resolve(R.dl != null ? (finish(), true) : false); }
         for (const k of ['ping', 'jitter', 'dl', 'ul']) if (o[k] != null && isFinite(o[k])) R[k] = +o[k];
-        if (o.server) R.server = o.server;
+        if (o.server) { R.server = o.server; $('#sSrv').textContent = o.server; }
         if (o.done) { clearTimeout(guard); if (R.dl == null && o.mbps != null) R.dl = +o.mbps; finish(); return resolve(true); }
         const ph = o.phase || 'download';
         act(ph === 'ping' ? 'kPing' : ph === 'upload' ? 'kUl' : 'kDl');
