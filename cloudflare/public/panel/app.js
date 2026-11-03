@@ -32,7 +32,7 @@ const DEMO = (() => {
     return { bound: true, id: 'd' + i, code: rndCode(), name: n, model: models[i % models.length], notes: '', active: i % 9 !== 4, expires: exp.toISOString().slice(0, 10), playlists: [{ id: 'p' + i, name: 'Principale', type: i % 2 ? 'xtream' : 'm3u', url: 'http://esempio.tv/lista.m3u', host: 'http://esempio.tv:8080', username: 'user' + i, password: '••••', epg: '' }], createdAt: created, lastSeen: now - Math.floor(Math.random() * 60) * 3600e3,
       parent: '', maxConn: i % 4 === 0 ? 2 : 1, maxProfiles: 3, profiles, lockProfiles: false, vpn: i % 6 === 0 ? 1 : 0, vpnConf: false };
   });
-  const acc0 = { parent: '', maxConn: 1, maxStreams: 1, maxProfiles: 3, profiles: [], lockProfiles: false, vpn: 0, vpnConf: false };
+  const acc0 = { parent: '', maxConn: 1, maxProfiles: 3, profiles: [], lockProfiles: false, vpn: 0, vpnConf: false };
   devices.push({ ...acc0, bound: true, id: 'l0', code: rndCode(), name: 'Camera da letto', model: 'Fire TV Stick Lite', notes: '', active: false, expires: '', playlists: [], parent: 'd0', createdAt: now - 5 * 864e5, lastSeen: now - 2 * 3600e3 });
   for (let i = 0; i < 3; i++) devices.unshift({ ...acc0, bound: true, id: 'n' + i, code: rndCode(), name: '', model: models[(i + 3) % models.length], notes: '', active: false, expires: '', playlists: [], createdAt: now - i * 3600e3, lastSeen: now - i * 600e3 });
   const activity = [
@@ -337,8 +337,8 @@ async function save(d, patch) { try { await api('PUT', '/admin/devices/' + d.id,
 let edit = null, isNew = false;
 function openDrawer(d, activating) {
   isNew = !d;
-  edit = d ? JSON.parse(JSON.stringify(d)) : { code: '', name: '', notes: '', active: true, expires: addMonths('', 12), playlists: [] };
-  edit = { parent: '', maxConn: 1, maxStreams: 1, maxProfiles: 3, lockProfiles: false, vpn: 0, vpnConf: false, ...edit, profiles: Array.isArray(edit.profiles) ? edit.profiles : [], wgText: '', vpnConfClear: false };
+  edit = d ? JSON.parse(JSON.stringify(d)) : { code: '', name: '', notes: '', maxStreams: 1, active: true, expires: addMonths('', 12), playlists: [] };
+  edit = { parent: '', maxConn: 1, maxProfiles: 3, lockProfiles: false, vpn: 0, vpnConf: false, ...edit, profiles: Array.isArray(edit.profiles) ? edit.profiles : [], wgText: '', vpnConfClear: false };
   if (activating && !edit.parent) { edit.active = true; if (!edit.expires) edit.expires = addMonths('', 12); if (!edit.playlists.length) edit.playlists.push({ id: 'p' + Date.now(), name: 'Principale', type: 'xtream', url: '', host: '', username: '', password: '' }); }
   $('#dTitle').innerHTML = isNew ? 'Nuovo dispositivo' : `${esc(edit.name || (edit.parent ? edit.model : '') || 'Dispositivo')} <span class="code" style="margin-left:6px">${esc(edit.code)}</span>`;
   $('#dAv').textContent = (edit.name || 'K')[0].toUpperCase();

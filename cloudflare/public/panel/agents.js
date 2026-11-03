@@ -344,7 +344,7 @@ body.agent .foot{display:none}
   /* ---------- l'agente: scheda cliente semplice (server assegnato + utente e password) ---------- */
   function openClient(d) {
     const isNew = !d, m = me(), P = m.perms || {};
-    const e = d ? JSON.parse(JSON.stringify(d)) : { code: '', name: '', notes: '', active: true, expires: addMonths('', 1), playlists: [], maxConn: 1, maxStreams: 1, addons: [] };
+    const e = d ? JSON.parse(JSON.stringify(d)) : { code: '', name: '', notes: '', active: true, expires: addMonths('', 1), playlists: [], maxConn: 1, addons: [] };
     if (!e.playlists.length) e.playlists.push({ serverId: (D.servers[0] || {}).id || '', username: '', password: '' });
     const linked = !!e.parent;
     const adCat = (D.addonCat || []).filter((x) => x.mode === 'some');
