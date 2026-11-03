@@ -292,6 +292,12 @@ Solo server e pannello: **non serve un nuovo APK**.
 - **App**: quando le domande finiscono (o finisce il gratuito di Cloudflare) compare il pulsante **«Chiedi altre domande al fornitore»**; sotto ogni risposta c'è quante domande restano oggi. Le finestre dell'assistente e del menu (tasto OK lungo) sono più piccole e non escono più dallo schermo della TV (menu su due colonne).
 - Tutto arriva con l'aggiornamento automatico dell'interfaccia: **non serve un nuovo APK**.
 
+### 2.4.1 — Assistente IA anche con Claude
+
+- Nel pannello (**Monitoraggio → Assistente IA → Chi risponde ai clienti**) scegli **Cloudflare** (gratis, veloce), **Claude** (a pagamento, risposte più precise) o **Gemini** (gratis, più lento). Se il servizio scelto non risponde (limite, credito finito, chiave sbagliata) risponde l'altro, se è collegato. Modelli Claude: **Haiku 5.5** (veloce, costa pochissimo) o **Sonnet 5.5** (più preciso, circa 20 volte più caro).
+- **Collegare Claude**: console.anthropic.com → **Billing** (carta e un piccolo credito) → **API Keys → Create Key** → copia la chiave `sk-ant-…` → Cloudflare → Workers → kairos-panel → Impostazioni → Variabili e segreti → **Aggiungi**, tipo **Segreto**, nome **`ANTHROPIC_API_KEY`** (in alternativa: segreto di GitHub con lo stesso nome). Puoi mettere un tetto di spesa mensile su console.anthropic.com → Limits.
+- La pagina mostra la **spesa stimata** di Claude (oggi e ultimi 30 giorni); chiave sbagliata o credito finito compaiono in *Attività*.
+
 ## Come funziona per i clienti
 
 1. Installano l'app (codice Downloader) e la aprono: compare un **codice** tipo `KXAB-7Q2M`.

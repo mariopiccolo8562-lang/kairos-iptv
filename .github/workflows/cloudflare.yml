@@ -84,9 +84,10 @@ jobs:
           RESEND_KEY: ${{ secrets.RESEND_KEY }}
           TMDB_KEY: ${{ secrets.TMDB_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           umask 077
-          jq -n --arg a "$ENC_KEY" --arg b "$ADMIN_BOOTSTRAP_PASS" --arg c "$TURNSTILE_SECRET" --arg d "$RESEND_KEY" --arg e "$TMDB_KEY" --arg f "$GEMINI_API_KEY" \
-            '{ENC_KEY:$a, ADMIN_BOOTSTRAP_PASS:$b, TURNSTILE_SECRET:$c, RESEND_KEY:$d, TMDB_KEY:$e, GEMINI_API_KEY:$f} | with_entries(select(.value != ""))' > "$RUNNER_TEMP/s.json"
+          jq -n --arg a "$ENC_KEY" --arg b "$ADMIN_BOOTSTRAP_PASS" --arg c "$TURNSTILE_SECRET" --arg d "$RESEND_KEY" --arg e "$TMDB_KEY" --arg f "$GEMINI_API_KEY" --arg g "$ANTHROPIC_API_KEY" \
+            '{ENC_KEY:$a, ADMIN_BOOTSTRAP_PASS:$b, TURNSTILE_SECRET:$c, RESEND_KEY:$d, TMDB_KEY:$e, GEMINI_API_KEY:$f, ANTHROPIC_API_KEY:$g} | with_entries(select(.value != ""))' > "$RUNNER_TEMP/s.json"
           wrangler secret bulk "$RUNNER_TEMP/s.json"
           rm -f "$RUNNER_TEMP/s.json"

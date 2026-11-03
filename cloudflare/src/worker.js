@@ -244,7 +244,7 @@ const DEFAULT_SETTINGS = {
   allowLocalPlaylists: true, apkUrl: '', apkVersionCode: 0, downloaderCode: '', storeDownloaderCode: '',
   serverUrl: '', showFootball: true,
   price: '22 € / anno', privacy: '',
-  aiDaily: 20, aiModel: 'gemma',
+  aiDaily: 20, aiModel: 'gemma', aiProvider: 'cf', aiClaude: 'haiku',
 };
 /* Versione dell'APK da proporre alle app: quella pubblicata in automatico da GitHub (kairos-tv.json)
    oppure, solo se strettamente più recente, quella scritta a mano nel pannello.
@@ -1163,6 +1163,23 @@ const AI_CF_MODELS = {
   llama: { id: '@cf/meta/llama-3.1-8b-instruct-fp8-fast', name: 'Llama 3.1 8B (più veloce, italiano meno curato)', inN: 4119, outN: 34868 },
 };
 const AI_CF_FREE = 10000;
+// prezzi in dollari per milione di parole (token), dalla pagina dei modelli di Anthropic: servono solo per stimare la spesa nel pannello
+const AI_CLAUDE_MODELS = {
+  haiku: { id: 'claude-haiku-5-5', name: 'Claude Haiku 5.5 (veloce, costa pochissimo)', pin: 0.10, pout: 0.50 },
+  sonnet: { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5 (più preciso, costa circa 20 volte di più)', pin: 2, pout: 10 },
+};
+async function claudeAsk(env, model, text) {
+  const m = AI_CLAUDE_MODELS[model] || AI_CLAUDE_MODELS.haiku;
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST', signal: AbortSignal.timeout(25000),
+    headers: { 'content-type': 'application/json', 'x-api-key': String(env.ANTHROPIC_API_KEY).trim(), 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: m.id, max_tokens: 400, temperature: 0.6, system: AI_SYSTEM, messages: [{ role: 'user', content: text }] }),
+  });
+  const j = await r.json().catch(() => null);
+  const answer = j && Array.isArray(j.content) ? j.content.map((p) => (p && p.type === 'text' ? p.text : '')).join('').trim() : '';
+  const u = (j && j.usage) || {};
+  return { status: r.status, answer, tin: +u.input_tokens || 0, tout: +u.output_tokens || 0, err: (j && j.error && j.error.message) || '' };
+}
 const AI_MODEL = 'gemini-3.8-flash', AI_MODEL_LITE = 'gemini-3.5-flash-lite';
 const AI_SYSTEM = 'Sei l\'assistente di un\'app per guardare la TV. Rispondi in italiano, in modo breve e chiaro: al massimo 5 frasi brevi, adatte a essere lette sulla TV. Parla solo del contenuto indicato e di argomenti legati (trama, attori, genere, età consigliata, titoli simili). Non rivelare il finale se non te lo chiedono. Se non sei sicuro di qualcosa dillo, non inventare. Non usare markdown, elenchi puntati o simboli.';
 const utcDay = (t = now()) => new Date(t).toISOString().slice(0, 10);
@@ -1190,9 +1207,9 @@ async function geminiAsk(env, model, text) {
 }
 const aiLimitOf = (P, set) => (+P.ai_limit >= 0 ? +P.ai_limit : Math.max(0, parseInt(set.aiDaily ?? 20, 10) || 0));
 async function aiUsed(env, id) { return ((await env.DB.prepare('SELECT n FROM ai_usage WHERE day = ? AND device_id = ?').bind(utcDay(), id).first()) || { n: 0 }).n; }
-async function aiCount(env, id, f, neu) {
-  await env.DB.prepare(`INSERT INTO ai_usage (day, device_id, n, cf, gm, neu) VALUES (?, ?, 1, ?, ?, ?) ON CONFLICT(day, device_id) DO UPDATE SET n = n + 1, cf = cf + excluded.cf, gm = gm + excluded.gm, neu = neu + excluded.neu`)
-    .bind(utcDay(), id, f === 'cf' ? 1 : 0, f === 'gm' ? 1 : 0, neu || 0).run();
+async function aiCount(env, id, f, neu, tin = 0, tout = 0) {
+  await env.DB.prepare(`INSERT INTO ai_usage (day, device_id, n, cf, gm, neu, cl, cl_in, cl_out) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?) ON CONFLICT(day, device_id) DO UPDATE SET n = n + 1, cf = cf + excluded.cf, gm = gm + excluded.gm, neu = neu + excluded.neu, cl = cl + excluded.cl, cl_in = cl_in + excluded.cl_in, cl_out = cl_out + excluded.cl_out`)
+    .bind(utcDay(), id, f === 'cf' ? 1 : 0, f === 'gm' ? 1 : 0, neu || 0, f === 'cl' ? 1 : 0, tin, tout).run();
 }
 async function cfIsOut(env) {
   if (cfOutDay === utcDay()) return true;
@@ -1206,7 +1223,7 @@ async function playerAi(req, env, ip, ctx) {
   try { b = await readJSON(req, 8192); } catch (e) { return json({ error: e.message }, e.status || 400); }
   const [d, bad] = await deviceAuth(env, b);
   if (bad) return bad;
-  if (!env.AI && !env.GEMINI_API_KEY) return json({ off: true });
+  if (!env.AI && !env.GEMINI_API_KEY && !env.ANTHROPIC_API_KEY) return json({ off: true });
   const [P] = await activeAccount(env, d);
   if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
   if (permsParse(P.perms).ai === false) return json({ error: 'Assistente non attivo su questo abbonamento' }, 403);
@@ -1229,36 +1246,44 @@ async function playerAi(req, env, ip, ctx) {
   ].filter(Boolean).join('\n');
   const text = `${info}\n\nDomanda: ${q}`;
   const left = (n) => Math.max(0, limit - used - 1) + Math.max(0, +P.ai_extra - (extra ? 1 : 0));
-  // 1) Cloudflare Workers AI
-  if (env.AI && !(await cfIsOut(env))) {
-    try {
-      const r = await cfAsk(env, set.aiModel, text);
-      ctx.waitUntil(aiCount(env, P.id, 'cf', r.neu));
-      return json({ answer: (r.answer || 'Non ho una risposta per questa domanda.').slice(0, 2000), left: left() });
-    } catch (e) {
-      const msg = String((e && e.message) || e);
-      if (/4006|daily free allocation|neurons|exceeded|quota/i.test(msg)) {
-        cfOutDay = utcDay();
-        ctx.waitUntil(env.DB.prepare("INSERT INTO ai_usage (day, device_id, n) VALUES (?, '_cf', 1) ON CONFLICT(day, device_id) DO UPDATE SET n = n + 1").bind(utcDay()).run());
-        ctx.waitUntil(log(env, 'off', `Assistente IA: finite le risposte gratuite di Cloudflare per oggi${env.GEMINI_API_KEY ? ' (si usa Gemini di riserva)' : ''}`, ip));
+  const ok = (answer, f, neu, tin, tout) => { ctx.waitUntil(aiCount(env, P.id, f, neu, tin, tout)); return json({ answer: (answer || 'Non ho una risposta per questa domanda.').slice(0, 2000), left: left() }); };
+  const order = set.aiProvider === 'claude' ? ['claude', 'cf', 'gm'] : set.aiProvider === 'gm' ? ['gm', 'cf', 'claude'] : ['cf', 'claude', 'gm'];
+  for (const prov of order) {
+    if (prov === 'claude' && env.ANTHROPIC_API_KEY) {
+      let r = null;
+      try { r = await claudeAsk(env, set.aiClaude, text); } catch {}
+      if (r && r.status === 200) return ok(r.answer, 'cl', 0, r.tin, r.tout);
+      if (r && [401, 403].includes(r.status)) ctx.waitUntil(log(env, 'off', `Assistente IA: Anthropic ha rifiutato la chiave ANTHROPIC_API_KEY (errore ${r.status}). Controlla di aver copiato la chiave giusta da console.anthropic.com`, ip));
+      else if (r && r.status === 400 && /credit|balance|billing/i.test(r.err)) ctx.waitUntil(log(env, 'off', 'Assistente IA: credito di Anthropic finito. Ricarica su console.anthropic.com → Billing (intanto risponde il servizio di riserva, se c\'è)', ip));
+    }
+    if (prov === 'cf' && env.AI && !(await cfIsOut(env))) {
+      try {
+        const r = await cfAsk(env, set.aiModel, text);
+        return ok(r.answer, 'cf', r.neu);
+      } catch (e) {
+        const msg = String((e && e.message) || e);
+        if (/4006|daily free allocation|neurons|exceeded|quota/i.test(msg)) {
+          cfOutDay = utcDay();
+          ctx.waitUntil(env.DB.prepare("INSERT INTO ai_usage (day, device_id, n) VALUES (?, '_cf', 1) ON CONFLICT(day, device_id) DO UPDATE SET n = n + 1").bind(utcDay()).run());
+          ctx.waitUntil(log(env, 'off', `Assistente IA: finite le risposte gratuite di Cloudflare per oggi${env.GEMINI_API_KEY || env.ANTHROPIC_API_KEY ? ' (si usa il servizio di riserva)' : ''}`, ip));
+        }
       }
     }
-  }
-  // 2) Gemini di riserva
-  if (env.GEMINI_API_KEY) {
-    const models = [...new Set([str(env.AI_MODEL || '', 60) || AI_MODEL, AI_MODEL_LITE])];
-    let last = 0;
-    for (const model of models) {
-      let r;
-      try { r = await geminiAsk(env, model, text); } catch { last = 502; continue; }
-      if (r.status === 200) { ctx.waitUntil(aiCount(env, P.id, 'gm', 0)); return json({ answer: (r.answer || 'Non ho una risposta per questa domanda.').slice(0, 2000), left: left() }); }
-      last = r.status;
-      if (![429, 404, 500, 503].includes(r.status)) break;
+    if (prov === 'gm' && env.GEMINI_API_KEY) {
+      const models = [...new Set([str(env.AI_MODEL || '', 60) || AI_MODEL, AI_MODEL_LITE])];
+      let last = 0;
+      for (const model of models) {
+        let r;
+        try { r = await geminiAsk(env, model, text); } catch { last = 502; continue; }
+        if (r.status === 200) return ok(r.answer, 'gm', 0);
+        last = r.status;
+        if (![429, 404, 500, 503].includes(r.status)) break;
+      }
+      if ([400, 401, 403].includes(last)) ctx.waitUntil(log(env, 'off', `Assistente IA: Google ha rifiutato la chiave GEMINI_API_KEY (errore ${last}). Controlla di aver copiato la chiave giusta da aistudio.google.com`, ip));
     }
-    if ([400, 401, 403].includes(last)) ctx.waitUntil(log(env, 'off', `Assistente IA: Google ha rifiutato la chiave GEMINI_API_KEY (errore ${last}). Controlla di aver copiato la chiave giusta da aistudio.google.com`, ip));
   }
   await back();
-  if (await cfIsOut(env)) return json({ error: 'L\'assistente ha finito le risposte gratuite di oggi: riprova domani o chiedi al fornitore.', limit: true, global: true }, 429);
+  if (await cfIsOut(env) && !env.ANTHROPIC_API_KEY) return json({ error: 'L\'assistente ha finito le risposte gratuite di oggi: riprova domani o chiedi al fornitore.', limit: true, global: true }, 429);
   return json({ error: 'Assistente non disponibile in questo momento' }, 502);
 }
 /* richiesta di altre domande all'assistente (dall'app, quando finiscono quelle del giorno) */
@@ -1276,14 +1301,18 @@ async function adminAi(req, env, path, who, ip) {
   const m = req.method;
   if (path === '/ai' && m === 'GET') {
     const day = utcDay(), set = await getSettings(env);
-    const days = ((await env.DB.prepare("SELECT day, SUM(n) AS n, SUM(cf) AS cf, SUM(gm) AS gm, SUM(neu) AS neu FROM ai_usage WHERE device_id <> '_cf' AND day >= ? GROUP BY day ORDER BY day").bind(utcDay(now() - 13 * 864e5)).all()).results) || [];
+    const days = ((await env.DB.prepare("SELECT day, SUM(n) AS n, SUM(cf) AS cf, SUM(gm) AS gm, SUM(neu) AS neu, SUM(cl) AS cl, SUM(cl_in) AS cl_in, SUM(cl_out) AS cl_out FROM ai_usage WHERE device_id <> '_cf' AND day >= ? GROUP BY day ORDER BY day").bind(utcDay(now() - 29 * 864e5)).all()).results) || [];
+    const cm = AI_CLAUDE_MODELS[set.aiClaude] || AI_CLAUDE_MODELS.haiku, cost = (r) => ((+r.cl_in || 0) * cm.pin + (+r.cl_out || 0) * cm.pout) / 1e6;
     const rows = ((await env.DB.prepare("SELECT u.device_id AS id, u.n, d.name, d.code, d.ai_limit, d.ai_extra FROM ai_usage u LEFT JOIN devices d ON d.id = u.device_id WHERE u.day = ? AND u.device_id <> '_cf' ORDER BY u.n DESC LIMIT 200").bind(day).all()).results) || [];
     const t = days.find((x) => x.day === day) || { n: 0, cf: 0, gm: 0, neu: 0 };
     return json({
-      status: { cf: !!env.AI, gemini: !!env.GEMINI_API_KEY, cfOut: await cfIsOut(env), freeNeurons: AI_CF_FREE, resetUtc: '00:00 UTC' },
-      today: { day, n: t.n || 0, cf: t.cf || 0, gm: t.gm || 0, neu: Math.round(t.neu || 0) }, days,
+      status: { cf: !!env.AI, gemini: !!env.GEMINI_API_KEY, claude: !!env.ANTHROPIC_API_KEY, cfOut: await cfIsOut(env), freeNeurons: AI_CF_FREE, resetUtc: '00:00 UTC' },
+      today: { day, n: t.n || 0, cf: t.cf || 0, gm: t.gm || 0, cl: t.cl || 0, neu: Math.round(t.neu || 0), usd: +cost(t).toFixed(4) },
+      month: { n: days.reduce((a, r) => a + (+r.n || 0), 0), cl: days.reduce((a, r) => a + (+r.cl || 0), 0), usd: +days.reduce((a, r) => a + cost(r), 0).toFixed(4) },
+      days: days.slice(-14).map((r) => ({ day: r.day, n: r.n, cf: r.cf, gm: r.gm, cl: r.cl })),
       clients: rows.map((r) => ({ id: r.id, name: r.name || '', code: r.code || '', n: r.n, limit: r.ai_limit >= 0 ? r.ai_limit : set.aiDaily ?? 20, own: r.ai_limit >= 0, extra: r.ai_extra || 0 })),
-      settings: { aiDaily: set.aiDaily ?? 20, aiModel: AI_CF_MODELS[set.aiModel] ? set.aiModel : 'gemma' }, models: Object.entries(AI_CF_MODELS).map(([k, v]) => ({ id: k, name: v.name })),
+      settings: { aiDaily: set.aiDaily ?? 20, aiModel: AI_CF_MODELS[set.aiModel] ? set.aiModel : 'gemma', aiProvider: ['claude', 'gm'].includes(set.aiProvider) ? set.aiProvider : 'cf', aiClaude: AI_CLAUDE_MODELS[set.aiClaude] ? set.aiClaude : 'haiku' },
+      models: Object.entries(AI_CF_MODELS).map(([k, v]) => ({ id: k, name: v.name })), claudeModels: Object.entries(AI_CLAUDE_MODELS).map(([k, v]) => ({ id: k, name: v.name })),
     });
   }
   if (path === '/ai/grant' && m === 'POST') {
@@ -2302,6 +2331,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (typeof b.showFootball === 'boolean') s.showFootball = b.showFootball;
     if (b.aiDaily !== undefined) { const n = parseInt(b.aiDaily, 10); if (!(n >= 0 && n <= 1000)) throw new HttpErr(400, 'Domande al giorno: da 0 a 1000'); s.aiDaily = n; }
     if (b.aiModel !== undefined) { if (!AI_CF_MODELS[b.aiModel]) throw new HttpErr(400, 'Modello non valido'); s.aiModel = b.aiModel; }
+    if (b.aiProvider !== undefined) { if (!['cf', 'claude', 'gm'].includes(b.aiProvider)) throw new HttpErr(400, 'Servizio non valido'); s.aiProvider = b.aiProvider; }
+    if (b.aiClaude !== undefined) { if (!AI_CLAUDE_MODELS[b.aiClaude]) throw new HttpErr(400, 'Modello Claude non valido'); s.aiClaude = b.aiClaude; }
     if (b.apkVersionCode !== undefined) {
       // si scrive la versione pubblicata, es. "1.3.0" (→ 10300, lo stesso numero che calcola la build su GitHub)
       const v = String(b.apkVersionCode).trim().replace(/^v/i, '');
