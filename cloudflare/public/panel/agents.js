@@ -347,6 +347,7 @@ body.agent .foot{display:none}
     const e = d ? JSON.parse(JSON.stringify(d)) : { code: '', name: '', notes: '', active: true, expires: addMonths('', 1), playlists: [], maxConn: 1, addons: [] };
     if (!e.playlists.length) e.playlists.push({ serverId: (D.servers[0] || {}).id || '', username: '', password: '' });
     const linked = !!e.parent;
+    let appSet = false;
     const adCat = (D.addonCat || []).filter((x) => x.mode === 'some');
     const roPl = !isNew && !P.playlists, roExp = !isNew && !P.renew;
     const plRow = (p, i) => `<div class="pl" data-i="${i}"><div class="row3" style="grid-template-columns:1fr 1fr 1fr auto"><select class="inp" data-k="serverId" ${roPl ? 'disabled' : ''}>${D.servers.map((s) => `<option value="${esc(s.id)}" ${p.serverId === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}${p.serverId || isNew ? '' : '<option value="" selected>' + esc(p.serverName || 'Altro server') + '</option>'}</select>
@@ -357,7 +358,8 @@ body.agent .foot{display:none}
       <div class="ag-c"><h4>Cliente</h4><small>${isNew ? 'Scrivi il codice che il cliente vede sulla TV quando apre l\'app' : 'Nome e note'}</small>
         ${isNew ? '<label class="lbl">Codice della TV</label><input class="inp mono" id="cCode" placeholder="KXAB-12CD" maxlength="9" style="text-transform:uppercase">' : ''}
         <label class="lbl">${linked ? 'Nome del dispositivo' : 'Nome cliente'}</label><input class="inp" id="cName" maxlength="60" value="${esc(e.name)}" placeholder="es. Mario Rossi">
-        <label class="lbl">Note</label><textarea class="inp" id="cNotes" maxlength="500" placeholder="Pagamento, contatto…">${esc(e.notes || '')}</textarea></div>
+        <label class="lbl">Note</label><textarea class="inp" id="cNotes" maxlength="500" placeholder="Pagamento, contatto…">${esc(e.notes || '')}</textarea>
+        ${linked ? '' : `<label class="lbl">App del cliente</label><select class="inp" id="cApp"><option value="tv">KAIROS TV</option><option value="lite" ${e.app === 'lite' ? 'selected' : ''}>Kairos Lite</option></select>`}</div>
       ${linked ? '' : `<div class="ag-c"><h4>Abbonamento</h4><small>${roExp ? 'Non puoi cambiare la scadenza' : 'Scadenza obbligatoria, massimo 3 anni'}</small>
         <div class="tog ${e.active ? 'on' : ''}" id="cAct" ${!isNew && !P.disable ? 'style="opacity:.5;pointer-events:none"' : ''}><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
         <label class="lbl">Scadenza</label><input class="inp" type="date" id="cExp" value="${esc(e.expires)}" ${roExp ? 'readonly' : ''}>
@@ -382,6 +384,7 @@ body.agent .foot{display:none}
     const draw = () => {
       const code = $('#cCode') ? $('#cCode').value : '';
       $('#agB').innerHTML = body(); if ($('#cCode')) $('#cCode').value = code;
+      $('#cApp') && ($('#cApp').onchange = () => { sync(); e.app = $('#cApp').value; appSet = true; draw(); });
       $('#cAct') && ($('#cAct').onclick = () => { e.active = !e.active; $('#cAct').classList.toggle('on', e.active); });
       $$('[data-cm]').forEach((b) => (b.onclick = () => { $('#cExp').value = addMonths($('#cExp').value, +b.dataset.cm); }));
       $('#cAddPl') && ($('#cAddPl').onclick = () => { sync(); e.playlists.push({ serverId: (D.servers[0] || {}).id || '', username: '', password: '' }); draw(); });
@@ -401,9 +404,9 @@ body.agent .foot{display:none}
       sync();
       const pls = e.playlists.map((p) => ({ id: p.id, serverId: p.serverId, username: p.username, password: p.password }));
       try {
-        if (isNew) await api('POST', '/admin/devices', { code: $('#cCode').value.trim().toUpperCase(), name: e.name, notes: e.notes, expires: e.expires, playlists: pls, maxConn: e.maxConn, addons: e.addons });
+        if (isNew) await api('POST', '/admin/devices', { code: $('#cCode').value.trim().toUpperCase(), name: e.name, notes: e.notes, expires: e.expires, playlists: pls, maxConn: e.maxConn, addons: e.app === 'lite' ? [] : e.addons, app: e.app === 'lite' ? 'lite' : 'tv' });
         else {
-          const b = { name: e.name, notes: e.notes };
+          const b = { name: e.name, notes: e.notes, ...(appSet ? { app: e.app } : {}) };
           if (!linked) {
             if (P.renew && e.expires !== d.expires) b.expires = e.expires;
             if (P.disable && e.active !== d.active) b.active = e.active;

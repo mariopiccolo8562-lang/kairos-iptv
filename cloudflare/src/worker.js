@@ -990,7 +990,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
   // il limite conta solo i battiti (register e inizio visione aggiornano la presenza ma non contano)
   if (old && t - (+old.hb_t || 0) < HB_MIN_MS) return json({ error: 'Troppi battiti: attendi qualche secondo', wait: Math.ceil((HB_MIN_MS - (t - old.hb_t)) / 1000) }, 429);
   const cf = cfOf(req);
-  { const app = /^lite\b/i.test(String(b.ver || '')) ? 'lite' : 'tv'; if (d.app !== app) ctx.waitUntil(env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(app, d.id).run()); }
+  { const app = appFrom(req, b); if (app && d.app !== app) ctx.waitUntil(env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(app, d.id).run()); }
   const state = STATES.includes(b.state) ? b.state : 'idle';
   const net = b.net && typeof b.net === 'object' ? b.net : {};
   const sp = b.speed && typeof b.speed === 'object' ? b.speed : null;
@@ -1711,6 +1711,14 @@ async function liteFeed(s) {
 /** manutenzione: l'app è bloccata per tutti tranne i clienti scelti nel pannello (P = abbonamento principale) */
 const maintFor = (s, P) => !!(s.maint && s.maint.on && P && !(s.maint.allow || []).includes(P.id));
 const MAINT_MSG = 'Servizio in manutenzione: torna disponibile a breve. Grazie per la pazienza!';
+/** quale app si collega: Kairos Lite si presenta con «KairosLite/x.y» (e versione «lite x.y»), KAIROS TV con «KairosPlayer/x.y» */
+const APPS = ['tv', 'lite'];
+function appFrom(req, b) {
+  const ua = req.headers.get('User-Agent') || '', ver = String((b && b.ver) || '');
+  if (/KairosLite\//i.test(ua) || /^lite\b/i.test(ver)) return 'lite';
+  if (/KairosPlayer\//i.test(ua) || ver) return 'tv';
+  return '';
+}
 async function playerRegister(req, env, ip, ctx) {
   if (await limited(env.RL_DEVICE, 'dev:' + ip)) return json({ error: 'Troppe richieste, riprova tra poco' }, 429);
   let b;
@@ -1751,6 +1759,7 @@ async function playerRegister(req, env, ip, ctx) {
 
   ctx.waitUntil(env.DB.prepare('UPDATE devices SET last_seen = ?, last_ip = ?, model = CASE WHEN ? <> \'\' THEN ? ELSE model END WHERE id = ?')
     .bind(now(), ip, model, model, d.id).run());
+  { const app = appFrom(req, b); if (app && d.app !== app) { d.app = app; ctx.waitUntil(env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(app, d.id).run()); } }
   ctx.waitUntil(presenceFromRegister(env, d, b, ip, cfOf(req)));
 
   // un dispositivo collegato usa stato, scadenza, playlist, profili e limiti del suo principale
@@ -2142,11 +2151,11 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
       const back = () => env.DB.prepare(`UPDATE devices SET owner_id = 0 WHERE id = ? AND owner_id = ? AND ${FREE_DEV.replace('owner_id = 0 AND ', '')}`).bind(d.id, A.id).run();
       try { await limitCheck(true); } catch (e) { await back(); throw e; }
       let r;
-      try { r = await forward('PUT', '/devices/' + d.id, { name: str(b.name, 60), notes: str(b.notes, 500), expires, active: true, playlists: pls, maxConn, addons }); } catch (e) { await back(); throw e; }
+      try { r = await forward('PUT', '/devices/' + d.id, { name: str(b.name, 60), notes: str(b.notes, 500), expires, active: true, playlists: pls, maxConn, addons, ...(APPS.includes(b.app) ? { app: b.app } : {}) }); } catch (e) { await back(); throw e; }
       if (r.status !== 200) { await back(); return r; }
       return json({ ok: true, id: d.id, code });
     }
-    const r = await forward('POST', '/devices', { code, name: str(b.name, 60), notes: str(b.notes, 500), expires, active: true, playlists: pls, maxConn, addons });
+    const r = await forward('POST', '/devices', { code, name: str(b.name, 60), notes: str(b.notes, 500), expires, active: true, playlists: pls, maxConn, addons, ...(APPS.includes(b.app) ? { app: b.app } : {}) });
     if (r.status !== 200) return r;
     const j = await r.json();
     try { await limitCheck(true); } catch (e) { await env.DB.prepare('DELETE FROM devices WHERE id = ? AND owner_id = ?').bind(j.id, A.id).run(); throw e; }
@@ -2174,6 +2183,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
       const b = await readJSON(req, 65536), o = {};
       if (typeof b.name === 'string') o.name = str(b.name, 60);
       if (typeof b.notes === 'string') o.notes = str(b.notes, 500);
+      if (APPS.includes(b.app)) o.app = b.app;
       if (!d.parent) {
         if (b.expires !== undefined && b.expires !== d.expires) { if (!P.renew) throw new HttpErr(403, 'Non puoi cambiare la scadenza'); o.expires = okDate(str(b.expires, 10)); }
         if (typeof b.active === 'boolean' && b.active !== !!d.active) { if (!P.disable) throw new HttpErr(403, 'Non puoi attivare o disattivare'); o.active = b.active; }
@@ -2553,6 +2563,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const newOwner = ses && ses.agent ? ses.admin_id : Math.max(0, parseInt(b.ownerId, 10) || 0);
     if (newOwner && !(ses && ses.agent) && !(await env.DB.prepare("SELECT 1 AS x FROM admins WHERE id = ? AND role = 'agent'").bind(newOwner).first())) throw new HttpErr(400, 'Agente non trovato');
     await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ?, addons = ?, owner_id = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, Array.isArray(b.addons) ? addonsList(b.addons).join(',') : '', newOwner, id).run();
+    if (APPS.includes(b.app)) await env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(b.app, id).run();
     if (ses && ses.agent) return json({ ok: true, id, code });
     await log(env, 'new', `${who}: creato dispositivo ${str(b.name, 60) || code}`, ip);
     return json({ ok: true, id, code });
@@ -2661,6 +2672,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       await env.DB.prepare('UPDATE devices SET name = ?, notes = ?, expires = ?, active = ?, playlists = ?, max_conn = ?, max_profiles = ?, profiles = ?, lock_profiles = ?, vpn = ?, vpn_conf = ?, perms = ? WHERE id = ?')
         .bind(name, notes, expires, active, await seal(env, pls), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, perms, d.id).run();
       await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ?, addons = ?, owner_id = ?, ai_limit = ?, ai_provider = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, addons, ownerId, aiLimit, aiProv, d.id).run();
+      if (b.app !== undefined) { if (!['', ...APPS].includes(b.app)) throw new HttpErr(400, 'App non valida'); await env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(b.app, d.id).run(); }
       if (JSON.stringify(pls) !== JSON.stringify(await unseal(env, d.playlists).catch(() => []))) srcMem.map = null;
       const after = statusOf({ active, expires }, pls);
       if (before !== after && after === 'active') ctx.waitUntil(webhookSend(env, 'device.activated', { id: d.id, code: d.code, name, expires }));

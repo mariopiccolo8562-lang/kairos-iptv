@@ -332,6 +332,7 @@ Il codice resta **legato a quel dispositivo**: se qualcuno lo copia su un'altra 
 - **Scheda di un cliente Lite**: restano solo le funzioni che la Lite ha (link, cambio playlist, profili, VPN). Spariscono Lettore, Add-on, Assistente IA, registrazioni, speed test e multischermo.
 - **Impostazioni → App e aggiornamenti → Kairos Lite**: link dell'APK (vuoto = ultima release di `kairos-lite`), codice Downloader e versione pubblicata letta dalla release.
 - Il codice Downloader della Lite compare anche in alto nel pannello, accanto a quello di KAIROS TV e dello store.
+- **Scelta dell'app**: nella scheda del cliente (e per gli agenti nel modulo del cliente) scegli *KAIROS TV* o *Kairos Lite*, anche quando lo crei. L'app viene comunque riconosciuta da sola appena si collega (dalla prima registrazione, non solo dal battito).
 
 ## Struttura
 

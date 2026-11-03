@@ -38,18 +38,28 @@
     $$('#dvTbl tbody tr[data-id]').forEach((r) => { const d = all.find((x) => x.id === r.dataset.id); const b = $('.dvt-u b', r); if (b && isLite(d) && !$('.app-chip', b)) b.insertAdjacentHTML('beforeend', '<span class="app-chip">LITE</span>'); });
   };
 
-  /* ---------- scheda cliente: solo le funzioni che Kairos Lite ha ---------- */
+  /* ---------- scheda cliente: scelta dell'app e solo le funzioni che Kairos Lite ha ---------- */
+  function applyLite() {
+    const on = isLite(edit);
+    for (const id of ['ply', 'add']) { const sec = $('#ds-' + id); if (sec) sec.style.display = on ? 'none' : ''; const nb = $(`#dBody [data-ds="${id}"]`); if (nb) nb.style.display = on ? 'none' : ''; }
+    let k = 0; $$('#dBody .dnav [data-ds]').forEach((b) => { const i = $('i', b); if (i && b.style.display !== 'none') i.textContent = ++k; });
+    k = 0; $$('#dBody .dsec').forEach((sec) => { const i = $('.dsh i', sec); if (i && sec.style.display !== 'none') i.textContent = ++k; });
+    $$('#ds-perm [data-perm]').forEach((t) => { t.style.display = on && !LITE_PERMS.has(t.dataset.perm) ? 'none' : ''; });
+    for (const sel of ['#eAiProv', '#eAiLim']) { const el = $(sel); if (!el) continue; const box = sel === '#eAiLim' ? el.parentElement : el; box.style.display = on ? 'none' : ''; const lb = box.previousElementSibling; if (lb && lb.classList.contains('lbl')) lb.style.display = on ? 'none' : ''; }
+    const note = $('#dBody .lite-note'); if (note) note.style.display = on ? '' : 'none';
+    $$('#eApp [data-eapp]').forEach((b) => b.classList.toggle('on', (b.dataset.eapp === 'lite') === on));
+  }
   const rdw = renderDrawer;
   window.renderDrawer = renderDrawer = function () {
     rdw();
-    if (!edit || !isLite(edit)) return;
-    for (const id of ['ply', 'add']) { const sec = $('#ds-' + id); if (sec) sec.remove(); const nb = $(`#dBody [data-ds="${id}"]`); if (nb) nb.remove(); }
-    $$('#dBody .dnav [data-ds] i').forEach((i, k) => (i.textContent = k + 1));
-    $$('#dBody .dsec .dsh i').forEach((i, k) => (i.textContent = k + 1));
-    $$('#ds-perm [data-perm]').forEach((t) => { if (!LITE_PERMS.has(t.dataset.perm)) t.style.display = 'none'; });
-    for (const sel of ['#eAiProv', '#eAiLim']) { const el = $(sel); if (!el) continue; const box = sel === '#eAiLim' ? el.parentElement : el; box.style.display = 'none'; const lb = box.previousElementSibling; if (lb && lb.classList.contains('lbl')) lb.style.display = 'none'; }
-    const main = $('#dBody .dmain');
-    if (main && !$('.lite-note', main)) main.insertAdjacentHTML('afterbegin', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa: niente lettore a scelta, add-on, assistente IA, registrazioni, speed test e multi-schermo.</div>');
+    if (!edit) return;
+    const main = $('#dBody .dmain'); if (!main) return;
+    if (!edit.parent && !$('#eAppBox', main)) {
+      main.insertAdjacentHTML('afterbegin', `<div id="eAppBox" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px"><b style="font-size:13.5px">App del cliente</b><div class="seg" id="eApp"><button data-eapp="tv">KAIROS TV</button><button data-eapp="lite">Kairos Lite</button></div><small class="mut">Si aggiorna da sola quando l'app si collega</small></div>`);
+      $$('#eApp [data-eapp]').forEach((b) => (b.onclick = () => { edit.app = b.dataset.eapp; edit._appSet = true; applyLite(); }));
+    }
+    if (!$('.lite-note', main)) $('#eAppBox', main) ? $('#eAppBox', main).insertAdjacentHTML('afterend', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa: niente lettore a scelta, add-on, assistente IA, registrazioni, speed test e multi-schermo.</div>') : main.insertAdjacentHTML('afterbegin', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa.</div>');
+    applyLite();
   };
 
   /* ---------- Impostazioni → App e aggiornamenti: Kairos Lite ---------- */
@@ -83,7 +93,10 @@
   window.renderAll = renderAll = function () { ra(); renderLite(); };
   // lo stato porta anche le informazioni di Lite
   const api0 = api;
-  window.api = api = async function (m, p, b) { const r = await api0(m, p, b); if (p === '/admin/state' && m === 'GET' && r) D.lite = r.lite || null; return r; };
+  window.api = api = async function (m, p, b) {
+    // l'app scelta nella scheda del cliente (titolare) viaggia con il salvataggio
+    if (edit && edit.app && !edit.parent && b && typeof b === 'object' && ((m === 'POST' && p === '/admin/devices' && isNew) || (m === 'PUT' && p === '/admin/devices/' + edit.id && edit._appSet))) b = { ...b, app: edit.app };
+    const r = await api0(m, p, b); if (p === '/admin/state' && m === 'GET' && r) D.lite = r.lite || null; return r; };
   if (typeof DEMO !== 'undefined') {
     DEMO.settings.liteDownloaderCode = DEMO.settings.liteDownloaderCode || '5551234';
     DEMO.devices.forEach((d, i) => { if (!d.parent && d.playlists && d.playlists.length) d.app = i % 4 === 2 ? 'lite' : 'tv'; });
