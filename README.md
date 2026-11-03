@@ -225,6 +225,12 @@ In **Impostazioni** trovi anche il **prezzo** mostrato ai clienti e il testo **P
 - Server: la cache di trailer, età e attori salva i «non trovato» solo per dispositivi registrati (titoli inventati non riempiono il database); l'API non restituisce mai password delle playlist (anche dopo *Cambia DNS* o una modifica) e un `PUT` con le playlist **conserva password e indirizzi** delle playlist esistenti invece di cancellarli; corpo `null` → errore 400 invece di 500; limite degli errori dell'app contato per problema; meno query in *Online ora* e nel controllo delle visioni contemporanee; il pannello non interroga il server con la scheda nascosta.
 - Serve la release **2.1.0** per la parte nativa (salta intro, PiP, multi-schermo, correzioni Android); il resto arriva da solo con l'interfaccia.
 
+### 2.1.1 — Pacchetti avatar e più playlist
+
+- **48 avatar in 4 pacchetti**: *Classici*, *Animali* (gatto, cane, volpe, gufo, pesce, farfalla, coniglio, tartaruga, pinguino, leone, balena, ape), *Sport* (calcio, basket, tennis, coppa, bici, auto da corsa, medaglia, bersaglio, golf, pesi, scarpa, ping pong) e *Spazio* (razzo, pianeta, luna, astronauta, disco volante, stella cadente, satellite, sole, costellazione, telescopio, alieno, scintille). Nell'app si scelgono a schede nella modifica del profilo; nel pannello l'elenco degli avatar è diviso per pacchetto. Disegnati dentro l'app: niente da scaricare.
+- **Fino a 100 playlist per cliente** (prima 20).
+- Arriva da sola con l'interfaccia e il pannello: non serve un APK nuovo.
+
 ## Come funziona per i clienti
 
 1. Installano l'app (codice Downloader) e la aprono: compare un **codice** tipo `KXAB-7Q2M`.

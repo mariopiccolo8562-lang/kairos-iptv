@@ -344,7 +344,7 @@ function cleanPlaylists(list) {
   const okUrl = (u) => { if (!u) return ''; try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href.slice(0, 1000) : ''; } catch { return ''; } };
   const ids = new Set();
   const pid = (v) => { let id = str(v, 40); if (!/^[A-Za-z0-9_-]{1,40}$/.test(id) || ids.has(id)) id = b64url(rand(6)); ids.add(id); return id; };
-  return list.slice(0, 20).map((p) => ({
+  return list.slice(0, 100).map((p) => ({ // fino a 100 playlist per cliente
     id: pid(p.id),
     name: str(p.name, 60) || 'Playlist',
     type: p.type === 'xtream' ? 'xtream' : 'm3u',
@@ -441,7 +441,7 @@ function swapHost(p, host) {
 /* ====================================================================== */
 /* Account: connessioni (più dispositivi), profili personali, VPN           */
 /* ====================================================================== */
-const AVATAR_RE = /^a([1-9]|1[0-2])$/;
+const AVATAR_RE = /^a([1-9]|[1-3]\d|4[0-8])$/; // 48 avatar: classici, animali, sport, spazio
 const PROFILE_ID_RE = /^[a-z0-9]{4,12}$/;
 const MAX_CONN = 20, MAX_PROFILES = 12;
 const intIn = (v, lo, hi, label) => { const n = Number(v); if (!Number.isInteger(n) || n < lo || n > hi) throw new HttpErr(400, `${label}: scegli un numero da ${lo} a ${hi}`); return n; };
@@ -1958,7 +1958,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       return json({ ok: true });
     }
     if (m === 'PUT') {
-      const b = await readJSON(req);
+      const b = await readJSON(req, 512 * 1024); // fino a 100 playlist con indirizzi lunghi
       const before = statusOf(d, await unseal(env, d.playlists).catch(() => []));
       const name = typeof b.name === 'string' ? str(b.name, 60) : d.name;
       const notes = typeof b.notes === 'string' ? str(b.notes, 500) : d.notes;
@@ -2070,7 +2070,7 @@ async function apiV1(req, env, url, ip, ctx) {
   }
   const pm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})$/);
   if (pm && m === 'PUT') {
-    const b = await readJSON(req, 65536).catch((e) => e);
+    const b = await readJSON(req, 512 * 1024).catch((e) => e);
     if (b instanceof Error || !b || typeof b !== 'object' || Array.isArray(b)) return json({ error: 'JSON non valido' }, 400);
     if (b.playlists !== undefined) {
       if (!Array.isArray(b.playlists)) return json({ error: 'playlists deve essere un elenco' }, 400);

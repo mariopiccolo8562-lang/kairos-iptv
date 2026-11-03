@@ -270,9 +270,14 @@ function renderDevices() {
 }
 const parentOf = (d) => (d && d.parent ? D.devices.find((x) => x.id === d.parent) || null : null);
 const kidsOf = (id) => D.devices.filter((x) => x.parent === id);
-/* 12 avatar predefiniti dell'app: nel pannello un pallino colorato numerato */
+/* 48 avatar dell'app (4 pacchetti da 12): nel pannello un pallino colorato numerato */
 const AVC = ['#e5202b', '#ff7a3d', '#e0a800', '#1fbf75', '#13a8d8', '#3d6bff', '#7b5cff', '#b13dff', '#e535c8', '#ff3d7a', '#5f9e2f', '#7a839e'];
-const avDot = (a) => { const n = Math.min(12, Math.max(1, parseInt(String(a || 'a1').slice(1), 10) || 1)); return `<span class="avd" data-avd style="background:${AVC[n - 1]}">${n}</span>`; };
+const AV_PACKS = [['Classici', Array.from({ length: 12 }, (_, i) => 'Classico ' + (i + 1))],
+  ['Animali', ['Gatto', 'Cane', 'Volpe', 'Gufo', 'Pesce', 'Farfalla', 'Coniglio', 'Tartaruga', 'Pinguino', 'Leone', 'Balena', 'Ape']],
+  ['Sport', ['Calcio', 'Basket', 'Tennis', 'Coppa', 'Bici', 'Auto da corsa', 'Medaglia', 'Bersaglio', 'Golf', 'Pesi', 'Scarpa', 'Ping pong']],
+  ['Spazio', ['Razzo', 'Pianeta', 'Luna', 'Astronauta', 'Disco volante', 'Stella cadente', 'Satellite', 'Sole', 'Costellazione', 'Telescopio', 'Alieno', 'Scintille']]];
+const avDot = (a) => { const n = Math.min(48, Math.max(1, parseInt(String(a || 'a1').slice(1), 10) || 1)); return `<span class="avd" data-avd style="background:${AVC[(n - 1) % 12]}">${n}</span>`; };
+const avOptions = (sel) => AV_PACKS.map(([g, names], k) => `<optgroup label="${g}">${names.map((nm, i) => { const v = 'a' + (k * 12 + i + 1); return `<option value="${v}" ${sel === v ? 'selected' : ''}>${k * 12 + i + 1} · ${nm}</option>`; }).join('')}</optgroup>`).join('');
 $('#rows').addEventListener('click', async (e) => {
   const tr = e.target.closest('tr'); if (!tr) return;
   const d = D.devices.find((x) => x.id === tr.dataset.id), act = e.target.closest('[data-act]')?.dataset.act;
@@ -317,7 +322,7 @@ const VPN_H = ['Il cliente non vede l\'opzione VPN.', 'Il cliente può accendere
 function profRow(p, i) {
   return `<div class="pl prof" data-pi="${i}">
     <div class="ph">${avDot(p.avatar)}<input class="inp" data-pk="name" maxlength="24" value="${esc(p.name)}" placeholder="Nome del profilo"><button class="icb" data-prm title="Elimina profilo">${ICO_BIN}</button></div>
-    <div class="row3"><select class="inp" data-pk="avatar" title="Avatar">${Array.from({ length: 12 }, (_, k) => `<option value="a${k + 1}" ${p.avatar === 'a' + (k + 1) ? 'selected' : ''}>Avatar ${k + 1}</option>`).join('')}</select>
+    <div class="row3"><select class="inp" data-pk="avatar" title="Avatar">${avOptions(p.avatar)}</select>
     <select class="inp" data-pk="pl" title="Playlist del profilo"><option value="all">Tutte le playlist</option>${edit.playlists.map((x) => `<option value="${esc(x.id)}" ${p.pl === x.id ? 'selected' : ''}>${esc(x.name || 'Playlist')}</option>`).join('')}</select>
     <button class="btn sm kid ${p.kids ? 'on' : ''}" data-pkids title="Profilo per bambini">${p.kids ? '✓ ' : ''}Bambini</button></div></div>`;
 }
