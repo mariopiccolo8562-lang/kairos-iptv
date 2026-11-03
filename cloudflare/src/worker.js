@@ -269,6 +269,24 @@ async function apkFeed(env) {
   feedMem = { t: now(), v };
   return v;
 }
+/* Kairos Lite (app leggera stile Smarters, accanto a KAIROS TV, repository kairos-lite):
+   canale di aggiornamento separato, kairos-lite.json dell'ultima release di quel repository. */
+let feedLiteMem = { t: 0, v: null };
+async function apkFeedLite(env) {
+  if (!env.APK_FEED_LITE) return null;
+  if (now() - feedLiteMem.t < 5 * 60e3) return feedLiteMem.v;
+  let v = null;
+  try {
+    const r = await fetch(env.APK_FEED_LITE, { headers: { 'User-Agent': 'KairosPanel' }, cf: { cacheTtl: 300, cacheEverything: true } });
+    if (r.ok) {
+      const j = await r.json();
+      const code = semverCode(j.version) || +j.versionCode;
+      if (code > 0 && /^https:\/\//.test(j.url || '')) v = { versionCode: code, version: String(j.version || '').slice(0, 20), url: String(j.url).slice(0, 500), date: String(j.date || '').slice(0, 40), auto: true };
+    }
+  } catch {}
+  feedLiteMem = { t: now(), v };
+  return v;
+}
 async function latestApk(env, s) {
   // versione manuale valida solo se scritta come X.Y.Z (i vecchi numeri "a mano" senza nome versione vengono ignorati)
   const code = semverCode(s.apkVersion);
@@ -1026,7 +1044,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
     else if (t - +d.kick_t < 180e3) kick = +d.kick_t;
   }
   const mt = maintFor(await getSettings(env), P) ? 1 : 0;
-  return json({ ok: true, mt, unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (P.pl_default || '') + '|' + JSON.stringify(playerParse(P.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
+  return json({ ok: true, mt, unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === P.pl_default) ? P.pl_default : '') + '|' + JSON.stringify(playerParse(P.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
 }
 /** vista pannello: chi è collegato e cosa guarda */
 /* visioni contemporanee: prima di iniziare a guardare l'app chiede il permesso (solo se il pannello ha messo un limite) */
@@ -1641,6 +1659,8 @@ async function route(req, env, ctx) {
     }
     if (path === '/api/player/update' && req.method === 'GET') {
       if (await limited(env.RL_DEVICE, 'up:' + ip)) return json({ ui: null, apk: null }, 429);
+      // Kairos Lite: solo il suo APK (niente interfaccia web da aggiornare)
+      if (url.searchParams.get('app') === 'lite') return json({ ui: null, apk: await apkFeedLite(env) }, 200, { 'Cache-Control': 'no-store' });
       const s = await getSettings(env);
       return json({
         ui: env.UI_VERSION ? { version: env.UI_VERSION, url: '/app/index.html' } : null,
