@@ -868,7 +868,11 @@ async function playerHeartbeat(req, env, ip, ctx) {
   if (sp) Object.assign(f, { speed_dl: num(sp.dl, 0, 1e5), speed_ul: num(sp.ul, 0, 1e5), speed_ping: num(sp.ping, 0, 1e5), speed_jit: num(sp.jitter, 0, 1e5), speed_t: Math.round(num(sp.t, 0, 1e13)) || t });
   if (st) Object.assign(f, { res: str(st.res, 20), fps: num(st.fps, 0, 1e3), bitrate: num(st.bitrate, 0, 1e9), buffers: Math.round(num(st.buffers, 0, 1e6)), dropped: Math.round(num(st.dropped, 0, 1e9)), engine: str(st.engine, 20) });
   else if (state === 'idle') Object.assign(f, { res: '', fps: 0, bitrate: 0, buffers: 0, dropped: 0, engine: '' });
-  const writes = [upsertPresence(env, d.id, f)];
+  // durante la visione l'app batte ogni 20 s (per «Disconnetti»): se non è cambiato niente di importante la riga
+  // si riscrive al massimo una volta al minuto, così le scritture su D1 restano quelle di prima
+  const same = old && t - (+old.t || 0) < 55e3 && old.state === state && (old.title || '') === f.title && (old.ch_id || '') === f.ch_id
+    && (old.vpn || '') === f.vpn && (old.screen || '') === f.screen && (!sp || +old.speed_t === f.speed_t) && (old.ip || '') === (f.ip ?? old.ip ?? '');
+  const writes = same ? [] : [upsertPresence(env, d.id, f)];
   // nuova "sessione" di visione: contenuto diverso da quello dell'ultimo battito
   if (state !== 'idle' && f.title && (!old || old.state !== state || old.title !== f.title))
     writes.push(env.DB.prepare('INSERT INTO watch (day, kind, title, n) VALUES (?, ?, ?, 1) ON CONFLICT(day, kind, title) DO UPDATE SET n = watch.n + 1').bind(dayIT(t), state, f.title).run());
@@ -878,7 +882,13 @@ async function playerHeartbeat(req, env, ip, ctx) {
   const vm = P ? (+P.vpn === 2 ? 'force' : +P.vpn === 1 ? 'allow' : 'off') : 'off';
   // impronta dei server delle playlist: se cambia (DNS cambiato dal pannello) l'app aggiorna gli indirizzi senza ricaricare la lista
   const pv = pls.length ? (await sha256(pls.map((p) => p.id + '|' + hostOf(p) + '|' + (p.username || '')).join(','))).slice(0, 12) : '';
-  return json({ ok: true, unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (P.pl_default || '') + '|' + JSON.stringify(playerParse(P.player)) : '' });
+  // "Disconnetti" dal pannello: l'ordine resta valido 3 minuti; l'app lo conferma (kickAck) e viene azzerato
+  let kick = 0;
+  if (+d.kick_t > 0) {
+    if (b.kickAck && +b.kickAck === +d.kick_t) await env.DB.prepare('UPDATE devices SET kick_t = 0 WHERE id = ? AND kick_t = ?').bind(d.id, +d.kick_t).run();
+    else if (t - +d.kick_t < 180e3) kick = +d.kick_t;
+  }
+  return json({ ok: true, unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (P.pl_default || '') + '|' + JSON.stringify(playerParse(P.player)) : '', ...(kick ? { kick } : {}) });
 }
 /** vista pannello: chi è collegato e cosa guarda */
 /* visioni contemporanee: prima di iniziare a guardare l'app chiede il permesso (solo se il pannello ha messo un limite) */
@@ -1672,11 +1682,21 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
 
   if (path === '/privacy-template' && m === 'GET') return json({ text: PRIVACY_TEMPLATE });
 
-  const dm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})(\/reset|\/link|\/unlink|\/dns|\/linkcode)?$/);
+  const dm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})(\/reset|\/link|\/unlink|\/dns|\/linkcode|\/kick)?$/);
   if (dm) {
     const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(dm[1]).first();
     if (!d) throw new HttpErr(404, 'Dispositivo non trovato');
     const label = d.name || d.code;
+    if (dm[2] === '/kick' && m === 'POST') {
+      // "Disconnetti": l'app interrompe la visione in corso al prossimo battito (entro ~20 s) e torna alla home;
+      // l'abbonamento non cambia. Con ?all=1 vale anche per le connessioni collegate a questo cliente.
+      const t = now();
+      const ids = [d.id];
+      if (url.searchParams.get('all') === '1' && !d.parent) for (const k of (await env.DB.prepare('SELECT id FROM devices WHERE parent = ?').bind(d.id).all()).results || []) ids.push(k.id);
+      await env.DB.batch(ids.map((id) => env.DB.prepare('UPDATE devices SET kick_t = ? WHERE id = ?').bind(t, id)));
+      await log(env, 'off', `${who}: disconnesso ${label}${ids.length > 1 ? ` e ${ids.length - 1} dispositivi collegati` : ''} (visione interrotta)`, ip);
+      return json({ ok: true, kicked: ids.length });
+    }
     if (dm[2] === '/reset' && m === 'POST') {
       await env.DB.prepare('UPDATE devices SET secret_hash = ? WHERE id = ?').bind('', d.id).run();
       await log(env, 'edit', `${who}: sbloccato il collegamento di ${label}`, ip);

@@ -60,6 +60,8 @@ async function demoApi(method, path, body) {
   if (path === '/admin/login') return { ok: true, user: body.user || 'admin' };
   if (path === '/admin/privacy-template') return { text: '# Informativa sulla privacy e condizioni del servizio\n\n# 1. Chi fornisce il servizio\n{nome} è fornito dal rivenditore che ti ha attivato l\'app.\nContatti: {contatti}\n\n# 8. Condizioni del servizio\n- Prezzo: {prezzo}.\n- (modello dimostrativo: sul server trovi il testo completo)' };
   if (path === '/admin/state') { const ap = DEMO.settings, mc = verCode(ap.apkVersion); return { settings: DEMO.settings, devices: DEMO.devices.map(pub), activity: DEMO.activity, messages: DEMO.messages || [], user: 'admin', wgConf: !!DEMO.wgConf, apkFeed: DEMO.apkFeed, apk: ap.apkUrl && mc > DEMO.apkFeed.versionCode ? { versionCode: mc, version: ap.apkVersion, url: ap.apkUrl, auto: false } : { ...DEMO.apkFeed, auto: true }, security: DEMO.sec || (DEMO.sec = { totp: false, encryption: true, access: true, turnstile: true, sessions: 1 }) }; }
+  const km = path.match(/^\/admin\/devices\/([^/?]+)\/kick(\?all=1)?$/);
+  if (km) { const d = DEMO.devices.find((x) => x.id === km[1]); const n = 1 + (km[2] && !d.parent ? DEMO.devices.filter((x) => x.parent === d.id).length : 0); d.kickT = Date.now(); log('off', `Disconnesso ${d.name || d.code}${n > 1 ? ` e ${n - 1} dispositivi collegati` : ''} (visione interrotta)`); return { ok: true, kicked: n }; }
   const lm = path.match(/^\/admin\/devices\/([^/]+)\/(link|unlink)$/);
   if (lm) {
     const d = DEMO.devices.find((x) => x.id === lm[1]);
@@ -281,6 +283,12 @@ $('#rows').addEventListener('click', async (e) => {
   openDrawer(d, d.status === 'pending');
 });
 function addMonths(base, m) { const b = base && new Date(base) > new Date() ? new Date(base) : new Date(); b.setMonth(b.getMonth() + m); return b.toISOString().slice(0, 10); }
+/* «Disconnetti»: interrompe la visione in corso sull'app (entro ~20 s); l'abbonamento resta attivo */
+async function kickDev(d, quiet) {
+  const kids = d.parent ? [] : kidsOf(d.id);
+  if (!quiet && !(await ask('Disconnettere?', `La visione in corso su <b>${esc(d.name || d.code)}</b>${kids.length ? ` e sui suoi ${kids.length} dispositivi collegati` : ''} viene interrotta entro una ventina di secondi e l'app torna alla home.<br><span class="mut">L'abbonamento resta attivo: il cliente può riprendere a guardare. Per bloccarlo usa «Disattiva».</span>`, 'Disconnetti'))) return false;
+  try { const r = await api('POST', '/admin/devices/' + d.id + '/kick' + (kids.length ? '?all=1' : '')); if (!quiet) toast(`${d.name || d.code}: disconnesso${r && r.kicked > 1 ? ' (' + r.kicked + ' dispositivi)' : ''}`); return true; } catch (e) { toast(e.message, 1); return false; }
+}
 async function extend(d, m) { await save(d, { expires: addMonths(d.expires, m), active: true }); toast(`${d.name || d.code}: +${m} ${m === 1 ? 'mese' : 'mesi'}`); }
 async function save(d, patch) { try { await api('PUT', '/admin/devices/' + d.id, patch); await load(); } catch (e) { toast(e.message, 1); } }
 
@@ -294,6 +302,8 @@ function openDrawer(d, activating) {
   $('#dTitle').innerHTML = isNew ? 'Nuovo dispositivo' : `${esc(edit.name || (edit.parent ? edit.model : '') || 'Dispositivo')} <span class="code" style="margin-left:6px">${esc(edit.code)}</span>`;
   $('#dAv').textContent = (edit.name || 'K')[0].toUpperCase();
   $('#dDel').style.display = isNew ? 'none' : '';
+  $('#dKick').style.display = isNew || d.status === 'pending' ? 'none' : '';
+  $('#dKick').onclick = () => kickDev(d);
   renderDrawer();
   $('#shade').classList.add('on'); $('#drawer').classList.add('on');
 }

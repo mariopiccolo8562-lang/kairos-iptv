@@ -926,6 +926,8 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface fun preview(json: String) { runOnUiThread { showPreview(json) } }
         @JavascriptInterface fun previewStop() { runOnUiThread { previewWanted = false; stopPreview() } }
+        /** «Disconnetti» dal pannello: chiude il player a schermo intero, se aperto */
+        @JavascriptInterface fun playerClose() { runOnUiThread { PlayerActivity.current?.killByPanel() } }
         @JavascriptInterface fun installApk(url: String) { downloadAndInstall(url) }
         @JavascriptInterface fun speedTest() { runSpeedTest() }
         /** ferma lo speed test in corso (es. finestra chiusa) */

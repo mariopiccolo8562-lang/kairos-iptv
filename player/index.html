@@ -3038,10 +3038,22 @@ function nativePlay(item, kind, fromSec, extra) {
   return true;
 }
 // chiamata dall'app quando si chiude il player nativo
+/* «Disconnetti» dal pannello: la visione in corso si interrompe (player nativo, schermo intero web, anteprima) e si torna alla home */
+function kickedByPanel() {
+  S.kicked = true;
+  try { if (S.inPlayer && NATIVE && NATIVE.playerClose) NATIVE.playerClose(); } catch {}
+  try { if ($('#fs').classList.contains('on')) closeFs(); } catch {}
+  try { stopPreview(); } catch {}
+  try { stopVideo($('#pv')); } catch {}
+  if (!$('#home').classList.contains('on')) try { go('home', true); } catch {}
+  toast('⛔ Visione interrotta dal tuo fornitore', 6000);
+  setTimeout(() => { S.kicked = false; }, 4000);
+}
 window.kxPlayerClosed = (r) => {
   S.inPlayer = false; S.playingVod = null;
   setTimeout(() => heartbeat(true), 800);
   try { r = typeof r === 'string' ? JSON.parse(r) : r; } catch { r = null; }
+  if (r && r.kicked) { try { stopPreview(); } catch {} if (!$('#home').classList.contains('on')) go('home', true); return; }
   if (!r) { evReturn(); return; }
   if (r.engine && r.engineKey && OPT[r.engineKey] && !panelEng(r.engineKey)) store.set('o_' + r.engineKey, r.engine); // scelta fatta nel player: ricordata per quel tipo di contenuto (non se il lettore lo decide il fornitore)
   if (r.kind === 'vod' && r.id && r.dur > 0) {
@@ -5002,7 +5014,7 @@ async function heartbeat(force) {
   const [state, it] = hbState();
   const sig = state + '|' + (it ? it.id : '');
   const now = Date.now();
-  if (!force && sig === hbLast && now - hbT < 60e3) return;
+  if (!force && sig === hbLast && now - hbT < (state === 'idle' ? 60e3 : 20e3)) return; // durante la visione ogni 20 s: «Disconnetti» dal pannello arriva in fretta
   if (now - hbT < 15e3) return; // mai più di una ogni 15 s
   hbLast = sig; hbT = now;
   let net = null, stats = null;
@@ -5012,9 +5024,10 @@ async function heartbeat(force) {
   const sp = speedLast ? { dl: +speedLast.mbps.toFixed(1), ul: speedLast.ul != null && speedLast.ul >= 0 ? +speedLast.ul.toFixed(1) : null, ping: Math.round(speedLast.ping || 0), jitter: Math.round(speedLast.jitter || 0), t: speedLast.t } : null;
   const body = { state, title: it ? (it.k === 'l' ? (n ? n.title : '') : it.name) : '', ch: it && it.k === 'l' ? it.name : '', chId: it ? it.id : '', group: it ? it.group || '' : '', pl: it ? it.pl || '' : '', prof: S.prof ? S.prof.name : '',
     ver: (NATIVE && NATIVE.version && NATIVE.version()) || 'web', ui: (NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || '', model: (NATIVE && NATIVE.model && NATIVE.model()) || 'browser', screen: ($('.screen.on') || {}).id || '',
-    net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off' };
+    net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off', ...(S.kickAck ? { kickAck: S.kickAck } : {}) };
   try {
     const j = await apiPost('/api/player/heartbeat', body); if (!j) return;
+    if (j.kick) { S.kickAck = j.kick; if (j.kick !== store.get('kickSeen', 0)) { store.set('kickSeen', j.kick); kickedByPanel(); } }
     const offNow = S.perms ? Object.keys(S.perms).filter((k) => S.perms[k] === false).sort().join(',') : '';
     let offSrv = ''; try { offSrv = j.ph ? Object.keys(JSON.parse(j.ph)).sort().join(',') : ''; } catch {}
     const pmNow = S.account ? (S.account.plMode === 'split' ? 'split' : 'merge') + '|' + (S.account.plDefault || '') : '';
@@ -5034,7 +5047,7 @@ async function heartbeat(force) {
     }).catch(() => {});
   } catch {}
 }
-setInterval(() => heartbeat(false), 60e3);
+setInterval(() => heartbeat(false), 20e3); // la funzione decide: ogni 60 s nei menu, ogni 20 s durante la visione
 /* mentre l'app resta aperta: ogni 20 minuti si aggiornano stato, messaggi e scadenza */
 setInterval(async () => {
   if (S.demo || !baseServer() || S.inPlayer || $('#activate').classList.contains('on') || $('#boot').classList.contains('on')) return;

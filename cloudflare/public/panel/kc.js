@@ -191,7 +191,46 @@
 .dv-info{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:12.5px;color:var(--mut)}.dv-info span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dv-kids{display:flex;flex-wrap:wrap;gap:6px}.dv-kids button{all:unset;cursor:pointer;font-size:12px;padding:4px 9px;border-radius:99px;background:rgba(255,255,255,.06);border:1px solid var(--line)}.dv-kids button:hover{background:rgba(255,255,255,.12)}
 .dv-note{font-size:12.5px;color:var(--mut);padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03)}
-.dv-act{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}.dv-act .btn{flex:1}
+.dv-act{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}.dv-act .btn{flex:1}.dv-act .dv-kick{flex:0 0 auto;color:#ff6b81;border-color:rgba(255,107,129,.35)}
+.dvt-wrap{padding:0!important;overflow:auto}
+.dvt{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+.dvt th{position:sticky;top:0;z-index:1;background:#12132a;text-align:left;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);padding:12px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.dvt td{padding:10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:middle}
+.dvt .c{text-align:center;width:1%}
+.dvt tbody tr{cursor:pointer;transition:background .12s}
+.dvt tbody tr:hover{background:rgba(255,255,255,.035)}
+.dvt tbody tr.sel{background:rgba(124,92,255,.12)}
+.dvt tbody tr.sub td{padding-top:6px;padding-bottom:6px;background:rgba(0,0,0,.12)}
+.dvt input[type=checkbox]{width:16px;height:16px;accent-color:var(--a1);cursor:pointer}
+.dvt-u{display:flex;align-items:center;gap:10px;min-width:170px}
+.dvt-u b{display:block;font-size:14px}
+.dvt-av{width:32px;height:32px;flex:0 0 32px;border-radius:10px;display:grid;place-items:center;font-weight:800;font-size:13px;color:#fff;background:linear-gradient(135deg,hsl(var(--h),70%,52%),hsl(calc(var(--h) + 40),70%,38%))}
+.dvt-sub{width:32px;text-align:center;color:var(--mut);font-size:16px}
+.dvt-code{display:inline-flex;align-items:center;gap:4px;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--mut);cursor:copy}
+.dvt-code svg{width:11px;height:11px;opacity:.6}.dvt-code:hover{color:#fff}
+.dvt-exp b,.dvt-dev b{display:block;font-weight:600;white-space:nowrap}
+.dvt-exp small,.dvt-dev small{display:block;font-size:11px;color:var(--mut);margin-top:2px}
+.dvt-exp small.warn{color:var(--warn)}.dvt-exp small.bad{color:var(--bad)}
+.dvt-dev{max-width:170px}.dvt-dev b{overflow:hidden;text-overflow:ellipsis}
+.dvt-pl{white-space:nowrap;max-width:170px;overflow:hidden;text-overflow:ellipsis}
+.dvt-note{max-width:200px;color:#d7d9ef;cursor:text;white-space:nowrap}
+.dvt-note span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;max-width:170px;vertical-align:middle}
+.dvt-note svg{width:12px;height:12px;opacity:.45;vertical-align:middle}
+.dvt-ni{padding:6px 8px!important;font-size:13px!important;min-width:170px}
+.dvt-acts{white-space:nowrap;text-align:right}
+.dvt-acts .btn{margin-left:4px}
+.dvt-ib{width:30px;height:30px;margin-left:4px;border-radius:9px;display:inline-grid;place-items:center;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#cfd3ff;cursor:pointer;transition:all .12s;vertical-align:middle}
+.dvt-ib svg{width:15px;height:15px}
+.dvt-ib:hover{transform:translateY(-1px);filter:brightness(1.25)}
+.dvt-ib.g{color:#4ce3a0;border-color:rgba(76,227,160,.3);background:rgba(76,227,160,.08)}
+.dvt-ib.b{color:#6fb7ff;border-color:rgba(111,183,255,.3);background:rgba(111,183,255,.08)}
+.dvt-ib.k{color:#ff6b81;border-color:rgba(255,107,129,.35);background:rgba(255,107,129,.1)}
+.dvt-ib.o{color:#ffb547;border-color:rgba(255,181,71,.3);background:rgba(255,181,71,.08)}
+.dvt-ib.e{color:#a99bff;border-color:rgba(169,155,255,.3);background:rgba(169,155,255,.08)}
+.dvt-ib.r{color:#ff5470;border-color:rgba(255,84,112,.3);background:rgba(255,84,112,.06)}
+.dvt-bulk{display:none;position:sticky;top:8px;z-index:5;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;padding:10px 14px;border-radius:14px;background:linear-gradient(90deg,rgba(124,92,255,.25),rgba(255,59,90,.18));border:1px solid rgba(124,92,255,.45);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.dvt-bulk.on{display:flex}
+@media (max-width:900px){.dvt th:nth-child(6),.dvt td:nth-child(6),.dvt th:nth-child(7),.dvt td:nth-child(7),.dvt th:nth-child(8),.dvt td:nth-child(8){display:none}}
 .kc-dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
 .kc-dns{display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.02)}
 .kc-dns.saved{border-color:rgba(255,90,60,.35);background:linear-gradient(135deg,rgba(255,60,60,.08),rgba(255,255,255,.02))}
@@ -251,7 +290,7 @@
     const where = `<b class="mono" style="font-size:13px">${esc(o.ip || '—')}</b><small>${esc([o.city, o.country].filter(Boolean).join(', ') || '')}</small>${(o.flags || []).includes('ip') ? '<span class="kc-tag warn" title="Due indirizzi IP diversi in pochi minuti: possibile codice condiviso">⚠ 2 IP</span>' : ''}${(o.flags || []).includes('country') ? '<span class="kc-tag warn">⚠ paese diverso</span>' : ''}`;
     const app = `<b>${esc(o.ver ? 'App ' + o.ver : 'App ?')}</b><small>${esc(o.model || '')}${o.prof ? '<br>Profilo: ' + esc(o.prof) : ''}</small>${o.vpn === 'on' ? '<span class="kc-tag ok">🛡 VPN attiva</span>' : ''}`;
     const vpnBtn = d && !d.parent && +d.vpn ? `<button class="btn sm" data-kvpn="${esc(o.id)}" title="Spegne la VPN su questo abbonamento">Spegni VPN</button>` : '';
-    return `<div class="kc-row"><div><b>${esc(o.name || o.code)}</b><small><span class="mono">${esc(o.code)}</span> · ${o.online ? 'adesso' : ago(Date.now() - o.ago)}</small></div><div>${what}${play}</div><div>${net}</div><div>${where}</div><div>${app}</div><div class="kc-acts">${vpnBtn}<button class="btn sm" data-kopen="${esc(o.id)}">Scheda</button></div></div>`;
+    return `<div class="kc-row"><div><b>${esc(o.name || o.code)}</b><small><span class="mono">${esc(o.code)}</span> · ${o.online ? 'adesso' : ago(Date.now() - o.ago)}</small></div><div>${what}${play}</div><div>${net}</div><div>${where}</div><div>${app}</div><div class="kc-acts">${o.online && o.state !== 'idle' ? `<button class="btn sm danger" data-kkick="${esc(o.id)}" title="Interrompe subito la visione (l'abbonamento resta attivo)">⛔ Disconnetti</button>` : ''}${vpnBtn}<button class="btn sm" data-kopen="${esc(o.id)}">Scheda</button></div></div>`;
   }
   let liveT = null;
   async function liveLoad() {
@@ -272,6 +311,7 @@
       </div>`;
     $('#kLiveR').onclick = liveLoad;
     $$('[data-kopen]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.kopen); d ? openDrawer(d) : toast('Dispositivo non trovato', 1); }));
+    $$('[data-kkick]', V).forEach((b) => (b.onclick = async () => { const d = D.devices.find((x) => x.id === b.dataset.kkick); if (d && (await kickDev(d))) { b.disabled = true; b.textContent = 'Disconnessione…'; } }));
     $$('[data-kvpn]', V).forEach((b) => (b.onclick = async () => {
       if (!(await ask('Spegnere la VPN?', 'La VPN verrà disattivata su questo abbonamento: l\'app la chiude al prossimo controllo (entro qualche minuto).', 'Spegni'))) return;
       try { await api('PUT', '/admin/devices/' + b.dataset.kvpn, { vpn: 0 }); await load(); toast('VPN disattivata'); liveLoad(); } catch (e) { toast(e.message, 1); }
@@ -461,6 +501,7 @@
       ['GET', '/devices?status=active&q=mario', 'Elenco dei dispositivi (status: active, pending, expired, disabled)'],
       ['GET', '/devices/KXAB-12CD', 'Un dispositivo (codice o id)'],
       ['POST', '/devices', 'Crea un cliente: { code?, name, expires, active, playlists, maxConn, … }'],
+      ['POST', '/devices/KXAB-12CD/kick', 'Disconnetti: interrompe la visione in corso entro ~20 s (l\'abbonamento resta attivo). Con ?all=1 anche i dispositivi collegati'],
       ['PUT', '/devices/KXAB-12CD', 'Modifica: name, notes, expires, active, playlists, maxConn, maxStreams, maxProfiles, plMode, plDefault, player ({live, movie, series}: auto · exo · vlc · "" = sceglie il cliente), perms, vpn, vpnLoc'],
       ['POST', '/devices/KXAB-12CD/activate', 'Attiva: { months | days | expires | unlimited, playlists? }'],
       ['POST', '/devices/KXAB-12CD/extend', 'Rinnova dalla scadenza attuale: { months | days }'],
@@ -530,9 +571,9 @@
     V.insertAdjacentHTML('afterbegin', `<div class="dv-tiles" id="dvTiles"></div>
       <div class="dv-bar"><div class="dv-q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input class="inp" id="dvQ" placeholder="Cerca per nome, codice, note o modello"></div>
         <select class="inp" id="dvSort"><option value="exp">Scadenza più vicina</option><option value="name">Nome A–Z</option><option value="seen">Ultimo accesso</option><option value="new">Aggiunti di recente</option></select>
-        <div class="seg" id="dvView"><button data-dv="cards">Schede</button><button data-dv="list">Elenco</button></div></div>
-      <div id="dvPend"></div><div class="dv-grid" id="dvCards"></div><div id="dvMore"></div>`);
-    const st = { view: 'cards', sort: 'exp', limit: 60 };
+        <div class="seg" id="dvView"><button data-dv="cards" title="Schede grandi: comode con pochi clienti">Schede</button><button data-dv="table" title="Tabella compatta con azioni rapide e selezione multipla: comoda con tanti clienti">Tabella</button><button data-dv="list" title="Elenco semplice di prima">Elenco</button></div></div>
+      <div id="dvPend"></div><div class="dv-grid" id="dvCards"></div><div id="dvBulk" class="dvt-bulk"></div><div id="dvTbl"></div><div id="dvMore"></div>`);
+    const st = { view: 'cards', sort: 'exp', limit: 60, sel: new Set() };
     try { st.view = localStorage.getItem('kc_dv') || 'cards'; st.sort = localStorage.getItem('kc_dvs') || 'exp'; } catch {}
     $('#dvSort').value = st.sort;
     const TILES = [
@@ -561,19 +602,82 @@
         </div>
         ${kids.length ? `<div class="dv-kids">${kids.map((k) => `<button data-open="${esc(k.id)}" title="${esc(k.code)}">↳ ${esc(k.name || k.model || k.code)}</button>`).join('')}</div>` : ''}
         ${d.notes ? `<div class="dv-note">📝 ${esc(d.notes.slice(0, 90))}</div>` : ''}
-        <div class="dv-act"><button class="btn sm" data-act="ext1">+1 mese</button><button class="btn sm" data-act="ext12">+12 mesi</button><button class="btn sm ${d.active ? '' : 'pri'}" data-act="tog">${d.active ? 'Disattiva' : 'Riattiva'}</button><button class="btn sm pri" data-act="open">Apri scheda</button></div>
+        <div class="dv-act">${d.status === 'active' ? '<button class="btn sm dv-kick" data-act="kick" title="Disconnetti: interrompe la visione in corso">⛔</button>' : ''}<button class="btn sm" data-act="ext1">+1 mese</button><button class="btn sm" data-act="ext12">+12 mesi</button><button class="btn sm ${d.active ? '' : 'pri'}" data-act="tog">${d.active ? 'Disattiva' : 'Riattiva'}</button><button class="btn sm pri" data-act="open">Apri scheda</button></div>
       </div>`;
     }
     function pendCard(d) {
       return `<div class="dv-pc" data-id="${esc(d.id)}"><div><span class="code big">${esc(d.code)}</span><small>${esc(d.model || 'Dispositivo')} · si è collegato ${esc(ago(d.lastSeen || d.createdAt))}</small></div>
         <div class="dv-act"><button class="btn sm pri" data-act="activate">Attiva</button><button class="btn sm" data-act="link">Collega a un cliente</button></div></div>`;
     }
+    const IC = {
+      ext1: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+      ext12: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+      kick: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.4 5.6a9 9 0 1 1-12.8 0"/><path d="M12 2v10"/></svg>',
+      off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
+      on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4v16l13-8z"/></svg>',
+      edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+      del: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
+      copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V4h12"/></svg>',
+      note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+    };
+    const ib = (act, cls, title) => `<button class="dvt-ib ${cls}" data-act="${act}" title="${title}">${IC[act]}</button>`;
+    function trow(d, sub) {
+      const kids = sub ? [] : kidsOf(d.id), p = sub ? parentOf(d) : null;
+      const base = sub && p ? p : d, dl = daysLeft(base);
+      const exp = base.expires ? `<b>${esc(fmtD(base.expires))}</b><small class="${dl !== null && dl < 0 ? 'bad' : dl !== null && dl <= 14 ? 'warn' : ''}">${dl === null ? '' : dl < 0 ? 'scaduto da ' + -dl + ' g' : dl === 0 ? 'scade oggi' : 'tra ' + dl + ' g'}</small>` : (d.status === 'pending' ? '<span class="mut">—</span>' : '<b>Senza scadenza</b>');
+      const pls = sub ? '<span class="mut">dal principale</span>' : (d.playlists || []).length ? `${(d.playlists || []).length} · <span class="mut">${esc(hostsOf(d).slice(0, 1).join(''))}</span>` : '<span class="mut">nessuna</span>';
+      const acts = d.status === 'pending' && !sub
+        ? '<button class="btn sm pri" data-act="activate">Attiva</button><button class="btn sm" data-act="link">Collega</button>'
+        : sub ? ib('kick', 'k', 'Disconnetti') + ib('edit', 'e', 'Apri scheda')
+        : ib('ext1', 'g', '+1 mese') + ib('ext12', 'b', '+12 mesi') + (d.status === 'active' ? ib('kick', 'k', 'Disconnetti: interrompe la visione in corso') : '') + (d.active ? ib('off', 'o', 'Disattiva') : ib('on', 'g', 'Riattiva')) + ib('edit', 'e', 'Apri scheda') + ib('del', 'r', 'Elimina');
+      return `<tr data-id="${esc(d.id)}" class="${sub ? 'sub' : ''} ${st.sel.has(d.id) ? 'sel' : ''}">
+        <td class="c">${sub ? '' : `<input type="checkbox" data-sel="${esc(d.id)}" ${st.sel.has(d.id) ? 'checked' : ''}>`}</td>
+        <td><div class="dvt-u">${sub ? '<span class="dvt-sub">↳</span>' : `<span class="dvt-av" style="--h:${hue(d.name || d.code)}">${esc(initial(d.name || d.code))}</span>`}<div><b>${esc(d.name || (sub ? d.model || 'Dispositivo' : '') || '— senza nome —')}</b><span class="dvt-code" data-copy="${esc(d.code)}" title="Copia il codice">${esc(d.code)} ${IC.copy}</span></div></div></td>
+        <td>${stPill(d.status)}</td>
+        <td class="dvt-exp">${exp}</td>
+        <td class="c mono">${sub || d.status === 'pending' ? '—' : `${1 + kids.length}/${esc(d.maxConn || 1)}`}</td>
+        <td class="dvt-dev"><b>${esc(d.model || '—')}</b><small>${esc(ago(d.lastSeen))}</small></td>
+        <td class="dvt-pl">${pls}</td>
+        <td class="dvt-note" data-note="${esc(d.id)}">${d.notes ? `<span>${esc(d.notes.slice(0, 60))}</span>` : `<span class="mut">Aggiungi nota</span>`} ${IC.note}</td>
+        <td class="dvt-acts">${acts}</td></tr>`;
+    }
+    function renderTable(list, pend, q) {
+      const rows = [];
+      for (const d of [...pend, ...list.slice(0, st.limit)]) { rows.push(trow(d, false)); for (const k of kidsOf(d.id)) rows.push(trow(k, true)); }
+      $('#dvTbl').innerHTML = rows.length ? `<div class="card glass dvt-wrap"><table class="dvt"><thead><tr><th class="c"><input type="checkbox" id="dvtAll" title="Seleziona tutti quelli mostrati"></th><th>Cliente</th><th>Stato</th><th>Scadenza</th><th class="c">Conn.</th><th>Dispositivo</th><th>Playlist</th><th>Note</th><th>Azioni</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`
+        : `<div class="emptyc" style="display:block">${q ? 'Nessun cliente trovato per «' + esc(q) + '»' : 'Nessun cliente in questo elenco'}</div>`;
+      const all = $('#dvtAll'); if (all) { const ids = [...pend, ...list.slice(0, st.limit)].map((d) => d.id); all.checked = ids.length > 0 && ids.every((i) => st.sel.has(i)); all.onchange = () => { ids.forEach((i) => (all.checked ? st.sel.add(i) : st.sel.delete(i))); render(); }; }
+      bulkBar();
+    }
+    function bulkBar() {
+      for (const i of [...st.sel]) if (!D.devices.some((d) => d.id === i)) st.sel.delete(i);
+      const n = st.sel.size;
+      $('#dvBulk').innerHTML = n && st.view === 'table' ? `<b>${n} selezionat${n === 1 ? 'o' : 'i'}</b><button class="btn sm" data-bulk="ext1">+1 mese</button><button class="btn sm" data-bulk="ext12">+12 mesi</button><button class="btn sm danger" data-bulk="kick">⛔ Disconnetti</button><button class="btn sm" data-bulk="off">Disattiva</button><button class="btn sm" data-bulk="on">Riattiva</button><span style="flex:1"></span><button class="btn sm" data-bulk="clear">Deseleziona</button>` : '';
+      $('#dvBulk').classList.toggle('on', !!n && st.view === 'table');
+    }
+    async function bulk(act) {
+      if (act === 'clear') { st.sel.clear(); return render(); }
+      const ds = [...st.sel].map((i) => D.devices.find((d) => d.id === i)).filter((d) => d && !d.parent && d.status !== 'pending');
+      if (!ds.length) return toast('Nessun cliente attivabile tra quelli selezionati', 1);
+      const L = { ext1: ['Aggiungere 1 mese?', 'Aggiungi'], ext12: ['Aggiungere 12 mesi?', 'Aggiungi'], kick: ['Disconnettere?', 'Disconnetti'], off: ['Disattivare?', 'Disattiva'], on: ['Riattivare?', 'Riattiva'] }[act];
+      const names = ds.slice(0, 8).map((d) => esc(d.name || d.code)).join(', ') + (ds.length > 8 ? ` e altri ${ds.length - 8}` : '');
+      if (!(await ask(L[0], `<b>${ds.length}</b> client${ds.length === 1 ? 'e' : 'i'}: ${names}${act === 'kick' ? '<br><span class="mut">La visione in corso si interrompe entro una ventina di secondi; gli abbonamenti restano attivi.</span>' : ''}`, L[1]))) return;
+      let ok = 0;
+      for (const d of ds) {
+        try {
+          if (act === 'kick') { if (await kickDev(d, true)) ok++; continue; }
+          const patch = act === 'ext1' ? { expires: addMonths(d.expires, 1), active: true } : act === 'ext12' ? { expires: addMonths(d.expires, 12), active: true } : { active: act === 'on' };
+          await api('PUT', '/admin/devices/' + d.id, patch); ok++;
+        } catch (e) { toast((d.name || d.code) + ': ' + e.message, 1); }
+      }
+      st.sel.clear(); await load(); toast(`Fatto su ${ok} di ${ds.length}`);
+    }
     function render() {
       const f = D.filter || 'all', q = ($('#dvQ').value || D.q || '').toLowerCase().trim();
       $('#dvTiles').innerHTML = TILES.map(([k, l, ic, sub]) => `<button class="dv-tile ${k} ${f === k ? 'on' : ''}" data-fl2="${k}"><i>${ic}</i><span><b>${D.devices.filter((d) => fit(d, k)).length}</b><em>${l}</em><small>${sub}</small></span></button>`).join('');
       $$('#dvView [data-dv]').forEach((b) => b.classList.toggle('on', b.dataset.dv === st.view));
-      V.classList.toggle('dv-cardsview', st.view === 'cards');
-      if (st.view !== 'cards') { $('#dvPend').innerHTML = $('#dvCards').innerHTML = $('#dvMore').innerHTML = ''; return; }
+      V.classList.toggle('dv-cardsview', st.view !== 'list');
+      if (st.view === 'list') { $('#dvPend').innerHTML = $('#dvCards').innerHTML = $('#dvMore').innerHTML = $('#dvTbl').innerHTML = ''; bulkBar(); return; }
       const hay = (d) => [d.code, d.name, d.notes, d.model].join(' ').toLowerCase();
       const pend = D.devices.filter((d) => d.status === 'pending' && !d.parent && (f === 'all' || f === 'pending') && (!q || hay(d).includes(q)));
       $('#dvPend').innerHTML = pend.length ? `<div class="card glass dv-pend"><div class="hd"><h3>🆕 Da attivare <span class="cnt">${pend.length}</span><small>Il cliente apre l'app e ti legge il codice: premi <b>Attiva</b>, scegli durata e playlist. Se è una TV in più di un cliente che hai già, usa <b>Collega a un cliente</b>.</small></h3></div><div class="dv-pgrid">${pend.slice(0, 24).map(pendCard).join('')}</div></div>` : '';
@@ -582,6 +686,14 @@
       const orphans = D.devices.filter((d) => d.parent && !parentOf(d) && (!q || hay(d).includes(q)) && f === 'all');
       const by = { exp: (a, b) => (daysLeft(a) ?? 1e9) - (daysLeft(b) ?? 1e9), name: (a, b) => String(a.name || a.code).localeCompare(String(b.name || b.code), 'it'), seen: (a, b) => (b.lastSeen || 0) - (a.lastSeen || 0), new: (a, b) => (b.createdAt || 0) - (a.createdAt || 0) }[st.sort];
       list = list.sort(by);
+      if (st.view === 'table') {
+        $('#dvPend').innerHTML = $('#dvCards').innerHTML = '';
+        renderTable(list, pend, q);
+        $('#dvMore').innerHTML = list.length > st.limit ? `<button class="btn" id="dvMoreB" style="width:100%;margin-top:14px">Mostra altri ${Math.min(100, list.length - st.limit)} (${list.length - st.limit} rimanenti)</button>` : '';
+        $('#dvMoreB') && ($('#dvMoreB').onclick = () => { st.limit += 100; render(); });
+        return;
+      }
+      $('#dvTbl').innerHTML = ''; bulkBar();
       const shown = list.slice(0, st.limit);
       $('#dvCards').innerHTML = shown.map(card).join('') + orphans.map((d) => `<div class="dv-card" data-id="${esc(d.id)}"><div class="dv-top"><div class="dv-av">?</div><div class="dv-n"><b>${esc(d.name || d.model || d.code)}</b><span class="code">${esc(d.code)}</span></div></div><p class="mut" style="font-size:13px">Connessione di un cliente eliminato</p><div class="dv-act"><button class="btn sm pri" data-act="open">Apri scheda</button></div></div>`).join('')
         || (pend.length ? '' : `<div class="emptyc" style="display:block;grid-column:1/-1">${q ? 'Nessun cliente trovato per «' + esc(q) + '»' : 'Nessun cliente in questo elenco'}</div>`);
@@ -589,20 +701,56 @@
       $('#dvMoreB') && ($('#dvMoreB').onclick = () => { st.limit += 60; render(); });
     }
     V.addEventListener('click', async (e) => {
-      const t = e.target.closest('[data-fl2]'); if (t) { D.filter = t.dataset.fl2; st.limit = 60; return renderDevices(); }
-      const v = e.target.closest('[data-dv]'); if (v) { st.view = v.dataset.dv; try { localStorage.setItem('kc_dv', st.view); } catch {} return renderDevices(); }
+      const t = e.target.closest('[data-fl2]'); if (t) { D.filter = t.dataset.fl2; st.limit = st.view === 'table' ? 100 : 60; return renderDevices(); }
+      const v = e.target.closest('[data-dv]'); if (v) { st.view = v.dataset.dv; st.limit = st.view === 'table' ? 100 : 60; try { localStorage.setItem('kc_dv', st.view); } catch {} return renderDevices(); }
       const o = e.target.closest('[data-open]'); if (o) { const k = D.devices.find((x) => x.id === o.dataset.open); if (k) openDrawer(k, false); return; }
+      const bk = e.target.closest('[data-bulk]'); if (bk) return bulk(bk.dataset.bulk);
+      const cp = e.target.closest('[data-copy]'); if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); toast('Codice copiato: ' + cp.dataset.copy); } catch { toast(cp.dataset.copy); } return; }
+      const sl = e.target.closest('[data-sel]'); if (sl) { sl.checked ? st.sel.add(sl.dataset.sel) : st.sel.delete(sl.dataset.sel); sl.closest('tr').classList.toggle('sel', sl.checked); const all = $('#dvtAll'); if (all && !sl.checked) all.checked = false; return bulkBar(); }
+      const nt = e.target.closest('[data-note]');
+      if (nt && !nt.querySelector('input')) {
+        const d = D.devices.find((x) => x.id === nt.dataset.note); if (!d) return;
+        nt.innerHTML = `<input class="inp dvt-ni" maxlength="300" value="${esc(d.notes || '')}" placeholder="Nota (Invio per salvare, Esc per annullare)">`;
+        const inp = nt.querySelector('input'); inp.focus(); inp.select();
+        let done = false;
+        const fin = async (keep) => { if (done) return; done = true; if (keep && inp.value.trim() !== (d.notes || '')) { await save(d, { notes: inp.value.trim() }); toast('Nota salvata'); } else render(); };
+        inp.onkeydown = (ev) => { if (ev.key === 'Enter') fin(true); else if (ev.key === 'Escape') fin(false); };
+        inp.onblur = () => fin(true);
+        return;
+      }
+      if (nt) return;
+      const tr = e.target.closest('.dvt tbody tr');
+      if (tr) {
+        const d = D.devices.find((x) => x.id === tr.dataset.id); if (!d) return;
+        const a = (e.target.closest('[data-act]') || {}).dataset?.act;
+        if (a === 'ext1') return extend(d, 1);
+        if (a === 'ext12') return extend(d, 12);
+        if (a === 'kick') return kickDev(d);
+        if (a === 'off') { if (!(await ask('Disattivare il cliente?', `<b>${esc(d.name || d.code)}</b> non potrà più guardare finché non lo riattivi.`, 'Disattiva'))) return; await save(d, { active: false }); return toast('Disattivato'); }
+        if (a === 'on') { await save(d, { active: true }); return toast('Riattivato'); }
+        if (a === 'del') {
+          const n = kidsOf(d.id).length;
+          if (!(await ask('Eliminare il dispositivo?', `Il codice <b class="mono">${esc(d.code)}</b> verrà rimosso e il player tornerà alla schermata di attivazione.${n ? ` Le ${n} connessioni collegate torneranno “in attesa”.` : ''}`, 'Elimina'))) return;
+          try { await api('DELETE', '/admin/devices/' + d.id); st.sel.delete(d.id); await load(); toast('Eliminato'); } catch (er) { toast(er.message, 1); }
+          return;
+        }
+        if (a === 'activate') return openDrawer(d, true);
+        if (a === 'link') { openDrawer(d, false); setTimeout(() => { const s2 = $('#eLinkTo'); if (s2) { s2.scrollIntoView({ block: 'center' }); s2.focus(); } }, 350); return; }
+        if (a === 'edit' || !e.target.closest('button,input')) return openDrawer(d, d.status === 'pending');
+        return;
+      }
       const c = e.target.closest('.dv-card, .dv-pc'); if (!c) return;
       const d = D.devices.find((x) => x.id === c.dataset.id); if (!d) return;
       const act = (e.target.closest('[data-act]') || {}).dataset?.act;
       if (act === 'ext1') return extend(d, 1);
       if (act === 'ext12') return extend(d, 12);
+      if (act === 'kick') return kickDev(d);
       if (act === 'tog') { if (d.active && !(await ask('Disattivare il cliente?', `<b>${esc(d.name || d.code)}</b> non potrà più guardare finché non lo riattivi.`, 'Disattiva'))) return; await save(d, { active: !d.active }); return toast(d.active ? 'Cliente disattivato' : 'Cliente riattivato'); }
       if (act === 'activate') return openDrawer(d, true);
       if (act === 'link') { openDrawer(d, false); setTimeout(() => { const s = $('#eLinkTo'); if (s) { s.scrollIntoView({ block: 'center' }); s.focus(); } }, 350); return; }
       if (act === 'open' || !e.target.closest('button')) openDrawer(d, d.status === 'pending');
     });
-    $('#dvQ').addEventListener('input', () => { st.limit = 60; render(); });
+    $('#dvQ').addEventListener('input', () => { st.limit = st.view === 'table' ? 100 : 60; render(); });
     $('#dvSort').onchange = (e) => { st.sort = e.target.value; try { localStorage.setItem('kc_dvs', st.sort); } catch {} render(); };
     const orig = window.renderDevices;
     window.renderDevices = renderDevices = function () { orig(); render(); };

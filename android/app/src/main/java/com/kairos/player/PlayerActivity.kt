@@ -49,6 +49,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         @Volatile var pending: String? = null
         /** lista già analizzata (dal thread del ponte JS, non da quello dell'interfaccia) */
         @Volatile var pendingJson: JSONObject? = null
+        /** player aperto in questo momento (per «Disconnetti» dal pannello) */
+        @Volatile var current: PlayerActivity? = null
         const val RESULT = "kx_result"
         private val ACCENT = Color.parseColor("#E5202B")
     }
@@ -173,6 +175,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             setOpaque(true)
         }
         showOsd(false)
+        current = this
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -1253,7 +1256,20 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         @Suppress("DEPRECATION") overridePendingTransition(0, 0)
     }
 
+    /** «Disconnetti» dal pannello: chiusura immediata, il video non torna nell'anteprima */
+    fun killByPanel() {
+        if (closing || done) return
+        closing = true
+        ui.removeCallbacks(zapPlay)
+        ui.removeCallbacks(listHide)
+        try { dialog?.dismiss() } catch (_: Exception) {}
+        completeHandoff(true)
+        setResult(android.app.Activity.RESULT_OK, Intent().putExtra(RESULT, JSONObject().put("kind", kind).put("id", item.id).put("kicked", true).toString()))
+        finishNow()
+    }
+
     override fun onDestroy() {
+        if (current === this) current = null
         closing = true // un errore tardivo del motore non deve crearne un altro su un'activity distrutta
         ui.removeCallbacksAndMessages(null)
         PlayStats.stop()
