@@ -2519,6 +2519,27 @@ function qualityOf(ch) {
   if (/\b(SD|480P?|576P?)\b/.test(n)) return 'SD';
   return '';
 }
+/* Versioni dello stesso canale (4K / FHD / HD / SD) nella stessa playlist: servono alla qualità adattiva.
+   Chiave = nome senza prefisso del paese e senza indicazioni di qualità; rango = quanto è "pesante". */
+const RX_QTOK = /\b(4K|UHD|2160P?|FHD|FULL ?HD|1080[PI]?|HD|720P?|SD|480P?|576P?|LQ|LOW|HQ|HEVC|H\.?26[45]|50 ?FPS|60 ?FPS|BACKUP|BK|ALT)\b|[\[\](){}|]/g;
+const varKey = (c) => (c.pl || '') + '|' + String(c.name || '').toUpperCase().replace(RX_CC, '').replace(RX_QTOK, ' ').replace(/[^A-Z0-9+]+/g, ' ').trim();
+const varRank = (c) => { const n = (c.name || '').toUpperCase(); return /\b(4K|UHD|2160P?)\b/.test(n) ? 4 : /\b(FHD|FULL ?HD|1080[PI]?)\b/.test(n) ? 3 : /\b(SD|480P?|576P?|LQ|LOW)\b/.test(n) ? 1 : /\b(HD|720P?)\b/.test(n) ? 2 : 0; };
+let varCache = null;
+function variantsOf(c) {
+  const list = S.lib && S.lib.live;
+  if (!list || !list.length) return [];
+  if (!varCache || varCache.src !== list) {
+    const m = new Map();
+    for (const x of list) { const r = varRank(x); if (!r) continue; const k = varKey(x); if (k.length < 2) continue; let a = m.get(k); if (!a) m.set(k, (a = [])); a.push(x); }
+    for (const [k, a] of m) if (a.length < 2) m.delete(k);
+    varCache = { src: list, m };
+  }
+  const r = varRank(c); if (!r) return [];
+  const a = varCache.m.get(varKey(c)); if (!a) return [];
+  const hevc = (x) => /\b(HEVC|H\.?265)\b/i.test(x.name);
+  // solo versioni più leggere; mai passare a HEVC (più pesante da decodificare) se il canale non lo è
+  return a.filter((x) => x !== c && varRank(x) < r && (hevc(c) || !hevc(x))).sort((x, y) => varRank(y) - varRank(x)).slice(0, 3);
+}
 const qBadge = (ch) => { const q = qualityOf(ch); return q ? `<span class="qb q${q}" data-q="${esc(ch.id)}">${q}</span>` : `<span class="qb qnone" data-q="${esc(ch.id)}"></span>`; };
 function setMeasuredQuality(id, h) {
   if (!id || !(h > 0)) return;
@@ -3011,10 +3032,11 @@ function nativePlay(item, kind, fromSec, extra) {
     // al player si passa al massimo una finestra di 3000 canali attorno a quello scelto (liste enormi = JSON enorme)
     let from = 0, sub = list;
     if (list.length > 3000) { from = Math.max(0, Math.min(index - 1500, list.length - 3000)); sub = list.slice(from, from + 3000); index -= from; }
-    const t = Date.now();
+    const t = Date.now(), adapt = !!opt('adaptQ');
     items = sub.map((c) => {
       const [u, a] = liveUrls(c);
       const o = { id: c.id, t: c.name, u, a, n: c.num || 0, g: c.group || '', l: c.logo || '' };
+      if (adapt) { const v = variantsOf(c); if (v.length) o.v = v.map((x) => [liveUrls(x)[0], ({ 4: '4K', 3: 'FHD', 2: 'HD', 1: 'SD' })[varRank(x)]]); }
       const ep = epgOf(c);
       if (ep && ep.length) { const i = ep.findIndex((x) => x.start <= t && x.end > t); if (i >= 0) { const a2 = ep[i], b = ep[i + 1]; o.e = [a2.title, Math.floor(a2.start / 1000), Math.floor(a2.end / 1000), b ? b.title : '', b ? Math.floor(b.start / 1000) : 0]; } }
       return o;
@@ -3030,7 +3052,7 @@ function nativePlay(item, kind, fromSec, extra) {
   try {
     NATIVE.play(JSON.stringify({ kind: pk, items, index, start: Math.floor(start * 1000), engine: engineFor(kind, item), engineKey: kind === 'live' ? 'engLive' : kind === 'series' ? 'engSeries' : 'engMovie',
       quality: P.quality, buffer: P.buffer, aspect: P.aspect, brand: S.settings.brand || 'KAIROS',
-      hw: opt('hw'), sub: opt('subSize'), res: !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list) }));
+      hw: opt('hw'), sub: opt('subSize'), res: !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list), adapt: !!opt('adaptQ') }));
   } catch (e) { return false; }
   S.inPlayer = true;
   if (kind === 'live') { S.playingLive = item; S.playingVod = null; addRecent(item, 'live'); store.set('lastCh', item.id); } else { S.playingVod = item; S.playingLive = null; }
@@ -3666,6 +3688,7 @@ const OPT = {
   engMovie: ['Lettore film', ENG, 'auto'],
   engSeries: ['Lettore serie TV', ENG, 'auto'],
   hw: ['Accelerazione hardware', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['off', 'Disattivata (software)']], 'auto'],
+  adaptQ: ['Qualità adattiva automatica', YN, true],
   autoNext: ['Episodio successivo automatico', YN, true],
   subSize: ['Dimensione sottotitoli', [['small', 'Piccola'], ['medium', 'Media'], ['large', 'Grande'], ['xl', 'Molto grande']], 'medium'],
   resInd: ['Indicatore risoluzione', YN, true],
@@ -3862,7 +3885,7 @@ function renderSettings(sec) {
     play: `<h3>Lettore</h3>${HAS_PLAYER ? '' : '<div class="snote">Queste opzioni valgono nell\'app (Fire TV, Android TV, telefoni).</div>'}
       ${optRow('engLive')}${optRow('engMovie')}${optRow('engSeries')}
       ${PLAY_OPTS.filter((o) => o[0] !== 'engine').map(([k, lbl, opts]) => `<div class="sr" data-f data-pk="${k}"><span>${lbl}</span><b>${(opts.find((o) => o[0] === P[k]) || opts[0])[1]}</b></div>`).join('')}
-      ${optRow('hw')}${optRow('autoNext')}${optRow('subSize')}${optRow('resInd')}
+      ${optRow('hw')}${optRow('adaptQ')}<div class="snote" style="margin:-4px 0 10px">Se la connessione non regge, il canale passa da solo a una sua versione più leggera (es. da FHD a HD) e torna alla qualità piena quando la linea migliora. Se il video si blocca, l'app prova da sola a ripartire, la decodifica software o l'altro lettore.</div>${optRow('autoNext')}${optRow('subSize')}${optRow('resInd')}
       <div class="snote"><b>Automatico avanzato</b> sceglie da solo il lettore migliore per ogni contenuto (ExoPlayer, oppure VLC per i formati che ExoPlayer non legge) e cambia lettore da solo se qualcosa non parte. Disattiva l'accelerazione hardware solo se vedi immagini verdi o a scatti. Durante la visione premi OK per audio, qualità e sottotitoli.</div>`,
     tv: (() => {
       const m = store.get('epgMeta', {}), src = epgSources();
@@ -5009,6 +5032,17 @@ function hbState() {
   if (S.previewing) return ['live', S.previewing];
   return ['idle', null];
 }
+/* problemi della visione (recupero automatico, errori del lettore) → pannello «Errori applicazione» */
+let pendEvts = [];
+async function sendPlayEvents() {
+  try { const r = NATIVE && NATIVE.playEvents && NATIVE.playEvents(); if (r) pendEvts.push(...JSON.parse(r)); } catch {}
+  if (!pendEvts.length || S.demo || !baseServer()) return;
+  const items = pendEvts.slice(0, 20);
+  try {
+    const j = await apiPost('/api/player/errors', { items, ver: (NATIVE && NATIVE.version && NATIVE.version()) || 'web', model: (NATIVE && NATIVE.model && NATIVE.model()) || 'browser' });
+    if (j && j.ok) pendEvts = pendEvts.slice(items.length); else if (pendEvts.length > 60) pendEvts = pendEvts.slice(-60);
+  } catch { if (pendEvts.length > 60) pendEvts = pendEvts.slice(-60); }
+}
 async function heartbeat(force) {
   if (S.demo || !baseServer() || S.status !== 'active' || $('#activate').classList.contains('on')) return;
   const [state, it] = hbState();
@@ -5027,6 +5061,7 @@ async function heartbeat(force) {
     net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off', ...(S.kickAck ? { kickAck: S.kickAck } : {}) };
   try {
     const j = await apiPost('/api/player/heartbeat', body); if (!j) return;
+    sendPlayEvents();
     if (j.kick) { S.kickAck = j.kick; if (j.kick !== store.get('kickSeen', 0)) { store.set('kickSeen', j.kick); kickedByPanel(); } }
     const offNow = S.perms ? Object.keys(S.perms).filter((k) => S.perms[k] === false).sort().join(',') : '';
     let offSrv = ''; try { offSrv = j.ph ? Object.keys(JSON.parse(j.ph)).sort().join(',') : ''; } catch {}

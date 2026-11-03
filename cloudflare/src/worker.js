@@ -813,7 +813,7 @@ function dayIT(t = now()) {
   try { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t)); }
   catch { return new Date(t).toISOString().slice(0, 10); }
 }
-const PRESENCE_COLS = ['t', 'hb_t', 'ip', 'ip2', 'ip2_t', 'country', 'city', 'home_country', 'ver', 'ui', 'model', 'state', 'title', 'ch', 'ch_id', 'grp', 'pl', 'prof', 'screen', 'net', 'rssi', 'speed_dl', 'speed_ul', 'speed_ping', 'speed_jit', 'speed_t', 'res', 'fps', 'bitrate', 'buffers', 'dropped', 'engine', 'vpn'];
+const PRESENCE_COLS = ['t', 'hb_t', 'ip', 'ip2', 'ip2_t', 'country', 'city', 'home_country', 'ver', 'ui', 'model', 'state', 'title', 'ch', 'ch_id', 'grp', 'pl', 'prof', 'screen', 'net', 'rssi', 'speed_dl', 'speed_ul', 'speed_ping', 'speed_jit', 'speed_t', 'res', 'fps', 'bitrate', 'buffers', 'dropped', 'engine', 'vpn', 'codec', 'dec', 'stalls_h', 'rec', 'reduced'];
 /** scrive/aggiorna la riga di presenza con i campi indicati (gli altri restano) */
 async function upsertPresence(env, id, fields) {
   const cols = Object.keys(fields).filter((k) => PRESENCE_COLS.includes(k));
@@ -842,6 +842,68 @@ async function presenceFromRegister(env, d, b, ip, cf) {
 async function unseenCount(env, d, pid) {
   try { return (await env.DB.prepare('SELECT COUNT(*) AS n FROM messages WHERE (target = ? OR target = ? OR target = ?) AND created > ? AND (until = 0 OR until > ?)').bind('all', d.id, pid || d.id, +d.last_seen || 0, now()).first()).n; } catch { return 0; }
 }
+/* problemi della visione mandati dall'app (recupero automatico, errori del lettore) → «Errori applicazione» */
+const ERR_PROBLEMS = ['freeze', 'stall', 'error'];
+const ERR_OUTCOMES = ['risolto', 'non risolto', 'chiuso'];
+const ERR_KEEP_MS = 7 * 86400e3;
+async function playerErrors(req, env, ip, ctx) {
+  if (await limited(env.RL_DEVICE, 'er:' + ip)) return json({ error: 'Troppe richieste' }, 429);
+  let b;
+  try { b = await readJSON(req, 32768); } catch (e) { return json({ error: e.message }, e.status || 400); }
+  const [d, bad] = await deviceAuth(env, b);
+  if (bad) return bad;
+  const items = Array.isArray(b.items) ? b.items.slice(0, 20) : [];
+  if (!items.length) return json({ ok: true, saved: 0 });
+  // al massimo 300 problemi l'ora per dispositivo: un'app impazzita non riempie il database
+  if (await throttled(env, 'er:' + d.id, 300, 3600e3)) return json({ ok: true, saved: 0, limited: true });
+  const t = now(), model = str(b.model, 80) || d.model || '', ver = str(b.ver, 20);
+  const stmts = [];
+  for (const x of items) {
+    if (!x || typeof x !== 'object') continue;
+    const problem = ERR_PROBLEMS.includes(x.problem) ? x.problem : 'error';
+    const outcome = ERR_OUTCOMES.includes(x.outcome) ? x.outcome : '';
+    // l'orologio del dispositivo può sbagliare: si usa quello dell'app solo se plausibile (ultime 24 h)
+    const at = Number.isFinite(+x.t) && +x.t > t - 86400e3 && +x.t <= t + 60e3 ? Math.round(+x.t) : t;
+    stmts.push(env.DB.prepare('INSERT INTO app_errors (t, device_id, problem, action, outcome, err, title, item_id, kind, engine, codec, dec, res, variant, model, ver) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(at, d.id, problem, nameClean(x.action, 60), outcome, str(x.err, 120), nameClean(x.title, 120), str(x.id, 60), x.k === 'live' ? 'live' : x.k ? 'vod' : '', str(x.engine, 12), str(x.codec, 16), x.dec === 'sw' ? 'sw' : x.dec === 'hw' ? 'hw' : '', str(x.res, 12), str(x.var, 12), model, ver));
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+  // pulizia: ogni tanto si tolgono quelli più vecchi di 7 giorni
+  if (Math.random() < 0.1) ctx.waitUntil(env.DB.prepare('DELETE FROM app_errors WHERE t < ?').bind(t - ERR_KEEP_MS).run().catch(() => {}));
+  return json({ ok: true, saved: stmts.length });
+}
+async function adminErrors(req, env, path, url, who, ip) {
+  const m = req.method;
+  if (path === '/app-errors' && m === 'GET') {
+    const t = now(), since = t - Math.min(ERR_KEEP_MS, Math.max(3600e3, (+url.searchParams.get('hours') || 168) * 3600e3));
+    const rows = ((await env.DB.prepare('SELECT e.*, d.name, d.code, d.parent FROM app_errors e LEFT JOIN devices d ON d.id = e.device_id WHERE e.t > ? ORDER BY e.t DESC LIMIT 2000').bind(since).all()).results) || [];
+    const seen = +((await env.DB.prepare("SELECT v FROM settings WHERE k = 'errSeen'").first()) || { v: 0 }).v || 0;
+    const items = rows.map((r) => ({ id: r.id, t: r.t, deviceId: r.device_id, name: r.name || '', code: r.code || '', problem: r.problem, action: r.action, outcome: r.outcome, err: r.err, title: r.title, itemId: r.item_id, kind: r.kind, engine: r.engine, codec: r.codec, dec: r.dec, res: r.res, variant: r.variant, model: r.model, ver: r.ver, isNew: r.t > seen }));
+    // riepiloghi: un canale con problemi su tanti dispositivi diversi è un problema del canale
+    const by = (key) => {
+      const mp = new Map();
+      for (const x of items) {
+        const k = key(x); if (!k) continue;
+        const o = mp.get(k) || { key: k, n: 0, unresolved: 0, devs: new Set(), titles: new Set() };
+        o.n++; if (x.outcome === 'non risolto') o.unresolved++; o.devs.add(x.deviceId); o.titles.add(x.title);
+        mp.set(k, o);
+      }
+      return [...mp.values()].sort((a, b) => b.n - a.n).slice(0, 10).map((o) => ({ key: o.key, n: o.n, unresolved: o.unresolved, devices: o.devs.size, titles: o.titles.size }));
+    };
+    const topTitles = by((x) => x.title), topDevices = by((x) => x.deviceId).map((o) => { const x = items.find((i) => i.deviceId === o.key) || {}; return { ...o, name: x.name, code: x.code, model: x.model }; });
+    return json({ items, topTitles, topDevices, newCount: items.filter((x) => x.isNew).length });
+  }
+  if (path === '/app-errors/seen' && m === 'POST') {
+    await env.DB.prepare("INSERT INTO settings (k, v) VALUES ('errSeen', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(String(now())).run();
+    return json({ ok: true });
+  }
+  if (path === '/app-errors' && m === 'DELETE') {
+    const r = await env.DB.prepare('DELETE FROM app_errors').run();
+    await log(env, 'del', `${who}: svuotati gli errori dell'applicazione`, ip);
+    return json({ ok: true, deleted: (r.meta && r.meta.changes) || 0 });
+  }
+  return null;
+}
 async function playerHeartbeat(req, env, ip, ctx) {
   if (await limited(env.RL_DEVICE, 'hb:' + ip)) return json({ error: 'Troppe richieste' }, 429);
   let b;
@@ -866,12 +928,12 @@ async function playerHeartbeat(req, env, ip, ctx) {
     vpn: b.vpn === 'on' ? 'on' : b.vpn === 'off' ? 'off' : '',
   };
   if (sp) Object.assign(f, { speed_dl: num(sp.dl, 0, 1e5), speed_ul: num(sp.ul, 0, 1e5), speed_ping: num(sp.ping, 0, 1e5), speed_jit: num(sp.jitter, 0, 1e5), speed_t: Math.round(num(sp.t, 0, 1e13)) || t });
-  if (st) Object.assign(f, { res: str(st.res, 20), fps: num(st.fps, 0, 1e3), bitrate: num(st.bitrate, 0, 1e9), buffers: Math.round(num(st.buffers, 0, 1e6)), dropped: Math.round(num(st.dropped, 0, 1e9)), engine: str(st.engine, 20) });
-  else if (state === 'idle') Object.assign(f, { res: '', fps: 0, bitrate: 0, buffers: 0, dropped: 0, engine: '' });
+  if (st) Object.assign(f, { res: str(st.res, 20), fps: num(st.fps, 0, 1e3), bitrate: num(st.bitrate, 0, 1e9), buffers: Math.round(num(st.buffers, 0, 1e6)), dropped: Math.round(num(st.dropped, 0, 1e9)), engine: str(st.engine, 20), codec: str(st.codec, 16), dec: st.dec === 'sw' ? 'sw' : st.dec === 'hw' ? 'hw' : '', stalls_h: Math.round(num(st.stallsH, 0, 1e4)), rec: nameClean(st.rec, 80), reduced: str(st.reduced, 12) });
+  else if (state === 'idle') Object.assign(f, { res: '', fps: 0, bitrate: 0, buffers: 0, dropped: 0, engine: '', codec: '', dec: '', rec: '', reduced: '' });
   // durante la visione l'app batte ogni 20 s (per «Disconnetti»): se non è cambiato niente di importante la riga
   // si riscrive al massimo una volta al minuto, così le scritture su D1 restano quelle di prima
   const same = old && t - (+old.t || 0) < 55e3 && old.state === state && (old.title || '') === f.title && (old.ch_id || '') === f.ch_id
-    && (old.vpn || '') === f.vpn && (old.screen || '') === f.screen && (!sp || +old.speed_t === f.speed_t) && (old.ip || '') === (f.ip ?? old.ip ?? '');
+    && (old.vpn || '') === f.vpn && (old.screen || '') === f.screen && (old.rec || '') === (f.rec ?? old.rec ?? '') && (old.reduced || '') === (f.reduced ?? old.reduced ?? '') && (+old.stalls_h || 0) === (f.stalls_h ?? +old.stalls_h ?? 0) && (!sp || +old.speed_t === f.speed_t) && (old.ip || '') === (f.ip ?? old.ip ?? '');
   const writes = same ? [] : [upsertPresence(env, d.id, f)];
   // nuova "sessione" di visione: contenuto diverso da quello dell'ultimo battito
   if (state !== 'idle' && f.title && (!old || old.state !== state || old.title !== f.title))
@@ -1202,6 +1264,7 @@ async function route(req, env, ctx) {
     if (path === '/api/player/linkcode' && req.method === 'POST') return playerLinkCode(req, env, ip, ctx);
     if (path === '/api/player/link' && req.method === 'POST') return playerLink(req, env, ip, ctx);
     if (path === '/api/player/heartbeat' && req.method === 'POST') return playerHeartbeat(req, env, ip, ctx);
+    if (path === '/api/player/errors' && req.method === 'POST') return playerErrors(req, env, ip, ctx);
     if (path === '/api/player/stream' && req.method === 'POST') return playerStream(req, env, ip, ctx);
     if (path === '/api/player/trailer' && req.method === 'GET') return playerTrailer(req, env, ip, url, ctx);
     if (path === '/api/player/request' && req.method === 'POST') return playerRequest(req, env, ip, ctx);
@@ -1452,6 +1515,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
 
   /* ---------- segnalazioni e richieste di contenuti ---------- */
   if (path === '/requests' || path.startsWith('/requests/')) { const r = await adminRequests(req, env, path, url, who, ip); if (r) return r; }
+  if (path === '/app-errors' || path.startsWith('/app-errors/')) { const r = await adminErrors(req, env, path, url, who, ip); if (r) return r; }
 
   /* ---------- DNS (server delle playlist) ---------- */
   /* ---------- DNS: server salvati (anche senza clienti) e cambio di massa ---------- */

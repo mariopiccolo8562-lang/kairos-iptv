@@ -10,11 +10,27 @@
     pres: () => {
       const devs = D.devices.filter((d) => d.status === 'active').slice(0, 6);
       const W = [['live', 'Tg1', 'Rai 1 HD'], ['movie', 'Dune - Parte Due', ''], ['series', 'Mare Fuori S4 E2', ''], ['idle', '', ''], ['live', 'Inter - Milan', 'DAZN 1 FHD'], ['idle', '', '']];
-      const online = devs.map((d, i) => ({ id: d.id, name: d.name, code: d.code, status: 'active', state: W[i % 6][0], title: W[i % 6][1], ch: W[i % 6][2], prof: ['Mario', 'Giulia', 'Bimbi', '', 'Luca', ''][i % 6], ip: `93.45.${10 + i}.${20 + i * 7}`, city: ['Milano', 'Roma', 'Napoli', 'Torino', 'Bari', 'Palermo'][i % 6], country: 'IT', ver: i === 3 ? '1.6.0' : '1.8.0', ui: 'a1b2c3d4e5f6', model: d.model || 'Fire TV Stick 4K', net: ['wifi', 'eth', 'wifi', 'mobile', 'wifi', 'eth'][i % 6], rssi: [-52, 0, -71, 0, -64, 0][i % 6], speed_dl: [180, 940, 42, 18, 300, 95][i % 6], speed_ul: [35, 400, 12, 5, 60, 20][i % 6], speed_ping: [18, 6, 35, 60, 14, 22][i % 6], speed_jit: [3, 1, 12, 30, 2, 5][i % 6], speed_t: now() - i * 3600e3, res: ['1920x1080', '3840x2160', '1280x720', '', '1920x1080', ''][i % 6], fps: [50, 24, 25, 0, 50, 0][i % 6], bitrate: [6.2e6, 15e6, 2.8e6, 0, 8e6, 0][i % 6], buffers: [0, 1, 6, 0, 0, 0][i % 6], engine: 'exo', vpn: i === 1 ? 'on' : 'off', ago: i * 20e3, online: true, flags: i === 2 ? ['ip'] : [] }));
+      const online = devs.map((d, i) => ({ id: d.id, name: d.name, code: d.code, status: 'active', state: W[i % 6][0], title: W[i % 6][1], ch: W[i % 6][2], prof: ['Mario', 'Giulia', 'Bimbi', '', 'Luca', ''][i % 6], ip: `93.45.${10 + i}.${20 + i * 7}`, city: ['Milano', 'Roma', 'Napoli', 'Torino', 'Bari', 'Palermo'][i % 6], country: 'IT', ver: i === 3 ? '1.6.0' : '1.8.0', ui: 'a1b2c3d4e5f6', model: d.model || 'Fire TV Stick 4K', net: ['wifi', 'eth', 'wifi', 'mobile', 'wifi', 'eth'][i % 6], rssi: [-52, 0, -71, 0, -64, 0][i % 6], speed_dl: [180, 940, 42, 18, 300, 95][i % 6], speed_ul: [35, 400, 12, 5, 60, 20][i % 6], speed_ping: [18, 6, 35, 60, 14, 22][i % 6], speed_jit: [3, 1, 12, 30, 2, 5][i % 6], speed_t: now() - i * 3600e3, res: ['1920x1080', '3840x2160', '1280x720', '', '1920x1080', ''][i % 6], fps: [50, 24, 25, 0, 50, 0][i % 6], bitrate: [6.2e6, 15e6, 2.8e6, 0, 8e6, 0][i % 6], buffers: [0, 1, 6, 0, 0, 0][i % 6], engine: 'exo', vpn: i === 1 ? 'on' : 'off', ago: i * 20e3, online: true, flags: i === 2 ? ['ip'] : [], codec: ['H.264', 'HEVC', 'H.264', '', 'H.264', ''][i % 6], dec: ['hw', 'hw', 'sw', '', 'hw', ''][i % 6], stalls_h: [0, 1, 5, 0, 4, 0][i % 6], dropped: [0, 12, 340, 0, 30, 0][i % 6], rec: ['', '', 'Immagine ferma → decodifica software', '', 'Caricamento continuo → qualità ridotta', ''][i % 6], reduced: ['', '', '', '', 'HD', ''][i % 6] }));
       return { online, recent: [], top: [{ kind: 'live', title: 'Inter - Milan', n: 14 }, { kind: 'movie', title: 'Dune - Parte Due', n: 9 }, { kind: 'live', title: 'Tg1', n: 7 }, { kind: 'series', title: 'Mare Fuori', n: 5 }], counts: { online: online.length, watching: online.filter((o) => o.state !== 'idle').length, idle: online.filter((o) => o.state === 'idle').length, total: D.devices.length } };
     },
     req: { report: [{ id: 1, kind: 'report', title: '', body: 'Rai 1 HD resta nero', info: 'app 1.8.0 · Fire TV · canale: Rai 1 HD', status: 'new', created: now() - 6e5, name: 'Mario Rossi', code: 'KXAB-7Q2M' }], content: [{ id: 2, kind: 'content', ctype: 'movie', title: 'Oppenheimer', body: 'versione in italiano', status: 'new', created: now() - 36e5, name: 'Giulia', code: 'KXCD-9P3L' }, { id: 3, kind: 'content', ctype: 'series', title: 'The Bear', body: '', status: 'done', created: now() - 864e5, name: 'Luca', code: 'KXEF-2K8S', note: 'Aggiunta' }] },
     locs: [{ id: 'mil1', name: 'Milano' }],
+    get errs() {
+      if (this._errs) return this._errs;
+      const ds = D.devices.filter((d) => d.status === 'active'); if (!ds.length) return [];
+      const mk = (i, min, problem, outcome, title, action, extra = {}) => { const d = ds[i % ds.length] || {}; return { id: 100 + i, t: now() - min * 60e3, deviceId: d.id, name: d.name, code: d.code, model: d.model || 'Fire TV Stick Lite', ver: '2.0.3', problem, outcome, title, action, kind: 'live', engine: 'exo', codec: 'H.264', dec: 'hw', res: '1080p', err: '', variant: '', ...extra }; };
+      this._errs = [
+        mk(0, 4, 'stall', 'risolto', 'Sky Sport 1 FHD', 'qualità ridotta (HD)', { variant: '' }),
+        mk(1, 9, 'stall', 'risolto', 'Sky Sport 1 FHD', 'formato alternativo'),
+        mk(2, 15, 'stall', 'non risolto', 'Sky Sport 1 FHD', 'ricaricato'),
+        mk(3, 31, 'freeze', 'risolto', 'DAZN 1 FHD', 'decodifica software', { codec: 'HEVC', model: 'AFTSSS', err: '' }),
+        mk(3, 58, 'error', 'risolto', 'Eurosport 1 HD', 'passato a VLC', { codec: 'MPEG-2', err: 'ERROR_CODE_DECODING_FORMAT_UNSUPPORTED' }),
+        mk(4, 95, 'error', 'non risolto', 'Dune - Parte Due', 'nessuna soluzione', { kind: 'vod', engine: 'vlc', codec: '', err: 'VLC_ERROR' }),
+        mk(0, 140, 'stall', 'chiuso', 'Rai 1 HD', 'ricaricato'),
+      ];
+      return this._errs;
+    },
+    set errs(v) { this._errs = v; },
     keys: [{ id: 'k1', name: 'Gestionale', prefix: 'kx_Q7pT2a', scope: 'full', created: now() - 9 * 864e5, last_used: now() - 36e5, last_ip: '93.45.10.20', uses: 1240 }],
     wh: { url: '', events: ['device.new', 'device.activated', 'report.new', 'request.new'], hasSecret: false, last: null },
   };
@@ -22,6 +38,13 @@
     if (!D.demo) return api(method, path, body);
     await new Promise((r) => setTimeout(r, 120));
     if (path === '/admin/presence') return DM.pres();
+    if (path.startsWith('/admin/app-errors')) {
+      if (method === 'DELETE') { DM.errs = []; return { ok: true }; }
+      if (path === '/admin/app-errors/seen') { DM.errSeen = now(); return { ok: true }; }
+      const items = DM.errs.map((x) => ({ ...x, isNew: x.t > (DM.errSeen || 0) }));
+      const by = (key) => { const mp = new Map(); for (const x of items) { const k = key(x); const o = mp.get(k) || { key: k, n: 0, unresolved: 0, devs: new Set(), titles: new Set(), name: x.name, code: x.code, model: x.model }; o.n++; if (x.outcome === 'non risolto') o.unresolved++; o.devs.add(x.deviceId); o.titles.add(x.title); mp.set(k, o); } return [...mp.values()].sort((a, b) => b.n - a.n).slice(0, 10).map((o) => ({ ...o, devices: o.devs.size, titles: o.titles.size, devs: undefined })); };
+      return { items, topTitles: by((x) => x.title).map(({ name, code, model, ...o }) => o), topDevices: by((x) => x.deviceId), newCount: items.filter((x) => x.isNew).length };
+    }
     if (path.startsWith('/admin/requests')) {
       const m = path.match(/^\/admin\/requests\/(\d+)(\/status)?/);
       const all = [...DM.req.report, ...DM.req.content];
@@ -90,12 +113,30 @@
   css.textContent = `
 .kc-k{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
 .kc-k .kpi{cursor:default}.kc-k .v{font-size:30px}
-.kc-row{display:grid;grid-template-columns:minmax(170px,1.3fr) minmax(200px,1.7fr) minmax(150px,1fr) minmax(150px,1fr) minmax(120px,.8fr) auto;gap:14px;align-items:center;padding:12px 14px;border-radius:14px;border:1px solid var(--line);margin-bottom:8px;background:rgba(255,255,255,.02)}
+.kc-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.9fr) minmax(0,1.15fr) minmax(0,.9fr) minmax(0,1fr);gap:14px;align-items:center;padding:12px 14px;border-radius:14px;border:1px solid var(--line);margin-bottom:8px;background:rgba(255,255,255,.02)}
 .kc-row:hover{background:rgba(255,255,255,.045)}
 .kc-row b{display:block;font-size:14px}.kc-row small{display:block;color:var(--mut);font-size:12px;line-height:1.45;word-break:break-word}
 .kc-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:1px;background:var(--mut)}
 .kc-dot.live{background:#ff3b3b;box-shadow:0 0 10px #ff3b3b;animation:kcb 1.4s infinite}.kc-dot.movie,.kc-dot.series{background:var(--a2);box-shadow:0 0 10px var(--a2)}.kc-dot.idle{background:var(--ok)}
 @keyframes kcb{50%{opacity:.35}}
+.kc-row>div{min-width:0}
+.kc-row b.kc-codec,.kc-codec{display:inline!important;font-size:inherit!important;font-weight:700;color:#cfd3ff}
+.kc-acts{flex-wrap:wrap}
+.kc-row>.kc-acts{grid-column:1/-1;justify-content:flex-end;margin-top:-4px}
+.kc-row b{overflow-wrap:anywhere}
+.kc-ef{display:flex;flex-direction:column;gap:10px;margin:0 0 12px}
+.kc-err{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:12px;align-items:flex-start;padding:12px 4px;border-top:1px solid var(--line)}
+.kc-err.bad{background:linear-gradient(90deg,color-mix(in srgb,var(--bad) 8%,transparent),transparent 60%)}
+.kc-err .ei{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:rgba(255,255,255,.05);font-size:17px}
+.kc-err .eb b{font-size:14px}.kc-err .et{margin:4px 0 2px;font-weight:600}
+.kc-err small{display:block;color:var(--mut);font-size:12px;margin-top:2px}
+.kc-err .ew{display:flex;flex-direction:column;align-items:flex-end;gap:6px;font-size:12px;color:var(--mut);white-space:nowrap}
+.kc-erank{display:flex;align-items:center;gap:10px;padding:9px 6px;border-top:1px solid var(--line);cursor:pointer;border-radius:8px}
+.kc-erank:hover{background:rgba(255,255,255,.04)}
+.kc-erank span{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis}.kc-erank small{display:block;font-weight:400;color:var(--mut);font-size:12px}
+.kc-erank>b{font-size:18px}
+.kc-kp{display:flex;flex-direction:column;gap:2px}.kc-kp small{color:var(--mut);font-size:12px;letter-spacing:.08em;text-transform:uppercase}.kc-kp b{font-size:28px}.kc-kp span{color:var(--mut);font-size:12px}
+@media (max-width:700px){.kc-err{grid-template-columns:30px minmax(0,1fr)}.kc-err .ew{grid-column:2;flex-direction:row;align-items:center}}
 .kc-tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.08em;padding:3px 7px;border-radius:6px;margin:2px 4px 0 0;background:rgba(255,255,255,.07);color:var(--txt)}
 .kc-tag.warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}.kc-tag.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}.kc-tag.bad{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
 .kc-bars{display:inline-flex;gap:2px;align-items:flex-end;height:12px;margin-right:6px;vertical-align:-1px}.kc-bars i{width:3px;border-radius:1px;background:rgba(255,255,255,.18)}.kc-bars i.on{background:var(--ok)}
@@ -261,13 +302,14 @@
     vod: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="9" rx="1.5"/><rect x="3" y="15" width="18" height="6" rx="1.5"/></svg>',
     api: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg>',
     dns: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg>',
+    apperr: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4M12 8v4M12 14.5h.01"/></svg>',
   };
   const dash = $('.nav[data-v="dash"]');
-  const navs = [['live', 'Online ora'], ['reports', 'Segnalazioni'], ['creq', 'Richieste contenuti'], ['vod', 'Videoteca'], ['dns', 'Server DNS e VPN'], ['api', 'API e integrazioni']];
+  const navs = [['live', 'Online ora'], ['apperr', 'Errori applicazione'], ['reports', 'Segnalazioni'], ['creq', 'Richieste contenuti'], ['vod', 'Videoteca'], ['dns', 'Server DNS e VPN'], ['api', 'API e integrazioni']];
   let after = dash;
   for (const [v, l] of navs) {
     const b = document.createElement('button'); b.className = 'nav'; b.dataset.v = v;
-    b.innerHTML = `${IC[v]}${l}${v === 'reports' || v === 'creq' ? `<span class="kc-nb" id="nb_${v}"></span>` : ''}`;
+    b.innerHTML = `${IC[v]}${l}${v === 'reports' || v === 'creq' || v === 'apperr' ? `<span class="kc-nb" id="nb_${v}"></span>` : ''}`;
     after.after(b); after = b;
     const sec = document.createElement('section'); sec.className = 'view'; sec.id = 'v-' + v;
     $('#v-dash').after(sec);
@@ -275,17 +317,34 @@
   }
   // all'apertura di una pagina si caricano i suoi dati
   const origView = view;
-  window.view = view = function (v) { origView(v); if (v === 'live') liveLoad(); if (v === 'reports') reqLoad('report'); if (v === 'creq') reqLoad('content'); if (v === 'vod') vodInit(); if (v === 'dns') dnsLoad(); if (v === 'api') apiLoad(); };
+  window.view = view = function (v) { origView(v); if (v === 'live') liveLoad(); if (v === 'reports') reqLoad('report'); if (v === 'creq') reqLoad('content'); if (v === 'vod') vodInit(); if (v === 'dns') dnsLoad(); if (v === 'api') apiLoad(); if (v === 'apperr') errLoad(); };
 
   /* ---------- Online ora ---------- */
   const STATE_L = { live: 'In diretta', movie: 'Film', series: 'Serie TV', rec: 'Registrazione', idle: 'Nell\'app' };
   const NET_L = { wifi: 'Wi-Fi', eth: 'Ethernet', mobile: 'Rete mobile', none: 'Senza rete' };
   const bars = (rssi) => { const n = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1; return `<span class="kc-bars">${[4, 7, 10, 12].map((h, i) => `<i style="height:${h}px" class="${i < n ? 'on' : ''}"></i>`).join('')}</span>`; };
   const mbps = (v) => (v >= 100 ? Math.round(v) : (+v).toFixed(1)) + ' Mbps';
+  /* dove sta probabilmente il problema: linea del cliente, dispositivo o canale */
+  function diagOf(o) {
+    if (!o || o.state === 'idle') return null;
+    const stalls = +o.stalls_h || 0, rec = String(o.rec || '');
+    if (/immagine ferma|decodifica|errore/i.test(rec) && !/qualità/i.test(rec)) return ['dispositivo', 'Il video si fermava o il decoder dava errore: probabile limite del dispositivo con questo canale (es. HEVC su chiavette vecchie)'];
+    if (stalls < 3 && !o.reduced) return null;
+    const errs = KC.errs && KC.errs.topTitles ? KC.errs.topTitles.find((x) => x.key === o.title && x.devices >= 2) : null;
+    if (errs) return ['canale', `Lo stesso contenuto ha avuto problemi su ${errs.devices} dispositivi diversi: probabile problema del canale o del server`];
+    const weakWifi = o.net === 'wifi' && o.rssi && o.rssi < -70;
+    const slow = o.speed_dl && o.bitrate && o.speed_dl * 1e6 < o.bitrate * 1.6;
+    if (weakWifi || slow || o.net === 'mobile') return ['linea', weakWifi ? `Segnale Wi-Fi debole (${o.rssi} dBm): avvicinare il router o usare il cavo` : slow ? 'La velocità del cliente è appena sopra quella del canale: serve più banda o una versione più leggera' : 'Rete mobile: velocità variabile'];
+    return ['linea o server', 'Blocchi ripetuti con segnale e velocità buoni: controlla se altri clienti hanno problemi sullo stesso canale (Errori applicazione)'];
+  }
+  const diagTag = (o) => { const d = diagOf(o); return d ? `<span class="kc-tag ${d[0] === 'dispositivo' ? 'bad' : 'warn'}" title="${esc(d[1])}">🔎 probabile problema: ${esc(d[0])}</span>` : ''; };
   function liveRow(o) {
     const d = D.devices.find((x) => x.id === o.id);
     const what = o.state === 'idle' ? `<b><span class="kc-dot idle"></span>Nell'app</b><small>${esc(o.screen || 'naviga nei menu')}</small>` : `<b><span class="kc-dot ${esc(o.state)}"></span>${esc(o.title || o.ch || '—')}</b><small>${STATE_L[o.state] || ''}${o.ch && o.title ? ' · ' + esc(o.ch) : ''}${o.grp ? ' · ' + esc(o.grp) : ''}</small>`;
-    const play = o.state !== 'idle' && (o.res || o.bitrate) ? `<small>${o.res ? esc(o.res) : ''}${o.fps ? ' · ' + Math.round(o.fps) + ' fps' : ''}${o.bitrate ? ' · ' + mbps(o.bitrate / 1e6) : ''}${o.buffers ? ` · <span style="color:var(--warn)">${o.buffers} blocchi</span>` : ''}${o.engine ? ' · ' + esc(o.engine) : ''}</small>` : '';
+    const ENG = { exo: 'ExoPlayer', vlc: 'VLC' };
+    const play = o.state !== 'idle' && (o.res || o.bitrate || o.codec) ? `<small>${o.res ? esc(o.res) : ''}${o.fps ? ' · ' + Math.round(o.fps) + ' fps' : ''}${o.bitrate ? ' · ' + mbps(o.bitrate / 1e6) : ''}${o.codec ? ' · <b class="kc-codec">' + esc(o.codec) + '</b>' : ''}${o.engine ? ' · ' + esc(ENG[o.engine] || o.engine) : ''}${o.dec ? (o.dec === 'sw' ? ' (software)' : ' (hardware)') : ''}</small>
+      <small>${o.stalls_h != null && o.codec ? `<span style="color:${o.stalls_h >= 3 ? 'var(--bad)' : o.stalls_h ? 'var(--warn)' : 'var(--ok)'}">${o.stalls_h} blocchi nell'ultima ora</span>` : o.buffers ? `<span style="color:var(--warn)">${o.buffers} blocchi</span>` : ''}${o.dropped ? ` · ${o.dropped} fotogrammi persi` : ''}</small>
+      ${o.reduced ? `<span class="kc-tag warn" title="La linea non reggeva: l'app è passata da sola a una versione più leggera del canale">⬇ qualità ridotta: ${esc(o.reduced)}</span>` : ''}${o.rec ? `<span class="kc-tag" title="Ultimo recupero automatico">🛠 ${esc(o.rec)}</span>` : ''}${diagTag(o)}` : '';
     const net = `<b>${o.net === 'wifi' && o.rssi ? bars(o.rssi) : ''}${NET_L[o.net] || 'Rete ?'}${o.net === 'wifi' && o.rssi ? ` <span class="mut" style="font-weight:400;font-size:12px">${o.rssi} dBm</span>` : ''}</b>${o.speed_dl ? `<small>↓ ${mbps(o.speed_dl)} · ↑ ${o.speed_ul ? mbps(o.speed_ul) : '—'} · ${Math.round(o.speed_ping)} ms${o.speed_jit ? ' (±' + Math.round(o.speed_jit) + ')' : ''}<br>speed test ${ago(o.speed_t)}</small>` : '<small>nessuno speed test</small>'}`;
     const where = `<b class="mono" style="font-size:13px">${esc(o.ip || '—')}</b><small>${esc([o.city, o.country].filter(Boolean).join(', ') || '')}</small>${(o.flags || []).includes('ip') ? '<span class="kc-tag warn" title="Due indirizzi IP diversi in pochi minuti: possibile codice condiviso">⚠ 2 IP</span>' : ''}${(o.flags || []).includes('country') ? '<span class="kc-tag warn">⚠ paese diverso</span>' : ''}`;
     const app = `<b>${esc(o.ver ? 'App ' + o.ver : 'App ?')}</b><small>${esc(o.model || '')}${o.prof ? '<br>Profilo: ' + esc(o.prof) : ''}</small>${o.vpn === 'on' ? '<span class="kc-tag ok">🛡 VPN attiva</span>' : ''}`;
@@ -296,6 +355,7 @@
   async function liveLoad() {
     const V = $('#v-live');
     if (!KC.live) V.innerHTML = '<div class="card glass"><p class="mut">Caricamento…</p></div>';
+    if (!KC.errs) { try { KC.errs = await kapi('GET', '/admin/app-errors?hours=24'); errBadge(); } catch {} }
     try { KC.live = await kapi('GET', '/admin/presence'); } catch (e) { V.innerHTML = `<div class="card glass"><p class="mut">${esc(e.message)}</p></div>`; return; }
     const P = KC.live, c = P.counts;
     V.innerHTML = `<div class="kc-k">${[['Online ora', c.online, 'app aperte negli ultimi 3 minuti', 'var(--ok)'], ['Stanno guardando', c.watching, 'canali, film e serie', 'var(--bad)'], ['Nei menu', c.idle, 'app aperta senza video', 'var(--a2)'], ['Dispositivi totali', c.total, 'registrati nel pannello', 'var(--a1)']].map(([l, v, s, col]) => `<div class="kpi glass"><div class="halo" style="background:${col}"></div><div class="lb"><i style="background:${col};box-shadow:0 0 10px ${col}"></i>${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('')}</div>
@@ -318,6 +378,63 @@
     }));
     clearTimeout(liveT);
     liveT = setTimeout(() => { if ($('#v-live').classList.contains('on')) liveLoad(); }, 15000);
+  }
+
+  /* ---------- Errori applicazione ---------- */
+  const PROB = { freeze: ['Immagine ferma', '🧊'], stall: ['Caricamento continuo', '⏳'], error: ['Errore del lettore', '⚠'] };
+  const OUTC = { risolto: ['Risolto da solo', 'ok'], 'non risolto': ['Non risolto', 'bad'], chiuso: ['Il cliente è uscito', ''], '': ['—', ''] };
+  KC.errF = { q: '', p: '', o: '', hours: 168 };
+  async function errLoad(quiet) {
+    const V = $('#v-apperr');
+    if (!quiet && !KC.errs) V.innerHTML = '<div class="card glass"><p class="mut">Caricamento…</p></div>';
+    try { KC.errs = await kapi('GET', '/admin/app-errors?hours=' + KC.errF.hours); } catch (e) { if (!quiet) V.innerHTML = `<div class="card glass"><p class="mut">${esc(e.message)}</p></div>`; return; }
+    errBadge();
+    if (quiet && !V.classList.contains('on')) return;
+    if (!quiet && KC.errs.newCount) { kapi('POST', '/admin/app-errors/seen').then(() => { KC.errs.newCount = 0; errBadge(); }).catch(() => {}); }
+    errRender();
+  }
+  function errBadge() {
+    const n = (KC.errs && KC.errs.newCount) || 0, e = $('#nb_apperr');
+    if (e) { e.textContent = n; e.classList.toggle('on', n > 0); }
+  }
+  function errRender() {
+    const V = $('#v-apperr'), E = KC.errs, F = KC.errF;
+    const q = F.q.toLowerCase().trim();
+    const list = E.items.filter((x) => (!F.p || x.problem === F.p) && (!F.o || x.outcome === F.o) && (!q || [x.title, x.name, x.code, x.model, x.err, x.codec].join(' ').toLowerCase().includes(q)));
+    const tot = E.items.length, fixed = E.items.filter((x) => x.outcome === 'risolto').length, unres = E.items.filter((x) => x.outcome === 'non risolto').length;
+    const devs = new Set(E.items.map((x) => x.deviceId)).size;
+    const card = (t, v, sub, col) => `<div class="card glass kc-kp"><small>${t}</small><b style="color:${col}">${v}</b><span>${sub}</span></div>`;
+    V.innerHTML = `<div class="kc-k">${card('Problemi', tot, 'negli ultimi ' + (F.hours >= 168 ? '7 giorni' : F.hours >= 24 ? F.hours / 24 + ' giorni' : F.hours + ' ore'), 'var(--txt)')}${card('Risolti da soli', fixed, tot ? Math.round((fixed / tot) * 100) + '% dal recupero automatico' : 'recupero automatico', 'var(--ok)')}${card('Non risolti', unres, 'il cliente non ha potuto guardare', 'var(--bad)')}${card('Dispositivi coinvolti', devs, 'diversi', 'var(--a2)')}</div>
+      <div class="g2b" style="grid-template-columns:minmax(0,2.4fr) minmax(260px,1fr)">
+        <div class="card glass"><div class="hd" style="flex-wrap:wrap;gap:10px"><h3>Errori applicazione<small>Problemi della visione inviati dalle app 2.0.3 o successive: cosa è successo e cosa ha fatto l'app da sola</small></h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><select class="inp" id="eH" style="width:auto;margin:0">${[[1, 'Ultima ora'], [24, 'Ultime 24 ore'], [72, 'Ultimi 3 giorni'], [168, 'Ultimi 7 giorni']].map(([h, l]) => `<option value="${h}" ${F.hours === h ? 'selected' : ''}>${l}</option>`).join('')}</select><button class="btn sm" id="eR">Aggiorna</button>${tot ? '<button class="btn sm danger" id="eClr">Svuota</button>' : ''}</div></div>
+          <div class="kc-ef"><input class="inp" id="eQ" placeholder="Cerca cliente, codice, canale, modello, codec…" value="${esc(F.q)}">
+            <div class="filters" style="margin:0">${[['', 'Tutti'], ['freeze', 'Immagine ferma'], ['stall', 'Caricamento'], ['error', 'Errori']].map(([k, l]) => `<button class="fchip ${F.p === k ? 'on' : ''}" data-ep="${k}">${l}<span>${E.items.filter((x) => !k || x.problem === k).length}</span></button>`).join('')}</div>
+            <div class="filters" style="margin:0">${[['', 'Ogni esito'], ['risolto', 'Risolti'], ['non risolto', 'Non risolti']].map(([k, l]) => `<button class="fchip ${F.o === k ? 'on' : ''}" data-eo="${k}">${l}</button>`).join('')}</div></div>
+          ${list.length ? list.slice(0, 300).map((x) => `<div class="kc-err ${x.outcome === 'non risolto' ? 'bad' : ''}">
+            <div class="ei">${(PROB[x.problem] || PROB.error)[1]}</div>
+            <div class="eb"><b>${esc((PROB[x.problem] || PROB.error)[0])}</b> <span class="kc-tag ${(OUTC[x.outcome] || OUTC[''])[1]}">${esc((OUTC[x.outcome] || OUTC[''])[0])}</span>${x.action ? `<span class="kc-tag" title="Cosa ha fatto l'app">🛠 ${esc(x.action)}</span>` : ''}
+              <div class="et">${x.kind === 'live' ? '📺' : '🎬'} ${esc(x.title || '—')}${x.variant ? ' <span class="mut">(versione ' + esc(x.variant) + ')</span>' : ''}</div>
+              <small>${esc(x.name || 'Dispositivo')} · <span class="mono">${esc(x.code)}</span> · ${esc(x.model || '')}${x.ver ? ' · app ' + esc(x.ver) : ''}</small>
+              <small class="mono">${[x.engine === 'vlc' ? 'VLC' : x.engine ? 'ExoPlayer' : '', x.codec, x.dec === 'sw' ? 'software' : x.dec === 'hw' ? 'hardware' : '', x.res, x.err].filter(Boolean).map(esc).join(' · ')}</small></div>
+            <div class="ew"><span>${ago(x.t)}</span>${x.deviceId ? `<button class="btn sm" data-eopen="${esc(x.deviceId)}">Scheda</button>` : ''}</div></div>`).join('') : `<p class="mut" style="padding:10px 0">${tot ? 'Nessun problema con questi filtri.' : 'Nessun problema registrato: le app non hanno avuto blocchi né errori (o non sono ancora alla 2.0.3).'}</p>`}
+          ${list.length > 300 ? `<p class="mut">Mostrati i 300 più recenti su ${list.length}: usa la ricerca per restringere.</p>` : ''}
+        </div>
+        <div>
+          <div class="card glass"><div class="hd"><h3>Contenuti con più problemi<small>Se un canale ha problemi su tanti dispositivi diversi, il guasto è del canale o del server</small></h3></div>
+            ${(E.topTitles || []).length ? E.topTitles.map((t) => `<div class="kc-erank" data-eq="${esc(t.key)}"><span>${esc(t.key)}<small>${t.devices} dispositiv${t.devices === 1 ? 'o' : 'i'}${t.unresolved ? ` · <b style="color:var(--bad)">${t.unresolved} non risolti</b>` : ''}</small></span><b>${t.n}</b>${t.devices >= 2 ? '<i class="kc-tag warn">canale</i>' : ''}</div>`).join('') : '<p class="mut">—</p>'}</div>
+          <div class="card glass" style="margin-top:14px"><div class="hd"><h3>Dispositivi con più problemi<small>Molti problemi su canali diversi = limite del dispositivo o della sua linea</small></h3></div>
+            ${(E.topDevices || []).length ? E.topDevices.map((t) => `<div class="kc-erank" data-eq="${esc(t.code || '')}"><span>${esc(t.name || t.code || 'Dispositivo')}<small><span class="mono">${esc(t.code || '')}</span> · ${esc(t.model || '')} · ${t.titles} contenut${t.titles === 1 ? 'o' : 'i'}</small></span><b>${t.n}</b>${t.titles >= 3 ? '<i class="kc-tag bad">dispositivo</i>' : ''}</div>`).join('') : '<p class="mut">—</p>'}</div>
+        </div>
+      </div>`;
+    $('#eR').onclick = () => errLoad();
+    $('#eH').onchange = (e) => { F.hours = +e.target.value; errLoad(); };
+    const qi = $('#eQ'); qi.oninput = () => { F.q = qi.value; const pos = qi.selectionStart; errRender(); const n = $('#eQ'); n.focus(); n.setSelectionRange(pos, pos); };
+    $$('[data-ep]', V).forEach((b) => (b.onclick = () => { F.p = b.dataset.ep; errRender(); }));
+    $$('[data-eo]', V).forEach((b) => (b.onclick = () => { F.o = b.dataset.eo; errRender(); }));
+    $$('[data-eq]', V).forEach((b) => (b.onclick = () => { F.q = b.dataset.eq; errRender(); }));
+    $$('[data-eopen]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.eopen); d ? openDrawer(d) : toast('Dispositivo non trovato', 1); }));
+    const c = $('#eClr'); if (c) c.onclick = async () => { if (!(await ask('Svuotare gli errori?', 'Tutti gli errori registrati verranno cancellati. Quelli nuovi continueranno ad arrivare.', 'Svuota'))) return; try { await kapi('DELETE', '/admin/app-errors'); errLoad(); } catch (e) { toast(e.message, 1); } };
   }
 
   /* ---------- Segnalazioni e Richieste contenuti ---------- */
@@ -361,7 +478,7 @@
     if (lastNew !== null && tot > lastNew) toast(`Nuove segnalazioni o richieste dai clienti (${tot})`);
     lastNew = tot;
   }
-  const pollReq = () => Promise.all([reqLoad('report', true), reqLoad('content', true)]).catch(() => {});
+  const pollReq = () => Promise.all([reqLoad('report', true), reqLoad('content', true), errLoad(true)]).catch(() => {});
 
   /* ---------- Videoteca ---------- */
   async function vodInit() {

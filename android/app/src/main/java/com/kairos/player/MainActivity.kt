@@ -865,6 +865,8 @@ class MainActivity : ComponentActivity() {
         /** rete (wifi/eth/mobile, segnale Wi-Fi) e dati della visione in corso, per il pannello "Online ora" */
         @JavascriptInterface fun netInfo(): String = NetInfo.json(applicationContext)
         @JavascriptInterface fun playStats(): String = PlayStats.json()
+        /** problemi della visione per «Errori applicazione» (letti e svuotati) */
+        @JavascriptInterface fun playEvents(): String = PlayStats.drainEvents()
         @JavascriptInterface fun playYoutube(id: String, title: String) { runOnUiThread { TrailerActivity.start(this@MainActivity, id, title) } }
         @JavascriptInterface fun openUrl(url: String) { runOnUiThread { try { openExternal(Uri.parse(url)) } catch (_: Exception) {} } }
         /** TV (Android TV / Google TV / Fire TV): la pagina non usa l'interfaccia touch anche se il puntatore è "coarse" */

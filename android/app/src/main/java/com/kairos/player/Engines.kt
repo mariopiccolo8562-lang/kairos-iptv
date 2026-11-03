@@ -222,6 +222,14 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
         pv = makeView(ctx, overlay)
         pv.player = player
 
+        player.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+            override fun onVideoDecoderInitialized(eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
+                PlayStats.decoder = decoderName
+            }
+            override fun onVideoCodecError(eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, videoCodecError: Exception) {
+                PlayStats.lastCodecError = videoCodecError.javaClass.simpleName
+            }
+        })
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 when (state) {
@@ -467,6 +475,14 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
         pv.subtitleView?.setFractionalTextSize(androidx.media3.ui.SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * f)
     }
     /** descrizione del video in onda, es. "1080p · 50 fps · 6,2 Mbps" */
+    /** fotogrammi disegnati finora (per accorgersi dell'immagine ferma con l'audio che va avanti) */
+    fun renderedFrames(): Long = try { val c = player.videoDecoderCounters; if (c == null) -1L else { c.ensureUpdated(); c.renderedOutputBufferCount.toLong() } } catch (_: Throwable) { -1L }
+    fun queuedFrames(): Long = try { val c = player.videoDecoderCounters; if (c == null) -1L else { c.ensureUpdated(); c.queuedInputBufferCount.toLong() } } catch (_: Throwable) { -1L }
+    fun frameRate(): Float = player.videoFormat?.frameRate ?: 0f
+    fun droppedFrames(): Long = try { val c = player.videoDecoderCounters; if (c == null) 0L else { c.ensureUpdated(); c.droppedBufferCount.toLong() } } catch (_: Throwable) { 0L }
+    /** c'è una traccia video (le radio no) e il lettore sta davvero riproducendo */
+    fun playingVideo(): Boolean = player.videoFormat != null && player.playWhenReady && player.playbackState == Player.STATE_READY
+    fun rawPosition(): Long = player.currentPosition
     /** dati per il pannello (risoluzione, fps, bitrate): da chiamare sul thread principale */
     fun fillStats() {
         val f = player.videoFormat ?: return
@@ -474,6 +490,8 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
         PlayStats.height = if (f.height > 0) f.height else 0
         PlayStats.fps = if (f.frameRate > 0f) f.frameRate else 0f
         PlayStats.bitrate = if (f.bitrate > 0) f.bitrate else 0
+        PlayStats.codec = codecName(f.sampleMimeType, f.codecs)
+        PlayStats.dropped = droppedFrames()
     }
     fun videoInfo(): String {
         val f = player.videoFormat ?: return ""
@@ -525,6 +543,7 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
         }
     }
     override val name = "vlc"
+    @Volatile private var vlcBuf = false
     private val layout = VLCVideoLayout(ctx)
     override val view: View get() = layout
     private val lib: LibVLC
@@ -540,7 +559,9 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
         mp.attachViews(layout, null, true, false)
         mp.setEventListener { e ->
             when (e.type) {
-                MediaPlayer.Event.Buffering -> l.onBuffering(e.buffering < 99.9f)
+                MediaPlayer.Event.Buffering -> { val b = e.buffering < 99.9f; vlcBuf = b; l.onBuffering(b) }
+                // il tempo avanza: non sta caricando (VLC non sempre manda «100%» alla fine del caricamento)
+                MediaPlayer.Event.TimeChanged -> if (vlcBuf) { vlcBuf = false; l.onBuffering(false) }
                 MediaPlayer.Event.Playing -> { l.onBuffering(false); l.onReady() }
                 MediaPlayer.Event.EncounteredError -> l.onError("VLC_ERROR")
                 MediaPlayer.Event.EndReached -> l.onEnded()
