@@ -326,6 +326,13 @@ Solo server e pannello: **non serve un nuovo APK**.
 
 Il codice resta **legato a quel dispositivo**: se qualcuno lo copia su un'altra TV, non funziona. Se un cliente cambia TV o reinstalla l'app, apri il dispositivo nel pannello e premi **Sblocca**.
 
+## 17. Kairos Lite separata nel pannello
+
+- **Clienti**: filtro *Tutte le app / KAIROS TV / Kairos Lite* e badge **LITE** sui clienti dell'app Lite. Il tipo di app si riconosce in automatico al primo collegamento dopo l'aggiornamento (la Lite invia la versione «lite x.y.z»).
+- **Scheda di un cliente Lite**: restano solo le funzioni che la Lite ha (link, cambio playlist, profili, VPN). Spariscono Lettore, Add-on, Assistente IA, registrazioni, speed test e multischermo.
+- **Impostazioni → App e aggiornamenti → Kairos Lite**: link dell'APK (vuoto = ultima release di `kairos-lite`), codice Downloader e versione pubblicata letta dalla release.
+- Il codice Downloader della Lite compare anche in alto nel pannello, accanto a quello di KAIROS TV e dello store.
+
 ## Struttura
 
 ```
