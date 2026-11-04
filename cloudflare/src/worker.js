@@ -210,6 +210,10 @@ function harden(res, req) {
   if (url.pathname.startsWith('/api/')) {
     h.set('Cache-Control', 'no-store');
     h.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+  } else if (url.pathname.startsWith('/app/') && url.searchParams.get('app') === 'vega') {
+    // solo per l'app KAIROS delle Fire TV con Vega OS (WebView): la pagina ha script interni e si collega
+    // ai server IPTV dei clienti, quindi la CSP del pannello la bloccherebbe. Tutto il resto resta com'era.
+    if (url.pathname.endsWith('.html') || url.pathname.endsWith('/')) h.set('Cache-Control', 'no-cache');
   } else {
     h.set('Content-Security-Policy', CSP_PANEL);
     if (url.pathname.endsWith('.html') || url.pathname.endsWith('/')) h.set('Cache-Control', 'no-cache');
