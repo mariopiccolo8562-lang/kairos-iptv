@@ -359,6 +359,12 @@ Nella scheda di ogni agente (Agenti → apri l'agente):
 - **Modifica elenco** (solo tu): aggiungi, cambia o togli app, codici, etichette («Nuova», «Solo con codici di attivazione») e link.
 - Agenti: permesso «Codici downloader» (acceso di base), solo da copiare.
 
+## 21. Gestione app terzi e scheda cliente a tendina
+
+- Nel menu, sotto **Server DNS e VPN**, c'è **Gestione app terzi**: i DNS di OrbixPlay (modifica e ✕ per cancellare, poi «Salva DNS OrbixPlay») e i DNS di MaxPlayer (rinomina, cambia indirizzo con «Salva», ✕ per cancellare scegliendo su quale DNS spostare i clienti), più la guida per le chiavi. MaxPlayer non permette di cancellare l'ultimo DNS.
+- **Liste create sulle app terzi** (stessa pagina): tutte le attivazioni fatte su OrbixPlay e MaxPlayer con cliente, lista, data e stato, ognuna con **Rimuovi**. «Inattiva» = abbonamento scaduto, o cliente disattivato e fermo, da più dei giorni scelti (di base 60). **Rimuovi le inattive** le toglie tutte insieme; **Rimuovi da sole ogni notte** lo fa in automatico. Eliminando un cliente dal pannello si tolgono anche le sue liste dalle app terzi.
+- **Scheda del cliente a tendina**: ogni sezione (1 Cliente, 2 Abbonamento…) si apre e si chiude toccando il titolo; il menu a sinistra apre la sezione scelta; ci sono «Apri tutte» e «Chiudi tutte». All'apertura è aperta solo «Cliente».
+
 ## Struttura
 
 ```

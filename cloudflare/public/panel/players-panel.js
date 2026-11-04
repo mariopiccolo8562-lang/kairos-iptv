@@ -103,18 +103,27 @@
   };
 
   /* ---------- Impostazioni → App e aggiornamenti: OrbixPlay e MaxPlayer (DNS personali + guida) ---------- */
-  const pane = $('[data-pane="upd"]');
+  // pagina «Gestione app terzi» nel menu, sotto Server DNS e VPN (solo titolare)
+  if (!$('.nav[data-v="apps3"]')) {
+    const b = document.createElement('button'); b.className = 'nav'; b.dataset.v = 'apps3';
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></svg>Gestione app terzi';
+    b.onclick = () => view('apps3');
+    const dns = $('.nav[data-v="dns"]'); dns ? dns.after(b) : $('#side').appendChild(b);
+    const sec = document.createElement('section'); sec.className = 'view'; sec.id = 'v-apps3'; $('#v-dash').after(sec);
+  }
+  TITLES.apps3 = 'Gestione app terzi';
+  const pane = $('#v-apps3');
   let cfg = null, dirty = false;
   const cfgNow = () => { const c = (D.settings && D.settings.playersCfg) || {}; return { orbix: (c.orbix || []).map((x) => ({ ...x })), max: (c.max || []).map((x) => ({ ...x })), showDnsAgents: !!c.showDnsAgents }; };
   if (pane && !$('#opCard')) {
-    pane.insertAdjacentHTML('beforeend', `<div class="card glass" id="opCard" style="margin-top:18px"><div class="hd"><h3>OrbixPlay e MaxPlayer<small>Attivi le app dalla scheda del cliente (sezione «Altre app») con ID dispositivo, utente e password: il DNS lo mette il pannello</small></h3></div>
+    pane.insertAdjacentHTML('beforeend', `<div class="card glass" id="opCard"><div class="hd"><h3>OrbixPlay e MaxPlayer<small>Attivi le app dalla scheda del cliente (sezione «Altre app») con ID dispositivo, utente e password: il DNS lo mette il pannello</small></h3></div>
       <div id="opState" class="st-note"></div>
-      <div class="st-row" style="align-items:flex-start"><div class="st-l"><b>DNS personale di OrbixPlay</b><small>Il primo è quello proposto di base. Il «codice host» (facoltativo) è il numero che OrbixPlay ti dà per il tuo DNS: se c'è, l'indirizzo non viene inviato.</small></div><div class="st-c" id="opDnsO"></div></div>
-      <div class="st-row" style="align-items:flex-start"><div class="st-l"><b>DNS di MaxPlayer</b><small>Sono i «Domini» del tuo pannello MaxPlayer: al cliente arriva solo il dominio scelto, mai l'indirizzo. Puoi aggiungerne uno da qui.</small></div><div class="st-c"><div id="opMx"></div>
+      <div class="st-row" style="align-items:flex-start"><div class="st-l"><b>DNS di OrbixPlay</b><small>Modificali e premi «Salva DNS»; con ✕ li cancelli. Il primo è quello proposto di base. Il «codice host» (facoltativo) è il numero che OrbixPlay ti dà per il tuo DNS: se c'è, l'indirizzo non viene inviato.</small></div><div class="st-c" id="opDnsO"></div></div>
+      <div class="st-row" style="align-items:flex-start"><div class="st-l"><b>DNS di MaxPlayer</b><small>Sono i «Domini» del tuo pannello MaxPlayer: al cliente arriva solo il dominio scelto, mai l'indirizzo. Qui li aggiungi, rinomini, cambi o cancelli (i clienti passano su un altro DNS).</small></div><div class="st-c"><div id="opMx"></div>
         <div style="display:grid;grid-template-columns:1fr 2fr auto;gap:8px;margin-top:10px"><input class="inp" id="opMxL" maxlength="60" placeholder="Nome (es. Principale)" style="margin:0"><input class="inp mono" id="opMxU" maxlength="300" placeholder="http://dns.esempio.com:8080" style="margin:0"><button class="btn sm" id="opMxAdd">Aggiungi a MaxPlayer</button></div></div></div>
       <div class="tog" id="opShow" style="margin-top:12px"><div><b>Gli agenti vedono l'indirizzo dei DNS</b><small>Spento: vedono solo il nome che dai al DNS. I clienti non lo vedono mai nel pannello.</small></div><i></i></div>
-      <div style="display:flex;gap:10px;margin-top:12px"><button class="btn pri" id="opSave">Salva DNS</button></div>
-      <details style="margin-top:14px"><summary style="cursor:pointer;font-weight:600">Come collegare OrbixPlay (chiave)</summary>
+      <div style="display:flex;gap:10px;margin-top:12px"><button class="btn pri" id="opSave">Salva DNS OrbixPlay</button></div>
+      <details style="margin-top:14px"><summary style="cursor:pointer;font-weight:600">Come collegare OrbixPlay e MaxPlayer (chiavi)</summary>
         <ol style="margin:10px 0 0 18px;line-height:1.7;font-size:13.5px">
           <li>Prendi la tua <b>customer key</b> dal tuo account OrbixPlay (o chiedila al loro supporto).</li>
           <li>Su GitHub apri il repository <b>kairos-iptv</b> → <b>Settings</b> → <b>Secrets and variables</b> → <b>Actions</b> → <b>New repository secret</b>.</li>
@@ -129,7 +138,7 @@
         <p class="mut" style="font-size:12.5px;margin-top:8px">Non scrivere mai le chiavi in chat o nel pannello.</p></details></div>`);
     $('#opMxAdd').onclick = async () => {
       const u = $('#opMxU').value.trim(), l = $('#opMxL').value.trim(); if (!u) { toast('Scrivi il DNS', 1); return; }
-      try { await api('POST', '/admin/maxplayer/domains', { url: u, label: l }); $('#opMxU').value = ''; $('#opMxL').value = ''; toast('DNS aggiunto su MaxPlayer'); await loadMx(true); } catch (e) { toast(e.message, 1); }
+      try { await api('POST', '/admin/maxplayer/domains', { url: u, label: l }); $('#opMxU').value = ''; $('#opMxL').value = ''; toast('DNS aggiunto su MaxPlayer (può restare «in attesa» finché MaxPlayer lo approva)'); mxOwned = null; await loadMx(true); } catch (e) { toast(e.message, 1); }
     };
     for (const ev of ['input', 'change']) $('#opCard').addEventListener(ev, (e) => { e.stopPropagation(); dirty = true; });
     $('#opShow').onclick = () => { $('#opShow').classList.toggle('on'); dirty = true; };
@@ -150,13 +159,87 @@
     $$('[data-opadd]').forEach((b) => (b.onclick = () => { readCfg(); cfg[b.dataset.opadd].push({ name: '', host: '' }); dirty = true; drawDns(); }));
     $$('[data-oprm]').forEach((b) => (b.onclick = () => { readCfg(); const [a, i] = b.dataset.oprm.split(':'); cfg[a].splice(+i, 1); dirty = true; drawDns(); }));
   }
+  /* DNS di MaxPlayer (tutti i tuoi, anche in attesa): nome e indirizzo modificabili, cancellazione con spostamento dei clienti */
+  let mxOwned = null, mxOwnBusy = false;
+  async function loadOwned() {
+    if (!P().max || mxOwnBusy) return; mxOwnBusy = true;
+    try { mxOwned = (await api('GET', '/admin/maxplayer/domains?owned=1')).domains || []; } catch (e) { mxOwned = []; mxOwned.err = e.message; }
+    mxOwnBusy = false; renderMxSettings();
+  }
+  const ST = { approved: ['Approvato', 'var(--ok)'], pending: ['In attesa', 'var(--warn)'] };
+  const urlOf = (x) => x.domain ? `${x.https ? 'https' : 'http'}://${x.domain}${x.port && !((x.https && x.port === '443') || (!x.https && x.port === '80')) ? ':' + x.port : ''}` : '';
   function renderMxSettings() {
     const el = $('#opMx'); if (!el) return;
-    el.innerHTML = !P().max ? '<small class="mut">Collega prima MaxPlayer (chiave MAXPLAYER_KEY, guida qui sotto)</small>' : !mxDoms ? '<small class="mut">Carico i DNS…</small>' : mxDoms.length ? mxDoms.map((x) => `<div class="dlc-l" style="margin-bottom:6px"><span>${esc(x.label || 'DNS ' + x.id)}</span><b class="mono" style="flex:1;font-weight:500">${esc(x.domain ? x.domain + (x.port ? ':' + x.port : '') : '(nascosto)')}</b><small class="mut">${esc(x.status || '')}</small></div>`).join('') + '<button class="btn sm" id="opMxR">Aggiorna</button>' : `<small class="mut">${esc(mxDoms.err || 'Nessun DNS su MaxPlayer: aggiungilo qui sotto')}</small>`;
-    $('#opMxR') && ($('#opMxR').onclick = () => loadMx(true));
     $('#opMxAdd') && ($('#opMxAdd').disabled = !P().max);
+    if (!P().max) { el.innerHTML = '<small class="mut">Collega prima MaxPlayer (chiave MAXPLAYER_KEY, guida qui sotto)</small>'; return; }
+    if (!mxOwned) { el.innerHTML = '<small class="mut">Carico i DNS…</small>'; loadOwned(); return; }
+    if (!mxOwned.length) { el.innerHTML = `<small class="mut">${esc(mxOwned.err || 'Nessun DNS su MaxPlayer: aggiungilo qui sotto')}</small>`; return; }
+    el.innerHTML = mxOwned.map((x) => { const st = ST[x.status] || [x.status || '', 'var(--mut)']; return `<div class="op-dr" data-mxd="${esc(x.id)}" style="display:grid;grid-template-columns:1fr 2fr auto auto auto;gap:8px;margin-bottom:8px;align-items:center"><input class="inp" data-k="label" maxlength="60" placeholder="Nome" value="${esc(x.label || '')}" style="margin:0"><input class="inp mono" data-k="url" maxlength="300" placeholder="${x.domain ? '' : 'indirizzo nascosto'}" value="${esc(urlOf(x))}" style="margin:0"><small style="color:${st[1]};white-space:nowrap">${esc(st[0])}</small><button class="btn sm" data-mxsave>Salva</button><button class="icb" data-mxdel title="Cancella">✕</button></div>`; }).join('') + '<button class="btn sm" id="opMxR">Aggiorna</button>';
+    $('#opMxR').onclick = () => { mxOwned = null; mxDoms = null; renderMxSettings(); loadMx(true); };
+    $$('[data-mxd]', el).forEach((row) => {
+      const id = row.dataset.mxd, x = mxOwned.find((y) => y.id === id);
+      $('[data-mxsave]', row).onclick = async () => {
+        const label = $('[data-k="label"]', row).value.trim(), u = $('[data-k="url"]', row).value.trim();
+        if (u && u !== urlOf(x) && !(await ask('Cambiare l\'indirizzo di questo DNS?', 'MaxPlayer aggiorna subito le liste di tutti i clienti che lo usano.', 'Cambia'))) return;
+        try { await api('PUT', '/admin/maxplayer/domains/' + id, { label, url: u && u !== urlOf(x) ? u : '' }); toast('DNS aggiornato'); mxOwned = null; mxDoms = null; renderMxSettings(); loadMx(true); } catch (e) { toast(e.message, 1); }
+      };
+      $('[data-mxdel]', row).onclick = async () => {
+        const others = mxOwned.filter((y) => y.id !== id && y.status === 'approved');
+        if (!others.length) { toast('MaxPlayer non permette di cancellare l\'ultimo DNS: aggiungine prima un altro (approvato)', 1); return; }
+        const pick = `<p>I clienti che usano <b>${esc(x.label || urlOf(x) || 'questo DNS')}</b> passano su:</p><select class="inp" id="mxTo">${others.map((y) => `<option value="${esc(y.id)}">${esc((y.label || 'DNS ' + y.id) + (y.domain ? ' — ' + y.domain : ''))}</option>`).join('')}</select>`;
+        const go = ask('Cancellare il DNS su MaxPlayer?', pick, 'Cancella');
+        await new Promise((r) => setTimeout(r, 0)); const sel = $('#mxTo'); let to = sel ? sel.value : others[0].id; if (sel) sel.onchange = () => (to = sel.value);
+        if (!(await go)) return;
+        try { await api('DELETE', '/admin/maxplayer/domains/' + id, { transferTo: to }); toast('DNS cancellato, clienti spostati'); mxOwned = null; mxDoms = null; renderMxSettings(); loadMx(true); } catch (e) { toast(e.message, 1); }
+      };
+    });
+    for (const ev of ['input', 'change']) el.addEventListener(ev, (e) => e.stopPropagation());
+  }
+  /* ---------- liste create sulle app terzi: elenco, rimozione e pulizia delle inattive ---------- */
+  if (pane && !$('#tlCard')) {
+    pane.insertAdjacentHTML('beforeend', `<div class="card glass" id="tlCard" style="margin-top:18px"><div class="hd"><h3>Liste create sulle app terzi<small>Le attivazioni fatte dal pannello su OrbixPlay e MaxPlayer. Inattiva = abbonamento scaduto, o cliente disattivato e fermo, da più dei giorni scelti.</small></h3></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+        <label class="mut" style="font-size:13px">Inattive da più di</label><input class="inp" id="tlDays" type="number" min="7" max="365" value="60" style="width:90px;margin:0"><span class="mut" style="font-size:13px">giorni</span>
+        <div class="seg" id="tlF"><button data-tlf="all" class="on">Tutte</button><button data-tlf="ina">Solo inattive</button></div>
+        <div style="flex:1"></div><button class="btn danger" id="tlClean" disabled>Rimuovi le inattive</button></div>
+      <div class="tog" id="tlAuto"><div><b>Rimuovi da sole ogni notte</b><small>Ogni notte il pannello toglie da OrbixPlay e MaxPlayer le liste inattive da più dei giorni scelti qui sopra</small></div><i></i></div>
+      <div id="tlList" style="margin-top:12px"></div></div>`);
+    let tlF = 'all', tlData = null, tlBusy = false;
+    const days = () => Math.max(7, Math.min(365, +$('#tlDays').value || 60));
+    const loadTl = async () => { if (tlBusy) return; tlBusy = true; try { tlData = await api('GET', '/admin/apps3/lists?days=' + days()); } catch (e) { tlData = { lists: [], err: e.message }; } tlBusy = false; drawTl(); };
+    const fmt = (t) => (t ? new Date(t).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
+    function drawTl() {
+      const el = $('#tlList'); if (!el) return;
+      if (!tlData) { el.innerHTML = '<small class="mut">Carico…</small>'; return; }
+      const all = tlData.lists || [], ina = all.filter((x) => x.inactive), show = tlF === 'ina' ? ina : all;
+      $('#tlClean').disabled = !ina.length; $('#tlClean').textContent = ina.length ? `Rimuovi le inattive (${ina.length})` : 'Nessuna lista inattiva';
+      el.innerHTML = tlData.err ? `<small class="mut">${esc(tlData.err)}</small>` : show.length ? `<div class="tbl-wrap"><table class="tbl" style="width:100%"><thead><tr><th>Cliente</th><th>App</th><th>Lista</th><th>Inviata</th><th>Stato</th><th></th></tr></thead><tbody>${show.map((x) => {
+        const st = x.inactive ? `<span style="color:var(--bad)">${x.why === 'scaduto' ? 'Scaduto' : 'Disattivato'} da ${Math.max(1, Math.floor((Date.now() - x.since) / 864e5))} giorni</span>` : x.status === 'expired' ? '<span style="color:var(--warn)">Scaduto da poco</span>' : x.status === 'disabled' ? '<span style="color:var(--warn)">Disattivato</span>' : '<span style="color:var(--ok)">Attivo</span>';
+        return `<tr><td><b>${esc(x.name || '—')}</b><br><small class="mono mut">${esc(x.code)}</small></td><td><span class="op-ic ${x.app === 'max' ? 'mx' : ''}" style="width:30px;height:30px;font-size:11px;display:inline-grid">${x.app === 'max' ? 'MX' : 'OP'}</span></td><td class="mono" style="font-size:12.5px">${esc(x.app === 'max' ? 'utente ' + x.ref : 'ID ' + x.ref)}</td><td>${esc(fmt(x.t))}</td><td>${st}</td><td style="text-align:right"><button class="btn sm danger" data-tlrm="${esc(x.app)}:${esc(x.id)}">Rimuovi</button></td></tr>`;
+      }).join('')}</tbody></table></div>` : `<div class="emptyc">${tlF === 'ina' ? 'Nessuna lista inattiva da più di ' + days() + ' giorni' : 'Nessuna lista creata sulle app terzi'}</div>`;
+      $$('[data-tlrm]', el).forEach((b) => (b.onclick = async () => {
+        const [app, id] = b.dataset.tlrm.split(':'), x = all.find((y) => y.id === id && y.app === app), NAME = app === 'max' ? 'MaxPlayer' : 'OrbixPlay';
+        if (!(await ask(`Rimuovere la lista da ${NAME}?`, `${esc(x.name || x.code)}: ${app === 'max' ? 'l\'account MaxPlayer viene cancellato' : 'la linea sparisce dall\'app OrbixPlay'}. L'abbonamento Kairos non cambia.`, 'Rimuovi'))) return;
+        try { await api('DELETE', (app === 'max' ? '/admin/maxplayer/' : '/admin/orbix/') + id); toast('Lista rimossa da ' + NAME); await load(); loadTl(); } catch (e) { toast(e.message, 1); }
+      }));
+    }
+    $('#tlDays').addEventListener('change', (e) => { e.stopPropagation(); loadTl(); });
+    $('#tlDays').addEventListener('input', (e) => e.stopPropagation());
+    $$('#tlF [data-tlf]').forEach((b) => (b.onclick = () => { tlF = b.dataset.tlf; $$('#tlF [data-tlf]').forEach((x) => x.classList.toggle('on', x === b)); drawTl(); }));
+    $('#tlClean').onclick = async () => {
+      const n = (tlData.lists || []).filter((x) => x.inactive).length;
+      if (!(await ask(`Rimuovere ${n} ${n === 1 ? 'lista inattiva' : 'liste inattive'}?`, `Tolgo da OrbixPlay e MaxPlayer le liste dei clienti scaduti o disattivati da più di ${days()} giorni. Gli abbonamenti Kairos non cambiano.`, 'Rimuovi'))) return;
+      try { const r = await api('POST', '/admin/apps3/cleanup', { days: days() }); toast(`Rimosse ${r.removed} liste${r.errors && r.errors.length ? ` · ${r.errors.length} non riuscite` : ''}`, r.errors && r.errors.length ? 1 : 0); await load(); loadTl(); } catch (e) { toast(e.message, 1); }
+    };
+    $('#tlAuto').onclick = async () => {
+      const on = !$('#tlAuto').classList.contains('on');
+      try { await api('PUT', '/admin/settings', { playersCfg: { autoClean: on, cleanDays: days() } }); $('#tlAuto').classList.toggle('on', on); toast(on ? `Ogni notte tolgo le liste inattive da più di ${days()} giorni` : 'Pulizia automatica spenta'); await load(); } catch (e) { toast(e.message, 1); }
+    };
+    window.KXThird = { load: loadTl, sync: () => { const c = (D.settings && D.settings.playersCfg) || {}; $('#tlAuto').classList.toggle('on', !!c.autoClean); if (!tlData && document.activeElement !== $('#tlDays')) $('#tlDays').value = c.cleanDays || 60; } };
+    const navB = $('.nav[data-v="apps3"]'); if (navB) navB.addEventListener('click', () => loadTl());
   }
   function renderOp() {
+    if (window.KXThird) KXThird.sync();
     const el = $('#opState'); if (!el) return;
     const n = D.devices.filter((d) => d.orbix).length;
     el.innerHTML = `${P().orbix ? `✅ <b>OrbixPlay collegato</b> · clienti attivi su OrbixPlay: <b>${n}</b>` : '⚠️ <b>OrbixPlay non collegato</b>: manca il segreto ORBIX_KEY (guida qui sotto)'}<br>${P().max ? `✅ <b>MaxPlayer collegato</b> · clienti attivi su MaxPlayer: <b>${D.devices.filter((d) => d.maxp).length}</b>` : '⚠️ <b>MaxPlayer non collegato</b>: manca il segreto MAXPLAYER_KEY (guida qui sotto)'}`;
@@ -170,8 +253,14 @@
   if (typeof DEMO !== 'undefined') {
     const dm = demoApi;
     window.demoApi = demoApi = async function (m, p, b) {
-      if (p.split('?')[0] === '/admin/maxplayer/domains' && m === 'GET') return { domains: D.role === 'agent' ? [{ id: '1', label: 'Principale' }] : [{ id: '1', domain: 'dns.kairos-esempio.tv', port: '8080', label: 'Principale', status: 'approved' }, ...(DEMO.mxNew || [])] };
-      if (p === '/admin/maxplayer/domains' && m === 'POST') { (DEMO.mxNew = DEMO.mxNew || []).push({ id: String(10 + DEMO.mxNew.length), domain: b.url.replace(/^https?:\/\//, '').split(/[:/]/)[0], port: '80', label: b.label, status: 'pending' }); return { ok: true }; }
+      if (p === '/admin/state' && !DEMO.seed3) { DEMO.seed3 = 1; const o = DEMO.devices.filter((d) => !d.parent && d.playlists && d.playlists.length); if (o[1]) { o[1].maxp = { uid: '501', u: 'cliente.vecchio', dom: '1', t: Date.now() - 200 * 864e5 }; o[1].demoOld = true; } if (o[2]) o[2].orbix = { id: 'AA11BB22', n: 1, t: Date.now() - 20 * 864e5, u: 'mario', dns: 0 }; }
+      if (p.startsWith('/admin/apps3/lists')) { const dd = +(p.split('days=')[1] || 60), t = Date.now(); return { days: dd, lists: DEMO.devices.filter((d) => d.orbix || d.maxp || d.demo3).flatMap((d) => { const ex = d.demoOld ? t - 95 * 864e5 : d.expires ? new Date(d.expires + 'T23:59:59Z').getTime() : 0, ina = ex && ex < t - dd * 864e5; const b = { id: d.id, name: d.name, code: d.code, expires: d.expires, status: ex && ex < t ? 'expired' : 'active', inactive: !!ina, why: ina ? 'scaduto' : '', since: ina ? ex : 0 }; return [...(d.orbix ? [{ ...b, app: 'orbix', ref: d.orbix.id, t: d.orbix.t }] : []), ...(d.maxp ? [{ ...b, app: 'max', ref: d.maxp.u, t: d.maxp.t }] : [])]; }) }; }
+      if (p === '/admin/apps3/cleanup') { const t = Date.now(); let n = 0; for (const d of DEMO.devices) { const ex = d.demoOld ? t - 95 * 864e5 : d.expires ? new Date(d.expires + 'T23:59:59Z').getTime() : 0; if (ex && ex < t - (b.days || 60) * 864e5) { if (d.orbix) { d.orbix = null; n++; } if (d.maxp) { d.maxp = null; n++; } } } return { removed: n, errors: [] }; }
+      const mdd = p.match(/^\/admin\/maxplayer\/domains\/(\d+)$/);
+      if (mdd && m === 'PUT') { const all = [DEMO.mx0 = DEMO.mx0 || { id: '1', domain: 'dns.kairos-esempio.tv', port: '8080', label: 'Principale', status: 'approved' }, ...(DEMO.mxNew || [])]; const x = all.find((y) => y.id === mdd[1]); if (x) { x.label = b.label; if (b.url) { const u = new URL(b.url); x.domain = u.hostname; x.port = u.port || (u.protocol === 'https:' ? '443' : '80'); x.https = u.protocol === 'https:'; } } return { ok: true }; }
+      if (mdd && m === 'DELETE') { DEMO.mxNew = (DEMO.mxNew || []).filter((y) => y.id !== mdd[1]); return { ok: true }; }
+      if (p.split('?')[0] === '/admin/maxplayer/domains' && m === 'GET') return { domains: D.role === 'agent' ? [{ id: '1', label: 'Principale' }] : [(DEMO.mx0 = DEMO.mx0 || { id: '1', domain: 'dns.kairos-esempio.tv', port: '8080', label: 'Principale', status: 'approved' }), ...(DEMO.mxNew || [])] };
+      if (p === '/admin/maxplayer/domains' && m === 'POST') { (DEMO.mxNew = DEMO.mxNew || []).push({ id: String(10 + DEMO.mxNew.length), domain: b.url.replace(/^https?:\/\//, '').split(/[:/]/)[0], port: '80', label: b.label, status: 'approved' }); return { ok: true }; }
       const xm = p.match(/^\/admin\/maxplayer\/(.+)$/);
       if (xm) { const d = DEMO.devices.find((x) => x.id === xm[1]); if (!d) throw new Error('Cliente non trovato'); if (m === 'DELETE') { d.maxp = null; return { ok: true }; } if (!b.username || !b.password) throw new Error('Scrivi utente e password della linea'); const created = !d.maxp; d.maxp = { uid: d.maxp ? d.maxp.uid : String(500 + Math.floor(Math.random() * 99)), u: d.maxp ? d.maxp.u : b.username, dom: b.domain || '1', t: Date.now() }; return { ...d.maxp, created }; }
       const om = p.match(/^\/admin\/orbix\/(.+)$/);

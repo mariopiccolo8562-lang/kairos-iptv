@@ -32,6 +32,8 @@ export default {
   },
   async scheduled(_ev, env) {
     await cleanup(env);
+    // app terzi: se l'hai chiesto, ogni notte si tolgono le liste inattive
+    try { const c = (await getSettings(env)).playersCfg || {}; if (c.autoClean) await thirdCleanup(env, c.cleanDays || 60, 'Pulizia automatica', ''); } catch {}
   },
 };
 
@@ -391,6 +393,41 @@ function mxDomainBody(u, label) {
   const https = x.protocol === 'https:', port = +(x.port || (https ? 443 : 80));
   if (!/^[a-z0-9.-]+$/i.test(x.hostname)) throw new HttpErr(400, 'DNS non valido');
   return { domain: x.hostname.toLowerCase(), port, https, label: str(label, 60) };
+}
+
+/* ---------------- liste create sulle app terzi (OrbixPlay, MaxPlayer): elenco e pulizia di quelle inattive ---------------- */
+/** inattiva: abbonamento scaduto da più di «days» giorni, oppure cliente disattivato e fermo (nessuna attività, né invio) da più di «days» giorni */
+function thirdInactive(d, P, days, t = now()) {
+  const lim = t - days * 864e5, src = P || d;
+  if (src.expires && DATE_RE.test(src.expires)) { const e = new Date(src.expires + 'T23:59:59Z').getTime(); if (e < lim) return { inactive: true, why: 'scaduto', since: e }; }
+  if (!src.active) { const last = Math.max(+d.last_seen || 0, +src.last_seen || 0, orbixOf(d).t, maxpOf(d).t); if (last < lim) return { inactive: true, why: 'disattivato', since: last }; }
+  return { inactive: false };
+}
+async function thirdLists(env, days) {
+  const rows = ((await env.DB.prepare("SELECT * FROM devices WHERE orbix <> '' OR maxp <> ''").all()).results) || [];
+  const pm = new Map();
+  for (const r of rows) if (r.parent && !pm.has(r.parent)) pm.set(r.parent, await env.DB.prepare('SELECT id, name, active, expires, last_seen FROM devices WHERE id = ?').bind(r.parent).first());
+  const out = [];
+  for (const d of rows) {
+    const P = d.parent ? pm.get(d.parent) : d, ia = thirdInactive(d, P, days);
+    const base = { id: d.id, name: d.name || (P && P.name) || '', code: d.code, ownerId: +d.owner_id || 0, expires: (P || d).expires || '', status: statusOf(P || d, ['x']), inactive: ia.inactive, why: ia.why || '', since: ia.since || 0 };
+    const o = orbixOf(d), x = maxpOf(d);
+    if (o.id) out.push({ ...base, app: 'orbix', ref: o.id, t: o.t });
+    if (x.uid) out.push({ ...base, app: 'max', ref: x.u, t: x.t });
+  }
+  return out.sort((a, b) => (+b.inactive - +a.inactive) || (a.since - b.since) || (b.t - a.t));
+}
+/** toglie dalle app terzi tutte le liste inattive da più di «days» giorni; restituisce quante e gli eventuali errori */
+async function thirdCleanup(env, days, who, ip) {
+  const list = (await thirdLists(env, days)).filter((x) => x.inactive);
+  let n = 0; const errors = [];
+  for (const x of list) {
+    const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(x.id).first(); if (!d) continue;
+    try { if (x.app === 'orbix') { if (env.ORBIX_KEY) { await orbixRemove(env, d, who, ip); n++; } } else if (env.MAXPLAYER_KEY) { await mxRemove(env, d, who, ip); n++; } }
+    catch (e) { errors.push(`${x.name || x.code} (${x.app === 'max' ? 'MaxPlayer' : 'OrbixPlay'}): ${e.message}`); }
+  }
+  if (n) await log(env, 'del', `${who}: app terzi — tolte ${n} liste inattive da più di ${days} giorni`, ip);
+  return { removed: n, errors: errors.slice(0, 20) };
 }
 
 async function orbixRemove(env, d, who, ip) {
@@ -2413,6 +2450,29 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (ses && ses.agent) { const P0 = d.parent ? await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first() : d; agentLines = xtreamLines(await unseal(env, (P0 || d).playlists).catch(() => [])); }
     return json(await orbixSend(env, d, b, who, ip, agentLines));
   }
+  if (path === '/maxplayer/domains' && m === 'GET' && url.searchParams.get('owned') === '1' && !(ses && ses.agent)) {
+    // gestione (Gestione app terzi): tutti i DNS che hai su MaxPlayer, anche quelli in attesa di approvazione
+    const j = await mxCall(env, 'GET', '/domains/owned');
+    return json({ domains: (Array.isArray(j.data) ? j.data : []).map((x) => ({ id: str(String(x.id ?? ''), 30), domain: str(x.domain, 200), port: str(String(x.port ?? ''), 8), https: !!+x.https, label: str(x.label, 60), status: str(x.status, 20) })).filter((x) => x.id) });
+  }
+  const mdm = path.match(/^\/maxplayer\/domains\/(\d{1,20})$/);
+  if (mdm && (m === 'PUT' || m === 'DELETE') && !(ses && ses.agent)) {
+    const b = await readJSON(req, 2048);
+    if (m === 'PUT') {
+      const body = str(b.url, 300) ? mxDomainBody(str(b.url, 300), b.label) : { label: str(b.label, 60) };
+      if (!str(b.url, 300)) body.label = str(b.label, 60);
+      await mxCall(env, 'PUT', '/domains/' + mdm[1], body);
+      mxDomMem.list = null;
+      await log(env, 'settings', `${who}: MaxPlayer — modificato il DNS ${str(b.label, 60) || mdm[1]}`, ip);
+      return json({ ok: true });
+    }
+    const to = str(String(b.transferTo ?? ''), 30);
+    if (!/^\d{1,20}$/.test(to) || to === mdm[1]) throw new HttpErr(400, 'Scegli il DNS su cui spostare i clienti di quello che cancelli');
+    await mxCall(env, 'DELETE', '/domains/' + mdm[1], { transfer_id: to, confirm: true });
+    mxDomMem.list = null;
+    await log(env, 'del', `${who}: MaxPlayer — cancellato un DNS (clienti spostati sull'altro)`, ip);
+    return json({ ok: true });
+  }
   if (path === '/maxplayer/domains' && m === 'GET') {
     const list = await mxDomains(env, url.searchParams.get('fresh') === '1');
     return json({ domains: ses && ses.agent ? list.map((x) => ({ id: x.id, label: x.label || 'DNS ' + x.id })) : list });
@@ -2433,6 +2493,15 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     let agentLines = null;
     if (ses && ses.agent) { const P0 = d.parent ? await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first() : d; agentLines = xtreamLines(await unseal(env, (P0 || d).playlists).catch(() => [])); }
     return json(await mxSend(env, d, b, who, ip, agentLines));
+  }
+  if (path === '/apps3/lists' && m === 'GET' && !(ses && ses.agent)) {
+    const days = Math.max(7, Math.min(365, parseInt(url.searchParams.get('days'), 10) || 60));
+    return json({ days, lists: await thirdLists(env, days) });
+  }
+  if (path === '/apps3/cleanup' && m === 'POST' && !(ses && ses.agent)) {
+    const b = await readJSON(req, 512);
+    const days = Math.max(7, Math.min(365, parseInt(b.days, 10) || 60));
+    return json(await thirdCleanup(env, days, who, ip));
   }
   const amd = path.match(/^\/agent-maint\/(\d{1,9})$/);
   if (amd && m === 'DELETE' && !(ses && ses.agent)) {
@@ -2705,7 +2774,9 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
         if (code !== null && !(code > 0 && code < 1e9)) throw new HttpErr(400, `DNS ${app} n. ${i + 1}: il codice host deve essere un numero`);
         return { name: str(x.name, 40) || 'DNS ' + (i + 1), host, ...(code ? { code } : {}) };
       });
-      s.playersCfg = { orbix: list(c.orbix, 'OrbixPlay'), max: list(c.max, 'MaxPlayer'), showDnsAgents: c.showDnsAgents === true };
+      const prev = s.playersCfg || {};
+      s.playersCfg = { orbix: c.orbix !== undefined ? list(c.orbix, 'OrbixPlay') : prev.orbix || [], max: c.max !== undefined ? list(c.max, 'MaxPlayer') : prev.max || [], showDnsAgents: c.showDnsAgents !== undefined ? c.showDnsAgents === true : !!prev.showDnsAgents,
+        autoClean: c.autoClean !== undefined ? c.autoClean === true : !!prev.autoClean, cleanDays: c.cleanDays !== undefined ? Math.max(7, Math.min(365, parseInt(c.cleanDays, 10) || 60)) : prev.cleanDays || 60 };
     }
     if (b.maint !== undefined) {
       const mt = b.maint && typeof b.maint === 'object' ? b.maint : {};
@@ -2934,6 +3005,9 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       return json({ ok: true });
     }
     if (m === 'DELETE') {
+      // le liste mandate alle app terzi non restano orfane
+      if (d.orbix && env.ORBIX_KEY) ctx.waitUntil(orbixRemove(env, d, who, ip).catch(() => {}));
+      if (d.maxp && env.MAXPLAYER_KEY) ctx.waitUntil(mxRemove(env, d, who, ip).catch(() => {}));
       // eliminando un cliente principale le sue connessioni tornano "in attesa" (non restano agganciate al nulla)
       const kids = d.parent ? [] : await linkedOf(env, d.id);
       await env.DB.batch([...kids.map((k) => unlinkStmt(env, k.id)), env.DB.prepare('DELETE FROM devices WHERE id = ?').bind(d.id), env.DB.prepare('DELETE FROM link_pins WHERE device_id = ?').bind(d.id)]);
