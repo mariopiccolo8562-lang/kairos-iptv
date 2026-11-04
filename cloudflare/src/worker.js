@@ -252,7 +252,17 @@ const DEFAULT_SETTINGS = {
   // DNS personali per OrbixPlay e MaxPlayer (gli agenti vedono solo il nome, salvo showDnsAgents)
   playersCfg: { orbix: [{ name: 'NKI OrbixPlay', host: 'http://orbx.nki-orbx.download' }], max: [], showDnsAgents: false, codes: { orbix: '265847', max: '265847' }, slots: null }, // link diretto NKI e codice cliente già pronti (slots: vedi SLOTS_DEFAULT)
   // «Attiva app»: il link di gestione dispositivo di ogni app dello store (dove il titolare attiva la lista col codice del cliente). Modificabile e ampliabile dal pannello.
-  appLinks: [{ name: 'OraPlayers', url: 'https://euser.oraplayers.com/manage-device' }, { name: 'IboOne TV', url: 'https://euser.iboonetv.com/manage-device' }],
+  appLinks: [
+    { name: 'Ora Player', url: 'https://euser.oraplayers.com/subscribe-web' },
+    { name: 'Ora Pro', url: 'https://euser.oraprotv.com/manage-device?redirectURL=%2Fdevice-info' },
+    { name: 'Ibo One', url: 'https://euser.iboonetv.com/manage-device?redirectURL=%2Fsubscribe-web' },
+    { name: 'Ibo Player', url: 'https://iboplayer.com/device/login' },
+    { name: 'Kemet', url: 'https://euser.kemetiptv.com/manage-device' },
+    { name: 'Gravity', url: 'https://euser.gravityiptv.com/manage-device' },
+    { name: 'Hot Ora IPTV', url: 'https://euser.hotoraiptv.com/manage-device' },
+    { name: 'Duplex Pro', url: 'https://euser.duplexprotv.com/manage-device' },
+    { name: 'TiviMate Pro', url: 'https://www.tivimateiptvpro.com/playlist' },
+  ],
 };
 /* Versione dell'APK da proporre alle app: quella pubblicata in automatico da GitHub (kairos-tv.json)
    oppure, solo se strettamente più recente, quella scritta a mano nel pannello.

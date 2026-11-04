@@ -3,7 +3,17 @@
    e con «+ Aggiungi app». Sotto resta tutto quello che c'era in App terzi (OrbixPlay/MaxPlayer, DNS, pulizia inattivi).
    Deve caricarsi DOPO players-panel.js e nav2.js. Usa le funzioni di app.js. Solo titolare. */
 (() => {
-  const DEF = [{ name: 'OraPlayers', url: 'https://euser.oraplayers.com/manage-device' }, { name: 'IboOne TV', url: 'https://euser.iboonetv.com/manage-device' }];
+  const DEF = [
+    { name: 'Ora Player', url: 'https://euser.oraplayers.com/subscribe-web' },
+    { name: 'Ora Pro', url: 'https://euser.oraprotv.com/manage-device?redirectURL=%2Fdevice-info' },
+    { name: 'Ibo One', url: 'https://euser.iboonetv.com/manage-device?redirectURL=%2Fsubscribe-web' },
+    { name: 'Ibo Player', url: 'https://iboplayer.com/device/login' },
+    { name: 'Kemet', url: 'https://euser.kemetiptv.com/manage-device' },
+    { name: 'Gravity', url: 'https://euser.gravityiptv.com/manage-device' },
+    { name: 'Hot Ora IPTV', url: 'https://euser.hotoraiptv.com/manage-device' },
+    { name: 'Duplex Pro', url: 'https://euser.duplexprotv.com/manage-device' },
+    { name: 'TiviMate Pro', url: 'https://www.tivimateiptvpro.com/playlist' },
+  ];
   const css = document.createElement('style');
   css.textContent = `
 #appLinksCard .al-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px}
@@ -78,6 +88,6 @@
   window.renderAll = renderAll = function () { ra(); applyName(); render(); };
 
   if (typeof DEMO !== 'undefined' && DEMO.settings && !DEMO.settings.appLinks) {
-    DEMO.settings.appLinks = [...DEF, { name: 'Hot ORA IPTV', url: 'https://euser.hotoraiptv.com/manage-device' }];
+    DEMO.settings.appLinks = DEF.map((x) => ({ ...x }));
   }
 })();
