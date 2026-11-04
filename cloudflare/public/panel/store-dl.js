@@ -129,9 +129,9 @@
         <div class="sd-act"><button class="btn sm pri" data-sda="approve">Autorizza</button><button class="btn sm danger" data-sda="deny">Rifiuta</button></div></div>`;
     }
     const [lb, cls] = ST[r.status] || ST.expired;
-    const how = r.via && VIA[r.via] ? ' · ' + VIA[r.via] : '';
+    const how = (r.via && VIA[r.via] ? ' · ' + VIA[r.via] : '') + (r.byName ? ' · da ' + r.byName : r.byMe ? ' · da te' : '');
     const extra = r.status === 'approved' ? ' · in attesa del download (vale 30 min)' : r.uses && r.status !== 'used' ? ' · scaricata' : '';
-    const act = r.status === 'approved' ? `<div class="sd-act"><button class="btn sm danger" data-sda="revoke" title="Il cliente non potrà più scaricare con questa autorizzazione">Revoca</button></div>` : '';
+    const act = r.status === 'approved' && (D.role !== 'agent' || r.byMe) ? `<div class="sd-act"><button class="btn sm danger" data-sda="revoke" title="Il cliente non potrà più scaricare con questa autorizzazione">Revoca</button></div>` : '';
     return `<div class="sd-req" data-id="${esc(r.id)}"><div class="ic" style="color:var(--mut)">${IC}</div>
       <div class="tx"><b>${esc(r.app)}</b><small>${meta}</small><small>${esc(when(r.created))}${esc(how)}${extra}</small></div>
       <span class="st ${cls}"><i></i>${lb}</span>${act}</div>`;

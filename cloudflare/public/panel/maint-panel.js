@@ -25,21 +25,31 @@
   const bar = document.createElement('div'); bar.className = 'mtbar'; bar.id = 'mtBar';
   ($('#dlBar') || $('.topbar')).after(bar);
   const page = document.createElement('div'); page.id = 'mtPage'; document.body.appendChild(page);
-  const M = () => (D.settings && D.settings.maint) || { on: false, msg: '', allow: [] };
+  // il titolare blocca tutti; un agente con il permesso blocca solo i suoi clienti
+  const isAg = () => D.role === 'agent';
+  const M = () => (isAg() ? D.maintMe : D.settings && D.settings.maint) || { on: false, msg: '', allow: [] };
+  const saveM = (m) => (isAg() ? api('PUT', '/admin/agent-maint', m) : api('PUT', '/admin/settings', { maint: m }));
+  const tutti = () => (isAg() ? 'i tuoi clienti' : 'tutti i clienti');
 
   function renderBar() {
-    const owner = D.role !== 'agent', m = M();
+    const owner = !isAg() || !!D.maintMe, m = M();
     btn.style.display = owner ? '' : 'none';
     btn.classList.toggle('on', owner && !!m.on);
     btn.innerHTML = m.on ? '🔧 Manutenzione attiva' : '🔧 Manutenzione';
-    bar.classList.toggle('on', owner && !!m.on);
+    const agOn = !isAg() ? (D.maintAg || []).map((id) => (D.agents || []).find((a) => a.id === id)).filter(Boolean) : [];
+    bar.classList.toggle('on', owner && (!!m.on || agOn.length > 0));
+    bar.innerHTML = '';
+    if (owner && !m.on && agOn.length) {
+      bar.innerHTML = `<span><b>Manutenzione degli agenti:</b> ${agOn.map((a) => esc(a.username)).join(', ')} ${agOn.length === 1 ? 'ha' : 'hanno'} bloccato l'app ai propri clienti.</span>` + agOn.map((a) => `<button class="btn sm" data-mtag="${a.id}">Spegni ${esc(a.username)}</button>`).join('');
+      $$('[data-mtag]', bar).forEach((b) => (b.onclick = async () => { try { await api('DELETE', '/admin/agent-maint/' + b.dataset.mtag); await load(); toast('Manutenzione dell\'agente spenta'); } catch (e) { toast(e.message, 1); } }));
+    }
     if (owner && m.on) {
       const names = (m.allow || []).map((id) => D.devices.find((d) => d.id === id)).filter(Boolean).map((d) => d.name || d.code);
-      bar.innerHTML = `<span><b>Manutenzione attiva:</b> l'app è bloccata per tutti i clienti${names.length ? ' tranne ' + names.slice(0, 4).map(esc).join(', ') + (names.length > 4 ? ` e altri ${names.length - 4}` : '') : ''}.</span><button class="btn sm" id="mtEdit">Gestisci</button><button class="btn sm pri" id="mtStop">Termina manutenzione</button>`;
+      bar.innerHTML = `<span><b>Manutenzione attiva:</b> l'app è bloccata per ${tutti()}${names.length ? ' tranne ' + names.slice(0, 4).map(esc).join(', ') + (names.length > 4 ? ` e altri ${names.length - 4}` : '') : ''}.</span><button class="btn sm" id="mtEdit">Gestisci</button><button class="btn sm pri" id="mtStop">Termina manutenzione</button>`;
       $('#mtEdit').onclick = openPage;
       $('#mtStop').onclick = async () => {
-        if (!(await ask('Terminare la manutenzione?', 'L\'app torna disponibile per tutti i clienti entro pochi secondi.', 'Termina'))) return;
-        try { await api('PUT', '/admin/settings', { maint: { ...M(), on: false } }); await load(); toast('Manutenzione terminata: app disponibile per tutti'); } catch (e) { toast(e.message, 1); }
+        if (!(await ask('Terminare la manutenzione?', `L'app torna disponibile per ${tutti()} entro pochi secondi.`, 'Termina'))) return;
+        try { await saveM({ ...M(), on: false }); await load(); toast('Manutenzione terminata: app di nuovo disponibile'); } catch (e) { toast(e.message, 1); }
       };
     }
   }
@@ -75,8 +85,8 @@
     $('#mtX').onclick = close; $('#mtNo').onclick = close;
     $('#mtOk').onclick = async () => {
       const on = $('#mtOn').classList.contains('on');
-      if (on && !m.on && !(await ask('Attivare la manutenzione?', `L'app si fermerà per tutti i clienti${sel.size ? ` tranne ${sel.size}` : ''}, anche per chi sta guardando (entro circa 20 secondi).`, 'Attiva'))) return;
-      try { await api('PUT', '/admin/settings', { maint: { on, msg: $('#mtMsg').value.trim(), allow: [...sel] } }); close(); await load(); toast(on ? 'Manutenzione attiva' : 'Impostazioni di manutenzione salvate'); } catch (e) { toast(e.message, 1); }
+      if (on && !m.on && !(await ask('Attivare la manutenzione?', `L'app si fermerà per ${tutti()}${sel.size ? ` tranne ${sel.size}` : ''}, anche per chi sta guardando (entro circa 20 secondi).`, 'Attiva'))) return;
+      try { await saveM({ on, msg: $('#mtMsg').value.trim(), allow: [...sel] }); close(); await load(); toast(on ? 'Manutenzione attiva' : 'Impostazioni di manutenzione salvate'); } catch (e) { toast(e.message, 1); }
     };
     page.classList.add('on');
   }

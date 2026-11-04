@@ -334,6 +334,23 @@ Il codice resta **legato a quel dispositivo**: se qualcuno lo copia su un'altra 
 - Il codice Downloader della Lite compare anche in alto nel pannello, accanto a quello di KAIROS TV e dello store.
 - **Scelta dell'app**: nella scheda del cliente (e per gli agenti nel modulo del cliente) scegli *KAIROS TV* o *Kairos Lite*, anche quando lo crei. L'app viene comunque riconosciuta da sola appena si collega (dalla prima registrazione, non solo dal battito).
 
+## 18. Agenti: store, clienti e manutenzione come permessi
+
+Nella scheda di ogni agente (Agenti → apri l'agente):
+- **App dello store che può approvare**: *Tutte le app* oppure solo quelle che spunti (l'elenco si riempie con le app richieste dallo store; puoi aggiungerne a mano). Un sotto-agente non può mai averne più di chi lo crea.
+- **Download store: vedere anche i download degli altri**: spento di base. L'agente vede le richieste in attesa delle sue app e, nello storico, solo i download approvati da lui (e dai suoi sotto-agenti). Può revocare solo i suoi. Tu vedi tutto, con il nome dell'agente accanto a ogni download.
+- **Vedere i clienti dei suoi sotto-agenti**: acceso di base; spento vede e gestisce solo i clienti attivati da lui. I tuoi clienti e quelli degli altri agenti non li vede mai.
+- **Manutenzione dei suoi clienti**: spento di base. Se acceso, l'agente ha il pulsante 🔧 Manutenzione che blocca l'app solo ai suoi clienti. La manutenzione generale resta solo tua; se un agente l'ha accesa lo vedi in alto e puoi spegnerla.
+- **Attività**: l'agente vede solo le sue azioni (anche le approvazioni dello store).
+
+## 19. Altre app: OrbixPlay (e MaxPlayer)
+
+- **Impostazioni → App e aggiornamenti → OrbixPlay e MaxPlayer**: scrivi il tuo **DNS personale** per ogni app (anche più di uno, con un nome). Per OrbixPlay puoi aggiungere il «codice host» che ti dà OrbixPlay: se c'è, l'indirizzo non viene inviato.
+- **Scheda del cliente → Altre app**: scrivi l'ID del dispositivo OrbixPlay, utente e password (proposti dalla linea del cliente) e premi **Attiva**. Il DNS lo mette il pannello: sotto il pulsante scegli quale. **Riattiva** sostituisce senza doppioni, **Togli** cancella. Se l'ID è sbagliato non viene cancellato niente.
+- **DNS nascosto**: gli agenti vedono solo il nome del DNS. Puoi decidere tu di mostrargli l'indirizzo («Gli agenti vedono l'indirizzo dei DNS»). Gli agenti possono usare solo utente e password delle linee dei loro clienti.
+- Collegamento: segreto GitHub `ORBIX_KEY` = la tua customer key OrbixPlay. L'abbonamento OrbixPlay si attiva/rinnova dal loro pannello: la loro API non lo prevede.
+- MaxPlayer: segreto `MAXPLAYER_KEY` e DNS personale già previsti; l'attivazione si completa con la documentazione della sua API.
+
 ## Struttura
 
 ```

@@ -110,12 +110,13 @@ body.agent .foot{display:none}
   const FL = [['create', 'Attivare clienti nuovi', 'Con il codice che il cliente vede sulla TV'], ['renew', 'Rinnovare e cambiare la scadenza', ''], ['disable', 'Attivare e disattivare il servizio', ''],
     ['playlists', 'Cambiare server, utente e password', 'Solo tra i server che gli assegni'], ['kick', 'Disconnettere il cliente', 'Interrompe la visione in corso'], ['delete', 'Eliminare clienti', ''],
     ['clientPerms', 'Cambiare i permessi dell\'app', 'Cosa può fare il cliente nell\'app'], ['vpn', 'Cambiare la VPN del cliente', ''],
-    ['link', 'Collegare altri dispositivi', 'Codice a 6 cifre, sblocca, scollega'], ['account', 'Profili, lettore e visioni contemporanee', 'Entro le connessioni che gli concedi'], ['ai', 'Assistente IA dei clienti', 'Quale IA, domande al giorno, domande extra']];
+    ['link', 'Collegare altri dispositivi', 'Codice a 6 cifre, sblocca, scollega'], ['subClients', 'Vedere i clienti dei suoi sotto-agenti', 'Se spento vede e gestisce solo i clienti attivati da lui'], ['players', 'Inviare le linee a OrbixPlay e MaxPlayer', 'Solo per i suoi clienti, con le tue chiavi (che non vede)'], ['account', 'Profili, lettore e visioni contemporanee', 'Entro le connessioni che gli concedi'], ['ai', 'Assistente IA dei clienti', 'Quale IA, domande al giorno, domande extra']];
   // pagine del pannello: sempre e solo con i dati dei suoi clienti
   const FP = [['dash', 'Dashboard', 'Riepilogo dei suoi clienti', 'dash'], ['online', 'Online ora', 'Chi sta guardando, tra i suoi clienti', 'live'], ['errors', 'Errori applicazione', 'Dei suoi clienti', 'apperr'],
     ['reports', 'Segnalazioni', 'Dei suoi clienti', 'reports'], ['contentReq', 'Richieste contenuti', 'Dei suoi clienti', 'creq'], ['addonReq', 'Richieste temi', 'Assegna solo gli add-on che gli concedi', 'areq'],
-    ['messages', 'Messaggi', 'Solo ai suoi clienti, mai a tutti', 'msgs'], ['store', 'Download store: accettare le richieste', 'Autorizza o rifiuta i download (le impostazioni restano tue)', 'store'],
-    ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity']];
+    ['messages', 'Messaggi', 'Solo ai suoi clienti, mai a tutti', 'msgs'], ['store', 'Download store: accettare le richieste', 'Solo per le app che scegli qui sotto (le impostazioni restano tue)', 'store'],
+    ['storeAll', 'Download store: vedere anche i download degli altri', 'Se spento nello storico vede solo quelli approvati da lui', ''],
+    ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', '']];
   const PERM_VIEW = Object.fromEntries(FP.map(([k, , , v]) => [v, k]));
   const isAgent = () => D.role === 'agent';
   const me = () => D.me || {};
@@ -150,13 +151,14 @@ body.agent .foot{display:none}
   }
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
-  const AG_OK = /^\/admin\/(presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
+  const AG_OK = /^\/admin\/(presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|agent-maint|orbix\/[A-Za-z0-9_-]+|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
   const origApi = api;
   window.api = api = async function (m, p, b) {
     if (isAgent() && !AG_OK.test(p)) throw new Error('Funzione non disponibile per gli agenti');
     const r = await origApi(m, p, b);
     if (p === '/admin/state' && m === 'GET' && r) {
       D.role = r.role === 'agent' ? 'agent' : 'owner'; D.agents = r.agents || []; D.me = r.me || null; D.servers = r.servers || [];
+      D.storeAppNames = r.storeAppNames || []; D.maintMe = r.maint || null; D.maintAg = r.maintAg || [];
       if (r.addonCat) D.addonCat = r.addonCat;
     }
     if (p === '/admin/login' && r && r.role) D.role = r.role;
@@ -267,6 +269,13 @@ body.agent .foot{display:none}
   $('#agX').onclick = closePage;
   addEventListener('keydown', (e) => { if (e.key === 'Escape') closePage(); });
   const chk = (name, val, label, on, dis, sm) => `<label class="${dis ? 'dis' : ''}"><input type="checkbox" data-${name}="${esc(val)}" ${on ? 'checked' : ''} ${dis ? 'disabled' : ''}>${label}${(name === 'ad' || name === 'cad') && window.KX_EYE ? window.KX_EYE(val) : ''}${sm ? `<small>${sm}</small>` : ''}</label>`;
+  // app dello store: «tutte» oppure quelle scelte (un sotto-agente mai più di chi lo crea)
+  const storeAppsBox = (P, topP) => {
+    const cur = Array.isArray(P.storeApps) ? P.storeApps : ['*'], all = cur.includes('*');
+    const topAll = !topP || !Array.isArray(topP.storeApps) || topP.storeApps.includes('*');
+    const names = [...new Set([...(D.storeAppNames || []), ...(topAll ? [] : topP.storeApps), ...cur.filter((x) => x !== '*')])].filter((x) => topAll || topP.storeApps.some((y) => y.toLowerCase() === x.toLowerCase())).sort((x, y) => x.localeCompare(y));
+    return (topAll ? chk('sapp', '*', '<b>Tutte le app</b>', all, false, 'Anche quelle che aggiungerai in futuro') : '') + (names.length ? names.map((n) => chk('sapp', n, esc(n), all ? !topAll : cur.some((x) => x.toLowerCase() === n.toLowerCase()), false, '')).join('') : '<p class="mut" style="font-size:12.5px">Le app compaiono qui dopo la prima richiesta dallo store; puoi anche aggiungerle a mano.</p>');
+  };
   async function openAgent(a) {
     const isNew = !a, sub = isAgent(), top = sub ? me() : null;
     let servers = [];
@@ -298,8 +307,12 @@ body.agent .foot{display:none}
       <div class="ag-c"><h4>Permessi</h4><small>Cosa può fare con i suoi clienti${sub ? ' (solo tra quelli che hai anche tu)' : ''}</small>
         <div class="ag-chk" id="agPm">${FL.map(([k, l, sm]) => chk('perm', k, l, !!P[k], topP && !topP[k], sm)).join('')}</div>
       </div>
-      <div class="ag-c"><h4>Pagine del pannello</h4><small>Cosa vede nel suo pannello: sempre e solo i dati dei suoi clienti. Impostazioni, Server DNS, API, Manutenzione e le impostazioni dell'assistente restano solo tue (valgono per tutti i clienti).</small>
+      <div class="ag-c"><h4>Pagine del pannello</h4><small>Cosa vede nel suo pannello: sempre e solo i dati dei suoi clienti. Impostazioni, Server DNS, API, la manutenzione generale e le impostazioni dell'assistente restano solo tue (valgono per tutti i clienti). I tuoi clienti e quelli degli altri agenti non li vede mai.</small>
         <div class="ag-chk" id="agPg">${FP.map(([k, l, sm]) => chk('perm', k, l, !!P[k], topP && !topP[k], sm)).join('')}</div>
+      </div>
+      <div class="ag-c"><h4>App dello store che può approvare</h4><small>Vale se ha «Download store: accettare le richieste». Vede solo le richieste di queste app.</small>
+        <div class="ag-chk" id="agSa" style="max-height:300px;overflow:auto">${storeAppsBox(P, topP)}</div>
+        <div style="display:flex;gap:8px;margin-top:10px"><input class="inp" id="agSaN" maxlength="80" placeholder="Aggiungi un'app (nome come nello store)" style="margin:0;flex:1"><button class="btn sm" id="agSaAdd">Aggiungi</button></div>
       </div>
       <div class="ag-c"><h4>Add-on che può assegnare</h4><small>Tra quelli che in Impostazioni → Store add-on sono «solo a chi assegno»</small>
         <div class="ag-chk" id="agAd" style="max-height:300px;overflow:auto">${adCat.length ? adCat.map((x) => chk('ad', x.id, esc(x.name), (P.addons || []).includes(x.id), topP && !(topP.addons || []).includes(x.id), x.price ? esc(x.price) : '')).join('') : '<p class="mut">Nessun add-on da assegnare.</p>'}</div>
@@ -311,6 +324,9 @@ body.agent .foot{display:none}
     </div>`;
     $('#agFt').innerHTML = `${a ? '<button class="btn danger" id="agDel">Elimina agente</button>' : ''}<div style="flex:1"></div><button class="btn" id="agNo">Annulla</button><button class="btn pri" id="agOk">${isNew ? 'Crea agente' : 'Salva modifiche'}</button>`;
     $('#agA').onclick = () => $('#agA').classList.toggle('on');
+    const saSync = () => { const all = $('#agSa [data-sapp="*"]'); $$('#agSa [data-sapp]').forEach((i) => { if (i.dataset.sapp !== '*') i.closest('label').style.opacity = all && all.checked ? '.45' : ''; }); };
+    $('#agSa').onchange = saSync; saSync();
+    $('#agSaAdd').onclick = () => { const n = $('#agSaN').value.trim(); if (!n) return; if (!$$('#agSa [data-sapp]').some((i) => i.dataset.sapp.toLowerCase() === n.toLowerCase())) $('#agSa').insertAdjacentHTML('beforeend', chk('sapp', n, esc(n), true, false, '')); else $$('#agSa [data-sapp]').forEach((i) => { if (i.dataset.sapp.toLowerCase() === n.toLowerCase()) i.checked = true; }); const all = $('#agSa [data-sapp="*"]'); if (all) all.checked = false; $('#agSaN').value = ''; saSync(); };
     $('#agPwEye') && ($('#agPwEye').onclick = () => { const i = $('#agPwNow'); i.type = i.type === 'password' ? 'text' : 'password'; });
     $('#agPwCp') && ($('#agPwCp').onclick = () => navigator.clipboard.writeText(a.password).then(() => toast('Password copiata'), () => toast('Copia non consentita', 1)));
     $$('#agR label').forEach((l) => (l.onclick = () => { $$('#agR label').forEach((x) => x.classList.toggle('on', x === l)); $('input', l).checked = true; }));
@@ -320,7 +336,8 @@ body.agent .foot{display:none}
       email: $('#agE').value.trim(), notes: $('#agN').value, active: $('#agA').classList.contains('on'), maxClients: +$('#agM').value || 0,
       canAgents: $('#agR input:checked') ? $('#agR input:checked').value === '1' : false,
       servers: $$('#agS [data-srv]').filter((i) => i.checked).map((i) => i.dataset.srv),
-      perms: { ...Object.fromEntries([...FL, ...FP].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"]`) || {}).checked])), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad) },
+      perms: { ...Object.fromEntries([...FL, ...FP].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"]`) || {}).checked])), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad),
+        storeApps: $('#agSa [data-sapp="*"]') && $('#agSa [data-sapp="*"]').checked ? ['*'] : $$('#agSa [data-sapp]').filter((i) => i.checked && i.dataset.sapp !== '*').map((i) => i.dataset.sapp) },
     });
     $('#agOk').onclick = async () => {
       const b = read(), pw = $('#agP').value;
@@ -374,6 +391,7 @@ body.agent .foot{display:none}
         <label class="lbl">Domande al giorno</label><input class="inp" type="number" id="cAiL" min="0" max="1000" placeholder="Predefinito" value="${(e.aiLimit ?? -1) >= 0 ? e.aiLimit : ''}">
         ${isNew ? '' : `<button class="btn sm" id="cAiX" style="margin-top:10px">+10 domande extra oggi</button>${e.aiExtra ? `<span class="mut" style="font-size:12px;margin-left:8px">${e.aiExtra} extra disponibili</span>` : ''}`}</div>` : ''}
       ${P.link && !isNew && !linked ? `<div class="ag-c"><h4>Collegare un altro dispositivo</h4><small>Sulla nuova TV il cliente sceglie «Ho già un abbonamento» e scrive il codice (vale 10 minuti)</small><button class="btn" id="cLink">🔗 Genera codice di collegamento</button><div id="cLinkOut" class="mono" style="font-size:22px;margin-top:10px"></div></div>` : ''}
+      ${P.players && !isNew && !linked && window.KXPlayers ? `<div class="ag-c" style="grid-column:1/-1" id="cOth"><h4>Altre app</h4><small>Manda le linee di questo cliente anche alle altre app</small>${KXPlayers.box(e)}</div>` : ''}
       ${adCat.length && e.app !== 'lite' ? `<div class="ag-c"><h4>Add-on</h4><small>Temi e skin che puoi assegnare</small><div class="ag-chk">${adCat.map((x) => chk('cad', x.id, esc(x.name), (e.addons || []).includes(x.id), false, x.price ? esc(x.price) : '')).join('')}</div></div>` : ''}`}
     </div>`;
     const sync = () => {
@@ -385,6 +403,7 @@ body.agent .foot{display:none}
       const code = $('#cCode') ? $('#cCode').value : '';
       $('#agB').innerHTML = body(); if ($('#cCode')) $('#cCode').value = code;
       $('#cApp') && ($('#cApp').onchange = () => { sync(); e.app = $('#cApp').value; appSet = true; draw(); });
+      $('#cOth') && KXPlayers.bind($('#cOth'), e, () => { const x = D.devices.find((y) => y.id === e.id); if (x) e.orbix = x.orbix; sync(); draw(); });
       $('#cAct') && ($('#cAct').onclick = () => { e.active = !e.active; $('#cAct').classList.toggle('on', e.active); });
       $$('[data-cm]').forEach((b) => (b.onclick = () => { $('#cExp').value = addMonths($('#cExp').value, +b.dataset.cm); }));
       $('#cAddPl') && ($('#cAddPl').onclick = () => { sync(); e.playlists.push({ serverId: (D.servers[0] || {}).id || '', username: '', password: '' }); draw(); });
@@ -431,7 +450,8 @@ body.agent .foot{display:none}
   /* ---------- demo: agenti di esempio e accesso come agente (utente "agente") ---------- */
   if (typeof DEMO !== 'undefined') {
     const t = Date.now();
-    const P0 = { create: true, renew: true, disable: true, kick: true, playlists: true, delete: false, clientPerms: false, vpn: false, link: true, account: true, ai: true, dash: true, online: true, errors: false, reports: true, contentReq: false, addonReq: true, messages: true, store: false, vod: false, activity: true, addons: ['tema-ghiaccio', 'tema-natale'], maxConn: 2 };
+    const P0 = { create: true, renew: true, disable: true, kick: true, playlists: true, delete: false, clientPerms: false, vpn: false, link: true, account: true, ai: true, dash: true, online: true, errors: false, reports: true, contentReq: false, addonReq: true, messages: true, store: false, storeApps: ['OrbixPlay', 'IBO Player'], storeAll: false, subClients: true, maint: false, vod: false, activity: true, addons: ['tema-ghiaccio', 'tema-natale'], maxConn: 2 };
+    DEMO.maintAg = { on: false, msg: '', allow: [] };
     DEMO.agents = [
       { id: 2, username: 'mario.rossi', password: 'Mario-2026!', email: 'mario@esempio.it', parentId: 0, maxClients: 50, canAgents: true, perms: P0, servers: ['s1', 's2'], active: true, notes: 'Zona Napoli', lastSeen: t - 40 * 60e3, createdAt: t - 40 * 864e5, totp: true },
       { id: 3, username: 'luca.tv', email: 'luca@esempio.it', parentId: 0, maxClients: 20, canAgents: false, perms: { ...P0, addons: [] }, servers: ['s1'], active: true, notes: '', lastSeen: t - 3 * 3600e3, createdAt: t - 22 * 864e5, totp: false },
@@ -449,13 +469,15 @@ body.agent .foot{display:none}
       if (p === '/admin/dns' && m === 'GET') return { saved: DEMO.srv, hosts: [], byDev: {} };
       if (p === '/admin/state') {
         const r = await origDemo(m, p, b);
-        if (!demoAgent) return { ...r, role: 'owner', agents: DEMO.agents.map(out) };
+        if (!demoAgent) return { ...r, role: 'owner', agents: DEMO.agents.map(out), storeAppNames: ['IBO Player', 'IboOne', 'OrbixPlay', 'Smarters Pro', 'TiviMate'], maintAg: DEMO.maintAg.on ? [2] : [] };
         const A = DEMO.agents[0], tree = [2, 4];
         const devs = r.devices.filter((d) => tree.includes(d.ownerId) || (d.parent && r.devices.some((x) => x.id === d.parent && tree.includes(x.ownerId))))
           .map((d) => ({ ...d, playlists: d.playlists.map((pl, i) => ({ id: pl.id, name: pl.name, type: 'xtream', serverId: i % 2 ? 's2' : 's1', serverName: i % 2 ? 'ATLX' : 'NKI', username: 'cliente' + d.id, password: 'xxxx' })) }));
         return { role: 'agent', user: A.username, me: { ...out(A), clientsUsed: out(A).clients }, devices: devs, agents: DEMO.agents.filter((x) => x.parentId === 2).map(out), servers: DEMO.srv.slice(0, 2).map(({ id, name }) => ({ id, name })),
-          addonCat: addonCatNow().filter((x) => A.perms.addons.includes(x.id) && x.mode === 'some'), settings: { brand: r.settings.brand, accent: r.settings.accent, downloaderCode: r.settings.downloaderCode || '', storeDownloaderCode: r.settings.storeDownloaderCode || '', apkUrl: r.settings.apkUrl || '' }, security: { totp: true }, activity: [], messages: [], counts: {} };
+          addonCat: addonCatNow().filter((x) => A.perms.addons.includes(x.id) && x.mode === 'some'), settings: { brand: r.settings.brand, accent: r.settings.accent, downloaderCode: r.settings.downloaderCode || '', storeDownloaderCode: r.settings.storeDownloaderCode || '', apkUrl: r.settings.apkUrl || '' }, security: { totp: true }, activity: [], messages: [], counts: {}, storeAppNames: ['IBO Player', 'OrbixPlay'], maint: A.perms.maint ? { ...DEMO.maintAg } : null, players: A.perms.players ? (() => { const c = DEMO.settings.playersCfg || { orbix: [{ name: 'Principale', host: 'http://dns.kairos-esempio.tv:8080' }], max: [] }, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: true, max: false, dns: { orbix: v(c.orbix), max: v(c.max) } }; })() : null };
       }
+      if (p === '/admin/agent-maint' && m === 'PUT') { DEMO.maintAg = { on: !!b.on, msg: b.msg || '', allow: b.allow || [] }; return { ...DEMO.maintAg }; }
+      if (/^\/admin\/agent-maint\/\d+$/.test(p) && m === 'DELETE') { DEMO.maintAg = { on: false, msg: '', allow: [] }; return { ok: true }; }
       if (p === '/admin/agents' && m === 'POST') {
         if (!b.username || !b.password || b.password.length < 10) throw new Error('Nome utente e password (almeno 10 caratteri)');
         const id = Math.max(...DEMO.agents.map((x) => x.id)) + 1; DEMO.agents.push({ id, username: b.username, email: b.email || '', parentId: demoAgent ? 2 : 0, maxClients: b.maxClients || 10, canAgents: !!b.canAgents, perms: b.perms, servers: b.servers || [], active: b.active !== false, notes: b.notes || '', lastSeen: 0, createdAt: Date.now(), totp: false });

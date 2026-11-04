@@ -113,20 +113,21 @@ const ENDED = { denied: 'Richiesta rifiutata', expired: 'Richiesta scaduta', use
 const VIA = { email: "dall'email", panel: 'dal pannello', code: 'con il codice', auto: 'automatica', tries: 'troppi codici errati' };
 
 /** approva o rifiuta una richiesta in attesa; false se non era più in attesa */
-async function decide(env, r, action, via, ip = '') {
+async function decide(env, r, action, via, ip = '', by = 0, who = '') {
+  const pre = by && who ? who + ': ' : '';
   const t = now();
   if (effStatus(r, t) !== 'pending') return false;
   if (action === 'approve') {
     const token = b64url(rand(24));
-    const u = await env.DB.prepare("UPDATE store_requests SET status = 'approved', token = ?, decided = ?, via = ? WHERE id = ? AND status = 'pending'").bind(token, t, via, r.id).run();
+    const u = await env.DB.prepare("UPDATE store_requests SET status = 'approved', token = ?, decided = ?, via = ?, by_admin = ? WHERE id = ? AND status = 'pending'").bind(token, t, via, by, r.id).run();
     if (!changed(u)) return false;
     Object.assign(r, { status: 'approved', token, decided: t, via });
-    await log(env, 'on', `Store: download autorizzato ${VIA[via] || ''} · ${r.app} su ${r.device || 'dispositivo'}${r.note ? ' (' + r.note + ')' : ''}`, ip);
+    await log(env, 'on', `${pre}Store: download autorizzato ${VIA[via] || ''} · ${r.app} su ${r.device || 'dispositivo'}${r.note ? ' (' + r.note + ')' : ''}`, ip);
   } else {
-    const u = await env.DB.prepare("UPDATE store_requests SET status = 'denied', token = '', decided = ?, via = ? WHERE id = ? AND status = 'pending'").bind(t, via, r.id).run();
+    const u = await env.DB.prepare("UPDATE store_requests SET status = 'denied', token = '', decided = ?, via = ?, by_admin = ? WHERE id = ? AND status = 'pending'").bind(t, via, by, r.id).run();
     if (!changed(u)) return false;
     Object.assign(r, { status: 'denied', decided: t, via });
-    await log(env, 'off', `Store: download rifiutato ${VIA[via] || ''} · ${r.app} su ${r.device || 'dispositivo'}${r.note ? ' (' + r.note + ')' : ''}`, ip);
+    await log(env, 'off', `${pre}Store: download rifiutato ${VIA[via] || ''} · ${r.app} su ${r.device || 'dispositivo'}${r.note ? ' (' + r.note + ')' : ''}`, ip);
   }
   return true;
 }
@@ -394,16 +395,16 @@ async function linkDecide(req, env, url, ip) {
 /* ====================================================================== */
 /* API del pannello (sessione e CSRF già verificati da admin())           */
 /* ====================================================================== */
-export async function storeAdmin(req, env, path, who, ip) {
+export async function storeAdmin(req, env, path, who, ip, by = 0) {
   const m = req.method;
   try {
     if (path === '/store' && m === 'GET') {
       const t = now();
       const settings = await getStoreSettings(env);
-      const rows = ((await env.DB.prepare('SELECT id, app, app_url, did, device, note, country, code, status, via, tries, uses, created, decided FROM store_requests WHERE created > ? ORDER BY created DESC LIMIT 300').bind(t - KEEP).all()).results) || [];
+      const rows = ((await env.DB.prepare('SELECT id, app, app_url, did, device, note, country, code, status, via, tries, uses, created, decided, by_admin FROM store_requests WHERE created > ? ORDER BY created DESC LIMIT 300').bind(t - KEEP).all()).results) || [];
       const requests = rows.map((r) => {
         const st = effStatus(r, t);
-        return { id: r.id, app: r.app, appUrl: r.app_url, did: r.did, device: r.device, note: r.note, country: r.country, code: st === 'pending' ? r.code : '', status: st, via: r.via, tries: r.tries, uses: r.uses, created: r.created, decided: r.decided };
+        return { id: r.id, app: r.app, appUrl: r.app_url, did: r.did, device: r.device, note: r.note, country: r.country, code: st === 'pending' ? r.code : '', status: st, via: r.via, tries: r.tries, uses: r.uses, created: r.created, decided: r.decided, by: +r.by_admin || 0 };
       });
       requests.sort((a, b) => (+(b.status === 'pending') - +(a.status === 'pending')) || (b.created - a.created));
       // vista per dispositivo: le richieste raggruppate per installazione dello store (did)
@@ -467,7 +468,7 @@ export async function storeAdmin(req, env, path, who, ip) {
         if (!(await revoke(env, r, who, ip))) throw new StoreErr(409, 'Questa richiesta non si può più revocare');
         return json({ ok: true, status: 'revoked' });
       }
-      if (!(await decide(env, r, dm[2], 'panel', ip))) throw new StoreErr(409, 'La richiesta non è più in attesa');
+      if (!(await decide(env, r, dm[2], 'panel', ip, by, who))) throw new StoreErr(409, 'La richiesta non è più in attesa');
       return json({ ok: true, status: effStatus(r) });
     }
     if (path === '/store' && m === 'DELETE') {
