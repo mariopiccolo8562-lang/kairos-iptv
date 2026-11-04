@@ -56,3 +56,5 @@ main .card > .hd h3{position:relative}
 `;
   document.head.appendChild(css);
 })();
+/* Online ora: i riquadri seguono i colori dei pallini (blu collegati, verde guardano, giallo nei menu) */
+(() => { const st = document.createElement('style'); st.textContent = '#v-live .kc-k>.kpi:nth-child(1){--c:#4f8cff}#v-live .kc-k>.kpi:nth-child(2){--c:#22c55e}#v-live .kc-k>.kpi:nth-child(3){--c:#facc15}#v-live .kc-k>.kpi:nth-child(4){--c:#a78bfa}'; document.head.appendChild(st); })();

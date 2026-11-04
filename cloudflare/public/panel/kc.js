@@ -122,16 +122,16 @@
 .kc-ltabs button span{min-width:26px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.25);font-size:13px;text-align:center}
 .kc-ltabs button i{width:10px;height:10px;border-radius:50%;background:var(--c)}
 .kc-ltabs .on-t{--c:#34d399;--c2:color-mix(in srgb,#34d399 45%,transparent)}.kc-ltabs .on-t i{box-shadow:0 0 0 4px color-mix(in srgb,#34d399 25%,transparent);animation:kcPulse 1.6s infinite}
-.kc-ltabs .off-t{--c:#94a3b8;--c2:color-mix(in srgb,#94a3b8 40%,transparent)}
+.kc-ltabs .off-t{--c:#ef4444;--c2:color-mix(in srgb,#ef4444 45%,transparent)}
 .kc-ltabs button.on{background:var(--c);border-color:transparent;color:#0b0d12;box-shadow:0 10px 26px -14px var(--c)}.kc-ltabs button.on span{background:rgba(255,255,255,.35)}.kc-ltabs button.on i{background:#0b0d12}
 .kc-ltabs .inp{flex:1;min-width:180px;margin:0}
 @keyframes kcPulse{50%{box-shadow:0 0 0 7px transparent}}
 #kLiveList>.kc-row:not(.kc-off){border-left:4px solid #34d399}
-.kc-row.kc-off{border-left:4px solid #64748b;background:rgba(148,163,184,.04);opacity:.92}
-.kc-offt{color:#cbd5e1}.kc-dot.off{background:#64748b!important;box-shadow:none!important}
+.kc-row.kc-off{border-left:4px solid #ef4444;background:rgba(148,163,184,.04);opacity:.92}
+.kc-offt{color:#cbd5e1}.kc-dot.off{background:#ef4444!important;box-shadow:0 0 8px #ef4444!important}
 .kc-row b{display:block;font-size:14px}.kc-row small{display:block;color:var(--mut);font-size:12px;line-height:1.45;word-break:break-word}
 .kc-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:1px;background:var(--mut)}
-.kc-dot.live{background:#ff3b3b;box-shadow:0 0 10px #ff3b3b;animation:kcb 1.4s infinite}.kc-dot.movie,.kc-dot.series{background:var(--a2);box-shadow:0 0 10px var(--a2)}.kc-dot.idle{background:var(--ok)}
+.kc-dot.live{background:#22c55e;box-shadow:0 0 10px #22c55e;animation:kcb 1.4s infinite}.kc-dot.movie,.kc-dot.series{background:var(--a2);box-shadow:0 0 10px var(--a2)}.kc-dot.idle{background:#facc15;box-shadow:0 0 8px #facc15}
 @keyframes kcb{50%{opacity:.35}}
 .kc-row>div{min-width:0}
 .kc-row b.kc-codec,.kc-codec{display:inline!important;font-size:inherit!important;font-weight:700;color:#cfd3ff}
@@ -424,7 +424,7 @@
     if (!KC.errs) { try { KC.errs = await kapi('GET', '/admin/app-errors?hours=24'); errBadge(); } catch {} }
     try { KC.live = await kapi('GET', '/admin/presence'); } catch (e) { V.innerHTML = `<div class="card glass"><p class="mut">${esc(e.message)}</p></div>`; return; }
     const P = KC.live, c = P.counts;
-    V.innerHTML = `<div class="kc-k">${[['Online ora', c.online, 'app aperte negli ultimi 3 minuti', 'var(--ok)'], ['Stanno guardando', c.watching, 'canali, film e serie', 'var(--bad)'], ['Nei menu', c.idle, 'app aperta senza video', 'var(--a2)'], ['Dispositivi totali', c.total, 'registrati nel pannello', 'var(--a1)']].map(([l, v, s, col]) => `<div class="kpi glass"><div class="halo" style="background:${col}"></div><div class="lb"><i style="background:${col};box-shadow:0 0 10px ${col}"></i>${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('')}</div>
+    V.innerHTML = `<div class="kc-k">${[['Online ora', c.online, 'app aperte negli ultimi 3 minuti', '#4f8cff'], ['Stanno guardando', c.watching, 'canali, film e serie', '#22c55e'], ['Nei menu', c.idle, 'app aperta senza video', '#facc15'], ['Dispositivi totali', c.total, 'registrati nel pannello', 'var(--a1)']].map(([l, v, s, col]) => `<div class="kpi glass"><div class="halo" style="background:${col}"></div><div class="lb"><i style="background:${col};box-shadow:0 0 10px ${col}"></i>${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('')}</div>
       <div class="g2b" style="grid-template-columns:minmax(0,2.4fr) minmax(260px,1fr)">
         <div class="card glass"><div class="hd"><h3>Utenti<small>Si aggiorna da solo ogni 15 secondi · dati inviati dalle app 1.8 o successive</small></h3><button class="btn sm" id="kLiveR">Aggiorna</button></div>
           <div class="kc-ltabs"><button class="on-t ${KC.liveTab !== 'off' ? 'on' : ''}" data-ltab="on"><i></i>Collegati ora<span>${P.online.length}</span></button><button class="off-t ${KC.liveTab === 'off' ? 'on' : ''}" data-ltab="off"><i></i>Offline<em>visti nelle ultime 24 ore</em><span>${P.recent.length}</span></button>
