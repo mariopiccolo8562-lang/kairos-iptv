@@ -5,7 +5,7 @@
   const V = $('#v-store'); if (!V) return;
 
   const ST = { pending: ['In attesa', 'pending'], approved: ['Autorizzata', 'active'], used: ['Scaricata', 'active'], denied: ['Rifiutata', 'disabled'], expired: ['Scaduta', 'expired'], revoked: ['Revocata', 'disabled'] };
-  const VIA = { email: "dall'email", panel: 'dal pannello', code: 'con il codice', auto: 'approvazione spenta', tries: 'troppi codici errati' };
+  const VIA = { email: "dall'email", panel: 'dal pannello', code: 'con il codice', auto: 'approvazione spenta', tries: 'troppi codici errati', telegram: 'da Telegram', push: 'dalla notifica' };
   const IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v11M7 9l5 5 5-5"/><rect x="4" y="17" width="16" height="4" rx="1.5"/></svg>';
   const S = { data: null, seen: null, busy: false };
 
@@ -38,6 +38,11 @@
 .sd-ag .nm{flex:1;min-width:120px}.sd-ag .nm b{display:block;font-size:14px}.sd-ag .nm small{display:block;color:var(--mut);font-size:12px}
 .sd-ag .inp{flex:1.4;min-width:170px;padding:10px 12px}
 .sd-ag .tog{margin:0;padding:8px 12px;flex:none}.sd-ag .tog b{font-size:13px}
+.nf-row{padding:14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.02);margin-bottom:12px}
+.nf-row h4{margin:0 0 4px;font-size:15px;display:flex;align-items:center;gap:8px}
+.nf-row p{margin:0 0 10px;color:var(--mut);font-size:13px;line-height:1.45}.nf-row p b{color:var(--txt)}
+.nf-btns{display:flex;gap:8px;flex-wrap:wrap}
+.nf-ok{color:var(--ok,#3dffb0)}.nf-warn{color:var(--warn)}
 .sd-ag.off .nm b{color:var(--mut)}
 @media (max-width:820px){.sd-act{width:100%}.sd-act .btn{flex:1}.sd-dev .tog{width:100%;justify-content:space-between}}`;
   document.head.appendChild(css);
@@ -62,6 +67,10 @@
       <input class="inp" id="sdMail" type="email" autocomplete="email" placeholder="la stessa del tuo account Resend">
       <div class="sd-note" id="sdMailSt"></div>
       <button class="btn pri" id="sdSave" style="margin-top:14px">Salva</button>
+    </div>
+    <div class="card glass" style="margin-top:18px" id="nfCard">
+      <div class="hd"><h3>Avvisi su Telegram e sul telefono<small>Gratis: ricevi ogni richiesta e decidi con un tocco</small></h3></div>
+      <div id="nfBody"><div class="emptyc">Caricamento…</div></div>
     </div>
     <div class="card glass" style="margin-top:18px" id="sdSmsCard">
       <div class="hd"><h3>Codici via SMS<small>Il codice di ogni richiesta arriva anche per SMS a te e agli agenti che scegli tu</small></h3></div>
@@ -303,10 +312,114 @@
     refresh();
   };
 
+  /* ---------------- avvisi: Telegram e notifiche del pannello ---------------- */
+  const NF = { d: null, poll: 0 };
+  const nApi = (method, path, body) => (D.demo ? nDemo(method, path, body) : api(method, '/admin/notify' + path, body));
+  const ND = { tg: { ready: true, bot: 'KairosStoreBot', hooked: true, allowed: true, linked: false, name: '' }, push: { allowed: true, key: 'BDemo', devices: 0 },
+    agents: [{ id: 2, username: 'luca', store: true, active: true, tg: true, push: false, tgLinked: true, pushDevices: 0 }, { id: 3, username: 'sara', store: false, active: true, tg: false, push: false, tgLinked: false, pushDevices: 0 }] };
+  async function nDemo(method, path, body) {
+    await new Promise((r) => setTimeout(r, 150));
+    if (path === '' ) return JSON.parse(JSON.stringify(ND));
+    if (path === '/tg/link') { ND.tg.linked = true; ND.tg.name = 'Mario @mario'; return { url: 'https://t.me/KairosStoreBot?start=demo', bot: 'KairosStoreBot' }; }
+    if (path === '/tg/unlink') { ND.tg.linked = false; return { ok: true }; }
+    if (path === '/consent') { ND.agents.forEach((a) => { a.tg = (body.tg || []).includes(a.id); a.push = (body.push || []).includes(a.id); }); return { ok: true }; }
+    return { ok: true };
+  }
+  const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  const keyBytes = (k) => { const s = atob(k.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((k.length + 3) % 4)); return Uint8Array.from(s, (c) => c.charCodeAt(0)); };
+  async function mySub() {
+    if (!pushOk()) return null;
+    const reg = await navigator.serviceWorker.getRegistration('/panel/');
+    return reg ? reg.pushManager.getSubscription() : null;
+  }
+  async function renderNf() {
+    const box = $('#nfBody'); if (!box) return;
+    let d; try { d = await nApi('GET', ''); } catch (e) { box.innerHTML = `<div class="sd-note">${esc(e.message)}</div>`; return; }
+    NF.d = d;
+    const owner = D.role !== 'agent';
+    let sub = null; try { sub = await mySub(); } catch {}
+    const here = !!sub && Notification.permission === 'granted';
+    const tg = d.tg || {}, pu = d.push || {};
+    let tgHtml;
+    if (!tg.allowed) tgHtml = '<p>Il titolare non ti ha ancora consentito gli avvisi su Telegram.</p>';
+    else if (!tg.ready) tgHtml = owner ? '<p class="nf-warn">⚠️ Manca il segreto <b>TELEGRAM_BOT_TOKEN</b> su GitHub: crea il bot con @BotFather e segui la guida nel README (sezione 7).</p>' : '<p>Telegram non è ancora attivo: chiedi al titolare.</p>';
+    else if (tg.linked) tgHtml = `<p class="nf-ok">✅ Collegato${tg.name ? ': <b>' + esc(tg.name) + '</b>' : ''}. Ogni richiesta arriva con i pulsanti <b>Autorizza</b> e <b>Rifiuta</b>.</p><div class="nf-btns"><button class="btn sm" data-nf="tgtest">Messaggio di prova</button><button class="btn sm danger" data-nf="tgunlink">Scollega</button></div>`;
+    else tgHtml = `<p>Premi <b>Collega Telegram</b>: si apre il bot${tg.bot ? ' <b>@' + esc(tg.bot) + '</b>' : ''}, premi <b>Avvia</b> e il collegamento è fatto.</p><div class="nf-btns"><button class="btn sm pri" data-nf="tglink">Collega Telegram</button>${owner && tg.ready && !tg.hooked ? '<button class="btn sm" data-nf="tgsetup">Ricollega il bot</button>' : ''}</div>`;
+    let puHtml;
+    if (!pu.allowed) puHtml = '<p>Il titolare non ti ha ancora consentito le notifiche.</p>';
+    else if (!pushOk()) puHtml = isIOS && !standalone() ? '<p>Su iPhone e iPad: apri il pannello con <b>Safari</b>, premi <b>Condividi → Aggiungi a schermata Home</b>, poi apri <b>Kairos</b> dalla Home e torna qui (serve iOS 16.4 o successivo).</p>' : '<p>Questo browser non supporta le notifiche. Usa Chrome, Edge, Firefox o Safari aggiornati.</p>';
+    else if (Notification.permission === 'denied') puHtml = '<p class="nf-warn">⚠️ Hai bloccato le notifiche per questo sito: riattivale dalle impostazioni del browser (icona del lucchetto → Notifiche → Consenti), poi ricarica.</p>';
+    else if (here) puHtml = `<p class="nf-ok">✅ Attive su questo dispositivo${pu.devices > 1 ? ` (e su altri ${pu.devices - 1})` : ''}. ${isIOS ? 'Tocca la notifica per aprire la richiesta.' : 'Puoi autorizzare direttamente dalla notifica.'}</p><div class="nf-btns"><button class="btn sm" data-nf="pushtest">Notifica di prova</button><button class="btn sm danger" data-nf="pushoff">Disattiva su questo dispositivo</button></div>`;
+    else puHtml = `<p>Ricevi le richieste come notifiche, anche a pannello chiuso.${pu.devices ? ` Già attive su ${pu.devices} ${pu.devices === 1 ? 'altro dispositivo' : 'altri dispositivi'}.` : ''}${isIOS ? '' : ' Sul telefono conviene prima installare il pannello: menu del browser → <b>Installa app</b> o <b>Aggiungi a schermata Home</b>.'}</p><div class="nf-btns"><button class="btn sm pri" data-nf="pushon">Attiva notifiche su questo dispositivo</button></div>`;
+    let agHtml = '';
+    if (owner) {
+      const list = d.agents || [];
+      agHtml = `<div class="sd-sub">Agenti che possono ricevere gli avvisi</div>${list.length ? list.map((a) => {
+        const why = !a.active ? 'account disattivato' : !a.store ? 'senza il permesso «Download store»: non riceve' : [a.tg ? (a.tgLinked ? 'Telegram collegato' : 'Telegram da collegare') : '', a.push ? (a.pushDevices ? a.pushDevices + ' dispositivi con notifiche' : 'notifiche da attivare') : ''].filter(Boolean).join(' · ') || 'nessun avviso';
+        return `<div class="sd-ag${a.store && a.active ? '' : ' off'}" data-nfa="${+a.id}"><div class="nm"><b>${esc(a.username)}</b><small>${esc(why)}</small></div>
+          <div class="tog${a.tg ? ' on' : ''}" data-nfk="tg" role="switch" tabindex="0"><div><b>Telegram</b></div><i></i></div>
+          <div class="tog${a.push ? ' on' : ''}" data-nfk="push" role="switch" tabindex="0"><div><b>Notifiche</b></div><i></i></div></div>`;
+      }).join('') : '<div class="emptyc">Nessun agente</div>'}${list.length ? '<button class="btn sm pri" data-nf="consent" style="margin-top:10px">Salva consensi</button><div class="sd-note">L\'agente collega poi il suo Telegram o attiva le notifiche dal suo pannello. Riceve solo le richieste delle app che gestisce. Togliendo il consenso viene scollegato subito.</div>' : ''}`;
+    }
+    box.innerHTML = `<div class="nf-row"><h4>✈️ Telegram</h4>${tgHtml}</div><div class="nf-row"><h4>🔔 Notifiche del pannello</h4>${puHtml}</div>${agHtml}`;
+  }
+  async function pushOn() {
+    const d = NF.d; if (!d || !d.push.key) throw new Error('Notifiche non disponibili');
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') throw new Error('Permesso negato: consenti le notifiche per questo sito');
+    if (D.demo) return;
+    const reg = await navigator.serviceWorker.register('/panel/sw.js', { scope: '/panel/' });
+    await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    const key = keyBytes(d.push.key);
+    if (sub) { const k = sub.options && sub.options.applicationServerKey ? new Uint8Array(sub.options.applicationServerKey) : null; if (!k || k.length !== key.length || k.some((x, i) => x !== key[i])) { await sub.unsubscribe(); sub = null; } }
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+    await nApi('POST', '/push', { sub: sub.toJSON(), ua: navigator.userAgent.slice(0, 120) });
+  }
+  async function pushOff() {
+    const sub = await mySub();
+    if (sub) { const endpoint = sub.endpoint; await sub.unsubscribe().catch(() => {}); await nApi('DELETE', '/push', { endpoint }); }
+  }
+  $('#nfBody').addEventListener('click', async (e) => {
+    const t = e.target.closest('[data-nfk]'); if (t) { t.classList.toggle('on'); return; }
+    const b = e.target.closest('[data-nf]'); if (!b) return;
+    const act = b.dataset.nf; b.disabled = true;
+    try {
+      if (act === 'tglink') {
+        const w = D.demo ? null : window.open('', '_blank');
+        const r = await nApi('POST', '/tg/link');
+        if (w) w.location = r.url; else if (!D.demo) location.href = r.url;
+        toast('Si apre Telegram: premi Avvia nel bot');
+        clearInterval(NF.poll); let k = 0;
+        NF.poll = setInterval(async () => { k++; try { const d = await nApi('GET', ''); if (d.tg && d.tg.linked) { clearInterval(NF.poll); toast('Telegram collegato ✓'); renderNf(); } } catch {} if (k > 60) clearInterval(NF.poll); }, 3000);
+      } else if (act === 'tgunlink') { await nApi('POST', '/tg/unlink'); toast('Telegram scollegato'); }
+      else if (act === 'tgtest') { await nApi('POST', '/tg/test'); toast('Messaggio di prova inviato su Telegram'); }
+      else if (act === 'tgsetup') { const r = await nApi('POST', '/tg/setup'); toast('Bot @' + r.bot + ' collegato al pannello'); }
+      else if (act === 'pushon') { await pushOn(); toast('Notifiche attive su questo dispositivo'); }
+      else if (act === 'pushoff') { await pushOff(); toast('Notifiche disattivate su questo dispositivo'); }
+      else if (act === 'pushtest') { await nApi('POST', '/push/test'); toast('Notifica di prova inviata: arriva tra pochi secondi'); }
+      else if (act === 'consent') {
+        const rows = $$('#nfBody [data-nfa]');
+        const pick = (k) => rows.filter((r) => r.querySelector(`[data-nfk="${k}"]`).classList.contains('on')).map((r) => +r.dataset.nfa);
+        await nApi('PUT', '/consent', { tg: pick('tg'), push: pick('push') }); toast('Consensi salvati');
+      }
+    } catch (err) { toast(err.message, 1); } finally { b.disabled = false; }
+    if (act !== 'pushtest' && act !== 'tgtest') renderNf();
+  });
+  $('#nfBody').addEventListener('keydown', (e) => { const t = e.target.closest && e.target.closest('[data-nfk]'); if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); t.classList.toggle('on'); } });
+  // dalla notifica: apre il pannello sulla pagina Download store
+  const goStore = () => { const n = document.querySelector('.nav[data-v="store"]'); if (n) n.click(); };
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.kairos === 'store') goStore(); });
+
   /* aggiornamento: all'apertura della pagina e ogni 20 secondi mentre il pannello è aperto */
   const navB = document.querySelector('.nav[data-v="store"]');
-  if (navB) navB.addEventListener('click', () => refresh(true));
+  if (navB) navB.addEventListener('click', () => { refresh(true); renderNf(); });
   const appEl = $('#app');
-  if (appEl) new MutationObserver(() => { if (appEl.classList.contains('on')) refresh(true); else { S.data = null; S.seen = null; badge(); } }).observe(appEl, { attributes: true, attributeFilter: ['class'] });
+  if (appEl) new MutationObserver(() => {
+    if (appEl.classList.contains('on')) { refresh(true); if (location.hash === '#store') { history.replaceState(null, '', location.pathname); setTimeout(goStore, 300); } }
+    else { S.data = null; S.seen = null; badge(); }
+  }).observe(appEl, { attributes: true, attributeFilter: ['class'] });
   setInterval(() => { if (appEl && appEl.classList.contains('on') && !document.hidden) refresh(); }, 20000);
 })();

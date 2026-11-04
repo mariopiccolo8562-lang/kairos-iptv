@@ -132,7 +132,15 @@ async function findOwn(env, id, did) {
 }
 
 const ENDED = { denied: 'Richiesta rifiutata', expired: 'Richiesta scaduta', used: 'Autorizzazione già usata', revoked: 'Autorizzazione revocata dal venditore' };
-const VIA = { email: "dall'email", panel: 'dal pannello', code: 'con il codice', auto: 'automatica', tries: 'troppi codici errati' };
+const VIA = { email: "dall'email", panel: 'dal pannello', code: 'con il codice', auto: 'automatica', tries: 'troppi codici errati', telegram: 'da Telegram', push: 'dalla notifica' };
+
+/* avvisi esterni (Telegram, notifiche): worker.js li collega con storeHooks() */
+let HOOKS = {};
+export function storeHooks(h) { HOOKS = h || {}; }
+async function hookDecided(env, r, st, via, who) {
+  if (typeof HOOKS.decided !== 'function') return;
+  try { await HOOKS.decided(env, r, st, via, who); } catch {}
+}
 
 /** approva o rifiuta una richiesta in attesa; false se non era più in attesa */
 async function decide(env, r, action, via, ip = '', by = 0, who = '') {
@@ -145,11 +153,13 @@ async function decide(env, r, action, via, ip = '', by = 0, who = '') {
     if (!changed(u)) return false;
     Object.assign(r, { status: 'approved', token, decided: t, via });
     await log(env, 'on', `${pre}Store: download autorizzato ${VIA[via] || ''} · ${r.app} su ${r.device || 'dispositivo'}${r.note ? ' (' + r.note + ')' : ''}`, ip);
+    await hookDecided(env, r, 'approved', via, by ? who.replace(/^Agente /, '') : (who || (via === 'code' ? 'cliente' : '')));
   } else {
     const u = await env.DB.prepare("UPDATE store_requests SET status = 'denied', token = '', decided = ?, via = ?, by_admin = ? WHERE id = ? AND status = 'pending'").bind(t, via, by, r.id).run();
     if (!changed(u)) return false;
     Object.assign(r, { status: 'denied', decided: t, via });
     await log(env, 'off', `${pre}Store: download rifiutato ${VIA[via] || ''} · ${r.app} su ${r.device || 'dispositivo'}${r.note ? ' (' + r.note + ')' : ''}`, ip);
+    await hookDecided(env, r, 'denied', via, by ? who.replace(/^Agente /, '') : who);
   }
   return true;
 }
@@ -161,6 +171,7 @@ async function revoke(env, r, who, ip = '') {
   const u = await env.DB.prepare("UPDATE store_requests SET status = 'revoked', token = '', decided = ? WHERE id = ? AND status IN ('pending', 'approved') AND uses = 0").bind(now(), r.id).run();
   if (!changed(u)) return false;
   Object.assign(r, { status: 'revoked', token: '', decided: now() });
+  await hookDecided(env, r, 'revoked', 'panel', String(who || '').replace(/^Agente /, ''));
   await log(env, 'off', `${who}: Store — ${st === 'approved' ? 'autorizzazione revocata' : 'richiesta rifiutata'} · ${r.app} su ${r.device || 'dispositivo'}${r.note ? ' (' + r.note + ')' : ''}`, ip);
   return true;
 }
@@ -344,6 +355,7 @@ async function create(req, env, ctx, url, ip, opts) {
   bg.push(log(env, 'new', `Store: richiesta download ${app} da ${device || 'dispositivo'}${note ? ' (' + note + ')' : ''}${country ? ' · ' + country : ''}`, ip));
   bg.push(notify(env, url.origin, r, s, ip));
   bg.push(notifySms(env, url.origin, r, s, ip, opts).catch(() => {}));
+  if (typeof HOOKS.created === 'function') bg.push(Promise.resolve().then(() => HOOKS.created(env, r, url.origin, ip)).catch(() => {}));
   ctx.waitUntil(Promise.all(bg));
   return json({ id: r.id, status: 'pending' });
 }
@@ -575,6 +587,16 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
     if (e instanceof StoreErr) return json({ error: e.message }, e.status);
     throw e;
   }
+}
+
+/** decisione da Telegram o dalle notifiche: { ok, status, error } */
+export async function storeDecide(env, id, action, via, ip, by, who) {
+  const r = await env.DB.prepare('SELECT * FROM store_requests WHERE id = ?').bind(String(id)).first();
+  if (!r) return { ok: false, status: 'unknown', error: 'Richiesta non trovata' };
+  const st0 = effStatus(r);
+  if (st0 !== 'pending') return { ok: false, status: st0, error: (ENDED[st0] || 'Richiesta non più in attesa') };
+  const ok = await decide(env, r, action === 'approve' ? 'approve' : 'deny', via, ip, by, who);
+  return ok ? { ok: true, status: effStatus(r) } : { ok: false, status: effStatus(r), error: 'La richiesta non è più in attesa' };
 }
 
 export const _storeInternal = { effStatus, linkSig, sixDigits, phoneNorm, smsNorm, smsSafe, TOKEN_TTL, REQ_TTL, MAX_TRIES, MAX_USES };

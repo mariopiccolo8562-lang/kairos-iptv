@@ -9,7 +9,8 @@ import { ADDON_ASSETS } from './addon-assets.js';
  *  Segreti:  ENC_KEY (base64, 32 byte), ADMIN_BOOTSTRAP_PASS, TURNSTILE_SECRET (opzionale)
  *  Variabili: ACCESS_TEAM_DOMAIN, ACCESS_AUD, TURNSTILE_SITEKEY (opzionali)
  */
-import { storeApi, storeAdmin, storeHeaders } from './store.js'; // autorizzazione download dello Store (/api/store/*)
+import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide } from './store.js'; // autorizzazione download dello Store (/api/store/*)
+import { tgHook, notifyNew, notifyDecided, notifyAdmin } from './notify.js'; // avvisi su Telegram e notifiche del pannello
 
 const SESSION_TTL = 30 * 86400; // secondi: l'accesso resta valido 30 giorni dall'ultimo uso (si rinnova da solo)
 const COOKIE = '__Host-kx';
@@ -1860,6 +1861,7 @@ async function route(req, env, ctx) {
   }
 
   /* ---------- autorizzazione dei download dello Store (pubblica, vedi store.js) ---------- */
+  if (path === '/api/tg/hook' && req.method === 'POST') return tgHook(req, env, ctx, ip, notifyH(env)); // webhook del bot Telegram
   if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { smsAgents: (app, ids) => storeSmsAgents(env, app, ids) });
 
   /* ---------- informativa privacy e condizioni (pubblica, la apre anche l'app) ---------- */
@@ -2114,6 +2116,17 @@ async function storeSmsAgents(env, app, ids, all) {
   }
   return out;
 }
+/** collegamenti per gli avvisi (Telegram, notifiche): chi è titolare, quali agenti possono ricevere, come si decide */
+const notifyH = (env) => ({
+  owners: async () => ((await env.DB.prepare("SELECT id, username FROM admins WHERE role <> 'agent' AND active <> 0").all()).results) || [],
+  eligible: (app, ids) => storeSmsAgents(env, app, ids),
+  agents: () => storeSmsAgentList(env),
+  decide: storeDecide,
+});
+storeHooks({
+  created: (env, r, origin, ip) => notifyNew(env, r, origin, ip, notifyH(env)),
+  decided: (env, r, st, via, who) => notifyDecided(env, r, st, via, who),
+});
 /** elenco degli agenti per la scheda SMS del pannello del titolare */
 async function storeSmsAgentList(env) {
   const all = await agentsAll(env), ok = new Set(await storeSmsAgents(env, null, all.map((a) => a.id), all));
@@ -2338,6 +2351,8 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     if (!r || !(await scope()).has(r.target)) throw new HttpErr(404, 'Messaggio non trovato');
     return adminRoutes(req, env, url, path, who, ip, ctx, aSes);
   }
+  // Avvisi su Telegram e notifiche del pannello: solo se il titolare li consente a questo agente
+  if (path === '/notify' || path.startsWith('/notify/')) return notifyAdmin(req, env, path, { id: A.id, username: A.username, agent: true }, ip, url.origin, notifyH(env));
   // Download store: vedere e decidere le richieste (le impostazioni restano tue)
   // (solo le app che gli concedi; nello storico solo i download decisi da lui o dai suoi sotto-agenti, salvo «vedere tutto»)
   if (path === '/store' && m === 'GET') {
@@ -2581,6 +2596,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     return json(j);
   }
   if (path === '/store' || path.startsWith('/store/')) return storeAdmin(req, env, path, who, ip, 0, { smsAgentList: () => storeSmsAgentList(env) }); // Download store
+  if ((path === '/notify' || path.startsWith('/notify/')) && ses && !ses.agent) return notifyAdmin(req, env, path, { id: ses.admin_id, username: ses.username, agent: false }, ip, url.origin, notifyH(env)); // avvisi Telegram / notifiche
 
   if (path === '/logout' && m === 'POST') {
     await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(ses.id).run();

@@ -133,6 +133,19 @@ Salva (Commit): lo store si aggiorna da solo in un minuto. Con `"server": ""` op
 - Il link **Autorizza** dell'email apre una pagina di conferma con il pulsante: così i programmi antivirus della posta che "aprono" i link da soli non possono autorizzare nulla al posto tuo.
 - I link degli APK e i codici Downloader in `apps.json` restano pubblici su GitHub: chi li copia può scaricare fuori dallo store. L'autorizzazione controlla i download **dallo store**; la tua app Kairos resta comunque protetta dall'attivazione nel pannello.
 
+**Avvisi gratis su Telegram e sul telefono** — ogni richiesta arriva con i pulsanti **Autorizza** e **Rifiuta**; quando qualcuno decide, il messaggio si aggiorna per tutti con l'esito e il nome di chi ha deciso.
+
+*Telegram*
+1. In Telegram apri **@BotFather** → `/newbot` → scegli un nome (es. *Kairos Store*) e un nome utente che finisce con `bot`. Copia il **token** che ti dà (tipo `123456789:AA…`).
+2. Su GitHub, repository **kairos-iptv** → *Settings → Secrets and variables → Actions* → **New repository secret**: `TELEGRAM_BOT_TOKEN` = il token. Poi **Actions → "Pannello Cloudflare" → Run workflow**.
+3. Pannello → **Download store** → **Avvisi su Telegram e sul telefono** → **Collega Telegram**: si apre il bot, premi **Avvia**. Fatto (il bot si collega al pannello da solo la prima volta).
+4. Per gli agenti: nella stessa scheda accendi **Telegram** accanto al loro nome e premi **Salva consensi**; ognuno poi preme **Collega Telegram** dal proprio pannello. Ricevono solo le richieste delle app che gestiscono (permesso *Download store*). Scrivendo `/stop` al bot la chat si scollega.
+
+*Notifiche del pannello (web push)* — niente da configurare su GitHub.
+- **Android / PC**: apri il pannello con Chrome, Edge o Firefox (sul telefono conviene *menu → Installa app*), poi **Attiva notifiche su questo dispositivo** e consenti. Dalla notifica puoi autorizzare o rifiutare direttamente.
+- **iPhone / iPad** (iOS 16.4 o successivo): apri il pannello con Safari → **Condividi → Aggiungi a schermata Home**, apri **Kairos** dalla Home e attiva le notifiche da lì. Tocca la notifica per aprire la richiesta.
+- La notifica arriva senza dati: il testo lo legge il telefono dal pannello con il tuo accesso, quindi su un telefono scollegato non compare niente. Per gli agenti accendi **Notifiche** accanto al loro nome.
+
 **Codici via SMS (facoltativo)** — il codice di ogni richiesta arriva anche per SMS a te e agli agenti che scegli tu. Gli SMS si pagano: con Twilio circa 8-10 centesimi l'uno verso numeri italiani (controlla il prezzo aggiornato su twilio.com).
 1. Registrati su **twilio.com**, aggiungi credito (*Billing*) e compra un numero che possa inviare SMS in Italia (*Phone Numbers → Buy a number*), oppure crea un *Messaging Service*.
 2. Nella home della console copia **Account SID** (inizia con `AC`) e **Auth Token**.
