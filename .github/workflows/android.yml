@@ -62,27 +62,35 @@ jobs:
           echo "VERSION_NAME=$V" >> "$GITHUB_ENV"
           echo "VERSION_CODE=$CODE" >> "$GITHUB_ENV"
 
-      - name: Compila APK
+      # due app dallo stesso codice: Kairos Pro (completa) e Kairos TV (più leggera, logo blu, si installa accanto)
+      - name: Compila APK (Kairos Pro e Kairos TV)
         env:
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
           APP_NAME: ${{ vars.APP_NAME }}
           APP_ID: ${{ vars.APP_ID }}
-        run: gradle -p android assembleRelease --no-daemon --stacktrace
+        run: gradle -p android assembleProRelease assembleTvRelease --no-daemon --stacktrace
 
-      - run: cp android/app/build/outputs/apk/release/app-release.apk kairos.apk
+      - run: |
+          cp android/app/build/outputs/apk/pro/release/app-pro-release.apk kairos.apk
+          cp android/app/build/outputs/apk/tv/release/app-tv-release.apk kairostv.apk
+          ls -l kairos.apk kairostv.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: kairos-apk-${{ env.VERSION_NAME }}
-          path: kairos.apk
+          path: |
+            kairos.apk
+            kairostv.apk
 
       - name: Pubblica la release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: kairos.apk
+          files: |
+            kairos.apk
+            kairostv.apk
           make_latest: true
           generate_release_notes: true
 
@@ -103,6 +111,16 @@ jobs:
           fi
           gh release upload kairos-tv kairos-tv.apk kairos-tv.json -R "$STORE_REPO" --clobber
           echo "::notice::APK $VERSION_NAME pubblicato: $URL"
+
+          # Kairos TV: sua release fissa «kairostv» (il pannello la legge da KTV_FEED)
+          URL2="https://github.com/${STORE_REPO}/releases/download/kairostv/kairostv.apk"
+          jq -n --arg v "$VERSION_NAME" --argjson c "$VERSION_CODE" --arg u "$URL2" --arg d "$(date -u +%FT%TZ)" \
+            '{version:$v, versionCode:$c, url:$u, date:$d}' > kairostv.json
+          if ! gh release view kairostv -R "$STORE_REPO" >/dev/null 2>&1; then
+            gh release create kairostv -R "$STORE_REPO" --title "Kairos TV" --notes "App Kairos TV (versione leggera di Kairos Pro): questa release viene aggiornata automaticamente a ogni nuova versione." --latest=false
+          fi
+          gh release upload kairostv kairostv.apk kairostv.json -R "$STORE_REPO" --clobber
+          echo "::notice::Kairos TV $VERSION_NAME pubblicata: $URL2"
 
       - name: Promemoria aggiornamento automatico
         if: startsWith(github.ref, 'refs/tags/v') && env.HAS_STORE_TOKEN != 'true'

@@ -400,7 +400,7 @@ body.agent .foot{display:none}
         ${isNew ? '<label class="lbl">Codice della TV</label><input class="inp mono" id="cCode" placeholder="KXAB-12CD" maxlength="9" style="text-transform:uppercase">' : ''}
         <label class="lbl">${linked ? 'Nome del dispositivo' : 'Nome cliente'}</label><input class="inp" id="cName" maxlength="60" value="${esc(e.name)}" placeholder="es. Mario Rossi">
         <label class="lbl">Note</label><textarea class="inp" id="cNotes" maxlength="500" placeholder="Pagamento, contatto…">${esc(e.notes || '')}</textarea>
-        ${linked ? '' : `<label class="lbl">App del cliente</label><select class="inp" id="cApp"><option value="tv">Kairos Pro</option><option value="lite" ${e.app === 'lite' ? 'selected' : ''}>Kairos Lite</option></select>`}</div>
+        ${linked ? '' : `<label class="lbl">App del cliente</label><select class="inp" id="cApp"><option value="tv">Kairos Pro</option><option value="ktv" ${e.app === 'ktv' ? 'selected' : ''}>Kairos TV</option><option value="lite" ${e.app === 'lite' ? 'selected' : ''}>Kairos Lite</option></select>`}</div>
       ${linked ? '' : `<div class="ag-c"><h4>Abbonamento</h4><small>${roExp ? 'Non puoi cambiare la scadenza' : 'Scadenza obbligatoria, massimo 3 anni'}</small>
         <div class="tog ${e.active ? 'on' : ''}" id="cAct" ${!isNew && !P.disable ? 'style="opacity:.5;pointer-events:none"' : ''}><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
         <label class="lbl">Scadenza</label><input class="inp" type="date" id="cExp" value="${esc(e.expires)}" ${roExp ? 'readonly' : ''}>
@@ -411,13 +411,13 @@ body.agent .foot{display:none}
         <div id="cPls">${e.playlists.map(plRow).join('')}</div>${roPl || e.playlists.length >= 10 ? '' : '<button class="btn sm" id="cAddPl">+ Aggiungi linea</button>'}</div>
       ${P.account ? `<div class="ag-c"><h4>Profili e visioni</h4><small>Quanti profili e quante visioni insieme</small>
         <div class="row"><div><label class="lbl">Profili massimi</label><input class="inp" type="number" id="cMaxP" min="0" max="10" value="${e.maxProfiles ?? 3}"></div><div><label class="lbl">Visioni insieme (0 = libere)</label><input class="inp" type="number" id="cMaxS" min="0" max="${P.maxConn || 1}" value="${e.maxStreams || 0}"></div></div></div>` : ''}
-      ${P.ai && e.app !== 'lite' ? `<div class="ag-c"><h4>Assistente IA</h4><small>Quale intelligenza artificiale e quante domande al giorno</small>
+      ${P.ai && e.app !== 'lite' && e.app !== 'ktv' ? `<div class="ag-c"><h4>Assistente IA</h4><small>Quale intelligenza artificiale e quante domande al giorno</small>
         <label class="lbl">Intelligenza artificiale</label><select class="inp" id="cAiP"><option value="">Quella predefinita</option><option value="claude" ${e.aiProvider === 'claude' ? 'selected' : ''}>Claude</option><option value="gm" ${e.aiProvider === 'gm' ? 'selected' : ''}>Gemini</option></select>
         <label class="lbl">Domande al giorno</label><input class="inp" type="number" id="cAiL" min="0" max="1000" placeholder="Predefinito" value="${(e.aiLimit ?? -1) >= 0 ? e.aiLimit : ''}">
         ${isNew ? '' : `<button class="btn sm" id="cAiX" style="margin-top:10px">+10 domande extra oggi</button>${e.aiExtra ? `<span class="mut" style="font-size:12px;margin-left:8px">${e.aiExtra} extra disponibili</span>` : ''}`}</div>` : ''}
       ${P.link && !isNew && !linked ? `<div class="ag-c"><h4>Collegare un altro dispositivo</h4><small>Sulla nuova TV il cliente sceglie «Ho già un abbonamento» e scrive il codice (vale 10 minuti)</small><button class="btn" id="cLink">🔗 Genera codice di collegamento</button><div id="cLinkOut" class="mono" style="font-size:22px;margin-top:10px"></div></div>` : ''}
       ${P.players && !isNew && !linked && window.KXPlayers ? `<div class="ag-c" style="grid-column:1/-1" id="cOth"><h4>Altre app</h4><small>Manda le linee di questo cliente anche alle altre app</small>${KXPlayers.box(e)}</div>` : ''}
-      ${adCat.length && e.app !== 'lite' ? `<div class="ag-c"><h4>Add-on</h4><small>Temi e skin che puoi assegnare</small><div class="ag-chk">${adCat.map((x) => chk('cad', x.id, esc(x.name), (e.addons || []).includes(x.id), false, x.price ? esc(x.price) : '')).join('')}</div></div>` : ''}`}
+      ${adCat.length && e.app !== 'lite' && e.app !== 'ktv' ? `<div class="ag-c"><h4>Add-on</h4><small>Temi e skin che puoi assegnare</small><div class="ag-chk">${adCat.map((x) => chk('cad', x.id, esc(x.name), (e.addons || []).includes(x.id), false, x.price ? esc(x.price) : '')).join('')}</div></div>` : ''}`}
     </div>`;
     const sync = () => {
       e.name = $('#cName').value; e.notes = $('#cNotes').value; if ($('#cExp')) e.expires = $('#cExp').value; if ($('#cConn')) e.maxConn = +$('#cConn').value || 1;
@@ -466,7 +466,7 @@ body.agent .foot{display:none}
       sync();
       const pls = e.playlists.map((p) => ({ id: p.id, serverId: p.serverId, username: p.username, password: p.password }));
       try {
-        if (isNew) await api('POST', '/admin/devices', { code: $('#cCode').value.trim().toUpperCase(), name: e.name, notes: e.notes, expires: e.expires, playlists: pls, maxConn: e.maxConn, addons: e.app === 'lite' ? [] : e.addons, app: e.app === 'lite' ? 'lite' : 'tv' });
+        if (isNew) await api('POST', '/admin/devices', { code: $('#cCode').value.trim().toUpperCase(), name: e.name, notes: e.notes, expires: e.expires, playlists: pls, maxConn: e.maxConn, addons: e.app === 'lite' || e.app === 'ktv' ? [] : e.addons, app: e.app === 'lite' || e.app === 'ktv' ? e.app : 'tv' });
         else {
           const b = { name: e.name, notes: e.notes, ...(appSet ? { app: e.app } : {}) };
           if (!linked) {

@@ -604,7 +604,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         if (!isLive) bar.addView(bPause)
         if (isLive) {
             bar.addView(button("Lista canali") { openList() })
-            bRec = button("Registra") { toggleRecording() }.also { bar.addView(it) }
+            if (BuildConfig.FULL) bRec = button("Registra") { toggleRecording() }.also { bar.addView(it) }
         }
         bar.addView(button("Audio") { menuAudio() })
         bar.addView(button("Qualità") { menuQuality() })
@@ -1101,10 +1101,10 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     /* ------------------------------------------------------------------ */
     /* Registrazione                                                       */
     /* ------------------------------------------------------------------ */
-    private fun recIdOf(chId: String): String? = try { Recorder.activeFor(chId) } catch (_: Throwable) { null }
+    private fun recIdOf(chId: String): String? = if (!BuildConfig.FULL) null else try { Recorder.activeFor(chId) } catch (_: Throwable) { null }
 
     private fun toggleRecording() {
-        if (!isLive || closing) return
+        if (!BuildConfig.FULL || !isLive || closing) return
         val ch = item
         try {
             val active = recIdOf(ch.id)

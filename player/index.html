@@ -601,6 +601,22 @@ img{display:block}
 .nrow{content-visibility:auto;contain-intrinsic-size:auto 260px}
 .track{contain:layout paint}
 .rail .rlogo{width:44px;height:44px;top:26px;left:24px}
+/* ---------- Kairos TV: stessa grafica, ancora più leggera per le chiavette datate ---------- */
+.ed-tv .aurora,.ed-tv .skinbg,.ed-tv .sp-rays,.ed-tv .sp-floor,.ed-tv .sp-wave,.ed-tv .sp-orbit{display:none!important}
+.ed-tv .sp-glow{animation-duration:.4s;background:radial-gradient(circle,rgba(59,130,246,.42),rgba(59,130,246,0) 62%)}
+.ed-tv #boot .boot-bar i{background:linear-gradient(90deg,#22d3ee,#6366f1);box-shadow:0 0 10px #3b82f6}
+.ed-tv #boot{--a1:#3b82f6;--a2:#22d3ee;--a1-45:rgba(59,130,246,.45);--a1-70:rgba(59,130,246,.7)}
+.ed-tv .sp-tag{color:#5eb8ff}
+.ed-tv .sp-word{background-image:linear-gradient(100deg,#fff 0 42%,#7dd3fc 50%,#fff 58% 100%)}
+.ed-tv .sp-tv{background:linear-gradient(100deg,#22d3ee,#6366f1);box-shadow:0 0 24px rgba(59,130,246,.7)}
+.ed-tv .sp-logo{border-radius:0;overflow:visible}.ed-tv .sp-logo::after{display:none}
+.ed-tv .sp-svg.tvm{filter:drop-shadow(0 0 18px rgba(59,130,246,.55))}
+.ed-tv .sp-svg.tvm .tvs,.ed-tv .sp-svg.tvm .tva{opacity:0;animation:fadein .35s .05s forwards}
+.ed-tv .sp-svg.tvm .tvk{opacity:0;transform:translateX(-18px);animation:spIn .35s .25s cubic-bezier(.2,.9,.25,1.2) forwards}
+.ed-tv .sp-svg.tvm .tvp{opacity:0;transform:translateX(18px);animation:spIn .35s .4s cubic-bezier(.2,.9,.25,1.2) forwards}
+.ed-tv .tile::before{animation:none}
+.ed-tv .focus-ring{transition-duration:.16s}
+.ed-tv .tnav .tlogo{filter:none}
 /* ---------- modalità leggera (app su TV): niente effetti costosi, più fluidità ---------- */
 .lite .glass,.lite .annc,.lite .detail,.lite .post .rt,.lite .hage,.lite .agb{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 .lite .glass{background:rgba(24,24,30,.94)}
@@ -1157,6 +1173,21 @@ h5.fh{margin-top:16px}
 </style>
 </head>
 <body>
+<script>
+/* Kairos TV = Kairos Pro più leggera (stessa grafica, meno funzioni, logo suo). Lo dice l'APK dal ponte nativo:
+   le APK di Kairos Pro (anche vecchie) e il browser restano "pro". */
+window.KX_ED = (function () { try { return (window.KairosNative && KairosNative.edition && KairosNative.edition()) || 'pro'; } catch (e) { return 'pro'; } })();
+if (window.KX_ED === 'tv') document.body.classList.add('ed-tv');
+/* logo di Kairos TV: schermo con antenne, una K e il tasto play (blu-ciano, diverso dal cerchio rosso della Pro) */
+window.KX_TVLOGO = function (id, cls) {
+  return '<svg class="' + (cls || '') + '" viewBox="0 0 200 200"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#3b82f6"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs>' +
+    '<g class="tva"><path d="M100 44 L74 14 M100 44 L126 14" stroke="url(#' + id + ')" stroke-width="8" stroke-linecap="round" fill="none"/><circle cx="74" cy="14" r="6" fill="#7dd3fc"/><circle cx="126" cy="14" r="6" fill="#a78bfa"/></g>' +
+    '<rect class="tvs" x="18" y="44" width="164" height="122" rx="30" fill="#0a1230" stroke="url(#' + id + ')" stroke-width="10"/>' +
+    '<g class="tvk"><rect x="56" y="70" width="17" height="70" rx="3" fill="#fff"/><path d="M106 66 L79 105 L106 144" stroke="#fff" stroke-width="16" stroke-miterlimit="4" fill="none"/></g>' +
+    '<path class="tvp" d="M113 82 L113 128 L150 105 Z" fill="url(#' + id + ')" stroke="url(#' + id + ')" stroke-width="5" stroke-linejoin="round"/>' +
+    '<path d="M76 184 H124" stroke="url(#' + id + ')" stroke-width="8" stroke-linecap="round"/></svg>';
+};
+</script>
 <canvas id="bg"></canvas>
 <div class="skinbg" id="skinBg"></div><div class="aurora"><i></i><i></i><i></i></div>
 <div class="floor"></div>
@@ -1242,7 +1273,8 @@ function kxWord(text, cls, sp = 3.1, label = '') {
 (function () {
   var b = 'KAIROS'; try { var st = JSON.parse(localStorage.getItem('kx_brand') || '""'); if (st) b = String(st).toUpperCase(); } catch (e) {}
   var t = document.getElementById('bootTitle'); t.innerHTML = kxWord(b, 'draw'); t.dataset.b = b;
-  document.querySelector('#boot .sp-tv').innerHTML = kxWord('PRO', 'tvw', 2.4);
+  if (window.KX_ED === 'tv') document.querySelector('#boot .sp-logo').innerHTML = window.KX_TVLOGO('kgS', 'sp-svg tvm');
+  document.querySelector('#boot .sp-tv').innerHTML = kxWord(window.KX_ED === 'tv' ? 'TV' : 'PRO', 'tvw', 2.4); // Kairos TV / Kairos Pro
   document.querySelector('#boot .sp-tag').innerHTML = kxWord('PLAYER', 'tagw', 6.5);
 })();
     </script>
@@ -1368,6 +1400,7 @@ const store = {
   set(k, v) { const key = store.key(k); if (isPrim(v)) storeMem.set(key, v); else storeMem.delete(key); try { localStorage.setItem(key, JSON.stringify(v)); } catch {} },
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const ED_TV = window.KX_ED === 'tv'; // Kairos TV: niente registrazioni, multi-schermo, speed test, IA, store add-on, organizza
 
 const THEMES = {
   cinema: ['#e5202b', '#ff5a36', '#b3121b'],
@@ -1426,7 +1459,8 @@ const ADDON_UI = {
 };
 /* add-on del cliente, come li manda il server ({ id, p: prezzo, own }); senza server (demo o prima del collegamento):
    demo = tutti, altrimenti solo i pacchetti avatar (come nella 2.1.1) */
-const addonList = () => S.addons || store.get('addons', null);
+// Kairos TV non ha lo store add-on: restano solo i pacchetti avatar normali (come senza server)
+const addonList = () => (ED_TV ? null : S.addons || store.get('addons', null));
 function addonOwn(id) {
   if (S.demo) return true;
   const l = addonList();
@@ -1919,7 +1953,7 @@ function confirmExit() {
 }
 
 /* ---------------- barra in alto ---------------- */
-const LOGO_SVG = (id) => `<svg class="tlogo" viewBox="0 0 200 200"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><circle cx="100" cy="100" r="84" fill="none" stroke="url(#${id})" stroke-width="9" stroke-linecap="round" stroke-dasharray="400 128" transform="rotate(-38 100 100)"/><rect x="62" y="52" width="22" height="96" rx="4" fill="#fff"/><path d="M90 104 L128 52 H156 L116 108 Z" fill="url(#${id})"/><path d="M104 98 L122 92 L158 148 H130 Z" fill="#fff"/><circle cx="171" cy="62" r="8" fill="#fff"/></svg>`;
+const LOGO_SVG = (id) => ED_TV ? window.KX_TVLOGO(id, 'tlogo') : `<svg class="tlogo" viewBox="0 0 200 200"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><circle cx="100" cy="100" r="84" fill="none" stroke="url(#${id})" stroke-width="9" stroke-linecap="round" stroke-dasharray="400 128" transform="rotate(-38 100 100)"/><rect x="62" y="52" width="22" height="96" rx="4" fill="#fff"/><path d="M90 104 L128 52 H156 L116 108 Z" fill="url(#${id})"/><path d="M104 98 L122 92 L158 148 H130 Z" fill="#fff"/><circle cx="171" cy="62" r="8" fill="#fff"/></svg>`;
 const TABS = [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta'], ['guide', 'Guida TV']];
 const NAV_IC = {
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
@@ -1930,7 +1964,8 @@ const NAV_IC = {
 NAV_IC.bell = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 0 1 12 0v4l1.8 3H4.2L6 13z"/><path d="M10 19.5a2 2 0 0 0 4 0"/></svg>';
 NAV_IC.req = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 9h18M8 5v4M16 5v4M12 12v4M10 14h4"/></svg>';
 const unseenMsgs = () => { const seen = new Set(store.get('seenMsg', [])); return (S.messages || []).filter((x) => !seen.has(x.id)); };
-const perm = (k) => !S.perms || S.perms[k] !== false;
+const ED_OFF = new Set(ED_TV ? ['rec', 'speed', 'multi', 'ai'] : []); // funzioni che Kairos TV non ha, qualunque cosa dica il pannello
+const perm = (k) => !ED_OFF.has(k) && (!S.perms || S.perms[k] !== false);
 let navSeq = 0;
 function navHTML(curKey) {
   return `<nav class="tnav">${LOGO_SVG('kgN' + ++navSeq)}<span class="tmeta"><span class="tdate"></span>${expChip()}</span>
@@ -4270,7 +4305,7 @@ async function metaOf(x) {
   const j = await p;
   if (j && j.off) S.metaOff = true; // il server non ha la chiave TMDB: niente altre richieste
   if (j && j.cert && !x.cert) x.cert = certNorm(j.cert);
-  if (j) x._extras = Array.isArray(j.extras) ? j.extras : [];
+  if (j) x._extras = Array.isArray(j.extras) && !ED_TV ? j.extras : []; // Kairos TV: niente «Contenuti speciali»
   return j;
 }
 async function fetchInfo(x) {
@@ -4518,11 +4553,11 @@ function itemMenu(x, el) {
   if (live && canRec()) acts.unshift(['rec', recFor(x.id) ? '■  Ferma la registrazione' : '●  Registra ora']);
   if (!live) {
     acts.push(['seen', S.watched.has(x.id) ? '↺  Segna come non visto' : '✓  Segna come già visto']);
-    acts.push(['queue', S.queue.includes(x.id) ? '−  Togli dalla coda' : '＋  Aggiungi alla coda']);
-    acts.push(['meta', '✎  Modifica informazioni']);
+    if (!ED_TV) acts.push(['queue', S.queue.includes(x.id) ? '−  Togli dalla coda' : '＋  Aggiungi alla coda']);
+    if (!ED_TV) acts.push(['meta', '✎  Modifica informazioni']);
   }
-  acts.push(['tag', '🏷  Tag…']);
-  if (live) acts.push(['epg', '📅  Associa la guida TV…']);
+  if (!ED_TV) acts.push(['tag', '🏷  Tag…']);
+  if (live && !ED_TV) acts.push(['epg', '📅  Associa la guida TV…']);
   if (live && HAS_MULTI && perm('multi')) acts.push(['multi', '⊞  Multi-schermo (2 o 4 canali)…']);
   if (perm('ai') && !aiOffNow() && !S.demo) acts.push(['ai', '✦  Chiedi all\'assistente IA']);
   if (perm('report')) acts.push(['rep', live ? '⚠  Segnala: il canale non funziona' : '⚠  Segnala un problema']);
@@ -4586,8 +4621,10 @@ function sfxPlay(type, tone) {
 
 const PLAY_OPTS = [['engine', 'Motore video', [['exo', 'ExoPlayer'], ['vlc', 'VLC']]], ['quality', 'Qualità video', [['auto', 'Automatica'], ['max', 'Massima'], ['1080', '1080p'], ['720', '720p'], ['480', '480p']]], ['buffer', 'Buffer di rete', [['fast', 'Veloce'], ['balanced', 'Bilanciato'], ['stable', 'Stabile']]], ['aspect', 'Formato immagine', [['fit', 'Adatta'], ['fill', 'Riempi'], ['zoom', 'Zoom']]]];
 S.setSec = 'dev';
+const SET_HIDE = new Set(ED_TV ? ['org', 'shop', 'rec', 'net'] : []); // sezioni che Kairos TV non mostra
 function renderSettings(sec) {
   if (sec) S.setSec = sec;
+  if (SET_HIDE.has(S.setSec)) S.setSec = 'dev';
   const st = { active: ['Attivo', 'var(--ok)'], pending: ['In attesa', 'var(--warn)'], expired: ['Scaduto', 'var(--bad)'], disabled: ['Disattivato', 'var(--bad)'], demo: ['Demo', 'var(--a1)'] }[S.demo ? 'demo' : S.status] || ['—', 'var(--mut)'];
   const plHid = new Set(store.get('plHidden', [])), plT = new Map(plList().map((p) => [p.id, p]));
   const allPl = allPlaylists().map((p) => ({ ...p, srv: !S.local.some((x) => x.id === p.id) }));
@@ -4652,10 +4689,10 @@ function renderSettings(sec) {
       <div class="sr" data-f id="sClearSeen"><span>Cancella «Ultimi visti» (canali e titoli aperti)</span><b>›</b></div>
       <div class="sr" data-f id="sClear"><span>Svuota preferiti e cronologia</span><b>›</b></div>
       <div class="sr" data-f id="sCache"><span>Svuota la memoria dei contenuti</span><b>›</b></div>`,
-    info: `<h3>Informazioni</h3>${kv('App', esc((S.settings.brand || 'KAIROS') + ' TV'))}${kv('Versione', esc((NATIVE && NATIVE.version && NATIVE.version()) || 'web'))}${kv('Interfaccia', esc((NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || 'inclusa'))}${kv('Dispositivo', esc((NATIVE && NATIVE.model && NATIVE.model()) || 'browser'))}${kv('Codice', `<span class="orb">${esc(S.code)}</span>`)}
+    info: `<h3>Informazioni</h3>${kv('App', esc((S.settings.brand || 'KAIROS') + (ED_TV ? ' TV' : ' Pro')))}${kv('Versione', esc((NATIVE && NATIVE.version && NATIVE.version()) || 'web'))}${kv('Interfaccia', esc((NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || 'inclusa'))}${kv('Dispositivo', esc((NATIVE && NATIVE.model && NATIVE.model()) || 'browser'))}${kv('Codice', `<span class="orb">${esc(S.code)}</span>`)}
       <div class="sbtns"><button class="btn pri" data-f id="sUpd">⟳ Cerca aggiornamenti</button>${perm('report') ? '<button class="btn" data-f id="sBug">⚠ Segnala un problema</button>' : ''}</div><div class="snote" id="sUpdTxt"></div>`,
   };
-  $('#settBody').innerHTML = `<div class="smenu">${MENU.map(([k, l]) => `<div class="sm ${k === S.setSec ? 'sel' : ''}" data-f data-sec="${k}">${SET_IC[k]}<span>${l}</span></div>`).join('')}</div>
+  $('#settBody').innerHTML = `<div class="smenu">${MENU.filter(([k]) => !SET_HIDE.has(k)).map(([k, l]) => `<div class="sm ${k === S.setSec ? 'sel' : ''}" data-f data-sec="${k}">${SET_IC[k]}<span>${l}</span></div>`).join('')}</div>
     <div class="spanel">${MENU.map(([k]) => `<div class="card ${k === S.setSec ? 'on' : ''}" data-card="${k}">${cards[k]}</div>`).join('')}</div>`;
   const form = (t) => ($('#plForm').innerHTML = t === 'xtream'
     ? '<input class="inp" data-f id="pName" placeholder="Nome (es. Casa)"><input class="inp" data-f id="pHost" placeholder="Server http://host:porta"><input class="inp" data-f id="pUser" placeholder="Username"><input class="inp" data-f id="pPass" placeholder="Password">'
@@ -4932,7 +4969,7 @@ function showProfiles(after) {
   if (after) scr.classList.remove('manage'); // apertura nuova: si parte dalla scelta, non dalla modifica
   scr._must = !l.length;
   const head = !l.length ? (canAdd ? '<h1>Crea il tuo profilo</h1><p class="mut prsub">Per iniziare serve almeno un profilo: scegli nome e avatar.</p>' : '<h1>Profilo in preparazione</h1><p class="mut prsub">Il tuo fornitore sta creando il tuo profilo. Riprova tra poco.</p>') : '<h1>Chi sta guardando?</h1>';
-  scr.innerHTML = `<div class="prw"><div class="prbrand"><b class="brandName" data-b="${esc((S.settings.brand || 'KAIROS').toUpperCase())}">${kxWord((S.settings.brand || 'KAIROS').toUpperCase(), '')}</b><span>${kxWord('PRO', 'tvw', 2.4)}</span></div>${head}
+  scr.innerHTML = `<div class="prw"><div class="prbrand"><b class="brandName" data-b="${esc((S.settings.brand || 'KAIROS').toUpperCase())}">${kxWord((S.settings.brand || 'KAIROS').toUpperCase(), '')}</b><span>${kxWord(ED_TV ? 'TV' : 'PRO', 'tvw', 2.4)}</span></div>${head}
     <div class="prlist">${l.map((p, i) => `<div class="prof" data-f data-pi="${i}" style="animation-delay:${i * 70}ms"><div class="pav">${avatarSVG(p.avatar, p.name)}</div><b>${esc(p.name)}</b>${p.kids ? '<small>BAMBINI</small>' : ''}</div>`).join('')}${canAdd ? `<div class="prof add" data-f data-pi="add" style="animation-delay:${l.length * 70}ms"><div class="pav"><span>+</span></div><b>Aggiungi profilo</b></div>` : ''}</div>
     ${!l.length ? (canAdd ? '' : '<button class="btn pri" data-f id="prRetry">↻ Riprova</button>') : profCanEdit() ? `<button class="btn" data-f id="prManage">${scr.classList.contains('manage') ? '✓ Fine' : '✎ Gestisci profili'}</button>` : ''}</div>`;
   const rt = scr.querySelector('#prRetry');

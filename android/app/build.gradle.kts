@@ -11,14 +11,34 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = env("APP_ID") ?: "com.kairos.player"
         minSdk = 22
         targetSdk = 35
         versionCode = env("VERSION_CODE")?.toInt() ?: 1
         versionName = env("VERSION_NAME") ?: "1.0.0"
-        resValue("string", "app_name", env("APP_NAME") ?: "Kairos Pro")
         // Fire TV / Android TV / telefoni usano processori ARM: escludere x86 riduce molto l'APK
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
+    }
+
+    /* Due app dallo stesso codice:
+       - pro = Kairos Pro (tutte le funzioni)
+       - tv  = Kairos TV (stessa grafica, più leggera: niente registrazioni, multi-schermo, speed test;
+               le altre funzioni tolte le nasconde l'interfaccia). Si installa accanto alla Pro. */
+    flavorDimensions += "app"
+    productFlavors {
+        create("pro") {
+            dimension = "app"
+            applicationId = env("APP_ID") ?: "com.kairos.player"
+            resValue("string", "app_name", env("APP_NAME") ?: "Kairos Pro")
+            buildConfigField("boolean", "FULL", "true")
+            buildConfigField("String", "EDITION", "\"pro\"")
+        }
+        create("tv") {
+            dimension = "app"
+            applicationId = env("TV_APP_ID") ?: "com.kairos.tv"
+            resValue("string", "app_name", env("TV_APP_NAME") ?: "Kairos TV")
+            buildConfigField("boolean", "FULL", "false")
+            buildConfigField("String", "EDITION", "\"tv\"")
+        }
     }
 
     signingConfigs {
