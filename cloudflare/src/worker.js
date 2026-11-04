@@ -253,7 +253,7 @@ const DEFAULT_SETTINGS = {
   playersCfg: { orbix: [{ name: 'NKI OrbixPlay', host: 'http://orbx.nki-orbx.download' }], max: [], showDnsAgents: false, codes: { orbix: '265847', max: '265847' }, slots: null }, // link diretto NKI e codice cliente già pronti (slots: vedi SLOTS_DEFAULT)
   // «Attiva app»: il link di gestione dispositivo di ogni app dello store (dove il titolare attiva la lista col codice del cliente). Modificabile e ampliabile dal pannello.
   appLinks: [
-    { name: 'OrbixPlay', url: 'https://orbixplay.com' },
+    { name: 'OrbixPlay', url: 'https://orbixplay.com/mylist' },
     { name: 'MaxPlayer', url: 'https://my.maxplayer.tv' },
     { name: 'Ora Player', url: 'https://euser.oraplayers.com/subscribe-web' },
     { name: 'Ora Pro', url: 'https://euser.oraprotv.com/manage-device?redirectURL=%2Fdevice-info' },
