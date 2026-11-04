@@ -4,6 +4,8 @@
    Deve caricarsi DOPO players-panel.js e nav2.js. Usa le funzioni di app.js. Solo titolare. */
 (() => {
   const DEF = [
+    { name: 'OrbixPlay', url: 'https://orbixplay.com' },
+    { name: 'MaxPlayer', url: 'https://my.maxplayer.tv' },
     { name: 'Ora Player', url: 'https://euser.oraplayers.com/subscribe-web' },
     { name: 'Ora Pro', url: 'https://euser.oraprotv.com/manage-device?redirectURL=%2Fdevice-info' },
     { name: 'Ibo One', url: 'https://euser.iboonetv.com/manage-device?redirectURL=%2Fsubscribe-web' },
