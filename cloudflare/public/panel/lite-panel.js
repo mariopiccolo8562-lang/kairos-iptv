@@ -48,7 +48,7 @@
     for (const id of ['ply', 'add']) { const off = on || ktv; const sec = $('#ds-' + id); if (sec) sec.style.display = off ? 'none' : ''; const nb = $(`#dBody [data-ds="${id}"]`); if (nb) nb.style.display = off ? 'none' : ''; }
     let k = 0; $$('#dBody .dnav [data-ds]').forEach((b) => { const i = $('i', b); if (i && b.style.display !== 'none') i.textContent = ++k; });
     k = 0; $$('#dBody .dsec').forEach((sec) => { const i = $('.dsh i', sec); if (i && sec.style.display !== 'none') i.textContent = ++k; });
-    $$('#ds-perm [data-perm]').forEach((t) => { t.style.display = (on || ktv) && !LITE_PERMS.has(t.dataset.perm) ? 'none' : ''; // Kairos TV nativa ha le stesse funzioni della Lite });
+    $$('#ds-perm [data-perm]').forEach((t) => { t.style.display = (on || ktv) && !LITE_PERMS.has(t.dataset.perm) ? 'none' : ''; });
     for (const sel of ['#eAiProv', '#eAiLim']) { const el = $(sel); if (!el) continue; const box = sel === '#eAiLim' ? el.parentElement : el; box.style.display = on || ktv ? 'none' : ''; const lb = box.previousElementSibling; if (lb && lb.classList.contains('lbl')) lb.style.display = on || ktv ? 'none' : ''; }
     const note = $('#dBody .lite-note'); if (note) note.style.display = on ? '' : 'none';
     const kn = $('#dBody .ktv-note'); if (kn) kn.style.display = ktv ? '' : 'none';
