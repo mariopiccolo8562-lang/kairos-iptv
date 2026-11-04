@@ -641,6 +641,11 @@ function cleanHost(h) {
   if (!/^[a-z0-9.-]+$/i.test(u.hostname) && !/^\[[0-9a-f:.]+\]$/i.test(u.hostname)) throw new HttpErr(400, 'Nome del server non valido');
   return u.origin;
 }
+/** confronta due indirizzi solo per nome host (ignora schema e porta): per abbinare una linea incollata a un server salvato */
+function sameHostname(a, b) {
+  const h = (x) => { try { return new URL(/^https?:\/\//i.test(x) ? x : 'http://' + x).hostname.toLowerCase(); } catch { return ''; } };
+  const ha = h(a); return !!ha && ha === h(b);
+}
 /** stessa playlist con un altro server (percorso e parametri invariati) */
 /* lettore per tipo di contenuto scelto dal pannello ('' = decide il cliente) */
 const PLAYER_ENG = ['auto', 'exo', 'vlc'];
@@ -2305,6 +2310,8 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   };
   const forward = (method, p, body) => adminRoutes(new Request(url.href, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }), env, url, p, who, ip, ctx, aSes);
 
+  // «Incolla linea»: a quale server assegnato corrisponde l'indirizzo incollato (l'agente ha già l'host, nessun dato nuovo)
+  if (path === '/match-server' && m === 'POST') { const b = await readJSON(req, 1024); const sv = servers.find((x) => sameHostname(x.host, str(b.host, 300))); return json({ server: sv ? { id: sv.id, name: sv.name } : null }); }
   const apv = path.match(/^\/addon-preview\/([a-z0-9-]{3,40})$/);
   if (apv && m === 'GET') { if (!allowedAddons.has(apv[1])) throw new HttpErr(404, 'Anteprima non disponibile'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
   const need = (k, msg) => { if (!P[k]) throw new HttpErr(403, msg || 'Funzione non consentita: chiedila a chi ti ha creato'); };

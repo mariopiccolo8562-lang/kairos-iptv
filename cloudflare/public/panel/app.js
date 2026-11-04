@@ -509,6 +509,7 @@ function renderDrawer() {
       await ask('Codice di collegamento', `<div style="font-size:40px;font-weight:700;letter-spacing:.25em;text-align:center;margin:10px 0" class="mono">${esc(r.pin)}</div><p class="mut" style="text-align:center">Valido fino alle ${new Date(r.until).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}. Sulla nuova TV: <b>Ho già un abbonamento</b> → scrivi il codice.</p>`, 'Fatto');
     } catch (e) { toast(e.message, 1); }
   });
+  window.__dsync = sync;
   const re = () => { sync(); renderDrawer(); };
   $('#eAct') && ($('#eAct').onclick = () => { edit.active = !edit.active; $('#eAct').classList.toggle('on', edit.active); });
   $('#eInf') && ($('#eInf').onclick = () => { sync(); edit.expires = ''; renderDrawer(); });

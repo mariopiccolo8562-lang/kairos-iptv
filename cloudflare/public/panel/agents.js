@@ -160,7 +160,7 @@ body.agent .foot{display:none}
   }
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
-  const AG_OK = /^\/admin\/(presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|agent-maint|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
+  const AG_OK = /^\/admin\/(presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|agent-maint|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
   const origApi = api;
   window.api = api = async function (m, p, b) {
     if (isAgent() && !AG_OK.test(p)) throw new Error('Funzione non disponibile per gli agenti');
@@ -392,6 +392,7 @@ body.agent .foot{display:none}
         ${roExp ? '' : `<div class="quick">${[1, 3, 6, 12].map((n) => `<button class="btn sm" data-cm="${n}">+${n} ${n === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>`}
         <label class="lbl">Connessioni (massimo ${P.maxConn || 1})</label><input class="inp" type="number" id="cConn" min="1" max="${P.maxConn || 1}" value="${Math.min(e.maxConn || 1, P.maxConn || 1)}"></div>
       <div class="ag-c" style="grid-column:1/-1"><h4>Linea</h4><small>Scegli il server e scrivi utente e password della linea del cliente</small>
+        ${!roPl && window.KXPaste ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><textarea class="inp mono" id="cPaste" rows="2" style="flex:1;min-width:220px;font-size:12.5px" placeholder="📋 Incolla linea: link M3U o utente e password — riempie utente e password qui sotto"></textarea><button class="btn sm" id="cPasteGo" type="button">Riconosci</button><span id="cPasteMsg" class="mut" style="font-size:12px;width:100%"></span></div>` : ''}
         <div id="cPls">${e.playlists.map(plRow).join('')}</div>${roPl || e.playlists.length >= 10 ? '' : '<button class="btn sm" id="cAddPl">+ Aggiungi linea</button>'}</div>
       ${P.account ? `<div class="ag-c"><h4>Profili e visioni</h4><small>Quanti profili e quante visioni insieme</small>
         <div class="row"><div><label class="lbl">Profili massimi</label><input class="inp" type="number" id="cMaxP" min="0" max="10" value="${e.maxProfiles ?? 3}"></div><div><label class="lbl">Visioni insieme (0 = libere)</label><input class="inp" type="number" id="cMaxS" min="0" max="${P.maxConn || 1}" value="${e.maxStreams || 0}"></div></div></div>` : ''}
@@ -416,6 +417,24 @@ body.agent .foot{display:none}
       $('#cAct') && ($('#cAct').onclick = () => { e.active = !e.active; $('#cAct').classList.toggle('on', e.active); });
       $$('[data-cm]').forEach((b) => (b.onclick = () => { $('#cExp').value = addMonths($('#cExp').value, +b.dataset.cm); }));
       $('#cAddPl') && ($('#cAddPl').onclick = () => { sync(); e.playlists.push({ serverId: (D.servers[0] || {}).id || '', username: '', password: '' }); draw(); });
+      const cPasteGo = async (quiet) => {
+        const r = window.KXPaste.parse($('#cPaste').value);
+        if (!r || !r.username) { if (!quiet) toast('Incolla il link M3U, o utente e password della linea', 1); return; }
+        sync();
+        let sv = null;
+        // prima prova: abbina il server sull'indirizzo vero (lato server, l'agente non vede gli host)
+        if (r.host) { try { const mm = await api('POST', '/admin/match-server', { host: r.host }); if (mm && mm.server) sv = D.servers.find((s) => s.id === mm.server.id) || mm.server; } catch {} }
+        // ripiego: abbina per nome del server dentro l'indirizzo
+        if (!sv) { const host = (r.host || '').replace(/^https?:\/\//, '').toLowerCase(); sv = D.servers.find((s) => host && String(s.name).length >= 2 && host.includes(String(s.name).toLowerCase())) || null; }
+        const p0 = e.playlists[0] || (e.playlists[0] = { serverId: '', username: '', password: '' });
+        p0.username = r.username; p0.password = r.password || ''; if (sv) p0.serverId = sv.id;
+        draw();
+        // la password nel modulo parte sempre vuota: la riempio io, così resta al salvataggio
+        const pf = $('#cPls .pl[data-i="0"] [data-k="password"]'); if (pf && r.password) pf.value = r.password;
+        const m = $('#cPasteMsg'); if (m) m.innerHTML = sv ? `✓ Riconosciuta · server <b>${esc(sv.name)}</b> · utente <b>${esc(r.username)}</b>` : `✓ Utente <b>${esc(r.username)}</b> inserito · ora scegli il server assegnato qui sotto`;
+      };
+      $('#cPasteGo') && ($('#cPasteGo').onclick = () => cPasteGo(false));
+      $('#cPaste') && $('#cPaste').addEventListener('paste', () => setTimeout(() => cPasteGo(true), 0)); // riconosce da sola appena incolli
       $$('[data-rm]').forEach((b) => (b.onclick = () => { sync(); e.playlists.splice(+b.dataset.rm, 1); draw(); }));
       $('#cAiX') && ($('#cAiX').onclick = async () => { try { await api('POST', '/admin/ai/grant', { deviceId: d.id, n: 10 }); toast('+10 domande extra'); } catch (err) { toast(err.message, 1); } });
       $('#cLink') && ($('#cLink').onclick = async () => { try { const r = await api('POST', '/admin/devices/' + d.id + '/linkcode'); $('#cLinkOut').textContent = r.pin ? r.pin.replace(/(\d{3})(\d{3})/, '$1 $2') : 'Codice non disponibile'; } catch (err) { toast(err.message, 1); } });
@@ -476,6 +495,7 @@ body.agent .foot{display:none}
     window.demoApi = demoApi = async function (m, p, b) {
       if (p === '/admin/login') { demoAgent = /^agente/i.test((b && b.user) || ''); return { ok: true, user: demoAgent ? 'mario.rossi' : b.user || 'admin', role: demoAgent ? 'agent' : 'owner' }; }
       if (p === '/admin/dns' && m === 'GET') return { saved: DEMO.srv, hosts: [], byDev: {} };
+      if (p === '/admin/match-server') { const h = (b.host || '').replace(/^https?:\/\//, '').toLowerCase(); const sv = DEMO.srv.find((s) => s.host && h === s.host.replace(/^https?:\/\//, '').replace(/[:/].*$/, '').toLowerCase()); return { server: sv ? { id: sv.id, name: sv.name } : null }; }
       if (p === '/admin/state') {
         const r = await origDemo(m, p, b);
         if (!demoAgent) return { ...r, role: 'owner', agents: DEMO.agents.map(out), storeAppNames: ['IBO Player', 'IboOne', 'OrbixPlay', 'Smarters Pro', 'TiviMate'], maintAg: DEMO.maintAg.on ? [2] : [] };

@@ -405,6 +405,10 @@ Nella scheda di ogni agente (Agenti → apri l'agente):
 - **App installabile**: in Panoramica → Azioni rapide c'è «Installa l'app» (Android/Chrome/Edge: installa direttamente; iPhone/iPad: Safari → Condividi → Aggiungi alla schermata Home). Si apre a tutto schermo con l'icona KAIROS.
 - **Server DNS e VPN → Verifica DNS e connessione**: pulsanti per dns.gtechgroup.it (propagazione DNS) e mio-ip.it (IP pubblico); accanto a ogni DNS «🔍 Verifica» copia il dominio e apre il sito.
 
+## 24. «Incolla linea»
+
+Nella scheda del cliente, sezione **Playlist**, c'è **«Incolla linea»**: la linea la crei tu sul pannello del tuo fornitore (Kairos non ci entra mai), poi incolli qui il **link M3U** (es. `http://server/get.php?username=…&password=…&type=m3u_plus`) oppure il **messaggio con server, utente e password**. Kairos riconosce da solo il formato (Xtream o M3U, link `get.php`/`player_api`, forma stream `/live/utente/password`, o testo con etichette) e lo mette nella playlist del cliente. Da lì scegli l'app, carichi la lista su KAIROS TV/Lite/OrbixPlay/MaxPlayer e mandi il messaggio al cliente — tutto da un pannello.
+
 ## Struttura
 
 ```
