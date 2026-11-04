@@ -320,8 +320,8 @@ async function orbixSend(env, d, b, who, ip, agentLines) {
   if (!ORBIX_ID_RE.test(orbixId)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
   if (!username || !password) throw new HttpErr(400, 'Scrivi utente e password della linea');
   if (agentLines && !agentLines.some((l) => l.username === username && l.password === password)) throw new HttpErr(400, 'Usa utente e password di una linea di questo cliente');
-  const s = await getSettings(env), list = ((s.playersCfg || {}).orbix) || [];
-  if (!list.length) throw new HttpErr(400, 'Imposta prima il DNS personale di OrbixPlay (Impostazioni → App e aggiornamenti)');
+  const s = await getSettings(env), list = orbixDnsList((s.playersCfg || {}).orbix, await dnsList(env));
+  if (!list.length) throw new HttpErr(400, 'Imposta prima un DNS (OrbixPlay in APP Store, oppure in «Server DNS»)');
   const di = Math.max(0, Math.min(list.length - 1, parseInt(b.dns, 10) || 0)), dns = list[di];
   const old = orbixOf(d);
   const j = await orbixCall(env, '/add-playlist', { deviceid: orbixId, playlistName: str(s.brand || 'Kairos', 40), username, password, host: dns.code || dns.host, notes: str(d.name || d.code, 60) });
@@ -699,6 +699,16 @@ async function dnsList(env) {
 }
 async function dnsSave(env, list) {
   await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('dnsl', JSON.stringify(list.slice(0, 100))).run();
+}
+/* Elenco DNS per OrbixPlay: i DNS Orbix dedicati (con eventuale «codice host») PIÙ tutti i DNS salvati in «Server DNS».
+   Così nella scheda del cliente si sceglie tra TUTTI i propri DNS, non uno solo. Dedup per host, l'ordine resta stabile
+   (prima i DNS Orbix, così gli indici già salvati sui dispositivi non cambiano). */
+const hostKey = (h) => String(h || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
+function orbixDnsList(orbixCfg, dnsl) {
+  const base = (Array.isArray(orbixCfg) ? orbixCfg : []).map((x) => ({ ...x }));
+  const seen = new Set(base.map((x) => hostKey(x.host)));
+  for (const d of (Array.isArray(dnsl) ? dnsl : [])) { const h = hostKey(d.host); if (h && !seen.has(h)) { seen.add(h); base.push({ name: str(d.name, 40) || d.host, host: str(d.host, 300) }); } }
+  return base;
 }
 function swapHost(p, host) {
   if (p.type === 'xtream') return { ...p, host };
@@ -2677,12 +2687,13 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     try { messages = ((await env.DB.prepare('SELECT id, target, title, body, level, created, until FROM messages ORDER BY id DESC LIMIT 100').all()).results) || []; } catch {}
     const sessions = ses ? (await env.DB.prepare('SELECT COUNT(*) AS n FROM sessions WHERE admin_id = ? AND expires > ?').bind(ses.admin_id, now()).first()).n : 0;
     const settings = await getSettings(env);
+    const dnslOwner = await dnsList(env);
     return json({
       settings, devices, activity, messages, user: who, apk: await latestApk(env, settings), apkFeed: await apkFeed(env),
       wgConf: !!(await env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first()),
       security: { totp: !!(ses && ses.totp_on), encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
       lite: { apk: settings.liteApkUrl || LITE_APK, feed: await liteFeed(settings) },
-      players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: settings.playersCfg.orbix || [], max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents, codes: settings.playersCfg.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(settings.playersCfg) },
+      players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: orbixDnsList(settings.playersCfg.orbix, dnslOwner), max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents, codes: settings.playersCfg.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(settings.playersCfg) },
       dlCodes: dlCodesOf(settings),
       storeAppNames: await storeAppNames(env), maintAg: Object.entries(settings.maintAg || {}).filter(([, x]) => x && x.on).map(([id]) => +id),
       counts: { ...(await newCounts(env)), online: await onlineCount(env) }, permKeys: PERM_KEYS, addonCat: addonCfg(settings), role: 'owner', ...(ses ? { agents: await agentsOut(env, await agentsAll(env)) } : {}),

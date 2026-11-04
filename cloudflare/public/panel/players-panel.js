@@ -351,7 +351,12 @@
       const om = p.match(/^\/admin\/orbix\/(.+)$/);
       if (om) { const d = DEMO.devices.find((x) => x.id === om[1]); if (!d) throw new Error('Cliente non trovato'); if (m === 'DELETE') { d.orbix = null; return { ok: true }; } if (!/^[A-Za-z0-9:._-]{4,64}$/.test(b.orbixId || '')) throw new Error('Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay'); if (!b.username || !b.password) throw new Error('Scrivi utente e password della linea'); d.orbix = { id: b.orbixId, n: 1, t: Date.now(), u: b.username, dns: b.dns || 0 }; return { ...d.orbix }; }
       const r = await dm(m, p, b);
-      if (p === '/admin/state' && r && !r.players) { const c = (DEMO.settings.playersCfg = DEMO.settings.playersCfg || { orbix: [{ name: 'Principale', host: 'http://dns.kairos-esempio.tv:8080' }], max: [], showDnsAgents: false }); r.players = { orbix: true, max: true, dns: { orbix: c.orbix, max: c.max }, showDnsAgents: c.showDnsAgents, codes: c.codes || { orbix: '265847', max: '265847' }, slots: c.slots || [{ id: 'nki-orbix', name: 'NKI', app: 'orbix', link: 'orbx.nki-orbx.download', code: '265847' }, { id: 'nki-max', name: 'NKI', app: 'max', link: 'maxplayer.nki-max.stream', code: '265847' }, { id: 'armada-max', name: 'Armada', app: 'max', link: 'maxplayer-armada.chasertv2.stream', code: '265847' }] }; r.settings = { ...r.settings, playersCfg: c }; }
+      if (p === '/admin/state' && r && !r.players) { const c = (DEMO.settings.playersCfg = DEMO.settings.playersCfg || { orbix: [{ name: 'Principale', host: 'http://dns.kairos-esempio.tv:8080' }], max: [], showDnsAgents: false });
+        // OrbixPlay: i suoi DNS PIÙ tutti i DNS salvati in «Server DNS» (come fa il worker con orbixDnsList)
+        const savedDemo = [{ name: 'DNS principale', host: 'http://demo.server.tv' }, { name: 'DNS di riserva', host: 'http://backup.server.tv:8080' }];
+        const kh = (h) => String(h || '').replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
+        const orbUni = [...c.orbix]; for (const d of savedDemo) if (!orbUni.some((x) => kh(x.host) === kh(d.host))) orbUni.push({ name: d.name, host: d.host });
+        r.players = { orbix: true, max: true, dns: { orbix: orbUni, max: c.max }, showDnsAgents: c.showDnsAgents, codes: c.codes || { orbix: '265847', max: '265847' }, slots: c.slots || [{ id: 'nki-orbix', name: 'NKI', app: 'orbix', link: 'orbx.nki-orbx.download', code: '265847' }, { id: 'nki-max', name: 'NKI', app: 'max', link: 'maxplayer.nki-max.stream', code: '265847' }, { id: 'armada-max', name: 'Armada', app: 'max', link: 'maxplayer-armada.chasertv2.stream', code: '265847' }] }; r.settings = { ...r.settings, playersCfg: c }; }
       return r;
     };
   }
