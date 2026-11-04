@@ -96,6 +96,28 @@
     new MutationObserver(() => { if (!V.contains(card)) V.appendChild(card); }).observe(V, { childList: true });
   })();
 
+  /* ---------- Server DNS e VPN: verifica dei DNS con siti esterni ---------- */
+  const CHECK = [['🌐', 'Verifica propagazione DNS', 'dns.gtechgroup.it — controlla il dominio su oltre 40 server DNS nel mondo', 'https://dns.gtechgroup.it/'], ['📍', 'Il mio IP', 'mio-ip.it — IP pubblico, provider, ping e WHOIS', 'https://www.mio-ip.it/']];
+  const hostOnly = (h) => { try { return new URL(/^https?:\/\//i.test(h) ? h : 'http://' + h).hostname; } catch { return String(h || '').replace(/^https?:\/\//i, '').split(/[:/]/)[0]; } };
+  const openOut = (u) => { const w = window.open(u, '_blank', 'noopener'); if (!w) location.href = u; };
+  (function dnsCheck() {
+    const V = $('#v-dns'); if (!V) return;
+    const card = document.createElement('div'); card.className = 'card glass'; card.id = 'dnsCheck'; card.style.marginBottom = '18px';
+    card.innerHTML = `<div class="hd"><h3>Verifica DNS e connessione<small>Si aprono in una nuova scheda. Con «Verifica» accanto a un DNS il dominio viene copiato: incollalo nel sito.</small></h3></div>
+      <div class="qa-acts">${CHECK.map(([i, l, sm], k) => `<button class="qa-a" data-chk="${k}"><i>${i}</i><b>${l}</b><small>${sm}</small></button>`).join('')}</div>`;
+    $$('[data-chk]', card).forEach((b) => (b.onclick = () => openOut(CHECK[+b.dataset.chk][3])));
+    const decorate = () => {
+      if (!V.contains(card)) V.prepend(card);
+      $$('.kc-dns', V).forEach((row) => {
+        const ac = $('.ac', row), h = ($('.mono', row) || {}).textContent; if (!ac || !h || $('[data-dchk]', row)) return;
+        ac.insertAdjacentHTML('afterbegin', `<button class="btn sm" data-dchk="${esc(h)}" title="Copia il dominio e apri dns.gtechgroup.it">🔍 Verifica</button>`);
+        $('[data-dchk]', row).onclick = () => { const d = hostOnly(h); navigator.clipboard.writeText(d).then(() => toast(`Copiato «${d}»: incollalo su dns.gtechgroup.it`), () => toast('Dominio: ' + d)); openOut(CHECK[0][3]); };
+      });
+    };
+    new MutationObserver(decorate).observe(V, { childList: true, subtree: false });
+    decorate();
+  })();
+
   /* ---------- barra in alto: campanella delle richieste, manutenzione al volo ---------- */
   const top = $('.topbar');
   if (top && !$('#bellB')) {
@@ -119,7 +141,7 @@
     const b = $('#mtBtn'); if (!b || !window.KXMaint) return;
     b.onclick = () => KXMaint.quick();
     b.title = 'Accendi o spegni la manutenzione (messaggio ed esclusi: Impostazioni → Manutenzione)';
-    b.innerHTML = KXMaint.on() ? '🔧 Manutenzione: ON' : '🔧 Manutenzione: OFF';
+    b.innerHTML = `🔧<span class="mtx"> Manutenzione: ${KXMaint.on() ? 'ON' : 'OFF'}</span>`;
   }
 
   /* ---------- Panoramica: azioni rapide e interruttori rapidi ---------- */

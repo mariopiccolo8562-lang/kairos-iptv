@@ -398,6 +398,12 @@ Nella scheda di ogni agente (Agenti → apri l'agente):
 - **App terzi → Elimina liste inattive**: la stessa finestra per le liste di OrbixPlay e MaxPlayer.
 - Assistente IA spento dall'interruttore: il pulsante sparisce dall'app per tutti.
 
+## 23. Telefono, tablet e app installabile (2.12)
+
+- Il pannello si usa bene da **telefono e tablet** (Android e iOS): barra in alto compatta, menu a scomparsa (anche scorrendo dal bordo sinistro), **barra in basso** sul telefono (Panoramica · Clienti · ＋ Nuovo · Richieste · Menu), schede e finestre a tutto schermo, tabelle che scorrono di lato, niente zoom automatico sui campi su iPhone.
+- **App installabile**: in Panoramica → Azioni rapide c'è «Installa l'app» (Android/Chrome/Edge: installa direttamente; iPhone/iPad: Safari → Condividi → Aggiungi alla schermata Home). Si apre a tutto schermo con l'icona KAIROS.
+- **Server DNS e VPN → Verifica DNS e connessione**: pulsanti per dns.gtechgroup.it (propagazione DNS) e mio-ip.it (IP pubblico); accanto a ogni DNS «🔍 Verifica» copia il dominio e apre il sito.
+
 ## Struttura
 
 ```
