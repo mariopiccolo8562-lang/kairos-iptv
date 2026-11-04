@@ -136,7 +136,7 @@ body.agent .foot{display:none}
   { const b = nav('devices'); if (b) for (const n of b.childNodes) if (n.nodeType === 3 && /Dispositivi/.test(n.textContent)) n.textContent = 'Clienti'; }
   Object.assign(TITLES, { devices: 'Clienti', agents: 'Agenti', sec: 'Sicurezza' });
   // menu (2.11): «Operatività» per il lavoro di tutti i giorni, «Impostazioni» per le cose che si toccano una volta
-  const GROUPS = [['§Operatività'], ['', ['dash']], ['Clienti', ['devices', 'agents', 'live']], ['Da gestire', ['reports', 'creq', 'areq', 'reqai', 'store']], ['Contenuti e comunicazione', ['msgs', 'vod']],
+  const GROUPS = [['§Operatività'], ['', ['dash']], ['Clienti', ['devices', 'agents', 'armada', 'live']], ['Da gestire', ['reports', 'creq', 'areq', 'reqai', 'store']], ['Contenuti e comunicazione', ['msgs', 'vod']],
     ['App e distribuzione', ['appk', 'dlc', 'apps3', 'lines']], ['Controllo', ['apperr', 'activity']],
     ['§Impostazioni'], ['', ['set-look', 'set-app', 'set-addon', 'set-ai', 'dns', 'set-maint', 'set-sec', 'sec', 'api']]];
   const HIDDEN = ['settings', 'ai']; // sostituite dalle voci qui sopra (le pagine restano)
@@ -178,7 +178,7 @@ body.agent .foot{display:none}
 
   /* ---------- modalità agente ---------- */
   const agentCan = (v) => !!PERM_VIEW[v] && can(PERM_VIEW[v]);
-  const OWNER_ONLY = ['dash', 'live', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'dns', 'apps3', 'lines', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity'];
+  const OWNER_ONLY = ['dash', 'live', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'dns', 'apps3', 'lines', 'armada', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity'];
   let modeSet = '';
   function applyMode() {
     const ag = isAgent();

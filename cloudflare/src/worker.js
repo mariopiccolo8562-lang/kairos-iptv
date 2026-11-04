@@ -613,6 +613,89 @@ async function linkedLinesRoutes(req, env, path, who, ip, ag) {
   return null;
 }
 
+/* ---------------- Pannello Armada: API reseller ufficiale (chiave ARMADA_KEY, solo titolare) ----------------
+   Documentazione: api.php?action=…&api_key=… (resellers_list, lines_list, mag_devices_list, new, device_info,
+   device_status, renew, bouquet, reseller). La chiave resta sul server: non arriva mai al pannello né ai log. */
+const ARMADA_URL = 'https://ts-spain.xyz/api.php';
+const armadaUrlOf = (s) => (s && s.armadaUrl) || ARMADA_URL;
+const armOk = (x) => x === true || x === 'true' || x === 1 || x === '1';
+async function armadaCall(env, s, params) {
+  if (!env.ARMADA_KEY) throw new HttpErr(400, 'Armada non è collegato: aggiungi il segreto ARMADA_KEY su GitHub (guida nella pagina Armada)');
+  const u = new URL(armadaUrlOf(s));
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '') u.searchParams.set(k, String(v));
+  u.searchParams.set('api_key', env.ARMADA_KEY);
+  let r; try { r = await fetch(u.toString(), { headers: { Accept: 'application/json' } }); } catch { throw new HttpErr(502, 'Armada non risponde, riprova tra poco'); }
+  const txt = await r.text();
+  let j; try { j = JSON.parse(txt); } catch { throw new HttpErr(502, r.ok ? 'Armada ha risposto in un formato inatteso: controlla l\'indirizzo dell\'API' : 'Errore di Armada (' + r.status + ')'); }
+  const first = Array.isArray(j) ? j[0] : j;
+  if (!r.ok || (first && typeof first === 'object' && 'status' in first && !armOk(first.status))) {
+    const why = str(String((first && (first.message || first.error || first.msg)) || ''), 200).replace(env.ARMADA_KEY, '***');
+    throw new HttpErr(r.status >= 500 ? 502 : 400, 'Armada: ' + (why || (r.status === 401 || r.status === 403 ? 'chiave API non valida' : 'operazione non riuscita')));
+  }
+  return j;
+}
+const armList = (j) => (Array.isArray(j) ? j : j && Array.isArray(j.data) ? j.data : []);
+const armTs = (v) => { const n = +v; return Number.isFinite(n) && n > 0 ? (n < 1e12 ? n * 1000 : n) : 0; };
+const armCommon = (x) => ({ id: +x.id || 0, enabled: armOk(x.enabled) && !(x.admin_enabled !== undefined && !armOk(x.admin_enabled)), adminOff: x.admin_enabled !== undefined && !armOk(x.admin_enabled), exp: armTs(x.exp_date), created: armTs(x.created_at), owner: str(x.owner_username, 80), notes: str(x.notes, 300), trial: armOk(x.is_trial), maxConn: +x.max_connections || 0, country: str(x.forced_country, 8), isp: str(x.isp_desc, 80), lastActivity: str(x.last_activity, 30), lastIp: str(x.last_ip, 60) });
+const armMac = (v) => { const h = String(v || '').toUpperCase().replace(/[^0-9A-F]/g, ''); return h.length === 12 ? h.match(/.{2}/g).join(':') : ''; };
+/** cambia solo alcune chiavi delle impostazioni salvate (senza scrivere i valori predefiniti) */
+async function settingsPatch(env, patch) {
+  const row = await env.DB.prepare("SELECT v FROM settings WHERE k = 'app'").first();
+  let raw = {}; try { raw = row ? JSON.parse(row.v) : {}; } catch {}
+  Object.assign(raw, patch);
+  await env.DB.prepare("INSERT INTO settings (k, v) VALUES ('app', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(JSON.stringify(raw)).run();
+}
+async function armadaRoutes(req, env, url, path, who, ip) {
+  const m = req.method, s = await getSettings(env);
+  if (path === '/armada/state' && m === 'GET') {
+    const out = { connected: !!env.ARMADA_KEY, url: armadaUrlOf(s), dns: s.armadaDns || '' };
+    if (env.ARMADA_KEY) { try { const x = armList(await armadaCall(env, s, { action: 'reseller' }))[0] || {}; out.reseller = { username: str(x.username, 80), credits: str(String(x.credits ?? ''), 20), enabled: armOk(x.enabled) }; } catch (e) { out.error = e.message; } }
+    return json(out);
+  }
+  if (path === '/armada/packages' && m === 'GET') return json({ packages: armList(await armadaCall(env, s, { action: 'bouquet' })).map((x) => ({ id: str(String(x.id ?? ''), 20), name: str(x.name, 80) })).filter((x) => x.id) });
+  if (path === '/armada/lines' && m === 'GET') return json({ lines: armList(await armadaCall(env, s, { action: 'lines_list' })).map((x) => ({ ...armCommon(x), username: str(x.username, 120), password: str(x.password, 200) })) });
+  if (path === '/armada/mags' && m === 'GET') return json({ mags: armList(await armadaCall(env, s, { action: 'mag_devices_list' })).map((x) => ({ ...armCommon(x), mac: str(x.mac, 32) })) });
+  if (path === '/armada/resellers' && m === 'GET') return json({ resellers: armList(await armadaCall(env, s, { action: 'resellers_list' })).map((x) => ({ id: +x.id || 0, username: str(x.username, 80), email: str(x.email, 120), credits: str(String(x.credits ?? ''), 20), enabled: armOk(x.status), notes: str(x.notes, 300), lastLogin: str(x.last_login, 30), group: str(x.group_name, 60), clients: +x.total_clients || 0, owner: str(x.owner_username, 80), relation: str(x.relation_type, 20) })) });
+  if (path === '/armada/new' && m === 'POST') {
+    const b = await readJSON(req, 2048);
+    const type = b.type === 'mag' ? 'mag' : 'm3u', sub = parseInt(b.sub, 10);
+    if (![0, 1, 3, 6, 12].includes(sub)) throw new HttpErr(400, 'Scegli la durata: prova, 1, 3, 6 o 12 mesi');
+    const pack = str(String(b.pack ?? ''), 20); if (!/^\d+$/.test(pack)) throw new HttpErr(400, 'Scegli il pacchetto di canali');
+    const params = { action: 'new', type, sub, pack };
+    if (type === 'mag') { const mac = armMac(b.mac); if (!mac) throw new HttpErr(400, 'MAC non valido (es. 00:1A:79:12:34:56)'); params.user = mac; }
+    if (sub === 0 && b.htime !== undefined && b.htime !== '') { const h = parseInt(b.htime, 10); if (!(h >= 1 && h <= 24)) throw new HttpErr(400, 'Ore di prova: da 1 a 24'); params.htime = h; }
+    const country = str(b.country, 3).toUpperCase(); if (country) { if (!/^([A-Z]{2}|ALL)$/.test(country)) throw new HttpErr(400, 'Paese: due lettere (es. IT) oppure ALL'); params.country = country; }
+    const notes = nameClean(b.notes, 200); if (notes) params.notes = notes;
+    if (b.adult === true || b.adult === false) params.adult = b.adult ? 1 : 0;
+    const x = armList(await armadaCall(env, s, params))[0] || {};
+    const out = { type, userId: str(String(x.user_id ?? ''), 20), url: str(x.url, 500), mac: str(x.mac, 32) || params.user || '', message: str(x.message, 120), username: '', password: '', host: '' };
+    if (type === 'm3u') { try { const u = new URL(out.url); out.username = u.searchParams.get('username') || ''; out.password = u.searchParams.get('password') || ''; out.host = u.origin; } catch {} }
+    if (out.host && !s.armadaDns) await settingsPatch(env, { armadaDns: out.host }); // il DNS delle linee si impara dalla prima linea creata
+    await log(env, 'new', `${who}: Armada — creata ${type === 'mag' ? 'MAG ' + out.mac : 'linea ' + (out.username || out.userId)} (${sub ? sub + (sub === 1 ? ' mese' : ' mesi') : 'prova'})`, ip);
+    return json(out);
+  }
+  if (path === '/armada/renew' && m === 'POST') {
+    const b = await readJSON(req, 1024);
+    const type = b.type === 'mag' ? 'mag' : 'm3u', sub = parseInt(b.sub, 10);
+    if (![1, 3, 6, 12].includes(sub)) throw new HttpErr(400, 'Rinnovo: 1, 3, 6 o 12 mesi');
+    const params = { action: 'renew', type, sub };
+    if (type === 'mag') { params.mac = armMac(b.mac); if (!params.mac) throw new HttpErr(400, 'MAC non valido'); }
+    else { params.username = str(b.username, 120); params.password = typeof b.password === 'string' ? b.password.slice(0, 200) : ''; if (!params.username || !params.password) throw new HttpErr(400, 'Servono utente e password della linea'); }
+    const x = armList(await armadaCall(env, s, params))[0] || {};
+    await log(env, 'edit', `${who}: Armada — rinnovata ${type === 'mag' ? 'MAG ' + params.mac : 'linea ' + params.username} di ${sub} ${sub === 1 ? 'mese' : 'mesi'}`, ip);
+    return json({ ok: true, exp: armTs(x.expire_date) });
+  }
+  if (path === '/armada/toggle' && m === 'POST') {
+    const b = await readJSON(req, 512);
+    const id = parseInt(b.id, 10), on = b.enabled === true;
+    if (!(id > 0)) throw new HttpErr(400, 'Linea non valida');
+    await armadaCall(env, s, { action: 'device_status', id, status: on ? 'enable' : 'disable' });
+    await log(env, on ? 'on' : 'off', `${who}: Armada — ${on ? 'attivata' : 'disattivata'} la linea #${id}`, ip);
+    return json({ ok: true });
+  }
+  return null;
+}
+
 async function getSettings(env) {
   const row = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('app').first();
   let s = {}; try { s = row ? JSON.parse(row.v) : {}; } catch {}
@@ -2819,7 +2902,9 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   /* ---------- segnalazioni e richieste di contenuti ---------- */
   if (path === '/requests' || path.startsWith('/requests/')) { const r = await adminRequests(req, env, path, url, who, ip); if (r) return r; }
   if (path === '/app-errors' || path.startsWith('/app-errors/')) { const r = await adminErrors(req, env, path, url, who, ip); if (r) return r; }
-  if (path === '/linked-lines' || path.startsWith('/linked-lines/')) { const r = await linkedLinesRoutes(req, env, path, who, ip, null); if (r) return r; }
+  // password delle linee e crediti Armada: solo dal pannello (mai dalle chiavi API di integrazione)
+  if (path === '/linked-lines' || path.startsWith('/linked-lines/')) { if (!ses) throw new HttpErr(403, 'Funzione disponibile solo dal pannello'); const r = await linkedLinesRoutes(req, env, path, who, ip, null); if (r) return r; }
+  if (path.startsWith('/armada/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Armada è riservato al titolare, dal pannello'); const r = await armadaRoutes(req, env, url, path, who, ip); if (r) return r; }
 
   /* ---------- DNS (server delle playlist) ---------- */
   /* ---------- DNS: server salvati (anche senza clienti) e cambio di massa ---------- */
@@ -3009,6 +3094,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (b.aiProvider !== undefined) { if (!AI_PROVIDERS.includes(b.aiProvider)) throw new HttpErr(400, 'Servizio non valido'); s.aiProvider = b.aiProvider; }
     if (b.dlCodes !== undefined) s.dlCodes = cleanDlCodes(b.dlCodes);
     if (b.appLinks !== undefined) s.appLinks = cleanAppLinks(b.appLinks);
+    if (typeof b.armadaUrl === 'string') { const u = str(b.armadaUrl, 300).trim(); if (!u) s.armadaUrl = ''; else { let x; try { x = new URL(u); } catch {} if (!x || x.protocol !== 'https:' || x.username || x.password) throw new HttpErr(400, 'Indirizzo API di Armada non valido: es. https://ts-spain.xyz/api.php'); s.armadaUrl = x.origin + x.pathname; } }
+    if (typeof b.armadaDns === 'string') { const u = str(b.armadaDns, 300).trim().replace(/\/+$/, ''); if (!u) s.armadaDns = ''; else { let x; try { x = new URL(/^https?:\/\//i.test(u) ? u : 'http://' + u); } catch {} if (!x) throw new HttpErr(400, 'DNS delle linee non valido: es. http://dns.esempio.com:8080'); s.armadaDns = x.origin; } }
     if (b.playersCfg !== undefined) {
       const c = b.playersCfg && typeof b.playersCfg === 'object' ? b.playersCfg : {};
       const list = (v, app) => (Array.isArray(v) ? v : []).slice(0, 20).map((x, i) => {
