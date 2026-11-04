@@ -329,6 +329,70 @@ async function orbixSend(env, d, b, who, ip, agentLines) {
   await log(env, 'edit', `${who}: OrbixPlay attivato per ${d.name || d.code} (dispositivo ${orbixId}, ${dns.name})`, ip);
   return { id: orbixId, n: 1, t: o.t, u: username, dns: di };
 }
+/* ---------------- MaxPlayer: account del cliente creato con la sua API ufficiale (chiave MAXPLAYER_KEY, intestazione Api-Token).
+   Il DNS è un «dominio» registrato su MaxPlayer: si sceglie per ID, l'indirizzo non viaggia e il cliente non lo vede. ---------------- */
+const MX_API = 'https://api.maxplayer.tv/v3/api/public';
+async function mxCall(env, method, path, body) {
+  if (!env.MAXPLAYER_KEY) throw new HttpErr(400, 'MaxPlayer non è collegato: aggiungi il segreto MAXPLAYER_KEY su GitHub (vedi la guida in Impostazioni)');
+  let r;
+  try { r = await fetch(MX_API + path, { method, headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'Api-Token': env.MAXPLAYER_KEY }, body: body === undefined ? undefined : JSON.stringify(body) }); } catch { throw new HttpErr(502, 'MaxPlayer non risponde, riprova tra poco'); }
+  const j = await r.json().catch(() => ({}));
+  if (r.ok && j && j.success !== 0) return j;
+  const why = str((j && j.error) || '', 200);
+  const MSG = { 401: 'Chiave MaxPlayer non valida o servizio MaxPlayer non attivo', 403: 'MaxPlayer: operazione non consentita (permessi o servizio)', 404: 'MaxPlayer: non trovato', 409: 'MaxPlayer: conflitto (già esistente o in uso)', 429: 'MaxPlayer: troppe richieste, riprova tra un minuto' };
+  throw new HttpErr(r.status >= 500 ? 502 : 400, (MSG[r.status] || 'Errore di MaxPlayer') + (why ? ' — ' + why : ''));
+}
+let mxDomMem = { t: 0, list: null };
+async function mxDomains(env, fresh) {
+  if (!fresh && mxDomMem.list && Date.now() - mxDomMem.t < 5 * 60e3) return mxDomMem.list;
+  const j = await mxCall(env, 'GET', '/domains');
+  const list = (Array.isArray(j.data) ? j.data : []).map((x) => ({ id: str(String(x.id ?? ''), 30), domain: str(x.domain, 200), port: str(String(x.port ?? ''), 8), https: !!+x.https, label: str(x.label, 60), status: str(x.status, 20) })).filter((x) => x.id);
+  mxDomMem = { t: Date.now(), list };
+  return list;
+}
+const maxpOf = (d) => { try { const o = JSON.parse(d.maxp || '{}'); return { uid: str(String(o.uid || ''), 30), u: str(o.u, 120), dom: str(String(o.dom || ''), 30), t: +o.t || 0 }; } catch { return { uid: '', u: '', dom: '', t: 0 }; } };
+/** attiva (crea l'account) o aggiorna la lista del cliente su MaxPlayer: utente e password della linea + dominio scelto */
+async function mxSend(env, d, b, who, ip, agentLines) {
+  if (!env.MAXPLAYER_KEY) throw new HttpErr(400, 'MaxPlayer non è collegato: aggiungi il segreto MAXPLAYER_KEY su GitHub (vedi la guida in Impostazioni)');
+  const username = str(b.username, 120), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '', dom = str(String(b.domain ?? ''), 30);
+  if (!username || !password) throw new HttpErr(400, 'Scrivi utente e password della linea');
+  if (agentLines && !agentLines.some((l) => l.username === username && l.password === password)) throw new HttpErr(400, 'Usa utente e password di una linea di questo cliente');
+  const doms = await mxDomains(env);
+  if (!doms.length) throw new HttpErr(400, 'Su MaxPlayer non hai ancora un DNS: aggiungilo in Impostazioni → App e aggiornamenti');
+  const D0 = doms.find((x) => x.id === dom) || doms[0];
+  const old = maxpOf(d);
+  let uid = old.uid, login = old.u, created = false;
+  if (uid) {
+    try { await mxCall(env, 'PUT', '/users/list', { user_id: uid, domain_id: D0.id, iptv_username: username, iptv_password: password }); }
+    catch (e) { if (!/non trovato/i.test(e.message)) throw e; uid = ''; } // account cancellato da MaxPlayer: si ricrea
+  }
+  if (!uid) {
+    const P = d.parent ? await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(d.parent).first() : d;
+    const body = { domain_id: D0.id, iptv_user: username, iptv_pass: password, fullname: str((P || d).name || d.name || d.code, 60) };
+    const j = await mxCall(env, 'POST', '/users', body);
+    uid = str(String(j.user_id ?? ''), 30); login = username; created = true;
+    if (!uid) throw new HttpErr(502, 'MaxPlayer non ha restituito l\'account creato');
+  }
+  const o = { uid, u: login, dom: D0.id, t: now() };
+  await env.DB.prepare('UPDATE devices SET maxp = ? WHERE id = ?').bind(JSON.stringify(o), d.id).run();
+  await log(env, 'edit', `${who}: MaxPlayer ${created ? 'attivato' : 'aggiornato'} per ${d.name || d.code} (${D0.label || 'DNS ' + D0.id})`, ip);
+  return { uid, u: login, dom: D0.id, t: o.t, created };
+}
+async function mxRemove(env, d, who, ip) {
+  const old = maxpOf(d);
+  if (old.uid) await mxCall(env, 'DELETE', '/users/' + encodeURIComponent(old.uid)).catch((e) => { if (!/non trovato/i.test(e.message)) throw e; });
+  await env.DB.prepare("UPDATE devices SET maxp = '' WHERE id = ?").bind(d.id).run();
+  await log(env, 'off', `${who}: MaxPlayer — account tolto a ${d.name || d.code}`, ip);
+  return { ok: true };
+}
+/** «http(s)://host:porta» → dominio per MaxPlayer */
+function mxDomainBody(u, label) {
+  let x; try { x = new URL(/^https?:\/\//i.test(u) ? u : 'http://' + u); } catch { throw new HttpErr(400, 'Scrivi il DNS completo, es. http://dns.esempio.com:8080'); }
+  const https = x.protocol === 'https:', port = +(x.port || (https ? 443 : 80));
+  if (!/^[a-z0-9.-]+$/i.test(x.hostname)) throw new HttpErr(400, 'DNS non valido');
+  return { domain: x.hostname.toLowerCase(), port, https, label: str(label, 60) };
+}
+
 async function orbixRemove(env, d, who, ip) {
   const old = orbixOf(d);
   if (old.id) await orbixCall(env, '/delete-playlists', { deviceid: old.id }).catch((e) => { if (!/non trovato/i.test(e.message)) throw e; });
@@ -2213,6 +2277,10 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   // Altre app (OrbixPlay): solo per i suoi clienti e con il permesso
   const aorb = path.match(/^\/orbix\/([A-Za-z0-9_-]{6,20})$/);
   if (aorb && (m === 'POST' || m === 'DELETE')) { need('players', 'Non puoi inviare le linee alle altre app'); if (!(await own(aorb[1]))) throw new HttpErr(404, 'Cliente non trovato'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
+  if (path === '/maxplayer/domains' && m === 'GET') { need('players', 'Non puoi usare le altre app'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
+  if (path === '/maxplayer/domains') throw new HttpErr(403, 'I DNS di MaxPlayer li gestisce solo il titolare');
+  const amx = path.match(/^\/maxplayer\/([A-Za-z0-9_-]{6,20})$/);
+  if (amx && (m === 'POST' || m === 'DELETE')) { need('players', 'Non puoi usare le altre app'); if (!(await own(amx[1]))) throw new HttpErr(404, 'Cliente non trovato'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
   // Manutenzione dei suoi clienti (se concessa): schermata «manutenzione» solo per loro
   if (path === '/agent-maint' && m === 'GET') { need('maint'); const s = await getSettings(env); return json((s.maintAg || {})[A.id] || { on: false, msg: '', allow: [] }); }
   if (path === '/agent-maint' && m === 'PUT') {
@@ -2344,6 +2412,27 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     let agentLines = null;
     if (ses && ses.agent) { const P0 = d.parent ? await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first() : d; agentLines = xtreamLines(await unseal(env, (P0 || d).playlists).catch(() => [])); }
     return json(await orbixSend(env, d, b, who, ip, agentLines));
+  }
+  if (path === '/maxplayer/domains' && m === 'GET') {
+    const list = await mxDomains(env, url.searchParams.get('fresh') === '1');
+    return json({ domains: ses && ses.agent ? list.map((x) => ({ id: x.id, label: x.label || 'DNS ' + x.id })) : list });
+  }
+  if (path === '/maxplayer/domains' && m === 'POST' && !(ses && ses.agent)) {
+    const b = await readJSON(req, 2048);
+    const j = await mxCall(env, 'POST', '/domains', mxDomainBody(str(b.url, 300), b.label));
+    mxDomMem.list = null;
+    await log(env, 'settings', `${who}: MaxPlayer — aggiunto un DNS (${str(b.label, 60) || 'senza nome'})`, ip);
+    return json({ ok: true, id: String(j.domain_id || '') });
+  }
+  const mxm = path.match(/^\/maxplayer\/([A-Za-z0-9_-]{6,20})$/);
+  if (mxm && (m === 'POST' || m === 'DELETE')) {
+    const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(mxm[1]).first();
+    if (!d) throw new HttpErr(404, 'Cliente non trovato');
+    if (m === 'DELETE') return json(await mxRemove(env, d, who, ip));
+    const b = await readJSON(req, 2048);
+    let agentLines = null;
+    if (ses && ses.agent) { const P0 = d.parent ? await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first() : d; agentLines = xtreamLines(await unseal(env, (P0 || d).playlists).catch(() => [])); }
+    return json(await mxSend(env, d, b, who, ip, agentLines));
   }
   const amd = path.match(/^\/agent-maint\/(\d{1,9})$/);
   if (amd && m === 'DELETE' && !(ses && ses.agent)) {
@@ -3053,7 +3142,7 @@ async function apiAdmin(req, env, path, who, ip, ctx) {
 async function deviceOut(env, d) {
   const pls = await unseal(env, d.playlists).catch(() => []);
   return { id: d.id, code: d.code, name: d.name, model: d.model, notes: d.notes, active: !!d.active, expires: d.expires, playlists: pls, hosts: [...new Set(pls.map(hostOf).filter(Boolean))], createdAt: d.created_at, lastSeen: d.last_seen, lastIp: d.last_ip, bound: !!d.secret_hash, status: statusOf(d, pls),
-    addons: addonsList(d.addons), ownerId: +d.owner_id || 0, aiLimit: d.ai_limit ?? -1, aiExtra: +d.ai_extra || 0, aiProvider: d.ai_provider || '', app: d.app || '', orbix: (({ id, t, n, u, dns }) => (id ? { id, t, n, u, dns } : null))(orbixOf(d)), parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '', player: playerParse(d.player) };
+    addons: addonsList(d.addons), ownerId: +d.owner_id || 0, aiLimit: d.ai_limit ?? -1, aiExtra: +d.ai_extra || 0, aiProvider: d.ai_provider || '', app: d.app || '', orbix: (({ id, t, n, u, dns }) => (id ? { id, t, n, u, dns } : null))(orbixOf(d)), maxp: (({ uid, u, dom, t }) => (uid ? { uid, u, dom, t } : null))(maxpOf(d)), parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '', player: playerParse(d.player) };
 }
 /** campi "account" inviati dal pannello: connessioni, profili, VPN (cur = valori attuali del dispositivo) */
 async function accountFields(env, b, cur, pls) {

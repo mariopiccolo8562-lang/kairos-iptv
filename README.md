@@ -349,7 +349,8 @@ Nella scheda di ogni agente (Agenti → apri l'agente):
 - **Scheda del cliente → Altre app**: scrivi l'ID del dispositivo OrbixPlay, utente e password (proposti dalla linea del cliente) e premi **Attiva**. Il DNS lo mette il pannello: sotto il pulsante scegli quale. **Riattiva** sostituisce senza doppioni, **Togli** cancella. Se l'ID è sbagliato non viene cancellato niente.
 - **DNS nascosto**: gli agenti vedono solo il nome del DNS. Puoi decidere tu di mostrargli l'indirizzo («Gli agenti vedono l'indirizzo dei DNS»). Gli agenti possono usare solo utente e password delle linee dei loro clienti.
 - Collegamento: segreto GitHub `ORBIX_KEY` = la tua customer key OrbixPlay. L'abbonamento OrbixPlay si attiva/rinnova dal loro pannello: la loro API non lo prevede.
-- MaxPlayer: segreto `MAXPLAYER_KEY` e DNS personale già previsti; l'attivazione si completa con la documentazione della sua API.
+- **MaxPlayer** (API pubblica ufficiale, chiave nel segreto `MAXPLAYER_KEY`, creata in MaxPlayer → API pubblica → Accesso → Crea chiave): nella scheda del cliente scrivi utente e password della linea, scegli il DNS e premi **Attiva**. Il pannello crea l'account MaxPlayer del cliente: entra nell'app con gli stessi utente e password. **Riattiva** aggiorna la lista (senza creare un altro account), **Togli** cancella l'account.
+- I DNS di MaxPlayer sono i **Domini** del tuo pannello MaxPlayer: li vedi in Impostazioni → App e aggiornamenti e puoi aggiungerne da lì. A MaxPlayer va solo l'ID del dominio, mai l'indirizzo; gli agenti vedono solo il nome.
 
 ## 20. Codici downloader
 
