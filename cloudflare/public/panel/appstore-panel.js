@@ -39,7 +39,8 @@
 
   const isOwner = () => D.role !== 'agent';
   const copy = (t) => navigator.clipboard.writeText(t).then(() => toast('Link copiato'), () => toast('Copia non consentita dal browser', 1));
-  const links = () => { const a = D.settings && D.settings.appLinks; return Array.isArray(a) && a.length ? a : DEF; };
+  // titolare: la sua lista (o i default); agente: solo le app che il titolare gli ha consentito (dal payload, sola lettura)
+  const links = () => isOwner() ? (() => { const a = D.settings && D.settings.appLinks; return Array.isArray(a) && a.length ? a : DEF; })() : (Array.isArray(D.appLinks) ? D.appLinks : []);
   let editing = null, busy = false;
 
   // --- card «Attiva app» in cima alla pagina APP Store ---
@@ -57,17 +58,31 @@
     busy = false; render();
   };
 
+  const cardItems = (l) => l.map((x, i) => `<div class="al-c"><b>${esc(x.name)}</b>
+        <div class="al-u">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.url.replace(/^https?:\/\//, ''))}</a>` : '<span class="nourl">— nessun link —</span>'}</div>
+        <div class="al-act">${x.url ? `<button class="btn sm pri" data-alc="${i}">Copia link</button><a class="btn sm" href="${esc(x.url)}" target="_blank" rel="noopener">Apri ↗</a>` : ''}</div></div>`).join('');
+
   function render() {
     const card = $('#appLinksCard'); if (!card) return;
-    if (!isOwner()) { card.style.display = 'none'; return; }
+    const oc = document.getElementById('opCard'); // config DNS OrbixPlay/MaxPlayer: solo titolare
+    if (!isOwner()) {
+      if (oc) oc.style.display = 'none';
+      const l = links();
+      if (!l.length) { card.style.display = 'none'; return; }
+      card.style.display = '';
+      card.innerHTML = `<div class="hd"><h3>Attiva app<small>Le app che il titolare ti ha abilitato: aprile, incolla il codice del cliente e carica la lista. I link li decide il titolare, non si modificano.</small></h3></div>
+        <div class="al-head"><span class="mut" style="font-size:12.5px">${l.length} app</span></div>
+        <div class="al-grid">${cardItems(l)}</div>`;
+      $$('[data-alc]', card).forEach((b) => (b.onclick = () => copy(links()[+b.dataset.alc].url)));
+      return;
+    }
+    if (oc) oc.style.display = '';
     card.style.display = '';
     if (editing) return renderEdit(card);
     const l = links();
     card.innerHTML = `<div class="hd"><h3>Attiva app<small>Il link di gestione dispositivo di ogni app dello store: aprilo, incolla il codice del cliente e attivi la lista. Copia il link, modificalo o aggiungine altri.</small></h3></div>
       <div class="al-head"><span class="mut" style="font-size:12.5px">${l.length} app</span><span class="sp"></span><button class="btn sm" id="alEdit">Modifica elenco</button></div>
-      ${l.length ? `<div class="al-grid">${l.map((x, i) => `<div class="al-c"><b>${esc(x.name)}</b>
-        <div class="al-u">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.url.replace(/^https?:\/\//, ''))}</a>` : '<span class="nourl">— nessun link —</span>'}</div>
-        <div class="al-act">${x.url ? `<button class="btn sm pri" data-alc="${i}">Copia link</button><a class="btn sm" href="${esc(x.url)}" target="_blank" rel="noopener">Apri ↗</a>` : ''}</div></div>`).join('')}</div>` : '<div class="emptyc" style="padding:18px">Nessuna app. Premi «Modifica elenco» per aggiungerne.</div>'}`;
+      ${l.length ? `<div class="al-grid">${cardItems(l)}</div>` : '<div class="emptyc" style="padding:18px">Nessuna app. Premi «Modifica elenco» per aggiungerne.</div>'}`;
     $('#alEdit').onclick = () => { editing = links().map((x) => ({ ...x })); render(); };
     $$('[data-alc]', card).forEach((b) => (b.onclick = () => copy(links()[+b.dataset.alc].url)));
   }
@@ -87,7 +102,13 @@
   }
 
   const ra = renderAll;
-  window.renderAll = renderAll = function () { ra(); applyName(); render(); };
+  window.renderAll = renderAll = function () {
+    ra(); applyName();
+    // per l'agente: la voce APP Store compare solo se il titolare gli ha consentito almeno un'app; la pagina mostra solo «Attiva app» (sola lettura)
+    const nav = $('.nav[data-v="apps3"]');
+    if (nav && !isOwner()) nav.style.display = (Array.isArray(D.appLinks) && D.appLinks.length) ? '' : 'none';
+    render();
+  };
 
   if (typeof DEMO !== 'undefined' && DEMO.settings && !DEMO.settings.appLinks) {
     DEMO.settings.appLinks = DEF.map((x) => ({ ...x }));

@@ -176,7 +176,8 @@ body.agent .foot{display:none}
 
   /* ---------- modalità agente ---------- */
   const agentCan = (v) => !!PERM_VIEW[v] && can(PERM_VIEW[v]);
-  const OWNER_ONLY = ['dash', 'live', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'dns', 'apps3', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity'];
+  // 'apps3' (APP Store) NON è qui: la sua visibilità per l'agente la decide appstore-panel.js in base alle app consentite (sola lettura)
+  const OWNER_ONLY = ['dash', 'live', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'dns', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity'];
   let modeSet = '';
   function applyMode() {
     const ag = isAgent();
@@ -285,6 +286,12 @@ body.agent .foot{display:none}
     const names = [...new Set([...(D.storeAppNames || []), ...(topAll ? [] : topP.storeApps), ...cur.filter((x) => x !== '*')])].filter((x) => topAll || topP.storeApps.some((y) => y.toLowerCase() === x.toLowerCase())).sort((x, y) => x.localeCompare(y));
     return (topAll ? chk('sapp', '*', '<b>Tutte le app</b>', all, false, 'Anche quelle che aggiungerai in futuro') : '') + (names.length ? names.map((n) => chk('sapp', n, esc(n), all ? !topAll : cur.some((x) => x.toLowerCase() === n.toLowerCase()), false, '')).join('') : '<p class="mut" style="font-size:12.5px">Le app compaiono qui dopo la prima richiesta dallo store; puoi anche aggiungerle a mano.</p>');
   };
+  // app di «Attiva app» (manage-device) che l'agente può vedere/usare: ['*'] = tutte
+  const appsAllowBox = (P) => {
+    const cur = Array.isArray(P.appsAllow) ? P.appsAllow : ['*'], all = cur.includes('*');
+    const names = [...new Set([...(((D.settings && D.settings.appLinks) || []).map((x) => x.name)), ...cur.filter((x) => x !== '*')])].sort((a, b) => a.localeCompare(b));
+    return chk('aapp', '*', '<b>Tutte le app</b>', all, false, 'Anche quelle che aggiungerai in futuro') + (names.length ? names.map((n) => chk('aapp', n, esc(n), all || cur.some((x) => x.toLowerCase() === n.toLowerCase()), false, '')).join('') : '<p class="mut" style="font-size:12.5px">Nessuna app: le aggiungi in APP Store → Attiva app.</p>');
+  };
   async function openAgent(a) {
     const isNew = !a, sub = isAgent(), top = sub ? me() : null;
     let servers = [];
@@ -323,6 +330,9 @@ body.agent .foot{display:none}
         <div class="ag-chk" id="agSa" style="max-height:300px;overflow:auto">${storeAppsBox(P, topP)}</div>
         <div style="display:flex;gap:8px;margin-top:10px"><input class="inp" id="agSaN" maxlength="80" placeholder="Aggiungi un'app (nome come nello store)" style="margin:0;flex:1"><button class="btn sm" id="agSaAdd">Aggiungi</button></div>
       </div>
+      <div class="ag-c"><h4>App di «Attiva app» che può usare</h4><small>Quali app (manage-device) l'agente vede nel suo pannello per caricare le liste. Non può aggiungerle né modificarne i link: decidi solo tu.</small>
+        <div class="ag-chk" id="agAa" style="max-height:260px;overflow:auto">${appsAllowBox(P)}</div>
+      </div>
       <div class="ag-c"><h4>Add-on che può assegnare</h4><small>Tra quelli che in Impostazioni → Store add-on sono «solo a chi assegno»</small>
         <div class="ag-chk" id="agAd" style="max-height:300px;overflow:auto">${adCat.length ? adCat.map((x) => chk('ad', x.id, esc(x.name), (P.addons || []).includes(x.id), topP && !(topP.addons || []).includes(x.id), x.price ? esc(x.price) : '')).join('') : '<p class="mut">Nessun add-on da assegnare.</p>'}</div>
       </div>
@@ -331,10 +341,13 @@ body.agent .foot{display:none}
         ${a.totp ? '<button class="btn sm" id="agTz" style="margin-top:10px">Azzera verifica in due passaggi</button>' : ''}
         <p class="mut" style="font-size:12px;margin-top:12px">Creato ${esc(fmtD(a.createdAt))} · ultima attività ${esc(a.lastSeen ? ago(a.lastSeen) : 'mai')}</p></div>` : ''}
     </div>`;
-    $('#agFt').innerHTML = `${a ? '<button class="btn danger" id="agDel">Elimina agente</button>' : ''}<div style="flex:1"></div><button class="btn" id="agNo">Annulla</button><button class="btn pri" id="agOk">${isNew ? 'Crea agente' : 'Salva modifiche'}</button>`;
+    $('#agFt').innerHTML = `${a ? '<button class="btn danger" id="agDel">Elimina agente</button>' : ''}${a && a.active ? '<button class="btn" id="agAssist" title="Entra nel pannello di questo agente per fargli assistenza">🛟 Entra per assistenza</button>' : ''}<div style="flex:1"></div><button class="btn" id="agNo">Annulla</button><button class="btn pri" id="agOk">${isNew ? 'Crea agente' : 'Salva modifiche'}</button>`;
+    $('#agAssist') && ($('#agAssist').onclick = () => { if (D.demo) { toast('In demo l\'assistenza non è disponibile', 1); return; } KXAssist.enter(a.id, a.username); });
     $('#agA').onclick = () => $('#agA').classList.toggle('on');
     const saSync = () => { const all = $('#agSa [data-sapp="*"]'); $$('#agSa [data-sapp]').forEach((i) => { if (i.dataset.sapp !== '*') i.closest('label').style.opacity = all && all.checked ? '.45' : ''; }); };
     $('#agSa').onchange = saSync; saSync();
+    const aaSync = () => { const all = $('#agAa [data-aapp="*"]'); $$('#agAa [data-aapp]').forEach((i) => { if (i.dataset.aapp !== '*') i.closest('label').style.opacity = all && all.checked ? '.45' : ''; }); };
+    $('#agAa') && ($('#agAa').onchange = aaSync); aaSync();
     $('#agSaAdd').onclick = () => { const n = $('#agSaN').value.trim(); if (!n) return; if (!$$('#agSa [data-sapp]').some((i) => i.dataset.sapp.toLowerCase() === n.toLowerCase())) $('#agSa').insertAdjacentHTML('beforeend', chk('sapp', n, esc(n), true, false, '')); else $$('#agSa [data-sapp]').forEach((i) => { if (i.dataset.sapp.toLowerCase() === n.toLowerCase()) i.checked = true; }); const all = $('#agSa [data-sapp="*"]'); if (all) all.checked = false; $('#agSaN').value = ''; saSync(); };
     $('#agPwEye') && ($('#agPwEye').onclick = () => { const i = $('#agPwNow'); i.type = i.type === 'password' ? 'text' : 'password'; });
     $('#agPwCp') && ($('#agPwCp').onclick = () => navigator.clipboard.writeText(a.password).then(() => toast('Password copiata'), () => toast('Copia non consentita', 1)));
@@ -346,7 +359,8 @@ body.agent .foot{display:none}
       canAgents: $('#agR input:checked') ? $('#agR input:checked').value === '1' : false,
       servers: $$('#agS [data-srv]').filter((i) => i.checked).map((i) => i.dataset.srv),
       perms: { ...Object.fromEntries([...FL, ...FP].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"]`) || {}).checked])), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad),
-        storeApps: $('#agSa [data-sapp="*"]') && $('#agSa [data-sapp="*"]').checked ? ['*'] : $$('#agSa [data-sapp]').filter((i) => i.checked && i.dataset.sapp !== '*').map((i) => i.dataset.sapp) },
+        storeApps: $('#agSa [data-sapp="*"]') && $('#agSa [data-sapp="*"]').checked ? ['*'] : $$('#agSa [data-sapp]').filter((i) => i.checked && i.dataset.sapp !== '*').map((i) => i.dataset.sapp),
+        appsAllow: $('#agAa [data-aapp="*"]') && $('#agAa [data-aapp="*"]').checked ? ['*'] : $$('#agAa [data-aapp]').filter((i) => i.checked && i.dataset.aapp !== '*').map((i) => i.dataset.aapp) },
     });
     $('#agOk').onclick = async () => {
       const b = read(), pw = $('#agP').value;
@@ -524,6 +538,21 @@ body.agent .foot{display:none}
       return origDemo(m, p, b);
     };
   }
+  /* «Entra per assistenza»: il titolare opera nel pannello di un suo agente. Un banner fisso lo ricorda e permette di uscire.
+     Tutte le richieste portano l'header X-Assist (vedi api() in app.js); le azioni restano registrate come assistenza. */
+  function assistBanner(name) {
+    let b = document.getElementById('assistBar');
+    if (!b) { b = document.createElement('div'); b.id = 'assistBar'; b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(90deg,#b45309,#d97706);color:#fff;display:flex;align-items:center;gap:12px;padding:9px 16px;font-size:13.5px;font-weight:600;box-shadow:0 2px 12px #0007'; document.body.appendChild(b); }
+    b.innerHTML = `🛟 Stai assistendo l'agente <b>${esc(name)}</b> — ogni modifica agisce sul <b>suo</b> pannello<span style="flex:1"></span><button class="btn sm" id="assistOut" style="background:#fff;color:#92400e;font-weight:700">Esci dall'assistenza</button>`;
+    document.body.style.paddingTop = '42px';
+    document.getElementById('assistOut').onclick = () => KXAssist.exit();
+  }
+  const KXAssist = (window.KXAssist = {
+    on: () => !!window.__assist,
+    enter(id, name) { window.__assist = id; closePage(); assistBanner(name); toast('Entrato nel pannello di ' + name); load().catch(() => { toast('Assistenza non riuscita', 1); KXAssist.exit(); }); },
+    exit() { if (!window.__assist) return; window.__assist = null; const b = document.getElementById('assistBar'); if (b) b.remove(); document.body.style.paddingTop = ''; load(); toast('Uscito dall\'assistenza'); },
+  });
+
   layoutMenu();
   if ($('#app').classList.contains('on')) renderAll();
 })();

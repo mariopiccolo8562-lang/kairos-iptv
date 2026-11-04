@@ -2136,6 +2136,13 @@ async function adminInner(req, env, url, ip, ctx) {
     RENEW.set(req, cookieOf(req));
   }
   if (ses.role === 'agent') return agentRoutes(req, env, url, path, ses, ip, ctx);
+  // «Entra per assistenza»: il titolare opera nel pannello di un suo agente (solo il titolare; le azioni restano registrate come assistenza)
+  const assistId = req.headers.get('X-Assist');
+  if (assistId && /^\d+$/.test(assistId)) {
+    const ag = (await agentsAll(env)).find((a) => a.id === +assistId);
+    if (!ag) throw new HttpErr(404, 'Agente non trovato');
+    return agentRoutes(req, env, url, path, { ...ses, role: 'agent', admin_id: ag.id, assist: true, assistBy: ses.username }, ip, ctx);
+  }
   return adminRoutes(req, env, url, path, ses.username, ip, ctx, ses);
 }
 /* ======================================================================
@@ -2146,7 +2153,7 @@ const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists'
   'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'dlcodes'];
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, addons: [], storeApps: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, addons: [], storeApps: ['*'], appsAllow: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
@@ -2160,6 +2167,7 @@ function agentPerms(src) {
   for (const k of AGENT_FLAGS) if (typeof o[k] === 'boolean') p[k] = o[k];
   p.addons = addonsList(o.addons || []);
   p.storeApps = storeAppsList(o.storeApps);
+  p.appsAllow = storeAppsList(o.appsAllow); // app di «Attiva app» che l'agente può vedere/usare (['*'] = tutte)
   p.maxConn = Math.max(1, Math.min(MAX_CONN, parseInt(o.maxConn, 10) || 1));
   return p;
 }
@@ -2170,6 +2178,7 @@ function agentPermsWithin(req, top) {
   for (const k of AGENT_FLAGS) if (!top[k]) p[k] = false;
   p.addons = p.addons.filter((x) => top.addons.includes(x));
   if (!top.storeApps.includes('*')) p.storeApps = p.storeApps.includes('*') ? [...top.storeApps] : p.storeApps.filter((x) => storeAppOk(top.storeApps, x));
+  if (!top.appsAllow.includes('*')) p.appsAllow = p.appsAllow.includes('*') ? [...top.appsAllow] : p.appsAllow.filter((x) => storeAppOk(top.appsAllow, x));
   p.maxConn = Math.min(p.maxConn, top.maxConn);
   return p;
 }
@@ -2319,7 +2328,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   let canAg = !!A.can_agents;
   for (let x = by.get(A.parent_id), n = 0; x && n < 20; x = by.get(x.parent_id), n++) { P = agentPermsWithin(P, agentPerms(x.perms)); const up = serverIds(x.servers); mine = mine.filter((y) => up.includes(y)); if (!x.can_agents) canAg = false; }
   const Aeff = { ...A, can_agents: canAg ? 1 : 0, perms: JSON.stringify(P), servers: mine.join(',') };
-  const tree = agentTree(all, A.id), who = 'Agente ' + A.username;
+  const tree = agentTree(all, A.id), who = ses.assist ? `Assistenza di ${ses.assistBy} · ${A.username}` : 'Agente ' + A.username;
   const ctree = P.subClients ? tree : [A.id]; // clienti visibili: i suoi e (se concesso) quelli dei sotto-agenti
   const aSes = { ...ses, agent: true };
   if (now() - (+A.last_seen || 0) > 5 * 60e3) ctx.waitUntil(env.DB.prepare('UPDATE admins SET last_seen = ? WHERE id = ?').bind(now(), A.id).run());
@@ -2496,6 +2505,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const sNames = canAg && P.store ? (await storeAppNames(env)).filter((x) => storeAppOk(P.storeApps, x)) : [];
     return json({ role: 'agent', user: A.username, me: { ...meSafe, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s) : [], players: P.players ? (() => { const c = s.playersCfg || {}, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: v(c.orbix), max: v(c.max) }, showDnsAgents: !!c.showDnsAgents, codes: c.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(c).map((x) => (c.showDnsAgents ? x : { ...x, link: '' })) }; })() : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: canAg ? await agentsOut(env, all, tree.filter((x) => x !== A.id), true) : [],
+      appLinks: (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)), // «Attiva app»: solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
       settings: { brand: s.brand, accent: s.accent, downloaderCode: s.downloaderCode || '', storeDownloaderCode: s.storeDownloaderCode || '', liteDownloaderCode: s.liteDownloaderCode || '', apkUrl: s.apkUrl || '' }, permKeys: PERM_KEYS, security: { totp: !!ses.totp_on }, counts: {},
       activity: P.activity ? ((await env.DB.prepare('SELECT t, type, text FROM activity WHERE ' + ctree.map(() => 'text LIKE ?').join(' OR ') + ' ORDER BY t DESC LIMIT 200').bind(...ctree.map((id) => 'Agente ' + (by.get(id) || {}).username + ':%')).all()).results || []) : [],

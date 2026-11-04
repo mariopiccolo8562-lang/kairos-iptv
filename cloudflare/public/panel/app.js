@@ -13,7 +13,7 @@ addEventListener('pointermove', (e) => { const s = $('#spot'); s.style.left = e.
 /* ---------------- API (con fallback demo) ---------------- */
 async function api(method, path, body) {
   if (D.demo) return demoApi(method, path, body);
-  const r = await fetch('/api' + path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Kairos': '1' }, body: body ? JSON.stringify(body) : undefined });
+  const r = await fetch('/api' + path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Kairos': '1', ...(window.__assist ? { 'X-Assist': String(window.__assist) } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({}));
   if (r.status === 401 && path !== '/admin/login') { showLogin(); throw new Error('Sessione scaduta, accedi di nuovo'); }
   if (!r.ok) throw new Error(j.error || 'Errore ' + r.status);
