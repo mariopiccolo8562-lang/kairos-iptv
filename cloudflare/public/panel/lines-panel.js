@@ -62,7 +62,7 @@
         <label>Nome utente<input class="inp" id="llU" maxlength="120" value="${esc(f.username)}" autocomplete="off"></label>
         <label>Password<input class="inp" id="llP" maxlength="200" value="${esc(f.password)}" autocomplete="off"></label>
         <label>DNS<input class="inp mono" id="llD" maxlength="300" placeholder="http://dns.esempio.com:8080" value="${esc(f.dns)}"></label>
-        <label>MAC / ID dispositivo<input class="inp mono" id="llM" maxlength="64" placeholder="facoltativo" value="${esc(f.mac)}"></label>
+        <label>MAC / ID dispositivo<input class="inp mono" id="llM" data-mac maxlength="64" autocomplete="off" placeholder="facoltativo" value="${esc(f.mac)}"></label>
         <label>Cliente Kairos<input class="inp" id="llC" list="llCl" placeholder="facoltativo: nome o codice" value="${esc(f.client)}"></label>
         <label>Nota<input class="inp" id="llN" maxlength="200" placeholder="facoltativa" value="${esc(f.note)}"></label>
       </div>

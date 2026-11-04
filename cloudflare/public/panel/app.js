@@ -687,3 +687,28 @@ $('#aSave').onclick = async () => { try { await api('PUT', '/admin/password', { 
   }
   showLogin();
 })();
+
+/* MAC: i «:» si mettono da soli mentre scrivi, in ogni campo con data-mac.
+   data-mac="strict" = sempre un MAC · data-mac (senza valore) = MAC o ID: se scrivi lettere oltre A-F o più di 12 cifre, si lascia com'è.
+   In cattura: arriva anche dove i moduli fermano gli eventi «input». */
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if (!el || !el.matches || !el.matches('input[data-mac]')) return;
+  const v = el.value, prev = el.dataset.prev || '', loose = el.dataset.mac !== 'strict';
+  if (loose && /[^0-9a-f:\-.\s]/i.test(v)) { el.dataset.prev = v; return; }
+  const caret = el.selectionStart == null ? v.length : el.selectionStart;
+  let n = v.slice(0, caret).replace(/[^0-9a-f]/gi, '').length;
+  let hex = v.replace(/[^0-9a-f]/gi, '').toUpperCase();
+  const it = e.inputType || '';
+  if (it.startsWith('delete') && hex === prev.replace(/[^0-9a-f]/gi, '').toUpperCase() && hex.length) {
+    // cancellato solo un «:»: si cancella la cifra accanto
+    if (it === 'deleteContentBackward' && n > 0) { hex = hex.slice(0, n - 1) + hex.slice(n); n--; }
+    else if (it === 'deleteContentForward') hex = hex.slice(0, n) + hex.slice(n + 1);
+  }
+  if (loose && hex.length > 12) { el.dataset.prev = v; return; }
+  hex = hex.slice(0, 12); n = Math.min(n, hex.length);
+  const out = (hex.match(/.{1,2}/g) || []).join(':');
+  el.value = out; el.dataset.prev = out;
+  const pos = n ? n + Math.floor((n - 1) / 2) : 0;
+  if (document.activeElement === el) { try { el.setSelectionRange(pos, pos); } catch {} }
+}, true);

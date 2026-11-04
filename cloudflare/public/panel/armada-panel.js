@@ -79,7 +79,7 @@
       <div class="ar-f">
         <label>Tipo<div class="ar-ch" id="arType"><button type="button" data-t="m3u" class="${f.type === 'm3u' ? 'on' : ''}">Linea M3U / Xtream</button><button type="button" data-t="mag" class="${f.type === 'mag' ? 'on' : ''}">MAG</button></div></label>
         <label style="grid-column:span 2">Durata<div class="ar-ch" id="arSub">${SUBS.map(([v, l]) => `<button type="button" data-s="${v}" class="${+f.sub === v ? 'on' : ''}">${l}</button>`).join('')}${+f.sub === 0 ? `<select class="inp" id="arH" style="width:auto;padding:5px 8px">${Array.from({ length: 24 }, (_, i) => i + 1).map((h) => `<option value="${h}" ${+f.htime === h ? 'selected' : ''}>${h} ${h === 1 ? 'ora' : 'ore'}</option>`).join('')}</select>` : ''}</div></label>
-        ${f.type === 'mag' ? `<label>MAC del MAG<input class="inp mono" id="arMac" value="${esc(f.mac)}" placeholder="00:1A:79:12:34:56"></label>` : ''}
+        ${f.type === 'mag' ? `<label>MAC del MAG<input class="inp mono" id="arMac" data-mac="strict" maxlength="17" autocomplete="off" value="${esc(f.mac)}" placeholder="00:1A:79:12:34:56"></label>` : ''}
         <label>Pacchetto di canali<select class="inp" id="arPk">${packs}</select></label>
         <label>Paese (facoltativo)<input class="inp" id="arCo" maxlength="3" value="${esc(f.country)}" placeholder="IT, oppure ALL per la VPN"></label>
         <label>Note (facoltative)<input class="inp" id="arNo" maxlength="200" value="${esc(f.notes)}" placeholder="es. nome del cliente"></label>
