@@ -117,7 +117,7 @@ body.agent .foot{display:none}
     ['reports', 'Segnalazioni', 'Dei suoi clienti', 'reports'], ['contentReq', 'Richieste contenuti', 'Dei suoi clienti', 'creq'], ['addonReq', 'Richieste temi', 'Assegna solo gli add-on che gli concedi', 'areq'],
     ['messages', 'Messaggi', 'Solo ai suoi clienti, mai a tutti', 'msgs'], ['store', 'Download store: accettare le richieste', 'Solo per le app che scegli qui sotto (le impostazioni restano tue)', 'store'],
     ['storeAll', 'Download store: vedere anche i download degli altri', 'Se spento nello storico vede solo quelli approvati da lui', ''],
-    ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['dlcodes', 'Codici downloader', 'Le app da far installare ai clienti (solo da copiare)', 'dlc'], ['appstore', 'APP Store', 'Le app per caricare le liste: solo quelle che scegli qui sotto, in sola lettura', 'apps3'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', '']];
+    ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['dlcodes', 'Codici downloader', 'Le app da far installare ai clienti (solo da copiare)', 'dlc'], ['appstore', 'APP Store', 'Le app per caricare le liste: solo quelle che scegli qui sotto, in sola lettura', 'apps3'], ['lines', 'Linee collegate', 'Il registro delle linee collegate alle app: solo le sue', 'lines'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', '']];
   const PERM_VIEW = Object.fromEntries(FP.map(([k, , , v]) => [v, k]));
   const isAgent = () => D.role === 'agent';
   const me = () => D.me || {};
@@ -137,7 +137,7 @@ body.agent .foot{display:none}
   Object.assign(TITLES, { devices: 'Clienti', agents: 'Agenti', sec: 'Sicurezza' });
   // menu (2.11): «Operatività» per il lavoro di tutti i giorni, «Impostazioni» per le cose che si toccano una volta
   const GROUPS = [['§Operatività'], ['', ['dash']], ['Clienti', ['devices', 'agents', 'live']], ['Da gestire', ['reports', 'creq', 'areq', 'reqai', 'store']], ['Contenuti e comunicazione', ['msgs', 'vod']],
-    ['App e distribuzione', ['appk', 'dlc', 'apps3']], ['Controllo', ['apperr', 'activity']],
+    ['App e distribuzione', ['appk', 'dlc', 'apps3', 'lines']], ['Controllo', ['apperr', 'activity']],
     ['§Impostazioni'], ['', ['set-look', 'set-app', 'set-addon', 'set-ai', 'dns', 'set-maint', 'set-sec', 'sec', 'api']]];
   const HIDDEN = ['settings', 'ai']; // sostituite dalle voci qui sopra (le pagine restano)
   function layoutMenu() {
@@ -160,7 +160,7 @@ body.agent .foot{display:none}
   }
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
-  const AG_OK = /^\/admin\/(presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|agent-maint|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
+  const AG_OK = /^\/admin\/(presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
   const origApi = api;
   window.api = api = async function (m, p, b) {
     if (isAgent() && !AG_OK.test(p)) throw new Error('Funzione non disponibile per gli agenti');
@@ -178,7 +178,7 @@ body.agent .foot{display:none}
 
   /* ---------- modalità agente ---------- */
   const agentCan = (v) => !!PERM_VIEW[v] && can(PERM_VIEW[v]);
-  const OWNER_ONLY = ['dash', 'live', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'dns', 'apps3', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity'];
+  const OWNER_ONLY = ['dash', 'live', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'dns', 'apps3', 'lines', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity'];
   let modeSet = '';
   function applyMode() {
     const ag = isAgent();

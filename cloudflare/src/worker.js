@@ -343,6 +343,7 @@ async function orbixSend(env, d, b, who, ip, agentLines) {
   if (old.id) for (const id of old.pls) if (!pls.includes(id)) await orbixCall(env, '/delete-playlist', { playlist_id: /^\d+$/.test(id) ? +id : id }).catch(() => {});
   const o = { id: orbixId, pls, t: now(), n: 1, u: username, dns: di, h: hostKey(dns.host) };
   await env.DB.prepare('UPDATE devices SET orbix = ? WHERE id = ?').bind(JSON.stringify(o), d.id).run();
+  await llAuto(env, d, 'orbix', username, password, dns.host, dns.name, orbixId).catch(() => {}); // registro «Linee collegate»
   await log(env, 'edit', `${who}: OrbixPlay attivato per ${d.name || d.code} (dispositivo ${orbixId}, ${dns.name})`, ip);
   return { id: orbixId, n: 1, t: o.t, u: username, dns: di };
 }
@@ -392,6 +393,7 @@ async function mxSend(env, d, b, who, ip, agentLines) {
   }
   const o = { uid, u: login, dom: D0.id, t: now() };
   await env.DB.prepare('UPDATE devices SET maxp = ? WHERE id = ?').bind(JSON.stringify(o), d.id).run();
+  await llAuto(env, d, 'max', username, password, D0.domain ? `${D0.https ? 'https' : 'http'}://${D0.domain}${D0.port && !['80', '443'].includes(String(D0.port)) ? ':' + D0.port : ''}` : '', D0.label || 'DNS ' + D0.id, login).catch(() => {});
   await log(env, 'edit', `${who}: MaxPlayer ${created ? 'attivato' : 'aggiornato'} per ${d.name || d.code} (${D0.label || 'DNS ' + D0.id})`, ip);
   return { uid, u: login, dom: D0.id, t: o.t, created };
 }
@@ -399,6 +401,7 @@ async function mxRemove(env, d, who, ip) {
   const old = maxpOf(d);
   if (old.uid) await mxCall(env, 'DELETE', '/users/' + encodeURIComponent(old.uid)).catch((e) => { if (!/non trovato/i.test(e.message)) throw e; });
   await env.DB.prepare("UPDATE devices SET maxp = '' WHERE id = ?").bind(d.id).run();
+  await llAutoOff(env, d, 'max').catch(() => {});
   await log(env, 'off', `${who}: MaxPlayer — account tolto a ${d.name || d.code}`, ip);
   return { ok: true };
 }
@@ -471,6 +474,7 @@ async function orbixRemove(env, d, who, ip) {
   const old = orbixOf(d);
   if (old.id) await orbixCall(env, '/delete-playlists', { deviceid: old.id }).catch((e) => { if (!/non trovato/i.test(e.message)) throw e; });
   await env.DB.prepare("UPDATE devices SET orbix = '' WHERE id = ?").bind(d.id).run();
+  await llAutoOff(env, d, 'orbix').catch(() => {});
   await log(env, 'off', `${who}: OrbixPlay — linee tolte da ${d.name || d.code}`, ip);
   return { ok: true };
 }
@@ -530,6 +534,83 @@ function cleanAppLinks(v) {
     if (url && !/^https?:\/\/[^\s]+$/i.test(url)) throw new HttpErr(400, `${name}: il link deve iniziare con http:// o https://`);
     return { name, url };
   });
+}
+
+/* ---------------- Linee collegate: registro delle linee IPTV collegate alle app ----------------
+   Le app senza API (OraPlayer, IboOne…) le registra il titolare/agente incollando la linea; OrbixPlay e MaxPlayer
+   si registrano da sole quando le attivi dal pannello. Password cifrate; per l'agente gli host dei DNS restano nascosti. */
+const LL_MAX = 20000;
+function llClean(b) {
+  const app = nameClean(b && b.app, 60); if (!app) throw new HttpErr(400, 'Scegli l\'app a cui hai collegato la linea');
+  const username = str(b.username, 120).trim(); if (!username) throw new HttpErr(400, 'Scrivi il nome utente della linea');
+  let dns = str(b.dns, 300).trim().replace(/\/+$/, '');
+  if (dns && !/^https?:\/\//i.test(dns)) dns = 'http://' + dns;
+  if (dns && !/^https?:\/\/[^\s/?#]+(:\d+)?(\/[^\s?#]*)?$/i.test(dns)) throw new HttpErr(400, 'DNS non valido: es. http://dns.esempio.com:8080');
+  return { app, username, password: typeof b.password === 'string' ? b.password.slice(0, 200) : null, dns, mac: nameClean(b.mac, 64), deviceId: str(b.deviceId, 40), note: nameClean(b.note, 200) };
+}
+async function devOwnerOf(env, id) {
+  const d = id ? await env.DB.prepare('SELECT id, owner_id, parent FROM devices WHERE id = ?').bind(id).first() : null;
+  if (!d) return null;
+  const P0 = d.parent ? await env.DB.prepare('SELECT owner_id FROM devices WHERE id = ?').bind(d.parent).first() : d;
+  return { id: d.id, owner: +((P0 || {}).owner_id) || 0 };
+}
+/** registrazione automatica (attivazioni OrbixPlay / MaxPlayer dal pannello) */
+async function llAuto(env, d, src, username, password, dns, dnsName, mac) {
+  const o = await devOwnerOf(env, d.id), t = now(), ps = await seal(env, password || '');
+  const app = src === 'orbix' ? 'OrbixPlay' : 'MaxPlayer';
+  const ex = await env.DB.prepare('SELECT id FROM linked_lines WHERE device_id = ? AND source = ?').bind(d.id, src).first();
+  if (ex) await env.DB.prepare('UPDATE linked_lines SET owner_id = ?, app = ?, username = ?, pass_seal = ?, dns = ?, dns_name = ?, mac = ?, updated = ? WHERE id = ?').bind(o ? o.owner : 0, app, str(username, 120), ps, str(dns, 300), str(dnsName, 60), str(mac, 64), t, ex.id).run();
+  else await env.DB.prepare('INSERT INTO linked_lines (owner_id, app, username, pass_seal, dns, dns_name, mac, device_id, note, source, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(o ? o.owner : 0, app, str(username, 120), ps, str(dns, 300), str(dnsName, 60), str(mac, 64), d.id, '', src, t, t).run();
+}
+const llAutoOff = (env, d, src) => env.DB.prepare('DELETE FROM linked_lines WHERE device_id = ? AND source = ?').bind(d.id, src).run();
+/** ag: null = titolare (vede tutto) · { id, tree, hideHosts } = agente (solo le linee sue e dei sotto-agenti visibili) */
+async function linkedLinesRoutes(req, env, path, who, ip, ag) {
+  const m = req.method;
+  const sel = 'SELECT l.*, d.name AS dname, d.code AS dcode FROM linked_lines l LEFT JOIN devices d ON d.id = l.device_id';
+  if (path === '/linked-lines' && m === 'GET') {
+    let rows = [];
+    if (!ag) rows = ((await env.DB.prepare(sel + ' ORDER BY l.updated DESC LIMIT 5000').all()).results) || [];
+    else for (let i = 0; i < ag.tree.length; i += 90) { const part = ag.tree.slice(i, i + 90); rows.push(...(((await env.DB.prepare(sel + ` WHERE l.owner_id IN (${part.map(() => '?').join(',')}) ORDER BY l.updated DESC LIMIT 5000`).bind(...part).all()).results) || [])); }
+    rows.sort((a, b) => b.updated - a.updated);
+    const names = new Map((await agentsAll(env)).map((a) => [a.id, a.username]));
+    const items = [];
+    for (const r of rows) {
+      const auto = r.source === 'orbix' || r.source === 'max';
+      items.push({ id: r.id, ownerId: +r.owner_id || 0, ownerName: names.get(+r.owner_id) || '', app: r.app, username: r.username, password: await unsealText(env, r.pass_seal),
+        dns: ag && ag.hideHosts && auto ? '' : r.dns, dnsName: r.dns_name || '', mac: r.mac, deviceId: r.device_id, deviceName: r.dname || '', deviceCode: r.dcode || '', deviceGone: !!r.device_id && !r.dcode,
+        note: r.note, source: r.source, created: r.created, updated: r.updated });
+    }
+    return json({ items });
+  }
+  if (path === '/linked-lines' && m === 'POST') {
+    const b = llClean(await readJSON(req, 4096));
+    let owner = ag ? ag.id : 0;
+    if (b.deviceId) { const d = await devOwnerOf(env, b.deviceId); if (!d || (ag && !ag.tree.includes(d.owner))) throw new HttpErr(400, 'Cliente non trovato'); if (!ag) owner = d.owner; }
+    if (((await env.DB.prepare('SELECT COUNT(*) AS n FROM linked_lines').first()) || { n: 0 }).n >= LL_MAX) throw new HttpErr(400, 'Hai raggiunto il massimo di linee registrate: togli quelle che non servono');
+    const t = now();
+    const r = await env.DB.prepare('INSERT INTO linked_lines (owner_id, app, username, pass_seal, dns, dns_name, mac, device_id, note, source, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id')
+      .bind(owner, b.app, b.username, await seal(env, b.password || ''), b.dns, '', b.mac, b.deviceId, b.note, '', t, t).first();
+    await log(env, 'new', `${who}: linea ${b.username} collegata a ${b.app}`, ip);
+    return json({ id: (r && r.id) || 0 });
+  }
+  const mm = path.match(/^\/linked-lines\/(\d+)$/);
+  if (mm && (m === 'PUT' || m === 'DELETE')) {
+    const row = await env.DB.prepare('SELECT * FROM linked_lines WHERE id = ?').bind(+mm[1]).first();
+    if (!row || (ag && !ag.tree.includes(+row.owner_id))) throw new HttpErr(404, 'Linea non trovata');
+    if (m === 'DELETE') {
+      await env.DB.prepare('DELETE FROM linked_lines WHERE id = ?').bind(row.id).run();
+      await log(env, 'del', `${who}: tolta dal registro la linea ${row.username} (${row.app})`, ip);
+      return json({ ok: true });
+    }
+    if (row.source) throw new HttpErr(400, 'Questa linea è registrata in automatico dall\'attivazione: la modifichi dalla scheda del cliente');
+    const b = llClean(await readJSON(req, 4096));
+    let owner = +row.owner_id || 0;
+    if (b.deviceId && b.deviceId !== row.device_id) { const d = await devOwnerOf(env, b.deviceId); if (!d || (ag && !ag.tree.includes(d.owner))) throw new HttpErr(400, 'Cliente non trovato'); if (!ag) owner = d.owner; }
+    const ps = b.password === null ? row.pass_seal : await seal(env, b.password);
+    await env.DB.prepare('UPDATE linked_lines SET owner_id = ?, app = ?, username = ?, pass_seal = ?, dns = ?, mac = ?, device_id = ?, note = ?, updated = ? WHERE id = ?').bind(owner, b.app, b.username, ps, b.dns, b.mac, b.deviceId, b.note, now(), row.id).run();
+    return json({ ok: true });
+  }
+  return null;
 }
 
 async function getSettings(env) {
@@ -2133,10 +2214,10 @@ async function adminInner(req, env, url, ip, ctx) {
    e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
    ====================================================================== */
 const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'account', 'ai',
-  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'dlcodes', 'appstore'];
+  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'dlcodes', 'appstore', 'lines'];
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, appstore: false, addons: [], storeApps: ['*'], appsAllow: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, appstore: false, lines: false, addons: [], storeApps: ['*'], appsAllow: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
@@ -2382,6 +2463,8 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const f = (l) => (l || []).filter((x) => sc.has(x.id));
     return json({ ...j, online: f(j.online), recent: f(j.recent), top: [] });
   }
+  // Linee collegate: solo le sue (e dei sotto-agenti, se li vede); gli host delle attivazioni automatiche restano nascosti
+  if (path === '/linked-lines' || path.startsWith('/linked-lines/')) { need('lines', 'Non puoi usare le linee collegate'); const r = await linkedLinesRoutes(req, env, path, who, ip, { id: A.id, tree: ctree, hideHosts: !((await getSettings(env)).playersCfg || {}).showDnsAgents }); if (r) return r; throw new HttpErr(404, 'Non trovato'); }
   // Errori dell'applicazione
   if (path === '/app-errors' && m === 'GET') {
     need('errors'); const sc = await scope(), j = await viaOwner(await adminErrors(req, env, path, url, who, ip));
@@ -2736,6 +2819,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   /* ---------- segnalazioni e richieste di contenuti ---------- */
   if (path === '/requests' || path.startsWith('/requests/')) { const r = await adminRequests(req, env, path, url, who, ip); if (r) return r; }
   if (path === '/app-errors' || path.startsWith('/app-errors/')) { const r = await adminErrors(req, env, path, url, who, ip); if (r) return r; }
+  if (path === '/linked-lines' || path.startsWith('/linked-lines/')) { const r = await linkedLinesRoutes(req, env, path, who, ip, null); if (r) return r; }
 
   /* ---------- DNS (server delle playlist) ---------- */
   /* ---------- DNS: server salvati (anche senza clienti) e cambio di massa ---------- */
