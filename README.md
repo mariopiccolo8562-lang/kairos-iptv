@@ -409,19 +409,13 @@ Nella scheda di ogni agente (Agenti → apri l'agente):
 
 Nella scheda del cliente, sezione **Playlist**, c'è **«Incolla linea»**: la linea la crei tu sul pannello del tuo fornitore (Kairos non ci entra mai), poi incolli qui il **link M3U** (es. `http://server/get.php?username=…&password=…&type=m3u_plus`) oppure il **messaggio con server, utente e password**. Kairos riconosce da solo il formato (Xtream o M3U, link `get.php`/`player_api`, forma stream `/live/utente/password`, o testo con etichette) e lo mette nella playlist del cliente. Da lì scegli l'app, carichi la lista su Kairos Pro/Lite/OrbixPlay/MaxPlayer e mandi il messaggio al cliente — tutto da un pannello.
 
-## 25. Kairos TV — Kairos Pro più leggera, con il suo logo
+## 25. Kairos TV nel pannello (repository separato kairos-tv)
 
-Una seconda app compilata **dallo stesso codice** di Kairos Pro: stessa grafica stile Netflix, ma più leggera per le Fire Stick datate. Logo **blu-ciano** (schermo TV con K e tasto play) per distinguerla dal cerchio rosso della Pro. Si installa **accanto** alla Pro (pacchetto `com.kairos.tv`).
-
-**Tolto in Kairos TV**: registrazioni (con servizio in sottofondo, notifiche e sveglie), multi-schermo, speed test, assistente IA, store add-on (temi, skin, avatar extra), contenuti speciali, *Organizza* (tag, coda, rinomina e riordino categorie, modifica informazioni), associazione manuale della guida TV, sfondo animato e la parte più pesante dell'intro.
-
-**Uguale alla Pro**: home Netflix, film, serie, TV in diretta, guida TV, ricerca, la mia lista, continua a guardare, trailer, eventi, promemoria, ExoPlayer + VLC con recupero automatico e qualità adattiva, profili, collegamento TV, messaggi, VPN, controllo genitori, più playlist, segnalazioni, richieste, manutenzione, aggiornamento automatico.
-
-- **Compilazione**: ogni release `vX.Y.Z` produce `kairos.apk` (Pro) e `kairostv.apk` (Kairos TV). L'aggiornamento automatico di Kairos TV va nella release fissa `kairostv` del repository dello store (`kairostv.apk` + `kairostv.json`); il pannello la legge da `KTV_FEED`.
-- **Pannello**: filtro *Kairos TV* e badge **TV** nei Clienti, scelta *Kairos TV* nella scheda del cliente (spariscono add-on, assistente IA, registrazioni, speed test e multi-schermo), *Impostazioni → App e aggiornamenti → Kairos TV* con versione pubblicata, link dell'APK e codice Downloader.
-- L'app si fa riconoscere con `KairosTV/x.y` nello User-Agent: ogni app riceve solo il proprio aggiornamento.
-- Facoltative: variabili `TV_APP_ID` (pacchetto) e `TV_APP_NAME` (nome sotto l'icona, predefinito «Kairos TV»).
-- Per togliere o rimettere una funzione: `ED_OFF` e `SET_HIDE` in `player/index.html` (arriva da sola con l'interfaccia); le parti native sono dietro `BuildConfig.FULL`.
+Kairos TV è l'app stile Netflix leggera per chiavette datate, con il suo codice nel repository **kairos-tv** (come la Lite) e il logo blu.
+- **Clienti**: filtro *Kairos TV* e badge **TV**; l'app si riconosce da sola (si presenta con `KairosTV/x.y`).
+- **Scheda del cliente Kairos TV**: spariscono Lettore (ha solo ExoPlayer), Add-on, Assistente IA, registrazioni, speed test, multi-schermo e guida TV personale.
+- **Impostazioni → App e aggiornamenti → Kairos TV**: link dell'APK (vuoto = ultima release di `kairos-tv`), codice Downloader e versione pubblicata. Il codice Downloader compare anche in alto.
+- **Aggiornamenti**: Kairos TV riceve solo il proprio APK e non scarica l'interfaccia della Pro (la sua è dentro l'APK).
 
 ## Struttura
 

@@ -55,8 +55,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val HOME = "file:///android_asset/www/index.html"
-        /** Kairos TV si presenta al pannello anche come «KairosTV/x.y» (Kairos Pro resta solo «KairosPlayer/x.y») */
-        private val UA_TAG: String = if (BuildConfig.FULL) "" else " KairosTV/" + BuildConfig.VERSION_NAME
     }
 
     private val otaDir: File get() = File(filesDir, "www")
@@ -188,7 +186,7 @@ class MainActivity : ComponentActivity() {
             loadWithOverviewMode = true
             textZoom = 100
             cacheMode = WebSettings.LOAD_DEFAULT
-            userAgentString = "$userAgentString KairosPlayer/${BuildConfig.VERSION_NAME}$UA_TAG"
+            userAgentString = "$userAgentString KairosPlayer/${BuildConfig.VERSION_NAME}"
             // sicurezza: niente content://, niente finestre/popup aperti da script, niente posizione
             allowContentAccess = false
             javaScriptCanOpenWindowsAutomatically = false
@@ -241,12 +239,10 @@ class MainActivity : ComponentActivity() {
             } catch (_: Exception) {}
         }
         // registrazioni e VPN: notifiche verso la pagina; le registrazioni programmate vengono riattivate
-        if (BuildConfig.FULL) {
-            Recorder.ua = userAgent()
-            Recorder.listener = recListener
-            try { Recorder.init(this) } catch (_: Throwable) {}
-        }
+        Recorder.ua = userAgent()
+        Recorder.listener = recListener
         KxVpn.listener = vpnListener
+        try { Recorder.init(this) } catch (_: Throwable) {}
         loadUi()
         web.requestFocus()
 
@@ -435,8 +431,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun userAgent(): String = try {
-        WebSettings.getDefaultUserAgent(this) + " KairosPlayer/" + BuildConfig.VERSION_NAME + UA_TAG
-    } catch (e: Exception) { "Mozilla/5.0 (Linux; Android) KairosPlayer/" + BuildConfig.VERSION_NAME + UA_TAG }
+        WebSettings.getDefaultUserAgent(this) + " KairosPlayer/" + BuildConfig.VERSION_NAME
+    } catch (e: Exception) { "Mozilla/5.0 (Linux; Android) KairosPlayer/" + BuildConfig.VERSION_NAME }
 
     /* ------------------------------------------------------------------ */
     /* Aggiornamento APK                                                   */
@@ -535,7 +531,6 @@ class MainActivity : ComponentActivity() {
     /* ------------------------------------------------------------------ */
     /** ping+jitter, download (6 connessioni) e upload (4 invii): vedi SpeedTest.kt. Una nuova chiamata annulla la precedente. */
     private fun runSpeedTest() {
-        if (!BuildConfig.FULL) return
         SpeedTest.start(userAgent()) { s -> js("window.kxSpeedCb && kxSpeedCb(${JSONObject.quote(s)})") }
     }
 
@@ -880,12 +875,12 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        if (BuildConfig.FULL && Recorder.listener === recListener) Recorder.listener = null
+        if (Recorder.listener === recListener) Recorder.listener = null
         if (KxVpn.listener === vpnListener) KxVpn.listener = null
         if (isFinishing) {
-            if (BuildConfig.FULL) SpeedTest.stop()
+            SpeedTest.stop()
             // uscendo dall'app la VPN (che riguarda solo questa app) si spegne, salvo registrazioni in corso o programmate
-            if (KxVpn.active() && !(BuildConfig.FULL && Recorder.hasWork())) KxVpn.stop()
+            if (KxVpn.active() && !Recorder.hasWork()) KxVpn.stop()
             // video passato tra le schermate e non più ripreso da nessuno: niente audio orfano dopo la chiusura
             Handoff.back?.let { Handoff.back = null; if (it !== previewEngine) it.release() }
             Handoff.engine?.let { Handoff.engine = null; if (it !== previewEngine) it.release() }
@@ -903,8 +898,6 @@ class MainActivity : ComponentActivity() {
     inner class Bridge {
         @JavascriptInterface fun version(): String = BuildConfig.VERSION_NAME
         @JavascriptInterface fun versionCode(): Int = BuildConfig.VERSION_CODE
-        /** "pro" = Kairos Pro, "tv" = Kairos TV (l'interfaccia nasconde le funzioni che Kairos TV non ha) */
-        @JavascriptInterface fun edition(): String = BuildConfig.EDITION
         @JavascriptInterface fun model(): String = "${Build.MANUFACTURER} ${Build.MODEL}".trim().take(70)
         /** rete (wifi/eth/mobile, segnale Wi-Fi) e dati della visione in corso, per il pannello "Online ora" */
         @JavascriptInterface fun netInfo(): String = NetInfo.json(applicationContext)
@@ -972,7 +965,6 @@ class MainActivity : ComponentActivity() {
 
         /** multi-schermo (2 o 4 canali insieme) */
         @JavascriptInterface fun multi(payload: String) {
-            if (!BuildConfig.FULL) return
             val j = try { JSONObject(payload) } catch (e: Exception) { return }
             MultiActivity.pending = j
             runOnUiThread { previewWanted = false; stopPreview(); try { multiLauncher.launch(Intent(this@MainActivity, MultiActivity::class.java)) } catch (_: Throwable) {} }
@@ -984,20 +976,19 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface fun installApk(url: String) { downloadAndInstall(url) }
         @JavascriptInterface fun speedTest() { runSpeedTest() }
         /** ferma lo speed test in corso (es. finestra chiusa) */
-        @JavascriptInterface fun speedStop() { if (BuildConfig.FULL) SpeedTest.stop() }
+        @JavascriptInterface fun speedStop() { SpeedTest.stop() }
 
         /** registrazione: json {chId, name, url, at?, until?} (epoch ms) → id, "" se non valida. Aggiornamenti in window.kxRecCb(lista JSON) */
         @JavascriptInterface fun recStart(json: String): String {
-            if (!BuildConfig.FULL) return ""
             val o = try { JSONObject(json) } catch (e: Exception) { return "" }
             val id = Recorder.start(this@MainActivity, o.optString("chId"), o.optString("name"), o.optString("url"), o.optLong("at", 0L), o.optLong("until", 0L))
             if (id.isNotEmpty()) runOnUiThread { askNotifications() }
             return id
         }
-        @JavascriptInterface fun recStop(id: String) { if (BuildConfig.FULL) Recorder.stop(this@MainActivity, id) }
-        @JavascriptInterface fun recList(): String = if (BuildConfig.FULL) Recorder.listJson() else "[]"
-        @JavascriptInterface fun recDelete(id: String): Boolean = BuildConfig.FULL && Recorder.delete(this@MainActivity, id)
-        @JavascriptInterface fun recFree(): String = if (BuildConfig.FULL) Recorder.freeJson(this@MainActivity) else "{}"
+        @JavascriptInterface fun recStop(id: String) { Recorder.stop(this@MainActivity, id) }
+        @JavascriptInterface fun recList(): String = Recorder.listJson()
+        @JavascriptInterface fun recDelete(id: String): Boolean = Recorder.delete(this@MainActivity, id)
+        @JavascriptInterface fun recFree(): String = Recorder.freeJson(this@MainActivity)
 
         /** VPN WireGuard (testo wg-quick dal pannello). Stato in window.kxVpnCb(state, message) */
         @JavascriptInterface fun vpnSupported(): Boolean = KxVpn.supported(this@MainActivity)
@@ -1042,7 +1033,7 @@ class MainActivity : ComponentActivity() {
                         conn.connectTimeout = 15_000
                         conn.readTimeout = 30_000
                         conn.requestMethod = if (method == "POST") "POST" else "GET"
-                        conn.setRequestProperty("User-Agent", ua.ifBlank { "KairosPlayer/" + BuildConfig.VERSION_NAME + UA_TAG })
+                        conn.setRequestProperty("User-Agent", ua.ifBlank { "KairosPlayer/" + BuildConfig.VERSION_NAME })
                         conn.setRequestProperty("Accept", "application/json, text/plain, */*")
                         if (method == "POST") {
                             conn.doOutput = true

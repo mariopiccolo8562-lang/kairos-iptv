@@ -14,8 +14,8 @@
   const appOf = (d) => { if (!d) return ''; if (d.parent && !d.app) { const p = D.devices.find((x) => x.id === d.parent); return p ? p.app || '' : ''; } return d.app || ''; };
   const isLite = (d) => appOf(d) === 'lite';
   const isKtv = (d) => appOf(d) === 'ktv';
-  // Kairos TV: tutto come Kairos Pro tranne registrazioni, speed test, multi-schermo, assistente IA e add-on
-  const KTV_OFF = new Set(['rec', 'speed', 'multi', 'ai']);
+  // Kairos TV (stile Netflix leggera, solo ExoPlayer): niente registrazioni, speed test, multi-schermo, assistente IA, guida personale, add-on e scelta del lettore
+  const KTV_OFF = new Set(['rec', 'speed', 'multi', 'ai', 'epgUrl']);
   const kindOf = (d) => (isLite(d) ? 'lite' : isKtv(d) ? 'ktv' : 'tv');
   let flt = 'all';
   try { flt = localStorage.getItem('kc_app') || 'all'; } catch {}
@@ -47,7 +47,7 @@
   /* ---------- scheda cliente: scelta dell'app e solo le funzioni che Kairos Lite ha ---------- */
   function applyLite() {
     const on = isLite(edit), ktv = isKtv(edit);
-    for (const id of ['ply', 'add']) { const off = on || (ktv && id === 'add'); const sec = $('#ds-' + id); if (sec) sec.style.display = off ? 'none' : ''; const nb = $(`#dBody [data-ds="${id}"]`); if (nb) nb.style.display = off ? 'none' : ''; }
+    for (const id of ['ply', 'add']) { const off = on || ktv; const sec = $('#ds-' + id); if (sec) sec.style.display = off ? 'none' : ''; const nb = $(`#dBody [data-ds="${id}"]`); if (nb) nb.style.display = off ? 'none' : ''; }
     let k = 0; $$('#dBody .dnav [data-ds]').forEach((b) => { const i = $('i', b); if (i && b.style.display !== 'none') i.textContent = ++k; });
     k = 0; $$('#dBody .dsec').forEach((sec) => { const i = $('.dsh i', sec); if (i && sec.style.display !== 'none') i.textContent = ++k; });
     $$('#ds-perm [data-perm]').forEach((t) => { t.style.display = (on && !LITE_PERMS.has(t.dataset.perm)) || (ktv && KTV_OFF.has(t.dataset.perm)) ? 'none' : ''; });
@@ -66,7 +66,7 @@
       $$('#eApp [data-eapp]').forEach((b) => (b.onclick = () => { edit.app = b.dataset.eapp; edit._appSet = true; applyLite(); }));
     }
     if (!$('.lite-note', main)) $('#eAppBox', main) ? $('#eAppBox', main).insertAdjacentHTML('afterend', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa: niente lettore a scelta, add-on, assistente IA, registrazioni, speed test e multi-schermo.</div>') : main.insertAdjacentHTML('afterbegin', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa.</div>');
-    if (!$('.ktv-note', main)) $('.lite-note', main).insertAdjacentHTML('afterend', '<div class="lite-note ktv-note"><b>Questo cliente usa Kairos TV.</b> Stessa grafica di Kairos Pro, più leggera: niente registrazioni, speed test, multi-schermo, assistente IA e add-on.</div>');
+    if (!$('.ktv-note', main)) $('.lite-note', main).insertAdjacentHTML('afterend', '<div class="lite-note ktv-note"><b>Questo cliente usa Kairos TV.</b> Stile Netflix come Kairos Pro, ma leggera e solo con ExoPlayer: niente scelta del lettore, add-on, assistente IA, registrazioni, speed test, multi-schermo e guida TV personale.</div>');
     applyLite();
   };
 
@@ -86,9 +86,9 @@
   }
   /* ---------- Impostazioni → App e aggiornamenti: Kairos TV ---------- */
   if (pane && !$('#ktvCard')) {
-    pane.insertAdjacentHTML('beforeend', `<div class="card glass" id="ktvCard" style="margin-top:18px"><div class="hd"><h3>Kairos TV<small>La versione leggera di Kairos Pro (stessa grafica, logo blu): si compila e si aggiorna insieme alla Pro dallo stesso repository</small></h3></div>
+    pane.insertAdjacentHTML('beforeend', `<div class="card glass" id="ktvCard" style="margin-top:18px"><div class="hd"><h3>Kairos TV<small>L'app stile Netflix leggera per chiavette datate (logo blu): stesso pannello e stessi clienti, aggiornamenti dal suo repository kairos-tv</small></h3></div>
       <div id="ktvAuto" class="st-note"></div>
-      <div class="st-row"><div class="st-l"><b>Link per scaricare l'APK di Kairos TV</b><small>Vuoto = quello pubblicato in automatico a ogni release (kairostv.apk)</small></div><div class="st-c"><input class="inp mono" id="sKtvApk" placeholder="https://github.com/…/kairostv.apk"></div></div>
+      <div class="st-row"><div class="st-l"><b>Link per scaricare l'APK di Kairos TV</b><small>Vuoto = l'ultima release del repository kairos-tv</small></div><div class="st-c"><input class="inp mono" id="sKtvApk" placeholder="https://github.com/…/kairos-tv.apk"></div></div>
       <div class="st-row"><div class="st-l"><b>Codice Downloader di Kairos TV</b><small>Compare in alto nel pannello accanto agli altri (anche agli agenti)</small></div><div class="st-c"><input class="inp mono" id="sKtvDl" maxlength="20" placeholder="es. 7654321"></div></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px"><button class="btn pri" id="ktvSave">Salva Kairos TV</button><button class="btn" id="ktvCopy">Copia link APK</button></div></div>`);
     $('#ktvSave').onclick = async () => { try { await api('PUT', '/admin/settings', { ktvApkUrl: $('#sKtvApk').value.trim(), ktvDownloaderCode: $('#sKtvDl').value.trim() }); delete $('#sKtvApk').dataset.ldirty; delete $('#sKtvDl').dataset.ldirty; await load(); toast('Kairos TV salvata'); } catch (e) { toast(e.message, 1); } };
@@ -99,7 +99,7 @@
   function renderKtv() {
     const s = D.settings || {}, K = D.ktv || {}, f = K.feed;
     const n = D.devices.filter((d) => !d.parent && isKtv(d)).length;
-    if ($('#ktvAuto')) $('#ktvAuto').innerHTML = (f && f.version ? `✅ <b>Versione pubblicata: ${esc(f.version)}</b>${f.date ? ' · ' + esc(String(f.date).slice(0, 10)) : ''} — le app Kairos TV installate la propongono da sole` : '⚠️ Kairos TV non ancora pubblicata: arriva con la prossima release (tag vX.Y.Z)') + ` · Clienti che usano Kairos TV: <b>${n}</b>`;
+    if ($('#ktvAuto')) $('#ktvAuto').innerHTML = (f && f.version ? `✅ <b>Versione pubblicata: ${esc(f.version)}</b>${f.date ? ' · ' + esc(String(f.date).slice(0, 10)) : ''} — le app Kairos TV installate la propongono da sole` : '⚠️ Nessuna release di Kairos TV trovata (o GitHub non risponde adesso)') + ` · Clienti che usano Kairos TV: <b>${n}</b>`;
     if ($('#sKtvApk') && !$('#sKtvApk').dataset.ldirty && document.activeElement !== $('#sKtvApk')) $('#sKtvApk').value = s.ktvApkUrl || '';
     if ($('#sKtvDl') && !$('#sKtvDl').dataset.ldirty && document.activeElement !== $('#sKtvDl')) $('#sKtvDl').value = s.ktvDownloaderCode || '';
     const bar = $('#dlBar');
@@ -133,6 +133,6 @@
     DEMO.settings.liteDownloaderCode = DEMO.settings.liteDownloaderCode || '5551234';
     DEMO.devices.forEach((d, i) => { if (!d.parent && d.playlists && d.playlists.length) d.app = i % 4 === 2 ? 'lite' : i % 4 === 3 ? 'ktv' : 'tv'; });
     const dm = demoApi;
-    window.demoApi = demoApi = async function (m, p, b) { const r = await dm(m, p, b); if (p === '/admin/state' && r && !r.lite) r.lite = { apk: DEMO.settings.liteApkUrl || 'https://github.com/mariopiccolo8562-lang/kairos-lite/releases/latest/download/kairos-lite.apk', feed: { version: '1.0.0', date: '2026-11-03' } }; if (p === '/admin/state' && r && !r.ktv) r.ktv = { apk: 'https://github.com/mariopiccolo8562-lang/kairos-store/releases/download/kairostv/kairostv.apk', feed: { version: '2.6.0', date: '2026-11-04' } }; return r; };
+    window.demoApi = demoApi = async function (m, p, b) { const r = await dm(m, p, b); if (p === '/admin/state' && r && !r.lite) r.lite = { apk: DEMO.settings.liteApkUrl || 'https://github.com/mariopiccolo8562-lang/kairos-lite/releases/latest/download/kairos-lite.apk', feed: { version: '1.0.0', date: '2026-11-03' } }; if (p === '/admin/state' && r && !r.ktv) r.ktv = { apk: 'https://github.com/mariopiccolo8562-lang/kairos-tv/releases/latest/download/kairos-tv.apk', feed: { version: '1.0.0', date: '2026-11-04' } }; return r; };
   }
 })();

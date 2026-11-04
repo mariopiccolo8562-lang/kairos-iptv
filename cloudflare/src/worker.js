@@ -293,22 +293,24 @@ async function apkFeed(env) {
   feedMem = { t: now(), v };
   return v;
 }
-/* Kairos TV (versione leggera di Kairos Pro, stesso repository): si aggiorna dalla sua release fissa «kairostv»
-   (variabile KTV_FEED, impostata dal workflow) oppure dal link scritto nel pannello */
+/* Kairos TV (versione leggera stile Netflix, repository separato kairos-tv come la Lite):
+   aggiornamenti da kairos-tv.json dell'ultima release, oppure dal link scritto nel pannello */
+const KTV_APK = 'https://github.com/mariopiccolo8562-lang/kairos-tv/releases/latest/download/kairos-tv.apk';
 let ktvMem = { t: 0, k: '', v: null };
-async function ktvFeed(env, s) {
-  const url = s.ktvApkUrl ? s.ktvApkUrl.replace(/\.apk(\?.*)?$/i, '.json') : env.KTV_FEED || '';
-  if (!/^https:\/\/.+\.json$/i.test(url)) return null;
+async function ktvFeed(s) {
+  const apk = s.ktvApkUrl || KTV_APK, url = apk.replace(/\.apk(\?.*)?$/i, '.json');
   if (ktvMem.k === url && now() - ktvMem.t < 5 * 60e3) return ktvMem.v;
   let v = null;
-  try {
-    const r = await fetch(url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(6000) });
-    if (r.ok) {
-      const j = await r.json();
-      const code = semverCode(j.version) || +j.versionCode;
-      if (code > 0 && /^https:\/\//.test(j.url || '')) v = { versionCode: code, version: String(j.version || '').replace(/^v/i, '').slice(0, 20), url: String(j.url).slice(0, 500), date: String(j.date || '').slice(0, 40), auto: true };
-    }
-  } catch {}
+  if (/^https:\/\/.+\.json$/i.test(url)) {
+    try {
+      const r = await fetch(url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(6000) });
+      if (r.ok) {
+        const j = await r.json();
+        const code = semverCode(j.version) || +j.versionCode;
+        if (code > 0) v = { versionCode: code, version: String(j.version || '').replace(/^v/i, '').slice(0, 20), url: /^https:\/\//.test(j.url || '') ? String(j.url).slice(0, 500) : apk, date: String(j.date || '').slice(0, 40), auto: true };
+      }
+    } catch {}
+  }
   ktvMem = { t: now(), k: url, v };
   return v;
 }
@@ -2101,10 +2103,11 @@ async function route(req, env, ctx) {
     if (path === '/api/player/update' && req.method === 'GET') {
       if (await limited(env.RL_DEVICE, 'up:' + ip)) return json({ ui: null, apk: null }, 429);
       const s = await getSettings(env);
+      // Kairos TV ha la sua interfaccia dentro l'APK (repository kairos-tv): niente interfaccia della Pro e solo il suo APK
+      const ktv = appFrom(req, null) === 'ktv';
       return json({
-        ui: env.UI_VERSION ? { version: env.UI_VERSION, url: '/app/index.html' } : null,
-        // ogni app riceve solo il proprio APK (Kairos TV ha un altro pacchetto: non deve mai installare quello della Pro)
-        apk: appFrom(req, null) === 'ktv' ? await ktvFeed(env, s) : await latestApk(env, s),
+        ui: env.UI_VERSION && !ktv ? { version: env.UI_VERSION, url: '/app/index.html' } : null,
+        apk: ktv ? await ktvFeed(s) : await latestApk(env, s),
       }, 200, { 'Cache-Control': 'no-store' });
     }
     return json({ error: 'Non trovato' }, 404);
@@ -2898,7 +2901,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       wgConf: !!(await env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first()),
       security: { totp: !!(ses && ses.totp_on), encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
       lite: { apk: settings.liteApkUrl || LITE_APK, feed: await liteFeed(settings) },
-      ktv: { apk: settings.ktvApkUrl || (env.KTV_FEED ? env.KTV_FEED.replace(/\.json$/i, '.apk') : ''), feed: await ktvFeed(env, settings) },
+      ktv: { apk: settings.ktvApkUrl || KTV_APK, feed: await ktvFeed(settings) },
       players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: orbixDnsList(settings.playersCfg.orbix, dnslOwner), max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents, codes: settings.playersCfg.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(settings.playersCfg) },
       dlCodes: dlCodesOf(settings),
       storeAppNames: await storeAppNames(env), maintAg: Object.entries(settings.maintAg || {}).filter(([, x]) => x && x.on).map(([id]) => +id),
