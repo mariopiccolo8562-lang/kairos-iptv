@@ -153,7 +153,7 @@ async function enter() {
   $('#login').style.display = 'none'; $('#app').classList.add('on'); requestAnimationFrame(drawChart);
   $('#copyLink').onclick = () => { const l = D.settings.apkUrl; if (!l) return toast('Imposta il link APK in Impostazioni', 1); navigator.clipboard.writeText(l).then(() => toast('Link copiato'), () => toast('Copia non consentita', 1)); };
   clearInterval(poll);
-  if (!D.demo) poll = setInterval(() => { if (!document.hidden && document.querySelector('#app.on')) load().catch(() => {}); }, 20000);
+  if (!D.demo && !window.KXAuto) poll = setInterval(() => { if (!document.hidden && document.querySelector('#app.on')) load().catch(() => {}); }, 20000); // con il pulsante «Auto» decide auto-refresh.js
 }
 function renderSide() {
   $('#dlCode').textContent = D.settings.downloaderCode ? 'Downloader ' + D.settings.downloaderCode : '';

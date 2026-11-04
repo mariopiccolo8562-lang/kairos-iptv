@@ -427,7 +427,7 @@
     const P = KC.live, c = P.counts;
     V.innerHTML = `<div class="kc-k">${[['Online ora', c.online, 'app aperte negli ultimi 3 minuti', '#4f8cff'], ['Stanno guardando', c.watching, 'canali, film e serie', '#22c55e'], ['Nei menu', c.idle, 'app aperta senza video', '#facc15'], ['Dispositivi totali', c.total, 'registrati nel pannello', 'var(--a1)']].map(([l, v, s, col]) => `<div class="kpi glass"><div class="halo" style="background:${col}"></div><div class="lb"><i style="background:${col};box-shadow:0 0 10px ${col}"></i>${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('')}</div>
       <div class="g2b" style="grid-template-columns:minmax(0,2.4fr) minmax(260px,1fr)">
-        <div class="card glass"><div class="hd"><h3>Utenti<small>Si aggiorna da solo ogni 15 secondi · dati inviati dalle app 1.8 o successive</small></h3><button class="btn sm" id="kLiveR">Aggiorna</button></div>
+        <div class="card glass"><div class="hd"><h3>Utenti<small>${window.KXAuto ? (KXAuto.on() ? 'Si aggiorna da solo ogni ' + KXAuto.sec() + ' secondi (pulsante «Auto» in alto)' : 'Aggiornamento automatico spento (pulsante «Auto» in alto)') : 'Si aggiorna da solo ogni 15 secondi'} · dati inviati dalle app 1.8 o successive</small></h3><button class="btn sm" id="kLiveR">Aggiorna</button></div>
           <div class="kc-ltabs"><button class="on-t ${KC.liveTab !== 'off' ? 'on' : ''}" data-ltab="on"><i></i>Collegati ora<span>${P.online.length}</span></button><button class="off-t ${KC.liveTab === 'off' ? 'on' : ''}" data-ltab="off"><i></i>Offline<em>visti nelle ultime 24 ore</em><span>${P.recent.length}</span></button>
             <input class="inp" id="kLiveQ" placeholder="Cerca nome o codice…" value="${esc(KC.liveQ || '')}"></div>
           <div id="kLiveList">${liveList(P)}</div>
@@ -443,7 +443,7 @@
     $('#kLiveQ').oninput = (e) => { KC.liveQ = e.target.value; redraw(); };
     liveBind(V);
     clearTimeout(liveT);
-    liveT = setTimeout(() => { if ($('#v-live').classList.contains('on')) liveLoad(); }, 15000);
+    if (!window.KXAuto) liveT = setTimeout(() => { if ($('#v-live').classList.contains('on')) liveLoad(); }, 15000); // con il pulsante «Auto» decide auto-refresh.js
   }
 
   /* ---------- Errori applicazione ---------- */

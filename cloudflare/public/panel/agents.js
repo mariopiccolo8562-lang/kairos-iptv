@@ -78,6 +78,7 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 .ag-st{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px}.ag-st i{width:7px;height:7px;border-radius:50%;background:currentColor}
 .ag-st.on{color:var(--ok)}.ag-st.off{color:var(--bad)}
 .ag-bar2{height:5px;border-radius:5px;background:#2a2e36;margin-top:6px;overflow:hidden;max-width:120px}.ag-bar2 s{display:block;height:100%;background:var(--a1)}
+.ag-host{margin-bottom:16px;border-left:4px solid #38bdf8}.ag-hrow{display:flex;gap:8px;flex-wrap:wrap}.ag-hrow .inp{flex:1;min-width:220px;margin:0}.ag-hlink{margin-top:10px;font-size:13.5px}.ag-hlink b{color:#38bdf8}.ag-hnote{margin:12px 0 0;color:var(--mut);font-size:12.5px;line-height:1.5}
 #agPage{position:fixed;top:0;bottom:0;right:0;left:240px;z-index:21;background:var(--bg);display:none;flex-direction:column}
 #agPage.on{display:flex}
 #agPage .ah{display:flex;align-items:center;gap:12px;padding:16px 28px;border-bottom:1px solid var(--line);background:var(--pane)}
@@ -252,7 +253,13 @@ body.agent .foot{display:none}
     const sub = isAgent();
     const list = L.filter((a) => (st.f === 'all' || (st.f === 'on' ? a.active : !a.active)) && (!st.q || [a.username, a.email, a.notes].join(' ').toLowerCase().includes(st.q)));
     const byId = new Map(L.map((a) => [a.id, a]));
-    V.innerHTML = `<div class="ag-bar"><input class="inp" id="agQ" placeholder="Cerca agente per nome, email o note" value="${esc(st.q)}">
+    const S = D.settings || {}, showHost = !sub && !window.__assist;
+    const hostCard = !showHost ? '' : `<div class="card glass ag-host" id="agHost"><div class="hd"><h3>🔗 Indirizzo per i tuoi agenti<small>Dai agli agenti un link diverso dal tuo: non vedranno mai l'indirizzo con cui entri tu</small></h3></div>
+      <div class="ag-hrow"><input class="inp" id="agHostI" placeholder="es. agenti-tuodominio.com" value="${esc(S.agentHost || '')}"><button class="btn pri" id="agHostS">Salva</button>${S.agentHost ? `<button class="btn" id="agHostC">Copia link agenti</button>` : ''}</div>
+      ${S.agentHost ? `<div class="ag-hlink">Link da dare agli agenti: <b class="mono">https://${esc(S.agentHost)}</b></div>
+      <div class="tog ${S.agentHostOnly ? 'on' : ''}" id="agHostO" role="switch" tabindex="0" style="margin-top:10px"><div><b>Gli agenti entrano solo da questo indirizzo</b><small>${S.agentHostOnly ? 'Acceso: dal tuo indirizzo gli agenti non possono più entrare' : 'Spento: per ora entrano da entrambi (accendilo dopo aver provato che il link funziona)'}</small></div><i></i></div>` : ''}
+      <p class="ag-hnote">Il dominio deve essere tuo su Cloudflare e collegato al pannello (dominio personalizzato del Worker <b>kairos-panel</b>). Da quell'indirizzo tu non entri (risulta «credenziali errate»), così nessuno capisce che è anche il tuo pannello. L'assistenza agli agenti la fai sempre dal tuo.</p></div>`;
+    V.innerHTML = `${hostCard}<div class="ag-bar"><input class="inp" id="agQ" placeholder="Cerca agente per nome, email o note" value="${esc(st.q)}">
       <div class="seg" id="agF">${[['all', 'Tutti'], ['on', 'Attivi'], ['off', 'Disattivati']].map(([k, l]) => `<button data-f="${k}" class="${st.f === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       <button class="btn pri" id="agNew">+ Nuovo ${sub ? 'sotto-agente' : 'agente'}</button></div>
       <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
@@ -268,6 +275,16 @@ body.agent .foot{display:none}
       : `<div class="emptyc">${L.length ? 'Nessun agente trovato' : `Nessun agente ancora.<br><span style="font-size:13px">Gli agenti sono i tuoi rivenditori: entrano nel pannello con le loro credenziali e gestiscono solo i propri clienti, con i permessi che decidi tu.</span>`}</div>`}</div>`;
     $('#agQ').oninput = (e) => { st.q = e.target.value.toLowerCase(); const p = e.target.selectionStart; renderAgents(); const q = $('#agQ'); q.focus(); q.setSelectionRange(p, p); };
     $$('#agF [data-f]').forEach((b) => (b.onclick = () => { st.f = b.dataset.f; renderAgents(); }));
+    if (showHost) {
+      const saveHost = async (body, msg) => { try { const r = await api('PUT', '/admin/settings', body); if (r && r.settings) D.settings = r.settings; else Object.assign(D.settings, body); renderAgents(); toast(msg); } catch (e) { toast(e.message, 1); } };
+      $('#agHostS').onclick = () => saveHost({ agentHost: $('#agHostI').value.trim() }, $('#agHostI').value.trim() ? 'Indirizzo degli agenti salvato' : 'Indirizzo degli agenti tolto');
+      if ($('#agHostC')) $('#agHostC').onclick = () => navigator.clipboard.writeText('https://' + S.agentHost).then(() => toast('Link copiato'), () => toast('Copia non consentita', 1));
+      if ($('#agHostO')) $('#agHostO').onclick = async () => {
+        const on = !S.agentHostOnly;
+        if (on && !(await ask('Agenti solo dal loro indirizzo?', `Da adesso gli agenti entrano solo da <b>https://${esc(S.agentHost)}</b>. Chi è collegato dal tuo indirizzo viene scollegato. Prima prova che il link funzioni.`, 'Attiva'))) return;
+        saveHost({ agentHostOnly: on }, on ? 'Agenti solo dal loro indirizzo' : 'Gli agenti possono entrare da entrambi');
+      };
+    }
     $('#agNew').onclick = () => openAgent(null);
     $$('[data-ag]', V).forEach((r) => (r.onclick = () => openAgent(L.find((a) => a.id === +r.dataset.ag))));
   }

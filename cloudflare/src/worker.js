@@ -2502,6 +2502,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(ses.id).run();
     throw new HttpErr(401, 'Account disattivato');
   }
+  if (!ses.assist) { const S1 = await getSettings(env); if (S1.agentHost && S1.agentHostOnly && new URL(req.url).hostname.toLowerCase() !== S1.agentHost) { await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(ses.id).run(); throw new HttpErr(401, 'Accedi dall\'indirizzo del pannello che ti è stato dato'); } }
   if (!ses.assist && path !== '/logout') { const am = (await getSettings(env)).agMaint; if (am && am.on) throw new HttpErr(503, am.msg || AGM_MSG, { maint: true }); } // manutenzione del pannello agenti
   const A = all.find((a) => a.id === ses.admin_id);
   const by = new Map(all.map((a) => [a.id, a]));
@@ -3128,6 +3129,19 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (b.aiProvider !== undefined) { if (!AI_PROVIDERS.includes(b.aiProvider)) throw new HttpErr(400, 'Servizio non valido'); s.aiProvider = b.aiProvider; }
     if (b.dlCodes !== undefined) s.dlCodes = cleanDlCodes(b.dlCodes);
     if (b.appLinks !== undefined) s.appLinks = cleanAppLinks(b.appLinks);
+    if (typeof b.agentHost === 'string') {
+      // indirizzo separato da cui entrano gli agenti (così non vedono quello del titolare)
+      let h = b.agentHost.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+      if (h && !/^(?=.{4,190}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(h)) throw new HttpErr(400, 'Indirizzo per gli agenti non valido (es. agenti-tuodominio.com)');
+      if (h && h === new URL(req.url).hostname.toLowerCase()) throw new HttpErr(400, 'L\'indirizzo degli agenti deve essere diverso da quello che usi tu');
+      if (h !== (s.agentHost || '')) await log(env, 'edit', `${who}: indirizzo degli agenti ${h ? 'impostato su ' + h : 'tolto'}`, ip);
+      s.agentHost = h; if (!h) s.agentHostOnly = false;
+    }
+    if (typeof b.agentHostOnly === 'boolean') {
+      if (b.agentHostOnly && !s.agentHost) throw new HttpErr(400, 'Imposta prima l\'indirizzo degli agenti');
+      if (b.agentHostOnly && new URL(req.url).hostname.toLowerCase() === s.agentHost) throw new HttpErr(400, 'Questa impostazione si cambia dal tuo indirizzo');
+      s.agentHostOnly = b.agentHostOnly;
+    }
     if (b.agMaint !== undefined) {
       const x = b.agMaint && typeof b.agMaint === 'object' ? b.agMaint : {}, was = !!(s.agMaint && s.agMaint.on), on = x.on === true;
       s.agMaint = { on, msg: nameClean(x.msg, 300) || (s.agMaint && s.agMaint.msg) || '', since: on ? (was ? (s.agMaint.since || now()) : now()) : 0 };
@@ -3643,14 +3657,24 @@ async function login(req, env, ip, ctx) {
       .bind(ip, until ? 0 : c, until, now()).run();
     return until ? ' — IP bloccato 15 min' : '';
   };
-  if (ok && a.role === 'agent' && !(await agentChainActive(env, a.id))) {
+  // indirizzo degli agenti: lì il titolare non entra (come credenziali errate); con «solo da lì» gli agenti non entrano dal tuo
+  let okHost = ok;
+  if (ok) {
+    const S0 = await getSettings(env), host = new URL(req.url).hostname.toLowerCase();
+    if (S0.agentHost && host === S0.agentHost && a.role !== 'agent') okHost = false;
+    if (S0.agentHost && S0.agentHostOnly && host !== S0.agentHost && a.role === 'agent') {
+      await log(env, 'off', `Accesso rifiutato all'agente ${a.username}: deve entrare dal suo indirizzo`, ip);
+      throw new HttpErr(403, 'Accedi dall\'indirizzo del pannello che ti è stato dato');
+    }
+  }
+  if (okHost && a.role === 'agent' && !(await agentChainActive(env, a.id))) {
     await log(env, 'off', `Accesso rifiutato all'agente ${a.username}: account disattivato`, ip);
     throw new HttpErr(403, 'Account disattivato: contatta il tuo fornitore');
   }
-  if (ok && a.role === 'agent') { const am = (await getSettings(env)).agMaint; if (am && am.on) throw new HttpErr(503, am.msg || AGM_MSG, { maint: true }); }
-  if (!ok) {
+  if (okHost && a.role === 'agent') { const am = (await getSettings(env)).agMaint; if (am && am.on) throw new HttpErr(503, am.msg || AGM_MSG, { maint: true }); }
+  if (!okHost) {
     const blocked = await strike();
-    await log(env, 'off', `Accesso fallito per "${user.slice(0, 30)}"${blocked}`, ip);
+    await log(env, 'off', `Accesso fallito per "${user.slice(0, 30)}"${ok ? ' (titolare dall\'indirizzo degli agenti)' : ''}${blocked}`, ip);
     throw new HttpErr(401, 'Credenziali errate');
   }
   if (a.totp_on) {
