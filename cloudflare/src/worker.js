@@ -2153,7 +2153,7 @@ const maintAgOf = (s, P) => P && +P.owner_id ? Object.values(s.maintAg || {}).fi
 const maintFor = (s, P) => !!((s.maint && s.maint.on && P && !(s.maint.allow || []).includes(P.id)) || maintAgOf(s, P));
 const maintMsgFor = (s, P) => { const a = !(s.maint && s.maint.on && P && !(s.maint.allow || []).includes(P.id)) && maintAgOf(s, P); return (a ? a.msg : s.maint && s.maint.msg) || MAINT_MSG; };
 const MAINT_MSG = 'Servizio in manutenzione: torna disponibile a breve. Grazie per la pazienza!';
-/** quale app si collega: Kairos Lite si presenta con «KairosLite/x.y» (e versione «lite x.y»), KAIROS TV con «KairosPlayer/x.y» */
+/** quale app si collega: Kairos Lite si presenta con «KairosLite/x.y» (e versione «lite x.y»), Kairos Pro con «KairosPlayer/x.y» */
 const APPS = ['tv', 'lite'];
 function appFrom(req, b) {
   const ua = req.headers.get('User-Agent') || '', ver = String((b && b.ver) || '');

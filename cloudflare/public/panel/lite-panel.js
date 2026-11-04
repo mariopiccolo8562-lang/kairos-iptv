@@ -1,4 +1,4 @@
-/* KAIROS Control 2.6 — KAIROS TV e Kairos Lite separate: filtro nei Clienti, scheda cliente senza le funzioni
+/* KAIROS Control 2.6 — Kairos Pro e Kairos Lite separate: filtro nei Clienti, scheda cliente senza le funzioni
    che Lite non ha, impostazioni di Kairos Lite in «App e aggiornamenti», codice Downloader di Lite in alto. */
 (() => {
   const css = document.createElement('style');
@@ -21,7 +21,7 @@
     let seg = $('#dvApp');
     if (!seg) { seg = document.createElement('div'); seg.className = 'seg'; seg.id = 'dvApp'; bar.insertBefore(seg, $('#dvView')); }
     const prim = D.devices.filter((d) => !d.parent), n = (k) => prim.filter((d) => (k === 'all' ? true : k === 'lite' ? isLite(d) : !isLite(d))).length;
-    seg.innerHTML = [['all', 'Tutte le app'], ['tv', 'KAIROS TV'], ['lite', 'Kairos Lite']].map(([k, l]) => `<button data-app="${k}" class="${flt === k ? 'on' : ''}" title="${k === 'tv' ? 'Comprende i dispositivi non ancora collegati' : ''}">${l} <span style="opacity:.6">${n(k)}</span></button>`).join('');
+    seg.innerHTML = [['all', 'Tutte le app'], ['tv', 'Kairos Pro'], ['lite', 'Kairos Lite']].map(([k, l]) => `<button data-app="${k}" class="${flt === k ? 'on' : ''}" title="${k === 'tv' ? 'Comprende i dispositivi non ancora collegati' : ''}">${l} <span style="opacity:.6">${n(k)}</span></button>`).join('');
     $$('[data-app]', seg).forEach((b) => (b.onclick = () => { flt = b.dataset.app; try { localStorage.setItem('kc_app', flt); } catch {} renderDevices(); }));
   }
   const rd = renderDevices;
@@ -55,7 +55,7 @@
     if (!edit) return;
     const main = $('#dBody .dmain'); if (!main) return;
     if (!edit.parent && !$('#eAppBox', main)) {
-      main.insertAdjacentHTML('afterbegin', `<div id="eAppBox" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px"><b style="font-size:13.5px">App del cliente</b><div class="seg" id="eApp"><button data-eapp="tv">KAIROS TV</button><button data-eapp="lite">Kairos Lite</button></div><small class="mut">Si aggiorna da sola quando l'app si collega</small></div>`);
+      main.insertAdjacentHTML('afterbegin', `<div id="eAppBox" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px"><b style="font-size:13.5px">App del cliente</b><div class="seg" id="eApp"><button data-eapp="tv">Kairos Pro</button><button data-eapp="lite">Kairos Lite</button></div><small class="mut">Si aggiorna da sola quando l'app si collega</small></div>`);
       $$('#eApp [data-eapp]').forEach((b) => (b.onclick = () => { edit.app = b.dataset.eapp; edit._appSet = true; applyLite(); }));
     }
     if (!$('.lite-note', main)) $('#eAppBox', main) ? $('#eAppBox', main).insertAdjacentHTML('afterend', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa: niente lettore a scelta, add-on, assistente IA, registrazioni, speed test e multi-schermo.</div>') : main.insertAdjacentHTML('afterbegin', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa.</div>');

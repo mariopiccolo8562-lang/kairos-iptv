@@ -1,6 +1,6 @@
 /* KAIROS Control 2.13 — «Incolla linea»: incolli il link M3U o i dati che ti dà il pannello IPTV del fornitore
    (server, utente, password) e Kairos riconosce tutto e lo mette nella playlist del cliente. Da lì scegli l'app,
-   carichi la lista su KAIROS TV/Lite/OrbixPlay/MaxPlayer e mandi il messaggio al cliente — tutto da un pannello.
+   carichi la lista su Kairos Pro/Lite/OrbixPlay/MaxPlayer e mandi il messaggio al cliente — tutto da un pannello.
    La linea la crei TU sul pannello del fornitore: Kairos non ci entra mai. */
 (() => {
   const css = document.createElement('style');

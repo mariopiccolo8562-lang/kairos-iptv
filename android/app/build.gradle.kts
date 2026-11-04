@@ -16,7 +16,7 @@ android {
         targetSdk = 35
         versionCode = env("VERSION_CODE")?.toInt() ?: 1
         versionName = env("VERSION_NAME") ?: "1.0.0"
-        resValue("string", "app_name", env("APP_NAME") ?: "KAIROS TV")
+        resValue("string", "app_name", env("APP_NAME") ?: "Kairos Pro")
         // Fire TV / Android TV / telefoni usano processori ARM: escludere x86 riduce molto l'APK
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
     }

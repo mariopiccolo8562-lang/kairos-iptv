@@ -99,7 +99,7 @@ jobs:
             '{version:$v, versionCode:$c, url:$u, date:$d}' > kairos-tv.json
           cat kairos-tv.json
           if ! gh release view kairos-tv -R "$STORE_REPO" >/dev/null 2>&1; then
-            gh release create kairos-tv -R "$STORE_REPO" --title "KAIROS TV" --notes "App KAIROS TV: questa release viene aggiornata automaticamente a ogni nuova versione." --latest=false
+            gh release create kairos-tv -R "$STORE_REPO" --title "Kairos Pro" --notes "App Kairos Pro: questa release viene aggiornata automaticamente a ogni nuova versione." --latest=false
           fi
           gh release upload kairos-tv kairos-tv.apk kairos-tv.json -R "$STORE_REPO" --clobber
           echo "::notice::APK $VERSION_NAME pubblicato: $URL"

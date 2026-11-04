@@ -190,7 +190,7 @@
     ['➕', 'Nuovo cliente', 'Attiva un codice', () => $('#newDev').click()],
     ['🔁', 'Rinnova in scadenza', 'Clienti che scadono entro 14 giorni', () => { D.filter = 'soon'; view('devices'); renderDevices(); }],
     ['💬', 'Messaggio a tutti', 'Avviso nell\'app dei clienti', () => { view('msgs'); setTimeout(() => { const t = $('#mTo'); if (t) t.value = 'all'; const i = $('#mTitle') || $('#v-msgs input'); if (i) i.focus(); }, 50); }],
-    ['📋', 'Copia codice downloader', 'App KAIROS', () => { const c = S().downloaderCode; c ? copy(c, 'Codice') : (openSet('appk'), toast('Imposta prima il codice Downloader', 1)); }],
+    ['📋', 'Copia codice downloader', 'App Kairos Pro', () => { const c = S().downloaderCode; c ? copy(c, 'Codice') : (openSet('appk'), toast('Imposta prima il codice Downloader', 1)); }],
     ['🧩', 'Attiva su OrbixPlay / MaxPlayer', 'Scegli il cliente', () => pickClient('Su quale cliente?', (d) => { openDrawer(d, false); setTimeout(() => { const b = $('#dBody .dnav [data-ds="oth"]'); if (b) b.click(); }, 120); })],
     ['🔧', 'Manutenzione', 'Accendi o spegni al volo', () => window.KXMaint && KXMaint.quick()],
   ];

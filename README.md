@@ -352,11 +352,11 @@ Il codice resta **legato a quel dispositivo**: se qualcuno lo copia su un'altra 
 
 ## 17. Kairos Lite separata nel pannello
 
-- **Clienti**: filtro *Tutte le app / KAIROS TV / Kairos Lite* e badge **LITE** sui clienti dell'app Lite. Il tipo di app si riconosce in automatico al primo collegamento dopo l'aggiornamento (la Lite invia la versione «lite x.y.z»).
+- **Clienti**: filtro *Tutte le app / Kairos Pro / Kairos Lite* e badge **LITE** sui clienti dell'app Lite. Il tipo di app si riconosce in automatico al primo collegamento dopo l'aggiornamento (la Lite invia la versione «lite x.y.z»).
 - **Scheda di un cliente Lite**: restano solo le funzioni che la Lite ha (link, cambio playlist, profili, VPN). Spariscono Lettore, Add-on, Assistente IA, registrazioni, speed test e multischermo.
 - **Impostazioni → App e aggiornamenti → Kairos Lite**: link dell'APK (vuoto = ultima release di `kairos-lite`), codice Downloader e versione pubblicata letta dalla release.
-- Il codice Downloader della Lite compare anche in alto nel pannello, accanto a quello di KAIROS TV e dello store.
-- **Scelta dell'app**: nella scheda del cliente (e per gli agenti nel modulo del cliente) scegli *KAIROS TV* o *Kairos Lite*, anche quando lo crei. L'app viene comunque riconosciuta da sola appena si collega (dalla prima registrazione, non solo dal battito).
+- Il codice Downloader della Lite compare anche in alto nel pannello, accanto a quello di Kairos Pro e dello store.
+- **Scelta dell'app**: nella scheda del cliente (e per gli agenti nel modulo del cliente) scegli *Kairos Pro* o *Kairos Lite*, anche quando lo crei. L'app viene comunque riconosciuta da sola appena si collega (dalla prima registrazione, non solo dal battito).
 
 ## 18. Agenti: store, clienti e manutenzione come permessi
 
@@ -407,7 +407,7 @@ Nella scheda di ogni agente (Agenti → apri l'agente):
 
 ## 24. «Incolla linea»
 
-Nella scheda del cliente, sezione **Playlist**, c'è **«Incolla linea»**: la linea la crei tu sul pannello del tuo fornitore (Kairos non ci entra mai), poi incolli qui il **link M3U** (es. `http://server/get.php?username=…&password=…&type=m3u_plus`) oppure il **messaggio con server, utente e password**. Kairos riconosce da solo il formato (Xtream o M3U, link `get.php`/`player_api`, forma stream `/live/utente/password`, o testo con etichette) e lo mette nella playlist del cliente. Da lì scegli l'app, carichi la lista su KAIROS TV/Lite/OrbixPlay/MaxPlayer e mandi il messaggio al cliente — tutto da un pannello.
+Nella scheda del cliente, sezione **Playlist**, c'è **«Incolla linea»**: la linea la crei tu sul pannello del tuo fornitore (Kairos non ci entra mai), poi incolli qui il **link M3U** (es. `http://server/get.php?username=…&password=…&type=m3u_plus`) oppure il **messaggio con server, utente e password**. Kairos riconosce da solo il formato (Xtream o M3U, link `get.php`/`player_api`, forma stream `/live/utente/password`, o testo con etichette) e lo mette nella playlist del cliente. Da lì scegli l'app, carichi la lista su Kairos Pro/Lite/OrbixPlay/MaxPlayer e mandi il messaggio al cliente — tutto da un pannello.
 
 ## Struttura
 
