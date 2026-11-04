@@ -30,6 +30,7 @@ aside{background:var(--pane)!important;backdrop-filter:none!important;padding:18
 .nav.on::before{left:-12px;top:7px;bottom:7px;width:3px;box-shadow:none;background:var(--a1)}
 .nav .bdg,.kc-nb{background:var(--a1)!important;color:#fff!important}
 .nav-h{font-size:11px;font-weight:700;letter-spacing:.09em;color:#6c7280;padding:16px 12px 6px;text-transform:uppercase}
+.nav-h.big{font-size:12px;color:#c9ced8;letter-spacing:.14em;padding:22px 12px 2px;margin-top:6px;border-top:1px solid var(--line)}.nav-h.big:first-of-type{border-top:0;margin-top:0;padding-top:10px}
 aside .foot{border-radius:8px;background:#1f2228!important}
 main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 .topbar{margin-bottom:20px}.topbar h2{font-size:22px;font-weight:600}
@@ -134,19 +135,27 @@ body.agent .foot{display:none}
   // "Dispositivi" diventa "Clienti"
   { const b = nav('devices'); if (b) for (const n of b.childNodes) if (n.nodeType === 3 && /Dispositivi/.test(n.textContent)) n.textContent = 'Clienti'; }
   Object.assign(TITLES, { devices: 'Clienti', agents: 'Agenti', sec: 'Sicurezza' });
-  const GROUPS = [['', ['dash']], ['Utenti', ['devices', 'agents']], ['Monitoraggio', ['live', 'apperr', 'reports', 'creq', 'areq', 'ai']], ['Contenuti', ['vod', 'msgs', 'store']], ['Impostazioni', ['dns', 'apps3', 'dlc', 'settings', 'api', 'activity', 'sec']]];
+  // menu (2.11): «Operatività» per il lavoro di tutti i giorni, «Impostazioni» per le cose che si toccano una volta
+  const GROUPS = [['§Operatività'], ['', ['dash']], ['Clienti', ['devices', 'agents', 'live']], ['Da gestire', ['reports', 'creq', 'areq', 'reqai', 'store']], ['Contenuti e comunicazione', ['msgs', 'vod']],
+    ['App e distribuzione', ['appk', 'dlc', 'apps3']], ['Controllo', ['apperr', 'activity']],
+    ['§Impostazioni'], ['', ['set-look', 'set-app', 'set-addon', 'set-ai', 'dns', 'set-maint', 'set-sec', 'sec', 'api']]];
+  const HIDDEN = ['settings', 'ai']; // sostituite dalle voci qui sopra (le pagine restano)
   function layoutMenu() {
     const foot = $('aside .foot'), brand = $('aside .brand');
     $$('.nav-h', side).forEach((h) => h.remove());
     let at = brand;
     const put = (el) => { at.after(el); at = el; };
+    for (const v of HIDDEN) { const b = nav(v); if (b) b.style.display = 'none'; }
+    let big = null;
     for (const [h, vs] of GROUPS) {
-      const items = vs.map(nav).filter((b) => b && b.style.display !== 'none');
+      if (h && h[0] === '§') { big = h.slice(1); continue; }
+      const items = (vs || []).map(nav).filter((b) => b && b.style.display !== 'none');
       if (!items.length) continue;
+      if (big) { const e = document.createElement('div'); e.className = 'nav-h big'; e.textContent = big; put(e); big = null; }
       if (h) { const e = document.createElement('div'); e.className = 'nav-h'; e.textContent = h; put(e); }
       items.forEach(put);
     }
-    for (const b of $$('.nav[data-v]', side)) if (!GROUPS.some(([, vs]) => vs.includes(b.dataset.v))) put(b); // eventuali voci nuove
+    for (const b of $$('.nav[data-v]', side)) if (!HIDDEN.includes(b.dataset.v) && !GROUPS.some(([, vs]) => (vs || []).includes(b.dataset.v))) put(b); // eventuali voci nuove
     if (foot && $('#logout')) foot.after($('#logout'));
   }
 
@@ -167,7 +176,7 @@ body.agent .foot{display:none}
 
   /* ---------- modalità agente ---------- */
   const agentCan = (v) => !!PERM_VIEW[v] && can(PERM_VIEW[v]);
-  const OWNER_ONLY = ['dash', 'live', 'apperr', 'reports', 'creq', 'areq', 'ai', 'vod', 'msgs', 'store', 'dns', 'apps3', 'dlc', 'settings', 'api', 'activity'];
+  const OWNER_ONLY = ['dash', 'live', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'dns', 'apps3', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity'];
   let modeSet = '';
   function applyMode() {
     const ag = isAgent();

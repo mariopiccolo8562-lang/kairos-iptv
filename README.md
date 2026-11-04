@@ -376,6 +376,15 @@ Nella scheda di ogni agente (Agenti → apri l'agente):
 - **Liste create sulle app terzi** (stessa pagina): tutte le attivazioni fatte su OrbixPlay e MaxPlayer con cliente, lista, data e stato, ognuna con **Rimuovi**. «Inattiva» = abbonamento scaduto, o cliente disattivato e fermo, da più dei giorni scelti (di base 60). **Rimuovi le inattive** le toglie tutte insieme; **Rimuovi da sole ogni notte** lo fa in automatico. Eliminando un cliente dal pannello si tolgono anche le sue liste dalle app terzi.
 - **Scheda del cliente a tendina**: ogni sezione (1 Cliente, 2 Abbonamento…) si apre e si chiude toccando il titolo; il menu a sinistra apre la sezione scelta; ci sono «Apri tutte» e «Chiudi tutte». All'apertura è aperta solo «Cliente».
 
+## 22. Pannello riorganizzato (2.11)
+
+- **Menu in due parti**. *Operatività*: Panoramica · Clienti (Clienti, Agenti, Online ora) · Da gestire (Segnalazioni, Richieste contenuti, Richieste temi, Richieste IA, Download store) · Contenuti e comunicazione (Messaggi, Videoteca) · App e distribuzione (App Kairos, Codici downloader, App terzi) · Controllo (Errori applicazione, Attività). *Impostazioni*: Aspetto e marchio (con prezzo e privacy) · Funzioni dell'app · Store add-on · Assistente IA · Server DNS e VPN (con la VPN generale) · Manutenzione · Sicurezza e account · API e integrazioni.
+- **Barra in alto**: ricerca, pillola *Manutenzione ON/OFF* (accende e spegne al volo; messaggio ed esclusi in Impostazioni → Manutenzione), campanella con tutte le richieste in attesa, *Nuovo cliente*.
+- **Panoramica**: Azioni rapide (nuovo cliente, rinnova in scadenza, messaggio a tutti, copia codice downloader, attiva su OrbixPlay/MaxPlayer, manutenzione) e Interruttori rapidi (manutenzione, approvazione download store, playlist personali, eventi sportivi, assistente IA, pulizia automatica app terzi, agenti che vedono i DNS), più i riquadri e i grafici di prima.
+- **Clienti → ⋯ Altre opzioni → Elimina clienti inattivi** (come su MaxPlayer): giorni senza aprire l'app, «Includi clienti che non hanno mai effettuato l'accesso», «Solo scaduti o disattivati», numero di clienti idonei, fino a 500 per volta. Si conservano sempre i clienti con liste su OrbixPlay/MaxPlayer e quelli con una connessione collegata usata di recente.
+- **App terzi → Elimina liste inattive**: la stessa finestra per le liste di OrbixPlay e MaxPlayer.
+- Assistente IA spento dall'interruttore: il pulsante sparisce dall'app per tutti.
+
 ## Struttura
 
 ```

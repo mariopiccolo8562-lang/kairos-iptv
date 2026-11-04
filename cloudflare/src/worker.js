@@ -430,6 +430,28 @@ async function thirdCleanup(env, days, who, ip) {
   return { removed: n, errors: errors.slice(0, 20) };
 }
 
+/* ---------------- Clienti inattivi: chi non apre l'app da più di N giorni (come «Elimina utenti inattivi» di MaxPlayer) ----------------
+   Si conservano sempre: i clienti con liste attive su OrbixPlay o MaxPlayer e quelli con una connessione collegata usata di recente. */
+async function inactiveClients(env, o) {
+  const days = Math.max(7, Math.min(3650, parseInt(o.days, 10) || 30)), lim = now() - days * 864e5;
+  const rows = ((await env.DB.prepare("SELECT id, code, name, active, expires, playlists, last_seen, created_at, secret_hash, orbix, maxp, owner_id FROM devices WHERE parent = ''").all()).results) || [];
+  const kids = ((await env.DB.prepare("SELECT parent, MAX(last_seen) AS ls, MAX(CASE WHEN orbix <> '' OR maxp <> '' THEN 1 ELSE 0 END) AS third FROM devices WHERE parent <> '' GROUP BY parent").all()).results) || [];
+  const km = new Map(kids.map((k) => [k.parent, k]));
+  const out = [];
+  for (const d of rows) {
+    const st = statusOf(d, d.playlists ? ['x'] : []);
+    if (st === 'pending') continue; // i codici «da attivare» non sono clienti
+    if (d.orbix || d.maxp || (km.get(d.id) || {}).third) continue; // liste attive sulle app terzi: si conservano
+    if (o.onlyExp && st === 'active') continue;
+    const k = km.get(d.id), seen = Math.max(+d.last_seen || 0, +(k && k.ls) || 0);
+    const never = !d.secret_hash && !seen;
+    if (never) { if (!o.never || (+d.created_at || 0) >= lim) continue; }
+    else if (seen >= lim) continue;
+    out.push({ id: d.id, code: d.code, name: d.name, status: st, seen, never, ownerId: +d.owner_id || 0 });
+  }
+  return { days, list: out.sort((a, b) => a.seen - b.seen) };
+}
+
 async function orbixRemove(env, d, who, ip) {
   const old = orbixOf(d);
   if (old.id) await orbixCall(env, '/delete-playlists', { deviceid: old.id }).catch((e) => { if (!/non trovato/i.test(e.message)) throw e; });
@@ -1399,6 +1421,7 @@ async function playerAi(req, env, ip, ctx) {
   const [d, bad] = await deviceAuth(env, b);
   if (bad) return bad;
   if (!env.GEMINI_API_KEY && !env.ANTHROPIC_API_KEY) return json({ off: true });
+  if ((await getSettings(env)).aiOff) return json({ off: true });
   const [P] = await activeAccount(env, d);
   if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
   if (permsParse(P.perms).ai === false) return json({ error: 'Assistente non attivo su questo abbonamento' }, 403);
@@ -1960,6 +1983,7 @@ async function playerRegister(req, env, ip, ctx) {
     out.account = await accountOf(env, P, d, pls);
     out.vpn = await vpnOf(env, P, d);
     out.perms = permsOf(P); // i collegati ereditano i permessi del principale
+    if (s.aiOff) out.perms.ai = false; // assistente spento dal pannello
     out.addons = addonsFor(s, P); out.adg = P.addons || ''; // add-on (i collegati usano quelli del principale)
   }
   return json(out);
@@ -2513,6 +2537,26 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (ses && ses.agent) { const P0 = d.parent ? await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first() : d; agentLines = xtreamLines(await unseal(env, (P0 || d).playlists).catch(() => [])); }
     return json(await mxSend(env, d, b, who, ip, agentLines));
   }
+  if (path === '/devices/inactive' && m === 'GET' && !(ses && ses.agent)) {
+    const r = await inactiveClients(env, { days: url.searchParams.get('days'), never: url.searchParams.get('never') === '1', onlyExp: url.searchParams.get('onlyExp') === '1' });
+    return json({ days: r.days, count: r.list.length, sample: r.list.slice(0, 20) });
+  }
+  if (path === '/devices/purge' && m === 'POST' && !(ses && ses.agent)) {
+    const b = await readJSON(req, 512);
+    const r = await inactiveClients(env, { days: b.days, never: b.never === true, onlyExp: b.onlyExp === true });
+    const del = r.list.slice(0, 500);
+    for (let i = 0; i < del.length; i += 40) {
+      const part = del.slice(i, i + 40), ph = part.map(() => '?').join(','), ids = part.map((x) => x.id);
+      // le connessioni collegate tornano «in attesa», come quando elimini un cliente a mano
+      await env.DB.batch([
+        env.DB.prepare(`UPDATE devices SET parent = '', active = 0, expires = '', playlists = '', profiles = '' WHERE parent IN (${ph})`).bind(...ids),
+        env.DB.prepare(`DELETE FROM devices WHERE id IN (${ph})`).bind(...ids),
+        env.DB.prepare(`DELETE FROM link_pins WHERE device_id IN (${ph})`).bind(...ids),
+      ]);
+    }
+    if (del.length) await log(env, 'del', `${who}: eliminati ${del.length} clienti inattivi da più di ${r.days} giorni${b.onlyExp ? ' (solo scaduti o disattivati)' : ''}${b.never ? ', compresi quelli mai collegati' : ''}`, ip);
+    return json({ deleted: del.length, left: Math.max(0, r.list.length - del.length) });
+  }
   if (path === '/apps3/lists' && m === 'GET' && !(ses && ses.agent)) {
     const days = Math.max(7, Math.min(365, parseInt(url.searchParams.get('days'), 10) || 60));
     return json({ days, lists: await thirdLists(env, days) });
@@ -2781,6 +2825,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (typeof b.liteApkUrl === 'string') { const u = str(b.liteApkUrl, 500); if (u && !/^https:\/\//.test(u)) throw new HttpErr(400, 'Il link di Kairos Lite deve iniziare con https://'); s.liteApkUrl = u; }
     if (typeof b.allowLocalPlaylists === 'boolean') s.allowLocalPlaylists = b.allowLocalPlaylists;
     if (typeof b.showFootball === 'boolean') s.showFootball = b.showFootball;
+    if (typeof b.aiOff === 'boolean') s.aiOff = b.aiOff; // interruttore rapido: assistente IA spento per tutti
     if (b.aiDaily !== undefined) { const n = parseInt(b.aiDaily, 10); if (!(n >= 0 && n <= 1000)) throw new HttpErr(400, 'Domande al giorno: da 0 a 1000'); s.aiDaily = n; }
     if (b.aiProvider !== undefined) { if (!AI_PROVIDERS.includes(b.aiProvider)) throw new HttpErr(400, 'Servizio non valido'); s.aiProvider = b.aiProvider; }
     if (b.dlCodes !== undefined) s.dlCodes = cleanDlCodes(b.dlCodes);

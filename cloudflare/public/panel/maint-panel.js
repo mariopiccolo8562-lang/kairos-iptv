@@ -91,6 +91,14 @@
     page.classList.add('on');
   }
   btn.onclick = openPage;
+  // per il menu nuovo: la pillola in alto accende/spegne al volo, le impostazioni sono in Impostazioni → Manutenzione
+  async function quick() {
+    const m = M();
+    if (m.on) { if (!(await ask('Terminare la manutenzione?', `L'app torna disponibile per ${tutti()} entro pochi secondi.`, 'Termina'))) return; }
+    else if (!(await ask('Attivare la manutenzione?', `L'app si ferma per ${tutti()}${(m.allow || []).length ? ` tranne ${m.allow.length} esclus${m.allow.length === 1 ? 'o' : 'i'}` : ''}, anche per chi sta guardando (entro circa 20 secondi).<br><span class="mut">Messaggio e clienti esclusi: Impostazioni → Manutenzione.</span>`, 'Attiva'))) return;
+    try { await saveM({ ...m, on: !m.on }); await load(); toast(m.on ? 'Manutenzione terminata' : 'Manutenzione attiva'); } catch (e) { toast(e.message, 1); }
+  }
+  window.KXMaint = { open: openPage, quick, on: () => !!M().on, can: () => !isAg() || !!D.maintMe };
   addEventListener('keydown', (e) => { if (e.key === 'Escape') page.classList.remove('on'); });
   if ($('#app').classList.contains('on')) renderBar();
 })();

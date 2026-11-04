@@ -201,7 +201,7 @@
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
         <label class="mut" style="font-size:13px">Inattive da più di</label><input class="inp" id="tlDays" type="number" min="7" max="365" value="60" style="width:90px;margin:0"><span class="mut" style="font-size:13px">giorni</span>
         <div class="seg" id="tlF"><button data-tlf="all" class="on">Tutte</button><button data-tlf="ina">Solo inattive</button></div>
-        <div style="flex:1"></div><button class="btn danger" id="tlClean" disabled>Rimuovi le inattive</button></div>
+        <div style="flex:1"></div><button class="btn danger" id="tlClean">🧹 Elimina liste inattive</button></div>
       <div class="tog" id="tlAuto"><div><b>Rimuovi da sole ogni notte</b><small>Ogni notte il pannello toglie da OrbixPlay e MaxPlayer le liste inattive da più dei giorni scelti qui sopra</small></div><i></i></div>
       <div id="tlList" style="margin-top:12px"></div></div>`);
     let tlF = 'all', tlData = null, tlBusy = false;
@@ -212,7 +212,7 @@
       const el = $('#tlList'); if (!el) return;
       if (!tlData) { el.innerHTML = '<small class="mut">Carico…</small>'; return; }
       const all = tlData.lists || [], ina = all.filter((x) => x.inactive), show = tlF === 'ina' ? ina : all;
-      $('#tlClean').disabled = !ina.length; $('#tlClean').textContent = ina.length ? `Rimuovi le inattive (${ina.length})` : 'Nessuna lista inattiva';
+      $('#tlClean').textContent = `🧹 Elimina liste inattive${ina.length ? ` (${ina.length})` : ''}`;
       el.innerHTML = tlData.err ? `<small class="mut">${esc(tlData.err)}</small>` : show.length ? `<div class="tbl-wrap"><table class="tbl" style="width:100%"><thead><tr><th>Cliente</th><th>App</th><th>Lista</th><th>Inviata</th><th>Stato</th><th></th></tr></thead><tbody>${show.map((x) => {
         const st = x.inactive ? `<span style="color:var(--bad)">${x.why === 'scaduto' ? 'Scaduto' : 'Disattivato'} da ${Math.max(1, Math.floor((Date.now() - x.since) / 864e5))} giorni</span>` : x.status === 'expired' ? '<span style="color:var(--warn)">Scaduto da poco</span>' : x.status === 'disabled' ? '<span style="color:var(--warn)">Disattivato</span>' : '<span style="color:var(--ok)">Attivo</span>';
         return `<tr><td><b>${esc(x.name || '—')}</b><br><small class="mono mut">${esc(x.code)}</small></td><td><span class="op-ic ${x.app === 'max' ? 'mx' : ''}" style="width:30px;height:30px;font-size:11px;display:inline-grid">${x.app === 'max' ? 'MX' : 'OP'}</span></td><td class="mono" style="font-size:12.5px">${esc(x.app === 'max' ? 'utente ' + x.ref : 'ID ' + x.ref)}</td><td>${esc(fmt(x.t))}</td><td>${st}</td><td style="text-align:right"><button class="btn sm danger" data-tlrm="${esc(x.app)}:${esc(x.id)}">Rimuovi</button></td></tr>`;
@@ -226,10 +226,18 @@
     $('#tlDays').addEventListener('change', (e) => { e.stopPropagation(); loadTl(); });
     $('#tlDays').addEventListener('input', (e) => e.stopPropagation());
     $$('#tlF [data-tlf]').forEach((b) => (b.onclick = () => { tlF = b.dataset.tlf; $$('#tlF [data-tlf]').forEach((x) => x.classList.toggle('on', x === b)); drawTl(); }));
+    // come «Elimina utenti inattivi» di MaxPlayer: soglia in giorni, conteggio degli idonei, Elimina
     $('#tlClean').onclick = async () => {
-      const n = (tlData.lists || []).filter((x) => x.inactive).length;
-      if (!(await ask(`Rimuovere ${n} ${n === 1 ? 'lista inattiva' : 'liste inattive'}?`, `Tolgo da OrbixPlay e MaxPlayer le liste dei clienti scaduti o disattivati da più di ${days()} giorni. Gli abbonamenti Kairos non cambiano.`, 'Rimuovi'))) return;
-      try { const r = await api('POST', '/admin/apps3/cleanup', { days: days() }); toast(`Rimosse ${r.removed} liste${r.errors && r.errors.length ? ` · ${r.errors.length} non riuscite` : ''}`, r.errors && r.errors.length ? 1 : 0); await load(); loadTl(); } catch (e) { toast(e.message, 1); }
+      const go = ask('Elimina liste inattive', `<div class="ina-m"><p class="mut" style="margin:0 0 10px">Toglie da OrbixPlay e MaxPlayer le liste dei clienti con abbonamento scaduto, o disattivati e fermi, da più dei giorni scelti. Gli abbonamenti Kairos non cambiano.</p>
+        <label class="lbl">Giorni di inattività</label><input class="inp" type="number" id="tlmD" min="7" max="365" value="${days()}"><div class="cnt" id="tlmC" style="margin-top:14px">Calcolo…</div></div>`, 'Elimina');
+      const yes = $('#mYes'); yes.classList.add('danger'); yes.style.background = 'var(--bad)'; yes.style.borderColor = 'var(--bad)'; yes.disabled = true;
+      let n = 0, tm = 0;
+      const count = async () => { const d = Math.max(7, Math.min(365, +$('#tlmD').value || 60)); yes.disabled = true; try { const r = await api('GET', '/admin/apps3/lists?days=' + d); n = (r.lists || []).filter((x) => x.inactive).length; $('#tlmC').innerHTML = `Liste idonee: <b>${n}</b>. Soglia di inattività: ${d} giorni.`; yes.disabled = !n; } catch (e) { $('#tlmC').textContent = e.message; } };
+      $('#tlmD').oninput = () => { clearTimeout(tm); tm = setTimeout(count, 300); }; count();
+      const ok = await go; yes.classList.remove('danger'); yes.style.background = yes.style.borderColor = ''; yes.disabled = false;
+      if (!ok || !n) return;
+      const d = Math.max(7, Math.min(365, +$('#tlmD').value || 60)); $('#tlDays').value = d;
+      try { const r = await api('POST', '/admin/apps3/cleanup', { days: d }); toast(`Rimosse ${r.removed} liste${r.errors && r.errors.length ? ` · ${r.errors.length} non riuscite` : ''}`, r.errors && r.errors.length ? 1 : 0); await load(); loadTl(); } catch (e) { toast(e.message, 1); }
     };
     $('#tlAuto').onclick = async () => {
       const on = !$('#tlAuto').classList.contains('on');
