@@ -7,6 +7,16 @@
 .op-f{display:grid;grid-template-columns:1.1fr 1fr 1fr auto auto;gap:8px;margin-top:12px;align-items:center}.op-f .inp{width:auto!important;min-width:0}
 .op-d{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
 .op-f.mx{grid-template-columns:1fr 1fr auto auto}
+.op-h{flex-wrap:wrap}.op-h .op-tx{min-width:220px}
+#drawer.full #ds-oth{grid-column:1/-1}
+.op-slot{padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:#1a1d22;margin-bottom:8px}
+.op-slot .sl-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.op-slot .op-ic{width:30px;height:30px;font-size:11px}
+.op-slot .sl-b{display:grid;grid-template-columns:1.6fr 1fr;gap:8px;margin-top:10px}
+.op-slot .sl-b>div{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--line);min-width:0}
+.op-slot .sl-b small{color:var(--mut);font-size:11.5px;flex:0 0 auto}.op-slot .sl-b b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px}
+@media (max-width:700px){.op-slot .sl-b{grid-template-columns:1fr}}
+.op-code{margin-left:auto;flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border-radius:9px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+.op-code small{color:var(--mut);font-size:11.5px}.op-code b{font-size:16px;letter-spacing:.06em}
 @media (max-width:900px){.op-f{grid-template-columns:1fr 1fr}}
 .op-row+.op-row{margin-top:8px}
 .op-ic{width:38px;height:38px;border-radius:9px;display:grid;place-items:center;font-weight:800;font-size:13px;flex:0 0 auto;background:rgba(124,92,255,.18);color:#b9a6ff}
@@ -33,6 +43,26 @@
     if (!l.length) return `<small class="mut">${owner() ? 'Nessun DNS personale: impostalo in Impostazioni → App e aggiornamenti' : 'Il DNS non è ancora impostato: chiedilo a chi ti gestisce'}</small>`;
     return `<label class="mut" style="font-size:12.5px">DNS</label><select class="inp" data-opdns style="width:auto;min-width:200px;margin:0">${l.map((x, i) => `<option value="${i}" ${i === (cur || 0) ? 'selected' : ''}>${esc(x.name)}${x.host ? ' — ' + esc(x.host.replace(/^https?:\/\//, '')) : ''}${x.code ? ' (codice ' + x.code + ')' : ''}</option>`).join('')}</select>`;
   };
+  /* slot: fornitore + app + link (DNS) + codice cliente. Il codice mostrato segue il DNS scelto nell'attivazione */
+  const SLOTS = () => P().slots || [];
+  const hostOf2 = (h) => String(h || '').trim().replace(/^https?:\/\//i, '').split(/[:/]/)[0].toLowerCase();
+  function slotFor(app, dnsName, dnsHost) {
+    const l = SLOTS().filter((x) => x.app === app); if (!l.length) return null;
+    const h = hostOf2(dnsHost), n = String(dnsName || '').toLowerCase();
+    return (h && l.find((x) => hostOf2(x.link) === h)) || (n && l.find((x) => n.includes(x.name.toLowerCase()))) || l[0];
+  }
+  const codeOf = (app, sl) => (sl ? sl.code : '') || ((P().codes || {})[app]) || '';
+  const codeBox = (app, sl) => { const c = codeOf(app, sl); return c ? `<div class="op-code" data-opcodebox="${app}"><small>Codice cliente${sl ? ' · ' + esc(sl.name) : ''}</small><b class="mono">${esc(c)}</b><button class="btn sm" data-opcode="${esc(c)}">Copia</button></div>` : ''; };
+  /** dopo aver scelto un DNS nell'attivazione, il codice cliente si aggiorna */
+  function syncCode(row) {
+    const app = row.dataset.app, sel = $('[data-opdns]', row); if (!sel) return;
+    let name = '', host = '';
+    if (app === 'orbix') { const d = ((P().dns || {}).orbix || [])[+sel.value || 0] || {}; name = d.name; host = d.host; }
+    else { const d = (mxDoms || []).find((x) => x.id === sel.value) || {}; name = d.label; host = d.domain; }
+    const box = $('[data-opcodebox]', row), html = codeBox(app, slotFor(app, name, host));
+    if (box) box.outerHTML = html || '<span></span>'; bindCodes(row);
+  }
+  const bindCodes = (root) => $$('[data-opcode]', root).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); navigator.clipboard.writeText(b.dataset.opcode).then(() => toast('Codice cliente copiato: ' + b.dataset.opcode), () => toast('Codice cliente: ' + b.dataset.opcode)); }));
   /* domini (DNS) di MaxPlayer: letti dalla sua API, l'agente vede solo i nomi */
   let mxDoms = null, mxBusy = false;
   async function loadMx(fresh) {
@@ -40,12 +70,14 @@
     try { mxDoms = (await api('GET', '/admin/maxplayer/domains' + (fresh ? '?fresh=1' : ''))).domains || []; } catch (e) { mxDoms = []; mxDoms.err = e.message; }
     mxBusy = false;
     $$('[data-mxsel]').forEach((el) => { el.outerHTML = mxSel(el.dataset.mxsel); });
+    $$('.op-row[data-app="max"]').forEach(syncCode);
     renderMxSettings();
   }
   const mxLbl = (x) => (x.label || 'DNS ' + x.id) + (owner() && x.domain ? ' — ' + x.domain + (x.port ? ':' + x.port : '') : '');
   const mxSel = (cur) => {
     if (!mxDoms) return `<small class="mut" data-mxsel="${esc(cur || '')}">Carico i DNS di MaxPlayer…</small>`;
     if (!mxDoms.length) return `<small class="mut" data-mxsel="${esc(cur || '')}">${mxDoms.err ? esc(mxDoms.err) : owner() ? 'Nessun DNS su MaxPlayer: aggiungilo in Impostazioni → App e aggiornamenti' : 'Il DNS non è ancora impostato: chiedilo a chi ti gestisce'}</small>`;
+    if (!cur) { const nki = mxDoms.find((x) => (x.domain || '').toLowerCase() === 'maxplayer.nki-max.stream' || /nki/i.test(x.label || '')); if (nki) cur = nki.id; } // di base il link diretto NKI
     return `<label class="mut" style="font-size:12.5px">DNS</label><select class="inp" data-opdns style="width:auto;min-width:200px;margin:0">${mxDoms.map((x) => `<option value="${esc(x.id)}" ${x.id === cur ? 'selected' : ''}>${esc(mxLbl(x))}</option>`).join('')}</select>`;
   };
   /** riquadro «Altre app» di un cliente (lo usano la scheda del titolare e quella degli agenti) */
@@ -54,16 +86,18 @@
     const up = (u) => `<input class="inp" data-opu placeholder="Utente" maxlength="120" value="${esc(u || ln.u)}" autocomplete="off"><input class="inp" data-opp type="password" placeholder="Password" maxlength="200" value="${esc(ln.p)}" autocomplete="new-password">`;
     const btns = (on) => `<button class="btn sm pri" data-opsend>${on ? 'Riattiva' : 'Attiva'}</button>${on ? '<button class="btn sm danger" data-opdel>Togli</button>' : '<span></span>'}`;
     const orb = `<div class="op-row" data-op="${esc(d.id)}" data-app="orbix"><div class="op-h"><div class="op-ic">OP</div>
-      <div class="op-tx"><b>OrbixPlay</b><small>${!P().orbix ? 'Non collegato: aggiungi la chiave ORBIX_KEY (Impostazioni → App e aggiornamenti)' : o ? `<span class="op-ok">✓ Attivo</span> sul dispositivo <span class="mono">${esc(o.id)}</span> · ${esc(ago2(o.t))}` : 'Scrivi l\'ID che il cliente vede nell\'app OrbixPlay, utente e password: il DNS lo mette il pannello'}</small></div></div>
+      <div class="op-tx"><b>OrbixPlay</b><small>${!P().orbix ? 'Non collegato: aggiungi la chiave ORBIX_KEY (Impostazioni → App e aggiornamenti)' : o ? `<span class="op-ok">✓ Attivo</span> sul dispositivo <span class="mono">${esc(o.id)}</span> · ${esc(ago2(o.t))}` : 'Scrivi l\'ID che il cliente vede nell\'app OrbixPlay, utente e password: il DNS lo mette il pannello'}</small></div>${codeBox('orbix', slotFor('orbix', (((P().dns || {}).orbix || [])[o ? o.dns : 0] || {}).name, (((P().dns || {}).orbix || [])[o ? o.dns : 0] || {}).host))}</div>
       ${P().orbix ? `<div class="op-f"><input class="inp mono" data-opid placeholder="ID dispositivo" maxlength="64" value="${esc(o ? o.id : '')}">${up(o && o.u)}${btns(!!o)}</div><div class="op-d">${dnsSel('orbix', o ? o.dns : 0)}</div>` : ''}</div>`;
     const mx = `<div class="op-row" data-op="${esc(d.id)}" data-app="max"><div class="op-h"><div class="op-ic mx">MX</div>
-      <div class="op-tx"><b>MaxPlayer</b><small>${!P().max ? 'Non collegato: aggiungi la chiave MAXPLAYER_KEY (Impostazioni → App e aggiornamenti)' : x ? `<span class="op-ok">✓ Attivo</span>: il cliente entra in MaxPlayer con utente <span class="mono" style="color:var(--tx,#fff);font-weight:600">${esc(x.u)}</span> e la password della linea · ${esc(ago2(x.t))}` : 'Utente e password della linea: il pannello crea l\'account MaxPlayer del cliente (entra con gli stessi dati)'}</small></div></div>
+      <div class="op-tx"><b>MaxPlayer</b><small>${!P().max ? 'Non collegato: aggiungi la chiave MAXPLAYER_KEY (Impostazioni → App e aggiornamenti)' : x ? `<span class="op-ok">✓ Attivo</span>: il cliente entra in MaxPlayer con utente <span class="mono" style="color:var(--tx,#fff);font-weight:600">${esc(x.u)}</span> e la password della linea · ${esc(ago2(x.t))}` : 'Utente e password della linea: il pannello crea l\'account MaxPlayer del cliente (entra con gli stessi dati)'}</small></div>${codeBox('max', slotFor('max', '', ''))}</div>
       ${P().max ? `<div class="op-f mx">${up(x && x.u)}${btns(!!x)}</div><div class="op-d">${mxSel(x ? x.dom : '')}</div>` : ''}</div>`;
     if (P().max && !mxDoms && !mxBusy) setTimeout(() => loadMx(), 0);
     return orb + mx;
   }
   function bind(root, d, after) {
+    bindCodes(root);
     for (const row of root.querySelectorAll(`[data-op="${CSS.escape(d.id)}"]`)) {
+      syncCode(row); row.addEventListener('change', (e) => { if (e.target.matches('[data-opdns]')) syncCode(row); });
       const app = row.dataset.app, send = row.querySelector('[data-opsend]'), del = row.querySelector('[data-opdel]'), NAME = app === 'max' ? 'MaxPlayer' : 'OrbixPlay';
       if (send) send.onclick = async () => {
         const v = (sel) => (row.querySelector(sel) || {}).value || '';
@@ -118,6 +152,7 @@
   if (pane && !$('#opCard')) {
     pane.insertAdjacentHTML('beforeend', `<div class="card glass" id="opCard"><div class="hd"><h3>OrbixPlay e MaxPlayer<small>Attivi le app dalla scheda del cliente (sezione «Altre app») con ID dispositivo, utente e password: il DNS lo mette il pannello</small></h3></div>
       <div id="opState" class="st-note"></div>
+      <div class="st-row" style="align-items:flex-start"><div class="st-l"><b>Link diretti e codici cliente</b><small>Uno «slot» per ogni fornitore: app, link (DNS) e codice cliente. Crea, modifica ed elimina come vuoi. Nella scheda del cliente («Altre app») il codice segue il DNS che scegli.</small></div><div class="st-c" id="opDirect"></div></div>
       <div class="st-row" style="align-items:flex-start"><div class="st-l"><b>DNS di OrbixPlay</b><small>Modificali e premi «Salva DNS»; con ✕ li cancelli. Il primo è quello proposto di base. Il «codice host» (facoltativo) è il numero che OrbixPlay ti dà per il tuo DNS: se c'è, l'indirizzo non viene inviato.</small></div><div class="st-c" id="opDnsO"></div></div>
       <div class="st-row" style="align-items:flex-start"><div class="st-l"><b>DNS di MaxPlayer</b><small>Sono i «Domini» del tuo pannello MaxPlayer: al cliente arriva solo il dominio scelto, mai l'indirizzo. Qui li aggiungi, rinomini, cambi o cancelli (i clienti passano su un altro DNS).</small></div><div class="st-c"><div id="opMx"></div>
         <div style="display:grid;grid-template-columns:1fr 2fr auto;gap:8px;margin-top:10px"><input class="inp" id="opMxL" maxlength="60" placeholder="Nome (es. Principale)" style="margin:0"><input class="inp mono" id="opMxU" maxlength="300" placeholder="http://dns.esempio.com:8080" style="margin:0"><button class="btn sm" id="opMxAdd">Aggiungi a MaxPlayer</button></div></div></div>
@@ -168,7 +203,48 @@
   }
   const ST = { approved: ['Approvato', 'var(--ok)'], pending: ['In attesa', 'var(--warn)'] };
   const urlOf = (x) => x.domain ? `${x.https ? 'https' : 'http'}://${x.domain}${x.port && !((x.https && x.port === '443') || (!x.https && x.port === '80')) ? ':' + x.port : ''}` : '';
+  /* Link diretti e codici cliente: «slot» creati e modificati dal titolare */
+  const APPN = { orbix: 'OrbixPlay', max: 'MaxPlayer' };
+  const slotReady = (x) => x.app === 'orbix' ? ((cfg && cfg.orbix) || cfgNow().orbix).some((d) => hostOf2(d.host) === hostOf2(x.link)) : (mxOwned || mxDoms || []).some((d) => (d.domain || '').toLowerCase() === hostOf2(x.link));
+  const saveSlots = async (slots, msg) => { try { await api('PUT', '/admin/settings', { playersCfg: { ...cfgNow(), slots } }); await load(); toast(msg); } catch (e) { toast(e.message, 1); } };
+  function slotModal(x) {
+    const isNew = !x; x = x || { name: '', app: 'max', link: '', code: (SLOTS()[0] || {}).code || '' };
+    const go = ask(isNew ? 'Nuovo slot' : 'Modifica slot', `<label class="lbl">Nome (es. il fornitore)</label><input class="inp" id="slN" maxlength="40" value="${esc(x.name)}" placeholder="es. Armada">
+      <label class="lbl">App</label><div class="seg" id="slA" style="display:flex">${['orbix', 'max'].map((a) => `<button type="button" data-sla="${a}" class="${x.app === a ? 'on' : ''}">${APPN[a]}</button>`).join('')}</div>
+      <label class="lbl">Link (DNS)</label><input class="inp mono" id="slL" maxlength="300" value="${esc(x.link)}" placeholder="es. maxplayer.esempio.stream">
+      <label class="lbl">Codice cliente</label><input class="inp mono" id="slC" maxlength="30" value="${esc(x.code)}" placeholder="es. 265847">`, isNew ? 'Crea' : 'Salva');
+    let app = x.app;
+    $$('#slA [data-sla]').forEach((b) => (b.onclick = () => { app = b.dataset.sla; $$('#slA [data-sla]').forEach((y) => y.classList.toggle('on', y === b)); }));
+    go.then(async (ok) => {
+      if (!ok) return;
+      const v = { ...(isNew ? {} : { id: x.id }), name: $('#slN').value.trim(), app, link: $('#slL').value.trim(), code: $('#slC').value.trim() };
+      const list = SLOTS().map((y) => ({ ...y }));
+      if (isNew) list.push(v); else list.splice(list.findIndex((y) => y.id === x.id), 1, v);
+      await saveSlots(list, isNew ? 'Slot creato' : 'Slot salvato');
+    });
+  }
+  function renderDirect() {
+    const el = $('#opDirect'); if (!el) return;
+    const l = SLOTS();
+    el.innerHTML = (l.length ? l.map((x) => {
+      const ready = x.link && slotReady(x);
+      const use = !x.link ? '' : ready ? '<small style="color:var(--ok);white-space:nowrap">✓ pronto</small>' : x.app === 'max' && !P().max ? '<small class="mut">serve la chiave</small>' : `<button class="btn sm pri" data-sluse="${esc(x.id)}">${x.app === 'max' ? 'Aggiungi a MaxPlayer' : 'Aggiungi ai DNS'}</button>`;
+      return `<div class="op-slot"><div class="sl-h"><span class="op-ic ${x.app === 'max' ? 'mx' : ''}">${x.app === 'max' ? 'MX' : 'OP'}</span><b>${esc(x.name)}</b><small class="mut">${APPN[x.app]}</small><span style="flex:1"></span>${use}<button class="btn sm" data-sled="${esc(x.id)}">Modifica</button><button class="icb" data-sldel="${esc(x.id)}" title="Elimina">✕</button></div>
+        <div class="sl-b"><div><small>Link</small><b class="mono">${esc(x.link || '—')}</b>${x.link ? `<button class="btn sm" data-slcopy="${esc(x.link)}">Copia</button>` : ''}</div><div><small>Codice cliente</small><b class="mono">${esc(x.code || '—')}</b>${x.code ? `<button class="btn sm pri" data-opcode="${esc(x.code)}">Copia</button>` : ''}</div></div></div>`;
+    }).join('') : '<small class="mut">Nessuno slot: creane uno.</small>') + '<button class="btn sm" id="slNew" style="margin-top:8px">+ Nuovo slot</button>';
+    bindCodes(el);
+    $$('[data-slcopy]', el).forEach((b) => (b.onclick = () => navigator.clipboard.writeText(b.dataset.slcopy).then(() => toast('Link copiato'), () => toast(b.dataset.slcopy))));
+    $('#slNew').onclick = () => slotModal(null);
+    $$('[data-sled]', el).forEach((b) => (b.onclick = () => slotModal(l.find((x) => x.id === b.dataset.sled))));
+    $$('[data-sldel]', el).forEach((b) => (b.onclick = async () => { const x = l.find((y) => y.id === b.dataset.sldel); if (!(await ask('Eliminare lo slot?', `<b>${esc(x.name)}</b> · ${APPN[x.app]}. I DNS già aggiunti e le attivazioni fatte non cambiano.`, 'Elimina'))) return; await saveSlots(l.filter((y) => y.id !== x.id), 'Slot eliminato'); }));
+    $$('[data-sluse]', el).forEach((b) => (b.onclick = async () => {
+      const x = l.find((y) => y.id === b.dataset.sluse), url = /^https?:\/\//i.test(x.link) ? x.link : 'http://' + x.link;
+      if (x.app === 'orbix') { if (cfg) readCfg(); const c = cfg || cfgNow(); c.orbix = [...c.orbix, { name: `${x.name} OrbixPlay`, host: url }]; try { await api('PUT', '/admin/settings', { playersCfg: c }); cfg = null; dirty = false; await load(); toast(`OrbixPlay: ${x.name} aggiunto ai DNS`); } catch (e) { toast(e.message, 1); } return; }
+      try { await api('POST', '/admin/maxplayer/domains', { url, label: `${x.name} MaxPlayer` }); toast(`MaxPlayer: ${x.name} aggiunto (può restare «in attesa» finché MaxPlayer lo approva)`); mxOwned = null; mxDoms = null; renderMxSettings(); loadMx(true); } catch (e) { toast(e.message, 1); }
+    }));
+  }
   function renderMxSettings() {
+    renderDirect();
     const el = $('#opMx'); if (!el) return;
     $('#opMxAdd') && ($('#opMxAdd').disabled = !P().max);
     if (!P().max) { el.innerHTML = '<small class="mut">Collega prima MaxPlayer (chiave MAXPLAYER_KEY, guida qui sotto)</small>'; return; }
@@ -253,6 +329,7 @@
     el.innerHTML = `${P().orbix ? `✅ <b>OrbixPlay collegato</b> · clienti attivi su OrbixPlay: <b>${n}</b>` : '⚠️ <b>OrbixPlay non collegato</b>: manca il segreto ORBIX_KEY (guida qui sotto)'}<br>${P().max ? `✅ <b>MaxPlayer collegato</b> · clienti attivi su MaxPlayer: <b>${D.devices.filter((d) => d.maxp).length}</b>` : '⚠️ <b>MaxPlayer non collegato</b>: manca il segreto MAXPLAYER_KEY (guida qui sotto)'}`;
     if (P().max && !mxDoms && !mxBusy) loadMx(); else renderMxSettings();
     if (!dirty || !cfg) { cfg = cfgNow(); drawDns(); $('#opShow').classList.toggle('on', cfg.showDnsAgents); }
+    renderDirect();
   }
   const ra = renderAll;
   window.renderAll = renderAll = function () { ra(); if (D.role !== 'agent') renderOp(); };
@@ -274,7 +351,7 @@
       const om = p.match(/^\/admin\/orbix\/(.+)$/);
       if (om) { const d = DEMO.devices.find((x) => x.id === om[1]); if (!d) throw new Error('Cliente non trovato'); if (m === 'DELETE') { d.orbix = null; return { ok: true }; } if (!/^[A-Za-z0-9:._-]{4,64}$/.test(b.orbixId || '')) throw new Error('Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay'); if (!b.username || !b.password) throw new Error('Scrivi utente e password della linea'); d.orbix = { id: b.orbixId, n: 1, t: Date.now(), u: b.username, dns: b.dns || 0 }; return { ...d.orbix }; }
       const r = await dm(m, p, b);
-      if (p === '/admin/state' && r && !r.players) { const c = (DEMO.settings.playersCfg = DEMO.settings.playersCfg || { orbix: [{ name: 'Principale', host: 'http://dns.kairos-esempio.tv:8080' }], max: [], showDnsAgents: false }); r.players = { orbix: true, max: true, dns: { orbix: c.orbix, max: c.max }, showDnsAgents: c.showDnsAgents }; r.settings = { ...r.settings, playersCfg: c }; }
+      if (p === '/admin/state' && r && !r.players) { const c = (DEMO.settings.playersCfg = DEMO.settings.playersCfg || { orbix: [{ name: 'Principale', host: 'http://dns.kairos-esempio.tv:8080' }], max: [], showDnsAgents: false }); r.players = { orbix: true, max: true, dns: { orbix: c.orbix, max: c.max }, showDnsAgents: c.showDnsAgents, codes: c.codes || { orbix: '265847', max: '265847' }, slots: c.slots || [{ id: 'nki-orbix', name: 'NKI', app: 'orbix', link: 'orbx.nki-orbx.download', code: '265847' }, { id: 'nki-max', name: 'NKI', app: 'max', link: 'maxplayer.nki-max.stream', code: '265847' }, { id: 'armada-max', name: 'Armada', app: 'max', link: 'maxplayer-armada.chasertv2.stream', code: '265847' }] }; r.settings = { ...r.settings, playersCfg: c }; }
       return r;
     };
   }

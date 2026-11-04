@@ -250,7 +250,7 @@ const DEFAULT_SETTINGS = {
   aiDaily: 20, aiProvider: 'gm', aiClaude: 'haiku', aiGemini: 'flash',
   maint: { on: false, msg: '', allow: [] },
   // DNS personali per OrbixPlay e MaxPlayer (gli agenti vedono solo il nome, salvo showDnsAgents)
-  playersCfg: { orbix: [], max: [], showDnsAgents: false },
+  playersCfg: { orbix: [{ name: 'NKI OrbixPlay', host: 'http://orbx.nki-orbx.download' }], max: [], showDnsAgents: false, codes: { orbix: '265847', max: '265847' }, slots: null }, // link diretto NKI e codice cliente già pronti (slots: vedi SLOTS_DEFAULT)
 };
 /* Versione dell'APK da proporre alle app: quella pubblicata in automatico da GitHub (kairos-tv.json)
    oppure, solo se strettamente più recente, quella scritta a mano nel pannello.
@@ -362,7 +362,7 @@ async function mxSend(env, d, b, who, ip, agentLines) {
   if (agentLines && !agentLines.some((l) => l.username === username && l.password === password)) throw new HttpErr(400, 'Usa utente e password di una linea di questo cliente');
   const doms = await mxDomains(env);
   if (!doms.length) throw new HttpErr(400, 'Su MaxPlayer non hai ancora un DNS: aggiungilo in Impostazioni → App e aggiornamenti');
-  const D0 = doms.find((x) => x.id === dom) || doms[0];
+  const D0 = doms.find((x) => x.id === dom) || doms.find((x) => x.domain === 'maxplayer.nki-max.stream') || doms[0];
   const old = maxpOf(d);
   let uid = old.uid, login = old.u, created = false;
   if (uid) {
@@ -483,6 +483,27 @@ function cleanDlCodes(v) {
     const code = str(x.code, 12).replace(/\s+/g, ''); if (code && !/^\d{3,10}$/.test(code)) throw new HttpErr(400, `${name}: il codice downloader è fatto solo di numeri`);
     const links = (Array.isArray(x.links) ? x.links : []).slice(0, 10).map((l) => ({ label: str(l && l.label, 30) || 'Link', url: url(l && l.url, name) })).filter((l) => l.url);
     return { group: str(x.group, 40), name, code, note: str(x.note, 120), link: url(x.link, name), links };
+  });
+}
+
+/* «slot» delle app terzi: fornitore + app + link (DNS) + codice cliente, tutti modificabili dal titolare */
+const SLOTS_DEFAULT = [
+  { id: 'nki-orbix', name: 'NKI', app: 'orbix', link: 'orbx.nki-orbx.download', code: '265847' },
+  { id: 'nki-max', name: 'NKI', app: 'max', link: 'maxplayer.nki-max.stream', code: '265847' },
+  { id: 'armada-max', name: 'Armada', app: 'max', link: 'maxplayer-armada.chasertv2.stream', code: '265847' },
+];
+const slotsOf = (c) => (Array.isArray(c && c.slots) ? c.slots : SLOTS_DEFAULT);
+function cleanSlots(v) {
+  if (!Array.isArray(v)) throw new HttpErr(400, 'Gli slot devono essere un elenco');
+  const ids = new Set();
+  return v.slice(0, 60).map((x, i) => {
+    const name = str(x && x.name, 40); if (!name) throw new HttpErr(400, `Slot n. ${i + 1}: scrivi il nome (es. il fornitore)`);
+    const app = x.app === 'max' ? 'max' : x.app === 'orbix' ? 'orbix' : ''; if (!app) throw new HttpErr(400, `${name}: scegli OrbixPlay o MaxPlayer`);
+    const link = str(x.link, 300).replace(/^\s*https?:\/\//i, (m) => m.trim()).replace(/\/+$/, '');
+    if (link && !/^(https?:\/\/)?[a-z0-9.-]+(:\d{1,5})?(\/\S*)?$/i.test(link)) throw new HttpErr(400, `${name}: link non valido (es. maxplayer.esempio.stream)`);
+    const code = str(String(x.code ?? ''), 30); if (code && !/^[A-Za-z0-9_-]{1,30}$/.test(code)) throw new HttpErr(400, `${name}: il codice cliente può avere solo lettere e numeri`);
+    let id = str(x.id, 40); if (!/^[A-Za-z0-9_-]{1,40}$/.test(id) || ids.has(id)) id = b64url(rand(6)); ids.add(id);
+    return { id, name, app, link, code };
   });
 }
 
@@ -2414,7 +2435,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const meOut = (await agentsOut(env, all, [A.id], true))[0];
     const { password: _pw, ...meSafe } = meOut;
     const sNames = canAg && P.store ? (await storeAppNames(env)).filter((x) => storeAppOk(P.storeApps, x)) : [];
-    return json({ role: 'agent', user: A.username, me: { ...meSafe, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s) : [], players: P.players ? (() => { const c = s.playersCfg || {}, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: v(c.orbix), max: v(c.max) }, showDnsAgents: !!c.showDnsAgents }; })() : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
+    return json({ role: 'agent', user: A.username, me: { ...meSafe, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s) : [], players: P.players ? (() => { const c = s.playersCfg || {}, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: v(c.orbix), max: v(c.max) }, showDnsAgents: !!c.showDnsAgents, codes: c.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(c).map((x) => (c.showDnsAgents ? x : { ...x, link: '' })) }; })() : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: canAg ? await agentsOut(env, all, tree.filter((x) => x !== A.id), true) : [],
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
       settings: { brand: s.brand, accent: s.accent, downloaderCode: s.downloaderCode || '', storeDownloaderCode: s.storeDownloaderCode || '', liteDownloaderCode: s.liteDownloaderCode || '', apkUrl: s.apkUrl || '' }, permKeys: PERM_KEYS, security: { totp: !!ses.totp_on }, counts: {},
@@ -2624,7 +2645,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       wgConf: !!(await env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first()),
       security: { totp: !!(ses && ses.totp_on), encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
       lite: { apk: settings.liteApkUrl || LITE_APK, feed: await liteFeed(settings) },
-      players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: settings.playersCfg.orbix || [], max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents },
+      players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: settings.playersCfg.orbix || [], max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents, codes: settings.playersCfg.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(settings.playersCfg) },
       dlCodes: dlCodesOf(settings),
       storeAppNames: await storeAppNames(env), maintAg: Object.entries(settings.maintAg || {}).filter(([, x]) => x && x.on).map(([id]) => +id),
       counts: { ...(await newCounts(env)), online: await onlineCount(env) }, permKeys: PERM_KEYS, addonCat: addonCfg(settings), role: 'owner', ...(ses ? { agents: await agentsOut(env, await agentsAll(env)) } : {}),
@@ -2856,7 +2877,9 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       });
       const prev = s.playersCfg || {};
       s.playersCfg = { orbix: c.orbix !== undefined ? list(c.orbix, 'OrbixPlay') : prev.orbix || [], max: c.max !== undefined ? list(c.max, 'MaxPlayer') : prev.max || [], showDnsAgents: c.showDnsAgents !== undefined ? c.showDnsAgents === true : !!prev.showDnsAgents,
-        autoClean: c.autoClean !== undefined ? c.autoClean === true : !!prev.autoClean, cleanDays: c.cleanDays !== undefined ? Math.max(7, Math.min(365, parseInt(c.cleanDays, 10) || 60)) : prev.cleanDays || 60 };
+        autoClean: c.autoClean !== undefined ? c.autoClean === true : !!prev.autoClean, cleanDays: c.cleanDays !== undefined ? Math.max(7, Math.min(365, parseInt(c.cleanDays, 10) || 60)) : prev.cleanDays || 60,
+        slots: c.slots !== undefined ? cleanSlots(c.slots) : prev.slots || null,
+        codes: (() => { const pc = prev.codes || { orbix: '265847', max: '265847' }, nc = c.codes && typeof c.codes === 'object' ? c.codes : {}; const one = (k) => { if (nc[k] === undefined) return pc[k] || ''; const v = str(String(nc[k]), 30); if (v && !/^[A-Za-z0-9_-]{1,30}$/.test(v)) throw new HttpErr(400, 'Il codice cliente può avere solo lettere e numeri'); return v; }; return { orbix: one('orbix'), max: one('max') }; })() };
     }
     if (b.maint !== undefined) {
       const mt = b.maint && typeof b.maint === 'object' ? b.maint : {};
