@@ -1173,7 +1173,7 @@ h5.fh{margin-top:16px}
     <div class="sp-wave"></div><div class="sp-wave w2"></div>
     <div class="sp-orbit"><i></i><i></i><i></i></div>
     <div class="sp-logo"><svg class="sp-svg" viewBox="0 0 200 200"><defs><linearGradient id="kgS" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><circle class="lo-orb" cx="100" cy="100" r="84" fill="none" stroke="url(#kgS)" stroke-width="7" stroke-linecap="round" stroke-dasharray="400 128" transform="rotate(-38 100 100)"/><circle class="lo-orb2" cx="100" cy="100" r="70" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="1.5" stroke-dasharray="3 7"/><rect class="lo-kb" x="62" y="52" width="22" height="96" rx="4" fill="#fff"/><path class="lo-ku" d="M90 104 L128 52 H156 L116 108 Z" fill="url(#kgS)"/><path class="lo-kl" d="M104 98 L122 92 L158 148 H130 Z" fill="#fff"/><circle class="lo-sat" cx="171" cy="62" r="7" fill="#fff"/></svg></div>
-    <div class="sp-wrow"><div class="sp-word kxv" id="bootTitle">KAIROS</div><span class="sp-tv">TV</span></div>
+    <div class="sp-wrow"><div class="sp-word kxv" id="bootTitle">KAIROS</div><span class="sp-tv">PRO</span></div>
     <div class="sp-tag">PLAYER</div>
     <script>
 /* Carattere vettoriale KAIROS: lettere disegnate con tratti a 45°, smussi e tagli "stencil". Altezza 10, tratto 1.45 */
@@ -1242,7 +1242,7 @@ function kxWord(text, cls, sp = 3.1, label = '') {
 (function () {
   var b = 'KAIROS'; try { var st = JSON.parse(localStorage.getItem('kx_brand') || '""'); if (st) b = String(st).toUpperCase(); } catch (e) {}
   var t = document.getElementById('bootTitle'); t.innerHTML = kxWord(b, 'draw'); t.dataset.b = b;
-  document.querySelector('#boot .sp-tv').innerHTML = kxWord('TV', 'tvw', 2.4);
+  document.querySelector('#boot .sp-tv').innerHTML = kxWord('PRO', 'tvw', 2.4);
   document.querySelector('#boot .sp-tag').innerHTML = kxWord('PLAYER', 'tagw', 6.5);
 })();
     </script>
@@ -4932,7 +4932,7 @@ function showProfiles(after) {
   if (after) scr.classList.remove('manage'); // apertura nuova: si parte dalla scelta, non dalla modifica
   scr._must = !l.length;
   const head = !l.length ? (canAdd ? '<h1>Crea il tuo profilo</h1><p class="mut prsub">Per iniziare serve almeno un profilo: scegli nome e avatar.</p>' : '<h1>Profilo in preparazione</h1><p class="mut prsub">Il tuo fornitore sta creando il tuo profilo. Riprova tra poco.</p>') : '<h1>Chi sta guardando?</h1>';
-  scr.innerHTML = `<div class="prw"><div class="prbrand"><b class="brandName" data-b="${esc((S.settings.brand || 'KAIROS').toUpperCase())}">${kxWord((S.settings.brand || 'KAIROS').toUpperCase(), '')}</b><span>${kxWord('TV', 'tvw', 2.4)}</span></div>${head}
+  scr.innerHTML = `<div class="prw"><div class="prbrand"><b class="brandName" data-b="${esc((S.settings.brand || 'KAIROS').toUpperCase())}">${kxWord((S.settings.brand || 'KAIROS').toUpperCase(), '')}</b><span>${kxWord('PRO', 'tvw', 2.4)}</span></div>${head}
     <div class="prlist">${l.map((p, i) => `<div class="prof" data-f data-pi="${i}" style="animation-delay:${i * 70}ms"><div class="pav">${avatarSVG(p.avatar, p.name)}</div><b>${esc(p.name)}</b>${p.kids ? '<small>BAMBINI</small>' : ''}</div>`).join('')}${canAdd ? `<div class="prof add" data-f data-pi="add" style="animation-delay:${l.length * 70}ms"><div class="pav"><span>+</span></div><b>Aggiungi profilo</b></div>` : ''}</div>
     ${!l.length ? (canAdd ? '' : '<button class="btn pri" data-f id="prRetry">↻ Riprova</button>') : profCanEdit() ? `<button class="btn" data-f id="prManage">${scr.classList.contains('manage') ? '✓ Fine' : '✎ Gestisci profili'}</button>` : ''}</div>`;
   const rt = scr.querySelector('#prRetry');
