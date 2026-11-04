@@ -1837,7 +1837,7 @@ async function route(req, env, ctx) {
   }
 
   /* ---------- autorizzazione dei download dello Store (pubblica, vedi store.js) ---------- */
-  if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip);
+  if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { smsAgents: (app, ids) => storeSmsAgents(env, app, ids) });
 
   /* ---------- informativa privacy e condizioni (pubblica, la apre anche l'app) ---------- */
   if ((path === '/privacy' || path === '/privacy/') && (req.method === 'GET' || req.method === 'HEAD')) return privacyPage(env);
@@ -2075,6 +2075,25 @@ function agentTree(all, rootId) {
   const out = [rootId], seen = new Set(out);
   for (let i = 0; i < out.length; i++) for (const a of all) if (a.parent_id === out[i] && !seen.has(a.id)) { seen.add(a.id); out.push(a.id); }
   return out;
+}
+/** agenti che possono ricevere gli SMS dello store per quell'app (app null = per almeno un'app):
+ *  attivi con tutta la catena sopra di loro e con il permesso «Download store» effettivo */
+async function storeSmsAgents(env, app, ids, all) {
+  all = all || (await agentsAll(env));
+  const by = new Map(all.map((a) => [a.id, a])), out = [];
+  for (const id of ids) {
+    const A = by.get(id);
+    if (!A || !(await agentChainActive(env, id, all))) continue;
+    let P = agentPerms(A.perms);
+    for (let x = by.get(A.parent_id), n = 0; x && n < 20; x = by.get(x.parent_id), n++) P = agentPermsWithin(P, agentPerms(x.perms));
+    if (P.store && (app === null || storeAppOk(P.storeApps, app))) out.push(id);
+  }
+  return out;
+}
+/** elenco degli agenti per la scheda SMS del pannello del titolare */
+async function storeSmsAgentList(env) {
+  const all = await agentsAll(env), ok = new Set(await storeSmsAgents(env, null, all.map((a) => a.id), all));
+  return all.map((a) => ({ id: a.id, username: a.username, store: ok.has(a.id), active: !!a.active }));
 }
 async function agentChainActive(env, id, all) {
   all = all || (await agentsAll(env));
@@ -2512,12 +2531,12 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   }
   if (path === '/store' && m === 'GET') {
     // accanto a ogni download deciso da un agente compare il suo nome
-    const j = await (await storeAdmin(req, env, path, who, ip)).json();
+    const j = await (await storeAdmin(req, env, path, who, ip, 0, { smsAgentList: () => storeSmsAgentList(env) })).json();
     const names = new Map((await agentsAll(env)).map((a) => [a.id, a.username]));
     for (const r of j.requests || []) if (r.by) r.byName = names.get(r.by) || 'agente eliminato';
     return json(j);
   }
-  if (path === '/store' || path.startsWith('/store/')) return storeAdmin(req, env, path, who, ip); // Download store
+  if (path === '/store' || path.startsWith('/store/')) return storeAdmin(req, env, path, who, ip, 0, { smsAgentList: () => storeSmsAgentList(env) }); // Download store
 
   if (path === '/logout' && m === 'POST') {
     await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(ses.id).run();

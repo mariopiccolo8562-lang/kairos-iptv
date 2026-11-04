@@ -27,6 +27,9 @@
  *  Ogni richiesta vale per una sola app e un solo download: per installare di nuovo si chiede un'altra autorizzazione.
  *
  *  Segreti/variabili:  RESEND_KEY (segreto, facoltativo), OWNER_EMAIL e MAIL_FROM (variabili, facoltative).
+ *  SMS (facoltativi, Twilio): TWILIO_SID e TWILIO_TOKEN (segreti), TWILIO_FROM (variabile: numero Twilio o Messaging Service SID).
+ *  Il titolare sceglie dal pannello i numeri: il suo e quelli degli agenti a cui lo consente (solo agenti attivi con il
+ *  permesso «Download store» per quell'app). Un tetto giornaliero limita la spesa.
  *  Le firme dei link dell'email derivano da ENC_KEY.
  */
 
@@ -41,6 +44,9 @@ const KEEP = 30 * 86400e3;       // storico conservato 30 giorni
 const ID_RE = /^[A-Za-z0-9_-]{12,40}$/;
 const DID_RE = /^[A-Za-z0-9_-]{16,64}$/;
 const MAX_BLOCKED = 500;         // dispositivi bloccati ricordati nelle impostazioni
+const PHONE_RE = /^\+[1-9]\d{7,14}$/;
+const SMS_DEF_DAY = 50;          // SMS al giorno se il titolare non sceglie un altro tetto
+const SMS_MAX_DAY = 500;
 const MAIL_RE = /^[^\s@<>"',;:()[\]\\]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,}$/;
 
 const enc = new TextEncoder();
@@ -86,8 +92,24 @@ async function getStoreSettings(env) {
   const row = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('store').first();
   let s = {}; try { s = row ? JSON.parse(row.v) : {}; } catch {}
   const blocked = Array.isArray(s.blocked) ? s.blocked.filter((d) => typeof d === 'string' && DID_RE.test(d)).slice(0, MAX_BLOCKED) : [];
-  return { approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked };
+  return { approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, sms: smsNorm(s.sms) };
 }
+/** numero in formato internazionale (+39…); i numeri italiani scritti senza prefisso vengono completati */
+function phoneNorm(v) {
+  let p = String(v ?? '').replace(/[\s().\/-]/g, '');
+  if (p.startsWith('00')) p = '+' + p.slice(2);
+  if (/^3\d{8,9}$/.test(p)) p = '+39' + p;
+  return PHONE_RE.test(p) ? p : '';
+}
+function smsNorm(v) {
+  const o = v && typeof v === 'object' ? v : {};
+  const seen = new Set();
+  const agents = (Array.isArray(o.agents) ? o.agents : []).map((a) => ({ id: parseInt(a && a.id, 10) || 0, phone: phoneNorm(a && a.phone), on: !(a && a.on === false) }))
+    .filter((a) => a.id > 0 && a.phone && !seen.has(a.id) && seen.add(a.id)).slice(0, 200);
+  return { on: o.on === true, owner: phoneNorm(o.owner), link: o.link === true, perDay: Math.max(1, Math.min(SMS_MAX_DAY, parseInt(o.perDay, 10) || SMS_DEF_DAY)), agents };
+}
+const smsReady = (env) => !!(str(env.TWILIO_SID, 64) && str(env.TWILIO_TOKEN, 128) && str(env.TWILIO_FROM, 40));
+const maskPhone = (p) => (p.length > 6 ? p.slice(0, 3) + '•••' + p.slice(-3) : '•••');
 async function putStoreSettings(env, s) {
   await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('store', JSON.stringify(s)).run();
 }
@@ -200,10 +222,56 @@ ${links ? `<p style="margin:22px 0 10px;color:#4b5563">Oppure decidi tu (il down
   }
 }
 
+/* ---------------- SMS (Twilio) al titolare e agli agenti autorizzati ---------------- */
+async function sendSms(env, to, body, ip) {
+  const sid = str(env.TWILIO_SID, 64), tok = str(env.TWILIO_TOKEN, 128), from = str(env.TWILIO_FROM, 40);
+  const f = new URLSearchParams({ To: to, Body: body });
+  if (/^MG[0-9a-f]{32}$/i.test(from)) f.set('MessagingServiceSid', from); else f.set('From', from);
+  try {
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(sid)}/Messages.json`, {
+      method: 'POST', headers: { Authorization: 'Basic ' + btoa(sid + ':' + tok), 'Content-Type': 'application/x-www-form-urlencoded' }, body: f,
+    });
+    if (res.ok) return { ok: true };
+    let msg = ''; try { const j = await res.json(); msg = str(j && j.message, 140); } catch {}
+    await log(env, 'off', `Store: SMS a ${maskPhone(to)} non inviato (Twilio ${res.status}) ${msg}`, ip);
+    return { ok: false, error: msg || 'Twilio ' + res.status };
+  } catch {
+    await log(env, 'off', `Store: SMS a ${maskPhone(to)} non inviato (rete)`, ip);
+    return { ok: false, error: 'Twilio non raggiungibile' };
+  }
+}
+// testo scritto dal dispositivo del cliente: solo caratteri semplici (niente link o testi ingannevoli negli SMS)
+const smsSafe = (v, max) => String(v || '').replace(/[^A-Za-z0-9 _()+-]/g, ' ').replace(/\b(?:https?|www)\b/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+async function notifySms(env, origin, r, s, ip, opts) {
+  const sms = s.sms;
+  if (!sms || !sms.on || !smsReady(env)) return;
+  let to = sms.owner ? [sms.owner] : [];
+  const cand = sms.agents.filter((a) => a.on);
+  if (cand.length && opts && typeof opts.smsAgents === 'function') {
+    try {
+      const ok = new Set(await opts.smsAgents(r.app, cand.map((a) => a.id)));
+      for (const a of cand) if (ok.has(a.id)) to.push(a.phone);
+    } catch {}
+  }
+  to = [...new Set(to)];
+  if (!to.length) return;
+  const sent = await env.DB.prepare('SELECT COALESCE(SUM(sms), 0) AS n FROM store_requests WHERE created > ?').bind(now() - 86400e3).first();
+  const left = sms.perDay - ((sent && +sent.n) || 0);
+  if (left <= 0) { await log(env, 'off', `Store: limite giornaliero di SMS raggiunto (${sms.perDay}), guarda le richieste nel pannello`, ip); return; }
+  if (to.length > left) to = to.slice(0, left); // il titolare è sempre il primo
+  const k = sms.link ? await linkSig(env, r.id) : '';
+  const dev = smsSafe(r.device, 30), note = smsSafe(r.note, 20);
+  const text = `Kairos Store: richiesta ${smsSafe(r.app, 30)}${dev ? ' su ' + dev : ''}${note ? ' (' + note + ')' : ''}. Codice: ${r.code}` +
+    (k ? ` Autorizza: ${origin}/api/store/approve?id=${encodeURIComponent(r.id)}&k=${encodeURIComponent(k)}` : '');
+  let n = 0;
+  for (const p of to) if ((await sendSms(env, p, text, ip)).ok) n++;
+  if (n) await env.DB.prepare('UPDATE store_requests SET sms = sms + ? WHERE id = ?').bind(n, r.id).run();
+}
+
 /* ====================================================================== */
 /* API pubbliche                                                          */
 /* ====================================================================== */
-export async function storeApi(req, env, ctx, url, ip) {
+export async function storeApi(req, env, ctx, url, ip, opts = {}) {
   const p = url.pathname.slice('/api/store'.length), m = req.method;
   try {
     if (m === 'OPTIONS') return new Response(null, { status: 204 });
@@ -211,7 +279,7 @@ export async function storeApi(req, env, ctx, url, ip) {
       if (await limited(env.RL_DEVICE, 'scfg:' + ip)) return json({ error: 'Troppe richieste' }, 429);
       return json({ on: (await getStoreSettings(env)).approval });
     }
-    if (p === '/request' && m === 'POST') return await create(req, env, ctx, url, ip);
+    if (p === '/request' && m === 'POST') return await create(req, env, ctx, url, ip, opts);
     if (p === '/status' && m === 'GET') return await status(url, env, ip);
     if (p === '/verify' && m === 'POST') return await verify(req, env, ip);
     if (p === '/consume' && m === 'POST') return await consume(req, env, ctx, ip);
@@ -239,7 +307,7 @@ export function storeHeaders(h, path) {
   h.set('Cross-Origin-Resource-Policy', 'cross-origin');
 }
 
-async function create(req, env, ctx, url, ip) {
+async function create(req, env, ctx, url, ip, opts) {
   if (await limited(env.RL_DEVICE, 'sreq:' + ip)) return json({ error: 'Troppe richieste, riprova tra poco' }, 429);
   const b = await readBody(req);
   const app = str(b.app, 80), did = str(b.did, 64), device = str(b.device, 80), note = str(b.note, 40);
@@ -275,6 +343,7 @@ async function create(req, env, ctx, url, ip) {
   }
   bg.push(log(env, 'new', `Store: richiesta download ${app} da ${device || 'dispositivo'}${note ? ' (' + note + ')' : ''}${country ? ' · ' + country : ''}`, ip));
   bg.push(notify(env, url.origin, r, s, ip));
+  bg.push(notifySms(env, url.origin, r, s, ip, opts).catch(() => {}));
   ctx.waitUntil(Promise.all(bg));
   return json({ id: r.id, status: 'pending' });
 }
@@ -395,7 +464,7 @@ async function linkDecide(req, env, url, ip) {
 /* ====================================================================== */
 /* API del pannello (sessione e CSRF già verificati da admin())           */
 /* ====================================================================== */
-export async function storeAdmin(req, env, path, who, ip, by = 0) {
+export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
   const m = req.method;
   try {
     if (path === '/store' && m === 'GET') {
@@ -419,9 +488,13 @@ export async function storeAdmin(req, env, path, who, ip, by = 0) {
       for (const did of settings.blocked) if (!byDid.has(did)) byDid.set(did, { did, device: '', note: '', country: '', last: 0, requests: 0, downloads: 0, pending: 0, blocked: true });
       const devices = [...byDid.values()].sort((a, b) => (+b.blocked - +a.blocked) || (b.last - a.last));
       const sent = await env.DB.prepare('SELECT COUNT(*) AS n FROM store_requests WHERE mailed = 1 AND created > ?').bind(t - 86400e3).first();
+      const smsSent = await env.DB.prepare('SELECT COALESCE(SUM(sms), 0) AS n FROM store_requests WHERE created > ?').bind(t - 86400e3).first();
+      let agents = [];
+      if (typeof opts.smsAgentList === 'function') { try { agents = await opts.smsAgentList(); } catch {} }
       return json({
         settings,
         mail: { resend: !!env.RESEND_KEY, envEmail: !!str(env.OWNER_EMAIL, 200), links: !!env.ENC_KEY, sentToday: (sent && sent.n) || 0, limit: MAIL_PER_DAY },
+        sms: { ready: smsReady(env), sentToday: (smsSent && +smsSent.n) || 0, agents },
         requests, pending: requests.filter((r) => r.status === 'pending').length, devices,
       });
     }
@@ -434,9 +507,30 @@ export async function storeAdmin(req, env, path, who, ip, by = 0) {
         if (e && !MAIL_RE.test(e)) throw new StoreErr(400, 'Email non valida');
         s.ownerEmail = e;
       }
+      let smsTxt = '';
+      if (b.sms && typeof b.sms === 'object') {
+        const raw = b.sms, list = Array.isArray(raw.agents) ? raw.agents.slice(0, 200) : [];
+        if (raw.owner && !phoneNorm(raw.owner)) throw new StoreErr(400, 'Il tuo numero non è valido: scrivilo con il prefisso, es. +39 333 1234567');
+        for (const a of list) if (a && a.phone && !phoneNorm(a.phone)) throw new StoreErr(400, `Numero non valido: ${str(a.phone, 30)}`);
+        const known = typeof opts.smsAgentList === 'function' ? new Set((await opts.smsAgentList()).map((a) => a.id)) : null;
+        const next = smsNorm({ ...raw, agents: list.filter((a) => !known || known.has(parseInt(a && a.id, 10))) });
+        if (next.on && !next.owner && !next.agents.some((a) => a.on)) throw new StoreErr(400, 'Per attivare gli SMS scrivi almeno un numero');
+        s.sms = next;
+        smsTxt = ` · SMS ${next.on ? `attivi (${(next.owner ? 1 : 0) + next.agents.filter((a) => a.on).length} numeri, max ${next.perDay}/giorno)` : 'spenti'}`;
+      }
       await putStoreSettings(env, s);
-      await log(env, 'settings', `${who}: download store — approvazione ${s.approval ? 'attiva' : 'spenta'}`, ip);
+      await log(env, 'settings', `${who}: download store — approvazione ${s.approval ? 'attiva' : 'spenta'}${smsTxt}`, ip);
       return json({ settings: s });
+    }
+    if (path === '/store/sms/test' && m === 'POST') {
+      const b = await readBody(req);
+      const to = phoneNorm(b.phone);
+      if (!to) throw new StoreErr(400, 'Numero non valido: scrivilo con il prefisso, es. +39 333 1234567');
+      if (!smsReady(env)) throw new StoreErr(400, 'SMS non attivi: mancano TWILIO_SID, TWILIO_TOKEN o TWILIO_FROM');
+      const r = await sendSms(env, to, 'Kairos Store: SMS di prova. Da ora riceverai qui i codici delle richieste di download.', ip);
+      if (!r.ok) throw new StoreErr(502, 'SMS non inviato: ' + r.error);
+      await log(env, 'settings', `${who}: Store — SMS di prova a ${maskPhone(to)}`, ip);
+      return json({ ok: true, to: maskPhone(to) });
     }
     if (path === '/store/device/block' && m === 'POST') {
       const b = await readBody(req);
@@ -483,4 +577,4 @@ export async function storeAdmin(req, env, path, who, ip, by = 0) {
   }
 }
 
-export const _storeInternal = { effStatus, linkSig, sixDigits, TOKEN_TTL, REQ_TTL, MAX_TRIES, MAX_USES };
+export const _storeInternal = { effStatus, linkSig, sixDigits, phoneNorm, smsNorm, smsSafe, TOKEN_TTL, REQ_TTL, MAX_TRIES, MAX_USES };

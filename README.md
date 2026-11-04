@@ -133,6 +133,17 @@ Salva (Commit): lo store si aggiorna da solo in un minuto. Con `"server": ""` op
 - Il link **Autorizza** dell'email apre una pagina di conferma con il pulsante: così i programmi antivirus della posta che "aprono" i link da soli non possono autorizzare nulla al posto tuo.
 - I link degli APK e i codici Downloader in `apps.json` restano pubblici su GitHub: chi li copia può scaricare fuori dallo store. L'autorizzazione controlla i download **dallo store**; la tua app Kairos resta comunque protetta dall'attivazione nel pannello.
 
+**Codici via SMS (facoltativo)** — il codice di ogni richiesta arriva anche per SMS a te e agli agenti che scegli tu. Gli SMS si pagano: con Twilio circa 8-10 centesimi l'uno verso numeri italiani (controlla il prezzo aggiornato su twilio.com).
+1. Registrati su **twilio.com**, aggiungi credito (*Billing*) e compra un numero che possa inviare SMS in Italia (*Phone Numbers → Buy a number*), oppure crea un *Messaging Service*.
+2. Nella home della console copia **Account SID** (inizia con `AC`) e **Auth Token**.
+3. Su GitHub, repository **kairos-iptv** → *Settings → Secrets and variables → Actions*:
+   - **Secrets**: `TWILIO_SID` = Account SID, `TWILIO_TOKEN` = Auth Token;
+   - **Variables**: `TWILIO_FROM` = il numero Twilio con il prefisso (es. `+12025550123`) oppure il SID del Messaging Service (inizia con `MG`).
+4. **Actions → "Pannello Cloudflare" → Run workflow**.
+5. Pannello → **Download store** → scheda **Codici via SMS**: accendi *Invia il codice via SMS*, scrivi il tuo numero e, per ogni agente a cui lo consenti, il suo numero con *Consenti* acceso. Premi **Salva** e poi **Invia SMS di prova**.
+
+Gli agenti ricevono gli SMS solo se il loro account è attivo e hanno il permesso **Download store** per quell'app; i numeri li decidi solo tu. Il **tetto giornaliero** (predefinito 50) evita spese impreviste: raggiunto il tetto, le richieste arrivano solo via email e nel pannello. Con l'account di prova di Twilio gli SMS arrivano solo ai numeri verificati nella console Twilio.
+
 ## 8. Account dei clienti: più dispositivi, profili, VPN, privacy
 
 Tutto dal pannello, nella scheda del dispositivo (**Dispositivi → matita**):

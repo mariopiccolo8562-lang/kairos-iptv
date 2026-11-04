@@ -33,6 +33,12 @@
 .sd-dev .tx{flex:1;min-width:160px}.sd-dev .tx b{display:block;font-size:15px}.sd-dev .tx small{display:block;color:var(--mut);font-size:12px;word-break:break-word}
 .sd-dev .tog{margin:0;padding:8px 12px;gap:10px;flex:none}.sd-dev .tog b{font-size:13px}
 .sd-dev .tog.on i{background:linear-gradient(90deg,var(--bad),#ff8a5b);box-shadow:0 0 16px -2px var(--bad)}
+.sd-ag{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--line)}
+.sd-ag:first-child{border-top:0}
+.sd-ag .nm{flex:1;min-width:120px}.sd-ag .nm b{display:block;font-size:14px}.sd-ag .nm small{display:block;color:var(--mut);font-size:12px}
+.sd-ag .inp{flex:1.4;min-width:170px;padding:10px 12px}
+.sd-ag .tog{margin:0;padding:8px 12px;flex:none}.sd-ag .tog b{font-size:13px}
+.sd-ag.off .nm b{color:var(--mut)}
 @media (max-width:820px){.sd-act{width:100%}.sd-act .btn{flex:1}.sd-dev .tog{width:100%;justify-content:space-between}}`;
   document.head.appendChild(css);
 
@@ -57,6 +63,19 @@
       <div class="sd-note" id="sdMailSt"></div>
       <button class="btn pri" id="sdSave" style="margin-top:14px">Salva</button>
     </div>
+    <div class="card glass" style="margin-top:18px" id="sdSmsCard">
+      <div class="hd"><h3>Codici via SMS<small>Il codice di ogni richiesta arriva anche per SMS a te e agli agenti che scegli tu</small></h3></div>
+      <div class="tog" id="smsOn" role="switch" tabindex="0"><div><b>Invia il codice via SMS</b><small>Insieme all'email, appena un cliente chiede un download</small></div><i></i></div>
+      <label class="lbl">Il tuo numero</label>
+      <input class="inp" id="smsOwner" type="tel" inputmode="tel" autocomplete="tel" placeholder="+39 333 1234567">
+      <div class="sd-sub">Agenti</div>
+      <div id="smsAgents"></div>
+      <div class="tog" id="smsLink" role="switch" tabindex="0" style="margin-top:12px"><div><b>Aggiungi il link «Autorizza»</b><small>Si autorizza con un tocco, ma l'SMS è più lungo e costa circa il doppio</small></div><i></i></div>
+      <label class="lbl">Massimo SMS al giorno</label>
+      <input class="inp" id="smsDay" type="number" min="1" max="500" step="1" style="max-width:160px">
+      <div class="sd-note" id="smsSt"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px"><button class="btn pri" id="smsSave">Salva</button><button class="btn" id="smsTest">Invia SMS di prova al mio numero</button></div>
+    </div>
     <div class="card glass" style="margin-top:18px">
       <div class="hd"><h3>Come funziona</h3></div>
       <ol class="sd-how">
@@ -74,8 +93,9 @@
   const DM = (() => {
     const t = Date.now();
     return {
-      settings: { approval: true, ownerEmail: 'tuo@email.it', blocked: ['demo-did-mt-firetv-000000'] },
+      settings: { approval: true, ownerEmail: 'tuo@email.it', blocked: ['demo-did-mt-firetv-000000'], sms: { on: true, owner: '+393331234567', link: false, perDay: 50, agents: [{ id: 2, phone: '+393409876543', on: true }] } },
       mail: { resend: true, envEmail: false, links: true, sentToday: 3, limit: 90 },
+      sms: { ready: true, sentToday: 5, agents: [{ id: 2, username: 'luca', store: true, active: true }, { id: 3, username: 'sara', store: false, active: true }] },
       requests: [
         { id: 'demo-req-0001', app: 'IboPro', did: 'demo-did-marco-firetv-0000', device: 'Amazon AFTKA (Fire TV)', note: 'Marco', country: 'IT · Milano', code: '482913', status: 'pending', tries: 0, uses: 0, created: t - 90e3 },
         { id: 'demo-req-0002', app: 'TiviMate', did: 'demo-did-xiaomi-tv-000000', device: 'Xiaomi MiTV-AXSO0 (Android TV)', note: '', country: 'IT', code: '105377', status: 'pending', tries: 1, uses: 0, created: t - 11 * 60e3 },
@@ -101,6 +121,7 @@
     await new Promise((r) => setTimeout(r, 120));
     if (path === '' && method === 'GET') return { ...DM, pending: DM.requests.filter((r) => r.status === 'pending').length, devices: demoDevices() };
     if (path === '/settings') { Object.assign(DM.settings, body); return { settings: DM.settings }; }
+    if (path === '/sms/test') return { ok: true, to: '+39•••567' };
     if (path === '' && method === 'DELETE') { DM.requests = DM.requests.filter((r) => r.status === 'pending'); return { ok: true }; }
     if (path === '/device/block') {
       DM.settings.blocked = DM.settings.blocked.filter((d) => d !== body.did);
@@ -169,6 +190,34 @@
     if (m.resend) lines.push("Con il mittente di prova di Resend (onboarding@resend.dev) l'email arriva solo all'indirizzo con cui ti sei registrato su Resend.");
     if (m.resend && !m.links) lines.push('Pulsanti Autorizza/Rifiuta nell\'email non disponibili: manca ENC_KEY sul Worker.');
     $('#sdMailSt').innerHTML = lines.join('<br>');
+    renderSms();
+  }
+  /* ---------------- SMS ---------------- */
+  function renderSms() {
+    if (!S.data || !$('#smsOn')) return;
+    const sm = (S.data.settings && S.data.settings.sms) || {}, info = S.data.sms || {};
+    $('#smsOn').classList.toggle('on', !!sm.on); $('#smsOn').setAttribute('aria-checked', sm.on ? 'true' : 'false');
+    $('#smsLink').classList.toggle('on', !!sm.link); $('#smsLink').setAttribute('aria-checked', sm.link ? 'true' : 'false');
+    if (document.activeElement !== $('#smsOwner')) $('#smsOwner').value = sm.owner || '';
+    if (document.activeElement !== $('#smsDay')) $('#smsDay').value = sm.perDay || 50;
+    const saved = new Map((sm.agents || []).map((a) => [a.id, a]));
+    const list = info.agents || [];
+    $('#smsAgents').innerHTML = list.length ? list.map((a) => {
+      const v = saved.get(a.id) || {}, can = a.store && a.active;
+      const why = !a.active ? 'account disattivato: non riceve SMS' : !a.store ? 'senza il permesso «Download store»: non riceve SMS' : 'riceve solo le richieste delle app che gestisce';
+      return `<div class="sd-ag${can ? '' : ' off'}" data-ag="${+a.id}"><div class="nm"><b>${esc(a.username)}</b><small>${why}</small></div>
+        <input class="inp" type="tel" inputmode="tel" placeholder="Numero di ${esc(a.username)}" value="${esc(v.phone || '')}" data-agp="1">
+        <div class="tog${v.phone && v.on !== false ? ' on' : ''}" data-agt="1" role="switch" tabindex="0"><div><b>Consenti</b></div><i></i></div></div>`;
+    }).join('') : '<div class="emptyc">Nessun agente: crea gli agenti dalla pagina Agenti</div>';
+    const lines = [];
+    if (!info.ready) lines.push('⚠️ <b>SMS non attivi</b>: mancano i segreti <b>TWILIO_SID</b>, <b>TWILIO_TOKEN</b> e la variabile <b>TWILIO_FROM</b> su GitHub (vedi la guida nel README). Puoi già salvare i numeri.');
+    else lines.push(`${sm.on ? '✅ <b>SMS attivi</b>' : 'SMS spenti'} · inviati nelle ultime 24 ore: ${+info.sentToday || 0}/${+sm.perDay || 50}`);
+    lines.push('Ogni SMS costa (circa 8-10 centesimi in Italia, li paghi a Twilio). Il tetto giornaliero ti protegge da spese impreviste: raggiunto il tetto, le richieste arrivano solo via email e qui.');
+    $('#smsSt').innerHTML = lines.join('<br>');
+  }
+  function smsBody() {
+    const agents = $$('#smsAgents [data-ag]').map((row) => ({ id: +row.dataset.ag, phone: row.querySelector('[data-agp]').value.trim(), on: row.querySelector('[data-agt]').classList.contains('on') })).filter((a) => a.phone);
+    return { on: $('#smsOn').classList.contains('on'), owner: $('#smsOwner').value.trim(), link: $('#smsLink').classList.contains('on'), perDay: parseInt($('#smsDay').value, 10) || 50, agents };
   }
 
   async function refresh(full) {
@@ -218,6 +267,27 @@
     await refresh();
   }
   $('#sdReload').onclick = () => refresh(true);
+  const flip = (el) => { el.classList.toggle('on'); el.setAttribute('aria-checked', el.classList.contains('on') ? 'true' : 'false'); };
+  ['#smsOn', '#smsLink'].forEach((id) => { $(id).onclick = () => flip($(id)); $(id).onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip($(id)); } }; });
+  $('#smsAgents').addEventListener('click', (e) => { const t = e.target.closest('[data-agt]'); if (t) { t.dataset.touched = '1'; flip(t); } });
+  $('#smsAgents').addEventListener('input', (e) => { const i = e.target.closest('[data-agp]'); if (i && i.value.trim()) { const t = i.closest('[data-ag]').querySelector('[data-agt]'); if (!t.dataset.touched) { t.classList.add('on'); } } });
+  $('#smsAgents').addEventListener('keydown', (e) => { const t = e.target.closest && e.target.closest('[data-agt]'); if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); flip(t); } });
+  $('#smsSave').onclick = async () => {
+    const b = $('#smsSave'); b.disabled = true;
+    try {
+      const r = await sApi('PUT', '/settings', { sms: smsBody() });
+      if (S.data) S.data.settings = r.settings;
+      renderSms();
+      const sm = r.settings.sms || {};
+      toast(sm.on ? `SMS attivi: ${(sm.owner ? 1 : 0) + (sm.agents || []).filter((a) => a.on).length} numeri` : 'Salvato: SMS spenti');
+    } catch (err) { toast(err.message, 1); } finally { b.disabled = false; }
+  };
+  $('#smsTest').onclick = async () => {
+    const phone = $('#smsOwner').value.trim();
+    if (!phone) { toast('Scrivi prima il tuo numero', 1); return; }
+    const b = $('#smsTest'); b.disabled = true;
+    try { const r = await sApi('POST', '/sms/test', { phone }); toast('SMS di prova inviato a ' + r.to); } catch (err) { toast(err.message, 1); } finally { b.disabled = false; }
+  };
   $('#sdOn').onclick = () => $('#sdOn').classList.toggle('on');
   $('#sdSave').onclick = async () => {
     try {

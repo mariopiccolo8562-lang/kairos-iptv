@@ -62,9 +62,10 @@ jobs:
           TURNSTILE_SITEKEY: ${{ vars.TURNSTILE_SITEKEY }}
           OWNER_EMAIL: ${{ vars.OWNER_EMAIL }}
           MAIL_FROM: ${{ vars.MAIL_FROM }}
+          TWILIO_FROM: ${{ vars.TWILIO_FROM }}
         run: |
           ARGS=()
-          for V in ACCESS_TEAM_DOMAIN ACCESS_AUD TURNSTILE_SITEKEY OWNER_EMAIL MAIL_FROM; do
+          for V in ACCESS_TEAM_DOMAIN ACCESS_AUD TURNSTILE_SITEKEY OWNER_EMAIL MAIL_FROM TWILIO_FROM; do
             [ -n "${!V}" ] && ARGS+=(--var "$V:${!V}")
           done
           ARGS+=(--var "UI_VERSION:${UI_VERSION}")
@@ -87,9 +88,11 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ORBIX_KEY: ${{ secrets.ORBIX_KEY }}
           MAXPLAYER_KEY: ${{ secrets.MAXPLAYER_KEY }}
+          TWILIO_SID: ${{ secrets.TWILIO_SID }}
+          TWILIO_TOKEN: ${{ secrets.TWILIO_TOKEN }}
         run: |
           umask 077
-          jq -n --arg a "$ENC_KEY" --arg b "$ADMIN_BOOTSTRAP_PASS" --arg c "$TURNSTILE_SECRET" --arg d "$RESEND_KEY" --arg e "$TMDB_KEY" --arg f "$GEMINI_API_KEY" --arg g "$ANTHROPIC_API_KEY" --arg h "$ORBIX_KEY" --arg i "$MAXPLAYER_KEY" \
-            '{ENC_KEY:$a, ADMIN_BOOTSTRAP_PASS:$b, TURNSTILE_SECRET:$c, RESEND_KEY:$d, TMDB_KEY:$e, GEMINI_API_KEY:$f, ANTHROPIC_API_KEY:$g, ORBIX_KEY:$h, MAXPLAYER_KEY:$i} | with_entries(select(.value != ""))' > "$RUNNER_TEMP/s.json"
+          jq -n --arg a "$ENC_KEY" --arg b "$ADMIN_BOOTSTRAP_PASS" --arg c "$TURNSTILE_SECRET" --arg d "$RESEND_KEY" --arg e "$TMDB_KEY" --arg f "$GEMINI_API_KEY" --arg g "$ANTHROPIC_API_KEY" --arg h "$ORBIX_KEY" --arg i "$MAXPLAYER_KEY" --arg j "$TWILIO_SID" --arg k "$TWILIO_TOKEN" \
+            '{ENC_KEY:$a, ADMIN_BOOTSTRAP_PASS:$b, TURNSTILE_SECRET:$c, RESEND_KEY:$d, TMDB_KEY:$e, GEMINI_API_KEY:$f, ANTHROPIC_API_KEY:$g, ORBIX_KEY:$h, MAXPLAYER_KEY:$i, TWILIO_SID:$j, TWILIO_TOKEN:$k} | with_entries(select(.value != ""))' > "$RUNNER_TEMP/s.json"
           wrangler secret bulk "$RUNNER_TEMP/s.json"
           rm -f "$RUNNER_TEMP/s.json"

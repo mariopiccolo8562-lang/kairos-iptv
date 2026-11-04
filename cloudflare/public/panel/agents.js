@@ -173,7 +173,7 @@ body.agent .foot{display:none}
     const ag = isAgent();
     document.body.classList.toggle('agent', ag);
     for (const v of OWNER_ONLY) { const b = nav(v); if (b) b.style.display = ag && !agentCan(v) ? 'none' : ''; }
-    { const c = $('#sdOn') && $('#sdOn').closest('.card'); if (c) c.style.display = ag ? 'none' : ''; const d = $('#sdDev') && $('#sdDev').closest('.card'); if (d) d.style.display = ag ? 'none' : ''; const k = $('#sdClear'); if (k) k.style.visibility = ag ? 'hidden' : ''; }
+    { const c = $('#sdOn') && $('#sdOn').closest('.card'); if (c) c.style.display = ag ? 'none' : ''; const d = $('#sdDev') && $('#sdDev').closest('.card'); if (d) d.style.display = ag ? 'none' : ''; const k = $('#sdClear'); if (k) k.style.visibility = ag ? 'hidden' : ''; const sm = $('#sdSmsCard'); if (sm) sm.style.display = ag ? 'none' : ''; }
     const sb = nav('sec'); if (sb) sb.style.display = ag ? '' : 'none';
     const ab = nav('agents'); if (ab) ab.style.display = !ag || me().canAgents ? '' : 'none';
     layoutMenu();
