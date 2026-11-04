@@ -45,6 +45,9 @@
   };
   /* slot: fornitore + app + link (DNS) + codice cliente. Il codice mostrato segue il DNS scelto nell'attivazione */
   const SLOTS = () => P().slots || [];
+  // posizione del DNS OrbixPlay usato dal cliente: si cerca per host (l'elenco può cambiare), altrimenti l'indice salvato
+  const kh = (h) => String(h || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
+  const orbIdx = (o) => { if (!o) return 0; const l = ((P().dns || {}).orbix) || []; if (o.h) { const i = l.findIndex((x) => x.host && kh(x.host) === o.h); if (i >= 0) return i; } return +o.dns || 0; };
   const hostOf2 = (h) => String(h || '').trim().replace(/^https?:\/\//i, '').split(/[:/]/)[0].toLowerCase();
   function slotFor(app, dnsName, dnsHost) {
     const l = SLOTS().filter((x) => x.app === app); if (!l.length) return null;
@@ -86,8 +89,8 @@
     const up = (u) => `<input class="inp" data-opu placeholder="Utente" maxlength="120" value="${esc(u || ln.u)}" autocomplete="off"><input class="inp" data-opp type="password" placeholder="Password" maxlength="200" value="${esc(ln.p)}" autocomplete="new-password">`;
     const btns = (on) => `<button class="btn sm pri" data-opsend>${on ? 'Riattiva' : 'Attiva'}</button>${on ? '<button class="btn sm danger" data-opdel>Togli</button>' : '<span></span>'}`;
     const orb = `<div class="op-row" data-op="${esc(d.id)}" data-app="orbix"><div class="op-h"><div class="op-ic">OP</div>
-      <div class="op-tx"><b>OrbixPlay</b><small>${!P().orbix ? 'Non collegato: aggiungi la chiave ORBIX_KEY (Impostazioni → App e aggiornamenti)' : o ? `<span class="op-ok">✓ Attivo</span> sul dispositivo <span class="mono">${esc(o.id)}</span> · ${esc(ago2(o.t))}` : 'Scrivi l\'ID che il cliente vede nell\'app OrbixPlay, utente e password: il DNS lo mette il pannello'}</small></div>${codeBox('orbix', slotFor('orbix', (((P().dns || {}).orbix || [])[o ? o.dns : 0] || {}).name, (((P().dns || {}).orbix || [])[o ? o.dns : 0] || {}).host))}</div>
-      ${P().orbix ? `<div class="op-f"><input class="inp mono" data-opid placeholder="ID dispositivo" maxlength="64" value="${esc(o ? o.id : '')}">${up(o && o.u)}${btns(!!o)}</div><div class="op-d">${dnsSel('orbix', o ? o.dns : 0)}</div>` : ''}</div>`;
+      <div class="op-tx"><b>OrbixPlay</b><small>${!P().orbix ? 'Non collegato: aggiungi la chiave ORBIX_KEY (Impostazioni → App e aggiornamenti)' : o ? `<span class="op-ok">✓ Attivo</span> sul dispositivo <span class="mono">${esc(o.id)}</span> · ${esc(ago2(o.t))}` : 'Scrivi l\'ID che il cliente vede nell\'app OrbixPlay, utente e password: il DNS lo mette il pannello'}</small></div>${codeBox('orbix', slotFor('orbix', (((P().dns || {}).orbix || [])[orbIdx(o)] || {}).name, (((P().dns || {}).orbix || [])[orbIdx(o)] || {}).host))}</div>
+      ${P().orbix ? `<div class="op-f"><input class="inp mono" data-opid placeholder="ID dispositivo" maxlength="64" value="${esc(o ? o.id : '')}">${up(o && o.u)}${btns(!!o)}</div><div class="op-d">${dnsSel('orbix', orbIdx(o))}</div>` : ''}</div>`;
     const mx = `<div class="op-row" data-op="${esc(d.id)}" data-app="max"><div class="op-h"><div class="op-ic mx">MX</div>
       <div class="op-tx"><b>MaxPlayer</b><small>${!P().max ? 'Non collegato: aggiungi la chiave MAXPLAYER_KEY (Impostazioni → App e aggiornamenti)' : x ? `<span class="op-ok">✓ Attivo</span>: il cliente entra in MaxPlayer con utente <span class="mono" style="color:var(--tx,#fff);font-weight:600">${esc(x.u)}</span> e la password della linea · ${esc(ago2(x.t))}` : 'Utente e password della linea: il pannello crea l\'account MaxPlayer del cliente (entra con gli stessi dati)'}</small></div>${codeBox('max', slotFor('max', '', ''))}</div>
       ${P().max ? `<div class="op-f mx">${up(x && x.u)}${btns(!!x)}</div><div class="op-d">${mxSel(x ? x.dom : '')}</div>` : ''}</div>`;

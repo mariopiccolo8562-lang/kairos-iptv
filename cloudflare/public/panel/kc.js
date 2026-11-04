@@ -41,7 +41,7 @@
     if (path.startsWith('/admin/app-errors')) {
       if (method === 'DELETE') { DM.errs = []; return { ok: true }; }
       if (path === '/admin/app-errors/seen') { DM.errSeen = now(); return { ok: true }; }
-      const items = DM.errs.map((x) => ({ ...x, ownerId: +((DEMO.devices.find((d) => d.id === x.deviceId) || {}).ownerId || 0), isNew: x.t > (DM.errSeen || 0) }));
+      const items = DM.errs.map((x) => ({ ...x, ownerId: (() => { const d = DEMO.devices.find((y) => y.id === x.deviceId) || {}; const pd = d.parent ? DEMO.devices.find((y) => y.id === d.parent) || {} : d; return +(pd.ownerId || 0); })(), isNew: x.t > (DM.errSeen || 0) }));
       const by = (key) => { const mp = new Map(); for (const x of items) { const k = key(x); const o = mp.get(k) || { key: k, n: 0, unresolved: 0, devs: new Set(), titles: new Set(), name: x.name, code: x.code, model: x.model }; o.n++; if (x.outcome === 'non risolto') o.unresolved++; o.devs.add(x.deviceId); o.titles.add(x.title); mp.set(k, o); } return [...mp.values()].sort((a, b) => b.n - a.n).slice(0, 10).map((o) => ({ ...o, devices: o.devs.size, titles: o.titles.size, devs: undefined })); };
       return { items, topTitles: by((x) => x.title).map(({ name, code, model, ...o }) => o), topDevices: by((x) => x.deviceId), newCount: items.filter((x) => x.isNew).length };
     }

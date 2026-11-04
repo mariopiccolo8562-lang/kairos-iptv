@@ -164,10 +164,12 @@ body.agent .foot{display:none}
   const origApi = api;
   window.api = api = async function (m, p, b) {
     if (isAgent() && !AG_OK.test(p)) throw new Error('Funzione non disponibile per gli agenti');
+    const asAt = window.__assist || null;
     const r = await origApi(m, p, b);
+    if (p === '/admin/state' && m === 'GET' && (window.__assist || null) !== asAt) throw new Error('Pannello cambiato nel frattempo');
     if (p === '/admin/state' && m === 'GET' && r) {
       D.role = r.role === 'agent' ? 'agent' : 'owner'; D.agents = r.agents || []; D.me = r.me || null; D.servers = r.servers || [];
-      D.storeAppNames = r.storeAppNames || []; D.maintMe = r.maint || null; D.maintAg = r.maintAg || [];
+      D.storeAppNames = r.storeAppNames || []; D.maintMe = r.maint || null; D.maintAg = r.maintAg || []; D.appLinks = Array.isArray(r.appLinks) ? r.appLinks : [];
       if (r.addonCat) D.addonCat = r.addonCat;
     }
     if (p === '/admin/login' && r && r.role) D.role = r.role;
@@ -340,7 +342,7 @@ body.agent .foot{display:none}
         ${a.totp ? '<button class="btn sm" id="agTz" style="margin-top:10px">Azzera verifica in due passaggi</button>' : ''}
         <p class="mut" style="font-size:12px;margin-top:12px">Creato ${esc(fmtD(a.createdAt))} · ultima attività ${esc(a.lastSeen ? ago(a.lastSeen) : 'mai')}</p></div>` : ''}
     </div>`;
-    $('#agFt').innerHTML = `${a ? '<button class="btn danger" id="agDel">Elimina agente</button>' : ''}${a && a.active ? '<button class="btn" id="agAssist" title="Entra nel pannello di questo agente per fargli assistenza">🛟 Entra per assistenza</button>' : ''}<div style="flex:1"></div><button class="btn" id="agNo">Annulla</button><button class="btn pri" id="agOk">${isNew ? 'Crea agente' : 'Salva modifiche'}</button>`;
+    $('#agFt').innerHTML = `${a ? '<button class="btn danger" id="agDel">Elimina agente</button>' : ''}${a && a.active && !sub ? '<button class="btn" id="agAssist" title="Entra nel pannello di questo agente per fargli assistenza">🛟 Entra per assistenza</button>' : ''}<div style="flex:1"></div><button class="btn" id="agNo">Annulla</button><button class="btn pri" id="agOk">${isNew ? 'Crea agente' : 'Salva modifiche'}</button>`;
     $('#agAssist') && ($('#agAssist').onclick = () => { if (D.demo) { toast('In demo l\'assistenza non è disponibile', 1); return; } KXAssist.enter(a.id, a.username); });
     $('#agA').onclick = () => $('#agA').classList.toggle('on');
     const saSync = () => { const all = $('#agSa [data-sapp="*"]'); $$('#agSa [data-sapp]').forEach((i) => { if (i.dataset.sapp !== '*') i.closest('label').style.opacity = all && all.checked ? '.45' : ''; }); };
@@ -508,7 +510,7 @@ body.agent .foot{display:none}
     window.demoApi = demoApi = async function (m, p, b) {
       if (p === '/admin/login') { demoAgent = /^agente/i.test((b && b.user) || ''); return { ok: true, user: demoAgent ? 'mario.rossi' : b.user || 'admin', role: demoAgent ? 'agent' : 'owner' }; }
       if (p === '/admin/dns' && m === 'GET') return { saved: DEMO.srv, hosts: [], byDev: {} };
-      if (p === '/admin/match-server') { const h = (b.host || '').replace(/^https?:\/\//, '').toLowerCase(); const sv = DEMO.srv.find((s) => s.host && h === s.host.replace(/^https?:\/\//, '').replace(/[:/].*$/, '').toLowerCase()); return { server: sv ? { id: sv.id, name: sv.name } : null }; }
+      if (p === '/admin/match-server') { const h = (b.host || '').replace(/^https?:\/\//, '').replace(/[:/].*$/, '').toLowerCase(); const sv = DEMO.srv.find((s) => s.host && h === s.host.replace(/^https?:\/\//, '').replace(/[:/].*$/, '').toLowerCase()); return { server: sv ? { id: sv.id, name: sv.name } : null }; }
       if (p === '/admin/state') {
         const r = await origDemo(m, p, b);
         if (!demoAgent) return { ...r, role: 'owner', agents: DEMO.agents.map(out), storeAppNames: ['IBO Player', 'IboOne', 'OrbixPlay', 'Smarters Pro', 'TiviMate'], maintAg: DEMO.maintAg.on ? [2] : [] };
@@ -516,7 +518,7 @@ body.agent .foot{display:none}
         const devs = r.devices.filter((d) => tree.includes(d.ownerId) || (d.parent && r.devices.some((x) => x.id === d.parent && tree.includes(x.ownerId))))
           .map((d) => ({ ...d, playlists: d.playlists.map((pl, i) => ({ id: pl.id, name: pl.name, type: 'xtream', serverId: i % 2 ? 's2' : 's1', serverName: i % 2 ? 'ATLX' : 'NKI', username: 'cliente' + d.id, password: 'xxxx' })) }));
         return { role: 'agent', user: A.username, me: { ...out(A), clientsUsed: out(A).clients }, devices: devs, agents: DEMO.agents.filter((x) => x.parentId === 2).map(out), servers: DEMO.srv.slice(0, 2).map(({ id, name }) => ({ id, name })),
-          addonCat: addonCatNow().filter((x) => A.perms.addons.includes(x.id) && x.mode === 'some'), settings: { brand: r.settings.brand, accent: r.settings.accent, downloaderCode: r.settings.downloaderCode || '', storeDownloaderCode: r.settings.storeDownloaderCode || '', apkUrl: r.settings.apkUrl || '' }, security: { totp: true }, activity: [], messages: [], counts: {}, dlCodes: A.perms.dlcodes ? r.dlCodes : [], storeAppNames: ['IBO Player', 'OrbixPlay'], maint: A.perms.maint ? { ...DEMO.maintAg } : null, players: A.perms.players ? (() => { const c = DEMO.settings.playersCfg || { orbix: [{ name: 'Principale', host: 'http://dns.kairos-esempio.tv:8080' }], max: [] }, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: true, max: true, dns: { orbix: v(c.orbix), max: v(c.max) }, codes: c.codes || { orbix: '265847', max: '265847' }, slots: (c.slots || [{ id: 'nki-max', name: 'NKI', app: 'max', link: '', code: '265847' }, { id: 'armada-max', name: 'Armada', app: 'max', link: '', code: '265847' }, { id: 'nki-orbix', name: 'NKI', app: 'orbix', link: '', code: '265847' }]).map((x) => ({ ...x, link: '' })) }; })() : null };
+          addonCat: addonCatNow().filter((x) => A.perms.addons.includes(x.id) && x.mode === 'some'), settings: { brand: r.settings.brand, accent: r.settings.accent, downloaderCode: r.settings.downloaderCode || '', storeDownloaderCode: r.settings.storeDownloaderCode || '', apkUrl: r.settings.apkUrl || '' }, security: { totp: true }, activity: [], messages: [], counts: {}, dlCodes: A.perms.dlcodes ? r.dlCodes : [], storeAppNames: ['IBO Player', 'OrbixPlay'], maint: A.perms.maint ? { ...DEMO.maintAg } : null, appLinks: A.perms.appstore ? (DEMO.settings.appLinks || []).filter((x) => !Array.isArray(A.perms.appsAllow) || A.perms.appsAllow.includes('*') || A.perms.appsAllow.some((y) => y.toLowerCase() === x.name.toLowerCase())) : [], players: A.perms.players ? (() => { const c = DEMO.settings.playersCfg || { orbix: [{ name: 'Principale', host: 'http://dns.kairos-esempio.tv:8080' }], max: [] }, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: true, max: true, dns: { orbix: v(c.orbix), max: v(c.max) }, codes: c.codes || { orbix: '265847', max: '265847' }, slots: (c.slots || [{ id: 'nki-max', name: 'NKI', app: 'max', link: '', code: '265847' }, { id: 'armada-max', name: 'Armada', app: 'max', link: '', code: '265847' }, { id: 'nki-orbix', name: 'NKI', app: 'orbix', link: '', code: '265847' }]).map((x) => ({ ...x, link: '' })) }; })() : null };
       }
       if (p === '/admin/agent-maint' && m === 'PUT') { DEMO.maintAg = { on: !!b.on, msg: b.msg || '', allow: b.allow || [] }; return { ...DEMO.maintAg }; }
       if (/^\/admin\/agent-maint\/\d+$/.test(p) && m === 'DELETE') { DEMO.maintAg = { on: false, msg: '', allow: [] }; return { ok: true }; }
@@ -551,6 +553,13 @@ body.agent .foot{display:none}
     enter(id, name) { window.__assist = id; closePage(); assistBanner(name); toast('Entrato nel pannello di ' + name); load().catch(() => { toast('Assistenza non riuscita', 1); KXAssist.exit(); }); },
     exit() { if (!window.__assist) return; window.__assist = null; const b = document.getElementById('assistBar'); if (b) b.remove(); document.body.style.paddingTop = ''; load(); toast('Uscito dall\'assistenza'); },
   });
+
+  // sessione scaduta o uscita durante l'assistenza: si torna sempre al proprio pannello al prossimo accesso
+  const origLogout = logout;
+  window.logout = logout = function () { if (window.__assist) return KXAssist.exit(); return origLogout.apply(this, arguments); };
+  if ($('#logout')) $('#logout').onclick = logout;
+  const origShowLogin = showLogin;
+  window.showLogin = showLogin = function () { if (window.__assist) { window.__assist = null; const b = document.getElementById('assistBar'); if (b) b.remove(); document.body.style.paddingTop = ''; } return origShowLogin.apply(this, arguments); };
 
   layoutMenu();
   if ($('#app').classList.contains('on')) renderAll();

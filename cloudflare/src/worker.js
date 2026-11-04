@@ -323,7 +323,7 @@ async function orbixCall(env, path, query) {
   const MSG = { 400: 'Dati non accettati da OrbixPlay', 401: 'Chiave OrbixPlay non valida', 403: 'Abbonamento OrbixPlay scaduto o posti finiti', 404: 'Dispositivo non trovato su OrbixPlay: controlla l\'ID (il cliente deve prima aprire l\'app OrbixPlay)' };
   throw new HttpErr(r.status === 404 || r.status === 403 || r.status === 400 ? 400 : 502, (MSG[r.status] || 'Errore di OrbixPlay') + (why ? ' — ' + why : ''));
 }
-const orbixOf = (d) => { try { const o = JSON.parse(d.orbix || '{}'); return { id: str(o.id, 64), pls: Array.isArray(o.pls) ? o.pls.map((x) => str(String(x), 64)).filter(Boolean) : [], t: +o.t || 0, n: +o.n || 0, u: str(o.u, 120), dns: +o.dns || 0 }; } catch { return { id: '', pls: [], t: 0, n: 0, u: '', dns: 0 }; } };
+const orbixOf = (d) => { try { const o = JSON.parse(d.orbix || '{}'); return { id: str(o.id, 64), pls: Array.isArray(o.pls) ? o.pls.map((x) => str(String(x), 64)).filter(Boolean) : [], t: +o.t || 0, n: +o.n || 0, u: str(o.u, 120), dns: +o.dns || 0, h: str(o.h, 300) }; } catch { return { id: '', pls: [], t: 0, n: 0, u: '', dns: 0, h: '' }; } };
 /** attiva il dispositivo OrbixPlay: ID del dispositivo + utente e password della linea, sul DNS personale scelto
     (l'indirizzo non lo scrive nessuno: lo prende dalle impostazioni; con il «codice host» non viaggia nemmeno in chiaro) */
 async function orbixSend(env, d, b, who, ip, agentLines) {
@@ -332,7 +332,7 @@ async function orbixSend(env, d, b, who, ip, agentLines) {
   if (!ORBIX_ID_RE.test(orbixId)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
   if (!username || !password) throw new HttpErr(400, 'Scrivi utente e password della linea');
   if (agentLines && !agentLines.some((l) => l.username === username && l.password === password)) throw new HttpErr(400, 'Usa utente e password di una linea di questo cliente');
-  const s = await getSettings(env), list = orbixDnsList((s.playersCfg || {}).orbix, await dnsList(env));
+  const s = await getSettings(env), list = agentLines ? (((s.playersCfg || {}).orbix) || []) : orbixDnsList((s.playersCfg || {}).orbix, await dnsList(env));
   if (!list.length) throw new HttpErr(400, 'Imposta prima un DNS (OrbixPlay in APP Store, oppure in «Server DNS»)');
   const di = Math.max(0, Math.min(list.length - 1, parseInt(b.dns, 10) || 0)), dns = list[di];
   const old = orbixOf(d);
@@ -341,7 +341,7 @@ async function orbixSend(env, d, b, who, ip, agentLines) {
   const pls = pid !== undefined && pid !== null ? [String(pid)] : [];
   // solo ora (se l'invio è riuscito) si toglie quella mandata l'ultima volta: un ID sbagliato non svuota il dispositivo giusto
   if (old.id) for (const id of old.pls) if (!pls.includes(id)) await orbixCall(env, '/delete-playlist', { playlist_id: /^\d+$/.test(id) ? +id : id }).catch(() => {});
-  const o = { id: orbixId, pls, t: now(), n: 1, u: username, dns: di };
+  const o = { id: orbixId, pls, t: now(), n: 1, u: username, dns: di, h: hostKey(dns.host) };
   await env.DB.prepare('UPDATE devices SET orbix = ? WHERE id = ?').bind(JSON.stringify(o), d.id).run();
   await log(env, 'edit', `${who}: OrbixPlay attivato per ${d.name || d.code} (dispositivo ${orbixId}, ${dns.name})`, ip);
   return { id: orbixId, n: 1, t: o.t, u: username, dns: di };
@@ -2302,6 +2302,8 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const m = req.method;
   const all = await agentsAll(env);
   if (!(await agentChainActive(env, ses.admin_id, all))) {
+    // in assistenza la sessione è quella del titolare: non va chiusa, l'agente semplicemente non è disponibile
+    if (ses.assist) throw new HttpErr(403, 'Questo agente è disattivato (o lo è chi l\'ha creato): riattivalo per entrare in assistenza');
     await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(ses.id).run();
     throw new HttpErr(401, 'Account disattivato');
   }
@@ -2314,7 +2316,9 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const tree = agentTree(all, A.id), who = ses.assist ? `Assistenza di ${ses.assistBy} · ${A.username}` : 'Agente ' + A.username;
   const ctree = P.subClients ? tree : [A.id]; // clienti visibili: i suoi e (se concesso) quelli dei sotto-agenti
   const aSes = { ...ses, agent: true };
-  if (now() - (+A.last_seen || 0) > 5 * 60e3) ctx.waitUntil(env.DB.prepare('UPDATE admins SET last_seen = ? WHERE id = ?').bind(now(), A.id).run());
+  // in assistenza: niente «ultimo accesso» falsato e niente modifiche alla sicurezza dell'account dell'agente
+  if (ses.assist && /^\/(logout-all|password|totp\/(setup|enable|disable))$/.test(path)) throw new HttpErr(403, 'In assistenza non puoi cambiare password, verifica in due passaggi o sessioni dell\'agente');
+  if (!ses.assist && now() - (+A.last_seen || 0) > 5 * 60e3) ctx.waitUntil(env.DB.prepare('UPDATE admins SET last_seen = ? WHERE id = ?').bind(now(), A.id).run());
   if (path === '/password' && m === 'PUT') { const b = await readJSON(req, 4096); if (typeof b.next === 'string' && b.next.length >= 10 && b.next.length <= 200 && (await checkPass(str(b.current, 200), (await env.DB.prepare('SELECT pass_hash FROM admins WHERE id = ?').bind(A.id).first()).pass_hash))) ctx.waitUntil((async () => { await env.DB.prepare('UPDATE admins SET pw_seal = ? WHERE id = ?').bind(await seal(env, b.next), A.id).run(); })()); return adminRoutes(new Request(url.href, { method: 'PUT', body: JSON.stringify({ current: b.current, next: b.next }) }), env, url, path, who, ip, ctx, aSes); } // il nome utente lo cambia solo chi l'ha creato
   if (AGENT_SELF.test(path) && m !== 'GET') return adminRoutes(req, env, url, path, who, ip, ctx, aSes);
   if (path === '/agents' || path.startsWith('/agents/')) { if (!canAg) throw new HttpErr(403, 'Non puoi gestire agenti'); return agentsAdmin(req, env, path, who, ip, Aeff); }
@@ -2323,6 +2327,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const dview = (x) => {
     const dn = new Map(dns.map((y) => [y.host, y]));
     const { hosts, vpnConf, ...rest } = x;
+    if (rest.orbix) { const { h, ...ob } = rest.orbix; rest.orbix = ob; } // l'host del DNS OrbixPlay resta nascosto all'agente
     return { ...rest, playlists: (x.playlists || []).map((p) => { const sv = dn.get(hostOf(p)); return { id: p.id, name: p.name, type: p.type, serverId: sv ? sv.id : '', serverName: sv ? sv.name : 'Altro server', username: p.username, password: p.password }; }) };
   };
   const own = async (id) => {
@@ -2355,7 +2360,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const forward = (method, p, body) => adminRoutes(new Request(url.href, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }), env, url, p, who, ip, ctx, aSes);
 
   // «Incolla linea»: a quale server assegnato corrisponde l'indirizzo incollato (l'agente ha già l'host, nessun dato nuovo)
-  if (path === '/match-server' && m === 'POST') { const b = await readJSON(req, 1024); const sv = servers.find((x) => sameHostname(x.host, str(b.host, 300))); return json({ server: sv ? { id: sv.id, name: sv.name } : null }); }
+  if (path === '/match-server' && m === 'POST') { if (!P.create && !P.playlists) throw new HttpErr(403, 'Non puoi impostare le linee'); const b = await readJSON(req, 1024); const sv = servers.find((x) => sameHostname(x.host, str(b.host, 300))); return json({ server: sv ? { id: sv.id, name: sv.name } : null }); }
   const apv = path.match(/^\/addon-preview\/([a-z0-9-]{3,40})$/);
   if (apv && m === 'GET') { if (!allowedAddons.has(apv[1])) throw new HttpErr(404, 'Anteprima non disponibile'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
   const need = (k, msg) => { if (!P[k]) throw new HttpErr(403, msg || 'Funzione non consentita: chiedila a chi ti ha creato'); };
@@ -2490,7 +2495,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
       agents: canAg ? await agentsOut(env, all, tree.filter((x) => x !== A.id), true) : [],
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)) : [], // «Attiva app»: solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
-      settings: { brand: s.brand, accent: s.accent, downloaderCode: s.downloaderCode || '', storeDownloaderCode: s.storeDownloaderCode || '', liteDownloaderCode: s.liteDownloaderCode || '', apkUrl: s.apkUrl || '' }, permKeys: PERM_KEYS, security: { totp: !!ses.totp_on }, counts: {},
+      settings: { brand: s.brand, accent: s.accent, downloaderCode: s.downloaderCode || '', storeDownloaderCode: s.storeDownloaderCode || '', liteDownloaderCode: s.liteDownloaderCode || '', apkUrl: s.apkUrl || '' }, permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on) }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
       activity: P.activity ? ((await env.DB.prepare('SELECT t, type, text FROM activity WHERE ' + ctree.map(() => 'text LIKE ?').join(' OR ') + ' ORDER BY t DESC LIMIT 200').bind(...ctree.map((id) => 'Agente ' + (by.get(id) || {}).username + ':%')).all()).results || []) : [],
       messages: P.messages ? (((await env.DB.prepare('SELECT id, target, title, body, level, created, until FROM messages ORDER BY id DESC LIMIT 300').all()).results) || []).filter((x) => devices.some((d) => d.id === x.target)) : [] });
   }
@@ -3373,7 +3378,7 @@ async function apiAdmin(req, env, path, who, ip, ctx) {
 async function deviceOut(env, d) {
   const pls = await unseal(env, d.playlists).catch(() => []);
   return { id: d.id, code: d.code, name: d.name, model: d.model, notes: d.notes, active: !!d.active, expires: d.expires, playlists: pls, hosts: [...new Set(pls.map(hostOf).filter(Boolean))], createdAt: d.created_at, lastSeen: d.last_seen, lastIp: d.last_ip, bound: !!d.secret_hash, status: statusOf(d, pls),
-    addons: addonsList(d.addons), ownerId: +d.owner_id || 0, aiLimit: d.ai_limit ?? -1, aiExtra: +d.ai_extra || 0, aiProvider: d.ai_provider || '', app: d.app || '', orbix: (({ id, t, n, u, dns }) => (id ? { id, t, n, u, dns } : null))(orbixOf(d)), maxp: (({ uid, u, dom, t }) => (uid ? { uid, u, dom, t } : null))(maxpOf(d)), parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '', player: playerParse(d.player) };
+    addons: addonsList(d.addons), ownerId: +d.owner_id || 0, aiLimit: d.ai_limit ?? -1, aiExtra: +d.ai_extra || 0, aiProvider: d.ai_provider || '', app: d.app || '', orbix: (({ id, t, n, u, dns, h }) => (id ? { id, t, n, u, dns, h } : null))(orbixOf(d)), maxp: (({ uid, u, dom, t }) => (uid ? { uid, u, dom, t } : null))(maxpOf(d)), parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '', player: playerParse(d.player) };
 }
 /** campi "account" inviati dal pannello: connessioni, profili, VPN (cur = valori attuali del dispositivo) */
 async function accountFields(env, b, cur, pls) {

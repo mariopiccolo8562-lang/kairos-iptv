@@ -40,7 +40,7 @@
   const isOwner = () => D.role !== 'agent';
   const copy = (t) => navigator.clipboard.writeText(t).then(() => toast('Link copiato'), () => toast('Copia non consentita dal browser', 1));
   // titolare: la sua lista (o i default); agente: solo le app che il titolare gli ha consentito (dal payload, sola lettura)
-  const links = () => isOwner() ? (() => { const a = D.settings && D.settings.appLinks; return Array.isArray(a) && a.length ? a : DEF; })() : (Array.isArray(D.appLinks) ? D.appLinks : []);
+  const links = () => isOwner() ? (() => { const a = D.settings && D.settings.appLinks; return Array.isArray(a) ? a : DEF; })() : (Array.isArray(D.appLinks) ? D.appLinks : []);
   let editing = null, busy = false;
 
   // --- card «Attiva app» in cima alla pagina APP Store ---
@@ -64,9 +64,9 @@
 
   function render() {
     const card = $('#appLinksCard'); if (!card) return;
-    const oc = document.getElementById('opCard'); // config DNS OrbixPlay/MaxPlayer: solo titolare
+    const oc = document.getElementById('opCard'), tl = document.getElementById('tlCard'); // config DNS e liste inattive: solo titolare
     if (!isOwner()) {
-      if (oc) oc.style.display = 'none';
+      if (oc) oc.style.display = 'none'; if (tl) tl.style.display = 'none';
       const l = links();
       if (!l.length) { card.style.display = 'none'; return; }
       card.style.display = '';
@@ -76,7 +76,7 @@
       $$('[data-alc]', card).forEach((b) => (b.onclick = () => copy(links()[+b.dataset.alc].url)));
       return;
     }
-    if (oc) oc.style.display = '';
+    if (oc) oc.style.display = ''; if (tl) tl.style.display = '';
     card.style.display = '';
     if (editing) return renderEdit(card);
     const l = links();
