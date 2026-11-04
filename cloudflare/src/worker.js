@@ -507,6 +507,23 @@ function cleanSlots(v) {
   });
 }
 
+/* Reseller (app terze): promemoria personale del titolare. Kairos NON tocca il pannello del fornitore:
+   qui si tiene solo l'elenco, chi abilitare, la durata e lo stato. L'abilitazione la fa il titolare nel pannello OraPlayers. */
+function cleanResel(v) {
+  if (!Array.isArray(v)) throw new HttpErr(400, 'resel deve essere un elenco');
+  const ids = new Set();
+  return v.slice(0, 1000).map((x, i) => {
+    const name = str(x && x.name, 60); if (!name) throw new HttpErr(400, `Reseller n. ${i + 1}: scrivi il nome`);
+    const panel = str(x && x.panel, 40);
+    const dur = (x && x.dur) === '1y' || (x && x.dur) === 'unlim' ? x.dur : '';
+    const note = str((x && x.note) || '', 200);
+    const done = (x && x.done) === true;
+    let id = str(x && x.id, 40); if (!/^[A-Za-z0-9_-]{1,40}$/.test(id) || ids.has(id)) id = b64url(rand(6)); ids.add(id);
+    const t = Number.isFinite(+(x && x.t)) && +x.t > 0 ? +x.t : now();
+    return { id, name, panel, dur, done, note, t };
+  });
+}
+
 async function getSettings(env) {
   const row = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('app').first();
   let s = {}; try { s = row ? JSON.parse(row.v) : {}; } catch {}
@@ -2873,6 +2890,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (b.aiDaily !== undefined) { const n = parseInt(b.aiDaily, 10); if (!(n >= 0 && n <= 1000)) throw new HttpErr(400, 'Domande al giorno: da 0 a 1000'); s.aiDaily = n; }
     if (b.aiProvider !== undefined) { if (!AI_PROVIDERS.includes(b.aiProvider)) throw new HttpErr(400, 'Servizio non valido'); s.aiProvider = b.aiProvider; }
     if (b.dlCodes !== undefined) s.dlCodes = cleanDlCodes(b.dlCodes);
+    if (b.resel !== undefined) s.resel = cleanResel(b.resel);
+    if (typeof b.reselUrl === 'string') { const u = str(b.reselUrl, 300).replace(/\/+$/, ''); if (!u) s.reselUrl = ''; else if (/^https?:\/\/[^\s]+$/i.test(u)) s.reselUrl = u; else throw new HttpErr(400, 'Link del pannello non valido: deve iniziare con https://'); }
     if (b.playersCfg !== undefined) {
       const c = b.playersCfg && typeof b.playersCfg === 'object' ? b.playersCfg : {};
       const list = (v, app) => (Array.isArray(v) ? v : []).slice(0, 20).map((x, i) => {
