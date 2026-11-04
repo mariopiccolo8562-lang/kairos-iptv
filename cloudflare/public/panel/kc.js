@@ -11,7 +11,8 @@
       const devs = D.devices.filter((d) => d.status === 'active').slice(0, 6);
       const W = [['live', 'Tg1', 'Rai 1 HD'], ['movie', 'Dune - Parte Due', ''], ['series', 'Mare Fuori S4 E2', ''], ['idle', '', ''], ['live', 'Inter - Milan', 'DAZN 1 FHD'], ['idle', '', '']];
       const online = devs.map((d, i) => ({ id: d.id, name: d.name, code: d.code, status: 'active', state: W[i % 6][0], title: W[i % 6][1], ch: W[i % 6][2], prof: ['Mario', 'Giulia', 'Bimbi', '', 'Luca', ''][i % 6], ip: `93.45.${10 + i}.${20 + i * 7}`, city: ['Milano', 'Roma', 'Napoli', 'Torino', 'Bari', 'Palermo'][i % 6], country: 'IT', ver: i === 3 ? '1.6.0' : '1.8.0', ui: 'a1b2c3d4e5f6', model: d.model || 'Fire TV Stick 4K', net: ['wifi', 'eth', 'wifi', 'mobile', 'wifi', 'eth'][i % 6], rssi: [-52, 0, -71, 0, -64, 0][i % 6], speed_dl: [180, 940, 42, 18, 300, 95][i % 6], speed_ul: [35, 400, 12, 5, 60, 20][i % 6], speed_ping: [18, 6, 35, 60, 14, 22][i % 6], speed_jit: [3, 1, 12, 30, 2, 5][i % 6], speed_t: now() - i * 3600e3, res: ['1920x1080', '3840x2160', '1280x720', '', '1920x1080', ''][i % 6], fps: [50, 24, 25, 0, 50, 0][i % 6], bitrate: [6.2e6, 15e6, 2.8e6, 0, 8e6, 0][i % 6], buffers: [0, 1, 6, 0, 0, 0][i % 6], engine: 'exo', vpn: i === 1 ? 'on' : 'off', ago: i * 20e3, online: true, flags: i === 2 ? ['ip'] : [], codec: ['H.264', 'HEVC', 'H.264', '', 'H.264', ''][i % 6], dec: ['hw', 'hw', 'sw', '', 'hw', ''][i % 6], stalls_h: [0, 1, 5, 0, 4, 0][i % 6], dropped: [0, 12, 340, 0, 30, 0][i % 6], rec: ['', '', 'Immagine ferma → decodifica software', '', 'Caricamento continuo → qualità ridotta', ''][i % 6], reduced: ['', '', '', '', 'HD', ''][i % 6] }));
-      return { online, recent: [], top: [{ kind: 'live', title: 'Inter - Milan', n: 14 }, { kind: 'movie', title: 'Dune - Parte Due', n: 9 }, { kind: 'live', title: 'Tg1', n: 7 }, { kind: 'series', title: 'Mare Fuori', n: 5 }], counts: { online: online.length, watching: online.filter((o) => o.state !== 'idle').length, idle: online.filter((o) => o.state === 'idle').length, total: D.devices.length } };
+      const recent = D.devices.filter((d) => !devs.includes(d)).slice(0, 6).map((d, i) => ({ id: d.id, name: d.name, code: d.code, status: d.status, state: ['live', 'movie', 'idle', 'series', 'live', 'idle'][i], title: ['Rai 1 HD', 'Il Gladiatore II', '', 'Gomorra S2 E4', 'Sky Sport 1', ''][i], ip: `79.12.${30 + i}.${40 + i}`, city: ['Firenze', 'Genova', 'Verona', 'Catania', 'Padova', 'Lecce'][i], country: 'IT', ver: '1.8.0', model: d.model || 'Fire TV Stick 4K', online: false, ago: [25, 70, 180, 420, 900, 1300][i] * 60e3, flags: [] }));
+      return { online, recent, top: [{ kind: 'live', title: 'Inter - Milan', n: 14 }, { kind: 'movie', title: 'Dune - Parte Due', n: 9 }, { kind: 'live', title: 'Tg1', n: 7 }, { kind: 'series', title: 'Mare Fuori', n: 5 }], counts: { online: online.length, watching: online.filter((o) => o.state !== 'idle').length, idle: online.filter((o) => o.state === 'idle').length, total: D.devices.length } };
     },
     req: { report: [{ id: 1, kind: 'report', title: '', body: 'Rai 1 HD resta nero', info: 'app 1.8.0 · Fire TV · canale: Rai 1 HD', status: 'new', created: now() - 6e5, name: 'Mario Rossi', code: 'KXAB-7Q2M' }], content: [{ id: 2, kind: 'content', ctype: 'movie', title: 'Oppenheimer', body: 'versione in italiano', status: 'new', created: now() - 36e5, name: 'Giulia', code: 'KXCD-9P3L' }, { id: 3, kind: 'content', ctype: 'series', title: 'The Bear', body: '', status: 'done', created: now() - 864e5, name: 'Luca', code: 'KXEF-2K8S', note: 'Aggiunta' }] },
     locs: [{ id: 'mil1', name: 'Milano' }],
@@ -115,6 +116,19 @@
 .kc-k .kpi{cursor:default}.kc-k .v{font-size:30px}
 .kc-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.9fr) minmax(0,1.15fr) minmax(0,.9fr) minmax(0,1fr);gap:14px;align-items:center;padding:12px 14px;border-radius:14px;border:1px solid var(--line);margin-bottom:8px;background:rgba(255,255,255,.02)}
 .kc-row:hover{background:rgba(255,255,255,.045)}
+.kc-ltabs{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:2px 0 14px}
+.kc-ltabs button{display:flex;align-items:center;gap:9px;padding:10px 16px;border-radius:14px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;color:#eef1f8;border:1px solid var(--c2);background:color-mix(in srgb,var(--c) 12%,transparent)}
+.kc-ltabs button em{font-style:normal;font-weight:500;font-size:12px;opacity:.75}
+.kc-ltabs button span{min-width:26px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.25);font-size:13px;text-align:center}
+.kc-ltabs button i{width:10px;height:10px;border-radius:50%;background:var(--c)}
+.kc-ltabs .on-t{--c:#34d399;--c2:color-mix(in srgb,#34d399 45%,transparent)}.kc-ltabs .on-t i{box-shadow:0 0 0 4px color-mix(in srgb,#34d399 25%,transparent);animation:kcPulse 1.6s infinite}
+.kc-ltabs .off-t{--c:#94a3b8;--c2:color-mix(in srgb,#94a3b8 40%,transparent)}
+.kc-ltabs button.on{background:var(--c);border-color:transparent;color:#0b0d12;box-shadow:0 10px 26px -14px var(--c)}.kc-ltabs button.on span{background:rgba(255,255,255,.35)}.kc-ltabs button.on i{background:#0b0d12}
+.kc-ltabs .inp{flex:1;min-width:180px;margin:0}
+@keyframes kcPulse{50%{box-shadow:0 0 0 7px transparent}}
+#kLiveList>.kc-row:not(.kc-off){border-left:4px solid #34d399}
+.kc-row.kc-off{border-left:4px solid #64748b;background:rgba(148,163,184,.04);opacity:.92}
+.kc-offt{color:#cbd5e1}.kc-dot.off{background:#64748b!important;box-shadow:none!important}
 .kc-row b{display:block;font-size:14px}.kc-row small{display:block;color:var(--mut);font-size:12px;line-height:1.45;word-break:break-word}
 .kc-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:1px;background:var(--mut)}
 .kc-dot.live{background:#ff3b3b;box-shadow:0 0 10px #ff3b3b;animation:kcb 1.4s infinite}.kc-dot.movie,.kc-dot.series{background:var(--a2);box-shadow:0 0 10px var(--a2)}.kc-dot.idle{background:var(--ok)}
@@ -380,6 +394,29 @@
     const vpnBtn = d && !d.parent && +d.vpn ? `<button class="btn sm" data-kvpn="${esc(o.id)}" title="Spegne la VPN su questo abbonamento">Spegni VPN</button>` : '';
     return `<div class="kc-row"><div><b>${esc(o.name || o.code)}</b><small><span class="mono">${esc(o.code)}</span> · ${o.online ? 'adesso' : ago(Date.now() - o.ago)}</small></div><div>${what}${play}</div><div>${net}</div><div>${where}</div><div>${app}</div><div class="kc-acts">${o.online && o.state !== 'idle' ? `<button class="btn sm danger" data-kkick="${esc(o.id)}" title="Interrompe subito la visione (l'abbonamento resta attivo)">⛔ Disconnetti</button>` : ''}${vpnBtn}<button class="btn sm" data-kopen="${esc(o.id)}">Scheda</button></div></div>`;
   }
+  const offFor = (ms) => { const m = Math.max(1, Math.round(ms / 60e3)); return m < 60 ? m + ' min' : m < 1440 ? Math.floor(m / 60) + ' h' + (m % 60 >= 10 && m < 600 ? ' ' + (m % 60) + ' min' : '') : Math.floor(m / 1440) + ' g'; };
+  function offRow(o) {
+    const last = o.title || o.ch ? `<b>${o.state === 'live' ? '📺' : o.state === 'series' ? '🎞' : o.state === 'movie' ? '🎬' : ''} ${esc(o.title || o.ch)}</b><small>ultima visione</small>` : '<b class="mut" style="font-weight:500">—</b><small>nessuna visione registrata</small>';
+    return `<div class="kc-row kc-off"><div><b>${esc(o.name || o.code)}</b>${o.name ? `<small><span class="mono">${esc(o.code)}</span></small>` : ''}${o.owner ? `<small>di ${esc(o.owner)}</small>` : ''}</div><div><b class="kc-offt"><span class="kc-dot off"></span>Offline da ${offFor(o.ago)}</b><small>ultimo collegamento alle ${new Date(Date.now() - o.ago).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</small></div><div>${last}</div><div><b class="mono" style="font-size:13px">${esc(o.ip || '—')}</b><small>${esc([o.city, o.country].filter(Boolean).join(', ') || '')}</small></div><div><b>${esc(o.ver ? 'App ' + o.ver : 'App ?')}</b><small>${esc(o.model || '')}</small></div><div class="kc-acts"><button class="btn sm" data-kopen="${esc(o.id)}">Scheda</button></div></div>`;
+  }
+  function liveList(P) {
+    const q = (KC.liveQ || '').trim().toLowerCase();
+    const fit = (o) => !q || [o.name, o.code, o.owner, o.city].some((x) => String(x || '').toLowerCase().includes(q));
+    if (KC.liveTab === 'off') {
+      const L = P.recent.filter(fit).sort((a, b) => a.ago - b.ago);
+      return L.length ? L.slice(0, 200).map(offRow).join('') : `<p class="mut">${q ? 'Nessun risultato.' : 'Nessun dispositivo offline visto nelle ultime 24 ore.'}</p>`;
+    }
+    const L = P.online.filter(fit);
+    return L.length ? L.map(liveRow).join('') : `<p class="mut">${q ? 'Nessun risultato.' : 'Nessun utente collegato in questo momento.'}</p>`;
+  }
+  function liveBind(V) {
+    $$('[data-kopen]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.kopen); d ? openQuick(d) : toast('Dispositivo non trovato', 1); }));
+    $$('[data-kkick]', V).forEach((b) => (b.onclick = async () => { const d = D.devices.find((x) => x.id === b.dataset.kkick); if (d && (await kickDev(d))) { b.disabled = true; b.textContent = 'Disconnessione…'; } }));
+    $$('[data-kvpn]', V).forEach((b) => (b.onclick = async () => {
+      if (!(await ask('Spegnere la VPN?', 'La VPN verrà disattivata su questo abbonamento: l\'app la chiude al prossimo controllo (entro qualche minuto).', 'Spegni'))) return;
+      try { await api('PUT', '/admin/devices/' + b.dataset.kvpn, { vpn: 0 }); await load(); toast('VPN disattivata'); liveLoad(); } catch (e) { toast(e.message, 1); }
+    }));
+  }
   let liveT = null;
   async function liveLoad() {
     const V = $('#v-live');
@@ -389,9 +426,10 @@
     const P = KC.live, c = P.counts;
     V.innerHTML = `<div class="kc-k">${[['Online ora', c.online, 'app aperte negli ultimi 3 minuti', 'var(--ok)'], ['Stanno guardando', c.watching, 'canali, film e serie', 'var(--bad)'], ['Nei menu', c.idle, 'app aperta senza video', 'var(--a2)'], ['Dispositivi totali', c.total, 'registrati nel pannello', 'var(--a1)']].map(([l, v, s, col]) => `<div class="kpi glass"><div class="halo" style="background:${col}"></div><div class="lb"><i style="background:${col};box-shadow:0 0 10px ${col}"></i>${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('')}</div>
       <div class="g2b" style="grid-template-columns:minmax(0,2.4fr) minmax(260px,1fr)">
-        <div class="card glass"><div class="hd"><h3>Utenti collegati<small>Si aggiorna da solo ogni 15 secondi · dati inviati dalle app 1.8 o successive</small></h3><button class="btn sm" id="kLiveR">Aggiorna</button></div>
-          ${P.online.length ? P.online.map(liveRow).join('') : '<p class="mut">Nessun utente collegato in questo momento.</p>'}
-          ${P.recent.length ? `<div class="sd-sub" style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);font-weight:600;margin:18px 0 8px">Visti nelle ultime 24 ore</div>${P.recent.slice(0, 40).map(liveRow).join('')}` : ''}
+        <div class="card glass"><div class="hd"><h3>Utenti<small>Si aggiorna da solo ogni 15 secondi · dati inviati dalle app 1.8 o successive</small></h3><button class="btn sm" id="kLiveR">Aggiorna</button></div>
+          <div class="kc-ltabs"><button class="on-t ${KC.liveTab !== 'off' ? 'on' : ''}" data-ltab="on"><i></i>Collegati ora<span>${P.online.length}</span></button><button class="off-t ${KC.liveTab === 'off' ? 'on' : ''}" data-ltab="off"><i></i>Offline<em>visti nelle ultime 24 ore</em><span>${P.recent.length}</span></button>
+            <input class="inp" id="kLiveQ" placeholder="Cerca nome o codice…" value="${esc(KC.liveQ || '')}"></div>
+          <div id="kLiveList">${liveList(P)}</div>
         </div>
         <div class="card glass"><div class="hd"><h3>Più visti oggi<small>Quante volte è iniziata la visione</small></h3></div>
           <div class="kc-top">${(P.top || []).map((x) => `<div><span>${x.kind === 'live' ? '📺' : x.kind === 'series' ? '🎞' : '🎬'} ${esc(x.title)}</span><b>${x.n}</b></div>`).join('') || '<p class="mut">Ancora nessun dato oggi.</p>'}</div>
@@ -399,12 +437,10 @@
         </div>
       </div>`;
     $('#kLiveR').onclick = liveLoad;
-    $$('[data-kopen]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.kopen); d ? openQuick(d) : toast('Dispositivo non trovato', 1); }));
-    $$('[data-kkick]', V).forEach((b) => (b.onclick = async () => { const d = D.devices.find((x) => x.id === b.dataset.kkick); if (d && (await kickDev(d))) { b.disabled = true; b.textContent = 'Disconnessione…'; } }));
-    $$('[data-kvpn]', V).forEach((b) => (b.onclick = async () => {
-      if (!(await ask('Spegnere la VPN?', 'La VPN verrà disattivata su questo abbonamento: l\'app la chiude al prossimo controllo (entro qualche minuto).', 'Spegni'))) return;
-      try { await api('PUT', '/admin/devices/' + b.dataset.kvpn, { vpn: 0 }); await load(); toast('VPN disattivata'); liveLoad(); } catch (e) { toast(e.message, 1); }
-    }));
+    const redraw = () => { const L = $('#kLiveList'); L.innerHTML = liveList(P); liveBind(L); };
+    $$('[data-ltab]', V).forEach((b) => (b.onclick = () => { KC.liveTab = b.dataset.ltab; $$('[data-ltab]', V).forEach((x) => x.classList.toggle('on', x === b)); redraw(); }));
+    $('#kLiveQ').oninput = (e) => { KC.liveQ = e.target.value; redraw(); };
+    liveBind(V);
     clearTimeout(liveT);
     liveT = setTimeout(() => { if ($('#v-live').classList.contains('on')) liveLoad(); }, 15000);
   }
