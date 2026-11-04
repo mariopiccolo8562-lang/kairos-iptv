@@ -126,6 +126,7 @@ body{overscroll-behavior-y:none}
     if (t === 'menu') return side.classList.toggle('open');
     side.classList.remove('open');
     if (t === 'new') return $('#newDev').click();
+    if (t === 'bell' && $('.nav[data-v="hub-req"]') && $('.nav[data-v="hub-req"]').style.display !== 'none') return $('.nav[data-v="hub-req"]').click();
     if (t === 'bell') { const bb = $('#bellB'); if (bb) { bb.style.display = 'inline-grid'; bb.click(); bb.style.display = ''; const m = $('#bellM'); if (m) { m.style.top = 'auto'; m.style.bottom = `calc(78px + env(safe-area-inset-bottom))`; } } return; }
     const n = $(`.nav[data-v="${t}"]`); if (n) n.click();
   }));

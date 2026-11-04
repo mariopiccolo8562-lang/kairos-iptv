@@ -136,10 +136,10 @@ body.agent .foot{display:none}
   { const b = nav('devices'); if (b) for (const n of b.childNodes) if (n.nodeType === 3 && /Dispositivi/.test(n.textContent)) n.textContent = 'Clienti'; }
   Object.assign(TITLES, { devices: 'Clienti', agents: 'Agenti', sec: 'Sicurezza' });
   // menu (2.11): «Operatività» per il lavoro di tutti i giorni, «Impostazioni» per le cose che si toccano una volta
-  const GROUPS = [['§Operatività'], ['', ['dash']], ['Clienti', ['devices', 'agents', 'armada', 'live']], ['Da gestire', ['reports', 'creq', 'areq', 'reqai', 'store']], ['Contenuti e comunicazione', ['msgs', 'vod']],
-    ['App e distribuzione', ['appk', 'dlc', 'apps3', 'lines']], ['Controllo', ['apperr', 'activity']],
-    ['§Impostazioni'], ['', ['set-look', 'set-app', 'set-addon', 'set-ai', 'dns', 'set-maint', 'set-sec', 'sec', 'api']]];
+  // menu 3.0: 10 voci; le pagine simili sono schede di una voce sola (layout3.js)
+  const GROUPS = [['', ['dash', 'devices', 'agents']], ['Linee e app', ['hub-lines', 'hub-apps']], ['Comunicazione', ['hub-req', 'msgs', 'vod']], ['Gestione', ['hub-ctrl', 'hub-set', 'sec']]];
   const HIDDEN = ['settings', 'ai']; // sostituite dalle voci qui sopra (le pagine restano)
+  window.KXLayoutMenu = () => layoutMenu();
   function layoutMenu() {
     const foot = $('aside .foot'), brand = $('aside .brand');
     $$('.nav-h', side).forEach((h) => h.remove());
