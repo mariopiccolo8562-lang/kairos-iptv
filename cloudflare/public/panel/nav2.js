@@ -157,6 +157,16 @@
     ['ai', 'Assistente IA', 'Spento: il pulsante sparisce dall\'app per tutti', () => !S().aiOff, (on) => api('PUT', '/admin/settings', { aiOff: !on })],
     ['clean', 'Pulizia automatica app terzi', 'Ogni notte toglie le liste inattive da OrbixPlay e MaxPlayer', () => !!PC().autoClean, (on) => putPC('autoClean', on)],
     ['dnsag', 'Gli agenti vedono i DNS', 'Spento: vedono solo il nome dei DNS', () => !!PC().showDnsAgents, (on) => putPC('showDnsAgents', on)],
+    ['agmaint', 'Manutenzione pannello agenti', 'Gli agenti vedono «Pannello in manutenzione» e non possono lavorare (tu sì, anche in assistenza)', () => !!(S().agMaint && S().agMaint.on), async (on) => {
+      const cur = (S().agMaint && S().agMaint.msg) || 'Pannello in manutenzione: torniamo operativi a breve. Riprova tra poco.';
+      if (on) {
+        if (!(await ask('Mettere in manutenzione il pannello degli agenti?', `<p class="mut" style="margin:0 0 10px">Chi è dentro viene fermato subito; chi prova ad accedere vede questo messaggio. I clienti e le app non cambiano.</p><label class="lbl">Messaggio per gli agenti</label><textarea class="inp" id="agmMsg" maxlength="300" style="min-height:70px">${esc(cur)}</textarea>`, 'Attiva'))) return 'done';
+        const msg = (($('#agmMsg') || {}).value || '').trim() || cur;
+        await api('PUT', '/admin/settings', { agMaint: { on: true, msg } }); await load(); toast('Pannello agenti in manutenzione'); return 'done';
+      }
+      if (!(await ask('Terminare la manutenzione del pannello agenti?', 'Gli agenti possono di nuovo entrare e lavorare.', 'Termina'))) return 'done';
+      await api('PUT', '/admin/settings', { agMaint: { on: false } }); await load(); toast('Manutenzione agenti terminata'); return 'done';
+    }],
   ];
   function drawSw() {
     const box = $('#qaSw'); if (!box) return;

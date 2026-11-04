@@ -508,6 +508,8 @@ body.agent .foot{display:none}
       return { ...a, serverNames: a.servers.map((s) => (DEMO.srv.find((x) => x.id === s) || {}).name).filter(Boolean), clients: DEMO.devices.filter((d) => !d.parent && tree.includes(d.ownerId)).length, ownClients: own, subAgents: tree.length - 1 }; };
     const origDemo = demoApi;
     window.demoApi = demoApi = async function (m, p, b) {
+      { const am = DEMO.settings && DEMO.settings.agMaint; // demo: manutenzione del pannello agenti
+        if (am && am.on && p !== '/admin/logout' && (p === '/admin/login' ? /^agente/i.test((b && b.user) || '') : demoAgent)) { const msg = am.msg || 'Pannello in manutenzione: torniamo operativi a breve. Riprova tra poco.'; agMaintScreen(msg); throw new Error(msg); } }
       if (p === '/admin/login') { demoAgent = /^agente/i.test((b && b.user) || ''); return { ok: true, user: demoAgent ? 'mario.rossi' : b.user || 'admin', role: demoAgent ? 'agent' : 'owner' }; }
       if (p === '/admin/dns' && m === 'GET') return { saved: DEMO.srv, hosts: [], byDev: {} };
       if (p === '/admin/match-server') { const h = (b.host || '').replace(/^https?:\/\//, '').replace(/[:/].*$/, '').toLowerCase(); const sv = DEMO.srv.find((s) => s.host && h === s.host.replace(/^https?:\/\//, '').replace(/[:/].*$/, '').toLowerCase()); return { server: sv ? { id: sv.id, name: sv.name } : null }; }

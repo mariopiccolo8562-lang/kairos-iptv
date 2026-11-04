@@ -8,12 +8,24 @@
   const css = document.createElement('style');
   css.textContent = `
 .nav.hubsub{display:none!important}
-.hubbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 18px;padding:5px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.025);width:fit-content;max-width:100%}
+.hubbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 20px;width:fit-content;max-width:100%}
 .hubbar:empty{display:none}
-.hubbar button{all:unset;cursor:pointer;display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:10px;font-size:13.5px;font-weight:600;color:var(--mut);white-space:nowrap}
-.hubbar button:hover{color:var(--txt,#fff);background:rgba(255,255,255,.05)}
-.hubbar button.on{color:#fff;background:var(--a1,#3d7cf5);box-shadow:0 4px 14px -6px var(--a1,#3d7cf5)}
+/* ogni scheda ha il suo colore (--c): pallino, fondo e bordo tinti; quella aperta è piena */
+.hubbar button,#dBody .dtabs button{--c:#4f8cff}
+.hubbar button{all:unset;cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 15px;border-radius:11px;font-size:13.5px;font-weight:700;white-space:nowrap;color:#eef1f8;
+  background:color-mix(in srgb,var(--c) 13%,transparent);border:1px solid color-mix(in srgb,var(--c) 38%,transparent);transition:background .15s,box-shadow .15s}
+.hubbar button::before{content:'';flex:none;width:8px;height:8px;border-radius:50%;background:var(--c);box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 25%,transparent)}
+.hubbar button:hover{background:color-mix(in srgb,var(--c) 24%,transparent)}
+.hubbar button.on{background:var(--c);border-color:transparent;color:#fff;box-shadow:0 8px 22px -10px var(--c)}
+.hubbar button.on::before{background:#fff;box-shadow:none}
 .hubbar .n{font-size:11px;font-weight:800;min-width:18px;height:18px;padding:0 5px;border-radius:9px;display:grid;place-items:center;background:#ff4d4f;color:#fff}
+#dBody .dtabs button{border-color:color-mix(in srgb,var(--c) 40%,transparent)!important;background:color-mix(in srgb,var(--c) 12%,transparent)!important;color:#eef1f8!important}
+#dBody .dtabs button i{background:var(--c)!important;color:#fff}
+#dBody .dtabs button.on{background:var(--c)!important;border-color:transparent!important;color:#fff!important;box-shadow:0 8px 22px -10px var(--c)}
+#dBody .dtabs button.on i{background:rgba(255,255,255,.25)!important}
+#side .nav[data-v] svg{color:var(--c,currentColor)}
+.agmbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 16px;padding:11px 14px;border-radius:12px;border:1px solid rgba(245,176,65,.45);background:rgba(245,176,65,.12);font-size:13.5px}
+.agmbar b{color:#f5c26b}.agmbar .sp{flex:1}
 #v-apps3.m-links #opCard,#v-apps3.m-links #tlCard{display:none!important}
 #v-apps3.m-op #appLinksCard{display:none!important}
 #v-apps3.m-op #opCard{margin-top:0}
@@ -37,6 +49,8 @@
     ['hub-set', 'Impostazioni', svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
       [['set-look', 'Aspetto'], ['set-app', 'Funzioni app'], ['set-addon', 'Store add-on'], ['set-ai', 'Assistente IA'], ['dns', 'Server DNS e VPN'], ['set-maint', 'Manutenzione'], ['set-sec', 'Sicurezza'], ['api', 'API']]],
   ];
+  const PAL = ['#4f8cff', '#a78bfa', '#2dd4bf', '#f5b041', '#fb7185', '#34d399', '#fb923c', '#38bdf8'];
+  const colOf = (h, v) => PAL[Math.max(0, h[3].findIndex(([x]) => x === v)) % PAL.length];
   const navOf = (v) => document.querySelector(`.nav[data-v="${v}"]`);
   const isOwner = () => D.role !== 'agent';
   const hubOf = (v) => HUBS.find(([, , , t]) => t.some(([x]) => x === v));
@@ -85,7 +99,7 @@
       if (!h) { bar.innerHTML = ''; return; }
       lastTab[h[0]] = v;
       const tabs = h[3].filter(([x]) => allowed(x));
-      bar.innerHTML = tabs.length > 1 ? tabs.map(([x, l]) => { const c = x === 'apps3op' ? 0 : badgeOf(x); return `<button type="button" data-hubt="${x}" class="${x === v ? 'on' : ''}">${esc(l)}${c ? `<span class="n">${c}</span>` : ''}</button>`; }).join('') : '';
+      bar.innerHTML = tabs.length > 1 ? tabs.map(([x, l]) => { const c = x === 'apps3op' ? 0 : badgeOf(x); return `<button type="button" data-hubt="${x}" class="${x === v ? 'on' : ''}" style="--c:${colOf(h, x)}">${esc(l)}${c ? `<span class="n">${c}</span>` : ''}</button>`; }).join('') : '';
       bar.querySelectorAll('[data-hubt]').forEach((b) => (b.onclick = () => goTab(b.dataset.hubt)));
       const t = $('#vTitle'); if (t) t.textContent = h[1];
     } finally { busy = false; }
@@ -99,8 +113,17 @@
     for (const [id] of HUBS) { const n = navOf(id); if (!n) continue; const any = HUBS.find((x) => x[0] === id)[3].some(([v]) => allowed(v)); const d = any ? '' : 'none'; if (n.style.display !== d) n.style.display = d; }
     for (const [, , , tabs] of HUBS) for (const [v] of tabs) { const n = navOf(v); if (n && !n.classList.contains('hubsub')) n.classList.add('hubsub'); }
   }
+  const SIDEC = { dash: '#4f8cff', devices: '#2dd4bf', agents: '#a78bfa', 'hub-lines': '#38bdf8', 'hub-apps': '#f5b041', 'hub-req': '#fb7185', msgs: '#34d399', vod: '#fb923c', 'hub-ctrl': '#4f8cff', 'hub-set': '#a78bfa', sec: '#2dd4bf' };
+  function sideColors() { for (const [v, c] of Object.entries(SIDEC)) { const n = navOf(v); if (n && n.style.getPropertyValue('--c') !== c) n.style.setProperty('--c', c); } }
+  const amb = document.createElement('div'); amb.className = 'agmbar'; amb.id = 'agmBar'; amb.style.display = 'none'; bar.before(amb);
+  function agmBar() {
+    const am = (D.settings || {}).agMaint, on = isOwner() && !window.__assist && am && am.on;
+    amb.style.display = on ? '' : 'none'; if (!on) return;
+    amb.innerHTML = `🛠️ <span><b>Pannello agenti in manutenzione</b> · gli agenti vedono: «${esc(am.msg || '')}»</span><span class="sp"></span><button class="btn sm" id="agmEnd">Termina</button>`;
+    $('#agmEnd').onclick = async () => { try { await api('PUT', '/admin/settings', { agMaint: { on: false } }); await load(); toast('Manutenzione agenti terminata'); } catch (e) { toast(e.message, 1); } };
+  }
   const ra = renderAll;
-  window.renderAll = renderAll = function () { ra(); syncHubs(); if (window.KXLayoutMenu) KXLayoutMenu(); update(); };
+  window.renderAll = renderAll = function () { ra(); syncHubs(); if (window.KXLayoutMenu) KXLayoutMenu(); sideColors(); agmBar(); update(); };
   syncHubs(); if (window.KXLayoutMenu) KXLayoutMenu();
 
   /* ---------- scheda cliente a schede ---------- */
@@ -117,7 +140,7 @@
     const has = (k) => secs.some((s) => tabOf(s.id.slice(3)) === k && s.style.display !== 'none');
     if (!has(dtab)) dtab = DT.map((x) => x[0]).find(has) || 'main';
     let tb = $('.dtabs', nav); if (!tb) { tb = document.createElement('div'); tb.className = 'dtabs'; nav.prepend(tb); }
-    tb.innerHTML = DT.filter(([k]) => has(k)).map(([k, l], i) => `<button type="button" data-dt="${k}" class="${k === dtab ? 'on' : ''}"><i>${i + 1}</i>${l}</button>`).join('');
+    tb.innerHTML = DT.filter(([k]) => has(k)).map(([k, l], i) => `<button type="button" data-dt="${k}" class="${k === dtab ? 'on' : ''}" style="--c:${PAL[DT.findIndex((x) => x[0] === k) % PAL.length]}"><i>${i + 1}</i>${l}</button>`).join('');
     tb.querySelectorAll('[data-dt]').forEach((b) => (b.onclick = () => { dtab = b.dataset.dt; drawerTabs(); body.scrollTop = 0; }));
     for (const s of secs) { const on = tabOf(s.id.slice(3)) === dtab; s.classList.toggle('dt-off', !on); if (on) s.classList.remove('closed'); }
     // i collegamenti che puntano a una sezione (es. «Attiva su OrbixPlay») aprono la scheda giusta
@@ -141,7 +164,7 @@
       const has = (k) => secs.some((s) => agTabOf(s) === k);
       if (!has(atab)) atab = DT.map((x) => x[0]).find(has) || 'main';
       let tb = B.querySelector('.agtabs'); if (!tb) { tb = document.createElement('div'); tb.className = 'hubbar agtabs'; g.before(tb); }
-      const html = DT.filter(([k]) => has(k)).map(([k, l]) => `<button type="button" data-at="${k}" class="${k === atab ? 'on' : ''}">${l}</button>`).join('');
+      const html = DT.filter(([k]) => has(k)).map(([k, l]) => `<button type="button" data-at="${k}" class="${k === atab ? 'on' : ''}" style="--c:${PAL[DT.findIndex((x) => x[0] === k) % PAL.length]}">${l}</button>`).join('');
       if (tb.innerHTML !== html) tb.innerHTML = html;
       tb.querySelectorAll('[data-at]').forEach((b) => (b.onclick = () => { atab = b.dataset.at; agTabs(); B.scrollTop = 0; }));
       for (const s of secs) { const on = agTabOf(s) === atab; if (s.style.display !== (on ? '' : 'none')) s.style.display = on ? '' : 'none'; }

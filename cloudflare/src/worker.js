@@ -69,7 +69,8 @@ async function readJSON(req, max = 64 * 1024) {
   if (v === null || typeof v !== 'object') throw new HttpErr(400, 'JSON non valido');
   return v;
 }
-class HttpErr extends Error { constructor(status, msg) { super(msg); this.status = status; } }
+class HttpErr extends Error { constructor(status, msg, extra) { super(msg); this.status = status; this.extra = extra; } }
+const AGM_MSG = 'Pannello in manutenzione: torniamo operativi a breve. Riprova tra poco.';
 
 /* ---------------- password (PBKDF2-SHA256) ---------------- */
 async function hashPass(pass, salt = rand(16), iter = PBKDF2_ITER) {
@@ -2108,7 +2109,7 @@ async function route(req, env, ctx) {
   if (path.startsWith('/api/admin/')) {
     if (!(await verifyAccess(req, env))) return json({ error: 'Accesso negato (Cloudflare Access)' }, 403);
     try { return await admin(req, env, url, ip, ctx); }
-    catch (e) { if (e instanceof HttpErr) return json({ error: e.message }, e.status); throw e; }
+    catch (e) { if (e instanceof HttpErr) return json({ error: e.message, ...(e.extra || {}) }, e.status); throw e; }
   }
 
   /* ---------- interfaccia dell'app per l'aggiornamento automatico ---------- */
@@ -2471,6 +2472,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(ses.id).run();
     throw new HttpErr(401, 'Account disattivato');
   }
+  if (!ses.assist && path !== '/logout') { const am = (await getSettings(env)).agMaint; if (am && am.on) throw new HttpErr(503, am.msg || AGM_MSG, { maint: true }); } // manutenzione del pannello agenti
   const A = all.find((a) => a.id === ses.admin_id);
   const by = new Map(all.map((a) => [a.id, a]));
   let P = agentPerms(A.perms), mine = serverIds(A.servers);
@@ -3094,6 +3096,11 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (b.aiProvider !== undefined) { if (!AI_PROVIDERS.includes(b.aiProvider)) throw new HttpErr(400, 'Servizio non valido'); s.aiProvider = b.aiProvider; }
     if (b.dlCodes !== undefined) s.dlCodes = cleanDlCodes(b.dlCodes);
     if (b.appLinks !== undefined) s.appLinks = cleanAppLinks(b.appLinks);
+    if (b.agMaint !== undefined) {
+      const x = b.agMaint && typeof b.agMaint === 'object' ? b.agMaint : {}, was = !!(s.agMaint && s.agMaint.on), on = x.on === true;
+      s.agMaint = { on, msg: nameClean(x.msg, 300) || (s.agMaint && s.agMaint.msg) || '', since: on ? (was ? (s.agMaint.since || now()) : now()) : 0 };
+      if (was !== on) await log(env, on ? 'off' : 'on', `${who}: manutenzione del pannello agenti ${on ? 'ATTIVATA' : 'terminata'}`, ip);
+    }
     if (typeof b.armadaUrl === 'string') { const u = str(b.armadaUrl, 300).trim(); if (!u) s.armadaUrl = ''; else { let x; try { x = new URL(u); } catch {} if (!x || x.protocol !== 'https:' || x.username || x.password) throw new HttpErr(400, 'Indirizzo API di Armada non valido: es. https://ts-spain.xyz/api.php'); s.armadaUrl = x.origin + x.pathname; } }
     if (typeof b.armadaDns === 'string') { const u = str(b.armadaDns, 300).trim().replace(/\/+$/, ''); if (!u) s.armadaDns = ''; else { let x; try { x = new URL(/^https?:\/\//i.test(u) ? u : 'http://' + u); } catch {} if (!x) throw new HttpErr(400, 'DNS delle linee non valido: es. http://dns.esempio.com:8080'); s.armadaDns = x.origin; } }
     if (b.playersCfg !== undefined) {
@@ -3608,6 +3615,7 @@ async function login(req, env, ip, ctx) {
     await log(env, 'off', `Accesso rifiutato all'agente ${a.username}: account disattivato`, ip);
     throw new HttpErr(403, 'Account disattivato: contatta il tuo fornitore');
   }
+  if (ok && a.role === 'agent') { const am = (await getSettings(env)).agMaint; if (am && am.on) throw new HttpErr(503, am.msg || AGM_MSG, { maint: true }); }
   if (!ok) {
     const blocked = await strike();
     await log(env, 'off', `Accesso fallito per "${user.slice(0, 30)}"${blocked}`, ip);

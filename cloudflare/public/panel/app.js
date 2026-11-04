@@ -15,6 +15,7 @@ async function api(method, path, body) {
   if (D.demo) return demoApi(method, path, body);
   const r = await fetch('/api' + path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Kairos': '1', ...(window.__assist ? { 'X-Assist': String(window.__assist) } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({}));
+  if (r.status === 503 && j.maint) { agMaintScreen(j.error); throw new Error(j.error || 'Pannello in manutenzione'); }
   if (r.status === 401 && path !== '/admin/login') { showLogin(); throw new Error('Sessione scaduta, accedi di nuovo'); }
   if (!r.ok) throw new Error(j.error || 'Errore ' + r.status);
   return j;
@@ -682,11 +683,26 @@ $('#aSave').onclick = async () => { try { await api('PUT', '/admin/password', { 
     let r = null;
     try { r = await fetch('/api/admin/state', { credentials: 'same-origin', headers: { 'X-Kairos': '1' }, cache: 'no-store' }); } catch {}
     if (r && r.ok) { try { return await enter(); } catch { break; } }
+    if (r && r.status === 503) { const j = await r.json().catch(() => ({})); if (j.maint) { showLogin(); return agMaintScreen(j.error); } }
     if (r && r.status === 401) break;
     await new Promise((ok) => setTimeout(ok, 800 * (i + 1)));
   }
   showLogin();
 })();
+
+/* Manutenzione del pannello agenti: schermata per l'agente (all'accesso o mentre lavora). Si riapre da sola quando finisce. */
+function agMaintScreen(msg) {
+  let o = document.getElementById('agmScr');
+  if (!o) { o = document.createElement('div'); o.id = 'agmScr'; o.style.cssText = 'position:fixed;inset:0;z-index:100000;display:grid;place-items:center;padding:20px;background:rgba(8,9,22,.94);backdrop-filter:blur(6px)'; document.body.appendChild(o); }
+  o.innerHTML = `<div class="card glass" style="max-width:440px;width:100%;text-align:center;padding:30px 26px"><div style="font-size:46px;line-height:1">🛠️</div><h3 style="margin:12px 0 8px;font-size:21px">Pannello in manutenzione</h3>
+    <p style="color:var(--mut);line-height:1.6;margin:0">${esc(msg || 'Torniamo operativi a breve. Riprova tra poco.')}</p>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:20px"><button class="btn pri" id="agmRe">Riprova</button><button class="btn" id="agmOut">Esci</button></div>
+    <small style="display:block;margin-top:14px;color:var(--mut)">Questa pagina si riapre da sola appena la manutenzione finisce.</small></div>`;
+  document.getElementById('agmRe').onclick = () => location.reload();
+  document.getElementById('agmOut').onclick = async () => { try { await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-Kairos': '1' } }); } catch {} location.reload(); };
+  clearInterval(window.__agmT);
+  window.__agmT = setInterval(async () => { try { const r = await fetch('/api/admin/state', { credentials: 'same-origin', headers: { 'X-Kairos': '1' }, cache: 'no-store' }); if (r.ok) location.reload(); } catch {} }, 30000);
+}
 
 /* MAC: i «:» si mettono da soli mentre scrivi, in ogni campo con data-mac.
    data-mac="strict" = sempre un MAC · data-mac (senza valore) = MAC o ID: se scrivi lettere oltre A-F o più di 12 cifre, si lascia com'è.
