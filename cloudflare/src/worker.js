@@ -251,6 +251,8 @@ const DEFAULT_SETTINGS = {
   maint: { on: false, msg: '', allow: [] },
   // DNS personali per OrbixPlay e MaxPlayer (gli agenti vedono solo il nome, salvo showDnsAgents)
   playersCfg: { orbix: [{ name: 'NKI OrbixPlay', host: 'http://orbx.nki-orbx.download' }], max: [], showDnsAgents: false, codes: { orbix: '265847', max: '265847' }, slots: null }, // link diretto NKI e codice cliente già pronti (slots: vedi SLOTS_DEFAULT)
+  // «Attiva app»: il link di gestione dispositivo di ogni app dello store (dove il titolare attiva la lista col codice del cliente). Modificabile e ampliabile dal pannello.
+  appLinks: [{ name: 'OraPlayers', url: 'https://euser.oraplayers.com/manage-device' }, { name: 'IboOne TV', url: 'https://euser.iboonetv.com/manage-device' }],
 };
 /* Versione dell'APK da proporre alle app: quella pubblicata in automatico da GitHub (kairos-tv.json)
    oppure, solo se strettamente più recente, quella scritta a mano nel pannello.
@@ -521,6 +523,17 @@ function cleanResel(v) {
     let id = str(x && x.id, 40); if (!/^[A-Za-z0-9_-]{1,40}$/.test(id) || ids.has(id)) id = b64url(rand(6)); ids.add(id);
     const t = Number.isFinite(+(x && x.t)) && +x.t > 0 ? +x.t : now();
     return { id, name, panel, dur, done, note, t };
+  });
+}
+
+/* «Attiva app»: il link di gestione dispositivo di ogni app dello store. Copiabile/modificabile dal titolare. */
+function cleanAppLinks(v) {
+  if (!Array.isArray(v)) throw new HttpErr(400, 'appLinks deve essere un elenco');
+  return v.slice(0, 100).map((x, i) => {
+    const name = str(x && x.name, 60); if (!name) throw new HttpErr(400, `App n. ${i + 1}: scrivi il nome`);
+    const url = str(x && x.url, 300).trim().replace(/\/+$/, '');
+    if (url && !/^https?:\/\/[^\s]+$/i.test(url)) throw new HttpErr(400, `${name}: il link deve iniziare con http:// o https://`);
+    return { name, url };
   });
 }
 
@@ -2891,6 +2904,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (b.aiProvider !== undefined) { if (!AI_PROVIDERS.includes(b.aiProvider)) throw new HttpErr(400, 'Servizio non valido'); s.aiProvider = b.aiProvider; }
     if (b.dlCodes !== undefined) s.dlCodes = cleanDlCodes(b.dlCodes);
     if (b.resel !== undefined) s.resel = cleanResel(b.resel);
+    if (b.appLinks !== undefined) s.appLinks = cleanAppLinks(b.appLinks);
     if (typeof b.reselUrl === 'string') { const u = str(b.reselUrl, 300).replace(/\/+$/, ''); if (!u) s.reselUrl = ''; else if (/^https?:\/\/[^\s]+$/i.test(u)) s.reselUrl = u; else throw new HttpErr(400, 'Link del pannello non valido: deve iniziare con https://'); }
     if (b.playersCfg !== undefined) {
       const c = b.playersCfg && typeof b.playersCfg === 'object' ? b.playersCfg : {};
