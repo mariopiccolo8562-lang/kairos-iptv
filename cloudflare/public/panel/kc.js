@@ -41,7 +41,7 @@
     if (path.startsWith('/admin/app-errors')) {
       if (method === 'DELETE') { DM.errs = []; return { ok: true }; }
       if (path === '/admin/app-errors/seen') { DM.errSeen = now(); return { ok: true }; }
-      const items = DM.errs.map((x) => ({ ...x, isNew: x.t > (DM.errSeen || 0) }));
+      const items = DM.errs.map((x) => ({ ...x, ownerId: +((DEMO.devices.find((d) => d.id === x.deviceId) || {}).ownerId || 0), isNew: x.t > (DM.errSeen || 0) }));
       const by = (key) => { const mp = new Map(); for (const x of items) { const k = key(x); const o = mp.get(k) || { key: k, n: 0, unresolved: 0, devs: new Set(), titles: new Set(), name: x.name, code: x.code, model: x.model }; o.n++; if (x.outcome === 'non risolto') o.unresolved++; o.devs.add(x.deviceId); o.titles.add(x.title); mp.set(k, o); } return [...mp.values()].sort((a, b) => b.n - a.n).slice(0, 10).map((o) => ({ ...o, devices: o.devs.size, titles: o.titles.size, devs: undefined })); };
       return { items, topTitles: by((x) => x.title).map(({ name, code, model, ...o }) => o), topDevices: by((x) => x.deviceId), newCount: items.filter((x) => x.isNew).length };
     }
@@ -412,7 +412,7 @@
   /* ---------- Errori applicazione ---------- */
   const PROB = { freeze: ['Immagine ferma', '🧊'], stall: ['Caricamento continuo', '⏳'], error: ['Errore del lettore', '⚠'] };
   const OUTC = { risolto: ['Risolto da solo', 'ok'], 'non risolto': ['Non risolto', 'bad'], chiuso: ['Il cliente è uscito', ''], '': ['—', ''] };
-  KC.errF = { q: '', p: '', o: '', hours: 168 };
+  KC.errF = { q: '', p: '', o: '', ow: '', hours: 168 };
   async function errLoad(quiet) {
     const V = $('#v-apperr');
     if (!quiet && !KC.errs) V.innerHTML = '<div class="card glass"><p class="mut">Caricamento…</p></div>';
@@ -429,35 +429,45 @@
   function errRender() {
     const V = $('#v-apperr'), E = KC.errs, F = KC.errF;
     const q = F.q.toLowerCase().trim();
-    const list = E.items.filter((x) => (!F.p || x.problem === F.p) && (!F.o || x.outcome === F.o) && (!q || [x.title, x.name, x.code, x.model, x.err, x.codec].join(' ').toLowerCase().includes(q)));
-    const tot = E.items.length, fixed = E.items.filter((x) => x.outcome === 'risolto').length, unres = E.items.filter((x) => x.outcome === 'non risolto').length;
-    const devs = new Set(E.items.map((x) => x.deviceId)).size;
+    // filtro per proprietario: tutti, i miei clienti, quelli di un singolo agente (reseller)
+    const AG = D.agents || [], mineId = D.role === 'agent' ? +((D.me || {}).id || 0) : 0;
+    if (F.ow !== '' && F.ow !== String(mineId) && !AG.some((a) => String(a.id) === F.ow)) F.ow = '';
+    const base = F.ow === '' ? E.items : E.items.filter((x) => String(x.ownerId || 0) === F.ow);
+    const nOf = (id) => E.items.filter((x) => (x.ownerId || 0) === id).length;
+    const owSel = AG.length ? `<select class="inp" id="eOw" style="width:auto;margin:0" title="Di chi sono i clienti"><option value="" ${F.ow === '' ? 'selected' : ''}>Tutti i clienti (${E.items.length})</option><option value="${mineId}" ${F.ow === String(mineId) ? 'selected' : ''}>I miei clienti (${nOf(mineId)})</option>${AG.map((a) => `<option value="${a.id}" ${F.ow === String(a.id) ? 'selected' : ''}>Agente ${esc(a.username)} (${nOf(a.id)})</option>`).join('')}</select>` : '';
+    const agOf = (id) => { if (!id || id === mineId) return ''; const a = AG.find((y) => y.id === id); return a ? a.username : 'agente #' + id; };
+    const rank = (key) => { const mp = new Map(); for (const x of base) { const k = key(x); if (!k) continue; const o = mp.get(k) || { key: k, n: 0, unresolved: 0, devs: new Set(), titles: new Set() }; o.n++; if (x.outcome === 'non risolto') o.unresolved++; o.devs.add(x.deviceId); o.titles.add(x.title); mp.set(k, o); } return [...mp.values()].sort((a, b) => b.n - a.n).slice(0, 10).map((o) => ({ key: o.key, n: o.n, unresolved: o.unresolved, devices: o.devs.size, titles: o.titles.size })); };
+    const topTitles = rank((x) => x.title), topDevices = rank((x) => x.deviceId).map((o) => { const x = base.find((i) => i.deviceId === o.key) || {}; return { ...o, name: x.name, code: x.code, model: x.model }; });
+    const list = base.filter((x) => (!F.p || x.problem === F.p) && (!F.o || x.outcome === F.o) && (!q || [x.title, x.name, x.code, x.model, x.err, x.codec, agOf(x.ownerId)].join(' ').toLowerCase().includes(q)));
+    const tot = base.length, fixed = base.filter((x) => x.outcome === 'risolto').length, unres = base.filter((x) => x.outcome === 'non risolto').length;
+    const devs = new Set(base.map((x) => x.deviceId)).size;
     const card = (t, v, sub, col) => `<div class="card glass kc-kp"><small>${t}</small><b style="color:${col}">${v}</b><span>${sub}</span></div>`;
     V.innerHTML = `<div class="kc-k">${card('Problemi', tot, 'negli ultimi ' + (F.hours >= 168 ? '7 giorni' : F.hours >= 24 ? F.hours / 24 + ' giorni' : F.hours + ' ore'), 'var(--txt)')}${card('Risolti da soli', fixed, tot ? Math.round((fixed / tot) * 100) + '% dal recupero automatico' : 'recupero automatico', 'var(--ok)')}${card('Non risolti', unres, 'il cliente non ha potuto guardare', 'var(--bad)')}${card('Dispositivi coinvolti', devs, 'diversi', 'var(--a2)')}</div>
       <div class="g2b" style="grid-template-columns:minmax(0,2.4fr) minmax(260px,1fr)">
         <div class="card glass"><div class="hd" style="flex-wrap:wrap;gap:10px"><h3>Errori applicazione<small>Problemi della visione inviati dalle app 2.0.3 o successive: cosa è successo e cosa ha fatto l'app da sola</small></h3>
-          <div style="display:flex;gap:8px;flex-wrap:wrap"><select class="inp" id="eH" style="width:auto;margin:0">${[[1, 'Ultima ora'], [24, 'Ultime 24 ore'], [72, 'Ultimi 3 giorni'], [168, 'Ultimi 7 giorni']].map(([h, l]) => `<option value="${h}" ${F.hours === h ? 'selected' : ''}>${l}</option>`).join('')}</select><button class="btn sm" id="eR">Aggiorna</button>${tot ? '<button class="btn sm danger" id="eClr">Svuota</button>' : ''}</div></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">${owSel}<select class="inp" id="eH" style="width:auto;margin:0">${[[1, 'Ultima ora'], [24, 'Ultime 24 ore'], [72, 'Ultimi 3 giorni'], [168, 'Ultimi 7 giorni']].map(([h, l]) => `<option value="${h}" ${F.hours === h ? 'selected' : ''}>${l}</option>`).join('')}</select><button class="btn sm" id="eR">Aggiorna</button>${tot ? '<button class="btn sm danger" id="eClr">Svuota</button>' : ''}</div></div>
           <div class="kc-ef"><input class="inp" id="eQ" placeholder="Cerca cliente, codice, canale, modello, codec…" value="${esc(F.q)}">
-            <div class="filters" style="margin:0">${[['', 'Tutti'], ['freeze', 'Immagine ferma'], ['stall', 'Caricamento'], ['error', 'Errori']].map(([k, l]) => `<button class="fchip ${F.p === k ? 'on' : ''}" data-ep="${k}">${l}<span>${E.items.filter((x) => !k || x.problem === k).length}</span></button>`).join('')}</div>
+            <div class="filters" style="margin:0">${[['', 'Tutti'], ['freeze', 'Immagine ferma'], ['stall', 'Caricamento'], ['error', 'Errori']].map(([k, l]) => `<button class="fchip ${F.p === k ? 'on' : ''}" data-ep="${k}">${l}<span>${base.filter((x) => !k || x.problem === k).length}</span></button>`).join('')}</div>
             <div class="filters" style="margin:0">${[['', 'Ogni esito'], ['risolto', 'Risolti'], ['non risolto', 'Non risolti']].map(([k, l]) => `<button class="fchip ${F.o === k ? 'on' : ''}" data-eo="${k}">${l}</button>`).join('')}</div></div>
           ${list.length ? list.slice(0, 300).map((x) => `<div class="kc-err ${x.outcome === 'non risolto' ? 'bad' : ''}">
             <div class="ei">${(PROB[x.problem] || PROB.error)[1]}</div>
             <div class="eb"><b>${esc((PROB[x.problem] || PROB.error)[0])}</b> <span class="kc-tag ${(OUTC[x.outcome] || OUTC[''])[1]}">${esc((OUTC[x.outcome] || OUTC[''])[0])}</span>${x.action ? `<span class="kc-tag" title="Cosa ha fatto l'app">🛠 ${esc(x.action)}</span>` : ''}
               <div class="et">${x.kind === 'live' ? '📺' : '🎬'} ${esc(x.title || '—')}${x.variant ? ' <span class="mut">(versione ' + esc(x.variant) + ')</span>' : ''}</div>
-              <small>${esc(x.name || 'Dispositivo')} · <span class="mono">${esc(x.code)}</span> · ${esc(x.model || '')}${x.ver ? ' · app ' + esc(x.ver) : ''}</small>
+              <small>${esc(x.name || 'Dispositivo')} · <span class="mono">${esc(x.code)}</span>${agOf(x.ownerId) ? ` · <b>agente ${esc(agOf(x.ownerId))}</b>` : ''} · ${esc(x.model || '')}${x.ver ? ' · app ' + esc(x.ver) : ''}</small>
               <small class="mono">${[x.engine === 'vlc' ? 'VLC' : x.engine ? 'ExoPlayer' : '', x.codec, x.dec === 'sw' ? 'software' : x.dec === 'hw' ? 'hardware' : '', x.res, x.err].filter(Boolean).map(esc).join(' · ')}</small></div>
             <div class="ew"><span>${ago(x.t)}</span>${x.deviceId ? `<button class="btn sm" data-eopen="${esc(x.deviceId)}">Scheda</button>` : ''}</div></div>`).join('') : `<p class="mut" style="padding:10px 0">${tot ? 'Nessun problema con questi filtri.' : 'Nessun problema registrato: le app non hanno avuto blocchi né errori (o non sono ancora alla 2.0.3).'}</p>`}
           ${list.length > 300 ? `<p class="mut">Mostrati i 300 più recenti su ${list.length}: usa la ricerca per restringere.</p>` : ''}
         </div>
         <div>
           <div class="card glass"><div class="hd"><h3>Contenuti con più problemi<small>Se un canale ha problemi su tanti dispositivi diversi, il guasto è del canale o del server</small></h3></div>
-            ${(E.topTitles || []).length ? E.topTitles.map((t) => `<div class="kc-erank" data-eq="${esc(t.key)}"><span>${esc(t.key)}<small>${t.devices} dispositiv${t.devices === 1 ? 'o' : 'i'}${t.unresolved ? ` · <b style="color:var(--bad)">${t.unresolved} non risolti</b>` : ''}</small></span><b>${t.n}</b>${t.devices >= 2 ? '<i class="kc-tag warn">canale</i>' : ''}</div>`).join('') : '<p class="mut">—</p>'}</div>
+            ${topTitles.length ? topTitles.map((t) => `<div class="kc-erank" data-eq="${esc(t.key)}"><span>${esc(t.key)}<small>${t.devices} dispositiv${t.devices === 1 ? 'o' : 'i'}${t.unresolved ? ` · <b style="color:var(--bad)">${t.unresolved} non risolti</b>` : ''}</small></span><b>${t.n}</b>${t.devices >= 2 ? '<i class="kc-tag warn">canale</i>' : ''}</div>`).join('') : '<p class="mut">—</p>'}</div>
           <div class="card glass" style="margin-top:14px"><div class="hd"><h3>Dispositivi con più problemi<small>Molti problemi su canali diversi = limite del dispositivo o della sua linea</small></h3></div>
-            ${(E.topDevices || []).length ? E.topDevices.map((t) => `<div class="kc-erank" data-eq="${esc(t.code || '')}"><span>${esc(t.name || t.code || 'Dispositivo')}<small><span class="mono">${esc(t.code || '')}</span> · ${esc(t.model || '')} · ${t.titles} contenut${t.titles === 1 ? 'o' : 'i'}</small></span><b>${t.n}</b>${t.titles >= 3 ? '<i class="kc-tag bad">dispositivo</i>' : ''}</div>`).join('') : '<p class="mut">—</p>'}</div>
+            ${topDevices.length ? topDevices.map((t) => `<div class="kc-erank" data-eq="${esc(t.code || '')}"><span>${esc(t.name || t.code || 'Dispositivo')}<small><span class="mono">${esc(t.code || '')}</span> · ${esc(t.model || '')} · ${t.titles} contenut${t.titles === 1 ? 'o' : 'i'}</small></span><b>${t.n}</b>${t.titles >= 3 ? '<i class="kc-tag bad">dispositivo</i>' : ''}</div>`).join('') : '<p class="mut">—</p>'}</div>
         </div>
       </div>`;
     $('#eR').onclick = () => errLoad();
     $('#eH').onchange = (e) => { F.hours = +e.target.value; errLoad(); };
+    $('#eOw') && ($('#eOw').onchange = (e) => { F.ow = e.target.value; errRender(); });
     const qi = $('#eQ'); qi.oninput = () => { F.q = qi.value; const pos = qi.selectionStart; errRender(); const n = $('#eQ'); n.focus(); n.setSelectionRange(pos, pos); };
     $$('[data-ep]', V).forEach((b) => (b.onclick = () => { F.p = b.dataset.ep; errRender(); }));
     $$('[data-eo]', V).forEach((b) => (b.onclick = () => { F.o = b.dataset.eo; errRender(); }));
