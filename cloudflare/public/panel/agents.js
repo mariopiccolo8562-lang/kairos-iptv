@@ -116,7 +116,7 @@ body.agent .foot{display:none}
     ['reports', 'Segnalazioni', 'Dei suoi clienti', 'reports'], ['contentReq', 'Richieste contenuti', 'Dei suoi clienti', 'creq'], ['addonReq', 'Richieste temi', 'Assegna solo gli add-on che gli concedi', 'areq'],
     ['messages', 'Messaggi', 'Solo ai suoi clienti, mai a tutti', 'msgs'], ['store', 'Download store: accettare le richieste', 'Solo per le app che scegli qui sotto (le impostazioni restano tue)', 'store'],
     ['storeAll', 'Download store: vedere anche i download degli altri', 'Se spento nello storico vede solo quelli approvati da lui', ''],
-    ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', '']];
+    ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['dlcodes', 'Codici downloader', 'Le app da far installare ai clienti (solo da copiare)', 'dlc'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', '']];
   const PERM_VIEW = Object.fromEntries(FP.map(([k, , , v]) => [v, k]));
   const isAgent = () => D.role === 'agent';
   const me = () => D.me || {};
@@ -134,7 +134,7 @@ body.agent .foot{display:none}
   // "Dispositivi" diventa "Clienti"
   { const b = nav('devices'); if (b) for (const n of b.childNodes) if (n.nodeType === 3 && /Dispositivi/.test(n.textContent)) n.textContent = 'Clienti'; }
   Object.assign(TITLES, { devices: 'Clienti', agents: 'Agenti', sec: 'Sicurezza' });
-  const GROUPS = [['', ['dash']], ['Utenti', ['devices', 'agents']], ['Monitoraggio', ['live', 'apperr', 'reports', 'creq', 'areq', 'ai']], ['Contenuti', ['vod', 'msgs', 'store']], ['Impostazioni', ['dns', 'settings', 'api', 'activity', 'sec']]];
+  const GROUPS = [['', ['dash']], ['Utenti', ['devices', 'agents']], ['Monitoraggio', ['live', 'apperr', 'reports', 'creq', 'areq', 'ai']], ['Contenuti', ['vod', 'msgs', 'store']], ['Impostazioni', ['dns', 'dlc', 'settings', 'api', 'activity', 'sec']]];
   function layoutMenu() {
     const foot = $('aside .foot'), brand = $('aside .brand');
     $$('.nav-h', side).forEach((h) => h.remove());
@@ -167,7 +167,7 @@ body.agent .foot{display:none}
 
   /* ---------- modalità agente ---------- */
   const agentCan = (v) => !!PERM_VIEW[v] && can(PERM_VIEW[v]);
-  const OWNER_ONLY = ['dash', 'live', 'apperr', 'reports', 'creq', 'areq', 'ai', 'vod', 'msgs', 'store', 'dns', 'settings', 'api', 'activity'];
+  const OWNER_ONLY = ['dash', 'live', 'apperr', 'reports', 'creq', 'areq', 'ai', 'vod', 'msgs', 'store', 'dns', 'dlc', 'settings', 'api', 'activity'];
   let modeSet = '';
   function applyMode() {
     const ag = isAgent();
@@ -450,7 +450,7 @@ body.agent .foot{display:none}
   /* ---------- demo: agenti di esempio e accesso come agente (utente "agente") ---------- */
   if (typeof DEMO !== 'undefined') {
     const t = Date.now();
-    const P0 = { create: true, renew: true, disable: true, kick: true, playlists: true, delete: false, clientPerms: false, vpn: false, link: true, account: true, ai: true, dash: true, online: true, errors: false, reports: true, contentReq: false, addonReq: true, messages: true, store: false, storeApps: ['OrbixPlay', 'IBO Player'], storeAll: false, subClients: true, maint: false, vod: false, activity: true, addons: ['tema-ghiaccio', 'tema-natale'], maxConn: 2 };
+    const P0 = { create: true, renew: true, disable: true, kick: true, playlists: true, delete: false, clientPerms: false, vpn: false, link: true, account: true, ai: true, dash: true, online: true, errors: false, reports: true, contentReq: false, addonReq: true, messages: true, store: false, storeApps: ['OrbixPlay', 'IBO Player'], storeAll: false, subClients: true, maint: false, dlcodes: true, vod: false, activity: true, addons: ['tema-ghiaccio', 'tema-natale'], maxConn: 2 };
     DEMO.maintAg = { on: false, msg: '', allow: [] };
     DEMO.agents = [
       { id: 2, username: 'mario.rossi', password: 'Mario-2026!', email: 'mario@esempio.it', parentId: 0, maxClients: 50, canAgents: true, perms: P0, servers: ['s1', 's2'], active: true, notes: 'Zona Napoli', lastSeen: t - 40 * 60e3, createdAt: t - 40 * 864e5, totp: true },
@@ -474,7 +474,7 @@ body.agent .foot{display:none}
         const devs = r.devices.filter((d) => tree.includes(d.ownerId) || (d.parent && r.devices.some((x) => x.id === d.parent && tree.includes(x.ownerId))))
           .map((d) => ({ ...d, playlists: d.playlists.map((pl, i) => ({ id: pl.id, name: pl.name, type: 'xtream', serverId: i % 2 ? 's2' : 's1', serverName: i % 2 ? 'ATLX' : 'NKI', username: 'cliente' + d.id, password: 'xxxx' })) }));
         return { role: 'agent', user: A.username, me: { ...out(A), clientsUsed: out(A).clients }, devices: devs, agents: DEMO.agents.filter((x) => x.parentId === 2).map(out), servers: DEMO.srv.slice(0, 2).map(({ id, name }) => ({ id, name })),
-          addonCat: addonCatNow().filter((x) => A.perms.addons.includes(x.id) && x.mode === 'some'), settings: { brand: r.settings.brand, accent: r.settings.accent, downloaderCode: r.settings.downloaderCode || '', storeDownloaderCode: r.settings.storeDownloaderCode || '', apkUrl: r.settings.apkUrl || '' }, security: { totp: true }, activity: [], messages: [], counts: {}, storeAppNames: ['IBO Player', 'OrbixPlay'], maint: A.perms.maint ? { ...DEMO.maintAg } : null, players: A.perms.players ? (() => { const c = DEMO.settings.playersCfg || { orbix: [{ name: 'Principale', host: 'http://dns.kairos-esempio.tv:8080' }], max: [] }, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: true, max: false, dns: { orbix: v(c.orbix), max: v(c.max) } }; })() : null };
+          addonCat: addonCatNow().filter((x) => A.perms.addons.includes(x.id) && x.mode === 'some'), settings: { brand: r.settings.brand, accent: r.settings.accent, downloaderCode: r.settings.downloaderCode || '', storeDownloaderCode: r.settings.storeDownloaderCode || '', apkUrl: r.settings.apkUrl || '' }, security: { totp: true }, activity: [], messages: [], counts: {}, dlCodes: A.perms.dlcodes ? r.dlCodes : [], storeAppNames: ['IBO Player', 'OrbixPlay'], maint: A.perms.maint ? { ...DEMO.maintAg } : null, players: A.perms.players ? (() => { const c = DEMO.settings.playersCfg || { orbix: [{ name: 'Principale', host: 'http://dns.kairos-esempio.tv:8080' }], max: [] }, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: true, max: false, dns: { orbix: v(c.orbix), max: v(c.max) } }; })() : null };
       }
       if (p === '/admin/agent-maint' && m === 'PUT') { DEMO.maintAg = { on: !!b.on, msg: b.msg || '', allow: b.allow || [] }; return { ...DEMO.maintAg }; }
       if (/^\/admin\/agent-maint\/\d+$/.test(p) && m === 'DELETE') { DEMO.maintAg = { on: false, msg: '', allow: [] }; return { ok: true }; }

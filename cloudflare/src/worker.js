@@ -337,6 +337,31 @@ async function orbixRemove(env, d, who, ip) {
   return { ok: true };
 }
 
+/* ---------------- Codici downloader: le app da far installare ai clienti (il titolare le modifica dal pannello) ---------------- */
+const DLW = 'https://upgrade.logicyel.com/windows/';
+const DL_DEFAULT = [
+  ...[['IBO Player (Default)', '1171959'], ['IBO Player Pro', '923441', 'Nuova'], ['IBO Pro Player TV', '6402995', 'Nuova'], ['IBO Pro', '474637', 'Solo con codici di attivazione'], ['BOB Player', '815778'], ['King4K Player', '862414'], ['IBOSS IPTV', '967528'],
+    ['IBO XPlayer', '7947185', 'Nuova'], ['PIA VPN per Android TV', '1163646', 'Nuova'], ['MT', '8128314'], ['IboOne', '2533617'], ['IBO-PRO', '9416617'], ['TiviMate', '2578076'], ['OrbixPlay', '618101']]
+    .map(([name, code, note]) => ({ group: 'Android TV', name, code, note: note || '', links: [] })),
+  { group: 'ORA HUB Family', name: 'ORA Player', code: '8408809', note: 'Su tutti i Samsung e LG, anche Apple TV e Roku', links: [{ label: 'Sito', url: 'https://oraplayers.com/' }, { label: 'APK telefono', url: 'http://aftv.news/3819491' }, { label: 'Windows', url: DLW + 'ORA-TV-Setup-1.1.2.exe' }, { label: 'Google Play', url: 'https://play.google.com/store/apps/details?id=org.ora.player' }, { label: 'iPhone', url: 'https://apps.apple.com/eg/app/ora-iptv-player/id6744371383' }] },
+  { group: 'ORA HUB Family', name: 'ORA Pro', code: '5290692', note: 'Su tutti i Samsung e LG', links: [{ label: 'Sito', url: 'https://oraprotv.com/' }, { label: 'APK telefono', url: 'https://aftv.news/5290692' }, { label: 'Google Play', url: 'https://play.google.com/store/apps/details?id=com.orapro.app' }, { label: 'iPhone', url: 'https://apps.apple.com/eg/app/orapro-player/id6804694740' }, { label: 'Windows', url: DLW + 'ORA-Pro-Setup-1.1.2.exe' }] },
+  { group: 'ORA HUB Family', name: 'Duplex Pro', code: '9812319', note: 'Su tutti i Samsung e LG', links: [{ label: 'Sito', url: 'https://duplexprotv.com/' }, { label: 'APK telefono', url: 'https://go.aftvnews.com/9812319' }] },
+  { group: 'ORA HUB Family', name: 'Kemet Player', code: '6604691', note: 'Su tutti i Samsung e LG', links: [{ label: 'Sito', url: 'https://kemetiptv.com/' }, { label: 'APK telefono', url: 'https://go.aftvnews.com/6604691' }, { label: 'Google Play', url: 'https://play.google.com/store/apps/details?id=org.kemet.app' }, { label: 'Windows', url: DLW + 'Kemet-TV-Setup-1.1.2.exe' }] },
+  { group: 'ORA HUB Family', name: 'Gravity Player', code: '', note: 'Su tutti i Samsung e LG', links: [{ label: 'Sito', url: 'https://gravityiptv.com/' }, { label: 'Windows', url: DLW + 'Gravity-IPTV-Player-Setup-1.1.2.exe' }] },
+  { group: 'ORA HUB Family', name: 'Hot ORA IPTV', code: '', note: 'Su tutti i Samsung e LG', links: [{ label: 'Gestione dispositivo', url: 'https://euser.hotoraiptv.com/manage-device' }] },
+];
+const dlCodesOf = (s) => (Array.isArray(s.dlCodes) ? s.dlCodes : DL_DEFAULT);
+function cleanDlCodes(v) {
+  if (!Array.isArray(v)) throw new HttpErr(400, 'dlCodes deve essere un elenco');
+  const url = (u, what) => { u = str(u, 500); if (u && !/^https?:\/\/[^\s]+$/i.test(u)) throw new HttpErr(400, `${what}: il link deve iniziare con http:// o https://`); return u; };
+  return v.slice(0, 200).map((x, i) => {
+    const name = str(x && x.name, 60); if (!name) throw new HttpErr(400, `App n. ${i + 1}: manca il nome`);
+    const code = str(x.code, 12).replace(/\s+/g, ''); if (code && !/^\d{3,10}$/.test(code)) throw new HttpErr(400, `${name}: il codice downloader è fatto solo di numeri`);
+    const links = (Array.isArray(x.links) ? x.links : []).slice(0, 10).map((l) => ({ label: str(l && l.label, 30) || 'Link', url: url(l && l.url, name) })).filter((l) => l.url);
+    return { group: str(x.group, 40), name, code, note: str(x.note, 120), link: url(x.link, name), links };
+  });
+}
+
 async function getSettings(env) {
   const row = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('app').first();
   let s = {}; try { s = row ? JSON.parse(row.v) : {}; } catch {}
@@ -1913,10 +1938,10 @@ async function adminInner(req, env, url, ip, ctx) {
    e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
    ====================================================================== */
 const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'account', 'ai',
-  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players'];
+  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'dlcodes'];
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, addons: [], storeApps: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, addons: [], storeApps: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
@@ -2226,7 +2251,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const meOut = (await agentsOut(env, all, [A.id], true))[0];
     const { password: _pw, ...meSafe } = meOut;
     const sNames = canAg && P.store ? (await storeAppNames(env)).filter((x) => storeAppOk(P.storeApps, x)) : [];
-    return json({ role: 'agent', user: A.username, me: { ...meSafe, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, players: P.players ? (() => { const c = s.playersCfg || {}, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: v(c.orbix), max: v(c.max) }, showDnsAgents: !!c.showDnsAgents }; })() : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
+    return json({ role: 'agent', user: A.username, me: { ...meSafe, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s) : [], players: P.players ? (() => { const c = s.playersCfg || {}, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: v(c.orbix), max: v(c.max) }, showDnsAgents: !!c.showDnsAgents }; })() : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: canAg ? await agentsOut(env, all, tree.filter((x) => x !== A.id), true) : [],
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
       settings: { brand: s.brand, accent: s.accent, downloaderCode: s.downloaderCode || '', storeDownloaderCode: s.storeDownloaderCode || '', liteDownloaderCode: s.liteDownloaderCode || '', apkUrl: s.apkUrl || '' }, permKeys: PERM_KEYS, security: { totp: !!ses.totp_on }, counts: {},
@@ -2363,6 +2388,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       security: { totp: !!(ses && ses.totp_on), encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
       lite: { apk: settings.liteApkUrl || LITE_APK, feed: await liteFeed(settings) },
       players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: settings.playersCfg.orbix || [], max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents },
+      dlCodes: dlCodesOf(settings),
       storeAppNames: await storeAppNames(env), maintAg: Object.entries(settings.maintAg || {}).filter(([, x]) => x && x.on).map(([id]) => +id),
       counts: { ...(await newCounts(env)), online: await onlineCount(env) }, permKeys: PERM_KEYS, addonCat: addonCfg(settings), role: 'owner', ...(ses ? { agents: await agentsOut(env, await agentsAll(env)) } : {}),
     });
@@ -2580,6 +2606,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (typeof b.showFootball === 'boolean') s.showFootball = b.showFootball;
     if (b.aiDaily !== undefined) { const n = parseInt(b.aiDaily, 10); if (!(n >= 0 && n <= 1000)) throw new HttpErr(400, 'Domande al giorno: da 0 a 1000'); s.aiDaily = n; }
     if (b.aiProvider !== undefined) { if (!AI_PROVIDERS.includes(b.aiProvider)) throw new HttpErr(400, 'Servizio non valido'); s.aiProvider = b.aiProvider; }
+    if (b.dlCodes !== undefined) s.dlCodes = cleanDlCodes(b.dlCodes);
     if (b.playersCfg !== undefined) {
       const c = b.playersCfg && typeof b.playersCfg === 'object' ? b.playersCfg : {};
       const list = (v, app) => (Array.isArray(v) ? v : []).slice(0, 20).map((x, i) => {

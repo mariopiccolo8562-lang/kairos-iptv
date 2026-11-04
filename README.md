@@ -351,6 +351,13 @@ Nella scheda di ogni agente (Agenti → apri l'agente):
 - Collegamento: segreto GitHub `ORBIX_KEY` = la tua customer key OrbixPlay. L'abbonamento OrbixPlay si attiva/rinnova dal loro pannello: la loro API non lo prevede.
 - MaxPlayer: segreto `MAXPLAYER_KEY` e DNS personale già previsti; l'attivazione si completa con la documentazione della sua API.
 
+## 20. Codici downloader
+
+- Nel menu, sotto **Server DNS e VPN**, c'è **Codici downloader**: tutte le app da far installare ai clienti, a gruppi (Android TV, ORA HUB Family…).
+- Ogni app ha **Copia codice** e **Copia link** separati (il link è `aftv.news/<codice>`, oppure quello che scrivi tu), più gli altri link (sito, APK telefono, Google Play, iPhone, Windows) ognuno con il suo **Copia**.
+- **Modifica elenco** (solo tu): aggiungi, cambia o togli app, codici, etichette («Nuova», «Solo con codici di attivazione») e link.
+- Agenti: permesso «Codici downloader» (acceso di base), solo da copiare.
+
 ## Struttura
 
 ```
