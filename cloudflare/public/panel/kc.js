@@ -417,6 +417,7 @@
       try { await api('PUT', '/admin/devices/' + b.dataset.kvpn, { vpn: 0 }); await load(); toast('VPN disattivata'); liveLoad(); } catch (e) { toast(e.message, 1); }
     }));
   }
+  try { KC.liveTab = sessionStorage.getItem('kc_lt') || 'on'; } catch {}
   let liveT = null;
   async function liveLoad() {
     const V = $('#v-live');
@@ -438,7 +439,7 @@
       </div>`;
     $('#kLiveR').onclick = liveLoad;
     const redraw = () => { const L = $('#kLiveList'); L.innerHTML = liveList(P); liveBind(L); };
-    $$('[data-ltab]', V).forEach((b) => (b.onclick = () => { KC.liveTab = b.dataset.ltab; $$('[data-ltab]', V).forEach((x) => x.classList.toggle('on', x === b)); redraw(); }));
+    $$('[data-ltab]', V).forEach((b) => (b.onclick = () => { KC.liveTab = b.dataset.ltab; try { sessionStorage.setItem('kc_lt', KC.liveTab); } catch {} $$('[data-ltab]', V).forEach((x) => x.classList.toggle('on', x === b)); redraw(); }));
     $('#kLiveQ').oninput = (e) => { KC.liveQ = e.target.value; redraw(); };
     liveBind(V);
     clearTimeout(liveT);
