@@ -411,9 +411,9 @@ Nella scheda del cliente, sezione **Playlist**, c'è **«Incolla linea»**: la l
 
 ## 25. Kairos TV nel pannello (repository separato kairos-tv)
 
-Kairos TV è l'app stile Netflix leggera per chiavette datate, con il suo codice nel repository **kairos-tv** (come la Lite) e il logo blu.
+Kairos TV è l'app **nativa** stile Netflix per chiavette datate (veloce come la Lite: niente WebView), con il suo codice nel repository **kairos-tv** e il logo blu.
 - **Clienti**: filtro *Kairos TV* e badge **TV**; l'app si riconosce da sola (si presenta con `KairosTV/x.y`).
-- **Scheda del cliente Kairos TV**: spariscono Lettore (ha solo ExoPlayer), Add-on, Assistente IA, registrazioni, speed test, multi-schermo e guida TV personale.
+- **Scheda del cliente Kairos TV**: come per la Lite restano collegamento TV, cambio playlist, profili e VPN; spariscono Lettore, Add-on, Assistente IA, registrazioni, speed test e multi-schermo.
 - **Impostazioni → App e aggiornamenti → Kairos TV**: link dell'APK (vuoto = ultima release di `kairos-tv`), codice Downloader e versione pubblicata. Il codice Downloader compare anche in alto.
 - **Aggiornamenti**: Kairos TV riceve solo il proprio APK e non scarica l'interfaccia della Pro (la sua è dentro l'APK).
 

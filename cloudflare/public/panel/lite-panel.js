@@ -14,8 +14,6 @@
   const appOf = (d) => { if (!d) return ''; if (d.parent && !d.app) { const p = D.devices.find((x) => x.id === d.parent); return p ? p.app || '' : ''; } return d.app || ''; };
   const isLite = (d) => appOf(d) === 'lite';
   const isKtv = (d) => appOf(d) === 'ktv';
-  // Kairos TV (stile Netflix leggera, solo ExoPlayer): niente registrazioni, speed test, multi-schermo, assistente IA, guida personale, add-on e scelta del lettore
-  const KTV_OFF = new Set(['rec', 'speed', 'multi', 'ai', 'epgUrl']);
   const kindOf = (d) => (isLite(d) ? 'lite' : isKtv(d) ? 'ktv' : 'tv');
   let flt = 'all';
   try { flt = localStorage.getItem('kc_app') || 'all'; } catch {}
@@ -50,7 +48,7 @@
     for (const id of ['ply', 'add']) { const off = on || ktv; const sec = $('#ds-' + id); if (sec) sec.style.display = off ? 'none' : ''; const nb = $(`#dBody [data-ds="${id}"]`); if (nb) nb.style.display = off ? 'none' : ''; }
     let k = 0; $$('#dBody .dnav [data-ds]').forEach((b) => { const i = $('i', b); if (i && b.style.display !== 'none') i.textContent = ++k; });
     k = 0; $$('#dBody .dsec').forEach((sec) => { const i = $('.dsh i', sec); if (i && sec.style.display !== 'none') i.textContent = ++k; });
-    $$('#ds-perm [data-perm]').forEach((t) => { t.style.display = (on && !LITE_PERMS.has(t.dataset.perm)) || (ktv && KTV_OFF.has(t.dataset.perm)) ? 'none' : ''; });
+    $$('#ds-perm [data-perm]').forEach((t) => { t.style.display = (on || ktv) && !LITE_PERMS.has(t.dataset.perm) ? 'none' : ''; // Kairos TV nativa ha le stesse funzioni della Lite });
     for (const sel of ['#eAiProv', '#eAiLim']) { const el = $(sel); if (!el) continue; const box = sel === '#eAiLim' ? el.parentElement : el; box.style.display = on || ktv ? 'none' : ''; const lb = box.previousElementSibling; if (lb && lb.classList.contains('lbl')) lb.style.display = on || ktv ? 'none' : ''; }
     const note = $('#dBody .lite-note'); if (note) note.style.display = on ? '' : 'none';
     const kn = $('#dBody .ktv-note'); if (kn) kn.style.display = ktv ? '' : 'none';
@@ -66,7 +64,7 @@
       $$('#eApp [data-eapp]').forEach((b) => (b.onclick = () => { edit.app = b.dataset.eapp; edit._appSet = true; applyLite(); }));
     }
     if (!$('.lite-note', main)) $('#eAppBox', main) ? $('#eAppBox', main).insertAdjacentHTML('afterend', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa: niente lettore a scelta, add-on, assistente IA, registrazioni, speed test e multi-schermo.</div>') : main.insertAdjacentHTML('afterbegin', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa.</div>');
-    if (!$('.ktv-note', main)) $('.lite-note', main).insertAdjacentHTML('afterend', '<div class="lite-note ktv-note"><b>Questo cliente usa Kairos TV.</b> Stile Netflix come Kairos Pro, ma leggera e solo con ExoPlayer: niente scelta del lettore, add-on, assistente IA, registrazioni, speed test, multi-schermo e guida TV personale.</div>');
+    if (!$('.ktv-note', main)) $('.lite-note', main).insertAdjacentHTML('afterend', '<div class="lite-note ktv-note"><b>Questo cliente usa Kairos TV.</b> App nativa stile Netflix (veloce come la Lite): qui vedi solo quello che usa (collegamento TV, cambio playlist, profili, VPN).</div>');
     applyLite();
   };
 
