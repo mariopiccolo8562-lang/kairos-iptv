@@ -2343,6 +2343,16 @@ async function playerRegister(req, env, ip, ctx) {
   return json(out);
 }
 /* messaggi del fornitore per questo dispositivo (tutti + personali + quelli del cliente principale, non scaduti) */
+/** messaggi per il pannello: quelli di gruppo (stesso «grp») diventano una riga sola con l'elenco dei destinatari */
+function msgGroups(rows) {
+  const out = [], by = new Map();
+  for (const r of rows) {
+    if (!r.grp) { out.push({ ...r, targets: [r.target] }); continue; }
+    const g = by.get(r.grp); if (g) { g.targets.push(r.target); continue; }
+    const x = { ...r, target: 'group', targets: [r.target] }; by.set(r.grp, x); out.push(x);
+  }
+  return out;
+}
 async function deviceMessages(env, id, pid) {
   try {
     const r = await env.DB.prepare('SELECT id, title, body, level, created FROM messages WHERE (target = ? OR target = ? OR target = ?) AND (until = 0 OR until > ?) ORDER BY id DESC LIMIT 10').bind('all', id, pid || id, now()).all();
@@ -2733,14 +2743,25 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   }
   // Messaggi: solo ai suoi clienti
   if (path === '/messages' && m === 'POST') {
-    need('messages'); const b = await readJSON(req, 8192);
+    need('messages'); const b = await readJSON(req, 65536);
+    // a un cliente, a un gruppo dei suoi clienti, o a tutti i suoi clienti («mine»); mai a tutti i clienti del pannello
+    if (b.target === 'mine' || Array.isArray(b.targets)) {
+      const sc = await scope(), mineIds = [...sc];
+      const ids = b.target === 'mine' ? mineIds : [...new Set(b.targets.map((x) => str(x, 20)))];
+      if (!ids.length || ids.some((x) => !sc.has(x))) throw new HttpErr(400, 'Scegli solo tra i tuoi clienti');
+      const prim = b.target === 'mine' ? new Set((((await env.DB.prepare(`SELECT id FROM devices WHERE parent = '' AND id IN (${ids.slice(0, 2000).map(() => '?').join(',')})`).bind(...ids.slice(0, 2000)).all()).results) || []).map((r) => r.id)) : null;
+      const list = prim ? ids.filter((x) => prim.has(x)) : ids;
+      if (!list.length) throw new HttpErr(400, 'Non hai clienti a cui scrivere');
+      return adminRoutes(new Request(url.href, { method: 'POST', body: JSON.stringify({ ...b, target: undefined, targets: list }) }), env, url, path, who, ip, ctx, aSes);
+    }
     if (!b.target || b.target === 'all' || !(await own(str(b.target, 20)))) throw new HttpErr(400, 'Scegli uno dei tuoi clienti');
     return adminRoutes(new Request(url.href, { method: 'POST', body: JSON.stringify(b) }), env, url, path, who, ip, ctx, aSes);
   }
   const msm = path.match(/^\/messages\/(\d{1,10})$/);
   if (msm && m === 'DELETE') {
-    need('messages'); const r = await env.DB.prepare('SELECT target FROM messages WHERE id = ?').bind(+msm[1]).first();
+    need('messages'); const r = await env.DB.prepare('SELECT target, grp FROM messages WHERE id = ?').bind(+msm[1]).first();
     if (!r || !(await scope()).has(r.target)) throw new HttpErr(404, 'Messaggio non trovato');
+    if (r.grp) { const sc = await scope(); const all = ((await env.DB.prepare('SELECT target FROM messages WHERE grp = ?').bind(r.grp).all()).results) || []; if (all.some((x) => !sc.has(x.target))) throw new HttpErr(403, 'Questo messaggio lo può eliminare solo il titolare'); }
     return adminRoutes(req, env, url, path, who, ip, ctx, aSes);
   }
   // Avvisi su Telegram e notifiche del pannello: solo se il titolare li consente a questo agente
@@ -2814,7 +2835,9 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
       settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),
       kairosApps: P.appk ? kairosAppsOf(s).filter((x) => storeAppOk(P.kAllow, x.key)) : [], permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on) }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
       activity: P.activity ? ((await env.DB.prepare('SELECT t, type, text FROM activity WHERE ' + ctree.map(() => 'text LIKE ?').join(' OR ') + ' ORDER BY t DESC LIMIT 200').bind(...ctree.map((id) => 'Agente ' + (by.get(id) || {}).username + ':%')).all()).results || []) : [],
-      messages: P.messages ? (((await env.DB.prepare('SELECT id, target, title, body, level, created, until FROM messages ORDER BY id DESC LIMIT 300').all()).results) || []).filter((x) => devices.some((d) => d.id === x.target)) : [] });
+      messages: P.messages ? msgGroups((((await env.DB.prepare('SELECT id, target, title, body, level, created, until, grp FROM messages ORDER BY id DESC LIMIT 3000').all()).results) || []).filter((x) => devices.some((d) => d.id === x.target))).slice(0, 150) : [],
+      // messaggi del titolare per questo agente (a tutti gli agenti, a lui o al suo gruppo)
+      inbox: ses.assist ? [] : await (async () => { try { return ((await env.DB.prepare("SELECT id, title, body, level, created FROM agent_msgs WHERE (target = 'all' OR target = ?) AND (until = 0 OR until > ?) ORDER BY id DESC LIMIT 20").bind(String(A.id), now()).all()).results) || []; } catch { return []; } })() });
   }
   if (path === '/devices' && m === 'POST') {
     if (!P.create) throw new HttpErr(403, 'Non puoi attivare clienti');
@@ -3007,10 +3030,11 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path === '/state' && m === 'GET') {
     // tutto in parallelo: le query al database, la decifratura delle playlist e i controlli delle versioni delle app
     const settings = await getSettings(env);
-    const [rowsR, activityR, messagesR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, sAppNames, nCounts, onl, agAll] = await Promise.all([
+    const [rowsR, activityR, messagesR, agentMsgsR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, sAppNames, nCounts, onl, agAll] = await Promise.all([
       env.DB.prepare('SELECT * FROM devices ORDER BY created_at DESC LIMIT 5000').all(),
       env.DB.prepare('SELECT t, type, text, ip FROM activity ORDER BY id DESC LIMIT 200').all(),
-      env.DB.prepare('SELECT id, target, title, body, level, created, until FROM messages ORDER BY id DESC LIMIT 100').all().catch(() => ({ results: [] })),
+      env.DB.prepare('SELECT id, target, title, body, level, created, until, grp FROM messages ORDER BY id DESC LIMIT 3000').all().catch(() => ({ results: [] })),
+      env.DB.prepare('SELECT id, target, title, body, level, created, until, grp FROM agent_msgs ORDER BY id DESC LIMIT 1000').all().catch(() => ({ results: [] })),
       ses ? env.DB.prepare('SELECT COUNT(*) AS n FROM sessions WHERE admin_id = ? AND expires > ?').bind(ses.admin_id, now()).first() : null,
       dnsList(env),
       env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first(),
@@ -3021,9 +3045,9 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const devices = await Promise.all(rows.map((d) => deviceOut(env, d)));
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p && !p.parent ? p.status : 'pending'; }
-    const activity = activityR.results || [], messages = messagesR.results || [], sessions = sessionsR ? sessionsR.n : 0;
+    const activity = activityR.results || [], messages = msgGroups(messagesR.results || []).slice(0, 150), agentMsgs = msgGroups(agentMsgsR.results || []).slice(0, 100), sessions = sessionsR ? sessionsR.n : 0;
     return json({
-      settings, devices, activity, messages, user: who, apk, apkFeed: apkF,
+      settings, devices, activity, messages, agentMsgs, user: who, apk, apkFeed: apkF,
       wgConf: !!wgR,
       security: { totp: !!(ses && ses.totp_on), encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
       lite: { apk: settings.liteApkUrl || LITE_APK, feed: liteF },
@@ -3224,20 +3248,57 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   }
 
   if (path === '/messages' && m === 'POST') {
-    const b = await readJSON(req);
+    const b = await readJSON(req, 65536);
     const title = str(b.title, 80), body = str(b.body, 600);
     if (!title && !body) throw new HttpErr(400, 'Scrivi il titolo o il testo del messaggio');
+    const level = ['info', 'warn', 'urgent'].includes(b.level) ? b.level : 'info';
+    const days = Math.max(0, Math.min(365, +b.days || 0)), until = days ? now() + days * 864e5 : 0;
+    // destinatari: tutti, un cliente, oppure un gruppo di clienti scelti (una riga per cliente, stesso «grp»)
+    if (Array.isArray(b.targets)) {
+      const ids = [...new Set(b.targets.map((x) => str(x, 20)).filter(Boolean))].slice(0, 2000);
+      if (!ids.length) throw new HttpErr(400, 'Scegli almeno un cliente');
+      const ok = new Set();
+      for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); for (const r of ((await env.DB.prepare(`SELECT id FROM devices WHERE id IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || []) ok.add(r.id); }
+      const list = ids.filter((x) => ok.has(x)); if (!list.length) throw new HttpErr(400, 'Clienti non trovati');
+      const grp = list.length > 1 ? b64url(rand(8)) : '';
+      const st = list.map((t) => env.DB.prepare('INSERT INTO messages (target, title, body, level, created, until, grp) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(t, title, body, level, now(), until, grp));
+      for (let i = 0; i < st.length; i += 50) await env.DB.batch(st.slice(i, i + 50));
+      await log(env, 'msg', `${who}: messaggio inviato a ${list.length === 1 ? 'un cliente' : 'un gruppo di ' + list.length + ' clienti'} · ${title || body.slice(0, 40)}`, ip);
+      return json({ ok: true, sent: list.length });
+    }
     let target = str(b.target, 20) || 'all';
     if (target !== 'all' && !(await env.DB.prepare('SELECT id FROM devices WHERE id = ?').bind(target).first())) throw new HttpErr(400, 'Dispositivo non trovato');
-    const level = ['info', 'warn', 'urgent'].includes(b.level) ? b.level : 'info';
-    const days = Math.max(0, Math.min(365, +b.days || 0));
-    await env.DB.prepare('INSERT INTO messages (target, title, body, level, created, until) VALUES (?, ?, ?, ?, ?, ?)').bind(target, title, body, level, now(), days ? now() + days * 864e5 : 0).run();
+    await env.DB.prepare('INSERT INTO messages (target, title, body, level, created, until) VALUES (?, ?, ?, ?, ?, ?)').bind(target, title, body, level, now(), until).run();
     await log(env, 'msg', `${who}: messaggio inviato a ${target === 'all' ? 'tutti' : 'un dispositivo'} · ${title || body.slice(0, 40)}`, ip);
+    return json({ ok: true, sent: 1 });
+  }
+  /* ---------- messaggi agli agenti (solo il titolare): a tutti, a uno o a un gruppo ---------- */
+  if (path === '/agent-msgs' && m === 'POST' && !(ses && ses.agent)) {
+    const b = await readJSON(req, 16384);
+    const title = str(b.title, 80), body = str(b.body, 600);
+    if (!title && !body) throw new HttpErr(400, 'Scrivi il titolo o il testo del messaggio');
+    const level = ['info', 'warn', 'urgent'].includes(b.level) ? b.level : 'info';
+    const days = Math.max(0, Math.min(365, +b.days || 0)), until = days ? now() + days * 864e5 : 0;
+    const all = await agentsAll(env), known = new Set(all.map((a) => a.id));
+    let list = b.target === 'all' ? ['all'] : (Array.isArray(b.targets) ? b.targets : [b.target]).map((x) => parseInt(x, 10)).filter((x) => known.has(x)).map(String);
+    list = [...new Set(list)].slice(0, 500);
+    if (!list.length) throw new HttpErr(400, 'Scegli almeno un agente');
+    const grp = list.length > 1 ? b64url(rand(8)) : '';
+    await env.DB.batch(list.map((t) => env.DB.prepare('INSERT INTO agent_msgs (target, title, body, level, grp, created, until) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(t, title, body, level, grp, now(), until)));
+    await log(env, 'msg', `${who}: messaggio agli agenti (${list[0] === 'all' ? 'tutti' : list.length === 1 ? 'uno' : 'gruppo di ' + list.length}) · ${title || body.slice(0, 40)}`, ip);
+    return json({ ok: true, sent: list.length });
+  }
+  const agm = path.match(/^\/agent-msgs\/(\d{1,10})$/);
+  if (agm && m === 'DELETE' && !(ses && ses.agent)) {
+    const r = await env.DB.prepare('SELECT grp FROM agent_msgs WHERE id = ?').bind(+agm[1]).first();
+    if (r && r.grp) await env.DB.prepare('DELETE FROM agent_msgs WHERE grp = ?').bind(r.grp).run(); else await env.DB.prepare('DELETE FROM agent_msgs WHERE id = ?').bind(+agm[1]).run();
     return json({ ok: true });
   }
   const mm = path.match(/^\/messages\/(\d{1,10})$/);
   if (mm && m === 'DELETE') {
-    await env.DB.prepare('DELETE FROM messages WHERE id = ?').bind(+mm[1]).run();
+    // un messaggio di gruppo si elimina per tutti i clienti del gruppo
+    const r = await env.DB.prepare('SELECT grp FROM messages WHERE id = ?').bind(+mm[1]).first();
+    if (r && r.grp) await env.DB.prepare('DELETE FROM messages WHERE grp = ?').bind(r.grp).run(); else await env.DB.prepare('DELETE FROM messages WHERE id = ?').bind(+mm[1]).run();
     return json({ ok: true });
   }
 
