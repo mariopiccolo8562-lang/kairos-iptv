@@ -457,6 +457,63 @@ function mxDomainBody(u, label) {
   return { domain: x.hostname.toLowerCase(), port, https, label: str(label, 60) };
 }
 
+/* ---------------- «Crea lista»: liste caricate su OrbixPlay / MaxPlayer senza un cliente Kairos ----------------
+   Il titolare le vede tutte; un agente (con «Attivare OrbixPlay e MaxPlayer dal pannello») solo le sue e quelle dei suoi
+   sotto-agenti. Le chiavi e gli indirizzi dei DNS restano nel pannello: si sceglie il DNS per nome. */
+async function extListsRoutes(req, env, path, who, ip, ag) {
+  const m = req.method, t = now();
+  const mine = ag ? ag.tree : null; // null = titolare (tutte)
+  if (path === '/ext-lists' && m === 'GET') {
+    const rows = ((await env.DB.prepare('SELECT * FROM ext_lists ORDER BY created DESC LIMIT 1000').all()).results || []).filter((r) => !mine || mine.includes(+r.owner_id));
+    const names = new Map((await agentsAll(env)).map((a) => [a.id, a.username]));
+    return json({ lists: rows.map((r) => ({ id: r.id, app: r.app, name: r.name, ref: r.ref, username: r.username, dns: r.dns, note: r.note, created: r.created, updated: r.updated, by: +r.owner_id ? names.get(+r.owner_id) || 'agente eliminato' : 'Tu', mine: ag ? +r.owner_id === ag.id : !+r.owner_id })) });
+  }
+  if (path === '/ext-lists' && m === 'POST') {
+    const b = await readJSON(req, 4096);
+    const app = b.app === 'max' ? 'max' : b.app === 'orbix' ? 'orbix' : '';
+    if (!app) throw new HttpErr(400, 'Scegli OrbixPlay o MaxPlayer');
+    const name = nameClean(b.name, 60), note = nameClean(b.note, 200), username = str(b.username, 120), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '';
+    if (!username || !password) throw new HttpErr(400, 'Scrivi utente e password della linea');
+    const s = await getSettings(env);
+    let ref = '', ext = '', dnsName = '';
+    if (app === 'orbix') {
+      if (!env.ORBIX_KEY) throw new HttpErr(400, 'OrbixPlay non è collegato: aggiungi il segreto ORBIX_KEY su GitHub');
+      const orbixId = str(b.orbixId, 64);
+      if (!ORBIX_ID_RE.test(orbixId)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
+      const list = ag ? (((s.playersCfg || {}).orbix) || []) : orbixDnsList((s.playersCfg || {}).orbix, await dnsList(env));
+      if (!list.length) throw new HttpErr(400, 'Imposta prima un DNS di OrbixPlay');
+      const dns = list[Math.max(0, Math.min(list.length - 1, parseInt(b.dns, 10) || 0))];
+      const j = await orbixCall(env, '/add-playlist', { deviceid: orbixId, playlistName: str(s.brand || 'Kairos', 40), username, password, host: dns.code || dns.host, notes: name || username });
+      const pid = j.playlist_id ?? (j.playlist && j.playlist.playlist_id) ?? j.id;
+      ref = orbixId; ext = JSON.stringify(pid !== undefined && pid !== null ? [String(pid)] : []); dnsName = dns.name || 'DNS';
+    } else {
+      if (!env.MAXPLAYER_KEY) throw new HttpErr(400, 'MaxPlayer non è collegato: aggiungi il segreto MAXPLAYER_KEY su GitHub');
+      const doms = await mxDomains(env);
+      if (!doms.length) throw new HttpErr(400, 'Su MaxPlayer non hai ancora un DNS');
+      const dom = str(String(b.domain ?? ''), 30), D0 = doms.find((x) => x.id === dom) || doms.find((x) => x.domain === 'maxplayer.nki-max.stream') || doms[0];
+      const j = await mxCall(env, 'POST', '/users', { domain_id: D0.id, iptv_user: username, iptv_pass: password, fullname: name || username });
+      const uid = str(String(j.user_id ?? ''), 30); if (!uid) throw new HttpErr(502, 'MaxPlayer non ha restituito l\'account creato');
+      ref = username; ext = uid; dnsName = D0.label || 'DNS ' + D0.id;
+    }
+    const id = b64url(rand(9));
+    await env.DB.prepare('INSERT INTO ext_lists (id, owner_id, app, name, ref, ext, username, pass_seal, dns, note, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(id, ag ? ag.id : 0, app, name, ref, ext, username, await seal(env, [password]), dnsName, note, t, t).run();
+    await log(env, 'new', `${who}: lista creata su ${app === 'max' ? 'MaxPlayer' : 'OrbixPlay'}${name ? ' per ' + name : ''} (${app === 'max' ? 'utente ' + username : 'dispositivo ' + ref}, ${dnsName})`, ip);
+    return json({ ok: true, id, app, ref, dns: dnsName });
+  }
+  const em = path.match(/^\/ext-lists\/([A-Za-z0-9_-]{6,20})$/);
+  if (em && m === 'DELETE') {
+    const r = await env.DB.prepare('SELECT * FROM ext_lists WHERE id = ?').bind(em[1]).first();
+    if (!r || (mine && !mine.includes(+r.owner_id))) throw new HttpErr(404, 'Lista non trovata');
+    if (r.app === 'orbix') { let pls = []; try { pls = JSON.parse(r.ext || '[]'); } catch {} for (const x of pls) await orbixCall(env, '/delete-playlist', { playlist_id: /^\d+$/.test(x) ? +x : x }).catch((e) => { if (!/non trovato/i.test(e.message)) throw e; }); }
+    else if (r.ext) await mxCall(env, 'DELETE', '/users/' + encodeURIComponent(r.ext)).catch((e) => { if (!/non trovato/i.test(e.message)) throw e; });
+    await env.DB.prepare('DELETE FROM ext_lists WHERE id = ?').bind(r.id).run();
+    await log(env, 'del', `${who}: lista tolta da ${r.app === 'max' ? 'MaxPlayer' : 'OrbixPlay'}${r.name ? ' (' + r.name + ')' : ''}`, ip);
+    return json({ ok: true });
+  }
+  return null;
+}
+
 /* ---------------- liste create sulle app terzi (OrbixPlay, MaxPlayer): elenco e pulizia di quelle inattive ---------------- */
 /** inattiva: abbonamento scaduto da più di «days» giorni, oppure cliente disattivato e fermo (nessuna attività, né invio) da più di «days» giorni */
 function thirdInactive(d, P, days, t = now()) {
@@ -2623,6 +2680,8 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     return (scopeMem = ids);
   };
   const viaOwner = async (r) => (r instanceof Response ? r.json() : r);
+  // «Crea lista» su OrbixPlay/MaxPlayer senza cliente Kairos: con il permesso di attivarle dal pannello
+  if (path === '/ext-lists' || path.startsWith('/ext-lists/')) { need('players', 'Non puoi creare liste su OrbixPlay e MaxPlayer'); const r = await extListsRoutes(req, env, path, who, ip, { id: A.id, tree: ctree }); if (r) return r; }
   // App → OrbixPlay e MaxPlayer: le liste create sulle app terzi, solo dei suoi clienti
   if (path === '/apps3/lists' && m === 'GET') {
     need('appsOp'); const sc = await scope();
@@ -2834,6 +2893,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   const m = req.method;
   if (!ses && API_DENY.test(path)) throw new HttpErr(403, 'Funzione disponibile solo dal pannello');
   if (path === '/api-keys' || path.startsWith('/api-keys/') || path === '/webhook' || path.startsWith('/webhook/')) return apiAdmin(req, env, path, who, ip, ctx);
+  if ((path === '/ext-lists' || path.startsWith('/ext-lists/')) && !(ses && ses.agent)) { if (!ses) throw new HttpErr(403, 'Solo dal pannello'); const r = await extListsRoutes(req, env, path, who, ip, null); if (r) return r; }
   const orb = path.match(/^\/orbix\/([A-Za-z0-9_-]{6,20})$/);
   if (orb && (m === 'POST' || m === 'DELETE')) {
     const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(orb[1]).first();

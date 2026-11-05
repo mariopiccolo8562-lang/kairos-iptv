@@ -22,6 +22,7 @@
 .sd-code{font-size:22px;font-weight:500;letter-spacing:.18em;padding:6px 12px;border-radius:10px;background:rgba(0,0,0,.35);border:1px solid var(--line)}
 .sd-act{display:flex;gap:8px}
 .sd-sub{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);font-weight:600;margin:18px 0 6px}
+.sd-warn{font-size:13.5px;margin:0 0 12px;padding:12px 14px;border-radius:12px;border:1px solid rgba(239,68,68,.55);background:rgba(239,68,68,.12);color:#fecaca;line-height:1.45}.sd-now{font-size:13.5px;margin:0 0 10px}
 .sd-note{font-size:13px;margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.1);color:var(--mut);line-height:1.45}
 .sd-note b{color:var(--txt)}
 .sd-how{padding-left:20px;color:var(--mut);font-size:14px;line-height:1.55}.sd-how li{margin:4px 0}.sd-how b{color:var(--txt)}
@@ -62,11 +63,20 @@
     </div>
     <div class="card glass">
       <div class="hd"><h3>Approvazione<small>Decidi tu chi può scaricare</small></h3></div>
+      <div class="sd-warn" id="sdWarn" style="display:none"></div>
       <div class="tog" id="sdOn"><div><b>Chiedi la mia autorizzazione</b><small>Spento: i download partono subito, ma restano registrati qui</small></div><i></i></div>
       <label class="lbl">La tua email per gli avvisi</label>
       <input class="inp" id="sdMail" type="email" autocomplete="email" placeholder="la stessa del tuo account Resend">
       <div class="sd-note" id="sdMailSt"></div>
       <button class="btn pri" id="sdSave" style="margin-top:14px">Salva</button>
+    </div>
+    <div class="card glass" id="sdClCard">
+      <div class="hd"><h3>🌙 Orari di chiusura<small>In questa fascia (ora italiana) nessuno può chiedere o scaricare app dallo store: vedono il tuo messaggio</small></h3></div>
+      <div class="sd-now" id="sdClNow"></div>
+      <div class="tog" id="sdCl"><div><b>Chiudi lo store dalle… alle…</b><small>Vale ogni giorno; la fascia può passare la mezzanotte (es. dalle 23:00 alle 07:00)</small></div><i></i></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px"><label class="mut" style="font-size:13px">Dalle</label><input class="inp" id="sdClF" type="time" value="23:00" style="width:auto;margin:0"><label class="mut" style="font-size:13px">alle</label><input class="inp" id="sdClT" type="time" value="07:00" style="width:auto;margin:0"></div>
+      <label class="lbl">Messaggio per i clienti (facoltativo)</label><input class="inp" id="sdClM" maxlength="200" placeholder="Lo store è chiuso dalle 23:00 alle 07:00: riprova più tardi.">
+      <button class="btn pri" id="sdClSave" style="margin-top:14px">Salva orari</button>
     </div>
     <div class="card glass" style="margin-top:18px" id="nfCard">
       <div class="hd"><h3>Avvisi su Telegram e sul telefono<small>Gratis: ricevi ogni richiesta e decidi con un tocco</small></h3></div>
@@ -187,10 +197,15 @@
     const devs = (S.data && S.data.devices) || [];
     $('#sdDev').innerHTML = devs.length ? devs.map(devItem).join('') : '<div class="emptyc">Nessun dispositivo ha ancora chiesto un download</div>';
   }
+  const closedNow = (c) => { if (!c || !c.on || c.from === c.to) return false; const hm = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()); const m = (x) => +x.slice(0, 2) * 60 + +x.slice(3, 5), n = m(hm), a = m(c.from), b = m(c.to); return a < b ? n >= a && n < b : n >= a || n < b; };
   function renderSettings() {
     if (!S.data) return;
     const s = S.data.settings || {}, m = S.data.mail || {};
-    $('#sdOn').classList.toggle('on', s.approval !== false);
+    if (!S.apDirty) $('#sdOn').classList.toggle('on', s.approval !== false);
+    const w = $('#sdWarn'); if (w) { w.style.display = s.approval === false ? '' : 'none'; w.innerHTML = '⚠️ <b>Approvazione SPENTA</b>: adesso i clienti scaricano dallo store <b>senza mandarti la richiesta</b> (i download restano registrati qui sotto come «automatico»). Accendi «Chiedi la mia autorizzazione» e premi Salva.'; }
+    const c = s.closed || {}, cl = $('#sdCl');
+    if (cl && !S.clDirty) { cl.classList.toggle('on', !!c.on); $('#sdClF').value = c.from || '23:00'; $('#sdClT').value = c.to || '07:00'; if (document.activeElement !== $('#sdClM')) $('#sdClM').value = c.msg || ''; }
+    const nw = $('#sdClNow'); if (nw) nw.innerHTML = c.on ? (closedNow(c) ? `🔴 <b>Adesso lo store è chiuso</b> (fino alle ${esc(c.to)})` : `🟢 Adesso lo store è aperto · chiude alle ${esc(c.from)}`) : '🟢 Store sempre aperto';
     if (document.activeElement !== $('#sdMail')) $('#sdMail').value = s.ownerEmail || '';
     const lines = [];
     if (!m.resend) lines.push('⚠️ <b>Email non attiva</b>: manca il segreto <b>RESEND_KEY</b> su GitHub (vedi la guida nel README). Le richieste compaiono comunque qui.');
@@ -297,14 +312,24 @@
     const b = $('#smsTest'); b.disabled = true;
     try { const r = await sApi('POST', '/sms/test', { phone }); toast('SMS di prova inviato a ' + r.to); } catch (err) { toast(err.message, 1); } finally { b.disabled = false; }
   };
-  $('#sdOn').onclick = () => $('#sdOn').classList.toggle('on');
+  $('#sdOn').onclick = () => { $('#sdOn').classList.toggle('on'); S.apDirty = true; };
   $('#sdSave').onclick = async () => {
+    // finché le impostazioni non sono caricate non si manda l'approvazione: prima un Salva troppo veloce la spegneva
+    if (!S.data) { toast('Attendi il caricamento delle impostazioni', 1); return; }
     try {
       const r = await sApi('PUT', '/settings', { approval: $('#sdOn').classList.contains('on'), ownerEmail: $('#sdMail').value.trim() });
+      S.apDirty = false;
       if (S.data) S.data.settings = r.settings;
       renderSettings();
       toast(r.settings.approval ? 'Salvato: ogni download chiede la tua autorizzazione' : 'Salvato: download liberi (restano registrati)');
     } catch (err) { toast(err.message, 1); }
+  };
+  $('#sdCl').onclick = () => { $('#sdCl').classList.toggle('on'); S.clDirty = true; };
+  for (const id of ['#sdClF', '#sdClT', '#sdClM']) $(id).addEventListener('input', () => (S.clDirty = true));
+  $('#sdClSave').onclick = async () => {
+    if (!S.data) { toast('Attendi il caricamento delle impostazioni', 1); return; }
+    const closed = { on: $('#sdCl').classList.contains('on'), from: $('#sdClF').value, to: $('#sdClT').value, msg: $('#sdClM').value.trim() };
+    try { const r = await sApi('PUT', '/settings', { closed }); S.clDirty = false; S.data.settings = r.settings; renderSettings(); toast(closed.on ? `Store chiuso ogni giorno dalle ${closed.from} alle ${closed.to}` : 'Store sempre aperto'); } catch (err) { toast(err.message, 1); }
   };
   $('#sdClear').onclick = async () => {
     if (!(await ask('Svuotare lo storico?', 'Le richieste già decise o scadute verranno cancellate. Quelle in attesa restano.', 'Svuota'))) return;

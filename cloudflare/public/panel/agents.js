@@ -162,7 +162,7 @@ body.agent .foot{display:none}
   }
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
-  const AG_OK = /^\/admin\/(apps3\/lists(\?.*)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
+  const AG_OK = /^\/admin\/(apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
   const origApi = api;
   window.api = api = async function (m, p, b) {
     if (isAgent() && !AG_OK.test(p)) throw new Error('Funzione non disponibile per gli agenti');
@@ -186,7 +186,7 @@ body.agent .foot{display:none}
     const ag = isAgent();
     document.body.classList.toggle('agent', ag);
     for (const v of OWNER_ONLY) { const b = nav(v); if (b) b.style.display = ag && !agentCan(v) ? 'none' : ''; }
-    { const c = $('#sdOn') && $('#sdOn').closest('.card'); if (c) c.style.display = ag ? 'none' : ''; const d = $('#sdDev') && $('#sdDev').closest('.card'); if (d) d.style.display = ag ? 'none' : ''; const k = $('#sdClear'); if (k) k.style.visibility = ag ? 'hidden' : ''; const sm = $('#sdSmsCard'); if (sm) sm.style.display = ag ? 'none' : ''; }
+    { const c = $('#sdOn') && $('#sdOn').closest('.card'); if (c) c.style.display = ag ? 'none' : ''; const d = $('#sdDev') && $('#sdDev').closest('.card'); if (d) d.style.display = ag ? 'none' : ''; const k = $('#sdClear'); if (k) k.style.visibility = ag ? 'hidden' : ''; const sm = $('#sdSmsCard'); if (sm) sm.style.display = ag ? 'none' : ''; const cc = $('#sdClCard'); if (cc) cc.style.display = ag ? 'none' : ''; }
     const sb = nav('sec'); if (sb) sb.style.display = ag ? '' : 'none';
     const ab = nav('agents'); if (ab) ab.style.display = !ag || me().canAgents ? '' : 'none';
     layoutMenu();
@@ -454,7 +454,7 @@ body.agent .foot{display:none}
         <label class="lbl">Domande al giorno</label><input class="inp" type="number" id="cAiL" min="0" max="1000" placeholder="Predefinito" value="${(e.aiLimit ?? -1) >= 0 ? e.aiLimit : ''}">
         ${isNew ? '' : `<button class="btn sm" id="cAiX" style="margin-top:10px">+10 domande extra oggi</button>${e.aiExtra ? `<span class="mut" style="font-size:12px;margin-left:8px">${e.aiExtra} extra disponibili</span>` : ''}`}</div>` : ''}
       ${P.link && !isNew && !linked ? `<div class="ag-c"><h4>Collegare un altro dispositivo</h4><small>Sulla nuova TV il cliente sceglie «Ho già un abbonamento» e scrive il codice (vale 10 minuti)</small><button class="btn" id="cLink">🔗 Genera codice di collegamento</button><div id="cLinkOut" class="mono" style="font-size:22px;margin-top:10px"></div></div>` : ''}
-      ${P.players && !isNew && !linked && window.KXPlayers ? `<div class="ag-c" style="grid-column:1/-1" id="cOth"><h4>Altre app</h4><small>Manda le linee di questo cliente anche alle altre app</small>${KXPlayers.box(e)}</div>` : ''}
+      ${P.players && !linked && window.KXPlayers ? `<div class="ag-c" style="grid-column:1/-1" id="cOth"><h4>Altre app</h4><small>Manda le linee di questo cliente anche alle altre app</small>${KXPlayers.box(e)}</div>` : ''}
       ${adCat.length && e.app !== 'lite' && e.app !== 'ktv' && e.app !== 'xc' ? `<div class="ag-c"><h4>Add-on</h4><small>Temi e skin che puoi assegnare</small><div class="ag-chk">${adCat.map((x) => chk('cad', x.id, esc(x.name), (e.addons || []).includes(x.id), false, x.price ? esc(x.price) : '')).join('')}</div></div>` : ''}`}
     </div>`;
     const sync = () => {

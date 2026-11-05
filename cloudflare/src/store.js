@@ -87,12 +87,27 @@ async function log(env, type, text, ip = '') {
   try { await env.DB.prepare('INSERT INTO activity (t, type, text, ip) VALUES (?, ?, ?, ?)').bind(now(), type, String(text).slice(0, 300), ip).run(); } catch {}
 }
 
+/* ---------------- store chiuso in una fascia oraria (ora italiana), es. dalle 23:00 alle 07:00 ---------------- */
+const HM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+function closedNorm(c) {
+  c = c && typeof c === 'object' ? c : {};
+  return { on: c.on === true, from: HM_RE.test(c.from || '') ? c.from : '23:00', to: HM_RE.test(c.to || '') ? c.to : '07:00', msg: str(c.msg || '', 200) };
+}
+const romeHM = (t = Date.now()) => new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t));
+/** true se adesso lo store è chiuso (la fascia può passare la mezzanotte) */
+export function storeClosedNow(c, t = Date.now()) {
+  if (!c || !c.on || c.from === c.to) return false;
+  const m = (x) => +x.slice(0, 2) * 60 + +x.slice(3, 5), n = m(romeHM(t)), a = m(c.from), b = m(c.to);
+  return a < b ? n >= a && n < b : n >= a || n < b;
+}
+const closedMsg = (c) => c.msg || `Lo store è chiuso dalle ${c.from} alle ${c.to}: riprova più tardi.`;
+
 /* ---------------- impostazioni (tabella settings, chiave "store") ---------------- */
 async function getStoreSettings(env) {
   const row = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('store').first();
   let s = {}; try { s = row ? JSON.parse(row.v) : {}; } catch {}
   const blocked = Array.isArray(s.blocked) ? s.blocked.filter((d) => typeof d === 'string' && DID_RE.test(d)).slice(0, MAX_BLOCKED) : [];
-  return { approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, sms: smsNorm(s.sms) };
+  return { approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, sms: smsNorm(s.sms), closed: closedNorm(s.closed) };
 }
 /** numero in formato internazionale (+39…); i numeri italiani scritti senza prefisso vengono completati */
 function phoneNorm(v) {
@@ -288,7 +303,8 @@ export async function storeApi(req, env, ctx, url, ip, opts = {}) {
     if (m === 'OPTIONS') return new Response(null, { status: 204 });
     if (p === '/config' && m === 'GET') {
       if (await limited(env.RL_DEVICE, 'scfg:' + ip)) return json({ error: 'Troppe richieste' }, 429);
-      return json({ on: (await getStoreSettings(env)).approval });
+      const S = await getStoreSettings(env), cl = storeClosedNow(S.closed);
+      return json({ on: S.approval, closed: cl, ...(cl ? { msg: closedMsg(S.closed) } : {}) });
     }
     if (p === '/request' && m === 'POST') return await create(req, env, ctx, url, ip, opts);
     if (p === '/status' && m === 'GET') return await status(url, env, ip);
@@ -328,6 +344,7 @@ async function create(req, env, ctx, url, ip, opts) {
   if (appUrl && !/^https?:\/\/[^\s]+$/i.test(appUrl)) return json({ error: 'Link non valido' }, 400);
   const s = await getStoreSettings(env), t = now();
   if (s.blocked.includes(did)) return json({ error: 'Dispositivo bloccato dal venditore' }, 403);
+  if (storeClosedNow(s.closed)) return json({ error: closedMsg(s.closed), closed: true }, 403); // fascia oraria di chiusura decisa dal titolare
 
   // stessa app dallo stesso dispositivo già in attesa: nessuna nuova email (una richiesta = una app = un download)
   const same = await env.DB.prepare("SELECT id, app_url FROM store_requests WHERE did = ? AND app = ? AND status = 'pending' AND created > ? ORDER BY created DESC LIMIT 1").bind(did, app, t - REQ_TTL).first();
@@ -523,6 +540,13 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       const b = await readBody(req, 8192);
       const s = await getStoreSettings(env);
       if (typeof b.approval === 'boolean') s.approval = b.approval;
+      if (b.closed && typeof b.closed === 'object') {
+        const c = b.closed;
+        if ((c.from !== undefined && !HM_RE.test(c.from)) || (c.to !== undefined && !HM_RE.test(c.to))) throw new StoreErr(400, 'Orario non valido: scrivilo come 23:00');
+        const was = s.closed; s.closed = closedNorm({ ...was, ...c });
+        if (s.closed.on && s.closed.from === s.closed.to) throw new StoreErr(400, 'L\'ora di apertura e quella di chiusura devono essere diverse');
+        await log(env, 'settings', `${who}: store ${s.closed.on ? `chiuso dalle ${s.closed.from} alle ${s.closed.to}` : 'sempre aperto (orari di chiusura spenti)'}`, ip);
+      }
       if (typeof b.ownerEmail === 'string') {
         const e = str(b.ownerEmail, 200);
         if (e && !MAIL_RE.test(e)) throw new StoreErr(400, 'Email non valida');

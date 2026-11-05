@@ -23,7 +23,8 @@
 .op-ic.mx{background:rgba(229,83,75,.16);color:#ff9d97}
 .op-tx{flex:1;min-width:180px}.op-tx b{display:block;font-size:14px}.op-tx small{display:block;color:var(--mut);font-size:12.5px;margin-top:2px}
 .op-row .inp{margin:0}
-.op-ok{color:var(--ok)}`;
+.op-ok{color:var(--ok)}
+.op-auto{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;font-weight:600;cursor:pointer;color:#bbf7d0}.op-auto input{width:17px;height:17px;accent-color:#22c55e}.op-auto small{font-weight:400;color:var(--mut)}`;
   document.head.appendChild(css);
 
   const P = () => D.players || {};
@@ -87,19 +88,21 @@
   function box(d) {
     const o = d.orbix, x = d.maxp, ln = lineOf(d);
     const up = (u) => `<input class="inp" data-opu placeholder="Utente" maxlength="120" value="${esc(u || ln.u)}" autocomplete="off"><input class="inp" data-opp type="password" placeholder="Password" maxlength="200" value="${esc(ln.p)}" autocomplete="new-password">`;
-    const btns = (on) => `<button class="btn sm pri" data-opsend>${on ? 'Riattiva' : 'Attiva'}</button>${on ? '<button class="btn sm danger" data-opdel>Togli</button>' : '<span></span>'}`;
-    const orb = `<div class="op-row" data-op="${esc(d.id)}" data-app="orbix"><div class="op-h"><div class="op-ic">OP</div>
+    const fresh = !d.id; // cliente nuovo: si attiva dopo «Attiva cliente / Salva»
+    const btns = (on) => fresh ? '<span></span><span></span>' : `<button class="btn sm pri" data-opsend>${on ? 'Riattiva' : 'Attiva'}</button>${on ? '<button class="btn sm danger" data-opdel>Togli</button>' : '<span></span>'}`;
+    const auto = (app, on) => `<label class="op-auto"><input type="checkbox" data-opauto ${fresh || !on ? '' : ''}>${on ? 'Aggiorna' : 'Attiva'} su ${app} quando premi «${fresh ? (owner() ? 'Salva' : 'Attiva cliente') : 'Salva'}»<small>${fresh ? 'utente e password: se li lasci vuoti si usano quelli della linea' : 'manda utente e password scritti qui'}</small></label>`;
+    const orb = `<div class="op-row" data-op="${esc(d.id || 'new')}" data-app="orbix"><div class="op-h"><div class="op-ic">OP</div>
       <div class="op-tx"><b>OrbixPlay</b><small>${!P().orbix ? 'Non collegato: aggiungi la chiave ORBIX_KEY (Impostazioni → App e aggiornamenti)' : o ? `<span class="op-ok">✓ Attivo</span> sul dispositivo <span class="mono">${esc(o.id)}</span> · ${esc(ago2(o.t))}` : 'Scrivi l\'ID che il cliente vede nell\'app OrbixPlay, utente e password: il DNS lo mette il pannello'}</small></div>${codeBox('orbix', slotFor('orbix', (((P().dns || {}).orbix || [])[orbIdx(o)] || {}).name, (((P().dns || {}).orbix || [])[orbIdx(o)] || {}).host))}</div>
-      ${P().orbix ? `<div class="op-f"><input class="inp mono" data-opid placeholder="ID dispositivo" maxlength="64" value="${esc(o ? o.id : '')}">${up(o && o.u)}${btns(!!o)}</div><div class="op-d">${dnsSel('orbix', orbIdx(o))}</div>` : ''}</div>`;
-    const mx = `<div class="op-row" data-op="${esc(d.id)}" data-app="max"><div class="op-h"><div class="op-ic mx">MX</div>
+      ${P().orbix ? `<div class="op-f"><input class="inp mono" data-opid placeholder="ID dispositivo" maxlength="64" value="${esc(o ? o.id : '')}">${up(o && o.u)}${btns(!!o)}</div><div class="op-d">${dnsSel('orbix', orbIdx(o))}</div>${auto('OrbixPlay', !!o)}` : ''}</div>`;
+    const mx = `<div class="op-row" data-op="${esc(d.id || 'new')}" data-app="max"><div class="op-h"><div class="op-ic mx">MX</div>
       <div class="op-tx"><b>MaxPlayer</b><small>${!P().max ? 'Non collegato: aggiungi la chiave MAXPLAYER_KEY (Impostazioni → App e aggiornamenti)' : x ? `<span class="op-ok">✓ Attivo</span>: il cliente entra in MaxPlayer con utente <span class="mono" style="color:var(--tx,#fff);font-weight:600">${esc(x.u)}</span> e la password della linea · ${esc(ago2(x.t))}` : 'Utente e password della linea: il pannello crea l\'account MaxPlayer del cliente (entra con gli stessi dati)'}</small></div>${codeBox('max', slotFor('max', '', ''))}</div>
-      ${P().max ? `<div class="op-f mx">${up(x && x.u)}${btns(!!x)}</div><div class="op-d">${mxSel(x ? x.dom : '')}</div>` : ''}</div>`;
+      ${P().max ? `<div class="op-f mx">${up(x && x.u)}${btns(!!x)}</div><div class="op-d">${mxSel(x ? x.dom : '')}</div>${auto('MaxPlayer', !!x)}` : ''}</div>`;
     if (P().max && !mxDoms && !mxBusy) setTimeout(() => loadMx(), 0);
     return orb + mx;
   }
   function bind(root, d, after) {
     bindCodes(root);
-    for (const row of root.querySelectorAll(`[data-op="${CSS.escape(d.id)}"]`)) {
+    for (const row of root.querySelectorAll(`[data-op="${CSS.escape(d.id || 'new')}"]`)) {
       syncCode(row); row.addEventListener('change', (e) => { if (e.target.matches('[data-opdns]')) syncCode(row); });
       const app = row.dataset.app, send = row.querySelector('[data-opsend]'), del = row.querySelector('[data-opdel]'), NAME = app === 'max' ? 'MaxPlayer' : 'OrbixPlay';
       if (send) send.onclick = async () => {
@@ -121,11 +124,40 @@
   }
   window.KXPlayers = { box, bind };
 
+  /* ---------- attivazione al salvataggio: spunta «Attiva su … quando premi Salva» (titolare e agenti, anche cliente nuovo) ---------- */
+  let pending = null;
+  const lineFrom = (pls) => { for (const p of Array.isArray(pls) ? pls : []) { if (p && p.username && p.password) return { u: p.username, p: p.password }; try { const u = new URL((p && p.url) || ''); if (u.searchParams.get('username')) return { u: u.searchParams.get('username'), p: u.searchParams.get('password') || '' }; } catch {} } return { u: '', p: '' }; };
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('#dSave, #cOk'); if (!b) return;
+    const root = b.id === 'dSave' ? $('#dBody') : $('#agB'); if (!root) return;
+    const rows = [...root.querySelectorAll('.op-row')].filter((r) => { const c = r.querySelector('[data-opauto]'); return c && c.checked; });
+    pending = rows.length ? rows.map((r) => { const v = (sel) => (r.querySelector(sel) || {}).value || ''; return { app: r.dataset.app, id: v('[data-opid]').trim(), u: v('[data-opu]').trim(), p: v('[data-opp]'), dns: v('[data-opdns]') }; }) : null;
+  }, true);
+  async function runPending(list, devId, body) {
+    const ln = lineFrom(body && body.playlists);
+    for (const x of list) {
+      const NAME = x.app === 'max' ? 'MaxPlayer' : 'OrbixPlay', u = x.u || ln.u, pw = x.p || ln.p;
+      if (x.app === 'orbix' && !x.id) { toast(`${NAME}: manca l'ID del dispositivo, non attivato`, 1); continue; }
+      if (!u || !pw) { toast(`${NAME}: mancano utente e password, non attivato`, 1); continue; }
+      const b = x.app === 'max' ? { username: u, password: pw, domain: x.dns } : { orbixId: x.id, username: u, password: pw, dns: +x.dns || 0 };
+      try { const r = await api('POST', (x.app === 'max' ? '/admin/maxplayer/' : '/admin/orbix/') + devId, b); toast(`${NAME} ${r && r.created === false ? 'aggiornato' : 'attivato'} ✓`); } catch (e) { toast(`${NAME}: ${e.message}`, 1); }
+    }
+    try { await load(); } catch {}
+  }
+  const apiP = api;
+  window.api = api = async function (m, p, b) {
+    const isSave = (m === 'POST' && p === '/admin/devices') || (m === 'PUT' && /^\/admin\/devices\/[^/]+$/.test(p));
+    const list = isSave && pending ? pending : null; if (list) pending = null;
+    const r = await apiP(m, p, b);
+    if (list) { const id = m === 'PUT' ? p.split('/').pop() : (r && r.id) || ((D.devices || []).find((x) => x.code === (b && b.code)) || {}).id; if (id) setTimeout(() => runPending(list, id, b), 0); }
+    return r;
+  };
+
   /* ---------- scheda cliente (titolare): sezione «Altre app» prima delle note ---------- */
   const rdw = renderDrawer;
   window.renderDrawer = renderDrawer = function () {
     rdw();
-    if (!edit || isNew || edit.parent || D.role === 'agent') return;
+    if (!edit || edit.parent || D.role === 'agent') return;
     const secs = $('#dBody .dsecs'); if (!secs || $('#ds-oth')) return;
     const html = `<section class="dsec" id="ds-oth"><div class="dsh"><i></i><div><b>Altre app</b><small>Manda le linee di questo cliente anche alle altre app</small></div></div>${box(edit)}</section>`;
     const note = $('#ds-note');
