@@ -28,7 +28,29 @@
       delete b.dataset.v; sync();
     };
   }
-  function sync() { for (const [id, kind, what] of PAGES) { const s = document.getElementById(id); if (s) bar(s, kind, what); } }
+  /* anche in Impostazioni → Funzioni dell'app: tutti e quattro insieme */
+  const NAMES = { report: ['Segnalazioni', 'segnalazione'], content: ['Richieste di contenuti', 'richiesta di contenuto'], addon: ['Richieste di temi e add-on', 'richiesta di tema'], ai: ['Richieste di altre domande IA', 'richiesta IA'] };
+  const pane = document.querySelector('[data-pane="app"]');
+  if (pane && !document.getElementById('rwCard')) {
+    pane.insertAdjacentHTML('afterbegin', `<div class="card glass" id="rwCard" style="margin-bottom:18px;border-left:4px solid #f5b041"><div class="hd"><h3>⏱ Tempi di attesa delle richieste<small>Dopo una richiesta il cliente aspetta questo tempo oppure la tua risposta (fatta, rifiutata o eliminata). Se riprova prima vede «In attesa del fornitore…». Uno per tipo.</small></h3></div><div id="rwRows"></div></div>`);
+    const card = document.getElementById('rwCard');
+    for (const ev of ['input', 'change']) card.addEventListener(ev, (e) => e.stopPropagation()); // si salva da solo: non conta tra le «modifiche non salvate»
+  }
+  function rows() {
+    const box = document.getElementById('rwRows'); if (!box) return;
+    const card = document.getElementById('rwCard'); card.style.display = owner() ? '' : 'none';
+    const key = Object.keys(NAMES).map(cur).join(',');
+    if (box.dataset.k === key) return; box.dataset.k = key;
+    box.innerHTML = Object.entries(NAMES).map(([k, [t]]) => { const n = cur(k); return `<div class="st-row"><div class="st-l"><b>${t}</b><small>${n ? 'Attesa: ' + esc(lbl(n)) : 'Nessuna attesa'}</small></div><div class="st-c"><select class="inp" data-rwk="${k}">${(OPTS.some((o) => o[0] === n) ? OPTS : [...OPTS, [n, n + ' minuti']]).map(([v, l]) => `<option value="${v}" ${v === n ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>`; }).join('');
+    box.querySelectorAll('[data-rwk]').forEach((sel) => (sel.onchange = async () => {
+      const k = sel.dataset.rwk, v = +sel.value;
+      try { const r = await api('PUT', '/admin/settings', { reqWait: { ...((D.settings && D.settings.reqWait) || {}), [k]: v } }); if (r && r.settings) D.settings = r.settings; else D.settings.reqWait = { ...(D.settings.reqWait || {}), [k]: v }; toast(NAMES[k][0] + ': ' + (v ? lbl(v) : 'nessuna attesa')); } catch (err) { toast(err.message, 1); }
+      delete box.dataset.k; sync();
+    }));
+  }
+  function sync() {
+    rows();
+    for (const [id, kind, what] of PAGES) { const s = document.getElementById(id); if (s) bar(s, kind, what); } }
   for (const [id] of PAGES) { const s = document.getElementById(id); if (s) new MutationObserver(() => sync()).observe(s, { childList: true, attributes: true, attributeFilter: ['data-mode'] }); }
   const ra = renderAll;
   window.renderAll = renderAll = function () { ra(); sync(); };
