@@ -3434,7 +3434,7 @@ function aiDialog(x, prog) {
     } catch (e) {
       const lim = /domande di oggi|risposte gratuite/i.test(e.message || '');
       $('#aiA').innerHTML = `<div class="mut">${esc(e.message || 'Non riesco a rispondere adesso')}</div>${lim ? '<button class="btn pri" data-f id="aiMore" style="margin-top:1vh">Chiedi altre domande al fornitore</button>' : ''}`;
-      if ($('#aiMore')) { $('#aiMore').onclick = async () => { const bt = $('#aiMore'); bt.disabled = true; try { const r = await apiPost('/api/player/request', { ctype: 'ai' }); fx('ok'); bt.textContent = r && r.already ? 'Richiesta già inviata ✓' : 'Richiesta inviata ✓'; } catch (er) { bt.disabled = false; toast('Non inviata: ' + (er.message || 'riprova')); } }; focus($('#aiMore'), true); }
+      if ($('#aiMore')) { $('#aiMore').onclick = async () => { const bt = $('#aiMore'); bt.disabled = true; try { const r = await apiPost('/api/player/request', { ctype: 'ai' }); fx('ok'); bt.textContent = r && r.already ? 'Richiesta già inviata ✓' : 'Richiesta inviata ✓'; } catch (er) { if (/^In attesa del fornitore/.test(er.message || '')) { bt.textContent = '⏳ In attesa del fornitore'; toast('⏳ ' + er.message, 7000); } else { bt.disabled = false; toast('Non inviata: ' + (er.message || 'riprova')); } } }; focus($('#aiMore'), true); }
     } finally { busy = false; }
   };
   $$('#aiM [data-aq]').forEach((b) => (b.onclick = () => ask(chips[+b.dataset.aq])));
@@ -3498,7 +3498,7 @@ function addonDialog(id) {
   if ($('#adReq')) $('#adReq').onclick = async () => {
     const b = $('#adReq'); b.disabled = true;
     try { const r = await apiPost('/api/player/request', { ctype: 'addon', addon: id, title: 'Add-on: ' + a.name, body: price ? 'Prezzo indicato: ' + price : '' }); fx('ok'); back(); toast(r && r.already ? 'Hai già chiesto questo add-on: il fornitore la sta guardando' : '✓ Richiesta inviata al fornitore'); }
-    catch (e) { b.disabled = false; toast('Non inviata: ' + (e.message || 'riprova')); }
+    catch (e) { b.disabled = false; toast(/^In attesa del fornitore/.test(e.message || '') ? '⏳ ' + e.message : 'Non inviata: ' + (e.message || 'riprova'), /^In attesa/.test(e.message || '') ? 7000 : undefined); }
   };
   // tema non posseduto: anteprima (sfondo e avatar in piccolo), senza scaricare il tema
   if (!own && a.cat === 'tema') addonPreview(id).then((j) => {
@@ -5897,7 +5897,7 @@ function requestDialog() {
     const title = $('#rqTitle').value.trim(); if (title.length < 2) { $('#rqMsg').textContent = 'Scrivi il titolo'; return focus($('#rqTitle'), true); }
     $('#rqMsg').textContent = 'Invio in corso…';
     try { await apiPost('/api/player/request', { ctype, title, body: $('#rqNote').value.trim() }); fx('ok'); kxClose('reqcM'); toast('✓ Richiesta inviata al fornitore'); }
-    catch (e) { fx('err'); $('#rqMsg').textContent = 'Non inviata: ' + e.message; }
+    catch (e) { fx('err'); $('#rqMsg').textContent = /^In attesa del fornitore/.test(e.message || '') ? '⏳ ' + e.message : 'Non inviata: ' + e.message; }
   };
 }
 /* presenza: ogni minuto il server sa che l'app è aperta e cosa sta guardando (il fornitore lo vede in "Utenti online") */
@@ -5993,8 +5993,10 @@ function reportDialog(preset) {
     const body = JSON.stringify({ code: S.code, secret: S.secret, kind: kinds[+b.dataset.rk], text: $('#repTxt').value.trim(), info });
     try {
       const url = baseServer() + '/api/player/report';
-      let status;
-      if (hasNativeHttp()) ({ status } = await nativeFetch(url, 'POST', body)); else status = (await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })).status;
+      let status, text = '';
+      if (hasNativeHttp()) ({ status, text } = await nativeFetch(url, 'POST', body)); else { const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }); status = r.status; text = await r.text().catch(() => ''); }
+      let jr = null; try { jr = JSON.parse(text); } catch {}
+      if (status === 429 && jr && jr.waiting) { st.textContent = '⏳ ' + jr.error; return; }
       if (status === 200) { st.textContent = '✓ Inviata, grazie!'; toast('Segnalazione inviata al fornitore'); setTimeout(() => $('#repM') && back(), 1200); }
       else st.textContent = status === 429 ? 'Hai già inviato molte segnalazioni: riprova più tardi.' : 'Invio non riuscito (' + status + ').';
     } catch (e) { st.textContent = 'Server non raggiungibile.'; }

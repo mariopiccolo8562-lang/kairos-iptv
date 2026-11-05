@@ -6,6 +6,7 @@
 .app-chip{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:5px;margin-left:8px;vertical-align:2px;background:rgba(224,164,49,.16);color:#ecc06f}
 .app-chip.tv{background:rgba(61,124,245,.15);color:#8fb3ff}
 .app-chip.ktv{background:rgba(34,211,238,.15);color:#7fe3f5}
+.app-chip.xc{background:rgba(167,139,250,.18);color:#c4b5fd}
 .lite-note{padding:12px 14px;border-radius:10px;border:1px solid rgba(224,164,49,.45);background:rgba(224,164,49,.08);font-size:13.5px;margin-bottom:14px}
 #dvApp{flex:0 0 auto}`;
   document.head.appendChild(css);
@@ -14,7 +15,8 @@
   const appOf = (d) => { if (!d) return ''; if (d.parent && !d.app) { const p = D.devices.find((x) => x.id === d.parent); return p ? p.app || '' : ''; } return d.app || ''; };
   const isLite = (d) => appOf(d) === 'lite';
   const isKtv = (d) => appOf(d) === 'ktv';
-  const kindOf = (d) => (isLite(d) ? 'lite' : isKtv(d) ? 'ktv' : 'tv');
+  const isXc = (d) => appOf(d) === 'xc';
+  const kindOf = (d) => (isLite(d) ? 'lite' : isKtv(d) ? 'ktv' : isXc(d) ? 'xc' : 'tv');
   let flt = 'all';
   try { flt = localStorage.getItem('kc_app') || 'all'; } catch {}
 
@@ -24,7 +26,7 @@
     let seg = $('#dvApp');
     if (!seg) { seg = document.createElement('div'); seg.className = 'seg'; seg.id = 'dvApp'; bar.insertBefore(seg, $('#dvView')); }
     const prim = D.devices.filter((d) => !d.parent), n = (k) => prim.filter((d) => k === 'all' || kindOf(d) === k).length;
-    seg.innerHTML = [['all', 'Tutte le app'], ['tv', 'Kairos Pro'], ['ktv', 'Kairos TV'], ['lite', 'Kairos Lite']].map(([k, l]) => `<button data-app="${k}" class="${flt === k ? 'on' : ''}" title="${k === 'tv' ? 'Comprende i dispositivi non ancora collegati' : ''}">${l} <span style="opacity:.6">${n(k)}</span></button>`).join('');
+    seg.innerHTML = [['all', 'Tutte le app'], ['tv', 'Kairos Pro'], ['ktv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC']].map(([k, l]) => `<button data-app="${k}" class="${flt === k ? 'on' : ''}" title="${k === 'tv' ? 'Comprende i dispositivi non ancora collegati' : ''}">${l} <span style="opacity:.6">${n(k)}</span></button>`).join('');
     $$('[data-app]', seg).forEach((b) => (b.onclick = () => { flt = b.dataset.app; try { localStorage.setItem('kc_app', flt); } catch {} renderDevices(); }));
   }
   const rd = renderDevices;
@@ -37,21 +39,22 @@
     try { rd(); } finally { D.devices = all; }
     filterBar();
     // etichetta «LITE» / «TV» su schede e tabella
-    const chip = (d) => (isLite(d) ? '<span class="app-chip">LITE</span>' : isKtv(d) ? '<span class="app-chip ktv">TV</span>' : '');
+    const chip = (d) => (isLite(d) ? '<span class="app-chip">LITE</span>' : isKtv(d) ? '<span class="app-chip ktv">TV</span>' : isXc(d) ? '<span class="app-chip xc">XC</span>' : '');
     $$('#dvCards .dv-card[data-id]').forEach((c) => { const d = all.find((x) => x.id === c.dataset.id); const b = $('.dv-n b', c); if (b && chip(d) && !$('.app-chip', b)) b.insertAdjacentHTML('beforeend', chip(d)); });
     $$('#dvTbl tbody tr[data-id]').forEach((r) => { const d = all.find((x) => x.id === r.dataset.id); const b = $('.dvt-u b', r); if (b && chip(d) && !$('.app-chip', b)) b.insertAdjacentHTML('beforeend', chip(d)); });
   };
 
   /* ---------- scheda cliente: scelta dell'app e solo le funzioni che Kairos Lite ha ---------- */
   function applyLite() {
-    const on = isLite(edit), ktv = isKtv(edit);
+    const on = isLite(edit), xc = isXc(edit), ktv = isKtv(edit) || xc; // Kairos XC usa le stesse funzioni di Kairos TV/Lite
     for (const id of ['ply', 'add']) { const off = on || ktv; const sec = $('#ds-' + id); if (sec) sec.style.display = off ? 'none' : ''; const nb = $(`#dBody [data-ds="${id}"]`); if (nb) nb.style.display = off ? 'none' : ''; }
     let k = 0; $$('#dBody .dnav [data-ds]').forEach((b) => { const i = $('i', b); if (i && b.style.display !== 'none') i.textContent = ++k; });
     k = 0; $$('#dBody .dsec').forEach((sec) => { const i = $('.dsh i', sec); if (i && sec.style.display !== 'none') i.textContent = ++k; });
     $$('#ds-perm [data-perm]').forEach((t) => { t.style.display = (on || ktv) && !LITE_PERMS.has(t.dataset.perm) ? 'none' : ''; });
     for (const sel of ['#eAiProv', '#eAiLim']) { const el = $(sel); if (!el) continue; const box = sel === '#eAiLim' ? el.parentElement : el; box.style.display = on || ktv ? 'none' : ''; const lb = box.previousElementSibling; if (lb && lb.classList.contains('lbl')) lb.style.display = on || ktv ? 'none' : ''; }
     const note = $('#dBody .lite-note'); if (note) note.style.display = on ? '' : 'none';
-    const kn = $('#dBody .ktv-note'); if (kn) kn.style.display = ktv ? '' : 'none';
+    const kn = $('#dBody .ktv-note'); if (kn) kn.style.display = ktv && !xc ? '' : 'none';
+    const xn = $('#dBody .xc-note'); if (xn) xn.style.display = xc ? '' : 'none';
     $$('#eApp [data-eapp]').forEach((b) => b.classList.toggle('on', b.dataset.eapp === kindOf(edit)));
   }
   const rdw = renderDrawer;
@@ -60,11 +63,12 @@
     if (!edit) return;
     const main = $('#dBody .dmain'); if (!main) return;
     if (!edit.parent && !$('#eAppBox', main)) {
-      main.insertAdjacentHTML('afterbegin', `<div id="eAppBox" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px"><b style="font-size:13.5px">App del cliente</b><div class="seg" id="eApp"><button data-eapp="tv">Kairos Pro</button><button data-eapp="ktv">Kairos TV</button><button data-eapp="lite">Kairos Lite</button></div><small class="mut">Si aggiorna da sola quando l'app si collega</small></div>`);
+      main.insertAdjacentHTML('afterbegin', `<div id="eAppBox" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px"><b style="font-size:13.5px">App del cliente</b><div class="seg" id="eApp"><button data-eapp="tv">Kairos Pro</button><button data-eapp="ktv">Kairos TV</button><button data-eapp="lite">Kairos Lite</button><button data-eapp="xc">Kairos XC</button></div><small class="mut">Si aggiorna da sola quando l'app si collega</small></div>`);
       $$('#eApp [data-eapp]').forEach((b) => (b.onclick = () => { edit.app = b.dataset.eapp; edit._appSet = true; applyLite(); }));
     }
     if (!$('.lite-note', main)) $('#eAppBox', main) ? $('#eAppBox', main).insertAdjacentHTML('afterend', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa: niente lettore a scelta, add-on, assistente IA, registrazioni, speed test e multi-schermo.</div>') : main.insertAdjacentHTML('afterbegin', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa.</div>');
     if (!$('.ktv-note', main)) $('.lite-note', main).insertAdjacentHTML('afterend', '<div class="lite-note ktv-note"><b>Questo cliente usa Kairos TV.</b> App nativa stile Netflix (veloce come la Lite): qui vedi solo quello che usa (collegamento TV, cambio playlist, profili, VPN).</div>');
+    if (!$('.xc-note', main)) $('.ktv-note', main).insertAdjacentHTML('afterend', '<div class="lite-note xc-note"><b>Questo cliente usa Kairos XC.</b> App stile MirkoTeam, leggera e veloce: qui vedi solo quello che usa (collegamento TV, cambio playlist, profili, VPN).</div>');
     applyLite();
   };
 
@@ -94,6 +98,30 @@
     for (const id of ['#sKtvApk', '#sKtvDl']) $(id).addEventListener('input', (e) => (e.target.dataset.ldirty = '1'));
     for (const ev of ['input', 'change']) $('#ktvCard').addEventListener(ev, (e) => e.stopPropagation());
   }
+  /* ---------- Impostazioni → App e aggiornamenti: Kairos XC ---------- */
+  if (pane && !$('#xcCard')) {
+    pane.insertAdjacentHTML('beforeend', `<div class="card glass" id="xcCard" style="margin-top:18px"><div class="hd"><h3>Kairos XC<small>L'app stile MirkoTeam, leggera e veloce: stesso pannello e stessi clienti, aggiornamenti dal suo repository kairos-xc</small></h3></div>
+      <div id="xcAuto" class="st-note"></div>
+      <div class="st-row"><div class="st-l"><b>Link per scaricare l'APK di Kairos XC</b><small>Vuoto = l'ultima release del repository kairos-xc</small></div><div class="st-c"><input class="inp mono" id="sXcApk" placeholder="https://github.com/…/kairos-xc.apk"></div></div>
+      <div class="st-row"><div class="st-l"><b>Codice Downloader di Kairos XC</b><small>Compare in alto nel pannello accanto agli altri (anche agli agenti)</small></div><div class="st-c"><input class="inp mono" id="sXcDl" maxlength="20" placeholder="es. 7654321"></div></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px"><button class="btn pri" id="xcSave">Salva Kairos XC</button><button class="btn" id="xcCopy">Copia link APK</button></div></div>`);
+    $('#xcSave').onclick = async () => { try { await api('PUT', '/admin/settings', { xcApkUrl: $('#sXcApk').value.trim(), xcDownloaderCode: $('#sXcDl').value.trim() }); delete $('#sXcApk').dataset.ldirty; delete $('#sXcDl').dataset.ldirty; const old = $('#dlXc'); if (old) old.remove(); await load(); toast('Kairos XC salvata'); } catch (e) { toast(e.message, 1); } };
+    $('#xcCopy').onclick = () => { const l = (D.xc && ((D.xc.feed && D.xc.feed.url) || D.xc.apk)) || ''; if (!l) return toast('Nessun link ancora: pubblica una release', 1); navigator.clipboard.writeText(l).then(() => toast('Link copiato'), () => toast('Copia non consentita', 1)); };
+    for (const id of ['#sXcApk', '#sXcDl']) $(id).addEventListener('input', (e) => (e.target.dataset.ldirty = '1'));
+    for (const ev of ['input', 'change']) $('#xcCard').addEventListener(ev, (e) => e.stopPropagation());
+  }
+  function renderXc() {
+    const s = D.settings || {}, X = D.xc || {}, f = X.feed;
+    const n = D.devices.filter((d) => !d.parent && isXc(d)).length;
+    if ($('#xcAuto')) $('#xcAuto').innerHTML = (f && f.version ? `✅ <b>Versione pubblicata: ${esc(f.version)}</b>${f.date ? ' · ' + esc(String(f.date).slice(0, 10)) : ''} — le app Kairos XC installate la propongono da sole` : '⚠️ Nessuna release di Kairos XC trovata (o GitHub non risponde adesso)') + ` · Clienti che usano Kairos XC: <b>${n}</b>`;
+    if ($('#sXcApk') && !$('#sXcApk').dataset.ldirty && document.activeElement !== $('#sXcApk')) $('#sXcApk').value = s.xcApkUrl || '';
+    if ($('#sXcDl') && !$('#sXcDl').dataset.ldirty && document.activeElement !== $('#sXcDl')) $('#sXcDl').value = s.xcDownloaderCode || '';
+    const bar = $('#dlBar');
+    if (bar && !$('#dlXc') && s.xcDownloaderCode) {
+      bar.insertAdjacentHTML('beforeend', `<div class="dl" id="dlXc"><i>XC</i><div><small>Downloader · Kairos XC</small><b>${esc(s.xcDownloaderCode)}</b></div><button class="btn sm" data-dlc="${esc(s.xcDownloaderCode)}">Copia</button></div>`);
+      $('#dlXc [data-dlc]').onclick = (e) => navigator.clipboard.writeText(e.target.dataset.dlc).then(() => toast('Codice copiato'), () => toast('Copia non consentita', 1));
+    }
+  }
   function renderKtv() {
     const s = D.settings || {}, K = D.ktv || {}, f = K.feed;
     const n = D.devices.filter((d) => !d.parent && isKtv(d)).length;
@@ -120,17 +148,17 @@
     }
   }
   const ra = renderAll;
-  window.renderAll = renderAll = function () { ra(); renderLite(); renderKtv(); };
+  window.renderAll = renderAll = function () { ra(); renderLite(); renderKtv(); renderXc(); };
   // lo stato porta anche le informazioni di Lite
   const api0 = api;
   window.api = api = async function (m, p, b) {
     // l'app scelta nella scheda del cliente (titolare) viaggia con il salvataggio
     if (edit && edit.app && !edit.parent && b && typeof b === 'object' && ((m === 'POST' && p === '/admin/devices' && isNew) || (m === 'PUT' && p === '/admin/devices/' + edit.id && edit._appSet))) b = { ...b, app: edit.app };
-    const r = await api0(m, p, b); if (p === '/admin/state' && m === 'GET' && r) { D.lite = r.lite || null; D.ktv = r.ktv || null; } return r; };
+    const r = await api0(m, p, b); if (p === '/admin/state' && m === 'GET' && r) { D.lite = r.lite || null; D.ktv = r.ktv || null; D.xc = r.xc || null; } return r; };
   if (typeof DEMO !== 'undefined') {
     DEMO.settings.liteDownloaderCode = DEMO.settings.liteDownloaderCode || '5551234';
-    DEMO.devices.forEach((d, i) => { if (!d.parent && d.playlists && d.playlists.length) d.app = i % 4 === 2 ? 'lite' : i % 4 === 3 ? 'ktv' : 'tv'; });
+    DEMO.devices.forEach((d, i) => { if (!d.parent && d.playlists && d.playlists.length) d.app = i % 5 === 2 ? 'lite' : i % 5 === 3 ? 'ktv' : i % 5 === 4 ? 'xc' : 'tv'; });
     const dm = demoApi;
-    window.demoApi = demoApi = async function (m, p, b) { const r = await dm(m, p, b); if (p === '/admin/state' && r && !r.lite) r.lite = { apk: DEMO.settings.liteApkUrl || 'https://github.com/mariopiccolo8562-lang/kairos-lite/releases/latest/download/kairos-lite.apk', feed: { version: '1.0.0', date: '2026-11-03' } }; if (p === '/admin/state' && r && !r.ktv) r.ktv = { apk: 'https://github.com/mariopiccolo8562-lang/kairos-tv/releases/latest/download/kairos-tv.apk', feed: { version: '1.0.0', date: '2026-11-04' } }; return r; };
+    window.demoApi = demoApi = async function (m, p, b) { const r = await dm(m, p, b); if (p === '/admin/state' && r && !r.lite) r.lite = { apk: DEMO.settings.liteApkUrl || 'https://github.com/mariopiccolo8562-lang/kairos-lite/releases/latest/download/kairos-lite.apk', feed: { version: '1.0.0', date: '2026-11-03' } }; if (p === '/admin/state' && r && !r.ktv) r.ktv = { apk: 'https://github.com/mariopiccolo8562-lang/kairos-tv/releases/latest/download/kairos-tv.apk', feed: { version: '1.0.0', date: '2026-11-04' } }; if (p === '/admin/state' && r && !r.xc) r.xc = { apk: 'https://github.com/mariopiccolo8562-lang/kairos-xc/releases/latest/download/kairos-xc.apk', feed: { version: '1.0.0', date: '2026-11-05' } }; return r; };
   }
 })();

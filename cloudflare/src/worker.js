@@ -249,7 +249,7 @@ function harden(res, req) {
 const DEFAULT_SETTINGS = {
   brand: 'KAIROS', tagline: 'Streaming', accent: 'cinema',
   announcement: 'Benvenuto su KAIROS — buona visione!', supportContact: '',
-  allowLocalPlaylists: true, apkUrl: '', apkVersionCode: 0, downloaderCode: '', storeDownloaderCode: '', liteDownloaderCode: '', liteApkUrl: '', ktvDownloaderCode: '', ktvApkUrl: '',
+  allowLocalPlaylists: true, apkUrl: '', apkVersionCode: 0, downloaderCode: '', storeDownloaderCode: '', liteDownloaderCode: '', liteApkUrl: '', ktvDownloaderCode: '', ktvApkUrl: '', xcDownloaderCode: '', xcApkUrl: '',
   serverUrl: '', showFootball: true,
   price: '22 € / anno', privacy: '',
   aiDaily: 20, aiProvider: 'gm', aiClaude: 'haiku', aiGemini: 'flash',
@@ -312,6 +312,22 @@ async function ktvFeed(s) {
     } catch {}
   }
   ktvMem = { t: now(), k: url, v };
+  return v;
+}
+/* Kairos XC (stile MirkoTeam, repository separato kairos-xc): stesso meccanismo di Kairos TV */
+const XC_APK = 'https://github.com/mariopiccolo8562-lang/kairos-xc/releases/latest/download/kairos-xc.apk';
+let xcMem = { t: 0, k: '', v: null };
+async function xcFeed(s) {
+  const apk = s.xcApkUrl || XC_APK, url = apk.replace(/\.apk(\?.*)?$/i, '.json');
+  if (xcMem.k === url && now() - xcMem.t < 5 * 60e3) return xcMem.v;
+  let v = null;
+  if (/^https:\/\/.+\.json$/i.test(url)) {
+    try {
+      const r = await fetch(url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(6000) });
+      if (r.ok) { const j = await r.json(); const code = semverCode(j.version) || +j.versionCode; if (code > 0) v = { versionCode: code, version: String(j.version || '').replace(/^v/i, '').slice(0, 20), url: /^https:\/\//.test(j.url || '') ? String(j.url).slice(0, 500) : apk, date: String(j.date || '').slice(0, 40) }; }
+    } catch {}
+  }
+  xcMem = { t: now(), k: url, v };
   return v;
 }
 async function latestApk(env, s) {
@@ -1728,7 +1744,8 @@ async function playerAi(req, env, ip, ctx) {
 /* richiesta di altre domande all'assistente (dall'app, quando finiscono quelle del giorno) */
 async function playerAiMore(env, d, P, ip, ctx) {
   if (permsParse(P.perms).ai === false) return json({ error: 'Assistente non attivo su questo abbonamento' }, 403);
-  if (await env.DB.prepare("SELECT 1 AS x FROM requests WHERE kind = 'ai' AND device_id = ? AND status <> 'done'").bind(P.id).first()) return json({ ok: true, already: true });
+  { const w = await reqWait(env, 'ai', [P.id, d.id]); if (w) return w; }
+  if (!cleanReqWait((await getSettings(env)).reqWait).ai && await env.DB.prepare("SELECT 1 AS x FROM requests WHERE kind = 'ai' AND device_id = ? AND status <> 'done'").bind(P.id).first()) return json({ ok: true, already: true });
   if (await throttled(env, 'rqi:' + P.id, 5, 86400e3)) return json({ error: 'Hai già chiesto più volte oggi: aspetta la risposta del fornitore' }, 429);
   const set = await getSettings(env), limit = aiLimitOf(P, set), used = await aiUsed(env, P.id);
   await addRequest(env, P, 'ai', { ctype: 'ai', title: 'Altre domande all\'assistente IA', body: `Oggi ha usato ${used} domande su ${limit}`, info: 'ai' }, ip);
@@ -1908,6 +1925,22 @@ const onlineCount = async (env) => { try { return (await env.DB.prepare('SELECT 
 /* ====================================================================== */
 const CTYPES = ['movie', 'series', 'live', 'addon'];
 const REQ_STATUS = ['new', 'seen', 'done'];
+/* tempi di attesa tra una richiesta e l'altra, uno per tipo (minuti; 0 = nessuno), decisi dal titolare.
+   Dopo una richiesta il cliente aspetta la fine del tempo oppure che il fornitore risponda (fatta/rifiutata/eliminata). */
+const REQ_KINDS = ['report', 'content', 'addon', 'ai'];
+const REQ_WAIT_MAX = 10080; // 7 giorni
+function cleanReqWait(v) { const o = {}; const x = v && typeof v === 'object' ? v : {}; for (const k of REQ_KINDS) { const n = parseInt(x[k], 10); o[k] = n > 0 ? Math.min(REQ_WAIT_MAX, n) : 0; } return o; }
+const waitTxt = (ms) => { const m = Math.max(1, Math.ceil(ms / 60e3)); return m < 60 ? m + (m === 1 ? ' minuto' : ' minuti') : m < 1440 ? Math.ceil(m / 60) + (Math.ceil(m / 60) === 1 ? ' ora' : ' ore') : Math.ceil(m / 1440) + (Math.ceil(m / 1440) === 1 ? ' giorno' : ' giorni'); };
+/** se c'è una richiesta dello stesso tipo ancora senza risposta e dentro il tempo di attesa: risposta «in attesa del fornitore» */
+async function reqWait(env, kind, ids) {
+  const min = cleanReqWait((await getSettings(env)).reqWait)[kind];
+  if (!min) return null;
+  const list = [...new Set(ids.filter(Boolean))];
+  const r = await env.DB.prepare(`SELECT created FROM requests WHERE kind = ? AND status <> 'done' AND device_id IN (${list.map(() => '?').join(',')}) AND created > ? ORDER BY created DESC LIMIT 1`).bind(kind, ...list, now() - min * 60e3).first();
+  if (!r) return null;
+  const left = r.created + min * 60e3 - now();
+  return json({ error: `In attesa del fornitore: la tua richiesta precedente non ha ancora ricevuto risposta. Potrai inviarne un'altra appena il fornitore risponde, oppure tra ${waitTxt(left)}.`, waiting: true, retryIn: Math.ceil(left / 1000) }, 429);
+}
 async function addRequest(env, d, kind, f, ip) {
   await env.DB.prepare('INSERT INTO requests (device_id, kind, ctype, title, body, info, status, created, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(d.id, kind, f.ctype || '', f.title || '', f.body || '', f.info || '', 'new', now(), ip).run();
@@ -1919,6 +1952,7 @@ async function playerAddonRequest(req, env, ip, ctx, b, d, P) {
   const it = addonsFor(await getSettings(env), P).find((x) => x.id === id);
   if (!it) return json({ error: 'Add-on non disponibile' }, 404);
   if (it.own) return json({ ok: true, own: true });
+  { const w = await reqWait(env, 'addon', [P.id, d.id]); if (w) return w; }
   if (await env.DB.prepare("SELECT 1 AS x FROM requests WHERE kind = 'addon' AND device_id = ? AND info = ? AND status <> 'done'").bind(P.id, 'addon:' + id).first()) return json({ ok: true, already: true });
   if (await throttled(env, 'rqa:' + P.id, 10, 3600e3)) return json({ error: 'Hai inviato troppe richieste: riprova tra un\'ora' }, 429);
   await addRequest(env, P, 'addon', { ctype: 'addon', title: a.name, body: it.p ? 'Prezzo indicato: ' + str(it.p, 40) : '', info: 'addon:' + id }, ip);
@@ -1939,6 +1973,7 @@ async function playerRequest(req, env, ip, ctx) {
   if (!permsOf(P).request) return json({ error: PERM_MSG }, 403);
   const title = nameClean(b.title, 120), body = nameClean(b.body, 400), ctype = CTYPES.includes(b.ctype) ? b.ctype : '';
   if (!title) return json({ error: 'Scrivi il titolo' }, 400);
+  { const w = await reqWait(env, 'content', [d.id, P.id]); if (w) return w; }
   if (await throttled(env, 'rq:' + d.id, 10, 3600e3)) return json({ error: 'Hai inviato troppe richieste: riprova tra un\'ora' }, 429);
   await addRequest(env, d, 'content', { ctype, title, body }, ip);
   ctx.waitUntil(webhookSend(env, 'request.new', { code: d.code, name: d.name || '', ctype, title, note: body }));
@@ -2104,10 +2139,10 @@ async function route(req, env, ctx) {
       if (await limited(env.RL_DEVICE, 'up:' + ip)) return json({ ui: null, apk: null }, 429);
       const s = await getSettings(env);
       // Kairos TV ha la sua interfaccia dentro l'APK (repository kairos-tv): niente interfaccia della Pro e solo il suo APK
-      const ktv = appFrom(req, null) === 'ktv';
+      const who = appFrom(req, null), ktv = who === 'ktv', xc = who === 'xc';
       return json({
-        ui: env.UI_VERSION && !ktv ? { version: env.UI_VERSION, url: '/app/index.html' } : null,
-        apk: ktv ? await ktvFeed(s) : await latestApk(env, s),
+        ui: env.UI_VERSION && !ktv && !xc ? { version: env.UI_VERSION, url: '/app/index.html' } : null,
+        apk: xc ? await xcFeed(s) : ktv ? await ktvFeed(s) : await latestApk(env, s),
       }, 200, { 'Cache-Control': 'no-store' });
     }
     return json({ error: 'Non trovato' }, 404);
@@ -2178,11 +2213,13 @@ const maintMsgFor = (s, P) => { const a = !(s.maint && s.maint.on && P && !(s.ma
 const MAINT_MSG = 'Servizio in manutenzione: torna disponibile a breve. Grazie per la pazienza!';
 /** quale app si collega: Kairos Lite si presenta con «KairosLite/x.y» (e versione «lite x.y»),
     Kairos TV con «KairosPlayer/x.y KairosTV/x.y», Kairos Pro solo con «KairosPlayer/x.y».
-    Chiavi interne: 'tv' = Kairos Pro (nome storico), 'ktv' = Kairos TV, 'lite' = Kairos Lite */
-const APPS = ['tv', 'lite', 'ktv'];
+    Chiavi interne: 'tv' = Kairos Pro (nome storico), 'ktv' = Kairos TV, 'lite' = Kairos Lite, 'xc' = Kairos XC
+    (Kairos XC si presenta con «KairosTV/x.y KairosXC/x.y» e versione «xc x.y»: va riconosciuta prima di Kairos TV) */
+const APPS = ['tv', 'lite', 'ktv', 'xc'];
 function appFrom(req, b) {
   const ua = req.headers.get('User-Agent') || '', ver = String((b && b.ver) || '');
   if (/KairosLite\//i.test(ua) || /^lite\b/i.test(ver)) return 'lite';
+  if (/KairosXC\//i.test(ua) || /^xc\b/i.test(ver)) return 'xc';
   if (/KairosTV\//i.test(ua)) return 'ktv';
   if (/KairosPlayer\//i.test(ua) || ver) return 'tv';
   return '';
@@ -2264,6 +2301,7 @@ async function playerReport(req, env, ip, ctx) {
   if (!d || !d.secret_hash || !safeEq(d.secret_hash, await sha256('dev:' + secret))) return json({ error: 'Dispositivo non riconosciuto' }, 403);
   const P = (await primaryOf(env, d)) || d;
   if (!permsOf(P).report) return json({ error: PERM_MSG }, 403);
+  { const w = await reqWait(env, 'report', [d.id, P.id]); if (w) return w; }
   if (await throttled(env, 'rep:' + d.id, 20, 3600e3)) return json({ error: 'Troppe segnalazioni, riprova più tardi' }, 429);
   const kind = nameClean(b.kind, 40), text = nameClean(b.text, 400), info = nameClean(b.info, 400);
   await addRequest(env, d, 'report', { title: kind, body: text, info }, ip).catch(() => {}); // sezione "Segnalazioni" del pannello
@@ -2694,7 +2732,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
       agents: canAg ? await agentsOut(env, all, tree.filter((x) => x !== A.id), true) : [],
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)) : [], // «Attiva app»: solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
-      settings: { brand: s.brand, accent: s.accent, downloaderCode: s.downloaderCode || '', storeDownloaderCode: s.storeDownloaderCode || '', liteDownloaderCode: s.liteDownloaderCode || '', ktvDownloaderCode: s.ktvDownloaderCode || '', apkUrl: s.apkUrl || '' }, permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on) }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
+      settings: { brand: s.brand, accent: s.accent, downloaderCode: s.downloaderCode || '', storeDownloaderCode: s.storeDownloaderCode || '', liteDownloaderCode: s.liteDownloaderCode || '', ktvDownloaderCode: s.ktvDownloaderCode || '', xcDownloaderCode: s.xcDownloaderCode || '', apkUrl: s.apkUrl || '' }, permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on) }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
       activity: P.activity ? ((await env.DB.prepare('SELECT t, type, text FROM activity WHERE ' + ctree.map(() => 'text LIKE ?').join(' OR ') + ' ORDER BY t DESC LIMIT 200').bind(...ctree.map((id) => 'Agente ' + (by.get(id) || {}).username + ':%')).all()).results || []) : [],
       messages: P.messages ? (((await env.DB.prepare('SELECT id, target, title, body, level, created, until FROM messages ORDER BY id DESC LIMIT 300').all()).results) || []).filter((x) => devices.some((d) => d.id === x.target)) : [] });
   }
@@ -2903,6 +2941,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       security: { totp: !!(ses && ses.totp_on), encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
       lite: { apk: settings.liteApkUrl || LITE_APK, feed: await liteFeed(settings) },
       ktv: { apk: settings.ktvApkUrl || KTV_APK, feed: await ktvFeed(settings) },
+      xc: { apk: settings.xcApkUrl || XC_APK, feed: await xcFeed(settings) },
       players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: orbixDnsList(settings.playersCfg.orbix, dnslOwner), max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents, codes: settings.playersCfg.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(settings.playersCfg) },
       dlCodes: dlCodesOf(settings),
       storeAppNames: await storeAppNames(env), maintAg: Object.entries(settings.maintAg || {}).filter(([, x]) => x && x.on).map(([id]) => +id),
@@ -3118,8 +3157,9 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path === '/settings' && m === 'PUT') {
     const b = await readJSON(req);
     const s = await getSettings(env);
-    for (const k of ['brand', 'tagline', 'accent', 'announcement', 'supportContact', 'downloaderCode', 'storeDownloaderCode', 'liteDownloaderCode', 'ktvDownloaderCode']) if (typeof b[k] === 'string') s[k] = str(b[k], k === 'announcement' ? 300 : 80);
+    for (const k of ['brand', 'tagline', 'accent', 'announcement', 'supportContact', 'downloaderCode', 'storeDownloaderCode', 'liteDownloaderCode', 'ktvDownloaderCode', 'xcDownloaderCode']) if (typeof b[k] === 'string') s[k] = str(b[k], k === 'announcement' ? 300 : 80);
     if (typeof b.apkUrl === 'string') { const u = str(b.apkUrl, 500); s.apkUrl = !u || /^https:\/\//.test(u) ? u : s.apkUrl; }
+    if (typeof b.xcApkUrl === 'string') { const u = str(b.xcApkUrl, 500); if (u && !/^https:\/\//.test(u)) throw new HttpErr(400, 'Il link di Kairos XC deve iniziare con https://'); s.xcApkUrl = u; }
     if (typeof b.ktvApkUrl === 'string') { const u = str(b.ktvApkUrl, 500); if (u && !/^https:\/\//.test(u)) throw new HttpErr(400, 'Il link di Kairos TV deve iniziare con https://'); s.ktvApkUrl = u; }
     if (typeof b.liteApkUrl === 'string') { const u = str(b.liteApkUrl, 500); if (u && !/^https:\/\//.test(u)) throw new HttpErr(400, 'Il link di Kairos Lite deve iniziare con https://'); s.liteApkUrl = u; }
     if (typeof b.allowLocalPlaylists === 'boolean') s.allowLocalPlaylists = b.allowLocalPlaylists;
@@ -3142,6 +3182,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       if (b.agentHostOnly && new URL(req.url).hostname.toLowerCase() === s.agentHost) throw new HttpErr(400, 'Questa impostazione si cambia dal tuo indirizzo');
       s.agentHostOnly = b.agentHostOnly;
     }
+    if (b.reqWait !== undefined) { const was = JSON.stringify(cleanReqWait(s.reqWait)); s.reqWait = cleanReqWait({ ...cleanReqWait(s.reqWait), ...(b.reqWait && typeof b.reqWait === 'object' ? b.reqWait : {}) }); if (JSON.stringify(s.reqWait) !== was) await log(env, 'edit', `${who}: tempi di attesa delle richieste aggiornati`, ip); }
     if (b.agMaint !== undefined) {
       const x = b.agMaint && typeof b.agMaint === 'object' ? b.agMaint : {}, was = !!(s.agMaint && s.agMaint.on), on = x.on === true;
       s.agMaint = { on, msg: nameClean(x.msg, 300) || (s.agMaint && s.agMaint.msg) || '', since: on ? (was ? (s.agMaint.since || now()) : now()) : 0 };
