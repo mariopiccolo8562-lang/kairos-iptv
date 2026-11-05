@@ -42,7 +42,7 @@
   const svg = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
   // [voce, etichetta, icona, schede [vista, etichetta]]
   const HUBS = [
-    ['hub-lines', 'Linee IPTV', svg('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'), [['armada', 'Pannello Armada'], ['lines', 'Linee collegate']]],
+    ['hub-lines', 'Linee IPTV', svg('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'), [['lmap', 'Per linea'], ['armada', 'Pannello Armada'], ['lines', 'Linee collegate']]],
     ['hub-apps', 'App', svg('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/>'), [['apps3', 'Attiva app'], ['xlist', 'Crea lista'], ['apps3op', 'OrbixPlay e MaxPlayer'], ['dlc', 'Codici downloader'], ['appk', 'App Kairos'], ['agop', 'OrbixPlay e MaxPlayer'], ['agk', 'App Kairos']]],
     ['hub-req', 'Richieste', svg('<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>'), [['reports', 'Segnalazioni'], ['creq', 'Contenuti'], ['areq', 'Temi'], ['reqai', 'Assistente IA'], ['store', 'Download store']]],
     ['hub-ctrl', 'Controllo', svg('<path d="M3 12h4l3-8 4 16 3-8h4"/>'), [['live', 'Online ora'], ['apperr', 'Errori app'], ['activity', 'Attività']]],
