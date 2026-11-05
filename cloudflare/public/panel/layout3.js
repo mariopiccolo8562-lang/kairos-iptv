@@ -76,6 +76,7 @@
     else { const n = navOf(v); if (n) n.click(); }
     update();
   }
+  window.KXGoTab = (v) => { if (!hubOf(v) || !allowed(v)) return false; goTab(v); return true; };
   function openHub(id) {
     const h = HUBS.find((x) => x[0] === id); if (!h) return;
     const tabs = h[3].map(([v]) => v).filter(allowed);
