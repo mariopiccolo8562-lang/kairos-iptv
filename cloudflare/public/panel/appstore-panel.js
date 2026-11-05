@@ -26,7 +26,7 @@
 .al-u{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:7px;background:var(--glass);border:1px solid var(--line);font-size:12.5px}
 .al-u a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8fb3ff;text-decoration:none;font-family:'JetBrains Mono',monospace}
 .al-u .nourl{flex:1;color:var(--mut)}
-.al-act{display:flex;gap:6px}
+.al-act{display:flex;gap:6px;flex-wrap:wrap}.al-act a.btn{color:#eef1f8!important;text-decoration:none!important}.al-act .al-go{background:linear-gradient(135deg,#22c55e,#16a34a)!important;border-color:transparent!important;color:#fff!important;font-weight:700}.al-c .al-hint{font-size:12px;color:var(--mut);line-height:1.45}
 .al-e{display:grid;grid-template-columns:150px 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
 .al-e .inp{margin:0}
 @media (max-width:760px){.al-e{grid-template-columns:1fr}}`;
@@ -58,9 +58,39 @@
     busy = false; render();
   };
 
-  const cardItems = (l) => l.map((x, i) => `<div class="al-c"><b>${esc(x.name)}</b>
+  // OrbixPlay e MaxPlayer si attivano direttamente dal pannello (con le chiavi del titolare): niente sito esterno
+  const playerOf = (n) => (/orbix/i.test(n || '') ? 'orbix' : /max\s*-?player/i.test(n || '') ? 'max' : '');
+  const panelOk = (k) => { const P = D.players || {}; if (!k || !(k === 'orbix' ? P.orbix : P.max)) return false; return isOwner() || !!((D.me || {}).perms || {}).players; };
+  const cardItems = (l) => l.map((x, i) => {
+    const k = playerOf(x.name), viaPanel = panelOk(k);
+    if (!isOwner()) {
+      // agente: niente indirizzi (non li vede né li copia); OrbixPlay/MaxPlayer solo dal pannello
+      if (k) return `<div class="al-c"><b>${esc(x.name)}</b>${viaPanel ? `<div class="al-hint">Si attiva da qui: scegli il cliente e la lista va su ${esc(x.name)}.</div><div class="al-act"><button class="btn sm al-go" data-algo="${i}">⚡ Attiva dal pannello</button></div>` : '<div class="al-hint">Per attivarla dal pannello chiedi al titolare il permesso «Inviare le linee a OrbixPlay e MaxPlayer».</div>'}</div>`;
+      return `<div class="al-c"><b>${esc(x.name)}</b><div class="al-hint">Aprila, incolla il codice del cliente e carica la lista.</div><div class="al-act">${x.url ? `<a class="btn sm pri" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">Apri ↗</a>` : '<span class="nourl">— non disponibile —</span>'}</div></div>`;
+    }
+    return `<div class="al-c"><b>${esc(x.name)}</b>
         <div class="al-u">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.url.replace(/^https?:\/\//, ''))}</a>` : '<span class="nourl">— nessun link —</span>'}</div>
-        <div class="al-act">${x.url ? `<button class="btn sm pri" data-alc="${i}">Copia link</button><a class="btn sm" href="${esc(x.url)}" target="_blank" rel="noopener">Apri ↗</a>` : ''}</div></div>`).join('');
+        <div class="al-act">${viaPanel ? `<button class="btn sm al-go" data-algo="${i}">⚡ Attiva dal pannello</button>` : ''}${x.url ? `<button class="btn sm ${viaPanel ? '' : 'pri'}" data-alc="${i}">Copia link</button><a class="btn sm" href="${esc(x.url)}" target="_blank" rel="noopener">Apri ↗</a>` : ''}</div></div>`;
+  }).join('');
+  // scegli il cliente → si apre la sua scheda sulla parte «App» (OrbixPlay / MaxPlayer)
+  function goPanel(name) {
+    const list = (D.devices || []).filter((d) => !d.parent && d.status !== 'pending').sort((a, b) => String(a.name || a.code).localeCompare(String(b.name || b.code)));
+    if (!list.length) return toast('Nessun cliente attivo', 1);
+    const p = ask(`Attiva ${name}: quale cliente?`, `<input class="inp" id="alQ" placeholder="Cerca nome o codice" style="margin:0 0 8px"><select class="inp" id="alS" size="8" style="height:auto">${list.map((d) => `<option value="${esc(d.id)}">${esc(d.name || '— senza nome —')} · ${esc(d.code)}</option>`).join('')}</select>`, 'Continua');
+    const sel = $('#alS'); if (sel && sel.options.length) sel.selectedIndex = 0;
+    $('#alQ').oninput = (e) => { const q = e.target.value.toLowerCase(); [...sel.options].forEach((o) => (o.hidden = !o.textContent.toLowerCase().includes(q))); const f = [...sel.options].find((o) => !o.hidden); if (f) sel.value = f.value; };
+    setTimeout(() => $('#alQ') && $('#alQ').focus(), 50);
+    p.then((ok) => {
+      if (!ok || !sel.value) return;
+      const d = D.devices.find((x) => x.id === sel.value); if (!d) return;
+      openDrawer(d, false);
+      setTimeout(() => {
+        if (isOwner()) { if (window.KXDrawerTab) KXDrawerTab('apps'); const n = $('#dBody .dnav [data-ds="oth"]'); if (n) n.click(); }
+        else { const t = document.querySelector('#agB .agtabs [data-at="apps"]'); if (t) t.click(); const c = $('#cOth'); if (c) c.scrollIntoView({ block: 'start' }); }
+      }, 250);
+    });
+  }
+  const bindGo = (card) => $$('[data-algo]', card).forEach((b) => (b.onclick = () => goPanel(links()[+b.dataset.algo].name)));
 
   function render() {
     const card = $('#appLinksCard'); if (!card) return;
@@ -70,10 +100,10 @@
       const l = links();
       if (!l.length) { card.style.display = 'none'; return; }
       card.style.display = '';
-      card.innerHTML = `<div class="hd"><h3>Attiva app<small>Le app che il titolare ti ha abilitato: aprile, incolla il codice del cliente e carica la lista. I link li decide il titolare, non si modificano.</small></h3></div>
+      card.innerHTML = `<div class="hd"><h3>Attiva app<small>Le app che il titolare ti ha abilitato. OrbixPlay e MaxPlayer si attivano direttamente da qui; le altre si aprono, incolli il codice del cliente e carichi la lista.</small></h3></div>
         <div class="al-head"><span class="mut" style="font-size:12.5px">${l.length} app</span></div>
         <div class="al-grid">${cardItems(l)}</div>`;
-      $$('[data-alc]', card).forEach((b) => (b.onclick = () => copy(links()[+b.dataset.alc].url)));
+      bindGo(card);
       return;
     }
     if (oc) oc.style.display = ''; if (tl) tl.style.display = '';
@@ -85,6 +115,7 @@
       ${l.length ? `<div class="al-grid">${cardItems(l)}</div>` : '<div class="emptyc" style="padding:18px">Nessuna app. Premi «Modifica elenco» per aggiungerne.</div>'}`;
     $('#alEdit').onclick = () => { editing = links().map((x) => ({ ...x })); render(); };
     $$('[data-alc]', card).forEach((b) => (b.onclick = () => copy(links()[+b.dataset.alc].url)));
+    bindGo(card);
   }
 
   function readEdit(card) {
