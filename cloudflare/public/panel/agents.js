@@ -162,7 +162,7 @@ body.agent .foot{display:none}
   }
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
-  const AG_OK = /^\/admin\/(apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
+  const AG_OK = /^\/admin\/(insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/upd|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
   const origApi = api;
   window.api = api = async function (m, p, b) {
     if (isAgent() && !AG_OK.test(p)) throw new Error('Funzione non disponibile per gli agenti');

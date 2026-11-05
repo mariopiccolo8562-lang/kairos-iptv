@@ -1545,6 +1545,12 @@ async function playerHeartbeat(req, env, ip, ctx) {
   const same = old && t - (+old.t || 0) < 55e3 && old.state === state && (old.title || '') === f.title && (old.ch_id || '') === f.ch_id
     && (old.vpn || '') === f.vpn && (old.screen || '') === f.screen && (old.rec || '') === (f.rec ?? old.rec ?? '') && (old.reduced || '') === (f.reduced ?? old.reduced ?? '') && (+old.stalls_h || 0) === (f.stalls_h ?? +old.stalls_h ?? 0) && (!sp || +old.speed_t === f.speed_t) && (old.ip || '') === (f.ip ?? old.ip ?? '');
   const writes = same ? [] : [upsertPresence(env, d.id, f)];
+  // tempo di visione per cliente: quando la riga si riscrive (al massimo una volta al minuto) si aggiunge il tempo
+  // passato dall'ultima scrittura al contenuto che stava guardando (al massimo 2 minuti: niente buchi gonfiati)
+  if (!same && old && old.state && old.state !== 'idle' && old.title) {
+    const secs = Math.round(Math.min(Math.max(0, t - (+old.t || t)), 120e3) / 1000);
+    if (secs > 0) writes.push(env.DB.prepare('INSERT INTO watch_dev (device_id, day, kind, title, secs, last) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(device_id, day, kind, title) DO UPDATE SET secs = watch_dev.secs + excluded.secs, last = excluded.last').bind(d.id, dayIT(t), old.state, old.title, secs, t).run().catch(() => {}));
+  }
   // nuova "sessione" di visione: contenuto diverso da quello dell'ultimo battito
   if (state !== 'idle' && f.title && (!old || old.state !== state || old.title !== f.title))
     writes.push(env.DB.prepare('INSERT INTO watch (day, kind, title, n) VALUES (?, ?, ?, 1) ON CONFLICT(day, kind, title) DO UPDATE SET n = watch.n + 1').bind(dayIT(t), state, f.title).run());
@@ -1560,8 +1566,72 @@ async function playerHeartbeat(req, env, ip, ctx) {
     if (b.kickAck && +b.kickAck === +d.kick_t) await env.DB.prepare('UPDATE devices SET kick_t = 0 WHERE id = ? AND kick_t = ?').bind(d.id, +d.kick_t).run();
     else if (t - +d.kick_t < 180e3) kick = +d.kick_t;
   }
-  const mt = maintFor(await getSettings(env), P) ? 1 : 0;
-  return json({ ok: true, mt, unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === P.pl_default) ? P.pl_default : '') + '|' + JSON.stringify(playerParse(P.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
+  const S0 = await getSettings(env), mt = maintFor(S0, P) ? 1 : 0;
+  // «Invia aggiornamento» dal pannello (o in automatico se l'app è vecchia e il titolare l'ha scelto): l'app controlla subito
+  let upd = +d.upd_req || 0;
+  if (!upd && S0.health && S0.health.on && S0.health.autoUpd) { try { const L = await latestFor(env, S0, appFrom(req, b) || d.app || 'tv'); if (L && verBehind(f.ver, L.version)) upd = L.versionCode || 1; } catch {} }
+  return json({ ok: true, mt, ...(upd ? { upd } : {}), unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === P.pl_default) ? P.pl_default : '') + '|' + JSON.stringify(playerParse(P.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
+}
+/* ---------------- dati del cliente e salute delle app ---------------- */
+const verNum = (v) => { const m = String(v || '').match(/(\d{1,3})\.(\d{1,3})(?:\.(\d{1,3}))?/); return m ? +m[1] * 1e6 + +m[2] * 1e3 + +(m[3] || 0) : 0; };
+const verBehind = (cur, latest) => { const a = verNum(cur), b = verNum(latest); return !!(a && b && a < b); };
+/** ultima versione pubblicata dell'app del cliente: tv = Kairos Pro, ktv = Kairos TV, lite, xc */
+async function latestFor(env, s, app) {
+  if (app === 'lite') { const f = await liteFeed(s); return f && f.version ? { version: f.version, versionCode: semverCode(f.version) } : null; }
+  if (app === 'ktv') { const f = await ktvFeed(s); return f ? { version: f.version, versionCode: f.versionCode } : null; }
+  if (app === 'xc') { const f = await xcFeed(s); return f ? { version: f.version, versionCode: f.versionCode } : null; }
+  const a = await latestApk(env, s); return a && a.version ? { version: a.version, versionCode: a.versionCode } : null;
+}
+const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', lite: 'Kairos Lite', xc: 'Kairos XC' };
+/** problemi trovati per un cliente, con la soluzione suggerita (sev: bad | warn) */
+function healthIssues(p, errs, latest, app) {
+  const out = [];
+  if (p && latest && verBehind(p.ver, latest.version)) out.push({ sev: 'warn', key: 'upd', what: `App vecchia: ${p.ver || '?'} (ultima ${latest.version})`, fix: app === 'tv' || !app ? 'Invia l\'aggiornamento: l\'app lo propone subito al cliente' : 'L\'app propone l\'aggiornamento da sola all\'avvio: chiedi al cliente di riaprirla', act: 'upd' });
+  const nr = errs.filter((e) => e.outcome === 'non risolto').length, fr = errs.filter((e) => e.problem === 'freeze').length;
+  if (nr >= 3) out.push({ sev: 'bad', key: 'err', what: `${nr} errori non risolti nelle ultime 24 ore`, fix: errs.some((e) => /hevc|h\.?265/i.test(e.codec || '')) ? 'Canali HEVC/H.265 su un dispositivo che fatica: usa la versione H.264 del canale o un dispositivo più recente' : 'Controlla il canale o la linea: se succede su più clienti è il server', act: 'upd' });
+  else if (errs.length >= 5) out.push({ sev: 'warn', key: 'err', what: `${errs.length} problemi di visione nelle ultime 24 ore (risolti da soli)`, fix: 'Tienilo d\'occhio: se aumentano controlla linea e dispositivo' });
+  if (fr >= 3 && errs.some((e) => e.dec === 'sw')) out.push({ sev: 'warn', key: 'dec', what: 'Immagine ferma con decodifica software', fix: 'Nel lettore del cliente prova ExoPlayer con decodifica hardware, oppure VLC' });
+  if (p && p.state !== 'idle' && +p.stalls_h >= 3) out.push({ sev: 'warn', key: 'stall', what: `${p.stalls_h} blocchi nell'ultima ora`, fix: p.net === 'wifi' && +p.rssi < -70 ? 'Wi-Fi debole: avvicina il router o usa il cavo' : 'Linea o server lenti in questo momento' });
+  if (p && p.net === 'wifi' && +p.rssi && +p.rssi < -75) out.push({ sev: 'warn', key: 'wifi', what: `Wi-Fi molto debole (${p.rssi} dBm)`, fix: 'Avvicina il router, usa un ripetitore o il cavo' });
+  if (p && +p.speed_dl && +p.speed_dl < 8) out.push({ sev: 'warn', key: 'speed', what: `Connessione lenta (${(+p.speed_dl).toFixed(1)} Mbps)`, fix: 'Per l\'HD servono almeno 8–10 Mbps stabili' });
+  return out;
+}
+async function insightFor(env, d, s) {
+  const t = now(), p = await env.DB.prepare('SELECT * FROM presence WHERE device_id = ?').bind(d.id).first();
+  const app = d.app || 'tv', latest = await latestFor(env, s, app).catch(() => null);
+  const since = dayIT(t - 6 * 864e5);
+  const wd = ((await env.DB.prepare('SELECT day, kind, title, secs, last FROM watch_dev WHERE device_id = ? AND day >= ? ORDER BY last DESC LIMIT 500').bind(d.id, since).all().catch(() => ({ results: [] }))).results) || [];
+  const errs = ((await env.DB.prepare('SELECT t, problem, action, outcome, err, title, kind, engine, codec, dec, res, ver FROM app_errors WHERE device_id = ? AND t > ? ORDER BY t DESC LIMIT 200').bind(d.id, t - 7 * 864e5).all().catch(() => ({ results: [] }))).results) || [];
+  const errs24 = errs.filter((e) => e.t > t - 864e5);
+  const today = dayIT(t), byTitle = new Map(), byDay = new Map();
+  for (const w of wd) { const k = w.kind + '|' + w.title, x = byTitle.get(k) || { kind: w.kind, title: w.title, secs: 0, last: 0 }; x.secs += +w.secs; x.last = Math.max(x.last, +w.last); byTitle.set(k, x); byDay.set(w.day, (byDay.get(w.day) || 0) + +w.secs); }
+  const online = p && t - (+p.t || 0) <= 3 * 60e3;
+  return {
+    id: d.id, name: d.name || '', code: d.code, app, appName: APP_NAME[app] || 'Kairos', model: (p && p.model) || d.model || '',
+    online, lastSeen: Math.max(+d.last_seen || 0, p ? +p.t : 0), lastIp: (p && p.ip) || d.last_ip || '', city: p ? [p.city, p.country].filter(Boolean).join(', ') : '',
+    ver: (p && p.ver) || '', latest: latest ? latest.version : '', needsUpdate: !!(p && latest && verBehind(p.ver, latest.version)), updSent: +d.upd_req || 0,
+    now: p && p.state !== 'idle' && online ? { kind: p.state, title: p.title, ch: p.ch, res: p.res, codec: p.codec, engine: p.engine } : null,
+    last: wd.length ? { kind: wd[0].kind, title: wd[0].title, t: +wd[0].last } : p && p.title ? { kind: p.state, title: p.title, t: +p.t } : null,
+    net: p ? { type: p.net, rssi: +p.rssi || 0, dl: +p.speed_dl || 0, ul: +p.speed_ul || 0, ping: +p.speed_ping || 0, t: +p.speed_t || 0 } : null,
+    watch: { today: byDay.get(today) || 0, week: [...byDay.values()].reduce((a, b) => a + b, 0), days: [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([day, secs]) => ({ day, secs })), top: [...byTitle.values()].sort((a, b) => b.secs - a.secs).slice(0, 15) },
+    errors: { n24: errs24.length, n7: errs.length, unresolved24: errs24.filter((e) => e.outcome === 'non risolto').length, list: errs.slice(0, 12) },
+    issues: healthIssues(p, errs24, latest, app),
+  };
+}
+/** riepilogo per il pannello: clienti con problemi (versione vecchia, errori, blocchi), dal più grave */
+async function healthList(env, s, ids) {
+  const t = now();
+  const rows = ((await env.DB.prepare("SELECT p.device_id AS id, p.ver, p.state, p.stalls_h, p.net, p.rssi, p.speed_dl, p.t, d.name, d.code, d.app, d.parent, d.upd_req FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ?").bind(t - 3 * 864e5).all()).results) || [];
+  const er = new Map(((await env.DB.prepare('SELECT device_id, problem, outcome, codec, dec FROM app_errors WHERE t > ?').bind(t - 864e5).all().catch(() => ({ results: [] }))).results || []).reduce((m, e) => { const a = m.get(e.device_id) || []; a.push(e); m.set(e.device_id, a); return m; }, new Map()));
+  const L = {}; for (const a of ['tv', 'ktv', 'lite', 'xc']) L[a] = await latestFor(env, s, a).catch(() => null);
+  const out = [];
+  for (const r of rows) {
+    if (ids && !ids.has(r.id)) continue;
+    const app = r.app || 'tv', iss = healthIssues(r, er.get(r.id) || [], L[app], app);
+    if (iss.length) out.push({ id: r.id, name: r.name || '', code: r.code, app, ver: r.ver, online: t - +r.t <= 3 * 60e3, lastSeen: +r.t, updSent: +r.upd_req || 0, issues: iss, bad: iss.filter((x) => x.sev === 'bad').length });
+  }
+  out.sort((a, b) => b.bad - a.bad || b.issues.length - a.issues.length || b.lastSeen - a.lastSeen);
+  return { list: out.slice(0, 300), latest: Object.fromEntries(Object.entries(L).map(([k, v]) => [k, v ? v.version : ''])), settings: { on: !!(s.health && s.health.on), autoUpd: !!(s.health && s.health.autoUpd) } };
 }
 /** vista pannello: chi è collegato e cosa guarda */
 /* visioni contemporanee: prima di iniziare a guardare l'app chiede il permesso (solo se il pannello ha messo un limite) */
@@ -2690,6 +2760,12 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     return (scopeMem = ids);
   };
   const viaOwner = async (r) => (r instanceof Response ? r.json() : r);
+  // «Dati» dei suoi clienti, salute delle loro app, «Invia aggiornamento» ai suoi clienti
+  const ains = path.match(/^\/insight\/([A-Za-z0-9_-]{6,20})$/);
+  if (ains && m === 'GET') { const d = await own(ains[1]); if (!d) throw new HttpErr(404, 'Cliente non trovato'); return json(await insightFor(env, d, await getSettings(env))); }
+  if (path === '/health' && m === 'GET') { const r = await healthList(env, await getSettings(env), await scope()); return json({ ...r, settings: { on: r.settings.on } }); }
+  const aup = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})\/upd$/);
+  if (aup && m === 'POST') { if (!(await own(aup[1]))) throw new HttpErr(404, 'Cliente non trovato'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
   // «Crea lista» su OrbixPlay/MaxPlayer senza cliente Kairos: con il permesso di attivarle dal pannello
   if (path === '/ext-lists' || path.startsWith('/ext-lists/')) { need('players', 'Non puoi creare liste su OrbixPlay e MaxPlayer'); const r = await extListsRoutes(req, env, path, who, ip, { id: A.id, tree: ctree }); if (r) return r; }
   // App → OrbixPlay e MaxPlayer: le liste create sulle app terzi, solo dei suoi clienti
@@ -3062,6 +3138,24 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
 
   /* ---------- utenti online ---------- */
   if (path === '/presence' && m === 'GET') return json(await adminPresence(env));
+  /* ---------- «Dati» di un cliente e salute delle app ---------- */
+  const ins = path.match(/^\/insight\/([A-Za-z0-9_-]{6,20})$/);
+  if (ins && m === 'GET') { const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(ins[1]).first(); if (!d) throw new HttpErr(404, 'Cliente non trovato'); return json(await insightFor(env, d, await getSettings(env))); }
+  if (path === '/health' && m === 'GET') return json(await healthList(env, await getSettings(env), null));
+  if (path === '/health/settings' && m === 'PUT' && !(ses && ses.agent)) {
+    const b = await readJSON(req, 1024), s0 = await getSettings(env), h = { on: !!(s0.health && s0.health.on), autoUpd: !!(s0.health && s0.health.autoUpd) };
+    if (typeof b.on === 'boolean') h.on = b.on; if (typeof b.autoUpd === 'boolean') h.autoUpd = b.autoUpd;
+    await settingsPatch(env, { health: h });
+    await log(env, 'settings', `${who}: salute delle app — controllo ${h.on ? 'attivo' : 'spento'}, aggiornamento automatico ${h.autoUpd ? 'attivo' : 'spento'}`, ip);
+    return json({ ok: true, health: h });
+  }
+  const upm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})\/upd$/);
+  if (upm && m === 'POST') {
+    const d = await env.DB.prepare('SELECT id, name, code FROM devices WHERE id = ?').bind(upm[1]).first(); if (!d) throw new HttpErr(404, 'Cliente non trovato');
+    const t = now(); await env.DB.batch([env.DB.prepare('UPDATE devices SET upd_req = ? WHERE id = ? OR parent = ?').bind(t, d.id, d.id)]);
+    await log(env, 'edit', `${who}: aggiornamento dell'app inviato a ${d.name || d.code}`, ip);
+    return json({ ok: true, t });
+  }
 
   /* ---------- località VPN (più server WireGuard) ---------- */
   if (path === '/vpn-locs' && m === 'GET') return json((await wgLocs(env)).map((x) => ({ id: x.id, name: x.name })));

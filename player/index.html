@@ -5939,6 +5939,8 @@ async function heartbeat(force) {
     const j = await apiPost('/api/player/heartbeat', body); if (!j) return;
     sendPlayEvents();
     if (j.kick) { S.kickAck = j.kick; if (j.kick !== store.get('kickSeen', 0)) { store.set('kickSeen', j.kick); kickedByPanel(); } }
+    // «Invia aggiornamento» dal pannello (o aggiornamento automatico scelto dal fornitore): si controlla subito, senza interrompere la visione
+    if (j.upd && j.upd !== store.get('updSeen', 0) && !S.inPlayer && !S.updChecking && !S.demo) { store.set('updSeen', j.upd); setTimeout(async () => { S.lastUpdCheck = 0; await backgroundUpdateCheck(); if (S.apkUpdate && !S.inPlayer && !$('#updM')) { try { offerApkUpdate(); } catch {} } }, 1500); }
     if (j.mt && S.status === 'active') { // manutenzione appena attivata dal fornitore: si interrompe la visione e si mostra l'avviso
       register().then(() => { if (S.status !== 'active') { try { if (S.inPlayer && NATIVE && NATIVE.playerClose) NATIVE.playerClose(); } catch {} try { if ($('#fs').classList.contains('on')) closeFs(); } catch {} try { stopPreview(); stopVideo($('#pv')); } catch {} vpnApply(); showActivate(false); } }).catch(() => {});
       return;
