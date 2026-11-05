@@ -32,7 +32,7 @@
   const owner = () => D.role !== 'agent';
   /** utente e password della prima linea del cliente (Xtream, o M3U con username/password) */
   function lineOf(d) {
-    const src = d.parent ? D.devices.find((x) => x.id === d.parent) || d : d;
+    const src = d.parent && !d.own ? D.devices.find((x) => x.id === d.parent) || d : d; // TV collegata indipendente: le sue linee
     for (const p of src.playlists || []) {
       if (p.username && p.password && (p.type === 'xtream' || p.serverId !== undefined)) return { u: p.username, p: p.password };
       try { const u = new URL(p.url || ''); if (u.searchParams.get('username')) return { u: u.searchParams.get('username'), p: u.searchParams.get('password') || '' }; } catch {}

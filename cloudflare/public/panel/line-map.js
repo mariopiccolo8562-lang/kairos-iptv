@@ -13,8 +13,8 @@
 .lm-det a{color:#93c5fd;text-decoration:none;font-weight:600;margin-left:6px}.lm-det a:hover{text-decoration:underline}
 .lm-box h4{margin:0 0 6px;font-size:14px}.lm-warn{color:#fbbf24;font-size:12px;font-weight:700}`;
   document.head.appendChild(css);
-  const COL = { 'Kairos Pro': '#4f8cff', 'Kairos TV': '#22d3ee', 'Kairos Lite': '#34d399', 'Kairos XC': '#a78bfa', OrbixPlay: '#38bdf8', MaxPlayer: '#fb7185' };
-  const APPN = { tv: 'Kairos Pro', ktv: 'Kairos TV', lite: 'Kairos Lite', xc: 'Kairos XC', '': 'Kairos Pro' };
+  const COL = { 'Kairos Pro': '#4f8cff', 'Kairos TV': '#22d3ee', 'Kairos Lite': '#34d399', 'Kairos XC': '#a78bfa', 'Kairos Plus': '#e879f9', OrbixPlay: '#38bdf8', MaxPlayer: '#fb7185' };
+  const APPN = { tv: 'Kairos Pro', ktv: 'Kairos TV', lite: 'Kairos Lite', xc: 'Kairos XC', plus: 'Kairos Plus', '': 'Kairos Pro' };
   const norm = (u) => String(u || '').trim().toLowerCase();
   const uOf = (p) => { if (p.username) return { u: p.username, p: p.password || '' }; try { const x = new URL(p.url || ''); const u = x.searchParams.get('username'); if (u) return { u, p: x.searchParams.get('password') || '' }; } catch {} return null; };
   let LL = null, XL = null, lt = 0;
@@ -30,7 +30,7 @@
     for (const d of D.devices || []) {
       const who = d.name || d.code, P = d.parent ? (D.devices || []).find((x) => x.id === d.parent) : null;
       const seen = new Set();
-      for (const p of (d.parent && P ? P.playlists : d.playlists) || []) { const c = uOf(p); if (!c || seen.has(norm(c.u))) continue; seen.add(norm(c.u)); add(c.u, { app: APPN[d.app || ''] || 'Kairos Pro', who, ref: d.code, id: d.id, pass: c.p, linked: !!d.parent }); }
+      for (const p of (d.parent && P && !d.own ? P.playlists : d.playlists) || []) { const c = uOf(p); if (!c || seen.has(norm(c.u))) continue; seen.add(norm(c.u)); add(c.u, { app: APPN[d.app || ''] || 'Kairos Pro', who, ref: d.code, id: d.id, pass: c.p, linked: !!d.parent }); }
       if (d.orbix && d.orbix.u) add(d.orbix.u, { app: 'OrbixPlay', who, ref: 'ID ' + d.orbix.id, id: d.id });
       if (d.maxp && d.maxp.u) add(d.maxp.u, { app: 'MaxPlayer', who, ref: 'utente ' + d.maxp.u, id: d.id });
     }
