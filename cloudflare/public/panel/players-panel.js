@@ -48,7 +48,7 @@
   const SLOTS = () => P().slots || [];
   // posizione del DNS OrbixPlay usato dal cliente: si cerca per host (l'elenco può cambiare), altrimenti l'indice salvato
   const kh = (h) => String(h || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
-  const orbIdx = (o) => { if (!o) return 0; const l = ((P().dns || {}).orbix) || []; if (o.h) { const i = l.findIndex((x) => x.host && kh(x.host) === o.h); if (i >= 0) return i; } return +o.dns || 0; };
+  const orbIdx = (o) => { if (!o) return 0; if (o.di !== undefined) return o.di >= 0 ? o.di : 0; /* agente: posizione nel suo elenco (calcolata dal server) */ const l = ((P().dns || {}).orbix) || []; if (o.h) { const i = l.findIndex((x) => x.host && kh(x.host) === o.h); if (i >= 0) return i; } return +o.dns || 0; };
   const hostOf2 = (h) => String(h || '').trim().replace(/^https?:\/\//i, '').split(/[:/]/)[0].toLowerCase();
   function slotFor(app, dnsName, dnsHost) {
     const l = SLOTS().filter((x) => x.app === app); if (!l.length) return null;
@@ -379,7 +379,7 @@
       const mdd = p.match(/^\/admin\/maxplayer\/domains\/(\d+)$/);
       if (mdd && m === 'PUT') { const all = [DEMO.mx0 = DEMO.mx0 || { id: '1', domain: 'dns.kairos-esempio.tv', port: '8080', label: 'Principale', status: 'approved' }, ...(DEMO.mxNew || [])]; const x = all.find((y) => y.id === mdd[1]); if (x) { x.label = b.label; if (b.url) { const u = new URL(b.url); x.domain = u.hostname; x.port = u.port || (u.protocol === 'https:' ? '443' : '80'); x.https = u.protocol === 'https:'; } } return { ok: true }; }
       if (mdd && m === 'DELETE') { DEMO.mxNew = (DEMO.mxNew || []).filter((y) => y.id !== mdd[1]); return { ok: true }; }
-      if (p.split('?')[0] === '/admin/maxplayer/domains' && m === 'GET') return { domains: D.role === 'agent' ? [{ id: '1', label: 'Principale' }] : [(DEMO.mx0 = DEMO.mx0 || { id: '1', domain: 'dns.kairos-esempio.tv', port: '8080', label: 'Principale', status: 'approved' }), ...(DEMO.mxNew || [])] };
+      if (p.split('?')[0] === '/admin/maxplayer/domains' && m === 'GET') { const all = [(DEMO.mx0 = DEMO.mx0 || { id: '1', domain: 'dns.kairos-esempio.tv', port: '8080', label: 'Principale', status: 'approved' }), ...(DEMO.mxNew || [])]; if (D.role !== 'agent') return { domains: all }; const al = ((DEMO.agents || [])[0] || { perms: {} }).perms.mxDns; return { domains: all.filter((x) => !Array.isArray(al) || al.includes('*') || al.includes(x.id)).map((x) => ({ id: x.id, label: x.label })) }; } // demo: l'agente vede solo i nomi dei DNS concessi
       if (p === '/admin/maxplayer/domains' && m === 'POST') { (DEMO.mxNew = DEMO.mxNew || []).push({ id: String(10 + DEMO.mxNew.length), domain: b.url.replace(/^https?:\/\//, '').split(/[:/]/)[0], port: '80', label: b.label, status: 'approved' }); return { ok: true }; }
       const xm = p.match(/^\/admin\/maxplayer\/(.+)$/);
       if (xm) { const d = DEMO.devices.find((x) => x.id === xm[1]); if (!d) throw new Error('Cliente non trovato'); if (m === 'DELETE') { d.maxp = null; return { ok: true }; } if (!b.username || !b.password) throw new Error('Scrivi utente e password della linea'); const created = !d.maxp; d.maxp = { uid: d.maxp ? d.maxp.uid : String(500 + Math.floor(Math.random() * 99)), u: d.maxp ? d.maxp.u : b.username, dom: b.domain || '1', t: Date.now() }; return { ...d.maxp, created }; }

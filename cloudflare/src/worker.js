@@ -373,14 +373,14 @@ async function orbixCall(env, path, query) {
 const orbixOf = (d) => { try { const o = JSON.parse(d.orbix || '{}'); return { id: str(o.id, 64), pls: Array.isArray(o.pls) ? o.pls.map((x) => str(String(x), 64)).filter(Boolean) : [], t: +o.t || 0, n: +o.n || 0, u: str(o.u, 120), dns: +o.dns || 0, h: str(o.h, 300) }; } catch { return { id: '', pls: [], t: 0, n: 0, u: '', dns: 0, h: '' }; } };
 /** attiva il dispositivo OrbixPlay: ID del dispositivo + utente e password della linea, sul DNS personale scelto
     (l'indirizzo non lo scrive nessuno: lo prende dalle impostazioni; con il «codice host» non viaggia nemmeno in chiaro) */
-async function orbixSend(env, d, b, who, ip, agentLines) {
+async function orbixSend(env, d, b, who, ip, agentLines, allow) {
   if (!env.ORBIX_KEY) throw new HttpErr(400, 'OrbixPlay non è collegato: aggiungi il segreto ORBIX_KEY su GitHub (vedi la guida in Impostazioni)');
   const orbixId = str(b.orbixId, 64), username = str(b.username, 120), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '';
   if (!ORBIX_ID_RE.test(orbixId)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
   if (!username || !password) throw new HttpErr(400, 'Scrivi utente e password della linea');
   if (agentLines && !agentLines.some((l) => l.username === username && l.password === password)) throw new HttpErr(400, 'Usa utente e password di una linea di questo cliente');
-  const s = await getSettings(env), list = agentLines ? (((s.playersCfg || {}).orbix) || []) : orbixDnsList((s.playersCfg || {}).orbix, await dnsList(env));
-  if (!list.length) throw new HttpErr(400, 'Imposta prima un DNS (OrbixPlay in APP Store, oppure in «Server DNS»)');
+  const s = await getSettings(env), list = agentLines ? agOrbList(s, allow) : orbixDnsList((s.playersCfg || {}).orbix, await dnsList(env));
+  if (!list.length) throw new HttpErr(400, agentLines ? 'Nessun DNS di OrbixPlay disponibile per te: chiedilo a chi ti gestisce' : 'Imposta prima un DNS (OrbixPlay in APP Store, oppure in «Server DNS»)');
   const di = Math.max(0, Math.min(list.length - 1, parseInt(b.dns, 10) || 0)), dns = list[di];
   const old = orbixOf(d);
   const j = await orbixCall(env, '/add-playlist', { deviceid: orbixId, playlistName: str(s.brand || 'Kairos', 40), username, password, host: dns.code || dns.host, notes: str(d.name || d.code, 60) });
@@ -417,13 +417,13 @@ async function mxDomains(env, fresh) {
 }
 const maxpOf = (d) => { try { const o = JSON.parse(d.maxp || '{}'); return { uid: str(String(o.uid || ''), 30), u: str(o.u, 120), dom: str(String(o.dom || ''), 30), t: +o.t || 0 }; } catch { return { uid: '', u: '', dom: '', t: 0 }; } };
 /** attiva (crea l'account) o aggiorna la lista del cliente su MaxPlayer: utente e password della linea + dominio scelto */
-async function mxSend(env, d, b, who, ip, agentLines) {
+async function mxSend(env, d, b, who, ip, agentLines, allow) {
   if (!env.MAXPLAYER_KEY) throw new HttpErr(400, 'MaxPlayer non è collegato: aggiungi il segreto MAXPLAYER_KEY su GitHub (vedi la guida in Impostazioni)');
   const username = str(b.username, 120), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '', dom = str(String(b.domain ?? ''), 30);
   if (!username || !password) throw new HttpErr(400, 'Scrivi utente e password della linea');
   if (agentLines && !agentLines.some((l) => l.username === username && l.password === password)) throw new HttpErr(400, 'Usa utente e password di una linea di questo cliente');
-  const doms = await mxDomains(env);
-  if (!doms.length) throw new HttpErr(400, 'Su MaxPlayer non hai ancora un DNS: aggiungilo in Impostazioni → App e aggiornamenti');
+  const doms = agentLines ? agMxList(await mxDomains(env), allow) : await mxDomains(env); // agente: solo i DNS che gli hai concesso
+  if (!doms.length) throw new HttpErr(400, agentLines ? 'Nessun DNS di MaxPlayer disponibile per te: chiedilo a chi ti gestisce' : 'Su MaxPlayer non hai ancora un DNS: aggiungilo in Impostazioni → App e aggiornamenti');
   const D0 = doms.find((x) => x.id === dom) || doms.find((x) => x.domain === 'maxplayer.nki-max.stream') || doms[0];
   const old = maxpOf(d);
   let uid = old.uid, login = old.u, created = false;
@@ -483,16 +483,16 @@ async function extListsRoutes(req, env, path, who, ip, ag) {
       if (!env.ORBIX_KEY) throw new HttpErr(400, 'OrbixPlay non è collegato: aggiungi il segreto ORBIX_KEY su GitHub');
       const orbixId = str(b.orbixId, 64);
       if (!ORBIX_ID_RE.test(orbixId)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
-      const list = ag ? (((s.playersCfg || {}).orbix) || []) : orbixDnsList((s.playersCfg || {}).orbix, await dnsList(env));
-      if (!list.length) throw new HttpErr(400, 'Imposta prima un DNS di OrbixPlay');
+      const list = ag ? agOrbList(s, ag.orbDns) : orbixDnsList((s.playersCfg || {}).orbix, await dnsList(env));
+      if (!list.length) throw new HttpErr(400, ag ? 'Nessun DNS di OrbixPlay disponibile per te: chiedilo a chi ti gestisce' : 'Imposta prima un DNS di OrbixPlay');
       const dns = list[Math.max(0, Math.min(list.length - 1, parseInt(b.dns, 10) || 0))];
       const j = await orbixCall(env, '/add-playlist', { deviceid: orbixId, playlistName: str(s.brand || 'Kairos', 40), username, password, host: dns.code || dns.host, notes: name || username });
       const pid = j.playlist_id ?? (j.playlist && j.playlist.playlist_id) ?? j.id;
       ref = orbixId; ext = JSON.stringify(pid !== undefined && pid !== null ? [String(pid)] : []); dnsName = dns.name || 'DNS';
     } else {
       if (!env.MAXPLAYER_KEY) throw new HttpErr(400, 'MaxPlayer non è collegato: aggiungi il segreto MAXPLAYER_KEY su GitHub');
-      const doms = await mxDomains(env);
-      if (!doms.length) throw new HttpErr(400, 'Su MaxPlayer non hai ancora un DNS');
+      const doms = ag ? agMxList(await mxDomains(env), ag.mxDns) : await mxDomains(env);
+      if (!doms.length) throw new HttpErr(400, ag ? 'Nessun DNS di MaxPlayer disponibile per te: chiedilo a chi ti gestisce' : 'Su MaxPlayer non hai ancora un DNS');
       const dom = str(String(b.domain ?? ''), 30), D0 = doms.find((x) => x.id === dom) || doms.find((x) => x.domain === 'maxplayer.nki-max.stream') || doms[0];
       const j = await mxCall(env, 'POST', '/users', { domain_id: D0.id, iptv_user: username, iptv_pass: password, fullname: name || username });
       const uid = str(String(j.user_id ?? ''), 30); if (!uid) throw new HttpErr(502, 'MaxPlayer non ha restituito l\'account creato');
@@ -2560,7 +2560,7 @@ const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists'
   'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk'];
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
@@ -2576,6 +2576,9 @@ function kairosAppsOf(s) {
   ].map(([k, apk, code]) => ({ key: k, name: KAIROS_APPS.find((x) => x[0] === k)[1], apk, code }));
 }
 const storeAppOk = (list, app) => list.includes('*') || list.some((x) => x.toLowerCase() === String(app || '').toLowerCase());
+/** DNS che un agente può usare per OrbixPlay (scelti dal titolare per nome) e MaxPlayer (per id del dominio); ['*'] = tutti */
+const agOrbList = (s, allow) => (((s.playersCfg || {}).orbix) || []).filter((x) => storeAppOk(Array.isArray(allow) ? allow : ['*'], x.name));
+const agMxList = (doms, allow) => doms.filter((x) => storeAppOk(Array.isArray(allow) ? allow : ['*'], x.id));
 function agentPerms(src) {
   let o = {}; try { o = typeof src === 'string' ? JSON.parse(src || '{}') : src || {}; } catch {}
   const p = { ...AGENT_DEF };
@@ -2585,6 +2588,8 @@ function agentPerms(src) {
   p.appsAllow = storeAppsList(o.appsAllow); // app di «Attiva app» che l'agente può vedere/usare (['*'] = tutte)
   p.dlcAllow = storeAppsList(o.dlcAllow); // codici downloader che vede (per nome; ['*'] = tutti)
   p.kAllow = storeAppsList(o.kAllow).filter((x) => x === '*' || KAIROS_APPS.some((k) => k[0] === x)); // app Kairos di cui vede link e codice
+  p.orbDns = storeAppsList(o.orbDns); // DNS di OrbixPlay che può usare per le attivazioni (per nome; ['*'] = tutti). Ne vede solo il nome
+  p.mxDns = storeAppsList(o.mxDns); // DNS (domini) di MaxPlayer che può usare (per id; ['*'] = tutti). Ne vede solo il nome
   p.maxConn = Math.max(1, Math.min(MAX_CONN, parseInt(o.maxConn, 10) || 1));
   return p;
 }
@@ -2596,7 +2601,7 @@ function agentPermsWithin(req, top) {
   p.addons = p.addons.filter((x) => top.addons.includes(x));
   if (!top.storeApps.includes('*')) p.storeApps = p.storeApps.includes('*') ? [...top.storeApps] : p.storeApps.filter((x) => storeAppOk(top.storeApps, x));
   if (!top.appsAllow.includes('*')) p.appsAllow = p.appsAllow.includes('*') ? [...top.appsAllow] : p.appsAllow.filter((x) => storeAppOk(top.appsAllow, x));
-  for (const k of ['dlcAllow', 'kAllow']) if (!top[k].includes('*')) p[k] = p[k].includes('*') ? [...top[k]] : p[k].filter((x) => storeAppOk(top[k], x));
+  for (const k of ['dlcAllow', 'kAllow', 'orbDns', 'mxDns']) if (!top[k].includes('*')) p[k] = p[k].includes('*') ? [...top[k]] : p[k].filter((x) => storeAppOk(top[k], x));
   p.maxConn = Math.min(p.maxConn, top.maxConn);
   return p;
 }
@@ -2752,7 +2757,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const Aeff = { ...A, can_agents: canAg ? 1 : 0, perms: JSON.stringify(P), servers: mine.join(',') };
   const tree = agentTree(all, A.id), who = ses.assist ? `Assistenza di ${ses.assistBy} · ${A.username}` : 'Agente ' + A.username;
   const ctree = P.subClients ? tree : [A.id]; // clienti visibili: i suoi e (se concesso) quelli dei sotto-agenti
-  const aSes = { ...ses, agent: true };
+  const aSes = { ...ses, agent: true, orbDns: P.orbDns, mxDns: P.mxDns };
   // in assistenza: niente «ultimo accesso» falsato e niente modifiche alla sicurezza dell'account dell'agente
   if (ses.assist && /^\/(logout-all|password|totp\/(setup|enable|disable))$/.test(path)) throw new HttpErr(403, 'In assistenza non puoi cambiare password, verifica in due passaggi o sessioni dell\'agente');
   if (!ses.assist && now() - (+A.last_seen || 0) > 5 * 60e3) ctx.waitUntil(env.DB.prepare('UPDATE admins SET last_seen = ? WHERE id = ?').bind(now(), A.id).run());
@@ -2761,10 +2766,11 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   if (path === '/agents' || path.startsWith('/agents/')) { if (!canAg) throw new HttpErr(403, 'Non puoi gestire agenti'); return agentsAdmin(req, env, path, who, ip, Aeff); }
   const dns = (await dnsList(env)).map((x, i) => ({ ...x, name: svName(x, i) })), servers = dns.filter((x) => mine.includes(x.id));
   // l'agente non vede gli indirizzi dei server: solo il nome del server scelto
+  let dvOrb = null; // DNS OrbixPlay concessi all'agente (chiavi degli host, in ordine): per indicare quello del cliente senza mostrarlo
   const dview = (x) => {
     const dn = new Map(dns.map((y) => [y.host, y]));
     const { hosts, vpnConf, ...rest } = x;
-    if (rest.orbix) { const { h, ...ob } = rest.orbix; rest.orbix = ob; } // l'host del DNS OrbixPlay resta nascosto all'agente
+    if (rest.orbix) { const { h, ...ob } = rest.orbix; rest.orbix = dvOrb && h ? { ...ob, di: dvOrb.indexOf(h) } : ob; } // l'host del DNS OrbixPlay resta nascosto all'agente
     return { ...rest, playlists: (x.playlists || []).map((p) => { const sv = dn.get(hostOf(p)); return { id: p.id, name: p.name, type: p.type, serverId: sv ? sv.id : '', serverName: sv ? sv.name : 'Altro server', username: p.username, password: p.password }; }) };
   };
   const own = async (id) => {
@@ -2819,7 +2825,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const aup = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})\/upd$/);
   if (aup && m === 'POST') { if (!(await own(aup[1]))) throw new HttpErr(404, 'Cliente non trovato'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
   // «Crea lista» su OrbixPlay/MaxPlayer senza cliente Kairos: con il permesso di attivarle dal pannello
-  if (path === '/ext-lists' || path.startsWith('/ext-lists/')) { need('players', 'Non puoi creare liste su OrbixPlay e MaxPlayer'); const r = await extListsRoutes(req, env, path, who, ip, { id: A.id, tree: ctree }); if (r) return r; }
+  if (path === '/ext-lists' || path.startsWith('/ext-lists/')) { need('players', 'Non puoi creare liste su OrbixPlay e MaxPlayer'); const r = await extListsRoutes(req, env, path, who, ip, { id: A.id, tree: ctree, orbDns: P.orbDns, mxDns: P.mxDns }); if (r) return r; }
   // App → OrbixPlay e MaxPlayer: le liste create sulle app terzi, solo dei suoi clienti
   if (path === '/apps3/lists' && m === 'GET') {
     need('appsOp'); const sc = await scope();
@@ -2952,6 +2958,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const inboxP = ses.assist ? Promise.resolve([]) : (async () => { try { return ((await env.DB.prepare("SELECT id, title, body, level, created FROM agent_msgs WHERE (target = 'all' OR target = ?) AND (until = 0 OR until > ?) ORDER BY id DESC LIMIT 20").bind(String(A.id), now()).all()).results) || []; } catch { return []; } })();
     const rows = (await Promise.all(chunks(ctree).map((part) => env.DB.prepare(`SELECT * FROM devices WHERE parent = '' AND owner_id IN (${part.map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT 5000`).bind(...part).all()))).flatMap((r) => r.results || []);
     const kids = (await Promise.all(chunks(rows.map((r) => r.id)).map((part) => env.DB.prepare(`SELECT * FROM devices WHERE parent IN (${part.map(() => '?').join(',')})`).bind(...part).all()))).flatMap((r) => r.results || []);
+    dvOrb = agOrbList(await sP, P.orbDns).map((x) => hostKey(x.host));
     const devices = withPresence((await Promise.all([...rows, ...kids].map((d) => deviceOut(env, d)))).map(dview), await pmP); // in parallelo
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p ? p.status : 'pending'; }
@@ -2959,7 +2966,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const meOut = meArr[0];
     const { password: _pw, ...meSafe } = meOut;
     const sNames = canAg && P.store ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
-    return json({ role: 'agent', user: A.username, me: { ...meSafe, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? (() => { const c = s.playersCfg || {}, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: v(c.orbix), max: v(c.max) }, showDnsAgents: !!c.showDnsAgents, codes: c.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(c).map((x) => (c.showDnsAgents ? x : { ...x, link: '' })) }; })() : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
+    return json({ role: 'agent', user: A.username, me: { ...meSafe, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? (() => { const c = s.playersCfg || {}, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: v(agOrbList(s, P.orbDns)), max: v(c.max) }, showDnsAgents: !!c.showDnsAgents, codes: c.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(c).map((x) => (c.showDnsAgents ? x : { ...x, link: '' })) }; })() : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: agList,
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { name: x.name, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
@@ -3069,7 +3076,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const b = await readJSON(req, 2048);
     let agentLines = null;
     if (ses && ses.agent) { const P0 = d.parent && !ownOf(d) ? await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first() : d; agentLines = xtreamLines(await unseal(env, (P0 || d).playlists).catch(() => [])); }
-    return json(await orbixSend(env, d, b, who, ip, agentLines));
+    return json(await orbixSend(env, d, b, who, ip, agentLines, ses && ses.agent ? ses.orbDns : null));
   }
   if (path === '/maxplayer/domains' && m === 'GET' && url.searchParams.get('owned') === '1' && !(ses && ses.agent)) {
     // gestione (Gestione app terzi): tutti i DNS che hai su MaxPlayer, anche quelli in attesa di approvazione
@@ -3096,7 +3103,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   }
   if (path === '/maxplayer/domains' && m === 'GET') {
     const list = await mxDomains(env, url.searchParams.get('fresh') === '1');
-    return json({ domains: ses && ses.agent ? list.map((x) => ({ id: x.id, label: x.label || 'DNS ' + x.id })) : list });
+    return json({ domains: ses && ses.agent ? agMxList(list, ses.mxDns).map((x) => ({ id: x.id, label: x.label || 'DNS ' + x.id })) : list });
   }
   if (path === '/maxplayer/domains' && m === 'POST' && !(ses && ses.agent)) {
     const b = await readJSON(req, 2048);
@@ -3113,7 +3120,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const b = await readJSON(req, 2048);
     let agentLines = null;
     if (ses && ses.agent) { const P0 = d.parent && !ownOf(d) ? await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first() : d; agentLines = xtreamLines(await unseal(env, (P0 || d).playlists).catch(() => [])); }
-    return json(await mxSend(env, d, b, who, ip, agentLines));
+    return json(await mxSend(env, d, b, who, ip, agentLines, ses && ses.agent ? ses.mxDns : null));
   }
   if (path === '/devices/inactive' && m === 'GET' && !(ses && ses.agent)) {
     const r = await inactiveClients(env, { days: url.searchParams.get('days'), never: url.searchParams.get('never') === '1', onlyExp: url.searchParams.get('onlyExp') === '1' });

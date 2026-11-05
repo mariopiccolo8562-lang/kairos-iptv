@@ -101,14 +101,15 @@
     for (const [sel, full] of [['#v-dash', false], ['#v-live', true]]) {
       const V = $(sel); if (!V) continue;
       let c = V.querySelector(':scope > [data-hlwrap]');
-      if (!c) { c = document.createElement('div'); c.dataset.hlwrap = '1'; V.prepend(c); }
+      // in Panoramica in cima (riassunto), in «Online ora» in fondo: prima chi è collegato, poi la salute delle app
+      if (!c) { c = document.createElement('div'); c.dataset.hlwrap = '1'; if (full) { c.style.marginTop = '18px'; V.append(c); } else V.prepend(c); }
       const html = cardHtml(full); if (c.dataset.h !== html) { c.dataset.h = html; c.innerHTML = html; }
       $$('[data-hlupd]', c).forEach((b) => (b.onclick = async () => { await sendUpd(b.dataset.hlupd, b); loadH(true); }));
       $$('[data-hldati]', c).forEach((b) => (b.onclick = () => open(b.dataset.hldati)));
       $$('[data-hlt]', c).forEach((t) => (t.onclick = async () => { const k = t.dataset.hlt, v = !t.classList.contains('on'); try { const r = await api('PUT', '/admin/health/settings', { [k]: v }); H.settings = r.health; toast(k === 'on' ? (v ? 'Controllo salute attivo' : 'Controllo salute spento') : v ? 'Le app vecchie si aggiornano da sole' : 'Aggiornamento automatico spento'); delete c.dataset.h; drawH(); } catch (e) { toast(e.message, 1); } }));
     }
   }
-  // l'elenco di «Online ora» si ridisegna da solo: la scheda della salute resta in cima
+  // l'elenco di «Online ora» si ridisegna da solo: la scheda della salute torna in fondo
   const lv = $('#v-live'); if (lv) new MutationObserver(() => { if (!lv.querySelector(':scope > [data-hlwrap]') && H) { delete (lv.dataset || {}).x; drawH(); } }).observe(lv, { childList: true });
   const ra = renderAll;
   window.renderAll = renderAll = function () { ra(); loadH(); drawH(); };
