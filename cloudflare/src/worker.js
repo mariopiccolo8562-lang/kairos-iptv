@@ -251,7 +251,7 @@ function harden(res, req) {
 const DEFAULT_SETTINGS = {
   brand: 'KAIROS', tagline: 'Streaming', accent: 'cinema',
   announcement: 'Benvenuto su KAIROS — buona visione!', supportContact: '',
-  allowLocalPlaylists: true, apkUrl: '', apkVersionCode: 0, downloaderCode: '', storeDownloaderCode: '', liteDownloaderCode: '', liteApkUrl: '', ktvDownloaderCode: '', ktvApkUrl: '', xcDownloaderCode: '', xcApkUrl: '',
+  allowLocalPlaylists: true, apkUrl: '', apkVersionCode: 0, downloaderCode: '', storeDownloaderCode: '', liteDownloaderCode: '', liteApkUrl: '', ktvDownloaderCode: '', ktvApkUrl: '', xcDownloaderCode: '', xcApkUrl: '', plusDownloaderCode: '', plusApkUrl: '',
   serverUrl: '', showFootball: true,
   price: '22 € / anno', privacy: '',
   aiDaily: 20, aiProvider: 'gm', aiClaude: 'haiku', aiGemini: 'flash',
@@ -330,6 +330,22 @@ async function xcFeed(s) {
     } catch {}
   }
   xcMem = { t: now(), k: url, v };
+  return v;
+}
+/* Kairos Plus (stile Netflix, repository kairos-flutter): stesso meccanismo di Kairos TV / XC (kairos-plus.json) */
+const PLUS_APK = 'https://github.com/mariopiccolo8562-lang/kairos-flutter/releases/latest/download/kairos-plus.apk';
+let plusMem = { t: 0, k: '', v: null };
+async function plusFeed(s) {
+  const apk = s.plusApkUrl || PLUS_APK, url = apk.replace(/\.apk(\?.*)?$/i, '.json');
+  if (plusMem.k === url && now() - plusMem.t < 5 * 60e3) return plusMem.v;
+  let v = null;
+  if (/^https:\/\/.+\.json$/i.test(url)) {
+    try {
+      const r = await fetch(url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
+      if (r.ok) { const j = await r.json(); const code = semverCode(j.version) || +j.versionCode; if (code > 0) v = { versionCode: code, version: String(j.version || '').replace(/^v/i, '').slice(0, 20), url: /^https:\/\//.test(j.url || '') ? String(j.url).slice(0, 500) : apk, date: String(j.date || '').slice(0, 40), auto: true }; }
+    } catch {}
+  }
+  plusMem = { t: now(), k: url, v };
   return v;
 }
 async function latestApk(env, s) {
@@ -1591,18 +1607,19 @@ async function playerHeartbeat(req, env, ip, ctx) {
 /* ---------------- dati del cliente e salute delle app ---------------- */
 const verNum = (v) => { const m = String(v || '').match(/(\d{1,3})\.(\d{1,3})(?:\.(\d{1,3}))?/); return m ? +m[1] * 1e6 + +m[2] * 1e3 + +(m[3] || 0) : 0; };
 const verBehind = (cur, latest) => { const a = verNum(cur), b = verNum(latest); return !!(a && b && a < b); };
-/** ultima versione pubblicata dell'app del cliente: tv = Kairos Pro, ktv = Kairos TV, lite, xc */
+/** ultima versione pubblicata dell'app del cliente: tv = Kairos Pro, ktv = Kairos TV, lite, xc, plus */
 async function latestFor(env, s, app) {
   if (app === 'lite') { const f = await liteFeed(s); return f && f.version ? { version: f.version, versionCode: semverCode(f.version) } : null; }
   if (app === 'ktv') { const f = await ktvFeed(s); return f ? { version: f.version, versionCode: f.versionCode } : null; }
   if (app === 'xc') { const f = await xcFeed(s); return f ? { version: f.version, versionCode: f.versionCode } : null; }
+  if (app === 'plus') { const f = await plusFeed(s); return f ? { version: f.version, versionCode: f.versionCode } : null; }
   const a = await latestApk(env, s); return a && a.version ? { version: a.version, versionCode: a.versionCode } : null;
 }
-const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', lite: 'Kairos Lite', xc: 'Kairos XC' };
+const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', lite: 'Kairos Lite', xc: 'Kairos XC', plus: 'Kairos Plus' };
 /** problemi trovati per un cliente, con la soluzione suggerita (sev: bad | warn) */
 function healthIssues(p, errs, latest, app) {
   const out = [];
-  if (p && latest && verBehind(p.ver, latest.version)) out.push({ sev: 'warn', key: 'upd', what: `App vecchia: ${p.ver || '?'} (ultima ${latest.version})`, fix: app === 'tv' || !app ? 'Invia l\'aggiornamento: l\'app lo propone subito al cliente' : 'L\'app propone l\'aggiornamento da sola all\'avvio: chiedi al cliente di riaprirla', act: 'upd' });
+  if (p && latest && verBehind(p.ver, latest.version)) out.push({ sev: 'warn', key: 'upd', what: `App vecchia: ${p.ver || '?'} (ultima ${latest.version})`, fix: app === 'tv' || !app ? 'Invia l\'aggiornamento: l\'app lo propone subito al cliente' : app === 'plus' ? 'Chiedi al cliente di aggiornare Kairos Plus dal Kairos Store' : 'L\'app propone l\'aggiornamento da sola all\'avvio: chiedi al cliente di riaprirla', act: 'upd' });
   const nr = errs.filter((e) => e.outcome === 'non risolto').length, fr = errs.filter((e) => e.problem === 'freeze').length;
   if (nr >= 3) out.push({ sev: 'bad', key: 'err', what: `${nr} errori non risolti nelle ultime 24 ore`, fix: errs.some((e) => /hevc|h\.?265/i.test(e.codec || '')) ? 'Canali HEVC/H.265 su un dispositivo che fatica: usa la versione H.264 del canale o un dispositivo più recente' : 'Controlla il canale o la linea: se succede su più clienti è il server', act: 'upd' });
   else if (errs.length >= 5) out.push({ sev: 'warn', key: 'err', what: `${errs.length} problemi di visione nelle ultime 24 ore (risolti da soli)`, fix: 'Tienilo d\'occhio: se aumentano controlla linea e dispositivo' });
@@ -1639,7 +1656,7 @@ async function healthList(env, s, ids) {
   const t = now();
   const rows = ((await env.DB.prepare("SELECT p.device_id AS id, p.ver, p.state, p.stalls_h, p.net, p.rssi, p.speed_dl, p.t, d.name, d.code, d.app, d.parent, d.upd_req FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ?").bind(t - 3 * 864e5).all()).results) || [];
   const er = new Map(((await env.DB.prepare('SELECT device_id, problem, outcome, codec, dec FROM app_errors WHERE t > ?').bind(t - 864e5).all().catch(() => ({ results: [] }))).results || []).reduce((m, e) => { const a = m.get(e.device_id) || []; a.push(e); m.set(e.device_id, a); return m; }, new Map()));
-  const L = {}; for (const a of ['tv', 'ktv', 'lite', 'xc']) L[a] = await latestFor(env, s, a).catch(() => null);
+  const L = {}; for (const a of ['tv', 'ktv', 'lite', 'xc', 'plus']) L[a] = await latestFor(env, s, a).catch(() => null);
   const out = [];
   for (const r of rows) {
     if (ids && !ids.has(r.id)) continue;
@@ -2299,10 +2316,10 @@ async function route(req, env, ctx) {
       if (await limited(env.RL_DEVICE, 'up:' + ip)) return json({ ui: null, apk: null }, 429);
       const s = await getSettings(env);
       // Kairos TV ha la sua interfaccia dentro l'APK (repository kairos-tv): niente interfaccia della Pro e solo il suo APK
-      const who = appFrom(req, null), ktv = who === 'ktv', xc = who === 'xc';
+      const who = appFrom(req, null), ktv = who === 'ktv', xc = who === 'xc', plus = who === 'plus';
       return json({
-        ui: env.UI_VERSION && !ktv && !xc ? { version: env.UI_VERSION, url: '/app/index.html' } : null,
-        apk: xc ? await xcFeed(s) : ktv ? await ktvFeed(s) : await latestApk(env, s),
+        ui: env.UI_VERSION && !ktv && !xc && !plus ? { version: env.UI_VERSION, url: '/app/index.html' } : null,
+        apk: plus ? await plusFeed(s) : xc ? await xcFeed(s) : ktv ? await ktvFeed(s) : await latestApk(env, s),
       }, 200, { 'Cache-Control': 'no-store' });
     }
     return json({ error: 'Non trovato' }, 404);
@@ -2374,10 +2391,12 @@ const MAINT_MSG = 'Servizio in manutenzione: torna disponibile a breve. Grazie p
 /** quale app si collega: Kairos Lite si presenta con «KairosLite/x.y» (e versione «lite x.y»),
     Kairos TV con «KairosPlayer/x.y KairosTV/x.y», Kairos Pro solo con «KairosPlayer/x.y».
     Chiavi interne: 'tv' = Kairos Pro (nome storico), 'ktv' = Kairos TV, 'lite' = Kairos Lite, 'xc' = Kairos XC
-    (Kairos XC si presenta con «KairosTV/x.y KairosXC/x.y» e versione «xc x.y»: va riconosciuta prima di Kairos TV) */
-const APPS = ['tv', 'lite', 'ktv', 'xc'];
+    (Kairos XC si presenta con «KairosTV/x.y KairosXC/x.y» e versione «xc x.y»: va riconosciuta prima di Kairos TV)
+    Kairos Plus ('plus') si presenta con «KairosPlus/x.y» e versione «plus x.y» */
+const APPS = ['tv', 'lite', 'ktv', 'xc', 'plus'];
 function appFrom(req, b) {
   const ua = req.headers.get('User-Agent') || '', ver = String((b && b.ver) || '');
+  if (/KairosPlus\//i.test(ua) || /^plus\b/i.test(ver)) return 'plus';
   if (/KairosLite\//i.test(ua) || /^lite\b/i.test(ver)) return 'lite';
   if (/KairosXC\//i.test(ua) || /^xc\b/i.test(ver)) return 'xc';
   if (/KairosTV\//i.test(ua)) return 'ktv';
@@ -2547,11 +2566,11 @@ function storeAppsList(v) {
   return out.includes('*') ? ['*'] : out;
 }
 /* app Kairos (link per scaricarle e codice Downloader): quali vede l'agente lo decide il titolare (kAllow) */
-const KAIROS_APPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['store', 'Kairos Store']];
+const KAIROS_APPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['plus', 'Kairos Plus'], ['store', 'Kairos Store']];
 function kairosAppsOf(s) {
   return [
     ['pro', s.apkUrl || '', s.downloaderCode || ''], ['tv', s.ktvApkUrl || KTV_APK, s.ktvDownloaderCode || ''], ['lite', s.liteApkUrl || LITE_APK, s.liteDownloaderCode || ''],
-    ['xc', s.xcApkUrl || XC_APK, s.xcDownloaderCode || ''], ['store', '', s.storeDownloaderCode || ''],
+    ['xc', s.xcApkUrl || XC_APK, s.xcDownloaderCode || ''], ['plus', s.plusApkUrl || PLUS_APK, s.plusDownloaderCode || ''], ['store', '', s.storeDownloaderCode || ''],
   ].map(([k, apk, code]) => ({ key: k, name: KAIROS_APPS.find((x) => x[0] === k)[1], apk, code }));
 }
 const storeAppOk = (list, app) => list.includes('*') || list.some((x) => x.toLowerCase() === String(app || '').toLowerCase());
@@ -2943,7 +2962,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { name: x.name, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
       // codici Downloader e link delle app Kairos: solo quelli che il titolare gli concede (kAllow)
-      settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),
+      settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', plusDownloaderCode: ok('plus') ? s.plusDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),
       kairosApps: P.appk ? kairosAppsOf(s).filter((x) => storeAppOk(P.kAllow, x.key)) : [], permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on) }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
       activity: actR ? actR.results || [] : [],
       messages: msgR ? msgGroups((msgR.results || []).filter((x) => byId.has(x.target))).slice(0, 150) : [],
@@ -3141,7 +3160,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path === '/state' && m === 'GET') {
     // tutto in parallelo: le query al database, la decifratura delle playlist e i controlli delle versioni delle app
     const settings = await getSettings(env);
-    const [rowsR, activityR, messagesR, agentMsgsR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, sAppNames, nCounts, onl, agAll, presLast] = await Promise.all([
+    const [rowsR, activityR, messagesR, agentMsgsR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, plusF, sAppNames, nCounts, onl, agAll, presLast] = await Promise.all([
       env.DB.prepare('SELECT * FROM devices ORDER BY created_at DESC LIMIT 5000').all(),
       env.DB.prepare('SELECT t, type, text, ip FROM activity ORDER BY id DESC LIMIT 200').all(),
       env.DB.prepare('SELECT id, target, title, body, level, created, until, grp FROM messages ORDER BY id DESC LIMIT 3000').all().catch(() => ({ results: [] })),
@@ -3149,7 +3168,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       ses ? env.DB.prepare('SELECT COUNT(*) AS n FROM sessions WHERE admin_id = ? AND expires > ?').bind(ses.admin_id, now()).first() : null,
       dnsList(env),
       env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first(),
-      latestApk(env, settings), apkFeed(env), liteFeed(settings), ktvFeed(settings), xcFeed(settings),
+      latestApk(env, settings), apkFeed(env), liteFeed(settings), ktvFeed(settings), xcFeed(settings), plusFeed(settings),
       storeAppNames(env), newCounts(env), onlineCount(env), ses ? agentsAll(env) : null, presenceMap(env),
     ]);
     const rows = rowsR.results || [];
@@ -3164,6 +3183,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       lite: { apk: settings.liteApkUrl || LITE_APK, feed: liteF },
       ktv: { apk: settings.ktvApkUrl || KTV_APK, feed: ktvF },
       xc: { apk: settings.xcApkUrl || XC_APK, feed: xcF },
+      plus: { apk: settings.plusApkUrl || PLUS_APK, feed: plusF },
       players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: orbixDnsList(settings.playersCfg.orbix, dnslOwner), max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents, codes: settings.playersCfg.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(settings.playersCfg) },
       dlCodes: dlCodesOf(settings),
       storeAppNames: sAppNames, maintAg: Object.entries(settings.maintAg || {}).filter(([, x]) => x && x.on).map(([id]) => +id),
@@ -3434,9 +3454,10 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path === '/settings' && m === 'PUT') {
     const b = await readJSON(req);
     const s = await getSettings(env);
-    for (const k of ['brand', 'tagline', 'accent', 'announcement', 'supportContact', 'downloaderCode', 'storeDownloaderCode', 'liteDownloaderCode', 'ktvDownloaderCode', 'xcDownloaderCode']) if (typeof b[k] === 'string') s[k] = str(b[k], k === 'announcement' ? 300 : 80);
+    for (const k of ['brand', 'tagline', 'accent', 'announcement', 'supportContact', 'downloaderCode', 'storeDownloaderCode', 'liteDownloaderCode', 'ktvDownloaderCode', 'xcDownloaderCode', 'plusDownloaderCode']) if (typeof b[k] === 'string') s[k] = str(b[k], k === 'announcement' ? 300 : 80);
     if (typeof b.apkUrl === 'string') { const u = str(b.apkUrl, 500); s.apkUrl = !u || /^https:\/\//.test(u) ? u : s.apkUrl; }
     if (typeof b.xcApkUrl === 'string') { const u = str(b.xcApkUrl, 500); if (u && !/^https:\/\//.test(u)) throw new HttpErr(400, 'Il link di Kairos XC deve iniziare con https://'); s.xcApkUrl = u; }
+    if (typeof b.plusApkUrl === 'string') { const u = str(b.plusApkUrl, 500); if (u && !/^https:\/\//.test(u)) throw new HttpErr(400, 'Il link di Kairos Plus deve iniziare con https://'); s.plusApkUrl = u; }
     if (typeof b.ktvApkUrl === 'string') { const u = str(b.ktvApkUrl, 500); if (u && !/^https:\/\//.test(u)) throw new HttpErr(400, 'Il link di Kairos TV deve iniziare con https://'); s.ktvApkUrl = u; }
     if (typeof b.liteApkUrl === 'string') { const u = str(b.liteApkUrl, 500); if (u && !/^https:\/\//.test(u)) throw new HttpErr(400, 'Il link di Kairos Lite deve iniziare con https://'); s.liteApkUrl = u; }
     if (typeof b.allowLocalPlaylists === 'boolean') s.allowLocalPlaylists = b.allowLocalPlaylists;
