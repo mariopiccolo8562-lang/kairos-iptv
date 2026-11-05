@@ -31,7 +31,8 @@ const DEMO = (() => {
     const exp = i % 7 === 3 ? new Date(now - 3 * day) : i % 5 === 1 ? new Date(now + (2 + i) * day) : new Date(now + (30 + i * 11) * day);
     const profiles = i % 3 === 0 ? [{ id: 'pr' + i + 'a', name: n.split(' ')[0], avatar: 'a' + (1 + (i % 12)), kids: false, pl: 'all' }, { id: 'pr' + i + 'b', name: 'Bambini', avatar: 'a7', kids: true, pl: 'all' }] : [];
     return { bound: true, id: 'd' + i, code: rndCode(), name: n, model: models[i % models.length], notes: '', active: i % 9 !== 4, expires: exp.toISOString().slice(0, 10), playlists: [{ id: 'p' + i, name: 'Principale', type: i % 2 ? 'xtream' : 'm3u', url: 'http://esempio.tv/lista.m3u', host: 'http://esempio.tv:8080', username: 'user' + i, password: '••••', epg: '' }], createdAt: created, lastSeen: now - Math.floor(Math.random() * 60) * 3600e3,
-      parent: '', maxConn: i % 4 === 0 ? 2 : 1, maxProfiles: 3, profiles, lockProfiles: false, vpn: i % 6 === 0 ? 1 : 0, vpnConf: false };
+      parent: '', maxConn: i % 4 === 0 ? 2 : 1, maxProfiles: 3, profiles, lockProfiles: false, vpn: i % 6 === 0 ? 1 : 0, vpnConf: false,
+      ...(i % 9 !== 4 && i % 7 !== 3 && i % 3 === 0 ? { live: i % 2 ? 'idle' : i % 4 ? 'movie' : 'live', lastSeen: now - 20e3 } : {}) }; // demo: alcuni collegati adesso
   });
   const acc0 = { parent: '', maxConn: 1, maxProfiles: 3, profiles: [], lockProfiles: false, vpn: 0, vpnConf: false };
   devices.push({ ...acc0, bound: true, id: 'l0', code: rndCode(), name: 'Camera da letto', model: 'Fire TV Stick Lite', notes: '', active: false, expires: '', playlists: [], parent: 'd0', createdAt: now - 5 * 864e5, lastSeen: now - 2 * 3600e3 });
@@ -131,8 +132,13 @@ function loadTurnstile(key) {
   document.head.appendChild(sc);
 }
 
-async function load() {
+let loadSig = '', loadT = 0;
+async function load(quiet) {
   const s = await api('GET', '/admin/state');
+  // aggiornamento automatico (quiet): se non è cambiato niente non si ridisegna tutto il pannello
+  // (al massimo una volta al minuto comunque, per i «5 min fa» e i giorni alla scadenza)
+  if (quiet === true) { const sig = JSON.stringify(s); if (sig === loadSig && Date.now() - loadT < 60e3) return false; loadSig = sig; } else loadSig = '';
+  loadT = Date.now();
   D.settings = s.settings; D.devices = s.devices; D.activity = s.activity; D.user = s.user; D.security = s.security || {}; D.apk = s.apk || null; D.messages = s.messages || [];
   D.apkFeed = s.apkFeed || null; D.wgConf = !!s.wgConf;
   const aa = document.getElementById('apkAuto');
@@ -270,7 +276,7 @@ function renderDevices() {
       <td>${stPill(d.status)}</td>
       <td class="hm">${fmtD(exp)}${dl !== null ? `<span class="days" style="color:${dl < 0 ? 'var(--bad)' : dl <= 14 ? 'var(--warn)' : ''}">${dl < 0 ? 'scaduto da ' + -dl + ' g' : 'tra ' + dl + ' g'}</span>` : ''}</td>
       <td class="hm">${sub ? '<span class="mut">—</span>' : d.playlists.length}</td>
-      <td class="hm mut">${ago(d.lastSeen)}</td>
+      <td class="hm mut">${d.live ? '<b style="color:#22c55e">adesso</b>' : ago(d.lastSeen)}</td>
       <td>${sub ? '' : d.status === 'pending' ? `<button class="btn sm pri" data-act="open">Attiva</button>` : `<button class="icb" title="+1 mese" data-act="ext"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button><button class="icb" title="${d.active ? 'Disattiva' : 'Riattiva'}" data-act="tog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></button>`}<button class="icb" title="Modifica" data-act="open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button></td></tr>`;
   }).join('');
 }

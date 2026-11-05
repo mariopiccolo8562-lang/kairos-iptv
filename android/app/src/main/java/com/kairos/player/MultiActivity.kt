@@ -29,6 +29,8 @@ import org.json.JSONObject
 class MultiActivity : ComponentActivity() {
     companion object {
         @Volatile var pending: JSONObject? = null
+        /** multi-schermo sullo schermo (l'interfaccia sotto sveglia il battito per il pannello) */
+        @Volatile var open = false
         const val RESULT = "kx_multi"
     }
 
@@ -218,6 +220,7 @@ class MultiActivity : ComponentActivity() {
     }
 
     // fuori dallo schermo (tasto Home): niente audio né connessioni aperte in sottofondo
-    override fun onStop() { super.onStop(); if (!closing) { closing = true; releaseAll(); finish() } }
-    override fun onDestroy() { closing = true; releaseAll(); super.onDestroy() }
+    override fun onStart() { super.onStart(); open = true }
+    override fun onStop() { open = false; super.onStop(); if (!closing) { closing = true; releaseAll(); finish() } }
+    override fun onDestroy() { open = false; closing = true; releaseAll(); super.onDestroy() }
 }

@@ -27,6 +27,12 @@ name = "RL_DEVICE"
 namespace_id = "7102"
 simple = { limit = 30, period = 60 }
 
+# battiti delle app: per IP solo un tetto alto anti-abuso (il limite vero è per dispositivo, su RL_DEVICE)
+[[ratelimits]]
+name = "RL_HB"
+namespace_id = "7103"
+simple = { limit = 600, period = 60 }
+
 # Pulizia notturna (sessioni scadute, log vecchi, dispositivi abbandonati)
 [triggers]
 crons = ["17 3 * * *"]

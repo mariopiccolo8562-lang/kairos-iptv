@@ -5,7 +5,7 @@ import { ADDON_ASSETS } from './addon-assets.js';
  *  - /api/player/*       API pubblica per l'app (rate limit + segreto dispositivo)
  *  - /api/public/config  configurazione pubblica minima del pannello (chiave Turnstile)
  *
- *  Binding:  DB (D1), ASSETS, RL_LOGIN / RL_DEVICE (rate limiting)
+ *  Binding:  DB (D1), ASSETS, RL_LOGIN / RL_DEVICE / RL_HB (rate limiting)
  *  Segreti:  ENC_KEY (base64, 32 byte), ADMIN_BOOTSTRAP_PASS, TURNSTILE_SECRET (opzionale)
  *  Variabili: ACCESS_TEAM_DOMAIN, ACCESS_AUD, TURNSTILE_SITEKEY (opzionali)
  */
@@ -285,7 +285,7 @@ async function apkFeed(env) {
   if (now() - feedMem.t < 5 * 60e3) return feedMem.v;
   let v = null;
   try {
-    const r = await fetch(env.APK_FEED, { headers: { 'User-Agent': 'KairosPanel' }, cf: { cacheTtl: 300, cacheEverything: true } });
+    const r = await fetch(env.APK_FEED, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
     if (r.ok) {
       const j = await r.json();
       const code = semverCode(j.version) || +j.versionCode;
@@ -342,8 +342,11 @@ async function latestApk(env, s) {
 }
 
 /** nomi delle app richieste dallo store (per scegliere quali può approvare un agente) */
+let sanMem = { t: 0, v: null };
 async function storeAppNames(env) {
-  try { return (((await env.DB.prepare('SELECT DISTINCT app FROM store_requests ORDER BY app LIMIT 200').all()).results) || []).map((r) => r.app).filter(Boolean); } catch { return []; }
+  // letta a ogni apertura/aggiornamento del pannello scorrendo tutte le richieste dello store: ora resta in memoria 5 minuti
+  if (sanMem.v && now() - sanMem.t < 5 * 60e3) return sanMem.v;
+  try { const v = (((await env.DB.prepare('SELECT DISTINCT app FROM store_requests ORDER BY app LIMIT 200').all()).results) || []).map((r) => r.app).filter(Boolean); sanMem = { t: now(), v }; return v; } catch { return []; }
 }
 /* ---------------- OrbixPlay: invio delle playlist del cliente all'app OrbixPlay (API ufficiale, chiave ORBIX_KEY) ---------------- */
 const ORBIX_API = 'https://apis.orbixplay.com';
@@ -1412,7 +1415,7 @@ ${custom ? '' : '<!-- Testo predefinito: modello generico da far verificare a un
 /* Utenti online: battito dell'app, presenza, contenuti più guardati       */
 /* ====================================================================== */
 const HB_MIN_MS = 15e3;          // un battito ogni 15 s al massimo per dispositivo
-const ONLINE_MS = 3 * 60e3;      // "online" = segnale negli ultimi 3 minuti
+const ONLINE_MS = 4 * 60e3;      // "online" = segnale negli ultimi 4 minuti (tollera un paio di battiti persi per strada)
 const STATES = ['idle', 'live', 'movie', 'series', 'rec'];
 const NETS = ['wifi', 'eth', 'mobile', 'none', ''];
 const num = (v, lo, hi) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : 0; };
@@ -1440,8 +1443,11 @@ function whereFields(old, ip, cf) {
 /** al register: il dispositivo è nei menu (non nel lettore) → presenza minima, stato "idle" */
 async function presenceFromRegister(env, d, b, ip, cf) {
   try {
-    const old = await env.DB.prepare('SELECT ip, t, home_country FROM presence WHERE device_id = ?').bind(d.id).first();
-    const f = { t: now(), state: 'idle', title: '', ch: '', ch_id: '', grp: '', ...whereFields(old, ip, cf) };
+    const old = await env.DB.prepare('SELECT ip, t, hb_t, state, home_country FROM presence WHERE device_id = ?').bind(d.id).first();
+    // le app native rileggono lo stato ogni 20 minuti anche durante la visione: se l'ultimo battito è recente
+    // la visione in corso resta com'è (prima per qualche secondo il cliente risultava «nei menu»)
+    const watching = old && old.state && old.state !== 'idle' && now() - (+old.hb_t || 0) < 90e3;
+    const f = { t: now(), ...(watching ? {} : { state: 'idle', title: '', ch: '', ch_id: '', grp: '' }), ...whereFields(old, ip, cf) };
     const model = str(b.model, 80), ver = str(b.ver, 20), ui = str(b.ui, 20);
     if (model) f.model = model; if (ver) f.ver = ver; if (ui) f.ui = ui;
     await upsertPresence(env, d.id, f);
@@ -1514,9 +1520,13 @@ async function adminErrors(req, env, path, url, who, ip) {
   return null;
 }
 async function playerHeartbeat(req, env, ip, ctx) {
-  if (await limited(env.RL_DEVICE, 'hb:' + ip)) return json({ error: 'Troppe richieste' }, 429);
   let b;
   try { b = await readJSON(req, 4096); } catch (e) { return json({ error: e.message }, e.status || 400); }
+  // limite per dispositivo (prima era per IP: più TV nella stessa casa, o tanti clienti dietro lo stesso IP
+  // dell'operatore, si bloccavano a vicenda e sparivano da «Online ora»); per IP resta solo un tetto alto anti-abuso
+  const code = str(b && b.code, 20).toUpperCase();
+  if (await limited(env.RL_HB, 'hbip:' + ip)) return json({ error: 'Troppe richieste' }, 429);
+  if (await limited(env.RL_DEVICE, 'hb:' + (CODE_RE.test(code) ? code : ip))) return json({ error: 'Troppe richieste' }, 429);
   const [d, bad] = await deviceAuth(env, b);
   if (bad) return bad;
   const t = now();
@@ -1544,17 +1554,20 @@ async function playerHeartbeat(req, env, ip, ctx) {
   // si riscrive al massimo una volta al minuto, così le scritture su D1 restano quelle di prima
   const same = old && t - (+old.t || 0) < 55e3 && old.state === state && (old.title || '') === f.title && (old.ch_id || '') === f.ch_id
     && (old.vpn || '') === f.vpn && (old.screen || '') === f.screen && (old.rec || '') === (f.rec ?? old.rec ?? '') && (old.reduced || '') === (f.reduced ?? old.reduced ?? '') && (+old.stalls_h || 0) === (f.stalls_h ?? +old.stalls_h ?? 0) && (!sp || +old.speed_t === f.speed_t) && (old.ip || '') === (f.ip ?? old.ip ?? '');
-  const writes = same ? [] : [upsertPresence(env, d.id, f)];
+  // la presenza è la cosa che conta: si scrive per prima e un errore qui non fa fallire il battito
+  if (!same) { try { await upsertPresence(env, d.id, f); } catch (e) { console.error('presenza non scritta', e && e.message); } }
+  // il resto (statistiche) va in sottofondo: non rallenta la risposta e non può bloccarla
+  const side = [];
   // tempo di visione per cliente: quando la riga si riscrive (al massimo una volta al minuto) si aggiunge il tempo
   // passato dall'ultima scrittura al contenuto che stava guardando (al massimo 2 minuti: niente buchi gonfiati)
   if (!same && old && old.state && old.state !== 'idle' && old.title) {
     const secs = Math.round(Math.min(Math.max(0, t - (+old.t || t)), 120e3) / 1000);
-    if (secs > 0) writes.push(env.DB.prepare('INSERT INTO watch_dev (device_id, day, kind, title, secs, last) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(device_id, day, kind, title) DO UPDATE SET secs = watch_dev.secs + excluded.secs, last = excluded.last').bind(d.id, dayIT(t), old.state, old.title, secs, t).run().catch(() => {}));
+    if (secs > 0) side.push(env.DB.prepare('INSERT INTO watch_dev (device_id, day, kind, title, secs, last) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(device_id, day, kind, title) DO UPDATE SET secs = watch_dev.secs + excluded.secs, last = excluded.last').bind(d.id, dayIT(t), old.state, old.title, secs, t).run());
   }
   // nuova "sessione" di visione: contenuto diverso da quello dell'ultimo battito
   if (state !== 'idle' && f.title && (!old || old.state !== state || old.title !== f.title))
-    writes.push(env.DB.prepare('INSERT INTO watch (day, kind, title, n) VALUES (?, ?, ?, 1) ON CONFLICT(day, kind, title) DO UPDATE SET n = watch.n + 1').bind(dayIT(t), state, f.title).run());
-  await Promise.all(writes);
+    side.push(env.DB.prepare('INSERT INTO watch (day, kind, title, n) VALUES (?, ?, ?, 1) ON CONFLICT(day, kind, title) DO UPDATE SET n = watch.n + 1').bind(dayIT(t), state, f.title).run());
+  if (side.length) ctx.waitUntil(Promise.allSettled(side));
   // modalità VPN e permessi attuali: se il pannello li ha cambiati l'app si riallinea subito (senza aspettare 20 minuti)
   const [P, pls] = await activeAccount(env, d);
   const vm = P ? (+P.vpn === 2 ? 'force' : +P.vpn === 1 ? 'allow' : 'off') : 'off';
@@ -1569,7 +1582,10 @@ async function playerHeartbeat(req, env, ip, ctx) {
   const S0 = await getSettings(env), mt = maintFor(S0, P) ? 1 : 0;
   // «Invia aggiornamento» dal pannello (o in automatico se l'app è vecchia e il titolare l'ha scelto): l'app controlla subito
   let upd = +d.upd_req || 0;
-  if (!upd && S0.health && S0.health.on && S0.health.autoUpd) { try { const L = await latestFor(env, S0, appFrom(req, b) || d.app || 'tv'); if (L && verBehind(f.ver, L.version)) upd = L.versionCode || 1; } catch {} }
+  if (!upd && S0.health && S0.health.on && S0.health.autoUpd) {
+    // ultima versione: di solito già in memoria; se va scaricata il battito non aspetta più di 800 ms
+    try { const lp = latestFor(env, S0, appFrom(req, b) || d.app || 'tv'); ctx.waitUntil(lp.catch(() => {})); const L = await Promise.race([lp, new Promise((r) => setTimeout(() => r(null), 800))]); if (L && verBehind(f.ver, L.version)) upd = L.versionCode || 1; } catch {}
+  }
   return json({ ok: true, mt, ...(upd ? { upd } : {}), unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === P.pl_default) ? P.pl_default : '') + '|' + JSON.stringify(playerParse(P.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
 }
 /* ---------------- dati del cliente e salute delle app ---------------- */
@@ -1605,7 +1621,7 @@ async function insightFor(env, d, s) {
   const errs24 = errs.filter((e) => e.t > t - 864e5);
   const today = dayIT(t), byTitle = new Map(), byDay = new Map();
   for (const w of wd) { const k = w.kind + '|' + w.title, x = byTitle.get(k) || { kind: w.kind, title: w.title, secs: 0, last: 0 }; x.secs += +w.secs; x.last = Math.max(x.last, +w.last); byTitle.set(k, x); byDay.set(w.day, (byDay.get(w.day) || 0) + +w.secs); }
-  const online = p && t - (+p.t || 0) <= 3 * 60e3;
+  const online = p && t - (+p.t || 0) <= ONLINE_MS;
   return {
     id: d.id, name: d.name || '', code: d.code, app, appName: APP_NAME[app] || 'Kairos', model: (p && p.model) || d.model || '',
     online, lastSeen: Math.max(+d.last_seen || 0, p ? +p.t : 0), lastIp: (p && p.ip) || d.last_ip || '', city: p ? [p.city, p.country].filter(Boolean).join(', ') : '',
@@ -1628,7 +1644,7 @@ async function healthList(env, s, ids) {
   for (const r of rows) {
     if (ids && !ids.has(r.id)) continue;
     const app = r.app || 'tv', iss = healthIssues(r, er.get(r.id) || [], L[app], app);
-    if (iss.length) out.push({ id: r.id, name: r.name || '', code: r.code, app, ver: r.ver, online: t - +r.t <= 3 * 60e3, lastSeen: +r.t, updSent: +r.upd_req || 0, issues: iss, bad: iss.filter((x) => x.sev === 'bad').length });
+    if (iss.length) out.push({ id: r.id, name: r.name || '', code: r.code, app, ver: r.ver, online: t - +r.t <= ONLINE_MS, lastSeen: +r.t, updSent: +r.upd_req || 0, issues: iss, bad: iss.filter((x) => x.sev === 'bad').length });
   }
   out.sort((a, b) => b.bad - a.bad || b.issues.length - a.issues.length || b.lastSeen - a.lastSeen);
   return { list: out.slice(0, 300), latest: Object.fromEntries(Object.entries(L).map(([k, v]) => [k, v ? v.version : ''])), settings: { on: !!(s.health && s.health.on), autoUpd: !!(s.health && s.health.autoUpd) } };
@@ -2048,6 +2064,21 @@ async function adminPresence(env) {
   return { online, recent, top, counts: { online: online.length, watching, idle: online.length - watching, total }, ts: t };
 }
 const onlineCount = async (env) => { try { return (await env.DB.prepare('SELECT COUNT(*) AS n FROM presence WHERE t > ?').bind(now() - ONLINE_MS).first()).n; } catch { return 0; } };
+/** ultimo contatto di ogni dispositivo dalla presenza (battiti): «Ultimo accesso» prima guardava solo l'apertura dell'app,
+    così chi guardava da ore risultava «visto 3 ore fa» anche se era collegato */
+async function presenceMap(env) {
+  try { return new Map((((await env.DB.prepare('SELECT device_id, t, state FROM presence WHERE t > ?').bind(now() - 30 * 864e5).all()).results) || []).map((r) => [r.device_id, r])); } catch { return new Map(); }
+}
+/** aggiunge ai dispositivi del pannello l'ultimo contatto vero e, se collegati adesso, cosa stanno facendo (live: idle|live|movie|series|rec) */
+function withPresence(devs, pm) {
+  const t = now();
+  for (const x of devs) {
+    const p = pm.get(x.id); if (!p) continue;
+    if (+p.t > (+x.lastSeen || 0)) x.lastSeen = +p.t;
+    if (t - +p.t <= ONLINE_MS) x.live = STATES.includes(p.state) ? p.state : 'idle';
+  }
+  return devs;
+}
 
 /* ====================================================================== */
 /* Segnalazioni e richieste di contenuti                                   */
@@ -2891,29 +2922,33 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     return adminRoutes(req, env, url, path, who, ip, ctx, aSes);
   }
   if (path === '/state' && m === 'GET') {
-    const rows = [];
-    for (let i = 0; i < ctree.length; i += 90) { const part = ctree.slice(i, i + 90); rows.push(...((await env.DB.prepare(`SELECT * FROM devices WHERE parent = '' AND owner_id IN (${part.map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT 5000`).bind(...part).all()).results || [])); }
-    const pids = rows.map((r) => r.id), kids = [];
-    for (let i = 0; i < pids.length; i += 90) { const part = pids.slice(i, i + 90); kids.push(...((await env.DB.prepare(`SELECT * FROM devices WHERE parent IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results || [])); }
-    const devices = [];
-    for (const x of await Promise.all([...rows, ...kids].map((d) => deviceOut(env, d)))) devices.push(dview(x)); // in parallelo
+    // tutto ciò che non dipende dall'elenco dei clienti parte subito, in parallelo (prima erano una decina di attese una dopo l'altra)
+    const chunks = (arr) => { const o = []; for (let i = 0; i < arr.length; i += 90) o.push(arr.slice(i, i + 90)); return o; };
+    const sP = getSettings(env), meP = agentsOut(env, all, [A.id], true), snP = canAg && P.store ? storeAppNames(env) : Promise.resolve([]), pmP = presenceMap(env);
+    const agP = canAg ? agentsOut(env, all, tree.filter((x) => x !== A.id), true) : Promise.resolve([]);
+    const actP = P.activity ? env.DB.prepare('SELECT t, type, text FROM activity WHERE ' + ctree.map(() => 'text LIKE ?').join(' OR ') + ' ORDER BY t DESC LIMIT 200').bind(...ctree.map((id) => 'Agente ' + (by.get(id) || {}).username + ':%')).all() : null;
+    const msgP = P.messages ? env.DB.prepare('SELECT id, target, title, body, level, created, until, grp FROM messages ORDER BY id DESC LIMIT 3000').all() : null;
+    const inboxP = ses.assist ? Promise.resolve([]) : (async () => { try { return ((await env.DB.prepare("SELECT id, title, body, level, created FROM agent_msgs WHERE (target = 'all' OR target = ?) AND (until = 0 OR until > ?) ORDER BY id DESC LIMIT 20").bind(String(A.id), now()).all()).results) || []; } catch { return []; } })();
+    const rows = (await Promise.all(chunks(ctree).map((part) => env.DB.prepare(`SELECT * FROM devices WHERE parent = '' AND owner_id IN (${part.map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT 5000`).bind(...part).all()))).flatMap((r) => r.results || []);
+    const kids = (await Promise.all(chunks(rows.map((r) => r.id)).map((part) => env.DB.prepare(`SELECT * FROM devices WHERE parent IN (${part.map(() => '?').join(',')})`).bind(...part).all()))).flatMap((r) => r.results || []);
+    const devices = withPresence((await Promise.all([...rows, ...kids].map((d) => deviceOut(env, d)))).map(dview), await pmP); // in parallelo
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p ? p.status : 'pending'; }
-    const s = await getSettings(env);
-    const meOut = (await agentsOut(env, all, [A.id], true))[0];
+    const [s, meArr, sAll, agList, actR, msgR, inbox] = await Promise.all([sP, meP, snP, agP, actP, msgP, inboxP]);
+    const meOut = meArr[0];
     const { password: _pw, ...meSafe } = meOut;
-    const sNames = canAg && P.store ? (await storeAppNames(env)).filter((x) => storeAppOk(P.storeApps, x)) : [];
+    const sNames = canAg && P.store ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
     return json({ role: 'agent', user: A.username, me: { ...meSafe, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? (() => { const c = s.playersCfg || {}, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: v(c.orbix), max: v(c.max) }, showDnsAgents: !!c.showDnsAgents, codes: c.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(c).map((x) => (c.showDnsAgents ? x : { ...x, link: '' })) }; })() : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
-      agents: canAg ? await agentsOut(env, all, tree.filter((x) => x !== A.id), true) : [],
+      agents: agList,
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { name: x.name, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
       // codici Downloader e link delle app Kairos: solo quelli che il titolare gli concede (kAllow)
       settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),
       kairosApps: P.appk ? kairosAppsOf(s).filter((x) => storeAppOk(P.kAllow, x.key)) : [], permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on) }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
-      activity: P.activity ? ((await env.DB.prepare('SELECT t, type, text FROM activity WHERE ' + ctree.map(() => 'text LIKE ?').join(' OR ') + ' ORDER BY t DESC LIMIT 200').bind(...ctree.map((id) => 'Agente ' + (by.get(id) || {}).username + ':%')).all()).results || []) : [],
-      messages: P.messages ? msgGroups((((await env.DB.prepare('SELECT id, target, title, body, level, created, until, grp FROM messages ORDER BY id DESC LIMIT 3000').all()).results) || []).filter((x) => devices.some((d) => d.id === x.target))).slice(0, 150) : [],
+      activity: actR ? actR.results || [] : [],
+      messages: msgR ? msgGroups((msgR.results || []).filter((x) => byId.has(x.target))).slice(0, 150) : [],
       // messaggi del titolare per questo agente (a tutti gli agenti, a lui o al suo gruppo)
-      inbox: ses.assist ? [] : await (async () => { try { return ((await env.DB.prepare("SELECT id, title, body, level, created FROM agent_msgs WHERE (target = 'all' OR target = ?) AND (until = 0 OR until > ?) ORDER BY id DESC LIMIT 20").bind(String(A.id), now()).all()).results) || []; } catch { return []; } })() });
+      inbox });
   }
   if (path === '/devices' && m === 'POST') {
     if (!P.create) throw new HttpErr(403, 'Non puoi attivare clienti');
@@ -3106,7 +3141,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path === '/state' && m === 'GET') {
     // tutto in parallelo: le query al database, la decifratura delle playlist e i controlli delle versioni delle app
     const settings = await getSettings(env);
-    const [rowsR, activityR, messagesR, agentMsgsR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, sAppNames, nCounts, onl, agAll] = await Promise.all([
+    const [rowsR, activityR, messagesR, agentMsgsR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, sAppNames, nCounts, onl, agAll, presLast] = await Promise.all([
       env.DB.prepare('SELECT * FROM devices ORDER BY created_at DESC LIMIT 5000').all(),
       env.DB.prepare('SELECT t, type, text, ip FROM activity ORDER BY id DESC LIMIT 200').all(),
       env.DB.prepare('SELECT id, target, title, body, level, created, until, grp FROM messages ORDER BY id DESC LIMIT 3000').all().catch(() => ({ results: [] })),
@@ -3115,10 +3150,10 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       dnsList(env),
       env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first(),
       latestApk(env, settings), apkFeed(env), liteFeed(settings), ktvFeed(settings), xcFeed(settings),
-      storeAppNames(env), newCounts(env), onlineCount(env), ses ? agentsAll(env) : null,
+      storeAppNames(env), newCounts(env), onlineCount(env), ses ? agentsAll(env) : null, presenceMap(env),
     ]);
     const rows = rowsR.results || [];
-    const devices = await Promise.all(rows.map((d) => deviceOut(env, d)));
+    const devices = withPresence(await Promise.all(rows.map((d) => deviceOut(env, d))), presLast);
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p && !p.parent ? p.status : 'pending'; }
     const activity = activityR.results || [], messages = msgGroups(messagesR.results || []).slice(0, 150), agentMsgs = msgGroups(agentMsgsR.results || []).slice(0, 100), sessions = sessionsR ? sessionsR.n : 0;

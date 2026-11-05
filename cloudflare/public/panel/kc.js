@@ -288,6 +288,7 @@
 .dvt-exp small,.dvt-dev small{display:block;font-size:11px;color:var(--mut);margin-top:2px}
 .dvt-exp small.warn{color:var(--warn)}.dvt-exp small.bad{color:var(--bad)}
 .dvt-dev{max-width:170px}.dvt-dev b{overflow:hidden;text-overflow:ellipsis}
+.dvt-dev small.dvt-on{color:#22c55e;font-weight:700}
 .dvt-pl{white-space:nowrap;max-width:170px;overflow:hidden;text-overflow:ellipsis}
 .dvt-note{max-width:200px;color:#d7d9ef;cursor:text;white-space:nowrap}
 .dvt-note span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;max-width:170px;vertical-align:middle}
@@ -426,7 +427,7 @@
     if (!KC.errs) { try { KC.errs = await kapi('GET', '/admin/app-errors?hours=24'); errBadge(); } catch {} }
     try { KC.live = await kapi('GET', '/admin/presence'); } catch (e) { V.innerHTML = `<div class="card glass"><p class="mut">${esc(e.message)}</p></div>`; return; }
     const P = KC.live, c = P.counts;
-    V.innerHTML = `<div class="kc-k">${[['Online ora', c.online, 'app aperte negli ultimi 3 minuti', '#4f8cff'], ['Stanno guardando', c.watching, 'canali, film e serie', '#22c55e'], ['Nei menu', c.idle, 'app aperta senza video', '#facc15'], ['Dispositivi totali', c.total, 'registrati nel pannello', 'var(--a1)']].map(([l, v, s, col]) => `<div class="kpi glass"><div class="halo" style="background:${col}"></div><div class="lb"><i style="background:${col};box-shadow:0 0 10px ${col}"></i>${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('')}</div>
+    V.innerHTML = `<div class="kc-k">${[['Online ora', c.online, 'app aperte negli ultimi 4 minuti', '#4f8cff'], ['Stanno guardando', c.watching, 'canali, film e serie', '#22c55e'], ['Nei menu', c.idle, 'app aperta senza video', '#facc15'], ['Dispositivi totali', c.total, 'registrati nel pannello', 'var(--a1)']].map(([l, v, s, col]) => `<div class="kpi glass"><div class="halo" style="background:${col}"></div><div class="lb"><i style="background:${col};box-shadow:0 0 10px ${col}"></i>${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('')}</div>
       <div class="g2b" style="grid-template-columns:minmax(0,2.4fr) minmax(260px,1fr)">
         <div class="card glass"><div class="hd"><h3>Utenti<small>${window.KXAuto ? (KXAuto.on() ? 'Si aggiorna da solo ogni ' + KXAuto.sec() + ' secondi (pulsante «Auto» in alto)' : 'Aggiornamento automatico spento (pulsante «Auto» in alto)') : 'Si aggiorna da solo ogni 15 secondi'} · dati inviati dalle app 1.8 o successive</small></h3><button class="btn sm" id="kLiveR">Aggiorna</button></div>
           <div class="kc-ltabs"><button class="on-t ${KC.liveTab !== 'off' ? 'on' : ''}" data-ltab="on"><i></i>Collegati ora<span>${P.online.length}</span></button><button class="off-t ${KC.liveTab === 'off' ? 'on' : ''}" data-ltab="off"><i></i>Offline<em>visti nelle ultime 24 ore</em><span>${P.recent.length}</span></button>
@@ -780,14 +781,18 @@
     const initial = (t) => (String(t || '?').trim()[0] || '?').toUpperCase();
     const hue = (t) => { let h = 0; for (const c of String(t || '')) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
     const hostsOf = (d) => [...new Set((d.playlists || []).map((p) => { try { return new URL(p.type === 'xtream' ? p.host : p.url).hostname; } catch { return ''; } }).filter(Boolean))];
+    // collegato adesso (dai battiti dell'app): pallino giallo nell'app, verde in diretta, viola film/serie
+    const LIVE_L = { live: 'guarda la TV in diretta', movie: 'guarda un film', series: 'guarda una serie', rec: 'sta registrando', idle: 'nell\'app' };
+    const liveDot = (d) => (d.live ? `<span class="kc-dot ${d.live === 'idle' ? 'idle' : d.live === 'live' || d.live === 'rec' ? 'live' : 'movie'}" title="Collegato adesso: ${LIVE_L[d.live] || ''}"></span>` : '');
+    const seenTxt = (d) => (d.live ? 'collegato adesso · ' + (LIVE_L[d.live] || '') : 'visto ' + ago(d.lastSeen));
     function card(d) {
       const kids = kidsOf(d.id), dl = daysLeft(d), tot = 365;
       const pct = dl === null ? 100 : Math.max(0, Math.min(100, (dl / tot) * 100));
       const tone = d.status !== 'active' ? 'bad' : dl !== null && dl <= 3 ? 'bad' : dl !== null && dl <= 14 ? 'warn' : 'ok';
       const name = d.name || '— senza nome —';
-      const info = [d.model || 'Modello sconosciuto', 'visto ' + ago(d.lastSeen), `${1 + kids.length}/${d.maxConn || 1} dispositivi`, (d.playlists || []).length ? (d.playlists || []).length + ((d.playlists || []).length === 1 ? ' playlist' : ' playlist') : 'nessuna playlist'];
+      const info = [d.model || 'Modello sconosciuto', seenTxt(d), `${1 + kids.length}/${d.maxConn || 1} dispositivi`, (d.playlists || []).length ? (d.playlists || []).length + ((d.playlists || []).length === 1 ? ' playlist' : ' playlist') : 'nessuna playlist'];
       return `<div class="dv-card ${d.status}" data-id="${esc(d.id)}">
-        <div class="dv-top"><div class="dv-n"><b>${esc(name)}</b><span class="code">${esc(d.code)}</span></div>${stPill(d.status)}</div>
+        <div class="dv-top"><div class="dv-n"><b>${liveDot(d)}${esc(name)}</b><span class="code">${esc(d.code)}</span></div>${stPill(d.status)}</div>
         <div class="dv-exp ${tone}"><span>${d.expires ? 'Scade il <b>' + esc(fmtD(d.expires)) + '</b>' : '<b>Senza scadenza</b>'}</span><em>${dl === null ? '' : dl < 0 ? 'scaduto da ' + -dl + ' giorni' : dl === 0 ? 'scade oggi' : dl === 1 ? 'domani' : 'tra ' + dl + ' giorni'}</em></div>
         <div class="dv-meta">${info.map(esc).join(' · ')}</div>
         ${kids.length ? `<div class="dv-kids">${kids.map((k) => `<button data-open="${esc(k.id)}" title="${esc(k.code)}">↳ ${esc(k.name || k.model || k.code)}</button>`).join('')}</div>` : ''}
@@ -822,11 +827,11 @@
         : ib('ext1', 'g', '+1 mese') + ib('ext12', 'b', '+12 mesi') + (d.status === 'active' ? ib('kick', 'k', 'Disconnetti: interrompe la visione in corso') : '') + (d.active ? ib('off', 'o', 'Disattiva') : ib('on', 'g', 'Riattiva')) + ib('edit', 'e', 'Apri scheda') + ib('del', 'r', 'Elimina');
       return `<tr data-id="${esc(d.id)}" class="${sub ? 'sub' : ''} ${st.sel.has(d.id) ? 'sel' : ''}">
         <td class="c">${sub ? '' : `<input type="checkbox" data-sel="${esc(d.id)}" ${st.sel.has(d.id) ? 'checked' : ''}>`}</td>
-        <td><div class="dvt-u">${sub ? '<span class="dvt-sub">↳</span>' : ''}<div><b>${esc(d.name || (sub ? d.model || 'Dispositivo' : '') || '— senza nome —')}</b><span class="dvt-code" data-copy="${esc(d.code)}" title="Copia il codice">${esc(d.code)} ${IC.copy}</span></div></div></td>
+        <td><div class="dvt-u">${sub ? '<span class="dvt-sub">↳</span>' : ''}<div><b>${liveDot(d)}${esc(d.name || (sub ? d.model || 'Dispositivo' : '') || '— senza nome —')}</b><span class="dvt-code" data-copy="${esc(d.code)}" title="Copia il codice">${esc(d.code)} ${IC.copy}</span></div></div></td>
         <td>${stPill(d.status)}</td>
         <td class="dvt-exp">${exp}</td>
         <td class="c mono">${sub || d.status === 'pending' ? '—' : `${1 + kids.length}/${esc(d.maxConn || 1)}`}</td>
-        <td class="dvt-dev"><b>${esc(d.model || '—')}</b><small>${esc(ago(d.lastSeen))}</small></td>
+        <td class="dvt-dev"><b>${esc(d.model || '—')}</b><small${d.live ? ' class="dvt-on"' : ''}>${esc(d.live ? 'collegato adesso' : ago(d.lastSeen))}</small></td>
         <td class="dvt-pl">${pls}</td>
         <td class="dvt-note" data-note="${esc(d.id)}">${d.notes ? `<span>${esc(d.notes.slice(0, 60))}</span>` : `<span class="mut">Aggiungi nota</span>`} ${IC.note}</td>
         <td class="dvt-acts">${acts}</td></tr>`;

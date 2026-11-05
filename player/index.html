@@ -5831,6 +5831,7 @@ async function backgroundUpdateCheck() {
 }
 setInterval(backgroundUpdateCheck, 3 * 3600e3);
 window.kxResume = () => {
+  setTimeout(() => heartbeat(true), 800); // di nuovo nell'app: il pannello lo sa subito
   // tornando nell'app l'anteprima della Live riparte (Android la ferma quando l'app va in pausa)
   if (HAS_PREVIEW && S.previewing && ($('#live').classList.contains('on') || $('#guide').classList.contains('on')) && !$('#drawer').classList.contains('on') && !$('.speedm.on') && !S.inPlayer) setTimeout(() => S.previewing && nativePreview(S.previewing), 300);
   if (Date.now() - (S.lastUpdCheck || 0) > 45 * 60e3) setTimeout(backgroundUpdateCheck, 2500);
@@ -5965,6 +5966,17 @@ async function heartbeat(force) {
   } catch {}
 }
 setInterval(() => heartbeat(false), 20e3); // la funzione decide: ogni 60 s nei menu, ogni 20 s durante la visione
+/* Mentre il player nativo copre l'interfaccia la WebView è nascosta e Android/Chromium rallenta i suoi timer
+   (anche di minuti): il cliente spariva da «Online ora» pur guardando. I timer di un piccolo Web Worker non vengono
+   rallentati: il suo messaggio sveglia il battito (heartbeat() decide da sola se è il momento, mai più di uno ogni 15 s). */
+{
+  const src = 'setInterval(function(){postMessage(0)},10000)';
+  for (const mk of [() => URL.createObjectURL(new Blob([src], { type: 'text/javascript' })), () => 'data:text/javascript,' + encodeURIComponent(src)]) {
+    try { const w = new Worker(mk()); w.onmessage = () => heartbeat(false); w.onerror = (e) => { try { e.preventDefault(); } catch {} }; break; } catch {}
+  }
+}
+// l'app 2.5.2+ lo chiama da sé ogni 20 s mentre il player nativo è davanti (sveglia sicura anche se la WebView è ferma)
+window.kxHbTick = () => heartbeat(false);
 /* mentre l'app resta aperta: ogni 20 minuti si aggiornano stato, messaggi e scadenza */
 setInterval(async () => {
   if (S.demo || !baseServer() || S.inPlayer || $('#activate').classList.contains('on') || $('#boot').classList.contains('on')) return;

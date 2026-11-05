@@ -25,6 +25,7 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.Lifecycle
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
@@ -855,15 +856,33 @@ class MainActivity : ComponentActivity() {
         if (hasFocus) hideSystemUi()
     }
 
+    /**
+     * Player nativo davanti all'interfaccia: la WebView è nascosta e Android/Chromium rallenta i suoi timer, così il
+     * battito per «Online ora» del pannello poteva saltare per minuti. Ogni 20 s l'app lo sveglia da sé.
+     * Si ferma quando si torna all'interfaccia o quando non c'è più un player sullo schermo.
+     */
+    private val hbTick = object : Runnable {
+        override fun run() {
+            if (isResumed) return
+            val p = PlayerActivity.current
+            val shown = (p != null && p.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) || MultiActivity.open
+            if (shown) js("window.kxHbTick && kxHbTick()")
+            if (p != null || MultiActivity.open) ui.postDelayed(this, 20_000)
+        }
+    }
+
     override fun onPause() {
         isResumed = false
         stopPreview()
         if (webOk) web.onPause()
+        ui.removeCallbacks(hbTick)
+        ui.postDelayed(hbTick, 20_000)
         super.onPause()
     }
 
     override fun onResume() {
         isResumed = true
+        ui.removeCallbacks(hbTick)
         super.onResume()
         if (!webOk) return
         web.onResume()

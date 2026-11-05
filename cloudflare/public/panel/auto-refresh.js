@@ -71,15 +71,19 @@
     if (document.querySelector('#modal.on,#drawer.on,#agPage.on,.ag-page.on,#arM.on')) return true;
     return false;
   };
-  let running = false;
+  let running = false, lastFull = 0;
   async function refresh() {
     if (running) return; running = true;
     B.classList.remove('spin'); void B.offsetWidth; B.classList.add('spin');
     try {
-      await load();
       const cur = document.querySelector('section.view.on');
       const v = cur && cur.id.slice(2);
-      if (PAGES.includes(v)) view(v);
+      // più leggero: sulle pagine-elenco (Online ora, Errori, Richieste…) si ricaricano solo i dati della pagina;
+      // lo stato completo del pannello (clienti, contatori) al massimo ogni 15 s lì, ogni volta sulle altre pagine.
+      // Se i dati non sono cambiati il pannello non si ridisegna (load(true)).
+      const list = PAGES.includes(v);
+      if (!list || Date.now() - lastFull >= 15e3) { lastFull = Date.now(); await load(true); }
+      if (list) view(v);
     } catch {} finally { running = false; }
   }
   setInterval(() => {
