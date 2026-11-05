@@ -2368,15 +2368,23 @@ async function adminInner(req, env, url, ip, ctx) {
    e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
    ====================================================================== */
 const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'account', 'ai',
-  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'dlcodes', 'appstore', 'lines'];
+  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk'];
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, appstore: false, lines: false, addons: [], storeApps: ['*'], appsAllow: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
   const out = [...new Set(v.map((x) => str(x, 80)).filter(Boolean))].slice(0, 100);
   return out.includes('*') ? ['*'] : out;
+}
+/* app Kairos (link per scaricarle e codice Downloader): quali vede l'agente lo decide il titolare (kAllow) */
+const KAIROS_APPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['store', 'Kairos Store']];
+function kairosAppsOf(s) {
+  return [
+    ['pro', s.apkUrl || '', s.downloaderCode || ''], ['tv', s.ktvApkUrl || KTV_APK, s.ktvDownloaderCode || ''], ['lite', s.liteApkUrl || LITE_APK, s.liteDownloaderCode || ''],
+    ['xc', s.xcApkUrl || XC_APK, s.xcDownloaderCode || ''], ['store', '', s.storeDownloaderCode || ''],
+  ].map(([k, apk, code]) => ({ key: k, name: KAIROS_APPS.find((x) => x[0] === k)[1], apk, code }));
 }
 const storeAppOk = (list, app) => list.includes('*') || list.some((x) => x.toLowerCase() === String(app || '').toLowerCase());
 function agentPerms(src) {
@@ -2386,6 +2394,8 @@ function agentPerms(src) {
   p.addons = addonsList(o.addons || []);
   p.storeApps = storeAppsList(o.storeApps);
   p.appsAllow = storeAppsList(o.appsAllow); // app di «Attiva app» che l'agente può vedere/usare (['*'] = tutte)
+  p.dlcAllow = storeAppsList(o.dlcAllow); // codici downloader che vede (per nome; ['*'] = tutti)
+  p.kAllow = storeAppsList(o.kAllow).filter((x) => x === '*' || KAIROS_APPS.some((k) => k[0] === x)); // app Kairos di cui vede link e codice
   p.maxConn = Math.max(1, Math.min(MAX_CONN, parseInt(o.maxConn, 10) || 1));
   return p;
 }
@@ -2397,6 +2407,7 @@ function agentPermsWithin(req, top) {
   p.addons = p.addons.filter((x) => top.addons.includes(x));
   if (!top.storeApps.includes('*')) p.storeApps = p.storeApps.includes('*') ? [...top.storeApps] : p.storeApps.filter((x) => storeAppOk(top.storeApps, x));
   if (!top.appsAllow.includes('*')) p.appsAllow = p.appsAllow.includes('*') ? [...top.appsAllow] : p.appsAllow.filter((x) => storeAppOk(top.appsAllow, x));
+  for (const k of ['dlcAllow', 'kAllow']) if (!top[k].includes('*')) p[k] = p[k].includes('*') ? [...top[k]] : p[k].filter((x) => storeAppOk(top[k], x));
   p.maxConn = Math.min(p.maxConn, top.maxConn);
   return p;
 }
@@ -2612,6 +2623,12 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     return (scopeMem = ids);
   };
   const viaOwner = async (r) => (r instanceof Response ? r.json() : r);
+  // App → OrbixPlay e MaxPlayer: le liste create sulle app terzi, solo dei suoi clienti
+  if (path === '/apps3/lists' && m === 'GET') {
+    need('appsOp'); const sc = await scope();
+    const days = Math.max(7, Math.min(365, parseInt(url.searchParams.get('days'), 10) || 60));
+    return json({ days, lists: (await thirdLists(env, days)).filter((x) => sc.has(x.id)).map(({ ownerId, ...x }) => x) });
+  }
   const REQ_PERM = { report: 'reports', content: 'contentReq', addon: 'addonReq', ai: 'ai' };
   // Online ora
   if (path === '/presence' && m === 'GET') {
@@ -2730,11 +2747,13 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const meOut = (await agentsOut(env, all, [A.id], true))[0];
     const { password: _pw, ...meSafe } = meOut;
     const sNames = canAg && P.store ? (await storeAppNames(env)).filter((x) => storeAppOk(P.storeApps, x)) : [];
-    return json({ role: 'agent', user: A.username, me: { ...meSafe, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s) : [], players: P.players ? (() => { const c = s.playersCfg || {}, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: v(c.orbix), max: v(c.max) }, showDnsAgents: !!c.showDnsAgents, codes: c.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(c).map((x) => (c.showDnsAgents ? x : { ...x, link: '' })) }; })() : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
+    return json({ role: 'agent', user: A.username, me: { ...meSafe, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? (() => { const c = s.playersCfg || {}, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: v(c.orbix), max: v(c.max) }, showDnsAgents: !!c.showDnsAgents, codes: c.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(c).map((x) => (c.showDnsAgents ? x : { ...x, link: '' })) }; })() : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: canAg ? await agentsOut(env, all, tree.filter((x) => x !== A.id), true) : [],
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { name: x.name, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
-      settings: { brand: s.brand, accent: s.accent, downloaderCode: s.downloaderCode || '', storeDownloaderCode: s.storeDownloaderCode || '', liteDownloaderCode: s.liteDownloaderCode || '', ktvDownloaderCode: s.ktvDownloaderCode || '', xcDownloaderCode: s.xcDownloaderCode || '', apkUrl: s.apkUrl || '' }, permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on) }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
+      // codici Downloader e link delle app Kairos: solo quelli che il titolare gli concede (kAllow)
+      settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),
+      kairosApps: P.appk ? kairosAppsOf(s).filter((x) => storeAppOk(P.kAllow, x.key)) : [], permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on) }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
       activity: P.activity ? ((await env.DB.prepare('SELECT t, type, text FROM activity WHERE ' + ctree.map(() => 'text LIKE ?').join(' OR ') + ' ORDER BY t DESC LIMIT 200').bind(...ctree.map((id) => 'Agente ' + (by.get(id) || {}).username + ':%')).all()).results || []) : [],
       messages: P.messages ? (((await env.DB.prepare('SELECT id, target, title, body, level, created, until FROM messages ORDER BY id DESC LIMIT 300').all()).results) || []).filter((x) => devices.some((d) => d.id === x.target)) : [] });
   }
