@@ -55,6 +55,15 @@ jobs:
           cp ../player/index.html public/app/index.html
           echo "UI_VERSION=$(sha256sum ../player/index.html | cut -c1-12)" >> "$GITHUB_ENV"
 
+      - name: Versione nei link dei file del pannello (il browser li tiene in memoria finché non cambiano)
+        run: |
+          cd public/panel
+          for f in *.js; do
+            H=$(sha256sum "$f" | cut -c1-12)
+            sed -i "s#src=\"$f\"#src=\"$f?v=$H\"#" index.html
+          done
+          grep -c '?v=' index.html
+
       - name: Pubblica il Worker
         env:
           ACCESS_TEAM_DOMAIN: ${{ vars.ACCESS_TEAM_DOMAIN }}

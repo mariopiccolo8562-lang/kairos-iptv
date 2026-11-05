@@ -333,6 +333,15 @@ async function create(req, env, ctx, url, ip, opts) {
   const same = await env.DB.prepare("SELECT id, app_url FROM store_requests WHERE did = ? AND app = ? AND status = 'pending' AND created > ? ORDER BY created DESC LIMIT 1").bind(did, app, t - REQ_TTL).first();
   if (s.approval && same && same.app_url === appUrl) return json({ id: same.id, status: 'pending' });
 
+  // tempo di attesa deciso dal titolare: con una richiesta ancora in attesa (anche di un'altra app) non se ne inviano altre
+  // finché il venditore non risponde o finché non passa il tempo
+  if (s.approval && opts.waitMin) {
+    const W = await opts.waitMin();
+    if (W > 0) {
+      const p = await env.DB.prepare("SELECT created FROM store_requests WHERE did = ? AND status = 'pending' AND created > ? ORDER BY created DESC LIMIT 1").bind(did, t - W * 60e3).first();
+      if (p) { const left = p.created + W * 60e3 - t; return json({ error: `In attesa del fornitore: hai già una richiesta in attesa di autorizzazione. Potrai inviarne un'altra appena il fornitore risponde, oppure tra ${opts.waitTxt ? opts.waitTxt(left) : Math.ceil(left / 60e3) + ' minuti'}.`, waiting: true, retryIn: Math.ceil(left / 1000) }, 429); }
+    }
+  }
   const c = await env.DB.prepare("SELECT (SELECT COUNT(*) FROM store_requests WHERE ip = ? AND created > ?) AS byIp, (SELECT COUNT(*) FROM store_requests WHERE did = ? AND created > ?) AS byDid, (SELECT COUNT(*) FROM store_requests WHERE status = 'pending' AND created > ?) AS pend")
     .bind(ip, t - 3600e3, did, t - 3600e3, t - REQ_TTL).first();
   const lim = s.approval ? PER_HOUR : PER_HOUR * 10;

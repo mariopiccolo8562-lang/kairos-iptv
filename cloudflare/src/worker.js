@@ -217,6 +217,8 @@ function harden(res, req) {
   } else {
     h.set('Content-Security-Policy', CSP_PANEL);
     if (url.pathname.endsWith('.html') || url.pathname.endsWith('/')) h.set('Cache-Control', 'no-cache');
+    // file del pannello con la versione nel link (?v=…, messa dal deploy): il browser li tiene e non li richiede più finché non cambiano
+    else if (url.pathname.startsWith('/panel/') && /^[a-f0-9]{8,16}$/.test(url.searchParams.get('v') || '') && r.status === 200) h.set('Cache-Control', 'public, max-age=31536000, immutable');
   }
   if (url.pathname.startsWith('/app/')) {
     h.set('Access-Control-Allow-Origin', '*');
@@ -303,7 +305,7 @@ async function ktvFeed(s) {
   let v = null;
   if (/^https:\/\/.+\.json$/i.test(url)) {
     try {
-      const r = await fetch(url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(6000) });
+      const r = await fetch(url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
       if (r.ok) {
         const j = await r.json();
         const code = semverCode(j.version) || +j.versionCode;
@@ -323,7 +325,7 @@ async function xcFeed(s) {
   let v = null;
   if (/^https:\/\/.+\.json$/i.test(url)) {
     try {
-      const r = await fetch(url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(6000) });
+      const r = await fetch(url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
       if (r.ok) { const j = await r.json(); const code = semverCode(j.version) || +j.versionCode; if (code > 0) v = { versionCode: code, version: String(j.version || '').replace(/^v/i, '').slice(0, 20), url: /^https:\/\//.test(j.url || '') ? String(j.url).slice(0, 500) : apk, date: String(j.date || '').slice(0, 40) }; }
     } catch {}
   }
@@ -1927,10 +1929,10 @@ const CTYPES = ['movie', 'series', 'live', 'addon'];
 const REQ_STATUS = ['new', 'seen', 'done'];
 /* tempi di attesa tra una richiesta e l'altra, uno per tipo (minuti; 0 = nessuno), decisi dal titolare.
    Dopo una richiesta il cliente aspetta la fine del tempo oppure che il fornitore risponda (fatta/rifiutata/eliminata). */
-const REQ_KINDS = ['report', 'content', 'addon', 'ai'];
+const REQ_KINDS = ['report', 'content', 'addon', 'ai', 'store'];
 const REQ_WAIT_MAX = 10080; // 7 giorni
 function cleanReqWait(v) { const o = {}; const x = v && typeof v === 'object' ? v : {}; for (const k of REQ_KINDS) { const n = parseInt(x[k], 10); o[k] = n > 0 ? Math.min(REQ_WAIT_MAX, n) : 0; } return o; }
-const waitTxt = (ms) => { const m = Math.max(1, Math.ceil(ms / 60e3)); return m < 60 ? m + (m === 1 ? ' minuto' : ' minuti') : m < 1440 ? Math.ceil(m / 60) + (Math.ceil(m / 60) === 1 ? ' ora' : ' ore') : Math.ceil(m / 1440) + (Math.ceil(m / 1440) === 1 ? ' giorno' : ' giorni'); };
+const waitTxt = (ms) => { const m = Math.max(1, Math.ceil(ms / 60e3)); if (m < 60) return m + (m === 1 ? ' minuto' : ' minuti'); if (m < 1440) { const h = Math.floor(m / 60), r = m % 60; return h + (h === 1 ? ' ora' : ' ore') + (r ? ' e ' + r + (r === 1 ? ' minuto' : ' minuti') : ''); } const g = Math.floor(m / 1440), h = Math.round((m % 1440) / 60); return g + (g === 1 ? ' giorno' : ' giorni') + (h ? ' e ' + h + (h === 1 ? ' ora' : ' ore') : ''); };
 /** se c'è una richiesta dello stesso tipo ancora senza risposta e dentro il tempo di attesa: risposta «in attesa del fornitore» */
 async function reqWait(env, kind, ids) {
   const min = cleanReqWait((await getSettings(env)).reqWait)[kind];
@@ -2150,7 +2152,7 @@ async function route(req, env, ctx) {
 
   /* ---------- autorizzazione dei download dello Store (pubblica, vedi store.js) ---------- */
   if (path === '/api/tg/hook' && req.method === 'POST') return tgHook(req, env, ctx, ip, notifyH(env)); // webhook del bot Telegram
-  if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { smsAgents: (app, ids) => storeSmsAgents(env, app, ids) });
+  if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { smsAgents: (app, ids) => storeSmsAgents(env, app, ids), waitMin: async () => cleanReqWait((await getSettings(env)).reqWait).store, waitTxt });
 
   /* ---------- informativa privacy e condizioni (pubblica, la apre anche l'app) ---------- */
   if ((path === '/privacy' || path === '/privacy/') && (req.method === 'GET' || req.method === 'HEAD')) return privacyPage(env);
@@ -2199,7 +2201,7 @@ async function liteFeed(s) {
   let v = null;
   if (/^https:\/\/.+\.json$/i.test(url)) {
     try {
-      const r = await fetch(url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(6000) });
+      const r = await fetch(url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
       if (r.ok) { const j = await r.json(); v = { version: String(j.version || '').replace(/^v/i, '').slice(0, 20), date: String(j.date || '').slice(0, 40), url: /^https:\/\//.test(j.url || '') ? String(j.url).slice(0, 500) : apk }; }
     } catch {}
   }
@@ -2721,7 +2723,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const pids = rows.map((r) => r.id), kids = [];
     for (let i = 0; i < pids.length; i += 90) { const part = pids.slice(i, i + 90); kids.push(...((await env.DB.prepare(`SELECT * FROM devices WHERE parent IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results || [])); }
     const devices = [];
-    for (const d of [...rows, ...kids]) devices.push(dview(await deviceOut(env, d)));
+    for (const x of await Promise.all([...rows, ...kids].map((d) => deviceOut(env, d)))) devices.push(dview(x)); // in parallelo
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p ? p.status : 'pending'; }
     const s = await getSettings(env);
@@ -2924,28 +2926,34 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   }
 
   if (path === '/state' && m === 'GET') {
-    const rows = (await env.DB.prepare('SELECT * FROM devices ORDER BY created_at DESC LIMIT 5000').all()).results || [];
-    const devices = [];
-    for (const d of rows) devices.push(await deviceOut(env, d));
+    // tutto in parallelo: le query al database, la decifratura delle playlist e i controlli delle versioni delle app
+    const settings = await getSettings(env);
+    const [rowsR, activityR, messagesR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, sAppNames, nCounts, onl, agAll] = await Promise.all([
+      env.DB.prepare('SELECT * FROM devices ORDER BY created_at DESC LIMIT 5000').all(),
+      env.DB.prepare('SELECT t, type, text, ip FROM activity ORDER BY id DESC LIMIT 200').all(),
+      env.DB.prepare('SELECT id, target, title, body, level, created, until FROM messages ORDER BY id DESC LIMIT 100').all().catch(() => ({ results: [] })),
+      ses ? env.DB.prepare('SELECT COUNT(*) AS n FROM sessions WHERE admin_id = ? AND expires > ?').bind(ses.admin_id, now()).first() : null,
+      dnsList(env),
+      env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first(),
+      latestApk(env, settings), apkFeed(env), liteFeed(settings), ktvFeed(settings), xcFeed(settings),
+      storeAppNames(env), newCounts(env), onlineCount(env), ses ? agentsAll(env) : null,
+    ]);
+    const rows = rowsR.results || [];
+    const devices = await Promise.all(rows.map((d) => deviceOut(env, d)));
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p && !p.parent ? p.status : 'pending'; }
-    const activity = ((await env.DB.prepare('SELECT t, type, text, ip FROM activity ORDER BY id DESC LIMIT 200').all()).results) || [];
-    let messages = [];
-    try { messages = ((await env.DB.prepare('SELECT id, target, title, body, level, created, until FROM messages ORDER BY id DESC LIMIT 100').all()).results) || []; } catch {}
-    const sessions = ses ? (await env.DB.prepare('SELECT COUNT(*) AS n FROM sessions WHERE admin_id = ? AND expires > ?').bind(ses.admin_id, now()).first()).n : 0;
-    const settings = await getSettings(env);
-    const dnslOwner = await dnsList(env);
+    const activity = activityR.results || [], messages = messagesR.results || [], sessions = sessionsR ? sessionsR.n : 0;
     return json({
-      settings, devices, activity, messages, user: who, apk: await latestApk(env, settings), apkFeed: await apkFeed(env),
-      wgConf: !!(await env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first()),
+      settings, devices, activity, messages, user: who, apk, apkFeed: apkF,
+      wgConf: !!wgR,
       security: { totp: !!(ses && ses.totp_on), encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
-      lite: { apk: settings.liteApkUrl || LITE_APK, feed: await liteFeed(settings) },
-      ktv: { apk: settings.ktvApkUrl || KTV_APK, feed: await ktvFeed(settings) },
-      xc: { apk: settings.xcApkUrl || XC_APK, feed: await xcFeed(settings) },
+      lite: { apk: settings.liteApkUrl || LITE_APK, feed: liteF },
+      ktv: { apk: settings.ktvApkUrl || KTV_APK, feed: ktvF },
+      xc: { apk: settings.xcApkUrl || XC_APK, feed: xcF },
       players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: orbixDnsList(settings.playersCfg.orbix, dnslOwner), max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents, codes: settings.playersCfg.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(settings.playersCfg) },
       dlCodes: dlCodesOf(settings),
-      storeAppNames: await storeAppNames(env), maintAg: Object.entries(settings.maintAg || {}).filter(([, x]) => x && x.on).map(([id]) => +id),
-      counts: { ...(await newCounts(env)), online: await onlineCount(env) }, permKeys: PERM_KEYS, addonCat: addonCfg(settings), role: 'owner', ...(ses ? { agents: await agentsOut(env, await agentsAll(env)) } : {}),
+      storeAppNames: sAppNames, maintAg: Object.entries(settings.maintAg || {}).filter(([, x]) => x && x.on).map(([id]) => +id),
+      counts: { ...nCounts, online: onl }, permKeys: PERM_KEYS, addonCat: addonCfg(settings), role: 'owner', ...(ses ? { agents: await agentsOut(env, agAll) } : {}),
     });
   }
 

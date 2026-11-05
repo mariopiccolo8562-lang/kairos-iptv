@@ -159,7 +159,7 @@ function renderSide() {
   $('#dlCode').textContent = D.settings.downloaderCode ? 'Downloader ' + D.settings.downloaderCode : '';
   $('#plLink').textContent = D.settings.apkUrl || 'Link APK non impostato';
 }
-function renderAll() { renderSide(); renderSecurity(); renderDash(); renderDevices(); renderFeed(); renderSettings(); renderMsgs(); }
+function renderAll() { kidsReset(); renderSide(); renderSecurity(); renderDash(); renderDevices(); renderFeed(); renderSettings(); renderMsgs(); }
 
 /* ---------------- navigazione ---------------- */
 const TITLES = { dash: 'Dashboard', devices: 'Dispositivi', msgs: 'Messaggi', activity: 'Attività', settings: 'Impostazioni' };
@@ -171,7 +171,8 @@ $('#gq').addEventListener('input', (e) => { D.q = e.target.value.toLowerCase(); 
 /* ---------------- helpers ---------------- */
 const daysLeft = (d) => (d.expires ? Math.ceil((new Date(d.expires) - Date.now()) / 864e5) : null);
 const ago = (t) => { if (!t) return 'mai'; const s = (Date.now() - t) / 1000; if (s < 90) return 'adesso'; if (s < 3600) return Math.floor(s / 60) + ' min fa'; if (s < 86400) return Math.floor(s / 3600) + ' h fa'; return Math.floor(s / 86400) + ' g fa'; };
-const fmtD = (d) => (d ? new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Illimitata');
+const FMT_D = new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }), fmtMemo = new Map();
+const fmtD = (d) => { if (!d) return 'Illimitata'; let v = fmtMemo.get(d); if (v === undefined) { v = FMT_D.format(new Date(d)); if (fmtMemo.size > 5000) fmtMemo.clear(); fmtMemo.set(d, v); } return v; }; // veloce: con migliaia di clienti toLocaleDateString rallentava tutto
 const stPill = (s) => `<span class="st ${s}"><i></i>${STL[s]}</span>`;
 function countUp(el, to) { const t0 = performance.now(), from = 0; const f = (t) => { const p = Math.min(1, (t - t0) / 900), e = 1 - Math.pow(1 - p, 3); el.textContent = Math.round(from + (to - from) * e); if (p < 1) requestAnimationFrame(f); }; requestAnimationFrame(f); }
 function spark(vals, color) { const max = Math.max(1, ...vals), w = 200, h = 60; const pts = vals.map((v, i) => [i * (w / (vals.length - 1 || 1)), h - 6 - (v / max) * (h - 16)]); const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' '); const id = 'sg' + Math.random().toString(36).slice(2, 7); return `<svg class="sl" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".45"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs><path d="${d} L${w} ${h} L0 ${h}Z" fill="url(#${id})"/><path d="${d}" fill="none" stroke="${color}" stroke-width="2"/></svg>`; }
@@ -240,6 +241,8 @@ addEventListener('resize', () => drawChart());
 
 /* ---------------- dispositivi ---------------- */
 function renderDevices() {
+  // vista a schede/tabella nuova (kc.js): la vecchia tabella è nascosta, inutile ridisegnarla (era la parte più lenta)
+  { const V = $('#v-devices'); if (V && V.classList.contains('dv-cardsview')) return; }
   const soon = (d) => d.status === 'active' && !d.parent && daysLeft(d) !== null && daysLeft(d) <= 14;
   const fit = (d, s) => s === 'all' || (s === 'soon' ? soon(d) : d.status === s);
   const cnt = (s) => D.devices.filter((d) => fit(d, s)).length;
@@ -249,10 +252,11 @@ function renderDevices() {
   const list = D.devices.filter((d) => fit(d, D.filter || 'all') && (!D.q || hay(d).includes(D.q)));
   // le connessioni collegate compaiono subito sotto il loro cliente principale
   const inList = new Set(list.map((d) => d.id)), ordered = [];
+  const kidsIn = new Map(); for (const k of list) if (k.parent) { const x = kidsIn.get(k.parent); x ? x.push(k) : kidsIn.set(k.parent, [k]); }
   for (const d of list) {
     if (d.parent && inList.has(d.parent)) continue;
     ordered.push(d);
-    if (!d.parent) for (const k of list) if (k.parent === d.id) ordered.push(k);
+    if (!d.parent) for (const k of kidsIn.get(d.id) || []) ordered.push(k);
   }
   $('#noRows').style.display = ordered.length ? 'none' : 'block';
   $('#rows').innerHTML = ordered.map((d, i) => {
@@ -271,7 +275,8 @@ function renderDevices() {
   }).join('');
 }
 const parentOf = (d) => (d && d.parent ? D.devices.find((x) => x.id === d.parent) || null : null);
-const kidsOf = (id) => D.devices.filter((x) => x.parent === id);
+let kidsC = null; const kidsReset = () => (kidsC = null);
+const kidsOf = (id) => { const L = D.devices; if (!kidsC || kidsC.L !== L || kidsC.n !== L.length) { const m = new Map(); for (const x of L) if (x.parent) { const a = m.get(x.parent); a ? a.push(x) : m.set(x.parent, [x]); } kidsC = { L, n: L.length, m }; } return kidsC.m.get(id) || []; }; // una sola passata invece di una per cliente
 /* add-on dello Store dell'app (stesso elenco del server) */
 const ADDON_CAT = [
   ['tema-ghiaccio', 'Regno di Ghiaccio', 'tema'], ['tema-draghi', 'Terra dei Draghi', 'tema'], ['tema-magia', 'Accademia di Magia', 'tema'],
