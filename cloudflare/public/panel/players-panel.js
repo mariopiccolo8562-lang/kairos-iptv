@@ -157,7 +157,7 @@
   const rdw = renderDrawer;
   window.renderDrawer = renderDrawer = function () {
     rdw();
-    if (!edit || edit.parent || D.role === 'agent') return;
+    if (!edit || (edit.parent && !edit.own) || D.role === 'agent') return; // TV collegata: solo con gestione indipendente (linee sue)
     const secs = $('#dBody .dsecs'); if (!secs || $('#ds-oth')) return;
     const html = `<section class="dsec" id="ds-oth"><div class="dsh"><i></i><div><b>Altre app</b><small>Manda le linee di questo cliente anche alle altre app</small></div></div>${box(edit)}</section>`;
     const note = $('#ds-note');

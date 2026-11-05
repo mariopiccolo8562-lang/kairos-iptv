@@ -2362,6 +2362,9 @@ function plSel() {
   return ids.includes(mine) ? mine : 'all';
 }
 /* divise e senza permesso di cambiarla: si scarica solo la playlist da usare (avvio più veloce) */
+/* impronta delle playlist della libreria (id + utente/percorso, non il server: il cambio di server lo gestisce dnsSwap):
+   se il pannello cambia le playlist di questa TV (es. gestione indipendente di una TV collegata) la libreria si ricarica subito */
+const plKeyOf = (pls) => pls.map((p) => { let k = p.username || ''; if (p.type !== 'xtream') { try { const u = new URL(p.url); k = u.pathname + u.search; } catch { k = p.url || ''; } } return p.id + ':' + k; }).join(',');
 const libPlaylists = () => { const all = activePlaylists(); if (all.length < 2 || plMode() !== 'split' || perm('plSwitch')) return all; const sel = plSel(); return all.filter((p) => p.id === sel); };
 /* playlist protette da PIN: i loro contenuti restano nascosti finché non si inserisce il PIN (vale fino alla chiusura dell'app) */
 S.plUnlocked = new Set();
@@ -2438,7 +2441,7 @@ async function fetchLibrary(onMsg) {
     }
   });
   delete lib._live; delete lib._movies; delete lib._series;
-  S.libPlIds = all.map((p) => p.id).join(',');
+  S.libPlIds = all.map((p) => p.id).join(','); S.libPlKey = plKeyOf(all);
   lib.clean = parts.every((x) => !x || x.clean) ? 1 : 0;
   // impronta della libreria dalle impronte delle parti (già calcolate nel thread di lavoro)
   if (parts.every((x) => !x || x.sig)) lib.sig = hashStr(all.map((p, i) => p.id + ':' + (parts[i] ? parts[i].sig : '-')).join('|'));
@@ -5960,7 +5963,9 @@ async function heartbeat(force) {
     if (typeof j.pv === 'string' && j.pv) hbPlv = j.pv;
     if (changed || dnsNew || (typeof j.unseen === 'number' && j.unseen > unseenMsgs().length)) register().then(() => {
       if (dnsNew) { const snap = store.get('plSnap', null), pls = activePlaylists(); if (snap && !dnsSwap(snap, pls)) store.set('plSnap', plSnapOf(pls)); }
-      if (plChanged || (j.ph !== undefined && offSrv !== offNow)) { const need = libPlaylists().map((p) => p.id).join(','); if (S.libPlIds && need !== S.libPlIds) whenIdle(() => loadLibrary().then(plRerender), 500); else if (!S.inPlayer) plRerender(); }
+      { const np = libPlaylists(), need = np.map((p) => p.id).join(',');
+        if ((S.libPlIds && need !== S.libPlIds) || (S.libPlKey && plKeyOf(np) !== S.libPlKey)) whenIdle(() => loadLibrary().then(plRerender), 500); // playlist cambiate dal pannello: si ricarica
+        else if ((plChanged || (j.ph !== undefined && offSrv !== offNow)) && !S.inPlayer) plRerender(); }
       vpnApply(); const sc = $('.screen.on'); if (sc && sc.querySelector('.navslot')) fillNav(sc.id === 'cat' ? 'cat' : sc.id); showNotices();
     }).catch(() => {});
   } catch {}

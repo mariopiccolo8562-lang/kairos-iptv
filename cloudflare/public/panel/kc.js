@@ -795,7 +795,7 @@
         <div class="dv-top"><div class="dv-n"><b>${liveDot(d)}${esc(name)}</b><span class="code">${esc(d.code)}</span></div>${stPill(d.status)}</div>
         <div class="dv-exp ${tone}"><span>${d.expires ? 'Scade il <b>' + esc(fmtD(d.expires)) + '</b>' : '<b>Senza scadenza</b>'}</span><em>${dl === null ? '' : dl < 0 ? 'scaduto da ' + -dl + ' giorni' : dl === 0 ? 'scade oggi' : dl === 1 ? 'domani' : 'tra ' + dl + ' giorni'}</em></div>
         <div class="dv-meta">${info.map(esc).join(' · ')}</div>
-        ${kids.length ? `<div class="dv-kids">${kids.map((k) => `<button data-open="${esc(k.id)}" title="${esc(k.code)}">↳ ${esc(k.name || k.model || k.code)}</button>`).join('')}</div>` : ''}
+        ${kids.length ? `<div class="dv-kids">${kids.map((k) => `<button data-open="${esc(k.id)}" title="${esc(k.code)}${k.own ? ' · gestione indipendente (playlist sue)' : ''}">${liveDot(k)}↳ ${esc(k.name || k.model || k.code)}${k.own ? ' · <em>playlist sue</em>' : ''}</button>`).join('')}</div>` : ''}
         ${d.notes ? `<div class="dv-note">${esc(d.notes.slice(0, 90))}</div>` : ''}
         <div class="dv-act"><button class="btn sm" data-act="renew">Rinnova</button><button class="btn sm pri" data-act="open">Modifica</button></div>
       </div>`;
@@ -820,7 +820,7 @@
       const kids = sub ? [] : kidsOf(d.id), p = sub ? parentOf(d) : null;
       const base = sub && p ? p : d, dl = daysLeft(base);
       const exp = base.expires ? `<b>${esc(fmtD(base.expires))}</b><small class="${dl !== null && dl < 0 ? 'bad' : dl !== null && dl <= 14 ? 'warn' : ''}">${dl === null ? '' : dl < 0 ? 'scaduto da ' + -dl + ' g' : dl === 0 ? 'scade oggi' : 'tra ' + dl + ' g'}</small>` : (d.status === 'pending' ? '<span class="mut">—</span>' : '<b>Senza scadenza</b>');
-      const pls = sub ? '<span class="mut">dal principale</span>' : (d.playlists || []).length ? `${(d.playlists || []).length} · <span class="mut">${esc(hostsOf(d).slice(0, 1).join(''))}</span>` : '<span class="mut">nessuna</span>';
+      const pls = sub && !d.own ? '<span class="mut">dal principale</span>' : (d.playlists || []).length ? `${(d.playlists || []).length} · <span class="mut">${esc(hostsOf(d).slice(0, 1).join(''))}</span>${sub ? ' <span class="kc-tag" title="Gestione indipendente: playlist e lettore di questa TV">propria</span>' : ''}` : '<span class="mut">nessuna</span>';
       const acts = d.status === 'pending' && !sub
         ? '<button class="btn sm pri" data-act="activate">Attiva</button><button class="btn sm" data-act="link">Collega</button>'
         : sub ? ib('kick', 'k', 'Disconnetti') + ib('edit', 'e', 'Apri scheda')

@@ -96,6 +96,7 @@ async function demoApi(method, path, body) {
     if (b.maxConn !== undefined && +b.maxConn < used(d.id)) throw new Error(`Su questo abbonamento ci sono già ${used(d.id)} dispositivi: scollegane qualcuno prima di ridurre le connessioni`);
     if (b.profiles && b.profiles.length > (b.maxProfiles ?? d.maxProfiles ?? 3)) throw new Error(`Puoi avere al massimo ${b.maxProfiles ?? d.maxProfiles} profili`);
     accIn(d, b);
+    if (d.parent && b.own === false) Object.assign(b, { playlists: [], plMode: 'merge', plDefault: '', player: {} });
     const was = statusOf(d); Object.assign(d, b); const now = statusOf(d); log(was !== now ? (now === 'active' ? 'on' : 'off') : 'edit', was !== now ? `${d.name || d.code}: ${was} → ${now}` : 'Modificato ' + (d.name || d.code)); return pub(d);
   }
   throw new Error('demo');
@@ -275,7 +276,7 @@ function renderDevices() {
       <td class="hm mut">${esc(d.model || '—')}</td>
       <td>${stPill(d.status)}</td>
       <td class="hm">${fmtD(exp)}${dl !== null ? `<span class="days" style="color:${dl < 0 ? 'var(--bad)' : dl <= 14 ? 'var(--warn)' : ''}">${dl < 0 ? 'scaduto da ' + -dl + ' g' : 'tra ' + dl + ' g'}</span>` : ''}</td>
-      <td class="hm">${sub ? '<span class="mut">—</span>' : d.playlists.length}</td>
+      <td class="hm">${sub && !d.own ? '<span class="mut">—</span>' : d.playlists.length}</td>
       <td class="hm mut">${d.live ? '<b style="color:#22c55e">adesso</b>' : ago(d.lastSeen)}</td>
       <td>${sub ? '' : d.status === 'pending' ? `<button class="btn sm pri" data-act="open">Attiva</button>` : `<button class="icb" title="+1 mese" data-act="ext"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button><button class="icb" title="${d.active ? 'Disattiva' : 'Riattiva'}" data-act="tog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></button>`}<button class="icb" title="Modifica" data-act="open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button></td></tr>`;
   }).join('');
@@ -433,9 +434,10 @@ function renderDrawer() {
   const ownConf = edit.vpnConf && !edit.vpnConfClear;
   const linkBox = !pendingFree ? '' : (() => {
     const opts = D.devices.filter((x) => !x.parent && x.id !== edit.id && x.status !== 'pending').map((x) => { const u = 1 + kidsOf(x.id).length, mx = x.maxConn || 1; return `<option value="${esc(x.id)}" ${u >= mx ? 'disabled' : ''}>${esc(x.name || x.code)} · ${u} di ${esc(mx)} connessioni${u >= mx ? ' (pieno)' : ''}</option>`; }).join('');
-    return `<div class="lnk"><b>🔗 È il dispositivo di un cliente che hai già?</b><small>Collegalo al suo abbonamento come connessione in più: userà le sue playlist, la sua scadenza e i suoi profili.</small>${opts ? `<div class="row"><select class="inp" id="eLinkTo"><option value="">Scegli il cliente…</option>${opts}</select><button class="btn" id="eLinkGo">Collega a un cliente</button></div>` : '<small>Nessun cliente con abbonamento a cui collegarlo.</small>'}</div>`;
+    return `<div class="lnk"><b>🔗 È il dispositivo di un cliente che hai già?</b><small>Collegalo al suo abbonamento come connessione in più: userà le sue playlist, la sua scadenza e i suoi profili (dopo, con «Gestione indipendente», puoi dargli playlist e lettore suoi).</small>${opts ? `<div class="row"><select class="inp" id="eLinkTo"><option value="">Scegli il cliente…</option>${opts}</select><button class="btn" id="eLinkGo">Collega a un cliente</button></div>` : '<small>Nessun cliente con abbonamento a cui collegarlo.</small>'}</div>`;
   })();
-  const linkedBox = !linked ? '' : `<div class="lnk"><b>🔗 Connessione di ${esc(P ? P.name || P.code : 'un cliente eliminato')}</b><small>Abbonamento, scadenza, playlist, profili e limiti sono quelli del cliente principale${P ? ` (${1 + kidsOf(P.id).length} di ${esc(P.maxConn || 1)} connessioni)` : ''}.</small><div style="display:flex;gap:8px">${P ? '<button class="btn sm" id="eOpenP">Apri il cliente principale</button>' : ''}<button class="btn sm danger" id="eUnlink">Scollega</button></div></div>`;
+  const linkedBox = !linked ? '' : `<div class="lnk"><b>🔗 Connessione di ${esc(P ? P.name || P.code : 'un cliente eliminato')}</b><small>${edit.own ? 'Abbonamento, scadenza, profili e limiti sono quelli del cliente principale; <span style="color:var(--txt);font-weight:700">playlist e lettore sono di questa TV</span>' : 'Abbonamento, scadenza, playlist, profili e limiti sono quelli del cliente principale'}${P ? ` (${1 + kidsOf(P.id).length} di ${esc(P.maxConn || 1)} connessioni)` : ''}.</small><div style="display:flex;gap:8px">${P ? '<button class="btn sm" id="eOpenP">Apri il cliente principale</button>' : ''}<button class="btn sm danger" id="eUnlink">Scollega</button></div></div>
+    <div class="tog ${edit.own ? 'on' : ''}" id="eOwn" style="margin-top:10px"><div><b>Gestione indipendente</b><small>${edit.own ? 'Questa TV usa le sue playlist e il suo lettore (sezioni qui sotto). Resta collegata: stessa scadenza, stessi profili, conta nelle connessioni del cliente.' : 'Accendila per dare a questa TV playlist e lettore suoi (es. un\'altra linea o un\'altra app), lasciandola collegata al cliente principale.'}</small></div><i></i></div>`;
   const accBox = linked ? '' : `
     <div class="row"><div><small class="mut">Connessioni massime</small><input class="inp" type="number" min="1" max="20" id="eMaxC" value="${esc(edit.maxConn ?? 1)}"></div><div><small class="mut">Profili massimi</small><input class="inp" type="number" min="0" max="12" id="eMaxP" value="${esc(maxP)}"></div></div>
     <div style="margin-top:10px"><small class="mut">Visioni contemporanee (0 = senza limite)</small><input class="inp" type="number" min="0" max="20" id="eMaxS" value="${esc(edit.maxStreams ?? 0)}"><small class="mut" style="display:block;margin-top:4px;font-size:11px">Quanti dispositivi di questo abbonamento possono guardare nello stesso momento</small></div>
@@ -454,7 +456,7 @@ function renderDrawer() {
   const locBox = linked || !locs.length ? '' : `<label class="lbl">Località VPN</label><select class="inp" id="eLoc"><option value="">Configurazione generale / del dispositivo</option>${locs.map((l) => `<option value="${esc(l.id)}" ${edit.vpnLoc === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select>`;
   // lettore per tipo di contenuto (2.0): '' = lo sceglie il cliente nell'app
   const pl = edit.player || {};
-  const playerBox = linked ? '' : [['live', 'TV in diretta', '📡'], ['movie', 'Film', '🎬'], ['series', 'Serie TV', '🎞️']].map(([k, l, ic]) => `<div class="pl-eng"><span class="ic">${ic}</span><b>${l}</b><div class="seg">${[['', 'Sceglie il cliente'], ['auto', 'Automatico'], ['exo', 'ExoPlayer'], ['vlc', 'VLC']].map(([v, t]) => `<button class="${(pl[k] || '') === v ? 'on' : ''}" data-peng="${k}" data-v="${v}">${t}</button>`).join('')}</div></div>`).join('');
+  const playerBox = linked && !edit.own ? '' : [['live', 'TV in diretta', '📡'], ['movie', 'Film', '🎬'], ['series', 'Serie TV', '🎞️']].map(([k, l, ic]) => `<div class="pl-eng"><span class="ic">${ic}</span><b>${l}</b><div class="seg">${[['', 'Sceglie il cliente'], ['auto', 'Automatico'], ['exo', 'ExoPlayer'], ['vlc', 'VLC']].map(([v, t]) => `<button class="${(pl[k] || '') === v ? 'on' : ''}" data-peng="${k}" data-v="${v}">${t}</button>`).join('')}</div></div>`).join('');
   const extraBox = linked ? '' : `
     <div class="perms">${PERM_L.map(([k, l, d]) => `<div class="tog ${!edit.perms || edit.perms[k] !== false ? 'on' : ''}" data-perm="${k}"><div><b>${l}</b><small>${d}</small></div><i></i></div>`).join('')}</div>
     ${isNew ? '' : `<label class="lbl">Collegare un altro dispositivo</label><button class="btn" id="eLinkCode" style="width:100%">🔗 Genera codice di collegamento (6 cifre)</button><small class="mut" style="display:block;margin-top:6px;font-size:12px">Sulla nuova TV il cliente sceglie «Ho già un abbonamento» e scrive il codice. Vale 10 minuti.</small>`}`;
@@ -467,7 +469,7 @@ function renderDrawer() {
   const S2 = linked ? '' : `<div class="tog ${edit.active ? 'on' : ''}" id="eAct"><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
     <div class="row"><input class="inp" type="date" id="eExp" value="${esc(edit.expires)}"><button class="btn" id="eInf">${edit.expires ? 'Rendi illimitato' : 'Illimitato ✓'}</button></div>
     <div class="quick">${[1, 3, 6, 12].map((m) => `<button class="btn sm" data-m="${m}">+${m} ${m === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>`;
-  const S3 = linked ? '' : `<div id="pls">${edit.playlists.map((p, i) => `<div class="pl" data-i="${i}">
+  const S3 = linked && !edit.own ? '' : `<div id="pls">${edit.playlists.map((p, i) => `<div class="pl" data-i="${i}">
       <div class="ph"><input class="inp" data-k="name" value="${esc(p.name)}" placeholder="Nome"><input class="inp pltag" data-k="tag" value="${esc(p.tag || '')}" maxlength="6" placeholder="Sigla" title="Sigla mostrata nell'app sui contenuti di questa playlist quando sono unite (es. SKY, A, B)"><div class="seg"><button class="${p.type === 'm3u' ? 'on' : ''}" data-t="m3u">M3U</button><button class="${p.type === 'xtream' ? 'on' : ''}" data-t="xtream">Xtream</button></div><button class="icb" data-rm><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button></div>
       ${p.type === 'm3u' ? `<input class="inp mono" data-k="url" value="${esc(p.url)}" placeholder="http://…/get.php?…&type=m3u_plus">` : `<input class="inp mono" data-k="host" value="${esc(p.host)}" placeholder="http://host:porta"><div class="row"><input class="inp" data-k="username" value="${esc(p.username)}" placeholder="Username"><input class="inp" data-k="password" value="${esc(p.password)}" placeholder="Password"></div>`}
     </div>`).join('')}</div>
@@ -485,7 +487,7 @@ function renderDrawer() {
   const S8 = `<textarea class="inp" id="eNotes" placeholder="Pagamento, contatto, dettagli…">${esc(edit.notes)}</textarea>
     ${!isNew ? `<p class="mut" style="font-size:12px;margin-top:10px">Registrato ${fmtD(edit.createdAt)} · ultimo accesso ${ago(edit.lastSeen)}${edit.model ? ' · ' + esc(edit.model) : ''}</p>` : ''}`;
   const SECS = linked
-    ? [['cli', 'Dispositivo', 'Codice e nome', S1], ['vpn', 'VPN', '', vpnBox], ['note', 'Note', 'Solo per te, il cliente non le vede', S8]]
+    ? [['cli', 'Dispositivo', 'Codice, nome e gestione', S1], ...(edit.own ? [['pl', 'Playlist', 'Le playlist di questa TV (gestione indipendente)', S3], ['ply', 'Lettore', 'Quale lettore usa l\'app di questa TV', playerBox]] : []), ['vpn', 'VPN', '', vpnBox], ['note', 'Note', 'Solo per te, il cliente non le vede', S8]]
     : [['cli', 'Cliente', 'Codice, collegamento e nome', S1], ['abb', 'Abbonamento', 'Attivo e scadenza', S2], ['pl', 'Playlist', 'Liste M3U o Xtream del cliente', S3],
       ['ply', 'Lettore', 'Quale lettore usa l\'app per ogni tipo di contenuto', playerBox], ['acc', 'Account e profili', 'Dispositivi, profili e visioni insieme', accBox],
       ['vpn', 'VPN', 'Modalità e località', vpnBox + locBox], ['perm', 'Permessi', 'Cosa può fare il cliente nell\'app', extraBox], ['add', 'Add-on', 'Temi, skin e avatar dello Store dell\'app', addonBox], ['note', 'Note', 'Solo per te, il cliente non le vede', S8]];
@@ -546,6 +548,20 @@ function renderDrawer() {
   $('#eWgClr') && ($('#eWgClr').onclick = () => { sync(); edit.vpnConfClear = true; edit.wgText = ''; renderDrawer(); });
   /* connessioni */
   $('#eOpenP') && ($('#eOpenP').onclick = () => openDrawer(parentOf(edit)));
+  // gestione indipendente: si parte da una copia delle playlist e del lettore del principale, poi si cambia quello che serve
+  $('#eOwn') && ($('#eOwn').onclick = () => {
+    sync();
+    edit.own = !edit.own;
+    if (edit.own && !(edit.playlists || []).length) {
+      const P0 = parentOf(edit);
+      edit.playlists = P0 ? JSON.parse(JSON.stringify(P0.playlists || [])) : [];
+      if (!edit.playlists.length) edit.playlists.push({ id: 'p' + Date.now(), name: 'Playlist 1', type: 'm3u', url: '', host: '', username: '', password: '' });
+      if (P0) { edit.plMode = P0.plMode; edit.plDefault = P0.plDefault; edit.player = { ...(P0.player || {}) }; }
+    }
+    renderDrawer();
+    // si passa subito alle playlist di questa TV (scheda «Linee e lettore»)
+    if (edit.own) { if (window.KXDrawerTab) KXDrawerTab('lines'); else setTimeout(() => { const el = $('#ds-pl'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); }
+  });
   $('#eUnlink') && ($('#eUnlink').onclick = async () => {
     if (!(await ask('Scollegare il dispositivo?', `<b class="mono">${esc(edit.code)}</b> non userà più l'abbonamento del cliente e tornerà “in attesa” di attivazione.`, 'Scollega'))) return;
     try { await api('POST', '/admin/devices/' + edit.id + '/unlink'); closeDrawer(); await load(); toast('Dispositivo scollegato: ora è in attesa'); } catch (e) { toast(e.message, 1); }
@@ -570,7 +586,7 @@ function renderDrawer() {
       if (edit.aiLimitIn !== undefined) own.aiLimit = edit.aiLimitIn;
       if (edit.aiProviderIn !== undefined) own.aiProvider = edit.aiProviderIn;
       if (isNew) await api('POST', '/admin/devices', { code: edit.code, name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart, ...own });
-      else if (edit.parent) await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, ...vpnPart });
+      else if (edit.parent) await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, ...vpnPart, own: !!edit.own, ...(edit.own ? { playlists: edit.playlists, plMode: acc.plMode, plDefault: acc.plDefault, player: acc.player } : {}) });
       else await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart, ...own });
       closeDrawer(); await load(); toast(isNew ? 'Dispositivo creato' : 'Modifiche salvate');
     } catch (e) { toast(e.message, 1); }

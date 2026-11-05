@@ -153,7 +153,7 @@
   window.KXDrawerTab = (k) => { dtab = k; drawerTabs(); };
 
   /* ---------- la stessa scheda cliente a schede anche per gli agenti (modulo «Cliente» del loro pannello) ---------- */
-  const agTabOf = (sec) => { if (sec.id === 'cOth') return 'apps'; const h = ((sec.querySelector('h4') || {}).textContent || '').trim(); if (/^(Cliente|Abbonamento)/.test(h)) return 'main'; if (/^Line/.test(h)) return 'lines'; return 'adv'; };
+  const agTabOf = (sec) => { if (sec.id === 'cOth') return 'apps'; const h = ((sec.querySelector('h4') || {}).textContent || '').trim(); if (/^(Cliente|Abbonamento)/.test(h)) return 'main'; if (/^(Line|Gestione indipendente)/.test(h)) return 'lines'; return 'adv'; };
   let atab = 'main', akey = null, aBusy = false;
   function agTabs() {
     const B = $('#agB'); if (!B || aBusy || window.KX_NO_TABS) return;

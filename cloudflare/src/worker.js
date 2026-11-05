@@ -1093,9 +1093,18 @@ async function primaryOf(env, d) {
   return p && !p.parent ? p : null;
 }
 const linkedOf = async (env, id) => ((await env.DB.prepare('SELECT id, code, name, model, last_seen, vpn_conf FROM devices WHERE parent = ? ORDER BY created_at LIMIT 100').bind(id).all()).results) || [];
-async function accountOf(env, P, me, pls) {
+/** connessione collegata con «gestione indipendente»: playlist e lettore suoi; abbonamento, scadenza, profili, permessi e limiti del principale */
+const ownOf = (d) => !!(d && d.parent && +d.own);
+/** playlist e scelte (unite/divise, playlist da usare, lettore) che valgono per il dispositivo d dell'account P:
+    C = da dove si leggono le scelte (il dispositivo stesso se è indipendente, altrimenti il principale) */
+async function effOf(env, d, P, Ppls) {
+  if (!ownOf(d)) return { C: P, pls: Ppls };
+  const pls = await unseal(env, d.playlists).catch(() => []);
+  return pls.length ? { C: d, pls } : { C: P, pls: Ppls }; // per sicurezza: senza playlist sue usa quelle del principale
+}
+async function accountOf(env, P, me, pls, C = P) {
   const conns = [P, ...(await linkedOf(env, P.id))].map((x) => ({ name: x.name || '', model: x.model || '', seen: x.id === me.id ? now() : +x.last_seen || 0, me: x.id === me.id }));
-  return { primary: me.id === P.id, owner: P.name || '', maxConn: P.max_conn ?? 1, conns, maxProfiles: P.max_profiles ?? 3, profiles: readProfiles(P, pls.map((p) => p.id)), canEdit: !P.lock_profiles, maxStreams: +P.max_streams || 0, plMode: P.pl_mode === 'split' ? 'split' : 'merge', plDefault: pls.some((p) => p.id === P.pl_default) ? P.pl_default : '', player: playerParse(P.player) };
+  return { primary: me.id === P.id, owner: P.name || '', maxConn: P.max_conn ?? 1, conns, maxProfiles: P.max_profiles ?? 3, profiles: readProfiles(P, pls.map((p) => p.id)), canEdit: !P.lock_profiles, maxStreams: +P.max_streams || 0, plMode: C.pl_mode === 'split' ? 'split' : 'merge', plDefault: pls.some((p) => p.id === C.pl_default) ? C.pl_default : '', player: playerParse(C.player) };
 }
 /* ---------------- VPN (WireGuard) ---------------- */
 /** controlla una configurazione wg-quick; '' = nessuna */
@@ -1177,11 +1186,20 @@ async function playerProfiles(req, env, ip, ctx) {
   if (!permsOf(P).profiles) return json({ error: PERM_MSG }, 403);
   if (P.lock_profiles) return json({ error: 'La modifica dei profili è stata bloccata dal fornitore' }, 403);
   if (await throttled(env, 'prof:' + P.id, 60, 3600e3)) return json({ error: 'Troppe modifiche, riprova più tardi' }, 429);
-  let list;
-  try { list = cleanProfiles(b.profiles, P.max_profiles ?? 3, pls.map((p) => p.id)); } catch (e) { return json({ error: e.message }, e.status || 400); }
+  let list, mine = null;
+  try {
+    if (ownOf(d)) {
+      // TV collegata con playlist sue: i profili restano quelli dell'account e la playlist scelta per ogni profilo
+      // (che si riferisce alle playlist del principale) non si cambia da qui
+      const keep = new Map(readProfiles(P, pls.map((p) => p.id)).map((p) => [p.id, p.pl]));
+      list = cleanProfiles(b.profiles, P.max_profiles ?? 3, []).map((p) => ({ ...p, pl: keep.get(p.id) || 'all' }));
+      const ids = (await unseal(env, d.playlists).catch(() => [])).map((p) => p.id);
+      mine = list.map((p) => ({ ...p, pl: ids.includes(p.pl) ? p.pl : 'all' }));
+    } else list = cleanProfiles(b.profiles, P.max_profiles ?? 3, pls.map((p) => p.id));
+  } catch (e) { return json({ error: e.message }, e.status || 400); }
   await env.DB.prepare('UPDATE devices SET profiles = ? WHERE id = ?').bind(JSON.stringify(list), P.id).run();
   ctx.waitUntil(log(env, 'edit', `Profili modificati dal cliente ${P.name || P.code} (${list.length})`, ip));
-  return json({ ok: true, profiles: list });
+  return json({ ok: true, profiles: mine || list });
 }
 async function playerLinkCode(req, env, ip, ctx) {
   if (await limited(env.RL_DEVICE, 'lc:' + ip)) return json({ error: 'Troppe richieste, riprova tra poco' }, 429);
@@ -1242,12 +1260,12 @@ async function playerLink(req, env, ip, ctx) {
   if (used >= max) return json({ error: `Connessioni esaurite (${used} di ${max})` }, 409);
   // il codice si usa una volta sola (se due dispositivi lo inviano insieme, solo uno lo ottiene)
   if (!(await env.DB.prepare('DELETE FROM link_pins WHERE pin_hash = ? AND until > ? RETURNING device_id').bind(h, now()).first())) return fail();
-  await env.DB.prepare("UPDATE devices SET parent = ?, active = 0, expires = '', playlists = '', profiles = '' WHERE id = ? AND parent = ''").bind(P.id, d.id).run();
+  await env.DB.prepare("UPDATE devices SET parent = ?, active = 0, expires = '', playlists = '', profiles = '', own = 0 WHERE id = ? AND parent = ''").bind(P.id, d.id).run();
   ctx.waitUntil(log(env, 'on', `${d.code}${d.model ? ' (' + d.model + ')' : ''} collegato come connessione di ${P.name || P.code} (${used + 1} di ${max})`, ip));
   return json({ ok: true });
 }
 /** in pannello: rende di nuovo "in attesa" un dispositivo collegato */
-const unlinkStmt = (env, id) => env.DB.prepare("UPDATE devices SET parent = '', active = 0, expires = '', playlists = '', profiles = '' WHERE id = ?").bind(id);
+const unlinkStmt = (env, id) => env.DB.prepare("UPDATE devices SET parent = '', active = 0, expires = '', playlists = '', profiles = '', own = 0 WHERE id = ?").bind(id);
 
 /* ====================================================================== */
 /* Tendenze: film e serie più popolari in Italia (Apple iTunes, oppure TMDB) */
@@ -1569,7 +1587,8 @@ async function playerHeartbeat(req, env, ip, ctx) {
     side.push(env.DB.prepare('INSERT INTO watch (day, kind, title, n) VALUES (?, ?, ?, 1) ON CONFLICT(day, kind, title) DO UPDATE SET n = watch.n + 1').bind(dayIT(t), state, f.title).run());
   if (side.length) ctx.waitUntil(Promise.allSettled(side));
   // modalità VPN e permessi attuali: se il pannello li ha cambiati l'app si riallinea subito (senza aspettare 20 minuti)
-  const [P, pls] = await activeAccount(env, d);
+  const [P, pls0] = await activeAccount(env, d);
+  const { C, pls } = P ? await effOf(env, d, P, pls0) : { C: null, pls: [] }; // connessione indipendente: le sue playlist e il suo lettore
   const vm = P ? (+P.vpn === 2 ? 'force' : +P.vpn === 1 ? 'allow' : 'off') : 'off';
   // impronta dei server delle playlist: se cambia (DNS cambiato dal pannello) l'app aggiorna gli indirizzi senza ricaricare la lista
   const pv = pls.length ? (await sha256(pls.map((p) => p.id + '|' + hostOf(p) + '|' + (p.username || '')).join(','))).slice(0, 12) : '';
@@ -1586,7 +1605,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
     // ultima versione: di solito già in memoria; se va scaricata il battito non aspetta più di 800 ms
     try { const lp = latestFor(env, S0, appFrom(req, b) || d.app || 'tv'); ctx.waitUntil(lp.catch(() => {})); const L = await Promise.race([lp, new Promise((r) => setTimeout(() => r(null), 800))]); if (L && verBehind(f.ver, L.version)) upd = L.versionCode || 1; } catch {}
   }
-  return json({ ok: true, mt, ...(upd ? { upd } : {}), unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (P.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === P.pl_default) ? P.pl_default : '') + '|' + JSON.stringify(playerParse(P.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
+  return json({ ok: true, mt, ...(upd ? { upd } : {}), unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
 }
 /* ---------------- dati del cliente e salute delle app ---------------- */
 const verNum = (v) => { const m = String(v || '').match(/(\d{1,3})\.(\d{1,3})(?:\.(\d{1,3}))?/); return m ? +m[1] * 1e6 + +m[2] * 1e3 + +(m[3] || 0) : 0; };
@@ -2427,15 +2446,17 @@ async function playerRegister(req, env, ip, ctx) {
   { const app = appFrom(req, b); if (app && d.app !== app) { d.app = app; ctx.waitUntil(env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(app, d.id).run()); } }
   ctx.waitUntil(presenceFromRegister(env, d, b, ip, cfOf(req)));
 
-  // un dispositivo collegato usa stato, scadenza, playlist, profili e limiti del suo principale
+  // un dispositivo collegato usa stato, scadenza, profili e limiti del suo principale; le playlist e il lettore
+  // anche, salvo «gestione indipendente» (allora sono i suoi)
   const P = await primaryOf(env, d);
-  const pls = P ? await unseal(env, P.playlists).catch(() => []) : [];
+  const Ppls = P ? await unseal(env, P.playlists).catch(() => []) : [];
   const s = await getSettings(env);
-  let status = P ? statusOf(P, pls) : 'pending';
+  let status = P ? statusOf(P, Ppls) : 'pending';
+  const { C, pls } = status === 'active' ? await effOf(env, d, P, Ppls) : { C: P, pls: [] };
   if (status === 'active' && maintFor(s, P)) status = 'maintenance';
   const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? pls : [], messages: await deviceMessages(env, d.id, P && P.id) };
   if (status === 'active') {
-    out.account = await accountOf(env, P, d, pls);
+    out.account = await accountOf(env, P, d, pls, C);
     out.vpn = await vpnOf(env, P, d);
     out.perms = permsOf(P); // i collegati ereditano i permessi del principale
     if (s.aiOff) out.perms.ai = false; // assistente spento dal pannello
@@ -3013,6 +3034,18 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
         for (const k of ['maxProfiles', 'lockProfiles', 'maxStreams', 'plMode', 'plDefault', 'player', 'profiles']) if (b[k] !== undefined) { if (!P.account) throw new HttpErr(403, 'Non puoi cambiare profili, lettore e visioni'); o[k] = b[k]; }
         if (o.maxStreams !== undefined) o.maxStreams = Math.min(Math.max(0, parseInt(o.maxStreams, 10) || 0), P.maxConn);
         for (const k of ['aiLimit', 'aiProvider']) if (b[k] !== undefined) { if (!P.ai) throw new HttpErr(403, 'Non puoi cambiare l\'assistente IA'); o[k] = b[k]; }
+      } else {
+        // TV collegata: con il permesso «playlist» l'agente le dà linee sue (gestione indipendente), restando collegata al cliente
+        if (typeof b.own === 'boolean' || b.playlists !== undefined) {
+          if (!P.playlists) throw new HttpErr(403, 'Non puoi cambiare le playlist');
+          o.own = typeof b.own === 'boolean' ? b.own : !!+d.own;
+          if (o.own && b.playlists !== undefined) {
+            // una riga copiata dal cliente principale (stesso id) senza password tiene la sua
+            const par = await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first();
+            o.playlists = plsFrom(b.playlists, [...(await unseal(env, d.playlists).catch(() => [])), ...(par ? await unseal(env, par.playlists).catch(() => []) : [])]);
+          }
+        }
+        for (const k of ['plMode', 'plDefault', 'player']) if (b[k] !== undefined) { if (!P.account) throw new HttpErr(403, 'Non puoi cambiare profili, lettore e visioni'); o[k] = b[k]; }
       }
       if (o.aiLimit !== undefined || o.aiProvider !== undefined) return adminRoutes(new Request(url.href, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) }), env, url, path, who, ip, ctx, { ...aSes, aiOk: true });
       return forward('PUT', path, o);
@@ -3035,7 +3068,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (m === 'DELETE') return json(await orbixRemove(env, d, who, ip));
     const b = await readJSON(req, 2048);
     let agentLines = null;
-    if (ses && ses.agent) { const P0 = d.parent ? await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first() : d; agentLines = xtreamLines(await unseal(env, (P0 || d).playlists).catch(() => [])); }
+    if (ses && ses.agent) { const P0 = d.parent && !ownOf(d) ? await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first() : d; agentLines = xtreamLines(await unseal(env, (P0 || d).playlists).catch(() => [])); }
     return json(await orbixSend(env, d, b, who, ip, agentLines));
   }
   if (path === '/maxplayer/domains' && m === 'GET' && url.searchParams.get('owned') === '1' && !(ses && ses.agent)) {
@@ -3079,7 +3112,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (m === 'DELETE') return json(await mxRemove(env, d, who, ip));
     const b = await readJSON(req, 2048);
     let agentLines = null;
-    if (ses && ses.agent) { const P0 = d.parent ? await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first() : d; agentLines = xtreamLines(await unseal(env, (P0 || d).playlists).catch(() => [])); }
+    if (ses && ses.agent) { const P0 = d.parent && !ownOf(d) ? await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first() : d; agentLines = xtreamLines(await unseal(env, (P0 || d).playlists).catch(() => [])); }
     return json(await mxSend(env, d, b, who, ip, agentLines));
   }
   if (path === '/devices/inactive' && m === 'GET' && !(ses && ses.agent)) {
@@ -3094,7 +3127,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       const part = del.slice(i, i + 40), ph = part.map(() => '?').join(','), ids = part.map((x) => x.id);
       // le connessioni collegate tornano «in attesa», come quando elimini un cliente a mano
       await env.DB.batch([
-        env.DB.prepare(`UPDATE devices SET parent = '', active = 0, expires = '', playlists = '', profiles = '' WHERE parent IN (${ph})`).bind(...ids),
+        env.DB.prepare(`UPDATE devices SET parent = '', active = 0, expires = '', playlists = '', profiles = '', own = 0 WHERE parent IN (${ph})`).bind(...ids),
         env.DB.prepare(`DELETE FROM devices WHERE id IN (${ph})`).bind(...ids),
         env.DB.prepare(`DELETE FROM link_pins WHERE device_id IN (${ph})`).bind(...ids),
       ]);
@@ -3624,7 +3657,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       // cambia solo il server (schema+host[:porta]) di tutte le playlist: percorsi, utente e password restano
       const b = await readJSON(req, 2048);
       const host = cleanHost(b.host);
-      if (d.parent) throw new HttpErr(400, 'Le playlist di una connessione collegata si cambiano dal cliente principale');
+      if (d.parent && !ownOf(d)) throw new HttpErr(400, 'Le playlist di una connessione collegata si cambiano dal cliente principale (oppure attiva la sua gestione indipendente)');
       const pls = await unseal(env, d.playlists).catch(() => []);
       if (!pls.length) throw new HttpErr(400, 'Il dispositivo non ha playlist');
       const next = pls.map((p) => swapHost(p, host));
@@ -3661,18 +3694,33 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       if (statusOf(P, await unseal(env, P.playlists).catch(() => [])) === 'pending') throw new HttpErr(400, 'Il cliente scelto non ha ancora un abbonamento');
       const used = await connCount(env, P), max = P.max_conn ?? 1;
       if (used >= max) throw new HttpErr(400, `Connessioni esaurite (${used} di ${max}): aumenta "Connessioni massime" del cliente`);
-      await env.DB.prepare("UPDATE devices SET parent = ?, active = 0, expires = '', playlists = '', profiles = '' WHERE id = ? AND parent = ''").bind(P.id, d.id).run();
+      await env.DB.prepare("UPDATE devices SET parent = ?, active = 0, expires = '', playlists = '', profiles = '', own = 0 WHERE id = ? AND parent = ''").bind(P.id, d.id).run();
       await log(env, 'on', `${who}: ${label} collegato come connessione di ${P.name || P.code} (${used + 1} di ${max})`, ip);
       return json({ ok: true });
     }
     if (m === 'PUT' && d.parent) {
-      // connessione di un altro cliente: abbonamento, playlist, profili e limiti si cambiano dal principale
-      const b = await readJSON(req);
-      if (['active', 'expires', 'playlists', 'profiles', 'maxConn', 'maxProfiles', 'lockProfiles', 'vpn', 'perms', 'addons'].some((k) => b[k] !== undefined)) throw new HttpErr(400, 'Questo dispositivo è una connessione di un altro cliente: abbonamento, playlist, profili e permessi si modificano dal cliente principale');
+      // connessione di un altro cliente: abbonamento, profili, permessi e limiti si cambiano dal principale.
+      // Con «gestione indipendente» (own) la TV collegata ha playlist e lettore suoi, restando collegata al principale.
+      const b = await readJSON(req, 512 * 1024);
+      if (['active', 'expires', 'profiles', 'maxConn', 'maxProfiles', 'lockProfiles', 'vpn', 'perms', 'addons'].some((k) => b[k] !== undefined)) throw new HttpErr(400, 'Questo dispositivo è una connessione di un altro cliente: abbonamento, scadenza, profili e permessi si modificano dal cliente principale');
+      const wasOwn = ownOf(d), own = typeof b.own === 'boolean' ? b.own : wasOwn;
+      if (!own && b.playlists !== undefined) throw new HttpErr(400, 'Per dare a questa TV playlist sue attiva prima la gestione indipendente');
+      const oldPls = await unseal(env, d.playlists).catch(() => []);
+      const pls = own ? (b.playlists !== undefined ? cleanPlaylists(b.playlists) : oldPls) : [];
+      if (own && !pls.length) throw new HttpErr(400, 'Gestione indipendente: aggiungi almeno una playlist per questa TV');
+      let plMode = own ? d.pl_mode || '' : '', plDef = own ? d.pl_default || '' : '', player = own ? d.player || '' : '';
+      if (own) {
+        if (b.plMode !== undefined) plMode = b.plMode === 'split' ? 'split' : 'merge';
+        if (b.plDefault !== undefined) { const v = str(b.plDefault, 40); if (v && !pls.some((p) => p.id === v)) throw new HttpErr(400, 'Playlist da usare non trovata'); plDef = v; }
+        if (!pls.some((p) => p.id === plDef)) plDef = '';
+        if (b.player !== undefined) player = playerInput(b.player);
+      }
       const acc = await accountFields(env, { vpnConf: b.vpnConf, vpnConfClear: b.vpnConfClear }, d, []);
-      await env.DB.prepare('UPDATE devices SET name = ?, notes = ?, vpn_conf = ? WHERE id = ?')
-        .bind(typeof b.name === 'string' ? str(b.name, 60) : d.name, typeof b.notes === 'string' ? str(b.notes, 500) : d.notes, acc.vpn_conf, d.id).run();
-      await log(env, 'edit', `${who}: modificato ${str(b.name, 60) || label}`, ip);
+      const name = typeof b.name === 'string' ? str(b.name, 60) : d.name;
+      await env.DB.prepare('UPDATE devices SET name = ?, notes = ?, vpn_conf = ?, own = ?, playlists = ?, pl_mode = ?, pl_default = ?, player = ? WHERE id = ?')
+        .bind(name, typeof b.notes === 'string' ? str(b.notes, 500) : d.notes, acc.vpn_conf, own ? 1 : 0, own ? await seal(env, pls) : '', plMode, plDef, player, d.id).run();
+      if (JSON.stringify(pls) !== JSON.stringify(oldPls)) srcMem.map = null;
+      await log(env, 'edit', own !== wasOwn ? `${who}: ${name || label} — gestione indipendente ${own ? 'attivata (playlist e lettore suoi)' : 'tolta (usa quelli del cliente principale)'}` : `${who}: modificato ${name || label}`, ip);
       return json({ ok: true });
     }
     if (m === 'PUT') {
@@ -3919,7 +3967,8 @@ async function apiAdmin(req, env, path, who, ip, ctx) {
 /** dispositivo come lo vede il pannello (le configurazioni WireGuard non tornano mai: solo "configurata sì/no") */
 async function deviceOut(env, d) {
   const pls = await unseal(env, d.playlists).catch(() => []);
-  return { id: d.id, code: d.code, name: d.name, model: d.model, notes: d.notes, active: !!d.active, expires: d.expires, playlists: pls, hosts: [...new Set(pls.map(hostOf).filter(Boolean))], createdAt: d.created_at, lastSeen: d.last_seen, lastIp: d.last_ip, bound: !!d.secret_hash, status: statusOf(d, pls),
+  // una connessione collegata ha lo stato del principale (il pannello lo copia); le sue eventuali playlist non la rendono «disattivata»
+  return { id: d.id, code: d.code, name: d.name, model: d.model, notes: d.notes, active: !!d.active, expires: d.expires, playlists: pls, hosts: [...new Set(pls.map(hostOf).filter(Boolean))], createdAt: d.created_at, lastSeen: d.last_seen, lastIp: d.last_ip, bound: !!d.secret_hash, status: statusOf(d, d.parent ? [] : pls), own: ownOf(d),
     addons: addonsList(d.addons), ownerId: +d.owner_id || 0, aiLimit: d.ai_limit ?? -1, aiExtra: +d.ai_extra || 0, aiProvider: d.ai_provider || '', app: d.app || '', orbix: (({ id, t, n, u, dns, h }) => (id ? { id, t, n, u, dns, h } : null))(orbixOf(d)), maxp: (({ uid, u, dom, t }) => (uid ? { uid, u, dom, t } : null))(maxpOf(d)), parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '', player: playerParse(d.player) };
 }
 /** campi "account" inviati dal pannello: connessioni, profili, VPN (cur = valori attuali del dispositivo) */

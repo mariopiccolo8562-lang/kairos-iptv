@@ -433,20 +433,24 @@ body.agent .foot{display:none}
       <input class="inp" data-k="username" placeholder="Utente" value="${esc(p.username)}" ${roPl ? 'readonly' : ''} autocomplete="off"><input class="inp" data-k="password" type="password" placeholder="${isNew ? 'Password' : 'Password (vuota = invariata)'}" value="" ${roPl ? 'readonly' : ''} autocomplete="new-password">
       ${roPl ? '' : `<button class="icb" data-rm="${i}" title="Togli">✕</button>`}</div></div>`;
     $('#agT').innerHTML = isNew ? 'Nuovo cliente' : `${esc(e.name || e.code)} <span class="code" style="margin-left:6px">${esc(e.code)}</span>`;
+    const lineaCard = () => `<div class="ag-c" style="grid-column:1/-1"><h4>Linea</h4><small>${linked ? 'Le linee di questa TV (gestione indipendente)' : 'Scegli il server e scrivi utente e password della linea del cliente'}</small>
+        ${!roPl && window.KXPaste ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><textarea class="inp mono" id="cPaste" rows="2" style="flex:1;min-width:220px;font-size:12.5px" placeholder="📋 Incolla linea: link M3U o utente e password — riempie utente e password qui sotto"></textarea><button class="btn sm" id="cPasteGo" type="button">Riconosci</button><span id="cPasteMsg" class="mut" style="font-size:12px;width:100%"></span></div>` : ''}
+        <div id="cPls">${e.playlists.map(plRow).join('')}</div>${roPl || e.playlists.length >= 10 ? '' : '<button class="btn sm" id="cAddPl">+ Aggiungi linea</button>'}</div>`;
+    // TV collegata a un cliente: di base usa le sue linee; con «Gestione indipendente» ha linee sue (resta collegata)
+    const ownCard = () => !linked || !P.playlists ? '' : `<div class="ag-c"><h4>Gestione indipendente</h4><small>Linee proprie per questa TV, restando collegata al cliente</small>
+        <div class="tog ${e.own ? 'on' : ''}" id="cOwn"><div><b>${e.own ? 'Linee proprie' : 'Usa le linee del cliente'}</b><small>${e.own ? 'Scadenza, profili e connessioni restano quelli del cliente principale' : 'Accendi per dare a questa TV un\'altra linea (es. un\'altra app)'}</small></div><i></i></div></div>${e.own ? lineaCard() : ''}${e.own && d && d.own && P.players && window.KXPlayers ? `<div class="ag-c" style="grid-column:1/-1" id="cOth"><h4>Altre app</h4><small>Manda le linee di questa TV anche alle altre app</small>${KXPlayers.box(e)}</div>` : ''}`;
     const body = () => `<div class="ag-g">
       <div class="ag-c"><h4>Cliente</h4><small>${isNew ? 'Scrivi il codice che il cliente vede sulla TV quando apre l\'app' : 'Nome e note'}</small>
         ${isNew ? '<label class="lbl">Codice della TV</label><input class="inp mono" id="cCode" placeholder="KXAB-12CD" maxlength="9" style="text-transform:uppercase">' : ''}
         <label class="lbl">${linked ? 'Nome del dispositivo' : 'Nome cliente'}</label><input class="inp" id="cName" maxlength="60" value="${esc(e.name)}" placeholder="es. Mario Rossi">
         <label class="lbl">Note</label><textarea class="inp" id="cNotes" maxlength="500" placeholder="Pagamento, contatto…">${esc(e.notes || '')}</textarea>
         ${linked ? '' : `<label class="lbl">App del cliente</label><select class="inp" id="cApp"><option value="tv">Kairos Pro</option><option value="ktv" ${e.app === 'ktv' ? 'selected' : ''}>Kairos TV</option><option value="lite" ${e.app === 'lite' ? 'selected' : ''}>Kairos Lite</option><option value="xc" ${e.app === 'xc' ? 'selected' : ''}>Kairos XC</option></select>`}</div>
-      ${linked ? '' : `<div class="ag-c"><h4>Abbonamento</h4><small>${roExp ? 'Non puoi cambiare la scadenza' : 'Scadenza obbligatoria, massimo 3 anni'}</small>
+      ${linked ? ownCard() : `<div class="ag-c"><h4>Abbonamento</h4><small>${roExp ? 'Non puoi cambiare la scadenza' : 'Scadenza obbligatoria, massimo 3 anni'}</small>
         <div class="tog ${e.active ? 'on' : ''}" id="cAct" ${!isNew && !P.disable ? 'style="opacity:.5;pointer-events:none"' : ''}><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
         <label class="lbl">Scadenza</label><input class="inp" type="date" id="cExp" value="${esc(e.expires)}" ${roExp ? 'readonly' : ''}>
         ${roExp ? '' : `<div class="quick">${[1, 3, 6, 12].map((n) => `<button class="btn sm" data-cm="${n}">+${n} ${n === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>`}
         <label class="lbl">Connessioni (massimo ${P.maxConn || 1})</label><input class="inp" type="number" id="cConn" min="1" max="${P.maxConn || 1}" value="${Math.min(e.maxConn || 1, P.maxConn || 1)}"></div>
-      <div class="ag-c" style="grid-column:1/-1"><h4>Linea</h4><small>Scegli il server e scrivi utente e password della linea del cliente</small>
-        ${!roPl && window.KXPaste ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><textarea class="inp mono" id="cPaste" rows="2" style="flex:1;min-width:220px;font-size:12.5px" placeholder="📋 Incolla linea: link M3U o utente e password — riempie utente e password qui sotto"></textarea><button class="btn sm" id="cPasteGo" type="button">Riconosci</button><span id="cPasteMsg" class="mut" style="font-size:12px;width:100%"></span></div>` : ''}
-        <div id="cPls">${e.playlists.map(plRow).join('')}</div>${roPl || e.playlists.length >= 10 ? '' : '<button class="btn sm" id="cAddPl">+ Aggiungi linea</button>'}</div>
+      ${lineaCard()}
       ${P.account ? `<div class="ag-c"><h4>Profili e visioni</h4><small>Quanti profili e quante visioni insieme</small>
         <div class="row"><div><label class="lbl">Profili massimi</label><input class="inp" type="number" id="cMaxP" min="0" max="10" value="${e.maxProfiles ?? 3}"></div><div><label class="lbl">Visioni insieme (0 = libere)</label><input class="inp" type="number" id="cMaxS" min="0" max="${P.maxConn || 1}" value="${e.maxStreams || 0}"></div></div></div>` : ''}
       ${P.ai && e.app !== 'lite' && e.app !== 'ktv' && e.app !== 'xc' ? `<div class="ag-c"><h4>Assistente IA</h4><small>Quale intelligenza artificiale e quante domande al giorno</small>
@@ -470,6 +474,12 @@ body.agent .foot{display:none}
       $('#cAct') && ($('#cAct').onclick = () => { e.active = !e.active; $('#cAct').classList.toggle('on', e.active); });
       $$('[data-cm]').forEach((b) => (b.onclick = () => { $('#cExp').value = addMonths($('#cExp').value, +b.dataset.cm); }));
       $('#cAddPl') && ($('#cAddPl').onclick = () => { sync(); e.playlists.push({ serverId: (D.servers[0] || {}).id || '', username: '', password: '' }); draw(); });
+      $('#cOwn') && ($('#cOwn').onclick = () => {
+        sync(); e.own = !e.own;
+        // si parte dalle linee del cliente principale (stesso id: senza riscrivere la password resta la sua)
+        if (e.own && !(d.playlists || []).length) { const par = D.devices.find((x) => x.id === e.parent); e.playlists = par && (par.playlists || []).length ? par.playlists.map((p) => ({ id: p.id, serverId: p.serverId || '', serverName: p.serverName, username: p.username, password: '' })) : [{ serverId: (D.servers[0] || {}).id || '', username: '', password: '' }]; }
+        draw();
+      });
       const cPasteGo = async (quiet) => {
         const r = window.KXPaste.parse($('#cPaste').value);
         if (!r || !r.username) { if (!quiet) toast('Incolla il link M3U, o utente e password della linea', 1); return; }
@@ -507,6 +517,7 @@ body.agent .foot{display:none}
         if (isNew) await api('POST', '/admin/devices', { code: $('#cCode').value.trim().toUpperCase(), name: e.name, notes: e.notes, expires: e.expires, playlists: pls, maxConn: e.maxConn, addons: ['lite', 'ktv', 'xc'].includes(e.app) ? [] : e.addons, app: ['lite', 'ktv', 'xc'].includes(e.app) ? e.app : 'tv' });
         else {
           const b = { name: e.name, notes: e.notes, ...(appSet ? { app: e.app } : {}) };
+          if (linked && P.playlists && (e.own || d.own)) { b.own = !!e.own; if (e.own) b.playlists = pls; }
           if (!linked) {
             if (P.renew && e.expires !== d.expires) b.expires = e.expires;
             if (P.disable && e.active !== d.active) b.active = e.active;
@@ -577,7 +588,10 @@ body.agent .foot{display:none}
       }
       if (demoAgent && p === '/admin/devices' && m === 'POST') { const r = await origDemo(m, p, { ...b, active: true, playlists: (b.playlists || []).map((x) => ({ name: 'Linea', type: 'xtream', host: 'http://nki.esempio.tv:8080', username: x.username, password: x.password })) }); const d = DEMO.devices.find((x) => x.code === b.code) || DEMO.devices[0]; d.ownerId = 2; return r; }
       if (b && b.ownerId !== undefined) { const dm = p.match(/^\/admin\/devices\/(.+)$/); const d = dm && DEMO.devices.find((x) => x.id === dm[1]); if (d) d.ownerId = b.ownerId; const { ownerId, ...rest } = b; b = rest; }
-      if (demoAgent && b && b.playlists) { const { playlists, ...r } = b; b = r; }
+      if (demoAgent && b && b.playlists) {
+        if (b.own) b = { ...b, playlists: b.playlists.map((x, i) => ({ id: x.id || 'po' + i, name: 'Linea', type: 'xtream', host: 'http://nki.esempio.tv:8080', username: x.username, password: x.password || 'xxxx' })) }; // demo: linee proprie della TV collegata
+        else { const { playlists, ...r } = b; b = r; }
+      }
       return origDemo(m, p, b);
     };
   }
