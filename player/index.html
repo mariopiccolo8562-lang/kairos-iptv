@@ -2604,7 +2604,7 @@ function logoKey(name) {
 }
 function applyLogos(list, dom) {
   let n = 0; const upd = dom ? new Map() : null;
-  if (store.get('autoLogo', true) === false) return 0;
+  if (!autoLogoOn()) return 0;
   for (const ch of list) {
     if (ch.logo && !ch.logoBad) continue;
     let mk = ch.lk;
@@ -2632,7 +2632,7 @@ window.kxLogoBad = (id, img) => {
   clearTimeout(logoBadT); logoBadT = setTimeout(autoLogos, 4000);
 };
 async function autoLogos() {
-  if (S.demo || S.logoRun || store.get('autoLogo', true) === false || !S.lib.live.length) return;
+  if (S.demo || S.logoRun || !autoLogoOn() || !S.lib.live.length) return;
   // le ricerche andate a vuoto si ripetono dopo 7 giorni (la banca dati viene aggiornata spesso)
   if (Date.now() - store.get('logoDbT', 0) > 7 * 864e5) for (const k in logoMap) if (!logoMap[k]) delete logoMap[k];
   const need = new Map();
@@ -3788,7 +3788,9 @@ function isAdult(x) {
   if (x._ad === undefined) x._ad = RX_ADULT_G.test(x.group || '') || RX_ADULT_N.test(x.name || '');
   return x._ad;
 }
-const showAdult = () => store.get('adultHome', false) === true;
+/* contenuti per adulti in Home e consigliati, loghi automatici: la voce imposta dal pannello (adult, logos) vince su quella scelta qui */
+const showAdult = () => { const v = rcGet('adult'); return v !== undefined ? v === 'on' : store.get('adultHome', false) === true; };
+const autoLogoOn = () => { const v = rcGet('logos'); return v !== undefined ? v === 'on' : store.get('autoLogo', true) !== false; };
 const safe = (arr) => (showAdult() ? arr : arr.filter((x) => !isAdult(x)));
 const safeCats = (cats) => (showAdult() ? cats : cats.filter((c) => !RX_ADULT_G.test(c.name)));
 function upcomingEvents() {
@@ -4661,8 +4663,8 @@ function renderSettings(sec) {
     look: `<h3>Generali</h3>${optRow('startScr')}${optRow('sfx')}${optRow('textSize')}
       ${rcGet('theme') ? `<div class="sr static"><span>Colore</span><b><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(theme) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(theme))} <small class="mut">· scelto dal fornitore</small></b></div>` : `<div class="sr" data-f id="sTheme"><span>Colore</span><b><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(theme) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(theme))}</b></div>`}
       ${optRow('orient')}
-      <div class="sr" data-f id="sAdult"><span>Contenuti per adulti nella Home e nei consigliati</span><b>${showAdult() ? 'Sì' : 'No'}</b></div>
-      <div class="sr" data-f id="sLogo"><span>Loghi dei canali automatici</span><b>${store.get('autoLogo', true) === false ? 'No' : 'Sì'}</b></div>
+      <div class="sr${rcGet('adult') !== undefined ? ' static' : ''}" ${rcGet('adult') !== undefined ? '' : 'data-f'} id="sAdult"><span>Contenuti per adulti nella Home e nei consigliati</span><b>${showAdult() ? 'Sì' : 'No'}${rcGet('adult') !== undefined ? ' <small class="mut">· scelto dal fornitore</small>' : ''}</b></div>
+      <div class="sr${rcGet('logos') !== undefined ? ' static' : ''}" ${rcGet('logos') !== undefined ? '' : 'data-f'} id="sLogo"><span>Loghi dei canali automatici</span><b>${autoLogoOn() ? 'Sì' : 'No'}${rcGet('logos') !== undefined ? ' <small class="mut">· scelto dal fornitore</small>' : ''}</b></div>
       ${NATIVE && NATIVE.prefetchApk ? `<div class="sr${rcGet('bgupd') != null ? ' static' : ''}" ${rcGet('bgupd') != null ? '' : 'data-f'} id="sBgUpd"><span>Aggiornamenti in background${rcGet('bgupd') != null ? ' <small class="mut">· scelto dal fornitore</small>' : ''}</span><b>${bgUpdOn() ? 'Sì' : 'No'}</b></div>` : ''}
       <div class="sr" data-f id="sClearCont"><span>Cancella «Continua a guardare» (film e serie)</span><b>›</b></div>
       <div class="sr" data-f id="sClearSeen"><span>Cancella «Ultimi visti» (canali e titoli aperti)</span><b>›</b></div>
@@ -4755,7 +4757,7 @@ function renderSettings(sec) {
     S.locked.clear(); store.set('locked', []); $('#kCount').textContent = '0'; toast('Tutti i contenuti sbloccati'); focus($('#kClear'), true);
   };
   $('#sTheme') && ($('#sTheme').onclick = () => { const ks = themeList(), nx = ks[(ks.indexOf(store.get('theme') || S.settings.accent || 'cinema') + 1) % ks.length]; store.set('theme', nx); applyTheme(nx); $('#sTheme b').innerHTML = `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(nx) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(nx))}`; });
-  $('#sAdult').onclick = () => { const on = !showAdult(); store.set('adultHome', on); $('#sAdult b').textContent = on ? 'Sì' : 'No'; buildBrowse($('#home'), 'all'); };
+  $('#sAdult').onclick = () => { if (rcGet('adult') !== undefined) return; const on = !showAdult(); store.set('adultHome', on); $('#sAdult b').textContent = on ? 'Sì' : 'No'; buildBrowse($('#home'), 'all'); };
   $('#sUpd').onclick = async () => {
     const t = $('#sUpdTxt'); t.textContent = 'Controllo in corso…';
     if (!NATIVE || !hasNativeHttp()) { t.textContent = 'Gli aggiornamenti si controllano nell\'app installata.'; return; }
@@ -4767,7 +4769,7 @@ function renderSettings(sec) {
     t.textContent = '✓ Hai già l\'ultima versione' + (NATIVE.version ? ' (' + NATIVE.version() + ')' : '') + '.';
   };
   if ($('#sBgUpd') && rcGet('bgupd') == null) $('#sBgUpd').onclick = () => { const on = !bgUpdOn(); store.set('bgUpd', on); $('#sBgUpd b').textContent = on ? 'Sì' : 'No'; toast(on ? 'La versione nuova si scaricherà da sola: ti chiederemo solo di installarla' : 'Scaricheremo la versione nuova solo quando accetti'); };
-  $('#sLogo').onclick = () => { const on = store.get('autoLogo', true) === false; store.set('autoLogo', on); $('#sLogo b').textContent = on ? 'Sì' : 'No'; if (on) { applyLogos(S.lib.live, true); autoLogos(); } else toast('Valido dal prossimo avvio'); };
+  $('#sLogo').onclick = () => { if (rcGet('logos') !== undefined) return; const on = !autoLogoOn(); store.set('autoLogo', on); $('#sLogo b').textContent = on ? 'Sì' : 'No'; if (on) { applyLogos(S.lib.live, true); autoLogos(); } else toast('Valido dal prossimo avvio'); };
   $('#sClear').onclick = () => { S.favs.clear(); S.recent = []; store.set('favs', []); store.set('recent', []); store.set('pos', {}); updFavCount(); toast('Preferiti e cronologia svuotati'); };
   $('#sCache').onclick = async () => { await LibCache.clear(); toast('Memoria svuotata: al prossimo avvio i contenuti verranno riscaricati'); };
   wireSettingsExtra();
@@ -4803,7 +4805,7 @@ const fmtDur = (ms) => { const m = Math.max(0, Math.round(ms / 60000)), h = Math
 const dayTime = (t) => { const d = new Date(t), td = new Date(); const day = d.toDateString() === td.toDateString() ? 'Oggi' : d.toDateString() === new Date(+td + 864e5).toDateString() ? 'Domani' : d.toDateString() === new Date(+td - 864e5).toDateString() ? 'Ieri' : d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }); return day + ' ' + hhmm(t); };
 
 /* ---------- controllo remoto dal pannello: impostazioni imposte (rc) e comandi (cmds) ---------- */
-const RC_CFG_KEYS = ['startScr', 'hw', 'adaptQ', 'liveFmt', 'autoNext', 'introAuto', 'resInd', 'subSize', 'textSize', 'sfx', 'epgShift', 'sortCats', 'sortCh', 'sortVod', 'lockAdult'];
+const RC_CFG_KEYS = ['startScr', 'hw', 'adaptQ', 'liveFmt', 'autoNext', 'introAuto', 'resInd', 'subSize', 'textSize', 'sfx', 'epgShift', 'sortCats', 'sortCh', 'sortVod', 'lockAdult', 'engLive', 'engMovie', 'engSeries', 'showHidden', 'orient'];
 function rcLiteApply() {
   const v = rcGet('lite'), b = document.body;
   const lite = v === 'on' || v === 'max' ? true : v === 'off' ? false : !!NATIVE;
@@ -4856,6 +4858,7 @@ function rcApply(rc, rcv) {
   try { S.sound = opt('sfx') !== 'off'; applyTextSize(opt('textSize')); if (opt('orient') !== 'auto') applyOrient(opt('orient')); } catch {}
   try { if ($('#settings') && $('#settings').classList.contains('on')) renderSettings(); } catch {}
   try { if (S.lib && S.lib.live && S.lib.live.length && !S.inPlayer) plRerender(); } catch {}
+  try { if (autoLogoOn() && S.lib && S.lib.live && S.lib.live.length) whenIdle(() => autoLogos(), 3000); } catch {}
 }
 /** impostazioni attuali dell'app, come le vede il pannello (stesse chiavi del suo catalogo) */
 /** aggiornamento in background: imposto dal fornitore (bgupd) o scelto dal cliente (default sì) */
@@ -4867,7 +4870,7 @@ function updFirstSeen(a) { const fs = store.get('apkFirst', {}); if (fs.v !== a.
 function updMust() { const a = S.apkUpdate, d = updForceDays(); if (!a || d == null || S.apkReady !== a.url) return false; return Date.now() - updFirstSeen(a) >= d * 86400e3; }
 function bgUpdOn() { const v = rcGet('bgupd'); return v != null ? v !== 'off' : store.get('bgUpd', true) !== false; }
 function rcSnapshot() {
-  const o = { bgupd: bgUpdOn() ? 'on' : 'off', lite: document.body.classList.contains('xlite') ? 'max' : document.body.classList.contains('lite') ? 'on' : 'off', theme: rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema' };
+  const o = { bgupd: bgUpdOn() ? 'on' : 'off', lite: document.body.classList.contains('xlite') ? 'max' : document.body.classList.contains('lite') ? 'on' : 'off', theme: rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema', adult: showAdult() ? 'on' : 'off', logos: autoLogoOn() ? 'on' : 'off' };
   try { for (const k of RC_CFG_KEYS) if (OPT[k]) o['o.' + k] = opt(k); } catch {}
   try { const P = playPrefs(); for (const k of ['quality', 'buffer', 'aspect']) o['p.' + k] = P[k]; } catch {}
   return o;

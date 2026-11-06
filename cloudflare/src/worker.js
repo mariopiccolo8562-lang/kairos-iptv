@@ -1881,32 +1881,51 @@ const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', prem: 'Kairos Premium', l
 const RC_APPS = ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus', 'nova'];
 /** app collegate al pannello con codice (battito e comandi); Kairos Nova può anche restare libera: allora legge solo la politica degli aggiornamenti */
 const RC_LINKED = ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus', 'nova'];
-// catalogo: [chiave, nome, tipo, valori [[valore, etichetta]], app che la capiscono, spiegazione]
+// catalogo: [chiave, nome, tipo, valori [[valore, etichetta]], app che la capiscono, spiegazione, etichetta «libera» (opz.), sezione]
+// Ogni voce corrisponde a un'impostazione che il cliente trova nell'app: imposta dal pannello, lì risulta «scelta dal fornitore».
+const KPRO = ['tv'], KALL_LITE = ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus'];
+const YN = [[true, 'Sì'], [false, 'No']];
+const ENG_OPTS = [['auto', 'Automatico avanzato'], ['exo', 'ExoPlayer'], ['vlc', 'VLC']];
 const RC_CAT = [
-  ['lite', 'Modalità leggera', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['max', 'Leggerissima'], ['off', 'Spenta']], ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus'], 'Niente animazioni ed effetti, immagini e memoria ridotte: per chiavette e TV vecchie'],
-  ['bgupd', 'Aggiornamenti in background', 'sel', [['on', 'Sì: scarica da sola, poi chiede solo «Installa»'], ['off', 'No: scarica solo quando il cliente accetta']], RC_APPS, 'Con «Sì» l\'app scarica e verifica da sola la versione nuova (solo su Wi-Fi o cavo); al cliente resta un solo OK, quello di Android per installare'],
-  ['force', 'Aggiornamento obbligatorio', 'sel', [['off', 'No: il cliente può rimandare'], ['7d', 'Dopo 7 giorni dal primo avviso'], ['3d', 'Dopo 3 giorni dal primo avviso'], ['now', 'Subito']], RC_APPS, 'Scaduto il termine l\'app si apre solo dopo aver installato la versione nuova. Blocca soltanto se l\'APK è già scaricato e verificato sul dispositivo, mai per un problema di rete', 'No: il cliente può rimandare'],
-  ['privacy', 'Finestra «Privacy e condizioni»', 'sel', [['show', 'Mostrala al primo avvio'], ['skip', 'Non mostrarla']], ['tv', 'ktv', 'prem', 'lite', 'xc'], 'Con «Non mostrarla» il cliente non vede più la finestra all\'avvio'],
-  ['preview', 'Anteprima nella lista canali', 'sel', [['click', 'Al primo OK'], ['off', 'Spenta']], ['ktv', 'prem', 'lite', 'xc'], 'Spenta: il canale parte subito a schermo intero (meno lavoro per il dispositivo)'],
-  ['theme', 'Colore', 'sel', [['cinema', 'Cinema'], ['ocean', 'Oceano'], ['forest', 'Foresta'], ['sunset', 'Tramonto'], ['mono', 'Mono']], ['tv'], 'Tema dell\'interfaccia'],
-  ['o.startScr', 'Schermata iniziale', 'sel', [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta'], ['guide', 'Guida TV'], ['lastch', 'Ultimo canale guardato']], ['tv'], ''],
-  ['o.hw', 'Accelerazione hardware', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['off', 'Disattivata (software)']], ['tv'], 'Disattivala solo se il cliente vede immagini verdi o a scatti'],
-  ['o.adaptQ', 'Qualità adattiva automatica', 'sel', [[true, 'Sì'], [false, 'No']], ['tv'], 'Se la linea non regge passa da sola a una versione più leggera del canale'],
-  ['o.liveFmt', 'Formato TV in diretta', 'sel', [['ts', 'Veloce (TS)'], ['hls', 'HLS']], ['tv'], ''],
-  ['o.autoNext', 'Episodio successivo automatico', 'sel', [[true, 'Sì'], [false, 'No']], ['tv'], ''],
-  ['o.introAuto', 'Salta l\'intro delle serie', 'sel', [[true, 'Sì'], [false, 'No']], ['tv'], ''],
-  ['o.resInd', 'Indicatore risoluzione', 'sel', [[true, 'Sì'], [false, 'No']], ['tv'], ''],
-  ['o.subSize', 'Dimensione sottotitoli', 'sel', [['small', 'Piccola'], ['medium', 'Media'], ['large', 'Grande'], ['xl', 'Molto grande']], ['tv'], ''],
-  ['o.textSize', 'Dimensione testi', 'sel', [['s', 'Piccola'], ['m', 'Media'], ['l', 'Grande'], ['xl', 'Molto grande']], ['tv'], ''],
-  ['o.sfx', 'Effetti sonori', 'sel', [['classic', 'Classici'], ['soft', 'Morbidi'], ['futur', 'Futuristici'], ['retro', 'Retrò'], ['off', 'Disattivati']], ['tv'], ''],
-  ['o.epgShift', 'Spostamento orario guida', 'sel', [[0, 'Nessuno'], [1, '+1 ora'], [2, '+2 ore'], [-1, '−1 ora'], [-2, '−2 ore']], ['tv'], ''],
-  ['o.sortCats', 'Ordina categorie', 'sel', [['pl', 'Come la playlist'], ['az', 'A → Z'], ['za', 'Z → A']], ['tv'], ''],
-  ['o.sortCh', 'Ordina canali', 'sel', [['pl', 'Come la playlist'], ['num', 'Per numero'], ['az', 'A → Z'], ['za', 'Z → A'], ['added', 'Aggiunti di recente']], ['tv'], ''],
-  ['o.sortVod', 'Ordina film e serie', 'sel', [['pl', 'Come la playlist'], ['recent', 'Aggiunti di recente'], ['az', 'A → Z'], ['rating', 'Valutazione']], ['tv'], ''],
-  ['o.lockAdult', 'Blocca contenuti per adulti', 'sel', [[true, 'Sì'], [false, 'No']], ['tv'], ''],
-  ['p.quality', 'Qualità video', 'sel', [['auto', 'Automatica'], ['max', 'Massima'], ['1080', '1080p'], ['720', '720p'], ['480', '480p']], ['tv'], ''],
-  ['p.buffer', 'Buffer di rete', 'sel', [['fast', 'Veloce'], ['balanced', 'Bilanciato'], ['stable', 'Stabile']], ['tv'], ''],
-  ['p.aspect', 'Formato immagine', 'sel', [['fit', 'Adatta'], ['fill', 'Riempi'], ['zoom', 'Zoom']], ['tv'], ''],
+  /* ---- Generale ---- */
+  ['lite', 'Modalità leggera', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['max', 'Leggerissima'], ['off', 'Spenta']], KALL_LITE, 'Niente animazioni ed effetti, immagini e memoria ridotte: per chiavette e TV vecchie. «Leggerissima» toglie anche le transizioni e svuota le cache: la scelta giusta per Fire Stick con poca memoria', '', 'Generale'],
+  ['privacy', 'Finestra «Privacy e condizioni»', 'sel', [['show', 'Mostrala al primo avvio'], ['skip', 'Non mostrarla']], ['tv', 'ktv', 'prem', 'lite', 'xc'], 'Con «Non mostrarla» il cliente non vede più la finestra all\'avvio', '', 'Generale'],
+  ['o.startScr', 'Schermata iniziale', 'sel', [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta'], ['guide', 'Guida TV'], ['lastch', 'Ultimo canale guardato']], KPRO, '', '', 'Generale'],
+  ['o.orient', 'Layout su telefoni e tablet', 'sel', [['auto', 'Automatico'], ['land', 'Sempre orizzontale']], KPRO, 'Sulle TV non cambia nulla', '', 'Generale'],
+  ['tvmode', 'Modalità TV', 'sel', [['on', 'Attiva: interfaccia per telecomando'], ['off', 'Spenta']], ['nova'], '', '', 'Generale'],
+  /* ---- Aggiornamenti ---- */
+  ['bgupd', 'Aggiornamenti in background', 'sel', [['on', 'Sì: scarica da sola, poi chiede solo «Installa»'], ['off', 'No: scarica solo quando il cliente accetta']], RC_APPS, 'Con «Sì» l\'app scarica e verifica da sola la versione nuova (su Wi-Fi o cavo, mai durante la visione): al cliente resta un solo tasto', '', 'Aggiornamenti'],
+  ['force', 'Aggiornamento obbligatorio', 'sel', [['off', 'No: il cliente può rimandare'], ['7d', 'Dopo 7 giorni dal primo avviso'], ['3d', 'Dopo 3 giorni dal primo avviso'], ['now', 'Subito']], RC_APPS, 'Scaduto il termine l\'app si apre solo dopo aver installato la versione nuova. Blocca soltanto se l\'APK è già scaricato e verificato sul dispositivo, mai per un problema di rete', 'No: il cliente può rimandare', 'Aggiornamenti'],
+  /* ---- Aspetto ---- */
+  ['theme', 'Colore dell\'interfaccia', 'sel', [['cinema', 'Cinema (rosso)'], ['aurora', 'Aurora'], ['plasma', 'Plasma'], ['matrix', 'Matrix'], ['solar', 'Solare'], ['ice', 'Ghiaccio'], ['oro', 'Oro'], ['smeraldo', 'Smeraldo'], ['oceano', 'Oceano'], ['tramonto', 'Tramonto'], ['viola', 'Viola'], ['rosa', 'Rosa']], KPRO, 'I temi speciali dello Store restano quelli del cliente', '', 'Aspetto'],
+  ['o.textSize', 'Dimensione testi', 'sel', [['s', 'Piccola'], ['m', 'Media'], ['l', 'Grande'], ['xl', 'Molto grande']], KPRO, '', '', 'Aspetto'],
+  ['o.sfx', 'Effetti sonori', 'sel', [['classic', 'Classici'], ['soft', 'Morbidi'], ['futur', 'Futuristici'], ['retro', 'Retrò'], ['off', 'Disattivati']], KPRO, '', '', 'Aspetto'],
+  ['adult', 'Contenuti per adulti nella Home e nei consigliati', 'sel', [['on', 'Sì'], ['off', 'No']], KPRO, 'Riguarda solo Home e consigliati: le categorie restano raggiungibili (vedi «Blocca contenuti per adulti»)', '', 'Aspetto'],
+  ['logos', 'Loghi dei canali automatici', 'sel', [['on', 'Sì'], ['off', 'No']], KPRO, 'Con «No» l\'app non cerca i loghi mancanti: meno rete e memoria', '', 'Aspetto'],
+  /* ---- Lettore ---- */
+  ['o.engLive', 'Lettore TV in diretta', 'sel', ENG_OPTS, KPRO, 'Se nella scheda del cliente hai già scelto il lettore, vale quello', '', 'Lettore'],
+  ['o.engMovie', 'Lettore film', 'sel', ENG_OPTS, KPRO, '', '', 'Lettore'],
+  ['o.engSeries', 'Lettore serie TV', 'sel', ENG_OPTS, KPRO, '', '', 'Lettore'],
+  ['o.hw', 'Accelerazione hardware', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['off', 'Disattivata (software)']], KPRO, 'Disattivala solo se il cliente vede immagini verdi o a scatti', '', 'Lettore'],
+  ['o.adaptQ', 'Qualità adattiva automatica', 'sel', YN, KPRO, 'Se la linea non regge passa da sola a una versione più leggera del canale', '', 'Lettore'],
+  ['p.quality', 'Qualità video', 'sel', [['auto', 'Automatica'], ['max', 'Massima'], ['1080', '1080p'], ['720', '720p'], ['480', '480p']], KPRO, '', '', 'Lettore'],
+  ['p.buffer', 'Buffer di rete', 'sel', [['fast', 'Veloce'], ['balanced', 'Bilanciato'], ['stable', 'Stabile']], ['tv', 'nova'], 'Veloce: parte prima ma regge meno · Stabile: per Wi-Fi debole o server lenti', '', 'Lettore'],
+  ['p.aspect', 'Formato immagine', 'sel', [['fit', 'Adatta'], ['fill', 'Riempi'], ['zoom', 'Zoom']], KPRO, '', '', 'Lettore'],
+  ['o.autoNext', 'Episodio successivo automatico', 'sel', YN, KPRO, '', '', 'Lettore'],
+  ['o.introAuto', 'Salta l\'intro delle serie', 'sel', YN, KPRO, '', '', 'Lettore'],
+  ['o.resInd', 'Indicatore risoluzione', 'sel', YN, KPRO, '', '', 'Lettore'],
+  ['o.subSize', 'Dimensione sottotitoli', 'sel', [['small', 'Piccola'], ['medium', 'Media'], ['large', 'Grande'], ['xl', 'Molto grande']], KPRO, '', '', 'Lettore'],
+  /* ---- TV in diretta e guida TV ---- */
+  ['preview', 'Anteprima nella lista canali', 'sel', [['click', 'Al primo OK'], ['off', 'Spenta']], ['ktv', 'prem', 'lite', 'xc', 'plus'], 'Spenta: il canale parte subito a schermo intero (meno lavoro per il dispositivo)', '', 'TV in diretta e guida TV'],
+  ['o.liveFmt', 'Formato TV in diretta', 'sel', [['ts', 'Veloce (TS)'], ['hls', 'HLS']], ['tv', 'plus'], 'TS è il formato consigliato; HLS solo se il fornitore lo richiede', '', 'TV in diretta e guida TV'],
+  ['o.epgShift', 'Spostamento orario guida', 'sel', [[0, 'Nessuno'], [1, '+1 ora'], [2, '+2 ore'], [-1, '−1 ora'], [-2, '−2 ore']], KPRO, '', '', 'TV in diretta e guida TV'],
+  ['o.showHidden', 'Mostra i canali nascosti', 'sel', [[false, 'No'], [true, 'Sì']], KPRO, 'I canali che il cliente ha nascosto tornano visibili', '', 'TV in diretta e guida TV'],
+  /* ---- Ordinamento ---- */
+  ['o.sortCats', 'Ordina categorie', 'sel', [['pl', 'Come la playlist'], ['az', 'A → Z'], ['za', 'Z → A'], ['custom', 'Ordine personalizzato del cliente']], KPRO, '', '', 'Ordinamento'],
+  ['o.sortCh', 'Ordina canali', 'sel', [['pl', 'Come la playlist'], ['num', 'Per numero'], ['az', 'A → Z'], ['za', 'Z → A'], ['added', 'Aggiunti di recente']], KPRO, '', '', 'Ordinamento'],
+  ['o.sortVod', 'Ordina film e serie', 'sel', [['pl', 'Come la playlist'], ['recent', 'Aggiunti di recente'], ['az', 'A → Z'], ['rating', 'Valutazione']], KPRO, '', '', 'Ordinamento'],
+  /* ---- Controllo genitori ---- */
+  ['o.lockAdult', 'Blocca contenuti per adulti', 'sel', YN, KPRO, 'Con «Sì» le categorie per adulti chiedono il PIN del controllo genitori', '', 'Controllo genitori'],
 ];
 // comandi: [chiave, nome, spiegazione, app che li eseguono]
 const RC_CMDS = [
