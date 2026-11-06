@@ -57,7 +57,7 @@ const DEMO = (() => {
     { t: now - 9 * 3600e3, type: 'off', text: 'Bar Centrale: active → disabled' },
     { t: now - 26 * 3600e3, type: 'auth', text: 'Accesso al pannello' },
   ];
-  return { settings: { brand: 'KAIROS', tagline: 'Next-gen streaming', accent: 'cinema', announcement: 'Benvenuto su KAIROS — buona visione!', allowLocalPlaylists: true, showFootball: true, serverUrl: '', apkVersionCode: 10200, apkVersion: '1.2.0', supportContact: 'WhatsApp +39 333 000 0000', apkUrl: 'https://github.com/tuo-utente/kairos-iptv/releases/latest/download/kairos.apk', downloaderCode: '1234567', price: '22 € / anno', privacy: '' }, devices, activity,
+  return { settings: { storeOwnerCode: 'A9KD', brand: 'KAIROS', tagline: 'Next-gen streaming', accent: 'cinema', announcement: 'Benvenuto su KAIROS — buona visione!', allowLocalPlaylists: true, showFootball: true, serverUrl: '', apkVersionCode: 10200, apkVersion: '1.2.0', supportContact: 'WhatsApp +39 333 000 0000', apkUrl: 'https://github.com/tuo-utente/kairos-iptv/releases/latest/download/kairos.apk', downloaderCode: '1234567', price: '22 € / anno', privacy: '' }, devices, activity,
     wgConf: false, apkFeed: { version: '1.5.0', versionCode: 10500, url: 'https://github.com/tuo-utente/kairos-store/releases/download/kairos-tv/kairos-tv.apk', date: new Date(now - 864e5).toISOString() } };
 })();
 /* stesso schema della build su GitHub: X.Y.Z → X*10000 + Y*100 + Z (0 = non valida) */

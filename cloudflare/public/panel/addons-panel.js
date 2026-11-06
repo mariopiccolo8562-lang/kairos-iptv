@@ -87,8 +87,10 @@
     const s = D.settings || {};
     const it = (k, label, code, hint) => `<div class="dl ${code ? '' : 'no'}"><i>${k}</i><div><small>${label}</small><b>${code ? esc(code) : hint}</b></div>${code ? `<button class="btn sm" data-dlc="${esc(code)}">Copia</button>` : ''}</div>`;
     const owner = D.role !== 'agent';
+    const seller = owner ? s.storeOwnerCode : (D.me && D.me.storeCode);
     bar.innerHTML = it('DL', 'Downloader · Kairos Pro', s.downloaderCode, owner ? 'non impostato (Impostazioni → App e aggiornamenti)' : 'non impostato')
-      + it('ST', 'Downloader · Kairos Store', s.storeDownloaderCode, owner ? 'non impostato (Impostazioni → App e aggiornamenti)' : 'non impostato');
+      + it('ST', 'Downloader · Kairos Store', s.storeDownloaderCode, owner ? 'non impostato (Impostazioni → App e aggiornamenti)' : 'non impostato')
+      + (seller ? it('VE', owner ? 'Codice venditore · Store (il tuo)' : 'Codice venditore · Store (dallo ai tuoi clienti)', seller, '') : '');
     $$('[data-dlc]', bar).forEach((b) => (b.onclick = () => navigator.clipboard.writeText(b.dataset.dlc).then(() => toast('Codice copiato'), () => toast('Copia non consentita', 1))));
     const v = $('#sDlStore'); if (v && !v.dataset.dirty && document.activeElement !== v) v.value = s.storeDownloaderCode || '';
   }

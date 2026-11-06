@@ -3376,7 +3376,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const meOut = meArr[0];
     const { password: _pw, ...meSafe } = meOut;
     const sNames = canAg && P.store ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
-    return json({ role: 'agent', user: A.username, me: { ...meSafe, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
+    return json({ role: 'agent', user: A.username, me: { ...meSafe, storeCode: await sellerAgentCode(env, A), perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: agList,
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { name: x.name, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
@@ -3624,6 +3624,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       plus: { apk: settings.plusApkUrl || PLUS_APK, feed: plusF },
       players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: orbixDnsList(settings.playersCfg.orbix, dnslOwner), max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents, codes: settings.playersCfg.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(settings.playersCfg) },
       dlCodes: dlCodesOf(settings),
+      storeOwnerCode: await sellerOwnerCode(env),
       storeAppNames: sAppNames, maintAg: Object.entries(settings.maintAg || {}).filter(([, x]) => x && x.on).map(([id]) => +id),
       counts: { ...nCounts, online: onl }, permKeys: PERM_KEYS, addonCat: addonCfg(settings), role: 'owner', ...(ses ? { agents: await agentsOut(env, agAll) } : {}),
     });
@@ -3698,6 +3699,15 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (tm && tm[2] && m === 'POST') return json(await trashRestore(env, tm[1], who, ip));
     if (tm && !tm[2] && m === 'DELETE') { const r = await env.DB.prepare('SELECT label, kind FROM trash WHERE id = ?').bind(tm[1]).first(); await env.DB.prepare('DELETE FROM trash WHERE id = ?').bind(tm[1]).run(); if (r) await log(env, 'del', `${who}: eliminato per sempre dal cestino ${TRASH_KIND[r.kind] || r.kind} · ${r.label}`, ip); return json({ ok: true }); }
     throw new HttpErr(404, 'Funzione non trovata');
+  }
+  // nuovo codice venditore per un agente (il vecchio smette subito di valere)
+  const scm = path.match(/^\/agents\/(\d+)\/store-code$/);
+  if (scm && m === 'POST') {
+    if (ses && ses.agent) throw new HttpErr(403, 'Solo il titolare');
+    const A = (await agentsAll(env)).find((a) => a.id === +scm[1]); if (!A) throw new HttpErr(404, 'Agente non trovato');
+    A.store_code = ''; const c = await sellerAgentCode(env, A);
+    await log(env, 'settings', `${who}: nuovo codice venditore Store per l'agente ${A.username}`, ip);
+    return json({ ok: true, storeCode: c });
   }
   if (path === '/activity' && m === 'DELETE') {
     if (!ses || ses.agent) throw new HttpErr(403, 'Il registro lo può svuotare solo il titolare');

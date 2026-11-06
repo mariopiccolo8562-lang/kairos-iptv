@@ -341,10 +341,11 @@ body.agent .foot{display:none}
     V.innerHTML = `${hostCard}<div class="ag-bar"><input class="inp" id="agQ" placeholder="Cerca agente per nome, email o note" value="${esc(st.q)}">
       <div class="seg" id="agF">${[['all', 'Tutti'], ['on', 'Attivi'], ['off', 'Disattivati']].map(([k, l]) => `<button data-f="${k}" class="${st.f === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       <button class="btn pri" id="agNew">+ Nuovo ${sub ? 'sotto-agente' : 'agente'}</button></div>
-      <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th><th>DNS</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
+      <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Codice Store</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th><th>DNS</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
       ${list.map((a) => { const pct = a.maxClients ? Math.min(100, Math.round((a.clients / a.maxClients) * 100)) : 100; const up = a.parentId && byId.get(a.parentId);
         return `<tr data-ag="${a.id}"><td class="num">${a.id}</td>
         <td><b>${esc(a.username)}</b><small>${esc(a.email || '—')}${up ? ' · sotto ' + esc(up.username) : ''}</small></td>
+        <td><b class="mono" title="Il cliente lo scrive nella richiesta dello Store: arriva solo a questo agente (e a te)">${esc(a.storeCode || '—')}</b></td>
         <td><b>${a.clients}</b><small>Limite: ${a.maxClients}</small><div class="ag-bar2"><s style="width:${pct}%"></s></div></td>
         <td class="hm">${a.subAgents}</td>
         <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span>${(a.perms || {}).armada ? '<br><span class="chip" style="margin-top:4px">Armada</span>' : ''}${(a.perms || {}).wolf ? '<br><span class="chip" style="margin-top:4px">WOLF</span>' : ''}${(a.perms || {}).mxp ? '<br><span class="chip" style="margin-top:4px">MaxPlayer</span>' : ''}${(a.perms || {}).oxp ? '<br><span class="chip" style="margin-top:4px">OrbixPlay</span>' : ''}</td>
@@ -428,7 +429,7 @@ body.agent .foot{display:none}
       <div class="ag-c"><h4>Limiti e accesso</h4><small>Quanti clienti può avere e cosa vede</small>
         <div class="row"><div><label class="lbl">Clienti massimi</label><input class="inp" id="agM" type="number" min="0" max="${top ? top.maxClients : 100000}" value="${a ? a.maxClients : Math.min(10, top ? top.maxClients : 10)}"></div>
         <div><label class="lbl">Connessioni per cliente</label><input class="inp" id="agC" type="number" min="1" max="${topP ? topP.maxConn : 10}" value="${P.maxConn || 1}"></div></div>
-        ${a ? `<p class="mut" style="font-size:12.5px;margin-top:8px">Clienti ora: <b>${a.clients}</b>${a.subAgents ? ` (di cui ${a.clients - a.ownClients} dei suoi ${a.subAgents} sotto-agenti)` : ''}${a.storeCode ? ` · Codice venditore Store: <b class="mono">${esc(a.storeCode)}</b> <small>(i clienti lo scrivono nella richiesta: arriva solo a lui e a te)</small>` : ''}</p>` : ''}
+        ${a ? `<p class="mut" style="font-size:12.5px;margin-top:8px">Clienti ora: <b>${a.clients}</b>${a.subAgents ? ` (di cui ${a.clients - a.ownClients} dei suoi ${a.subAgents} sotto-agenti)` : ''}${a.storeCode ? ` · Codice venditore Store: <b class="mono" id="agSc">${esc(a.storeCode)}</b> <button type="button" class="btn sm" id="agScCp">Copia</button> <button type="button" class="btn sm" id="agScNew" title="Il vecchio codice smette subito di valere">Rigenera</button> <small>(i clienti lo scrivono nella richiesta dello Store: arriva solo a lui e a te)</small>` : ''}</p>` : ''}
         <label class="lbl">Accesso</label><div class="ag-radio" id="agR">
           <label class="${a && a.canAgents ? '' : 'on'}"><input type="radio" name="agr" value="0" ${a && a.canAgents ? '' : 'checked'}><b>Solo clienti</b><small>Gestisce solo i suoi clienti</small></label>
           <label class="${a && a.canAgents ? 'on' : ''}"><input type="radio" name="agr" value="1" ${a && a.canAgents ? 'checked' : ''}><b>Gestisce agenti</b><small>Può creare sotto-agenti, mai con più permessi dei suoi</small></label></div>
@@ -539,6 +540,8 @@ body.agent .foot{display:none}
     $('#agSaAdd').onclick = () => { const n = $('#agSaN').value.trim(); if (!n) return; if (!$$('#agSa [data-sapp]').some((i) => i.dataset.sapp.toLowerCase() === n.toLowerCase())) $('#agSa').insertAdjacentHTML('beforeend', chk('sapp', n, esc(n), true, false, '')); else $$('#agSa [data-sapp]').forEach((i) => { if (i.dataset.sapp.toLowerCase() === n.toLowerCase()) i.checked = true; }); const all = $('#agSa [data-sapp="*"]'); if (all) all.checked = false; $('#agSaN').value = ''; saSync(); };
     $('#agPwEye') && ($('#agPwEye').onclick = () => { const i = $('#agPwNow'); i.type = i.type === 'password' ? 'text' : 'password'; });
     $('#agPwCp') && ($('#agPwCp').onclick = () => navigator.clipboard.writeText(a.password).then(() => toast('Password copiata'), () => toast('Copia non consentita', 1)));
+    $('#agScCp') && ($('#agScCp').onclick = () => navigator.clipboard.writeText(a.storeCode).then(() => toast('Codice venditore copiato'), () => toast('Copia non consentita', 1)));
+    $('#agScNew') && ($('#agScNew').onclick = async () => { if (!(await ask('Nuovo codice venditore?', `Il codice <b class="mono">${esc(a.storeCode)}</b> di ${esc(a.username)} smette subito di valere: i suoi clienti dovranno scrivere quello nuovo.`, 'Rigenera'))) return; try { const r = await api('POST', '/admin/agents/' + a.id + '/store-code'); a.storeCode = r.storeCode; $('#agSc').textContent = r.storeCode; toast('Nuovo codice: ' + r.storeCode); await load(); } catch (e) { toast(e.message, 1); } });
     $$('#agR label').forEach((l) => (l.onclick = () => { $$('#agR label').forEach((x) => x.classList.toggle('on', x === l)); $('input', l).checked = true; }));
     if (sub && !top.canAgents) $$('#agR input').forEach((i) => (i.disabled = true));
     $('#agNo').onclick = closePage;
@@ -710,10 +713,10 @@ body.agent .foot{display:none}
     const P0 = { create: true, renew: true, disable: true, kick: true, playlists: true, delete: false, clientPerms: false, vpn: false, link: true, account: true, ai: true, dash: true, online: true, errors: false, reports: true, contentReq: false, addonReq: true, messages: true, store: false, storeApps: ['OrbixPlay', 'IBO Player'], storeAll: false, subClients: true, maint: false, dlcodes: true, vod: false, activity: true, addons: ['tema-ghiaccio', 'tema-natale'], maxConn: 2 };
     DEMO.maintAg = { on: false, msg: '', allow: [] };
     DEMO.agents = [
-      { id: 2, username: 'mario.rossi', password: 'Mario-2026!', email: 'mario@esempio.it', parentId: 0, maxClients: 50, canAgents: true, perms: P0, servers: ['s1', 's2'], active: true, notes: 'Zona Napoli', lastSeen: t - 40 * 60e3, createdAt: t - 40 * 864e5, totp: true },
-      { id: 3, username: 'luca.tv', email: 'luca@esempio.it', parentId: 0, maxClients: 20, canAgents: false, perms: { ...P0, addons: [] }, servers: ['s1'], active: true, notes: '', lastSeen: t - 3 * 3600e3, createdAt: t - 22 * 864e5, totp: false },
-      { id: 4, username: 'giulia.stream', email: '', parentId: 2, maxClients: 10, canAgents: false, perms: { ...P0, addons: [] }, servers: ['s2'], active: true, notes: '', lastSeen: t - 2 * 864e5, createdAt: t - 9 * 864e5, totp: false },
-      { id: 5, username: 'bar.sport', email: 'info@barsport.it', parentId: 0, maxClients: 5, canAgents: false, perms: P0, servers: [], active: false, notes: 'Sospeso: pagamento', lastSeen: t - 20 * 864e5, createdAt: t - 60 * 864e5, totp: false },
+      { id: 2, username: 'mario.rossi', storeCode: 'K7M4', password: 'Mario-2026!', email: 'mario@esempio.it', parentId: 0, maxClients: 50, canAgents: true, perms: P0, servers: ['s1', 's2'], active: true, notes: 'Zona Napoli', lastSeen: t - 40 * 60e3, createdAt: t - 40 * 864e5, totp: true },
+      { id: 3, username: 'luca.tv', storeCode: 'P3XZ', email: 'luca@esempio.it', parentId: 0, maxClients: 20, canAgents: false, perms: { ...P0, addons: [] }, servers: ['s1'], active: true, notes: '', lastSeen: t - 3 * 3600e3, createdAt: t - 22 * 864e5, totp: false },
+      { id: 4, username: 'giulia.stream', storeCode: 'R8QA', email: '', parentId: 2, maxClients: 10, canAgents: false, perms: { ...P0, addons: [] }, servers: ['s2'], active: true, notes: '', lastSeen: t - 2 * 864e5, createdAt: t - 9 * 864e5, totp: false },
+      { id: 5, username: 'bar.sport', storeCode: 'T2NW', email: 'info@barsport.it', parentId: 0, maxClients: 5, canAgents: false, perms: P0, servers: [], active: false, notes: 'Sospeso: pagamento', lastSeen: t - 20 * 864e5, createdAt: t - 60 * 864e5, totp: false },
     ];
     DEMO.srv = [{ id: 's1', name: 'NKI', host: 'http://nki.esempio.tv:8080' }, { id: 's2', name: 'ATLX', host: 'http://atlx.esempio.tv' }, { id: 's3', name: 'Riserva', host: 'http://backup.esempio.tv' }];
     DEMO.devices.forEach((d, i) => { if (!d.parent && d.playlists.length) d.ownerId = i % 5 === 1 ? 2 : i % 5 === 3 ? 3 : i % 7 === 2 ? 4 : 0; });
@@ -751,6 +754,8 @@ body.agent .foot{display:none}
         const id = Math.max(...DEMO.agents.map((x) => x.id)) + 1; DEMO.agents.push({ id, username: b.username, email: b.email || '', parentId: demoAgent ? 2 : 0, maxClients: b.maxClients || 10, canAgents: !!b.canAgents, perms: b.perms, servers: b.servers || [], active: b.active !== false, notes: b.notes || '', lastSeen: 0, createdAt: Date.now(), totp: false });
         return { ok: true, id };
       }
+      const sc = p.match(/^\/admin\/agents\/(\d+)\/store-code$/);
+      if (sc && m === 'POST') { const a = DEMO.agents.find((x) => x.id === +sc[1]); a.storeCode = 'N' + Math.random().toString(36).slice(2, 5).toUpperCase().replace(/[01OIL]/g, '7'); return { ok: true, storeCode: a.storeCode }; }
       const am = p.match(/^\/admin\/agents\/(\d+)$/);
       if (am) {
         const a = DEMO.agents.find((x) => x.id === +am[1]);
