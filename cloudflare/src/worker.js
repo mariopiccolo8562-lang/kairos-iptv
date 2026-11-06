@@ -337,6 +337,23 @@ async function ktvFeed(s) {
   ktvMem = { t: now(), k: url, v };
   return v;
 }
+/* Kairos Premium (repository kairos-premium): aggiornamenti da kairos-premium.json dell'ultima release */
+const PREM_APK = 'https://github.com/mariopiccolo8562-lang/kairos-premium/releases/latest/download/kairos-premium.apk';
+let premMem = { t: 0, v: null };
+async function premFeed() {
+  if (now() - premMem.t < 5 * 60e3) return premMem.v;
+  let v = null;
+  try {
+    const r = await fetch(PREM_APK.replace(/\.apk$/, '.json'), { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
+    if (r.ok) {
+      const j = await r.json();
+      const code = semverCode(j.version) || +j.versionCode;
+      if (code > 0) v = { versionCode: code, version: String(j.version || '').replace(/^v/i, '').slice(0, 20), url: /^https:\/\//.test(j.url || '') ? String(j.url).slice(0, 500) : PREM_APK, date: String(j.date || '').slice(0, 40) };
+    }
+  } catch {}
+  premMem = { t: now(), v };
+  return v;
+}
 /* Kairos XC (stile MirkoTeam, repository separato kairos-xc): stesso meccanismo di Kairos TV */
 const XC_APK = 'https://github.com/mariopiccolo8562-lang/kairos-xc/releases/latest/download/kairos-xc.apk';
 let xcMem = { t: 0, k: '', v: null };
@@ -1796,6 +1813,7 @@ const verBehind = (cur, latest) => { const a = verNum(cur), b = verNum(latest); 
 /** ultima versione pubblicata dell'app del cliente: tv = Kairos Pro, ktv = Kairos TV, lite, xc */
 async function latestFor(env, s, app) {
   if (app === 'lite') { const f = await liteFeed(s); return f && f.version ? { version: f.version, versionCode: semverCode(f.version) } : null; }
+  if (app === 'prem') { const f = await premFeed(); return f ? { version: f.version, versionCode: f.versionCode } : null; }
   if (app === 'ktv') { const f = await ktvFeed(s); return f ? { version: f.version, versionCode: f.versionCode } : null; }
   if (app === 'xc') { const f = await xcFeed(s); return f ? { version: f.version, versionCode: f.versionCode } : null; }
   if (app === 'plus') { const f = await plusFeed(s); return f ? { version: f.version, versionCode: f.versionCode } : null; }
@@ -1803,7 +1821,7 @@ async function latestFor(env, s, app) {
   if (app !== 'tv') return null; // app non riconosciuta (es. KAIROS per Fire TV Vega OS): nessun confronto con gli APK
   const a = await latestApk(env, s); return a && a.version ? { version: a.version, versionCode: a.versionCode } : null;
 }
-const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', lite: 'Kairos Lite', xc: 'Kairos XC', plus: 'Kairos Plus', nova: 'Kairos Nova', vega: 'Kairos per Fire TV (Vega OS)' };
+const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', prem: 'Kairos Premium', lite: 'Kairos Lite', xc: 'Kairos XC', plus: 'Kairos Plus', nova: 'Kairos Nova', vega: 'Kairos per Fire TV (Vega OS)' };
 
 /* ====================================================================== */
 /* Controllo remoto delle app                                              */
@@ -1814,15 +1832,15 @@ const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', lite: 'Kairos Lite', xc: 
 /*    dispositivo, consegnati nel battito (cmds) e confermati dall'app (POST /api/player/cmd)                    */
 /*  - l'app riporta le sue impostazioni attuali (cfg) e la versione della configurazione applicata (rcv)        */
 /* ====================================================================== */
-const RC_APPS = ['tv', 'ktv', 'lite', 'xc', 'plus', 'nova'];
+const RC_APPS = ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus', 'nova'];
 /** app collegate al pannello con codice (battito e comandi); Kairos Nova può anche restare libera: allora legge solo la politica degli aggiornamenti */
-const RC_LINKED = ['tv', 'ktv', 'lite', 'xc', 'plus', 'nova'];
+const RC_LINKED = ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus', 'nova'];
 // catalogo: [chiave, nome, tipo, valori [[valore, etichetta]], app che la capiscono, spiegazione]
 const RC_CAT = [
-  ['lite', 'Modalità leggera', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['max', 'Leggerissima'], ['off', 'Spenta']], ['tv', 'ktv', 'lite', 'xc', 'plus'], 'Niente animazioni ed effetti, immagini e memoria ridotte: per chiavette e TV vecchie'],
+  ['lite', 'Modalità leggera', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['max', 'Leggerissima'], ['off', 'Spenta']], ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus'], 'Niente animazioni ed effetti, immagini e memoria ridotte: per chiavette e TV vecchie'],
   ['bgupd', 'Aggiornamenti in background', 'sel', [['on', 'Sì: scarica da sola, poi chiede solo «Installa»'], ['off', 'No: scarica solo quando il cliente accetta']], RC_APPS, 'Con «Sì» l\'app scarica e verifica da sola la versione nuova (solo su Wi-Fi o cavo); al cliente resta un solo OK, quello di Android per installare'],
   ['force', 'Aggiornamento obbligatorio', 'sel', [['off', 'No: il cliente può rimandare'], ['7d', 'Dopo 7 giorni dal primo avviso'], ['3d', 'Dopo 3 giorni dal primo avviso'], ['now', 'Subito']], RC_APPS, 'Scaduto il termine l\'app si apre solo dopo aver installato la versione nuova. Blocca soltanto se l\'APK è già scaricato e verificato sul dispositivo, mai per un problema di rete', 'No: il cliente può rimandare'],
-  ['preview', 'Anteprima nella lista canali', 'sel', [['click', 'Al primo OK'], ['off', 'Spenta']], ['ktv', 'lite', 'xc'], 'Spenta: il canale parte subito a schermo intero (meno lavoro per il dispositivo)'],
+  ['preview', 'Anteprima nella lista canali', 'sel', [['click', 'Al primo OK'], ['off', 'Spenta']], ['ktv', 'prem', 'lite', 'xc'], 'Spenta: il canale parte subito a schermo intero (meno lavoro per il dispositivo)'],
   ['theme', 'Colore', 'sel', [['cinema', 'Cinema'], ['ocean', 'Oceano'], ['forest', 'Foresta'], ['sunset', 'Tramonto'], ['mono', 'Mono']], ['tv'], 'Tema dell\'interfaccia'],
   ['o.startScr', 'Schermata iniziale', 'sel', [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta'], ['guide', 'Guida TV'], ['lastch', 'Ultimo canale guardato']], ['tv'], ''],
   ['o.hw', 'Accelerazione hardware', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['off', 'Disattivata (software)']], ['tv'], 'Disattivala solo se il cliente vede immagini verdi o a scatti'],
@@ -1915,17 +1933,18 @@ function appOfVer(ver, saved) {
   if (/^xc\b/i.test(v)) return 'xc';
   if (/^plus\b/i.test(v)) return 'plus';
   if (/^nova\b/i.test(v)) return 'nova';
+  if (/premium/i.test(v)) return 'prem';
   if (/^tv\b/i.test(v)) return 'ktv';
   if (/^\d+\.\d+/.test(v)) return 'tv';
   return saved || 'tv';
 }
 /** come si aggiorna ogni app: solo Kairos Pro riceve «Invia aggiornamento» dal pannello */
-const UPD_HOW = { tv: 'Invia l\'aggiornamento: l\'app lo propone subito al cliente', ktv: 'Invia l\'aggiornamento: Kairos TV lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', lite: 'Invia l\'aggiornamento: Kairos Lite lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', xc: 'Invia l\'aggiornamento: Kairos XC lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', plus: 'Invia l\'aggiornamento: Kairos Plus lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie si aggiornano dal Kairos Store)', nova: 'Invia l\'aggiornamento: Kairos Nova lo scarica in background e propone «Installa ora»' };
+const UPD_HOW = { tv: 'Invia l\'aggiornamento: l\'app lo propone subito al cliente', prem: 'Invia l\'aggiornamento: Kairos Premium lo scarica in background e propone «Installa ora»', ktv: 'Invia l\'aggiornamento: Kairos TV lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', lite: 'Invia l\'aggiornamento: Kairos Lite lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', xc: 'Invia l\'aggiornamento: Kairos XC lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', plus: 'Invia l\'aggiornamento: Kairos Plus lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie si aggiornano dal Kairos Store)', nova: 'Invia l\'aggiornamento: Kairos Nova lo scarica in background e propone «Installa ora»' };
 /** problemi trovati per un cliente, con la soluzione suggerita (sev: bad | warn) */
 function healthIssues(p, errs, latest, app) {
   const out = [];
   const pro = !app || RC_APPS.includes(app);
-  if (p && latest && verBehind(p.ver, latest.version)) out.push({ sev: 'warn', key: 'upd', what: `App vecchia: ${APP_NAME[app || 'tv'] || ''} ${String(p.ver || '?').replace(/^(lite|tv|xc|plus)\s+/i, '')} (ultima ${latest.version})`, fix: UPD_HOW[app || 'tv'] || 'Aggiorna l\'app del cliente', ...(pro ? { act: 'upd' } : {}) });
+  if (p && latest && verBehind(p.ver, latest.version)) out.push({ sev: 'warn', key: 'upd', what: `App vecchia: ${APP_NAME[app || 'tv'] || ''} ${String(p.ver || '?').replace(/^(lite|tv|xc|plus)\s+/i, '').replace(/\s+premium$/i, '')} (ultima ${latest.version})`, fix: UPD_HOW[app || 'tv'] || 'Aggiorna l\'app del cliente', ...(pro ? { act: 'upd' } : {}) });
   const rs = errs.filter((e) => e.problem === 'restart').length;
   if (rs >= 2) out.push({ sev: 'bad', key: 'restart', what: `Si è riavviata da sola ${rs} volte nelle ultime 24 ore: Android chiude il motore web per poca memoria${/fire|aft/i.test((p && p.model) || '') ? ' (tipico dei Fire Stick)' : ''}`, fix: 'L\'app è già passata da sola alla modalità leggerissima. Se continua: Controllo remoto → Modalità leggera «Leggerissima» per questo cliente, chiudi le altre app sul dispositivo e riavvialo; se ha ancora problemi serve un dispositivo con più memoria' });
   const nr = errs.filter((e) => e.outcome === 'non risolto' && e.problem !== 'restart').length, fr = errs.filter((e) => e.problem === 'freeze').length;
@@ -1967,7 +1986,7 @@ async function healthList(env, s, ids) {
   const [rowsR, erR] = await Promise.all([
     env.DB.prepare("SELECT p.device_id AS id, p.ver, p.state, p.stalls_h, p.net, p.rssi, p.speed_dl, p.t, d.name, d.code, d.app, d.parent, d.upd_req FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ?").bind(t - 3 * 864e5).all(),
     env.DB.prepare('SELECT device_id, problem, outcome, codec, dec FROM app_errors WHERE t > ?').bind(t - 864e5).all().catch(() => ({ results: [] })),
-    ...['tv', 'ktv', 'lite', 'xc', 'plus'].map(async (a) => { L[a] = await latestFor(env, s, a).catch(() => null); }),
+    ...['tv', 'ktv', 'prem', 'lite', 'xc', 'plus'].map(async (a) => { L[a] = await latestFor(env, s, a).catch(() => null); }),
   ]);
   const rows = (rowsR && rowsR.results) || [];
   const er = new Map(((erR && erR.results) || []).reduce((m, e) => { const a = m.get(e.device_id) || []; a.push(e); m.set(e.device_id, a); return m; }, new Map()));
@@ -2632,12 +2651,12 @@ async function route(req, env, ctx) {
       if (await limited(env.RL_DEVICE, 'up:' + ip)) return json({ ui: null, apk: null }, 429);
       const s = await getSettings(env);
       // Kairos TV ha la sua interfaccia dentro l'APK (repository kairos-tv): niente interfaccia della Pro e solo il suo APK
-      const who = appFrom(req, null), ktv = who === 'ktv', xc = who === 'xc', plus = who === 'plus', nova = who === 'nova';
+      const who = appFrom(req, null), prem = who === 'prem', ktv = who === 'ktv' || prem, xc = who === 'xc', plus = who === 'plus', nova = who === 'nova';
       // politica degli aggiornamenti del profilo dell'app (solo le due voci pubbliche): serve a Kairos Nova, che non si registra
       const prof = rcProfiles(s)[who] || {}, policy = {}; for (const k of ['bgupd', 'force']) if (prof[k] !== undefined) policy[k] = prof[k];
       return json({
         ui: env.UI_VERSION && !ktv && !xc && !plus && !nova ? { version: env.UI_VERSION, url: '/app/index.html' } : null,
-        apk: nova ? await novaFeed() : plus ? await plusFeed(s) : xc ? await xcFeed(s) : ktv ? await ktvFeed(s) : await latestApk(env, s),
+        apk: nova ? await novaFeed() : plus ? await plusFeed(s) : xc ? await xcFeed(s) : prem ? await premFeed() : ktv ? await ktvFeed(s) : await latestApk(env, s),
         policy,
       }, 200, { 'Cache-Control': 'no-store' });
     }
@@ -2711,13 +2730,15 @@ const MAINT_MSG = 'Servizio in manutenzione: torna disponibile a breve. Grazie p
     Kairos TV con «KairosPlayer/x.y KairosTV/x.y», Kairos Pro solo con «KairosPlayer/x.y».
     Chiavi interne: 'tv' = Kairos Pro (nome storico), 'ktv' = Kairos TV, 'lite' = Kairos Lite, 'xc' = Kairos XC
     (Kairos XC si presenta con «KairosTV/x.y KairosXC/x.y» e versione «xc x.y»: va riconosciuta prima di Kairos TV) */
-const APPS = ['tv', 'lite', 'ktv', 'xc', 'plus', 'nova'];
+const APPS = ['tv', 'lite', 'ktv', 'prem', 'xc', 'plus', 'nova'];
 function appFrom(req, b) {
   const ua = req.headers.get('User-Agent') || '', ver = String((b && b.ver) || '');
   if (/KairosLite\//i.test(ua) || /^lite\b/i.test(ver)) return 'lite';
   if (/KairosXC\//i.test(ua) || /^xc\b/i.test(ver)) return 'xc';
   if (/KairosPlus\//i.test(ua) || /^plus\b/i.test(ver)) return 'plus'; // Kairos Plus: «KairosPlus/x.y» e versione «plus x.y»
   if (/KairosNova\//i.test(ua) || /^nova\b/i.test(ver)) return 'nova';
+  // Kairos Premium (repository kairos-premium): versione «tv x.y premium», user agent «KairosPremium/x.y»
+  if (/KairosPremium\//i.test(ua) || /\bpremium\b/i.test(ver)) return 'prem';
   if (/KairosTV\//i.test(ua)) return 'ktv';
   if (/KairosPlayer\//i.test(ua) || ver) return 'tv';
   return '';
@@ -2892,10 +2913,10 @@ function storeAppsList(v) {
   return out.includes('*') ? ['*'] : out;
 }
 /* app Kairos (link per scaricarle e codice Downloader): quali vede l'agente lo decide il titolare (kAllow) */
-const KAIROS_APPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['plus', 'Kairos Plus'], ['store', 'Kairos Store']];
+const KAIROS_APPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['prem', 'Kairos Premium'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['plus', 'Kairos Plus'], ['store', 'Kairos Store']];
 function kairosAppsOf(s) {
   return [
-    ['pro', s.apkUrl || '', s.downloaderCode || ''], ['tv', s.ktvApkUrl || KTV_APK, s.ktvDownloaderCode || ''], ['lite', s.liteApkUrl || LITE_APK, s.liteDownloaderCode || ''],
+    ['pro', s.apkUrl || '', s.downloaderCode || ''], ['tv', s.ktvApkUrl || KTV_APK, s.ktvDownloaderCode || ''], ['prem', PREM_APK, ''], ['lite', s.liteApkUrl || LITE_APK, s.liteDownloaderCode || ''],
     ['xc', s.xcApkUrl || XC_APK, s.xcDownloaderCode || ''], ['plus', s.plusApkUrl || PLUS_APK, s.plusDownloaderCode || ''], ['store', '', s.storeDownloaderCode || ''],
   ].map(([k, apk, code]) => ({ key: k, name: KAIROS_APPS.find((x) => x[0] === k)[1], apk, code }));
 }
