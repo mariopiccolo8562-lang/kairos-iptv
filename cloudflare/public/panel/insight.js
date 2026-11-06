@@ -29,7 +29,7 @@
   const hm = (secs) => { secs = Math.round(+secs || 0); if (secs < 60) return secs ? secs + ' s' : '0 min'; const m = Math.round(secs / 60); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') + ' min'; };
   const when = (t) => (t ? new Date(t).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' }) : '—');
   const KIND = { live: '📺', movie: '🎬', series: '🎞' };
-  const PROB = { freeze: 'Immagine ferma', stall: 'Caricamento continuo', error: 'Errore del lettore', restart: 'Riavvio per memoria', crash: 'Chiusura per errore interno', killed: 'Chiusa dal sistema (memoria)' };
+  const PROB = { freeze: 'Immagine ferma', stall: 'Caricamento continuo', error: 'Errore del lettore', restart: 'Riavvio per memoria', crash: 'Chiusura per errore interno', killed: 'Chiusa dal sistema (memoria)', uierr: 'Errore dell\'interfaccia' };
   const SEV = { bad: '#ef4444', warn: '#f5b041' };
   document.body.insertAdjacentHTML('beforeend', '<div id="insM"><div class="ib" id="insB"></div></div>');
   const M = $('#insM');

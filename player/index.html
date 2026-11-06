@@ -6307,7 +6307,30 @@ function dnsSwap(oldPls, newPls) {
 document.addEventListener('pointerdown', () => fx('_'), { once: true });
 document.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') document.body.classList.add('nokbd'); });
 document.addEventListener('keydown', () => document.body.classList.remove('nokbd'), true);
-boot();
+/* ---- rete di sicurezza dell'avvio: un errore dell'interfaccia non deve lasciare l'app ferma sul logo ----
+   Gli errori (anche quelli silenziosi) finiscono in «Errori delle app» come «Errore dell'interfaccia», con riga e messaggio. */
+const uiErrs = [];
+function uiErr(msg, where) {
+  try {
+    const key = String(msg).slice(0, 80);
+    if (uiErrs.some((e) => e.key === key)) return;
+    uiErrs.push({ key });
+    pendEvts.push({ t: Date.now(), problem: 'uierr', action: where || '', outcome: '', err: `${key}${where ? ' @ ' + where : ''}`.slice(0, 120), title: 'interfaccia ' + (curUi() || 'inclusa') });
+    setTimeout(() => sendPlayEvents().catch(() => {}), 3000);
+  } catch {}
+}
+addEventListener('error', (e) => uiErr(e.message || 'errore', (e.filename ? '' : 'riga ') + (e.lineno || '')));
+addEventListener('unhandledrejection', (e) => uiErr((e.reason && (e.reason.message || e.reason)) || 'promessa rifiutata', 'async'));
+let booted = false;
+const bootDone = () => { booted = true; };
+(async () => {
+  // se dopo 40 s l'app è ancora sul logo, si va avanti comunque (attivazione o schermata principale)
+  const wd = setTimeout(() => { if (booted || !$('#boot') || !$('#boot').classList.contains('on')) return; uiErr('avvio bloccato: si prosegue senza attendere', 'watchdog'); try { if (S.status === 'active' && S.fullLib) enterApp(); else showActivate(false); } catch { try { location.reload(); } catch {} } }, 40000);
+  try { await boot(); } catch (e) {
+    uiErr((e && e.message) || String(e), 'boot');
+    try { if (S.status === 'active') { await loadOrCache().catch(() => {}); enterApp(); } else showActivate(false); } catch { setTimeout(() => location.reload(), 3000); }
+  } finally { clearTimeout(wd); bootDone(); }
+})();
 </script>
 </body>
 </html>
