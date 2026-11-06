@@ -11,6 +11,7 @@ import { ADDON_ASSETS } from './addon-assets.js';
  */
 import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide } from './store.js'; // autorizzazione download dello Store (/api/store/*)
 import { wolfRoutes, wolfCron } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
+import { mxpRoutes } from './mxpanel.js'; // account MaxPlayer gestiti da KAIROS (sezione «Pannello MaxPlayer»)
 import { tgHook, notifyNew, notifyDecided, notifyAdmin } from './notify.js'; // avvisi su Telegram e notifiche del pannello
 
 const SESSION_TTL = 30 * 86400; // secondi: l'accesso resta valido 30 giorni dall'ultimo uso (si rinnova da solo)
@@ -3428,6 +3429,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   const m = req.method;
   if (!ses && API_DENY.test(path)) throw new HttpErr(403, 'Funzione disponibile solo dal pannello');
   if (path === '/api-keys' || path.startsWith('/api-keys/') || path === '/webhook' || path.startsWith('/webhook/')) return apiAdmin(req, env, path, who, ip, ctx);
+  if (path.startsWith('/mxp/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello MaxPlayer'); const r = await mxpRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
   if (path.startsWith('/wolf/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare WOLF'); const r = await wolfRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
   if ((path === '/ext-lists' || path.startsWith('/ext-lists/')) && !(ses && ses.agent)) { if (!ses) throw new HttpErr(403, 'Solo dal pannello'); const r = await extListsRoutes(req, env, path, who, ip, null); if (r) return r; }
   const orb = path.match(/^\/orbix\/([A-Za-z0-9_-]{6,20})$/);
