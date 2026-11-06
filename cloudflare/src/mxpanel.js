@@ -180,6 +180,33 @@ export async function mxpRoutes(req, env, path, who, ip, H, ag = null) {
     await H.log(env, 'new', `${who}: Pannello MaxPlayer — cliente ${body.iptv_user} creato`, ip);
     return json({ ok: true, id: s(j.user_id ?? (j.data && j.data.id) ?? '', 30) });
   }
+  const lm = sub.match(/^\/users\/(\d{1,15})\/(lists|devices)$/);
+  if (lm && ((lm[2] === 'lists' && m === 'POST') || (lm[2] === 'devices' && m === 'PUT'))) {
+    await mine(lm[1]);
+    const b = await H.readJSON(req, 2048);
+    if (lm[2] === 'devices') {
+      const n = Math.trunc(+b.limit); if (!(n >= 1 && n <= 50)) throw new HttpErr(400, 'Dispositivi: da 1 a 50');
+      await call(H, key, 'PUT', `/users/${lm[1]}/device-limit`, { device_limit: n });
+      await H.log(env, 'edit', `${who}: Pannello MaxPlayer — dispositivi di ${uname(lm[1])}: ${n}`, ip);
+      return json({ ok: true });
+    }
+    const body = { user_id: lm[1], domain_id: str(String(b.domain || ''), 30), iptv_username: okIptv(b.user, H, 'Utente della linea'), iptv_password: okIptv(b.pass, H, 'Password della linea') };
+    if (!/^\d{1,30}$/.test(body.domain_id)) throw new HttpErr(400, 'Scegli il DNS (dominio)');
+    await call(H, key, 'POST', '/users/list', body); drop();
+    await H.log(env, 'new', `${who}: Pannello MaxPlayer — lista aggiunta a ${uname(lm[1])}`, ip);
+    return json({ ok: true });
+  }
+  const dmm = sub.match(/^\/domains(?:\/(\d{1,30}))?$/);
+  if (dmm && ((m === 'POST' && !dmm[1]) || (m === 'PUT' && dmm[1]))) {
+    if (mx) throw new HttpErr(403, 'Funzione riservata al titolare');
+    const b = await H.readJSON(req, 1024);
+    let x; try { x = new URL(/^https?:\/\//i.test(String(b.url || '')) ? String(b.url) : 'http://' + String(b.url || '')); } catch { throw new HttpErr(400, 'Scrivi il DNS completo, es. http://dns.esempio.com:8080'); }
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(x.hostname)) throw new HttpErr(400, 'DNS non valido');
+    const https = x.protocol === 'https:', body = { domain: x.hostname.toLowerCase(), port: +(x.port || (https ? 443 : 80)), https, label: str(b.label, 60) };
+    await call(H, key, dmm[1] ? 'PUT' : 'POST', dmm[1] ? `/domains/${dmm[1]}` : '/domains', body);
+    await H.log(env, 'edit', `${who}: Pannello MaxPlayer — DNS ${body.domain} ${dmm[1] ? 'modificato' : 'aggiunto'}`, ip);
+    return json({ ok: true });
+  }
   const um = sub.match(/^\/users\/(\d{1,15})(?:\/(password)|\/lists\/([A-Za-z0-9-]{1,60}))?$/);
   if (um) {
     const id = um[1];
@@ -192,6 +219,11 @@ export async function mxpRoutes(req, env, path, who, ip, H, ag = null) {
       await call(H, key, 'PUT', `/customers/${id}/lists/${encodeURIComponent(um[3])}`, body);
       const who2 = uname(id); drop();
       await H.log(env, 'edit', `${who}: Pannello MaxPlayer — lista di ${who2} modificata`, ip);
+      return json({ ok: true });
+    }
+    if (um[3] && m === 'DELETE') {
+      await call(H, key, 'DELETE', `/customers/${id}/lists/${encodeURIComponent(um[3])}`); const who2 = uname(id); drop();
+      await H.log(env, 'del', `${who}: Pannello MaxPlayer — lista tolta a ${who2}`, ip);
       return json({ ok: true });
     }
     if (um[2] && m === 'PUT') {
