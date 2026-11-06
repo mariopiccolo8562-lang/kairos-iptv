@@ -32,7 +32,7 @@
   }
   TITLES.armada = 'Pannello Armada';
 
-  const A = { st: null, tab: 'new', pk: null, lines: null, mags: null, res: null, F: { q: '', f: '' }, show: new Set(), last: null, sel: new Set(), vis: [], stOn: false,
+  const A = { st: null, tab: 'new', pk: null, lines: null, mags: null, res: null, F: { q: '', f: '' }, show: new Set(), last: null, sel: new Set(), vis: [], stOn: false, limit: 100,
     form: { type: 'm3u', sub: 12, htime: 24, pack: '', mac: '', country: '', adult: false, notes: '' } };
   const DAY = 864e5, fmtD = (t) => (t ? new Date(t).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
   const left = (t) => { if (!t) return ''; const d = Math.ceil((t - Date.now()) / DAY); return d < 0 ? `scaduta da ${-d} g` : d === 0 ? 'scade oggi' : `tra ${d} g`; };
@@ -136,8 +136,8 @@
     return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><input class="inp" id="arQ" placeholder="Cerca ${kind === 'lines' ? 'utente' : 'MAC'}, note${isAg() ? '' : ', reseller, agente'}…" value="${esc(F.q)}" style="flex:1;min-width:220px;margin:0"></div>
       <div class="filters" style="margin:0 0 6px">${FL.map(([k, l]) => `<button class="fchip ${F.f === k ? 'on' : ''}" data-arf="${k}">${l}<span>${cnt(k)}</span></button>`).join('')}</div>
       ${window.KXTools ? KXTools.bar('ar', A.vis.filter((k) => A.sel.has(k)).length, list.length, [['ren', 'Rinnova', 'pri'], ['on', 'Attiva'], ['off', 'Disattiva'], ...(kind === 'lines' ? [['msg', 'Messaggio ai clienti']] : [])]) + (A.stOn ? statsHtml(L, st) : '') : ''}
-      ${list.length ? list.slice(0, 500).map(row).join('') : `<p class="mut" style="padding:12px 0">${L.length ? 'Nessuna con questi filtri.' : 'Ancora niente.'}</p>`}
-      ${list.length > 500 ? `<p class="mut">Mostrate 500 su ${list.length}: usa la ricerca.</p>` : ''}`;
+      ${list.length ? list.slice(0, A.limit).map(row).join('') : `<p class="mut" style="padding:12px 0">${L.length ? 'Nessuna con questi filtri.' : 'Ancora niente.'}</p>`}
+      ${list.length > A.limit ? `<button class="btn sm" id="arMore" style="margin-top:10px">Mostra altre ${Math.min(100, list.length - A.limit)} (${A.limit} su ${list.length})</button>` : ''}`;
   }
 
   function resHtml() {
@@ -178,7 +178,7 @@
     if (!V.dataset.bound) { V.dataset.bound = '1'; for (const ev of ['input', 'change']) V.addEventListener(ev, (e) => e.stopPropagation()); } // non conta tra le «modifiche non salvate»
     $('#arRe') && ($('#arRe').onclick = () => loadState());
     $('#arCfg') && ($('#arCfg').onclick = async () => { try { await api('PUT', '/admin/settings', { armadaUrl: $('#arUrl').value.trim(), armadaDns: $('#arDns').value.trim() }); toast('Indirizzi salvati'); A.pk = A.lines = A.mags = A.res = null; await loadState(); loadTab(); } catch (e) { toast(e.message, 1); } });
-    $$('[data-artab]', V).forEach((b) => (b.onclick = () => { readForm(); A.tab = b.dataset.artab; A.F = { q: '', f: '' }; A.sel.clear(); render(); loadTab(); }));
+    $$('[data-artab]', V).forEach((b) => (b.onclick = () => { readForm(); A.tab = b.dataset.artab; A.F = { q: '', f: '' }; A.sel.clear(); A.limit = 100; render(); loadTab(); }));
     $('#arReT') && ($('#arReT').onclick = () => loadTab(true));
     // nuova linea
     $$('#arType [data-t]').forEach((b) => (b.onclick = () => { readForm(); A.form.type = b.dataset.t; render(); }));
@@ -210,8 +210,9 @@
       try { await api('POST', '/admin/linked-lines', { app: b.dataset.arapp, username: L.username, password: L.password, dns: L.host, note: A.form.notes || '' }); toast('Registrata in Linee collegate su ' + b.dataset.arapp); } catch (e) { toast(e.message, 1); }
     }));
     // elenchi
-    const qi = $('#arQ'); if (qi) qi.oninput = () => { A.F.q = qi.value; const p = qi.selectionStart; render(); const n = $('#arQ'); n.focus(); n.setSelectionRange(p, p); };
-    $$('[data-arf]', V).forEach((b) => (b.onclick = () => { A.F.f = b.dataset.arf; render(); }));
+    const qi = $('#arQ'); if (qi) qi.oninput = () => { A.F.q = qi.value; A.limit = 100; const p = qi.selectionStart; render(); const n = $('#arQ'); n.focus(); n.setSelectionRange(p, p); };
+    $$('[data-arf]', V).forEach((b) => (b.onclick = () => { A.F.f = b.dataset.arf; A.limit = 100; render(); }));
+    const more = V.querySelector('#arMore'); if (more) more.onclick = () => { A.limit += 100; render(); };
     const find = (k) => (k[0] === 'l' ? A.lines : A.mags).find((x) => 'lm'[k[0] === 'l' ? 0 : 1] + x.id === k) || {};
     $$('[data-arc]', V).forEach((b) => (b.onclick = () => { const k = (A.tab === 'lines' ? 'l' : 'm') + b.dataset.ari, x = find(k); copy(b.dataset.arc === 'u' ? x.username : b.dataset.arc === 'p' ? x.password : x.mac, b.dataset.arc === 'u' ? 'Utente' : b.dataset.arc === 'p' ? 'Password' : 'MAC'); }));
     $$('[data-areye]', V).forEach((b) => (b.onclick = () => { const k = b.dataset.areye; A.show.has(k) ? A.show.delete(k) : A.show.add(k); render(); }));

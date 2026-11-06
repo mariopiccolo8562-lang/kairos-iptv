@@ -166,14 +166,11 @@ body.agent .foot{display:none}
   // menu 3.2: una voce per ogni pagina, in sezioni chiare (prima molte pagine erano schede dentro poche voci).
   // Le voci che un agente non può usare restano nascoste; una sezione senza voci non compare.
   const GROUPS = [
-    ['', ['dash', 'devices', 'live', 'agents']],
-    ['Linee e DNS', ['lmap', 'lines', 'dns', 'armada', 'wolf', 'mxp', 'oxp']],
-    ['App e link', ['apps3', 'apps3op', 'agop', 'xlist', 'dlc', 'appk', 'agk']],
-    ['Richieste', ['store', 'reports', 'creq', 'areq', 'reqai']],
-    ['Comunicazione', ['msgs', 'vod']],
-    ['Controllo', ['rctl', 'apperr', 'activity', 'trash']],
-    ['Impostazioni', ['set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api']],
-    ['Account', ['sec']],
+    ['', ['dash', 'devices', 'live', 'agents', 'msgs']],
+    ['Linee e pannelli', ['conn', 'lmap', 'lines', 'dns', 'armada', 'wolf', 'mxp', 'oxp']],
+    ['App e Store', ['store', 'apps3', 'apps3op', 'agop', 'xlist', 'dlc', 'appk', 'agk']],
+    ['Richieste e controllo', ['reports', 'creq', 'areq', 'reqai', 'rctl', 'apperr', 'activity', 'trash', 'vod']],
+    ['Impostazioni', ['set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'sec']],
   ];
   const HIDDEN = ['settings', 'ai']; // pagine vecchie sostituite dalle voci qui sopra (le pagine restano)
   // sezioni richiudibili (si ricorda la scelta; di base è chiusa solo «Impostazioni»). Se apri una pagina di una sezione
