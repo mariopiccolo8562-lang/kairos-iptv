@@ -3641,7 +3641,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
         const t = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(dm[1]).first();
         const b = await readJSON(req, 1024);
         if (!t || !(await env.DB.prepare(`SELECT 1 AS x FROM devices WHERE id = ? AND ${FREE_DEV}`).bind(t.id).first()) || !(await own(str(b.primary, 20)))) throw new HttpErr(404, 'Dispositivo non trovato');
-        return forward('POST', '/devices/' + t.id + '/link', { primary: str(b.primary, 20) });
+        return forward('POST', '/devices/' + t.id + '/link', { primary: str(b.primary, 20), name: typeof b.name === 'string' ? str(b.name, 60) : '' });
       }
       throw new HttpErr(404, 'Dispositivo non trovato');
     }
@@ -4461,13 +4461,20 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       const P = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(str(b.primary, 20)).first();
       if (!P || P.parent || P.id === d.id) throw new HttpErr(400, 'Cliente principale non valido');
       if (d.parent) throw new HttpErr(400, 'Il dispositivo è già collegato a un cliente: scollegalo prima');
-      if (d.active || (await unseal(env, d.playlists).catch(() => [])).length) throw new HttpErr(400, 'Il dispositivo ha già un abbonamento suo: disattivalo e togli le playlist prima di collegarlo');
-      if ((await connCount(env, d)) > 1) throw new HttpErr(400, 'Il dispositivo ha già altre connessioni collegate');
+      // move: un cliente con abbonamento suo passa sotto un altro (con le sue connessioni); keep: tiene le sue linee (gestione indipendente)
+      const move = b.move === true, myPls = await unseal(env, d.playlists).catch(() => []), keep = move && b.keep !== false && myPls.length > 0;
+      if (!move && (d.active || myPls.length)) throw new HttpErr(400, 'Il dispositivo ha già un abbonamento suo: disattivalo e togli le playlist prima di collegarlo');
+      const kids = move ? ((await env.DB.prepare('SELECT id FROM devices WHERE parent = ? LIMIT 100').bind(d.id).all()).results || []) : [];
+      if (!move && (await connCount(env, d)) > 1) throw new HttpErr(400, 'Il dispositivo ha già altre connessioni collegate');
       if (statusOf(P, await unseal(env, P.playlists).catch(() => [])) === 'pending') throw new HttpErr(400, 'Il cliente scelto non ha ancora un abbonamento');
-      const used = await connCount(env, P), max = P.max_conn ?? 1;
-      if (used >= max) throw new HttpErr(400, `Connessioni esaurite (${used} di ${max}): aumenta "Connessioni massime" del cliente`);
-      await env.DB.prepare("UPDATE devices SET parent = ?, active = 0, expires = '', playlists = '', profiles = '', own = 0 WHERE id = ? AND parent = ''").bind(P.id, d.id).run();
-      await log(env, 'on', `${who}: ${label} collegato come connessione di ${P.name || P.code} (${used + 1} di ${max})`, ip);
+      const used = await connCount(env, P), max = P.max_conn ?? 1, add = 1 + kids.length;
+      if (used + add > max) throw new HttpErr(400, `Connessioni esaurite (${used} di ${max}${add > 1 ? `, ne servono altre ${add}` : ''}): aumenta "Connessioni massime" del cliente`);
+      const name = typeof b.name === 'string' && b.name.trim() ? str(b.name, 60) : d.name;
+      const ok = await env.DB.prepare("UPDATE devices SET parent = ?, name = ?, active = 0, expires = '', playlists = ?, profiles = '', own = ? WHERE id = ? AND parent = '' RETURNING id").bind(P.id, name, keep ? d.playlists : '', keep ? 1 : 0, d.id).first();
+      if (!ok) throw new HttpErr(409, 'Il dispositivo è appena stato collegato: ricarica');
+      if (move) await env.DB.batch([...kids.map((k) => env.DB.prepare('UPDATE devices SET parent = ? WHERE id = ? AND parent = ?').bind(P.id, k.id, d.id)), env.DB.prepare('DELETE FROM link_pins WHERE device_id = ?').bind(d.id)]);
+      if (myPls.length) srcMem.map = null;
+      await log(env, 'on', `${who}: ${name || label} ${move ? 'messo sotto' : 'collegato come connessione di'} ${P.name || P.code} (${used + add} di ${max})${kids.length ? ` con le sue ${kids.length} connessioni` : ''}${keep ? ', linee sue' : ''}`, ip);
       return json({ ok: true });
     }
     if (m === 'PUT' && d.parent) {
@@ -4491,6 +4498,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       const name = typeof b.name === 'string' ? str(b.name, 60) : d.name;
       await env.DB.prepare('UPDATE devices SET name = ?, notes = ?, vpn_conf = ?, own = ?, playlists = ?, pl_mode = ?, pl_default = ?, player = ? WHERE id = ?')
         .bind(name, typeof b.notes === 'string' ? str(b.notes, 500) : d.notes, acc.vpn_conf, own ? 1 : 0, own ? await seal(env, pls) : '', plMode, plDef, player, d.id).run();
+      if (b.app !== undefined) { if (!['', ...APPS].includes(b.app)) throw new HttpErr(400, 'App non valida'); await env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(b.app, d.id).run(); }
       if (JSON.stringify(pls) !== JSON.stringify(oldPls)) srcMem.map = null;
       await log(env, 'edit', own !== wasOwn ? `${who}: ${name || label} — gestione indipendente ${own ? 'attivata (playlist e lettore suoi)' : 'tolta (usa quelli del cliente principale)'}` : `${who}: modificato ${name || label}`, ip);
       return json({ ok: true });
