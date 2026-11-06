@@ -80,6 +80,8 @@
       if (W.f === 'exp') return l.exp && l.exp < now + 7 * DAY;
       if (W.f === 'off') return !l.enabled;
       if (W.f === 'link') return linkOf(l.id);
+      if (W.f === 'conn') return l.conns > 0;
+      if (W.f === 'disc') return !(l.conns > 0);
       return true;
     });
   }
@@ -96,7 +98,7 @@
       bindCfg(); return;
     }
     const d = W.data || {}, list = filtered(), shown = list.slice(0, W.limit);
-    const FL = [['', 'Tutte'], ['on', 'Attive'], ['exp', 'In scadenza / scadute'], ['off', 'Disattivate'], ...(isAg() ? [] : [['link', 'Collegate a clienti']])];
+    const FL = [['', 'Tutte'], ['on', 'Attive'], ['exp', 'In scadenza / scadute'], ['off', 'Disattivate'], ['conn', '🟢 Collegate ora'], ['disc', '🔴 Scollegate'], ...(isAg() ? [] : [['link', 'Collegate a clienti']])];
     V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">✅ Pannello WOLF collegato</b><small>${esc(W.cfg.url)} · ${esc(W.cfg.user)}</small><small>Quello che fai qui succede subito anche su WOLF, e viceversa.</small></div>
         <div><small>Crediti WOLF</small><span class="cr">${d.credits ?? '—'}</span></div><div><small>Linee</small><span class="cr">${d.lines ? d.lines.length : '—'}</span></div>
         <button class="btn sm" id="wfPw">Cambia password</button><button class="btn sm" id="wfRe">${W.busy || W.rsBusy ? 'Carico…' : 'Aggiorna'}</button><button class="btn sm" id="wfNew">${W.tab === 'rs' ? '+ Nuovo reseller' : '+ Nuova linea'}</button></div>
@@ -113,7 +115,7 @@
           return `<div class="wf-row" data-id="${l.id}"><div><span class="k">ID</span>${l.id}</div>
             <div><span class="k">Utente / password</span><div class="wf-v"><b class="mono">${esc(l.username)}</b><button data-a="cu" title="Copia utente">⧉</button></div><div class="wf-v"><span class="mono">${sh ? esc(l.password) : '••••••'}</span><button data-a="eye" title="${sh ? 'Nascondi' : 'Mostra'} password">${sh ? 'Nascondi' : 'Mostra'}</button><button data-a="cp" title="Copia password">⧉</button></div></div>
             <div><span class="k">Scadenza</span>${fmtD(l.exp)}<br><small class="mut">${left(l.exp)}</small></div>
-            <div><span class="k">Stato</span>${status(l)}${l.trial ? '<span class="wf-tag g">Prova</span>' : ''}<br><small class="mut">${l.conns}/${l.max || '?'} conn.</small></div>
+            <div><span class="k">Stato</span>${window.KXOnline ? KXOnline.dot({ on: l.conns > 0, conns: l.conns }) + (l.conns > 0 && l.watching ? `<small class="mut" title="Sta guardando"> ▶ ${esc(l.watching)}</small>` : '') + '<br>' : ''}${status(l)}${l.trial ? '<span class="wf-tag g">Prova</span>' : ''}<br><small class="mut">${l.conns}/${l.max || '?'} conn.</small></div>
             <div><span class="k">Nota / cliente KAIROS</span><div class="mono">${esc(l.note) || '<span class="mut">—</span>'}</div>${k ? `<span class="wf-tag">↔ ${esc(k.name)}</span>` : ''}${l.owner && l.owner !== W.cfg.user ? `<span class="wf-tag g" title="Reseller">${esc(l.owner)}</span>` : ''}</div>
             <div class="wf-act"><button class="btn sm" data-a="edit">Modifica</button><button class="btn sm" data-a="ext">Rinnova</button>${isAg() ? '' : `<button class="btn sm" data-a="link">${k ? 'Cliente' : 'Collega cliente'}</button>`}<button class="btn sm" data-a="m3u">M3U</button><button class="btn sm ghost" data-a="tgl">${l.enabled ? 'Disattiva' : 'Attiva'}</button><button class="btn sm ghost" data-a="del" style="color:#ff8f8f">Elimina</button></div></div>`;
         }).join('')}</div>
