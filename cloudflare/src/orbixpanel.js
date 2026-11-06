@@ -35,7 +35,7 @@ export async function oxpRoutes(req, env, path, who, ip, H, ag = null) {
   const m = req.method, { HttpErr, json, str } = H;
   const row = async () => ((await env.DB.prepare("SELECT v FROM settings WHERE k = 'oxp:email'").first()) || {}).v || '';
   if (path === '/oxp/state' && m === 'GET') return json({ connected: !!env.ORBIX_KEY, email: ag ? '' : await row(), agent: !!ag });
-  if (ag && (path === '/oxp/email' || path === '/oxp/slots' || (path === '/oxp/playlists' && m === 'POST'))) throw new HttpErr(403, 'Funzione riservata al titolare');
+  if (ag && (path === '/oxp/email' || path === '/oxp/slots' || path === '/oxp/dns' || (path === '/oxp/playlists' && m === 'POST' && !ag.canNew))) throw new HttpErr(403, 'Funzione riservata al titolare');
   if (path === '/oxp/email' && m === 'PUT') {
     const b = await H.readJSON(req, 512), e = str(b.email, 120);
     if (e && !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(e)) throw new HttpErr(400, 'Email non valida');
@@ -59,8 +59,20 @@ export async function oxpRoutes(req, env, path, who, ip, H, ag = null) {
     if (!/^[A-Za-z0-9:._-]{4,64}$/.test(q.deviceid)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
     if (!q.username || !q.password || !q.host) throw new HttpErr(400, 'Scrivi DNS, utente e password della linea');
     const j = await call(env, H, '/add-playlist', q);
+    if (ag) await env.DB.prepare('INSERT INTO ext_lists (id, owner_id, app, name, ref, ext, username, pass_seal, dns, note, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(H.pid(), ag.id, 'orbix', q.playlistName, q.deviceid, s(j.playlist_id, 64), q.username, await H.seal(env, q.password), q.host.slice(0, 80), q.notes, Date.now(), Date.now()).run().catch(() => {});
     await H.log(env, 'new', `${who}: Pannello OrbixPlay — playlist ${q.playlistName} aggiunta al dispositivo ${q.deviceid}`, ip);
     return json({ ok: true, id: s(j.playlist_id, 64) });
+  }
+  /* «Cambia DNS»: tutte le playlist con il DNS vecchio passano al nuovo */
+  if (path === '/oxp/dns' && m === 'POST') {
+    const b = await H.readJSON(req, 1024), from = str(b.from, 300), to = str(b.to, 300);
+    if (!from || !to || from === to) throw new HttpErr(400, 'Scegli il DNS vecchio e scrivi quello nuovo');
+    const all = ((await call(env, H, '/list-playlists', {})).playlists || []).map(plOut).filter((p) => p.host === from);
+    let n = 0; const errors = [];
+    for (const p of all) { try { await call(env, H, '/update-playlist', { playlist_id: /^\d+$/.test(p.id) ? +p.id : p.id, host: to }); n++; } catch (e) { errors.push(`${p.device}: ${e.message}`); } }
+    await H.log(env, 'edit', `${who}: Pannello OrbixPlay — DNS cambiato su ${n} playlist`, ip);
+    return json({ ok: true, changed: n, errors: errors.slice(0, 10) });
   }
   const pm = path.match(/^\/oxp\/playlists\/([A-Za-z0-9_-]{1,64})$/);
   if (pm && (m === 'PUT' || m === 'DELETE')) {

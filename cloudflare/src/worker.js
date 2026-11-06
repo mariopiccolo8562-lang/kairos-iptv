@@ -2879,10 +2879,10 @@ async function adminInner(req, env, url, ip, ctx) {
    e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
    ====================================================================== */
 const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'account', 'ai',
-  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'wolf', 'mxp', 'oxp'];
+  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'wolf', 'mxp', 'oxp', 'oxpNew'];
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, wolf: false, mxp: false, oxp: false, addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, wolf: false, mxp: false, oxp: false, oxpNew: false, addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
@@ -3185,7 +3185,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   // Pannello Armada: solo con il permesso del titolare (suoi crediti, tetto mensile, solo le linee create da lui)
   if (path.startsWith('/armada/')) { need('armada', 'Non puoi usare il pannello Armada: chiedilo a chi ti gestisce'); return agentArmada(req, env, url, path, who, ip, ctx, { A, P, all, tree: ctree }); }
   // Pannello OrbixPlay: con il permesso del titolare, solo le playlist dei dispositivi dei suoi clienti e delle sue liste
-  if (path.startsWith('/oxp/')) { need('oxp', 'Non puoi usare il Pannello OrbixPlay: chiedilo a chi ti gestisce'); const r = await oxpRoutes(req, env, path, who, ip, WOLF_H, { id: A.id, tree: ctree }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
+  if (path.startsWith('/oxp/')) { need('oxp', 'Non puoi usare il Pannello OrbixPlay: chiedilo a chi ti gestisce'); const r = await oxpRoutes(req, env, path, who, ip, WOLF_H, { id: A.id, tree: ctree, canNew: !!P.oxpNew }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
   // Pannello MaxPlayer: con il permesso del titolare, solo i clienti dell'agente MaxPlayer che gli ha assegnato
   if (path.startsWith('/mxp/')) { need('mxp', 'Non puoi usare il Pannello MaxPlayer: chiedilo a chi ti gestisce'); const r = await mxpRoutes(req, env, path, who, ip, WOLF_H, { id: A.id }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
   // Pannello WOLF: con il permesso del titolare, sul proprio account reseller WOLF (sue linee e suoi crediti)
