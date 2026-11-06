@@ -2063,6 +2063,7 @@ function back() {
   const m = $$('.speedm.on').pop();
   if (m) {
     if (m.id === 'speedM') { m.classList.remove('on'); speedRun++; speedStopNative(); focus($('#sSpeed') || visibleF($('.screen.on'))[0], true); return; }
+    if (m._lock) { focus($('#uGo') || visibleF(m)[0], true); return; } // aggiornamento obbligatorio: si va avanti solo installando
     if (m.id === 'updM') S.apkUpdate = null;
     if (m._onClose) m._onClose();
     m.remove();
@@ -4819,6 +4820,12 @@ function rcApply(rc, rcv) {
 }
 /** impostazioni attuali dell'app, come le vede il pannello (stesse chiavi del suo catalogo) */
 /** aggiornamento in background: imposto dal fornitore (bgupd) o scelto dal cliente (default sì) */
+/** aggiornamento obbligatorio (voce «force» del pannello): giorni di grazia dal primo avviso, null = non obbligatorio */
+function updForceDays() { const v = rcGet('force'); return v === 'now' ? 0 : v === '3d' ? 3 : v === '7d' ? 7 : null; }
+/** primo avviso di questa versione al cliente (per contare i giorni di grazia) */
+function updFirstSeen(a) { const fs = store.get('apkFirst', {}); if (fs.v !== a.versionCode) { store.set('apkFirst', { v: a.versionCode, t: Date.now() }); return Date.now(); } return fs.t || Date.now(); }
+/** l'app va bloccata: termine scaduto e APK già scaricato e verificato (mai per un problema di rete) */
+function updMust() { const a = S.apkUpdate, d = updForceDays(); if (!a || d == null || S.apkReady !== a.url) return false; return Date.now() - updFirstSeen(a) >= d * 86400e3; }
 function bgUpdOn() { const v = rcGet('bgupd'); return v != null ? v !== 'off' : store.get('bgUpd', true) !== false; }
 function rcSnapshot() {
   const o = { bgupd: bgUpdOn() ? 'on' : 'off', lite: document.body.classList.contains('xlite') ? 'max' : document.body.classList.contains('lite') ? 'on' : 'off', theme: rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema' };
@@ -5879,7 +5886,7 @@ async function checkUpdates() {
 }
 /* mentre l'app è aperta (le TV restano accese per giorni): controllo ogni 3 ore e al ritorno nell'app */
 /** l'APK scaricato in background è pronto: lo si propone appena si è in un menu */
-window.kxApkReady = (url) => { S.apkReady = url; if (S.apkUpdate && S.apkUpdate.url === url) updOfferWhenFree(); };
+window.kxApkReady = (url) => { S.apkReady = url; if (S.apkUpdate && S.apkUpdate.url === url) { if (updMust() && $('#updM') && !$('#updM')._lock) back(); updOfferWhenFree(); } };
 function updCanOffer() { return !$('#updM') && !$('.speedm.on') && !S.inPlayer && !$('#boot').classList.contains('on') && !$('#activate').classList.contains('on'); }
 function updOfferWhenFree() { if (updCanOffer()) offerApkUpdate(); else whenIdle(() => { if (updCanOffer()) offerApkUpdate(); }, 2000, 2000, 30 * 60e3); }
 async function backgroundUpdateCheck(fromPanel) {
@@ -5894,6 +5901,7 @@ async function backgroundUpdateCheck(fromPanel) {
     }
     if (apkNewer(u.apk) && !apkTriedSame(u.apk)) {
       S.apkUpdate = u.apk;
+      if (S.apkReady !== u.apk.url && NATIVE.apkReady) { try { if (NATIVE.apkReady(u.apk.url)) S.apkReady = u.apk.url; } catch {} } // già scaricato in un'apertura precedente
       // aggiornamento in background: l'APK si scarica e si verifica in silenzio, al cliente resta solo «Installa»
       if (NATIVE.prefetchApk && (bgUpdOn() || fromPanel) && S.apkReady !== u.apk.url) { try { NATIVE.prefetchApk(u.apk.url); } catch {} if (!fromPanel) return; } // la proposta arriva con kxApkReady (o, se il download non parte, al prossimo controllo)
       if (updCanOffer()) offerApkUpdate(fromPanel);
@@ -6094,15 +6102,17 @@ function reportDialog(preset) {
 
 function offerApkUpdate(force) {
   const a = S.apkUpdate; if (!a || $('#updM')) return;
-  const skip = store.get('apkSkip', {});
-  if (!force && skip.v === a.versionCode && Date.now() - skip.t < 12 * 3600e3) return;
+  const skip = store.get('apkSkip', {}), must = updMust();
+  updFirstSeen(a); // da qui contano i giorni di grazia
+  if (!force && !must && skip.v === a.versionCode && Date.now() - skip.t < 12 * 3600e3) return;
   modalPause(); // l'anteprima nativa coprirebbe la finestra
   document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="updM"><div class="sbox"><div class="orb mut" style="font-size:12px;letter-spacing:.35em">AGGIORNAMENTO</div>
-    <h2 style="margin:14px 0 8px;font-size:26px">${S.apkReady === a.url ? `Aggiornamento ${esc(a.version || '')} pronto` : `Nuova versione ${esc(a.version || '')} disponibile`}</h2><p class="mut" style="line-height:1.5">${S.apkReady === a.url ? 'È già scaricato e verificato: premi Installa e conferma nella schermata di Android. Ci vuole meno di un minuto.' : 'Contiene miglioramenti e correzioni. Il download richiede pochi secondi, poi conferma l\'installazione.'}</p>
+    <h2 style="margin:14px 0 8px;font-size:26px">${must ? `Aggiornamento ${esc(a.version || '')} necessario` : S.apkReady === a.url ? `Aggiornamento ${esc(a.version || '')} pronto` : `Nuova versione ${esc(a.version || '')} disponibile`}</h2><p class="mut" style="line-height:1.5">${must ? 'Per continuare a usare l\'app va installata la versione nuova: è già scaricata e verificata, premi Installa e conferma nella schermata di Android. Ci vuole meno di un minuto.' : S.apkReady === a.url ? 'È già scaricato e verificato: premi Installa e conferma nella schermata di Android. Ci vuole meno di un minuto.' : 'Contiene miglioramenti e correzioni. Il download richiede pochi secondi, poi conferma l\'installazione.'}</p>
     <div class="ubar"><i id="uBar"></i></div><div class="mut" id="uTxt" style="font-size:13px;min-height:18px;line-height:1.4"></div>
-    <div class="sbtn"><button class="btn pri" data-f id="uGo">${S.apkReady === a.url ? 'Installa ora' : 'Aggiorna ora'}</button><button class="btn" data-f id="uLater">Più tardi</button></div></div></div>`);
+    <div class="sbtn"><button class="btn pri" data-f id="uGo">${S.apkReady === a.url ? 'Installa ora' : 'Aggiorna ora'}</button>${must ? '' : '<button class="btn" data-f id="uLater">Più tardi</button>'}</div></div></div>`);
+  if (must) $('#updM')._lock = true; // il tasto indietro non la chiude
   setTimeout(() => focus($('#uGo'), true), 80);
-  $('#uLater').onclick = () => { store.set('apkSkip', { v: a.versionCode, t: Date.now() }); back(); };
+  if ($('#uLater')) $('#uLater').onclick = () => { store.set('apkSkip', { v: a.versionCode, t: Date.now() }); back(); };
   $('#uGo').onclick = () => {
     if (S.apkDl) return;
     S.apkDl = true;

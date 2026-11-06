@@ -238,7 +238,7 @@ class MainActivity : ComponentActivity() {
                     if (f.exists() && System.currentTimeMillis() - f.lastModified() > 10 * 60_000L && !apkBusy.get()) f.delete()
                     // APK pronto in background: resta una settimana (poi la versione nuova si riscarica)
                     val g = File(d, "kairos-ready.apk")
-                    if (g.exists() && (System.currentTimeMillis() - g.lastModified() > 7 * 86_400_000L || ApkCheck.verify(this, g) != null) && !apkBusy.get()) g.delete()
+                    if (g.exists() && (System.currentTimeMillis() - g.lastModified() > 7 * 86_400_000L || ApkCheck.verify(this, g) != null) && !apkBusy.get()) { g.delete(); File(d, "kairos-ready.url").delete() }
                 }
             } catch (_: Exception) {}
         }
@@ -507,13 +507,23 @@ class MainActivity : ComponentActivity() {
     } catch (_: Exception) { false }
 
     /** aggiornamento in background: l'APK si scarica e si verifica in silenzio; la pagina riceve kxApkReady(url) quando è pronto */
+    /** APK già pronto da un'apertura precedente (file + link salvato accanto), ancora valido */
+    private fun apkReadyFor(url: String): Boolean {
+        if (readyUrl == url && readyApk?.exists() == true) return true
+        return try {
+            val f = File(apkDir(), "kairos-ready.apk"); val u = File(apkDir(), "kairos-ready.url")
+            if (f.exists() && u.exists() && u.readText().trim() == url && ApkCheck.verify(this, f) == null) { readyApk = f; readyUrl = url; true } else false
+        } catch (_: Exception) { false }
+    }
+
     private fun prefetchApk(url: String) {
-        if (readyUrl == url && readyApk?.exists() == true) { js("window.kxApkReady && kxApkReady(${JSONObject.quote(url)})"); return }
+        if (apkReadyFor(url)) { js("window.kxApkReady && kxApkReady(${JSONObject.quote(url)})"); return }
         if (metered() || !apkBusy.compareAndSet(false, true)) return
         thread(name = "kx-apk-bg") {
             try {
                 val out = File(apkDir(), "kairos-ready.apk")
                 fetchApk(url, out, null)
+                try { File(apkDir(), "kairos-ready.url").writeText(url) } catch (_: Exception) {}
                 readyApk = out; readyUrl = url
                 js("window.kxApkReady && kxApkReady(${JSONObject.quote(url)})")
             } catch (_: Exception) {
@@ -1033,7 +1043,7 @@ class MainActivity : ComponentActivity() {
         /** aggiornamento in background: scarica e verifica l'APK senza disturbare; poi kxApkReady(url) */
         @JavascriptInterface fun prefetchApk(url: String) { this@MainActivity.prefetchApk(url) }
         /** true se l'APK di [url] è già scaricato e verificato */
-        @JavascriptInterface fun apkReady(url: String): Boolean = readyUrl == url && readyApk?.exists() == true
+        @JavascriptInterface fun apkReady(url: String): Boolean = apkReadyFor(url)
         @JavascriptInterface fun speedTest() { runSpeedTest() }
         /** ferma lo speed test in corso (es. finestra chiusa) */
         @JavascriptInterface fun speedStop() { SpeedTest.stop() }
