@@ -369,6 +369,22 @@ async function routes(req, env, path, who, ip, H, ag) {
   const cfg = await wolfCfg(env, H, K);
   if (!cfg) throw new HttpErr(400, ag ? 'Collega prima il tuo account WOLF (utente e password)' : 'Collega prima il pannello WOLF (indirizzo, utente e password)');
 
+  /* «Cambia password»: la cambia su WOLF (pagina Profilo, lasciando DNS e blocco IP come sono) e poi in KAIROS */
+  if (path === '/wolf/password' && m === 'POST') {
+    const b = await H.readJSON(req, 1024), pass = okUser(b.pass, H, 'Nuova password');
+    if (pass === cfg.pass) throw new HttpErr(400, 'La nuova password è uguale a quella attuale');
+    const page = await wfPage(env, H, cfg, '/profile', 'Non trovo la pagina del profilo su WOLF');
+    const t = tokenOf(page);
+    if (!t || !/<input[^>]*name="password"/.test(page) || !/<input[^>]*name="ip"/.test(page)) throw new HttpErr(502, 'Non trovo il modulo della password su WOLF: nessuna modifica fatta');
+    await wfJson(env, H, cfg, '/profile', { _token: t, password: pass, dns: inputVal(page, 'dns'), ip: inputVal(page, 'ip') });
+    try { await connectAcc(env, H, K, cfg.url, cfg.user, pass, cfg.dns || '', false); }
+    catch {
+      let old = false; try { await connectAcc(env, H, K, cfg.url, cfg.user, cfg.pass, cfg.dns || '', false); old = true; } catch {}
+      throw new HttpErr(502, old ? 'WOLF non ha cambiato la password: resta quella di prima' : 'Non riesco a entrare su WOLF dopo il cambio: controlla su WOLF e scrivi la password in «Impostazioni WOLF»');
+    }
+    await H.log(env, 'edit', `${who}: WOLF — password dell'account ${cfg.user} cambiata (su WOLF e in KAIROS)`, ip);
+    return json({ ok: true });
+  }
   if (path === '/wolf/lines' && m === 'GET') {
     const fresh = new URL(req.url).searchParams.get('fresh') === '1';
     const [lines, cr] = await Promise.all([fetchLines(env, H, cfg, fresh), credits(env, H, cfg).catch(() => null)]);
