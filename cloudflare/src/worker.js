@@ -1868,6 +1868,7 @@ const RC_CAT = [
   ['lite', 'Modalità leggera', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['max', 'Leggerissima'], ['off', 'Spenta']], ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus'], 'Niente animazioni ed effetti, immagini e memoria ridotte: per chiavette e TV vecchie'],
   ['bgupd', 'Aggiornamenti in background', 'sel', [['on', 'Sì: scarica da sola, poi chiede solo «Installa»'], ['off', 'No: scarica solo quando il cliente accetta']], RC_APPS, 'Con «Sì» l\'app scarica e verifica da sola la versione nuova (solo su Wi-Fi o cavo); al cliente resta un solo OK, quello di Android per installare'],
   ['force', 'Aggiornamento obbligatorio', 'sel', [['off', 'No: il cliente può rimandare'], ['7d', 'Dopo 7 giorni dal primo avviso'], ['3d', 'Dopo 3 giorni dal primo avviso'], ['now', 'Subito']], RC_APPS, 'Scaduto il termine l\'app si apre solo dopo aver installato la versione nuova. Blocca soltanto se l\'APK è già scaricato e verificato sul dispositivo, mai per un problema di rete', 'No: il cliente può rimandare'],
+  ['privacy', 'Finestra «Privacy e condizioni»', 'sel', [['show', 'Mostrala al primo avvio'], ['skip', 'Non mostrarla']], ['prem'], 'Con «Non mostrarla» il cliente non vede più la finestra all\'avvio'],
   ['preview', 'Anteprima nella lista canali', 'sel', [['click', 'Al primo OK'], ['off', 'Spenta']], ['ktv', 'prem', 'lite', 'xc'], 'Spenta: il canale parte subito a schermo intero (meno lavoro per il dispositivo)'],
   ['theme', 'Colore', 'sel', [['cinema', 'Cinema'], ['ocean', 'Oceano'], ['forest', 'Foresta'], ['sunset', 'Tramonto'], ['mono', 'Mono']], ['tv'], 'Tema dell\'interfaccia'],
   ['o.startScr', 'Schermata iniziale', 'sel', [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta'], ['guide', 'Guida TV'], ['lastch', 'Ultimo canale guardato']], ['tv'], ''],
@@ -1897,6 +1898,7 @@ const RC_CMDS = [
   ['settings', 'Apri le impostazioni', 'Porta il cliente nella pagina Impostazioni dell\'app', RC_LINKED],
   ['update', 'Aggiorna l\'app', 'L\'app controlla subito se c\'è una versione nuova: la scarica in background e propone «Installa ora»', RC_LINKED],
   ['speed', 'Speed test', 'Misura la connessione del dispositivo (il risultato arriva in «Online ora»)', ['tv']],
+  ['perm', 'Chiedi il permesso per gli aggiornamenti', 'Apre sulla TV la schermata di Android «Installa app sconosciute»: il cliente deve solo attivarla (Android non permette di farlo da remoto)', ['prem']],
   ['exit', 'Chiudi l\'app', 'L\'app si chiude; il cliente la riapre quando vuole', RC_LINKED],
 ];
 const rcCatByKey = new Map(RC_CAT.map((x) => [x[0], x]));
@@ -3719,7 +3721,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       const devs = {}; for (const r of pr.results || []) { let cfg = null; try { cfg = r.app_cfg ? JSON.parse(r.app_cfg) : null; } catch {} devs[r.device_id] = { cfg, rcv: r.rcv || '', ver: r.ver || '', t: +r.t }; }
       return json({ apps: rcProfiles(s0), cat: RC_CAT, cmds: RC_CMDS, appNames: APP_NAME, linked: RC_LINKED, devs, over: ov, last, pending: pend });
     }
-    const pa = path.match(/^\/rctl\/app\/(tv|ktv|lite|xc|plus|nova)$/);
+    const pa = path.match(/^\/rctl\/app\/(tv|ktv|prem|lite|xc|plus|nova)$/);
     if (pa && m === 'PUT') {
       const b = await readJSON(req, 8192), rc = rcClean(b.rc || {}, pa[1]);
       await settingsPatch(env, { rcApp: { ...rcProfiles(s0), [pa[1]]: rc } });
