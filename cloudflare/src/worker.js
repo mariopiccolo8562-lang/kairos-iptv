@@ -1698,7 +1698,7 @@ async function unseenCount(env, d, pid) {
   try { return (await env.DB.prepare('SELECT COUNT(*) AS n FROM messages WHERE (target = ? OR target = ? OR target = ?) AND created > ? AND (until = 0 OR until > ?)').bind('all', d.id, pid || d.id, +d.last_seen || 0, now()).first()).n; } catch { return 0; }
 }
 /* problemi della visione mandati dall'app (recupero automatico, errori del lettore) → «Errori applicazione» */
-const ERR_PROBLEMS = ['freeze', 'stall', 'error', 'restart']; // restart = l'app si è riavviata da sola (motore web chiuso da Android per memoria)
+const ERR_PROBLEMS = ['freeze', 'stall', 'error', 'restart', 'crash', 'killed']; // restart = motore web chiuso da Android; crash = errore interno; killed = app chiusa dal sistema (memoria)
 const ERR_OUTCOMES = ['risolto', 'non risolto', 'chiuso'];
 const ERR_KEEP_MS = 7 * 86400e3;
 async function playerErrors(req, env, ip, ctx) {
@@ -1973,9 +1973,12 @@ function healthIssues(p, errs, latest, app) {
   const out = [];
   const pro = !app || RC_APPS.includes(app);
   if (p && latest && verBehind(p.ver, latest.version)) out.push({ sev: 'warn', key: 'upd', what: `App vecchia: ${APP_NAME[app || 'tv'] || ''} ${String(p.ver || '?').replace(/^(lite|tv|xc|plus)\s+/i, '').replace(/\s+premium$/i, '')} (ultima ${latest.version})`, fix: UPD_HOW[app || 'tv'] || 'Aggiorna l\'app del cliente', ...(pro ? { act: 'upd' } : {}) });
+  const kd = errs.filter((e) => e.problem === 'killed').length, cr = errs.filter((e) => e.problem === 'crash').length;
+  if (kd >= 2) out.push({ sev: 'bad', key: 'killed', what: `Si è chiusa da sola ${kd} volte nelle ultime 24 ore: il sistema l'ha terminata per poca memoria${/fire|aft/i.test((p && p.model) || '') ? ' (tipico dei Fire Stick)' : ''}`, fix: 'L\'app è passata da sola alla modalità leggerissima. Fai chiudere le altre app sul dispositivo e riavviarlo; se continua, quel dispositivo ha troppo poca memoria per l\'app: serve un box o una stick con almeno 2 GB' });
+  if (cr >= 1) out.push({ sev: 'bad', key: 'crash', what: `${cr} ${cr === 1 ? 'chiusura improvvisa per errore interno' : 'chiusure improvvise per errore interno'} nelle ultime 24 ore`, fix: 'Guarda il dettaglio in «Errori delle app» e segnalalo: con quel testo si trova la causa' });
   const rs = errs.filter((e) => e.problem === 'restart').length;
   if (rs >= 2) out.push({ sev: 'bad', key: 'restart', what: `Si è riavviata da sola ${rs} volte nelle ultime 24 ore: Android chiude il motore web per poca memoria${/fire|aft/i.test((p && p.model) || '') ? ' (tipico dei Fire Stick)' : ''}`, fix: 'L\'app è già passata da sola alla modalità leggerissima. Se continua: Controllo remoto → Modalità leggera «Leggerissima» per questo cliente, chiudi le altre app sul dispositivo e riavvialo; se ha ancora problemi serve un dispositivo con più memoria' });
-  const nr = errs.filter((e) => e.outcome === 'non risolto' && e.problem !== 'restart').length, fr = errs.filter((e) => e.problem === 'freeze').length;
+  const nr = errs.filter((e) => e.outcome === 'non risolto' && !['restart', 'crash', 'killed'].includes(e.problem)).length, fr = errs.filter((e) => e.problem === 'freeze').length;
   if (nr >= 3) out.push({ sev: 'bad', key: 'err', what: `${nr} errori non risolti nelle ultime 24 ore`, fix: errs.some((e) => /hevc|h\.?265/i.test(e.codec || '')) ? 'Canali HEVC/H.265 su un dispositivo che fatica: usa la versione H.264 del canale o un dispositivo più recente' : 'Controlla il canale o la linea: se succede su più clienti è il server', ...(pro ? { act: 'upd' } : {}) });
   else if (errs.length >= 5) out.push({ sev: 'warn', key: 'err', what: `${errs.length} problemi di visione nelle ultime 24 ore (risolti da soli)`, fix: 'Tienilo d\'occhio: se aumentano controlla linea e dispositivo' });
   if (fr >= 3 && errs.some((e) => e.dec === 'sw')) out.push({ sev: 'warn', key: 'dec', what: 'Immagine ferma con decodifica software', fix: 'Nel lettore del cliente prova ExoPlayer con decodifica hardware, oppure VLC' });

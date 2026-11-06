@@ -4808,10 +4808,29 @@ function rcLiteApply() {
   b.classList.toggle('lite', lite); b.classList.toggle('xlite', v === 'max' || (v !== 'off' && !!store.get('memGuard', 0)));
 }
 /** riavvii forzati dal sistema (poca memoria, tipico Fire Stick): segnalati al pannello e, dal secondo in mezz'ora, modalità leggerissima */
+/** Android chiede memoria: si liberano le cache dell'interfaccia prima che il sistema chiuda l'app */
+window.kxTrim = (level) => {
+  try { if (typeof imgCache !== 'undefined' && imgCache && imgCache.clear) imgCache.clear(); } catch {}
+  try { if (S.epg && S.epg.data && level >= 60) S.epg.data = null; } catch {}
+  try { document.body.classList.add('xlite'); } catch {}
+  S.trimAt = Date.now();
+};
 function memGuard() {
-  if (!NATIVE || !NATIVE.renderGone) return;
+  if (!NATIVE) return;
+  // chiusure anomale dell'apertura precedente (errore o uccisa dal sistema): al pannello
+  try {
+    const list = NATIVE.deaths ? JSON.parse(NATIVE.deaths() || '[]') : [];
+    let mem = {}; try { mem = NATIVE.memInfo ? JSON.parse(NATIVE.memInfo() || '{}') : {}; } catch {}
+    for (const x of Array.isArray(list) ? list : []) {
+      if (x.kind !== 'crash' && x.kind !== 'killed') continue;
+      pendEvts.push({ t: x.t, problem: x.kind, action: x.kind === 'killed' ? 'modalità leggerissima' : 'riapertura', outcome: '', err: `${x.kind === 'killed' ? 'chiusa dal sistema' : 'errore interno'} · ${x.info || ''}${mem.totalMb ? ` · dispositivo ${mem.totalMb} MB` : ''}`.slice(0, 120) });
+      if (x.kind === 'killed' && !store.get('memGuard', 0)) { store.set('memGuard', Date.now()); setTimeout(() => toast('Il dispositivo ha poca memoria: attivata la modalità leggerissima'), 2500); }
+    }
+    if (list.length) setTimeout(() => sendPlayEvents().catch(() => {}), 4000);
+  } catch {}
+  if (!NATIVE.renderGone) { rcLiteApply(); return; }
   let g = {}; try { g = JSON.parse(NATIVE.renderGone() || '{}'); } catch {}
-  if (!g.last) return;
+  if (!g.last) { rcLiteApply(); return; }
   if (g.last !== store.get('rgSeen', 0)) {
     store.set('rgSeen', g.last);
     pendEvts.push({ t: g.last, problem: 'restart', action: g.n30 >= 2 ? 'modalità leggerissima attivata da sola' : 'nessuna', outcome: g.n30 >= 2 ? 'risolto' : '', err: `motore web chiuso da Android (${g.why || 'memoria'}) · ${g.n30} negli ultimi 30 min · ${g.total} in tutto` });

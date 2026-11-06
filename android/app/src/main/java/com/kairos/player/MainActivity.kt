@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         prefs = getSharedPreferences("kairos", MODE_PRIVATE)
         applyOrientation(prefs.getString("orient", "auto") ?: "auto")
+        Watch.start(this, prefs) // perché l'app si è chiusa l'ultima volta (errore, uccisa dal sistema, memoria): lo legge l'interfaccia e lo manda al pannello
 
         root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         // ispezione remota (chrome://inspect) solo nelle build di debug, mai nell'APK pubblicato
@@ -955,7 +956,14 @@ class MainActivity : ComponentActivity() {
         if (apk != null && (Build.VERSION.SDK_INT < 26 || packageManager.canRequestPackageInstalls())) { pendingApk = null; launchInstaller(apk) }
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // Android chiede memoria: l'interfaccia libera le sue cache prima che il sistema chiuda l'app
+        if (level >= TRIM_MEMORY_RUNNING_LOW) { Watch.note(prefs, "trim", "livello $level"); if (webOk) js("window.kxTrim && kxTrim($level)") }
+    }
+
     override fun onDestroy() {
+        if (isFinishing) Watch.clean(prefs) // chiusura voluta (tasto indietro, «Esci»): non è un'anomalia
         if (Recorder.listener === recListener) Recorder.listener = null
         if (KxVpn.listener === vpnListener) KxVpn.listener = null
         if (isFinishing) {
@@ -978,6 +986,10 @@ class MainActivity : ComponentActivity() {
     /** Funzioni esposte al player come window.KairosNative */
     inner class Bridge {
         @JavascriptInterface fun version(): String = BuildConfig.VERSION_NAME
+        /** chiusure anomale dell'app (errore, uccisa dal sistema, memoria scarsa): elenco JSON, poi azzerato */
+        @JavascriptInterface fun deaths(): String = Watch.drain(prefs)
+        /** memoria libera adesso (MB) e se il sistema è in riserva */
+        @JavascriptInterface fun memInfo(): String = Watch.mem(this@MainActivity).toString()
         /** riavvii forzati del motore web: {n30, last, why, total} (n30 = negli ultimi 30 minuti) */
         @JavascriptInterface fun renderGone(): String = try {
             val a = org.json.JSONArray(prefs.getString("rgone", "[]") ?: "[]"); val t = System.currentTimeMillis()
@@ -1169,5 +1181,80 @@ class MainActivity : ComponentActivity() {
                 runOnUiThread { if (webOk) web.evaluateJavascript(js, null) }
             }
         }
+    }
+}
+
+/**
+ * Sorveglianza delle chiusure anomale. Il pannello non può vedere un'app che muore: qui si lascia una traccia e la prossima
+ * apertura la consegna all'interfaccia (NATIVE.deaths()), che la manda in «Errori delle app».
+ * - errore non gestito → "crash" con il tipo e la prima riga utile dello stack
+ * - l'app era viva (battito ogni 20 s) e non è stata chiusa dall'utente → "killed" (uccisa dal sistema: quasi sempre memoria),
+ *   con la memoria libera vista all'ultimo battito
+ * - richieste di memoria del sistema (onTrimMemory) → "trim"
+ */
+object Watch {
+    private const val MAX = 12
+    private var started = false
+    private val h = Handler(Looper.getMainLooper())
+    private var pingPrefs: android.content.SharedPreferences? = null
+    private var ctx: android.content.Context? = null
+
+    fun mem(c: android.content.Context): JSONObject {
+        val o = JSONObject()
+        try {
+            val am = c.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val mi = android.app.ActivityManager.MemoryInfo(); am.getMemoryInfo(mi)
+            o.put("freeMb", mi.availMem / 1048576L).put("totalMb", mi.totalMem / 1048576L).put("low", mi.lowMemory)
+        } catch (_: Exception) {}
+        return o
+    }
+
+    fun note(p: android.content.SharedPreferences, kind: String, info: String, t: Long = System.currentTimeMillis()) {
+        try {
+            val a = org.json.JSONArray(p.getString("deaths", "[]") ?: "[]")
+            a.put(JSONObject().put("t", t).put("kind", kind).put("info", info.take(200)))
+            while (a.length() > MAX) a.remove(0)
+            p.edit().putString("deaths", a.toString()).commit() // commit: deve restare anche se il processo muore subito dopo
+        } catch (_: Exception) {}
+    }
+
+    fun drain(p: android.content.SharedPreferences): String {
+        val v = p.getString("deaths", "[]") ?: "[]"
+        if (v != "[]") p.edit().putString("deaths", "[]").apply()
+        return v
+    }
+
+    /** l'app è stata chiusa in modo pulito: niente traccia */
+    fun clean(p: android.content.SharedPreferences) { p.edit().putBoolean("alive", false).apply() }
+
+    fun start(c: android.content.Context, p: android.content.SharedPreferences) {
+        ctx = c.applicationContext; pingPrefs = p
+        if (started) return
+        started = true
+        // l'apertura precedente era ancora «viva» e non è stata chiusa dall'utente: uccisa dal sistema (o spenta la TV)
+        if (p.getBoolean("alive", false)) {
+            val last = p.getLong("aliveT", 0L); val free = p.getLong("aliveFree", -1L); val low = p.getBoolean("aliveLow", false)
+            note(p, "killed", "memoria libera all'ultimo battito: " + (if (free >= 0) "$free MB" else "?") + (if (low) " (sistema in riserva)" else ""), if (last > 0) last else System.currentTimeMillis())
+        }
+        // errori non gestiti: traccia, poi il gestore di Android fa il suo (l'app si chiude)
+        val prev = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { th, e ->
+            try {
+                val top = e.stackTrace.firstOrNull { it.className.startsWith("com.kairos") } ?: e.stackTrace.firstOrNull()
+                note(p, "crash", (e.javaClass.simpleName + (e.message?.let { ": " + it.take(80) } ?: "") + (top?.let { " @ " + it.className.substringAfterLast('.') + "." + it.methodName + ":" + it.lineNumber } ?: "")).take(200))
+                p.edit().putBoolean("alive", false).commit()
+            } catch (_: Throwable) {}
+            prev?.uncaughtException(th, e)
+        }
+        ping()
+    }
+
+    private fun ping() {
+        val p = pingPrefs ?: return
+        try {
+            val m = ctx?.let { mem(it) } ?: JSONObject()
+            p.edit().putBoolean("alive", true).putLong("aliveT", System.currentTimeMillis()).putLong("aliveFree", m.optLong("freeMb", -1L)).putBoolean("aliveLow", m.optBoolean("low", false)).apply()
+        } catch (_: Exception) {}
+        h.postDelayed({ ping() }, 20_000L)
     }
 }
