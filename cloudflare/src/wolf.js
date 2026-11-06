@@ -36,6 +36,8 @@ async function loadJar(env, H) {
 async function saveJar(env, H, jar) { mem.jar = jar; await setRow(env, 'wolf:ses', await H.seal(env, jar)).catch(() => {}); }
 
 /* HTTP/1.1 su socket TCP: fetch() dei Worker aggiunge CF-Connecting-IP (2a06:98c0:3600::103), che il firewall di WOLF blocca */
+class WolfNet extends Error {}
+
 async function sockFetch(url, { method, headers, body }) {
   const u = new URL(url), tls = u.protocol === 'https:';
   const enc = new TextEncoder(), data = body ? enc.encode(body) : null;
@@ -105,9 +107,9 @@ async function rawFetch(cfg, jar, path, o = {}) {
   let r;
   try { r = await sockFetch(cfg.url + path, req); }
   catch (e) {
-    if (!e || !e.early) throw new Error('WOLF non risponde: riprova');
+    if (!e || !e.early) throw new WolfNet('WOLF non risponde: riprova');
     try { r = await fetch(cfg.url + path, { ...req, redirect: 'manual' }); }
-    catch { throw new Error('WOLF non risponde: controlla l\'indirizzo del pannello'); }
+    catch { throw new WolfNet('WOLF non risponde: controlla l\'indirizzo del pannello'); }
   }
   eatCookies(jar, r);
   return r;
@@ -272,12 +274,18 @@ export async function wolfCron(env, H) {
 }
 
 export async function wolfRoutes(req, env, path, who, ip, H) {
+  try { return await routes(req, env, path, who, ip, H); }
+  catch (e) { if (e instanceof WolfNet) throw new H.HttpErr(502, e.message); throw e; }
+}
+async function routes(req, env, path, who, ip, H) {
   const m = req.method;
   const { HttpErr, json, str } = H;
   if (path === '/wolf/config' && m === 'GET') { const c = await wolfCfg(env, H); return json({ set: !!c, url: c ? c.url : '', user: c ? c.user : '', dns: c ? c.dns || '' : '' }); }
   if (path === '/wolf/config' && m === 'PUT') {
     const b = await H.readJSON(req, 4096), old = (await wolfCfg(env, H)) || {};
-    let url = str(b.url, 200).replace(/\/+$/, '');
+    let url = str(b.url, 200).trim();
+    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+    try { url = new URL(url).origin; } catch {}
     if (!/^https?:\/\/[^/\s]+$/.test(url)) throw new HttpErr(400, 'Indirizzo di WOLF non valido, es. https://pannello.esempio.com');
     const user = str(b.user, 120), pass = typeof b.pass === 'string' && b.pass ? b.pass.slice(0, 200) : old.url === url && old.user === user ? old.pass : '';
     if (!user || !pass) throw new HttpErr(400, 'Scrivi utente e password di WOLF');
