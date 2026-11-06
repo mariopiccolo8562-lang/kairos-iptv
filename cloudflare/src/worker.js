@@ -435,6 +435,8 @@ async function storeAppNames(env) {
 /* ---------------- OrbixPlay: invio delle playlist del cliente all'app OrbixPlay (API ufficiale, chiave ORBIX_KEY) ---------------- */
 const ORBIX_API = 'https://apis.orbixplay.com';
 const ORBIX_ID_RE = /^[A-Za-z0-9:._-]{4,64}$/;
+/* ID OrbixPlay: se è un MAC (12 cifre esadecimali, con o senza separatori) lo scrive come 00:1A:79:AA:BB:CC, come lo mostra l'app */
+const macNorm = (v) => { v = String(v || '').trim(); const h = v.replace(/[^0-9A-Fa-f]/g, ''); return h.length === 12 && /^[0-9A-Fa-f:.\s-]+$/.test(v) ? h.toUpperCase().match(/../g).join(':') : v; };
 /** linee Xtream di un cliente: le M3U con get.php?username=…&password=… diventano Xtream */
 function xtreamLines(pls) {
   const out = [];
@@ -459,7 +461,7 @@ const orbixOf = (d) => { try { const o = JSON.parse(d.orbix || '{}'); return { i
     (l'indirizzo non lo scrive nessuno: lo prende dalle impostazioni; con il «codice host» non viaggia nemmeno in chiaro) */
 async function orbixSend(env, d, b, who, ip, agentLines, allow) {
   if (!env.ORBIX_KEY) throw new HttpErr(400, 'OrbixPlay non è collegato: aggiungi il segreto ORBIX_KEY su GitHub (vedi la guida in Impostazioni)');
-  const orbixId = str(b.orbixId, 64), username = str(b.username, 120), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '';
+  const orbixId = macNorm(str(b.orbixId, 64)), username = str(b.username, 120), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '';
   if (!ORBIX_ID_RE.test(orbixId)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
   if (!username || !password) throw new HttpErr(400, 'Scrivi utente e password della linea');
   if (agentLines && !agentLines.some((l) => l.username === username && l.password === password)) throw new HttpErr(400, 'Usa utente e password di una linea di questo cliente');
@@ -565,7 +567,7 @@ async function extListsRoutes(req, env, path, who, ip, ag) {
     let ref = '', ext = '', dnsName = '';
     if (app === 'orbix') {
       if (!env.ORBIX_KEY) throw new HttpErr(400, 'OrbixPlay non è collegato: aggiungi il segreto ORBIX_KEY su GitHub');
-      const orbixId = str(b.orbixId, 64);
+      const orbixId = macNorm(str(b.orbixId, 64));
       if (!ORBIX_ID_RE.test(orbixId)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
       const list = ag ? agOrbList(s, ag.orbDns) : orbixDnsList((s.playersCfg || {}).orbix, await dnsList(env));
       if (!list.length) throw new HttpErr(400, ag ? 'Nessun DNS di OrbixPlay disponibile per te: chiedilo a chi ti gestisce' : 'Imposta prima un DNS di OrbixPlay');

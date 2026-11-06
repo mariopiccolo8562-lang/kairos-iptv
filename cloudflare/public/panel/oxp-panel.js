@@ -70,7 +70,7 @@
     pre = pre || {};
     const opts = dnsOpts('');
     const ok = await ask('Nuova playlist su OrbixPlay', `<div class="wf-f" style="grid-template-columns:1fr 1fr">
-      <label style="grid-column:1/-1">ID del dispositivo (dall'app OrbixPlay)<input class="inp mono" id="onD"></label>
+      <label style="grid-column:1/-1">ID del dispositivo (dall'app OrbixPlay)<input class="inp mono" id="onD" data-mac maxlength="64" autocomplete="off" placeholder="es. 00:1A:79:AA:BB:CC"></label>
       <label>Utente della linea<input class="inp mono" id="onU" value="${esc(pre.user || '')}"></label><label>Password della linea<input class="inp mono" id="onP" value="${esc(pre.pass || '')}"></label>
       <label>DNS${opts ? `<select class="inp" id="onH">${opts}</select>` : '<input class="inp mono" id="onH" placeholder="http://dns.esempio.com:8080">'}</label><label>Nome<input class="inp" id="onN" maxlength="40" value="${esc(pre.name || 'Kairos')}"></label>
       <label style="grid-column:1/-1">Note (facoltative)<input class="inp" id="onT" maxlength="60" value="${esc(pre.note || '')}"></label></div>

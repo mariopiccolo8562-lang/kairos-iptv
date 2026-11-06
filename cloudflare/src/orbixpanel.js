@@ -4,6 +4,8 @@
    create da lui (e dai suoi sotto-agenti) da KAIROS. */
 const API = 'https://apis.orbixplay.com';
 const s = (v, n = 200) => String(v ?? '').slice(0, n);
+/* ID OrbixPlay: se è un MAC (12 cifre esadecimali, con o senza separatori) lo scrive come 00:1A:79:AA:BB:CC, come lo mostra l'app */
+const macNorm = (v) => { v = String(v || '').trim(); const h = v.replace(/[^0-9A-Fa-f]/g, ''); return h.length === 12 && /^[0-9A-Fa-f:.\s-]+$/.test(v) ? h.toUpperCase().match(/../g).join(':') : v; };
 async function call(env, H, path, query) {
   if (!env.ORBIX_KEY) throw new H.HttpErr(400, 'OrbixPlay non è collegato (segreto ORBIX_KEY)');
   let r;
@@ -55,7 +57,7 @@ export async function oxpRoutes(req, env, path, who, ip, H, ag = null) {
   }
   if (path === '/oxp/playlists' && m === 'POST') {
     const b = await H.readJSON(req, 2048);
-    const q = { deviceid: str(b.device, 64), playlistName: str(b.name, 40) || 'Kairos', username: str(b.user, 120), password: typeof b.pass === 'string' ? b.pass.slice(0, 200) : '', host: str(b.host, 300), notes: str(b.notes, 60) };
+    const q = { deviceid: macNorm(str(b.device, 64)), playlistName: str(b.name, 40) || 'Kairos', username: str(b.user, 120), password: typeof b.pass === 'string' ? b.pass.slice(0, 200) : '', host: str(b.host, 300), notes: str(b.notes, 60) };
     if (!/^[A-Za-z0-9:._-]{4,64}$/.test(q.deviceid)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
     if (!q.username || !q.password || !q.host) throw new HttpErr(400, 'Scrivi DNS, utente e password della linea');
     // agente: niente playlist su un dispositivo OrbixPlay che ha già liste di clienti non suoi (lo vedrebbe tutto)
