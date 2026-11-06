@@ -66,7 +66,7 @@
   /* ---------- scheda del cliente: «Questa linea è attiva su N app» ---------- */
   function boxFor(d) {
     if (!d || !d.id) return '';
-    const P = d.parent ? (D.devices || []).find((x) => x.id === d.parent) : d;
+    const P = d.parent && !d.own ? (D.devices || []).find((x) => x.id === d.parent) : d;
     const us = [...new Set(((P && P.playlists) || []).map(uOf).filter(Boolean).map((c) => c.u))];
     if (!us.length) return '';
     const M = build();

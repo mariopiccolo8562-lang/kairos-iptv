@@ -69,7 +69,7 @@
     rdw();
     if (!edit) return;
     const main = $('#dBody .dmain'); if (!main) return;
-    if (!edit.parent && !$('#eAppBox', main)) {
+    if (!$('#eAppBox', main)) {
       main.insertAdjacentHTML('afterbegin', `<div id="eAppBox" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px"><b style="font-size:13.5px">App del cliente</b><div class="seg" id="eApp"><button data-eapp="tv">Kairos Pro</button><button data-eapp="ktv">Kairos TV</button><button data-eapp="prem">Kairos Premium</button><button data-eapp="lite">Kairos Lite</button><button data-eapp="xc">Kairos XC</button><button data-eapp="plus">Kairos Plus</button></div><small class="mut">Si aggiorna da sola quando l'app si collega</small></div>`);
       $$('#eApp [data-eapp]').forEach((b) => (b.onclick = () => { edit.app = b.dataset.eapp; edit._appSet = true; applyLite(); }));
     }
@@ -212,7 +212,7 @@
   const api0 = api;
   window.api = api = async function (m, p, b) {
     // l'app scelta nella scheda del cliente (titolare) viaggia con il salvataggio
-    if (edit && edit.app && !edit.parent && b && typeof b === 'object' && ((m === 'POST' && p === '/admin/devices' && isNew) || (m === 'PUT' && p === '/admin/devices/' + edit.id && edit._appSet))) b = { ...b, app: edit.app };
+    if (edit && edit.app && b && typeof b === 'object' && ((m === 'POST' && p === '/admin/devices' && isNew) || (m === 'PUT' && p === '/admin/devices/' + edit.id && edit._appSet))) b = { ...b, app: edit.app };
     const r = await api0(m, p, b); if (p === '/admin/state' && m === 'GET' && r) { D.lite = r.lite || null; D.ktv = r.ktv || null; D.xc = r.xc || null; D.plus = r.plus || null; D.prem = r.prem || null; D.nova = r.nova || null; } return r; };
   if (typeof DEMO !== 'undefined') {
     DEMO.settings.liteDownloaderCode = DEMO.settings.liteDownloaderCode || '5551234';

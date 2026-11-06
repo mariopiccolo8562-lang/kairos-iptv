@@ -88,8 +88,11 @@ async function demoApi(method, path, body) {
     if (lm[2] === 'unlink') { d.parent = ''; log('off', `Scollegato ${d.name || d.code} (torna in attesa)`); return { ok: true }; }
     const p = DEMO.devices.find((x) => x.id === body.primary);
     if (!p) throw new Error('Cliente principale non valido');
-    if (used(p.id) >= (p.maxConn || 1)) throw new Error(`Connessioni esaurite (${used(p.id)} di ${p.maxConn || 1}): aumenta "Connessioni massime" del cliente`);
-    Object.assign(d, { parent: p.id, active: false, expires: '', playlists: [], profiles: [] }); log('on', `${d.name || d.code} collegato come connessione di ${p.name || p.code}`); return { ok: true };
+    const kd = body.move ? DEMO.devices.filter((x) => x.parent === d.id) : [];
+    if (used(p.id) + 1 + kd.length > (p.maxConn || 1)) throw new Error(`Connessioni esaurite (${used(p.id)} di ${p.maxConn || 1}): aumenta "Connessioni massime" del cliente`);
+    const keep = body.move && body.keep !== false && (d.playlists || []).length;
+    kd.forEach((x) => (x.parent = p.id));
+    Object.assign(d, { parent: p.id, active: false, expires: '', playlists: keep ? d.playlists : [], profiles: [], own: !!keep }, body.name ? { name: body.name } : {}); log('on', `${d.name || d.code} collegato come connessione di ${p.name || p.code}`); return { ok: true };
   }
   if (path === '/admin/totp/setup') return { secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', uri: 'otpauth://totp/KAIROS:admin?secret=JBSWY3DPEHPK3PXP' };
   if (path === '/admin/totp/enable') { DEMO.sec.totp = true; return { ok: true }; }
@@ -466,7 +469,13 @@ function renderDrawer() {
   const ownConf = edit.vpnConf && !edit.vpnConfClear;
   const linkBox = !pendingFree ? '' : (() => {
     const opts = D.devices.filter((x) => !x.parent && x.id !== edit.id && x.status !== 'pending').map((x) => { const u = 1 + kidsOf(x.id).length, mx = x.maxConn || 1; return `<option value="${esc(x.id)}" ${u >= mx ? 'disabled' : ''}>${esc(x.name || x.code)} · ${u} di ${esc(mx)} connessioni${u >= mx ? ' (pieno)' : ''}</option>`; }).join('');
-    return `<div class="lnk"><b>🔗 È il dispositivo di un cliente che hai già?</b><small>Collegalo al suo abbonamento come connessione in più: userà le sue playlist, la sua scadenza e i suoi profili (dopo, con «Gestione indipendente», puoi dargli playlist e lettore suoi).</small>${opts ? `<div class="row"><select class="inp" id="eLinkTo"><option value="">Scegli il cliente…</option>${opts}</select><button class="btn" id="eLinkGo">Collega a un cliente</button></div>` : '<small>Nessun cliente con abbonamento a cui collegarlo.</small>'}</div>`;
+    return `<div class="lnk"><b>🔗 È il dispositivo di un cliente che hai già?</b><small>Collegalo al suo abbonamento come connessione in più: userà le sue playlist, la sua scadenza e i suoi profili (dopo, con «Gestione indipendente», puoi dargli playlist e lettore suoi).</small>${opts ? `<div class="row"><select class="inp" id="eLinkTo"><option value="">Scegli il cliente…</option>${opts}</select><button class="btn" id="eLinkGo">Collega a un cliente</button></div><input class="inp" id="eLinkName" maxlength="60" style="margin-top:8px" placeholder="Nome di questa TV (es. Camera da letto)" value="${esc(edit.name || '')}">` : '<small>Nessun cliente con abbonamento a cui collegarlo.</small>'}</div>`;
+  })();
+  const moveBox = isNew || linked || pendingFree ? '' : (() => {
+    const kn = kids.length;
+    const opts = D.devices.filter((x) => !x.parent && x.id !== edit.id && x.status !== 'pending').map((x) => { const u = 1 + kidsOf(x.id).length, mx = x.maxConn || 1, full = u + 1 + kn > mx; return `<option value="${esc(x.id)}" ${full ? 'disabled' : ''}>${esc(x.name || x.code)} · ${u} di ${esc(mx)} connessioni${full ? ' (pieno)' : ''}</option>`; }).join('');
+    if (!opts) return '';
+    return `<details class="lnk" id="eMoveBox"><summary style="cursor:pointer"><b>↪ Metti sotto un altro cliente</b></summary><small>Questo cliente diventa una connessione di un altro: userà la sua scadenza e i suoi profili.${kn ? ` Anche le sue ${kn} connessioni passano sotto il nuovo cliente.` : ''}</small><div class="row"><select class="inp" id="eMoveTo"><option value="">Scegli il cliente…</option>${opts}</select><button class="btn" id="eMoveGo">Metti sotto</button></div><input class="inp" id="eMoveName" maxlength="60" style="margin-top:8px" placeholder="Nome di questa TV sotto il nuovo cliente" value="${esc(edit.name || '')}"><div class="tog on" id="eMoveKeep" style="margin-top:8px"><div><b>Tieni le sue linee</b><small>Resta con le sue playlist (gestione indipendente). Se lo spegni usa quelle del nuovo cliente.</small></div><i></i></div></details>`;
   })();
   const linkedBox = !linked ? '' : `<div class="lnk"><b>🔗 Connessione di ${esc(P ? P.name || P.code : 'un cliente eliminato')}</b><small>${edit.own ? 'Abbonamento, scadenza, profili e limiti sono quelli del cliente principale; <span style="color:var(--txt);font-weight:700">playlist e lettore sono di questa TV</span>' : 'Abbonamento, scadenza, playlist, profili e limiti sono quelli del cliente principale'}${P ? ` (${1 + kidsOf(P.id).length} di ${esc(P.maxConn || 1)} connessioni)` : ''}.</small><div style="display:flex;gap:8px">${P ? '<button class="btn sm" id="eOpenP">Apri il cliente principale</button>' : ''}<button class="btn sm danger" id="eUnlink">Scollega</button></div></div>
     <div class="tog ${edit.own ? 'on' : ''}" id="eOwn" style="margin-top:10px"><div><b>Gestione indipendente</b><small>${edit.own ? 'Questa TV usa le sue playlist e il suo lettore (sezioni qui sotto). Resta collegata: stessa scadenza, stessi profili, conta nelle connessioni del cliente.' : 'Accendila per dare a questa TV playlist e lettore suoi (es. un\'altra linea o un\'altra app), lasciandola collegata al cliente principale.'}</small></div><i></i></div>`;
@@ -495,7 +504,7 @@ function renderDrawer() {
   // scheda a sezioni numerate, con un menu rapido in alto per saltare alla sezione
   const sec = (id, n, t, sub, html) => html.trim() ? `<section class="dsec" id="ds-${id}"><div class="dsh"><i>${n}</i><div><b>${t}</b>${sub ? `<small>${sub}</small>` : ''}</div></div>${html}</section>` : '';
   const S1 = `${isNew ? `<label class="lbl">Codice dispositivo</label><input class="inp mono" id="eCode" placeholder="Vuoto = generato, oppure quello mostrato dall'app (KXAB-12CD)" value="${esc(edit.code)}">` : `<div class="tog" style="cursor:default"><div><b>${edit.bound ? '🔒 Collegato al dispositivo' : '🔓 Non ancora collegato'}</b><small>${edit.bound ? 'Il codice funziona solo sul dispositivo che l\'ha generato. Se il cliente cambia TV o reinstalla l\'app, sblocca il collegamento.' : 'Il primo dispositivo che usa questo codice verrà collegato.'}</small></div>${edit.bound ? '<button class="btn sm" id="eReset">Sblocca</button>' : ''}</div>`}
-    ${linkedBox}${linkBox}
+    ${linkedBox}${linkBox}${moveBox}
     <label class="lbl">${linked ? 'Nome del dispositivo' : 'Nome cliente'}</label><input class="inp" id="eName" placeholder="${linked ? 'es. Camera da letto' : 'es. Mario Rossi'}" value="${esc(edit.name)}">
     ${!linked && D.role !== 'agent' && (D.agents || []).length ? `<label class="lbl">Responsabile</label><select class="inp" id="eOwner"><option value="0">Tu (nessun agente)</option>${D.agents.map((a) => `<option value="${a.id}" ${+edit.ownerId === a.id ? 'selected' : ''}>${esc(a.username)}${a.active ? '' : ' (disattivato)'}</option>`).join('')}</select><small class="mut" style="display:block;margin-top:6px;font-size:12px">L'agente scelto vede e gestisce questo cliente dal suo pannello.</small>` : ''}`;
   const S2 = linked ? '' : `<div class="tog ${edit.active ? 'on' : ''}" id="eAct"><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
@@ -607,7 +616,15 @@ function renderDrawer() {
     const pid = $('#eLinkTo').value, p = D.devices.find((x) => x.id === pid);
     if (!p) return toast('Scegli il cliente a cui collegarlo', 1);
     if (!(await ask('Collegare a un cliente?', `<b class="mono">${esc(edit.code)}</b> diventerà una connessione di <b>${esc(p.name || p.code)}</b> e userà il suo abbonamento.`, 'Collega'))) return;
-    try { await api('POST', '/admin/devices/' + edit.id + '/link', { primary: pid }); closeDrawer(); await load(); toast('Dispositivo collegato a ' + (p.name || p.code)); } catch (e) { toast(e.message, 1); }
+    try { await api('POST', '/admin/devices/' + edit.id + '/link', { primary: pid, name: $('#eLinkName') ? $('#eLinkName').value.trim() : '' }); closeDrawer(); await load(); toast('Dispositivo collegato a ' + (p.name || p.code)); } catch (e) { toast(e.message, 1); }
+  });
+  $('#eMoveKeep') && ($('#eMoveKeep').onclick = () => $('#eMoveKeep').classList.toggle('on'));
+  $('#eMoveGo') && ($('#eMoveGo').onclick = async () => {
+    const pid = $('#eMoveTo').value, p = D.devices.find((x) => x.id === pid);
+    if (!p) return toast('Scegli il cliente sotto cui metterlo', 1);
+    const keep = $('#eMoveKeep').classList.contains('on'), name = $('#eMoveName').value.trim(), kn = kidsOf(edit.id).length, pn = esc(p.name || p.code);
+    if (!(await askDanger('Mettere sotto un altro cliente?', `<b>${esc(edit.name || edit.code)}</b> diventa una connessione di <b>${pn}</b>. La sua scadenza${edit.expires ? ' (' + esc(fmtD(edit.expires)) + ')' : ''} e i suoi profili vengono sostituiti da quelli di ${pn}. ${keep ? 'Le sue linee restano sue.' : 'Userà le linee di ' + pn + '.'}${kn ? ` Anche le sue ${kn} connessioni passano sotto ${pn}.` : ''}`, edit.code, 'Metti sotto', false))) return;
+    try { await api('POST', '/admin/devices/' + edit.id + '/link', { primary: pid, name, move: true, keep }); closeDrawer(); await load(); toast('Ora è sotto ' + (p.name || p.code)); } catch (e) { toast(e.message, 1); }
   });
   $('#dSave').onclick = async () => {
     sync();
