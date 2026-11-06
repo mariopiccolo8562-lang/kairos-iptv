@@ -130,6 +130,33 @@
     for (const id of ['#sPlusApk', '#sPlusDl']) $(id).addEventListener('input', (e) => (e.target.dataset.ldirty = '1'));
     for (const ev of ['input', 'change']) $('#plusCard').addEventListener(ev, (e) => e.stopPropagation());
   }
+  /* ---------- Impostazioni → App e aggiornamenti: Kairos Premium e Kairos Nova (APK fisso, solo codice Downloader) ---------- */
+  const FIXED = [['prem', 'Kairos Premium', 'L\'app cinema in oro (stile IptvX): stesso pannello e stessi clienti, aggiornamenti dal repository kairos-premium', 'premDownloaderCode', 'PR', isPrem],
+    ['nova', 'Kairos Nova', 'L\'app Flutter per telefoni e TV: stesso pannello e stessi clienti, aggiornamenti dal repository Lairos-nova', 'novaDownloaderCode', 'NV', isNova]];
+  for (const [k, name, desc, ck] of FIXED) {
+    if (!pane || $('#' + k + 'Card')) continue;
+    pane.insertAdjacentHTML('beforeend', `<div class="card glass" id="${k}Card" style="margin-top:18px"><div class="hd"><h3>${name}<small>${desc}</small></h3></div>
+      <div id="${k}Auto" class="st-note"></div>
+      <div class="st-row"><div class="st-l"><b>Codice Downloader di ${name}</b><small>Compare in alto nel pannello accanto agli altri (anche agli agenti a cui la concedi)</small></div><div class="st-c"><input class="inp mono" id="${k}Dl" maxlength="20" placeholder="es. 7654321"></div></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px"><button class="btn pri" id="${k}Save">Salva ${name}</button><button class="btn" id="${k}Copy">Copia link APK</button></div></div>`);
+    $('#' + k + 'Save').onclick = async () => { try { await api('PUT', '/admin/settings', { [ck]: $('#' + k + 'Dl').value.trim() }); delete $('#' + k + 'Dl').dataset.ldirty; const old = $('#dl_' + k); if (old) old.remove(); await load(); toast(name + ' salvata'); } catch (e) { toast(e.message, 1); } };
+    $('#' + k + 'Copy').onclick = () => { const X = D[k] || {}, l = (X.feed && X.feed.url) || X.apk || ''; if (!l) return toast('Nessun link ancora', 1); navigator.clipboard.writeText(l).then(() => toast('Link copiato'), () => toast('Copia non consentita', 1)); };
+    $('#' + k + 'Dl').addEventListener('input', (e) => (e.target.dataset.ldirty = '1'));
+    for (const ev of ['input', 'change']) $('#' + k + 'Card').addEventListener(ev, (e) => e.stopPropagation());
+  }
+  function renderFixed() {
+    const s = D.settings || {};
+    for (const [k, name, , ck, ic, is] of FIXED) {
+      const f = (D[k] || {}).feed, n = D.devices.filter((d) => !d.parent && is(d)).length;
+      if ($('#' + k + 'Auto')) $('#' + k + 'Auto').innerHTML = (f && f.version ? `✅ <b>Versione pubblicata: ${esc(f.version)}</b>${f.date ? ' · ' + esc(String(f.date).slice(0, 10)) : ''} — le app installate la propongono da sole` : `⚠️ Nessuna release di ${name} trovata (o GitHub non risponde adesso)`) + ` · Clienti che usano ${name}: <b>${n}</b>`;
+      const inp = $('#' + k + 'Dl'); if (inp && !inp.dataset.ldirty && document.activeElement !== inp) inp.value = s[ck] || '';
+      const bar = $('#dlBar');
+      if (bar && !$('#dl_' + k) && s[ck]) {
+        bar.insertAdjacentHTML('beforeend', `<div class="dl" id="dl_${k}"><i>${ic}</i><div><small>Downloader · ${name}</small><b>${esc(s[ck])}</b></div><button class="btn sm" data-dlc="${esc(s[ck])}">Copia</button></div>`);
+        $('#dl_' + k + ' [data-dlc]').onclick = (e) => navigator.clipboard.writeText(e.target.dataset.dlc).then(() => toast('Codice copiato'), () => toast('Copia non consentita', 1));
+      }
+    }
+  }
   function renderPlus() {
     const s = D.settings || {}, X = D.plus || {}, f = X.feed;
     const n = D.devices.filter((d) => !d.parent && isPlus(d)).length;
@@ -180,13 +207,13 @@
     }
   }
   const ra = renderAll;
-  window.renderAll = renderAll = function () { ra(); renderLite(); renderKtv(); renderXc(); renderPlus(); };
+  window.renderAll = renderAll = function () { ra(); renderLite(); renderKtv(); renderXc(); renderPlus(); renderFixed(); };
   // lo stato porta anche le informazioni di Lite
   const api0 = api;
   window.api = api = async function (m, p, b) {
     // l'app scelta nella scheda del cliente (titolare) viaggia con il salvataggio
     if (edit && edit.app && !edit.parent && b && typeof b === 'object' && ((m === 'POST' && p === '/admin/devices' && isNew) || (m === 'PUT' && p === '/admin/devices/' + edit.id && edit._appSet))) b = { ...b, app: edit.app };
-    const r = await api0(m, p, b); if (p === '/admin/state' && m === 'GET' && r) { D.lite = r.lite || null; D.ktv = r.ktv || null; D.xc = r.xc || null; D.plus = r.plus || null; } return r; };
+    const r = await api0(m, p, b); if (p === '/admin/state' && m === 'GET' && r) { D.lite = r.lite || null; D.ktv = r.ktv || null; D.xc = r.xc || null; D.plus = r.plus || null; D.prem = r.prem || null; D.nova = r.nova || null; } return r; };
   if (typeof DEMO !== 'undefined') {
     DEMO.settings.liteDownloaderCode = DEMO.settings.liteDownloaderCode || '5551234';
     DEMO.devices.forEach((d, i) => { if (!d.parent && d.playlists && d.playlists.length) d.app = i % 5 === 2 ? 'lite' : i % 5 === 3 ? 'ktv' : i % 5 === 4 ? 'xc' : i % 10 === 5 ? 'plus' : i % 10 === 0 ? 'nova' : 'tv'; });

@@ -1351,7 +1351,7 @@ function kxWord(text, cls, sp = 3.1, label = '') {
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 /* i dati personali (preferiti, cronologia, blocchi…) sono separati per ogni profilo */
 let profNs = (() => { try { return JSON.parse(localStorage.getItem('kx_profNs') || '""') || ''; } catch { return ''; } })();
 // il PIN del controllo genitori (pinH) è unico per il dispositivo: è quello del genitore e protegge anche l'uscita dai profili bambini
@@ -2169,7 +2169,7 @@ async function getJSON(url) { return JSON.parse(await getText(url)); }
 
 async function register() {
   const url = baseServer() + '/api/player/register';
-  const body = JSON.stringify({ code: S.code, secret: S.secret, model: (NATIVE && NATIVE.model && NATIVE.model()) || navigator.userAgent.match(/\(([^)]+)\)/)?.[1]?.slice(0, 70) || '' });
+  const body = JSON.stringify({ code: S.code, secret: S.secret, model: (NATIVE && NATIVE.model && NATIVE.model()) || ((navigator.userAgent.match(/\(([^)]+)\)/) || [])[1] || '').slice(0, 70) || '' });
   let status = 0, text = '';
   try {
     if (hasNativeHttp()) ({ status, text } = await nativeFetch(url, 'POST', body));
@@ -2274,9 +2274,9 @@ function xtreamMap(d, pl) {
   const cm = (a) => new Map(a.map((x) => [String(x.category_id), x.category_name]));
   const lc = cm(d.lc), vc = cm(d.vc), sc = cm(d.sc), h = pl.host, U = pl.U, P = pl.P, id = pl.id;
   return {
-    live: d.ls.map((s, i) => ({ id: 'x' + s.stream_id, k: 'l', sid: s.stream_id, num: +s.num || i + 1, added: +s.added || 0, name: String(s.name ?? ''), logo: s.stream_icon, epgId: s.epg_channel_id || '', arch: +s.tv_archive ? +s.tv_archive_duration || 1 : 0, group: lc.get(String(s.category_id)) || 'Altro', url: `${h}/live/${U}/${P}/${s.stream_id}.m3u8`, alt: `${h}/live/${U}/${P}/${s.stream_id}.ts`, pl: id })),
-    movies: d.vs.map((s) => ({ id: 'xm' + s.stream_id, k: 'm', vid: s.stream_id, name: String(s.name ?? ''), poster: s.stream_icon, group: vc.get(String(s.category_id)) || 'Altro', rating: s.rating, added: +s.added || 0, url: `${h}/movie/${U}/${P}/${s.stream_id}.${s.container_extension || 'mp4'}`, pl: id })),
-    series: d.ss.map((s) => ({ id: 'xs' + s.series_id, k: 's', seriesId: s.series_id, name: String(s.name ?? ''), poster: s.cover, group: sc.get(String(s.category_id)) || 'Altro', rating: s.rating, plot: s.plot, genre: s.genre, cast: s.cast, added: +s.last_modified || 0, backdrop: (Array.isArray(s.backdrop_path) ? s.backdrop_path[0] : s.backdrop_path) || '', year: (s.releaseDate || s.release_date || '').slice(0, 4), pl: id })),
+    live: d.ls.map((s, i) => ({ id: 'x' + s.stream_id, k: 'l', sid: s.stream_id, num: +s.num || i + 1, added: +s.added || 0, name: String(s.name == null ? '' : s.name), logo: s.stream_icon, epgId: s.epg_channel_id || '', arch: +s.tv_archive ? +s.tv_archive_duration || 1 : 0, group: lc.get(String(s.category_id)) || 'Altro', url: `${h}/live/${U}/${P}/${s.stream_id}.m3u8`, alt: `${h}/live/${U}/${P}/${s.stream_id}.ts`, pl: id })),
+    movies: d.vs.map((s) => ({ id: 'xm' + s.stream_id, k: 'm', vid: s.stream_id, name: String(s.name == null ? '' : s.name), poster: s.stream_icon, group: vc.get(String(s.category_id)) || 'Altro', rating: s.rating, added: +s.added || 0, url: `${h}/movie/${U}/${P}/${s.stream_id}.${s.container_extension || 'mp4'}`, pl: id })),
+    series: d.ss.map((s) => ({ id: 'xs' + s.series_id, k: 's', seriesId: s.series_id, name: String(s.name == null ? '' : s.name), poster: s.cover, group: sc.get(String(s.category_id)) || 'Altro', rating: s.rating, plot: s.plot, genre: s.genre, cast: s.cast, added: +s.last_modified || 0, backdrop: (Array.isArray(s.backdrop_path) ? s.backdrop_path[0] : s.backdrop_path) || '', year: (s.releaseDate || s.release_date || '').slice(0, 4), pl: id })),
   };
 }
 const xtArr = (t) => { try { const j = JSON.parse(t); return Array.isArray(j) ? j : Object.values(j || {}); } catch { return []; } };
@@ -4689,7 +4689,7 @@ function renderSettings(sec) {
       $('#plAdd').textContent = '✓ Salva modifiche'; focus($('#pName'), true);
     }));
     $('#plAdd').onclick = async () => {
-      const p = { id: editId || 'loc' + Date.now(), type: pType, name: $('#pName').value.trim() || 'La mia playlist', url: $('#pUrl')?.value.trim(), host: $('#pHost')?.value.trim().replace(/\/+$/, ''), username: $('#pUser')?.value.trim(), password: $('#pPass')?.value.trim() };
+      const p = { id: editId || 'loc' + Date.now(), type: pType, name: $('#pName').value.trim() || 'La mia playlist', url: ($('#pUrl') || { value: '' }).value.trim(), host: ($('#pHost') || { value: '' }).value.trim().replace(/\/+$/, ''), username: ($('#pUser') || { value: '' }).value.trim(), password: ($('#pPass') || { value: '' }).value.trim() };
       if (pType === 'm3u' ? !p.url : !(p.host && p.username)) return toast('Compila i campi della playlist');
       // un link get.php con utente e password è una lista Xtream: la carico come tale (più veloce, con copertine)
       if (pType === 'm3u') { try { const u = new URL(fixUrl(p.url)); const us = u.searchParams.get('username'), pw = u.searchParams.get('password'); if (/get\.php$/i.test(u.pathname) && us && pw) Object.assign(p, { type: 'xtream', host: u.origin, username: us, password: pw }); } catch {} }
