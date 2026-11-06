@@ -842,7 +842,7 @@ async function onlineOne(origin, u, p) {
   const k = origin + '|' + u, c = onMem.get(k);
   if (c && now() - c.t < 60e3) return c.v;
   const url = `${origin}/player_api.php?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`, hd = { 'User-Agent': 'IPTVSmartersPro', Accept: 'application/json' };
-  const parse = async (r) => { if (!r || !r.ok) return null; let j = null; try { j = JSON.parse(await r.text()); } catch { return null; } const ui = j && j.user_info; if (!ui || typeof ui !== 'object') return null; const n = +ui.active_cons || 0; return { on: n > 0, conns: n }; };
+  const parse = async (r) => { if (!r || !r.ok) return null; let j = null; try { j = JSON.parse(await r.text()); } catch { return null; } const ui = j && j.user_info; if (!ui || typeof ui !== 'object') return null; const n = +ui.active_cons || 0; return { on: n > 0, conns: n, max: +ui.max_connections || 0 }; };
   let v = null;
   try { v = await parse(await fetch(url, { headers: hd, signal: AbortSignal.timeout(6000) })); } catch {}
   if (!v) { try { v = await parse(await Promise.race([sockFetch(url, { method: 'GET', headers: hd }), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 7000))])); } catch {} }
