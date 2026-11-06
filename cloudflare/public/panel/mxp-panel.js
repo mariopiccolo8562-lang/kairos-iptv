@@ -61,12 +61,13 @@
   }
   function filtered() {
     const q = M.q.trim().toLowerCase();
-    return (M.users || []).filter((u) => !q || `${u.id} ${u.username} ${u.email} ${u.lists.map((l) => `${l.user} ${l.fqdn} ${l.name}`).join(' ')}`.toLowerCase().includes(q));
+    const K = window.KXOnline, hs = (l) => (l.ssl ? 'https://' : 'http://') + l.fqdn + (l.port ? ':' + l.port : '');
+    return (M.users || []).filter((u) => (!q || `${u.id} ${u.username} ${u.email} ${u.lists.map((l) => `${l.user} ${l.fqdn} ${l.name}`).join(' ')}`.toLowerCase().includes(q)) && (!M.on || !K || K.match(M.on, u.lists.map((l) => K.state(hs(l), l.user, l.pass)))));
   }
   function usersHtml() {
     if (!M.users) return `<p class="mut">${M.busy ? 'Carico i clienti da MaxPlayer…' : 'Nessun dato'}</p>`;
     const list = filtered(), shown = list.slice(0, M.limit);
-    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="inp" id="mxQ" placeholder="Cerca utente, ID, linea o DNS" value="${esc(M.q)}" style="max-width:300px;margin:0"><span class="mut" style="font-size:12.5px">${list.length} clienti</span></div>
+    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="inp" id="mxQ" placeholder="Cerca utente, ID, linea o DNS" value="${esc(M.q)}" style="max-width:300px;margin:0">${window.KXOnline ? KXOnline.sel('mxOn', M.on || '') : ''}<span class="mut" style="font-size:12.5px">${list.length} clienti</span></div>
       ${window.KXTools ? KXTools.bar('mx', list.filter((u) => M.sel.has(String(u.id))).length, list.length, [['msg', 'Messaggio ai clienti']]) + (M.stOn ? statsHtml() : '') : ''}
       <div style="margin-top:8px">${shown.map((u) => `<div class="mx-row" data-id="${esc(u.id)}">
         <div><span class="k">${window.KXTools ? KXTools.ck('mx', u.id, M.sel.has(String(u.id))) : ''}ID</span>${esc(u.id)}</div>
@@ -124,6 +125,7 @@
     };
     const q = $('#mxQ'); if (q) q.oninput = () => { M.q = q.value; M.limit = 100; const p = q.selectionStart; render(); const n = $('#mxQ'); n.focus(); n.setSelectionRange(p, p); };
     if ($('#mxMore')) $('#mxMore').onclick = () => { M.limit += 100; render(); };
+    if ($('#mxOn')) $('#mxOn').onchange = (e) => { M.on = e.target.value; M.limit = 100; render(); };
     V.querySelectorAll('.mx-row [data-a]').forEach((b) => { b.onclick = () => userAct(b.dataset.a, b.closest('.mx-row').dataset.id, (b.closest('.mx-l') || {}).dataset ? b.closest('.mx-l') && b.closest('.mx-l').dataset.l : ''); });
     V.querySelectorAll('.mx-ag [data-a]').forEach((b) => { b.onclick = () => agentAct(b.dataset.a, b.closest('.mx-ag').dataset.id); });
     if (window.KXTools && M.tab === 'users' && M.users) KXTools.bind(V, 'mx', M.sel, () => filtered().map((u) => u.id), { csv: exportCsv, stats: () => { M.stOn = !M.stOn; render(); },
@@ -224,6 +226,7 @@
   function open() { show(); (M.accs ? Promise.resolve() : loadAccs()).then(() => { show(); if (M.acc && !M.users && !M.busy) loadAll(); }); }
   /* da WOLF/Armada: apre MaxPlayer con «Nuovo cliente» già compilato con utente e password della linea */
   window.KXMxpNew = async (pre) => { view('mxp'); if (!M.accs) await loadAccs(); if (!M.acc) return toast('Collega prima un account MaxPlayer', 1); if (!M.doms) await loadAll(); newUser(pre); };
+  setTimeout(() => window.KXOnline && KXOnline.watch('v-mxp', () => !!M.on, render), 0);
   const v0 = view;
   window.view = view = function (v) { const r = v0.apply(this, arguments); if (v === 'mxp') open(); return r; };
   const sec = $('#v-mxp');

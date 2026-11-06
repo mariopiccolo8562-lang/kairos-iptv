@@ -27,7 +27,7 @@
     } catch (e) { O.err = e.message; }
     O.busy = false; show();
   }
-  function filtered() { const q = O.q.trim().toLowerCase(); return (O.pls || []).filter((p) => !q || `${p.id} ${p.device} ${p.name} ${p.user} ${p.host} ${p.notes}`.toLowerCase().includes(q)); }
+  function filtered() { const q = O.q.trim().toLowerCase(), K = window.KXOnline; return (O.pls || []).filter((p) => (!q || `${p.id} ${p.device} ${p.name} ${p.user} ${p.host} ${p.notes}`.toLowerCase().includes(q)) && (!O.on || !K || K.match(O.on, [K.state(p.host, p.user, p.pass)]))); }
   function render() {
     const V = $('#v-oxp'); if (!V) return;
     if (!O.st) { V.innerHTML = `<div class="card glass"><p class="mut">${O.err ? esc(O.err) : 'Carico…'}</p></div>`; return; }
@@ -38,7 +38,7 @@
         <button class="btn sm" id="oxRe">${O.busy ? 'Carico…' : 'Aggiorna'}</button>${canNew() ? '<button class="btn sm" id="oxNew">+ Nuova playlist</button>' : ''}${isAg() ? '' : '<button class="btn sm" id="oxDns">Cambia DNS</button><button class="btn sm ghost" id="oxIn">Elimina inattive</button>'}</div>
       ${O.err ? `<p style="color:#ff8f8f;margin:10px 0 0">${esc(O.err)}</p>` : ''}
       ${isAg() ? '' : `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:13px">Impostazioni</summary><div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center"><input class="inp" id="oxEm" type="email" value="${esc(O.st.email || '')}" placeholder="email dell'account OrbixPlay" style="max-width:300px;margin:0"><button class="btn sm" id="oxEmB">Salva</button><small class="mut">Serve solo per leggere i posti.</small></div></details>`}</div>
-      <div class="card glass" style="margin-top:14px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="inp" id="oxQ" placeholder="Cerca dispositivo, nome, utente, DNS" value="${esc(O.q)}" style="max-width:300px;margin:0"><span class="mut" style="font-size:12.5px">${list.length} playlist</span></div>${window.KXTools && O.pls ? KXTools.bar('ox', list.filter((p) => O.sel.has(String(p.id))).length, list.length, [['msg', 'Messaggio ai clienti']]) + (O.stOn ? statsHtml() : '') : ''}
+      <div class="card glass" style="margin-top:14px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="inp" id="oxQ" placeholder="Cerca dispositivo, nome, utente, DNS" value="${esc(O.q)}" style="max-width:300px;margin:0">${window.KXOnline ? KXOnline.sel('oxOn', O.on || '') : ''}<span class="mut" style="font-size:12.5px">${list.length} playlist</span></div>${window.KXTools && O.pls ? KXTools.bar('ox', list.filter((p) => O.sel.has(String(p.id))).length, list.length, [['msg', 'Messaggio ai clienti']]) + (O.stOn ? statsHtml() : '') : ''}
       <div style="margin-top:8px">${!O.pls ? `<p class="mut">${O.busy ? 'Carico le playlist da OrbixPlay…' : 'Nessun dato'}</p>` : shown.map((p) => { const sh = O.show.has(p.id); return `<div class="wf-row ox-row" data-id="${esc(p.id)}"><div><span class="k">${window.KXTools ? KXTools.ck('ox', p.id, O.sel.has(String(p.id))) : ''}ID playlist</span><span class="oxid">${esc(p.id)}</span></div>
         <div><span class="k">Dispositivo</span><b class="mono">${esc(p.device)}</b>${p.notes ? `<br><small class="mut">${esc(p.notes)}</small>` : ''}</div>
         <div><span class="k">Playlist</span>${esc(p.name) || '—'}<br><small class="mut mono">${esc(p.host)}</small></div>
@@ -52,6 +52,7 @@
     if ($('#oxEmB')) $('#oxEmB').onclick = async () => { try { await api('PUT', '/admin/oxp/email', { email: $('#oxEm').value }); O.st = null; toast('Email salvata'); load(); } catch (e) { toast(e.message, 1); } };
     const q = $('#oxQ'); q.oninput = () => { O.q = q.value; O.limit = 100; const c = q.selectionStart; render(); const n = $('#oxQ'); n.focus(); n.setSelectionRange(c, c); };
     if ($('#oxMore')) $('#oxMore').onclick = () => { O.limit += 100; render(); };
+    if ($('#oxOn')) $('#oxOn').onchange = (e) => { O.on = e.target.value; O.limit = 100; render(); };
     V.querySelectorAll('.wf-row [data-a]').forEach((b) => { b.onclick = () => act(b.dataset.a, b.closest('.wf-row').dataset.id); });
     if (window.KXTools && O.pls) KXTools.bind(V, 'ox', O.sel, () => filtered().map((p) => p.id), { csv: exportCsv, stats: () => { O.stOn = !O.stOn; render(); },
       msg: () => { const S = selP(); KXTools.msg(KXTools.devsFor(S.map((p) => p.user)), S.length); } }, render);
@@ -113,6 +114,7 @@
   function open() { show(); if (!O.pls && !O.busy) load(); }
   /* da WOLF/Armada: apre OrbixPlay con «Nuova playlist» già compilata, resta solo l'ID del dispositivo */
   window.KXOxpNew = async (pre) => { view('oxp'); if (!O.pls) await load(); if (!canNew()) return toast('OrbixPlay non è collegato o non puoi creare playlist', 1); setTimeout(() => { newPl(pre); $('#onD') && $('#onD').focus(); }, 50); };
+  setTimeout(() => window.KXOnline && KXOnline.watch('v-oxp', () => !!O.on, render), 0);
   const v0 = view;
   window.view = view = function (v) { const r = v0.apply(this, arguments); if (v === 'oxp') open(); return r; };
   const sec = $('#v-oxp');

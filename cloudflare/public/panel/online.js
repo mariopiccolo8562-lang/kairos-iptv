@@ -37,14 +37,22 @@
           const r = await api('POST', '/admin/online', { lines: part.map(([k, x]) => ({ k, h: x.h, u: x.u, p: x.p })) });
           for (const [k] of part) C.set(k, { t: Date.now(), v: r && r.res && r.res[k] !== undefined ? r.res[k] : null });
         } catch { for (const [k] of part) C.set(k, { t: Date.now(), v: null }); }
-        paint(); if (window.KXOnline.onUpdate) window.KXOnline.onUpdate();
+        paint(); if (window.KXOnline.onUpdate) window.KXOnline.onUpdate(); document.dispatchEvent(new Event('kx-online'));
       }
     } finally { pend.clear(); running = false; }
   }
   function want(h, u, p) { const k = key(h, u); if (!host(h) || !u || !p) return ''; if (!fresh(k)) { pend.set(k, { h: host(h), u, p }); if (!timer) timer = setTimeout(flush, 250); } return k; }
   /** pallino da mettere in una riga: si colora da solo quando arriva la risposta */
   function slot(h, u, p) { const k = want(h, u, p); if (!k) return ''; const c = C.get(k); return `<span class="kx-on" data-on="${esc(k)}">${dot(c ? c.v : undefined)}</span>`; }
-  window.KXOnline = { slot, dot, key, want, get: (k) => (C.get(k) || {}).v, refresh: () => { C.clear(); } };
+  /** stato di una linea per i filtri: on | multi | off | na | wait (chiede il controllo se manca) */
+  function state(h, u, p) { const k = want(h, u, p); if (!k) return 'na'; const c = C.get(k), v = c ? c.v : undefined; return v === undefined ? 'wait' : v === null ? 'na' : v.on && v.conns > 1 ? 'multi' : v.on ? 'on' : 'off'; }
+  /** f = filtro scelto, ss = stati delle linee di una riga (un cliente MaxPlayer può averne più di una) */
+  function match(f, ss) { if (!f) return true; if (f === 'on') return ss.some((s) => s === 'on' || s === 'multi'); if (f === 'multi') return ss.includes('multi'); if (f === 'off') return ss.includes('off') && !ss.some((s) => s === 'on' || s === 'multi'); return !ss.length || ss.every((s) => s === 'na' || s === 'wait'); }
+  const FIL = [['', 'Connessione: tutti'], ['on', 'Collegati'], ['multi', 'Con più connessioni'], ['off', 'Scollegati'], ['na', 'Non verificabili']];
+  const sel = (id, cur) => `<select class="inp" id="${id}" style="width:auto;margin:0">${FIL.map(([k, t]) => `<option value="${k}"${cur === k ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
+  /** ridisegna la sezione quando arrivano nuovi stati, solo se il filtro è attivo e la sezione è aperta */
+  function watch(secId, active, redraw) { let t = 0; document.addEventListener('kx-online', () => { const s = document.getElementById(secId); if (!active() || !s || !s.classList.contains('on') || t) return; t = setTimeout(() => { t = 0; const a = document.activeElement; if (a && a.tagName === 'INPUT' && s.contains(a)) return; redraw(); }, 600); }); }
+  window.KXOnline = { slot, dot, key, want, state, match, sel, watch, get: (k) => (C.get(k) || {}).v, refresh: () => { C.clear(); } };
 
   /* ---------- sezione «Collegati ora» ---------- */
   const IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M6.3 6.3a8 8 0 0 0 0 11.4M17.7 6.3a8 8 0 0 1 0 11.4M3.5 3.5a12 12 0 0 0 0 17M20.5 3.5a12 12 0 0 1 0 17"/></svg>';

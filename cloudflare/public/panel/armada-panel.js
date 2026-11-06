@@ -119,7 +119,8 @@
     const now = Date.now(), F = A.F, q = F.q.toLowerCase().trim();
     const st = (x) => (!x.enabled ? 'off' : x.exp && x.exp < now ? 'exp' : x.trial ? 'trial' : x.exp && x.exp - now < 7 * DAY ? 'soon' : 'ok');
     const FL = [['', 'Tutte'], ['ok', 'Attive'], ['soon', 'In scadenza'], ['exp', 'Scadute'], ['trial', 'Prova'], ['off', 'Disattivate']];
-    const list = L.filter((x) => (!F.f || st(x) === F.f) && (!q || [x.username, x.mac, x.notes, x.owner, x.isp, x.country, x.by].join(' ').toLowerCase().includes(q)));
+    const K = kind === 'lines' && A.st && A.st.dns ? window.KXOnline : null;
+    const list = L.filter((x) => (!F.f || st(x) === F.f) && (!F.on || !K || K.match(F.on, [K.state(A.st.dns, x.username, x.password)])) && (!q || [x.username, x.mac, x.notes, x.owner, x.isp, x.country, x.by].join(' ').toLowerCase().includes(q)));
     A.vis = list.map((x) => (kind === 'lines' ? 'l' : 'm') + x.id);
     const TAG = { ok: ['Attiva', ''], soon: ['In scadenza', 'w'], exp: ['Scaduta', 'b'], trial: ['Prova', 'w'], off: ['Disattivata', 'g'] };
     const row = (x) => {
@@ -133,7 +134,7 @@
         <div class="ar-act">${link ? `<button class="btn sm" data-arlink="${x.id}">Copia link</button>` : ''}${kind === 'lines' && window.KXMxpNew ? `<button class="btn sm" data-armxp="${x.id}" title="Crea il cliente su MaxPlayer con questa linea">MaxPlayer</button>` : ''}${kind === 'lines' && window.KXOxpNew ? `<button class="btn sm" data-aroxp="${x.id}" title="Aggiungi questa linea a un dispositivo OrbixPlay">OrbixPlay</button>` : ''}<select class="inp" data-arsub="${id}">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select><button class="btn sm pri" data-arren="${id}">Rinnova</button><button class="btn sm ${x.enabled ? 'danger' : ''}" data-artog="${id}">${x.enabled ? 'Disattiva' : 'Attiva'}</button></div></div>`;
     };
     const cnt = (k) => L.filter((x) => !k || st(x) === k).length;
-    return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><input class="inp" id="arQ" placeholder="Cerca ${kind === 'lines' ? 'utente' : 'MAC'}, note${isAg() ? '' : ', reseller, agente'}…" value="${esc(F.q)}" style="flex:1;min-width:220px;margin:0"></div>
+    return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><input class="inp" id="arQ" placeholder="Cerca ${kind === 'lines' ? 'utente' : 'MAC'}, note${isAg() ? '' : ', reseller, agente'}…" value="${esc(F.q)}" style="flex:1;min-width:220px;margin:0">${K ? K.sel('arOn', F.on || '') : ''}</div>
       <div class="filters" style="margin:0 0 6px">${FL.map(([k, l]) => `<button class="fchip ${F.f === k ? 'on' : ''}" data-arf="${k}">${l}<span>${cnt(k)}</span></button>`).join('')}</div>
       ${window.KXTools ? KXTools.bar('ar', A.vis.filter((k) => A.sel.has(k)).length, list.length, [['ren', 'Rinnova', 'pri'], ['on', 'Attiva'], ['off', 'Disattiva'], ...(kind === 'lines' ? [['msg', 'Messaggio ai clienti']] : [])]) + (A.stOn ? statsHtml(L, st) : '') : ''}
       ${list.length ? list.slice(0, A.limit).map(row).join('') : `<p class="mut" style="padding:12px 0">${L.length ? 'Nessuna con questi filtri.' : 'Ancora niente.'}</p>`}
@@ -210,6 +211,7 @@
       try { await api('POST', '/admin/linked-lines', { app: b.dataset.arapp, username: L.username, password: L.password, dns: L.host, note: A.form.notes || '' }); toast('Registrata in Linee collegate su ' + b.dataset.arapp); } catch (e) { toast(e.message, 1); }
     }));
     // elenchi
+    if ($('#arOn')) $('#arOn').onchange = (e) => { A.F.on = e.target.value; A.limit = 100; render(); };
     const qi = $('#arQ'); if (qi) qi.oninput = () => { A.F.q = qi.value; A.limit = 100; const p = qi.selectionStart; render(); const n = $('#arQ'); n.focus(); n.setSelectionRange(p, p); };
     $$('[data-arf]', V).forEach((b) => (b.onclick = () => { A.F.f = b.dataset.arf; A.limit = 100; render(); }));
     const more = V.querySelector('#arMore'); if (more) more.onclick = () => { A.limit += 100; render(); };
@@ -270,6 +272,7 @@
   const bindTools = (V) => window.KXTools && (A.tab === 'lines' || A.tab === 'mags') && KXTools.bind(V, 'ar', A.sel, () => A.vis, { ren: bulkRen, on: () => bulkTgl(true), off: () => bulkTgl(false), csv: exportCsv,
     msg: () => { const S = selX(); KXTools.msg(KXTools.devsFor(S.map((x) => x.username)), S.length); }, stats: () => { A.stOn = !A.stOn; render(); } }, render);
 
+  setTimeout(() => window.KXOnline && KXOnline.watch('v-armada', () => !!(A.F && A.F.on), render), 0);
   const v0 = view;
   window.view = view = function (v) { v0(v); if (v === 'armada') { render(); loadState().then(() => loadTab()); } };
 
