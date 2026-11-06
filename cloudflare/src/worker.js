@@ -2993,9 +2993,9 @@ async function storeSmsAgentList(env) {
 }
 /* ---- codice venditore dello Store: corto, senza lettere ambigue; il cliente lo scrive nello Store (o arriva col link) ---- */
 const SELLER_ALPHA = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-const SELLER_RE = /^[A-HJ-NP-Z2-9]{4}$/;
+const SELLER_RE = /^[A-Z0-9]{3,8}$/; // scelto dal titolare: 3-8 lettere/cifre; quelli generati sono 4 caratteri senza lettere ambigue
 function sellerCodeGen() { const b = rand(4); let o = ''; for (let i = 0; i < 4; i++) o += SELLER_ALPHA[b[i] % SELLER_ALPHA.length]; return o; }
-const sellerNorm = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/O/g, '0').replace(/I|L/g, '1').slice(0, 4);
+const sellerNorm = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
 /** codice venditore del titolare (creato la prima volta che serve) */
 async function sellerOwnerCode(env) {
   const s = await getSettings(env);
@@ -3094,6 +3094,13 @@ async function agentsAdmin(req, env, path, who, ip, top) {
     const o = await clean({ maxClients: top ? Math.min(10, top.max_clients) : 10, perms: {}, servers: [], ...b }, null);
     const r = await env.DB.prepare("INSERT INTO admins (username, pass_hash, created_at, role, parent_id, email, max_clients, can_agents, perms, servers, active, notes, pw_seal) VALUES (?, ?, ?, 'agent', ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")
       .bind(user, o.pass_hash, now(), top ? top.id : 0, o.email || '', o.max_clients ?? 10, o.can_agents || 0, o.perms || JSON.stringify(AGENT_DEF), o.servers || '', o.active ?? 1, o.notes || '', o.pw_seal || '').first();
+    // codice venditore scelto dal titolare già alla creazione
+    if (!top && b.storeCode !== undefined && String(b.storeCode).trim()) {
+      const c = sellerNorm(b.storeCode);
+      if (!SELLER_RE.test(c)) throw new HttpErr(400, 'Codice venditore: da 3 a 8 lettere o cifre');
+      if (c === ((await getSettings(env)).storeOwnerCode || '') || all.some((x) => x.store_code === c)) throw new HttpErr(400, `Il codice ${c} è già usato`);
+      await env.DB.prepare('UPDATE admins SET store_code = ? WHERE id = ?').bind(c, r.id).run();
+    }
     memoDrop(env, 'ags');
     await log(env, 'new', `${who}: creato l'agente ${user}${top ? ' (sotto-agente)' : ''}`, ip);
     return json({ ok: true, id: r.id });
@@ -3106,6 +3113,14 @@ async function agentsAdmin(req, env, path, who, ip, top) {
     const b = await readJSON(req, 16384);
     const o = await clean(b, A);
     if (b.resetTotp === true) { o.totp_on = 0; o.totp_secret = ''; o.totp_last = 0; }
+    if (b.storeCode !== undefined) {
+      if (top) throw new HttpErr(403, 'Il codice venditore lo decide il titolare');
+      const c = sellerNorm(b.storeCode);
+      if (!SELLER_RE.test(c)) throw new HttpErr(400, 'Codice venditore: da 3 a 8 lettere o cifre');
+      if (c === ((await getSettings(env)).storeOwnerCode || '')) throw new HttpErr(400, 'Questo è il tuo codice venditore: scegline un altro per l\'agente');
+      const dup = all.find((x) => x.id !== id && x.store_code === c); if (dup) throw new HttpErr(400, `Il codice ${c} è già di ${dup.username}`);
+      o.store_code = c;
+    }
     const keys = Object.keys(o);
     if (keys.length) { await env.DB.prepare(`UPDATE admins SET ${keys.map((k) => k + ' = ?').join(', ')} WHERE id = ? AND role = 'agent'`).bind(...keys.map((k) => o[k]), id).run(); memoDrop(env, 'ags'); }
     if (o.pass_hash || o.active === 0 || b.resetTotp === true) await env.DB.prepare('DELETE FROM sessions WHERE admin_id = ?').bind(id).run(); // nuova password, disattivato o 2FA azzerata: si rientra
@@ -3997,6 +4012,12 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (b.aiDaily !== undefined) { const n = parseInt(b.aiDaily, 10); if (!(n >= 0 && n <= 1000)) throw new HttpErr(400, 'Domande al giorno: da 0 a 1000'); s.aiDaily = n; }
     if (b.aiProvider !== undefined) { if (!AI_PROVIDERS.includes(b.aiProvider)) throw new HttpErr(400, 'Servizio non valido'); s.aiProvider = b.aiProvider; }
     if (b.dlCodes !== undefined) s.dlCodes = cleanDlCodes(b.dlCodes);
+    if (b.storeOwnerCode !== undefined) {
+      const c = sellerNorm(b.storeOwnerCode);
+      if (!SELLER_RE.test(c)) throw new HttpErr(400, 'Codice venditore: da 3 a 8 lettere o cifre');
+      const dup = (await agentsAll(env)).find((x) => x.store_code === c); if (dup) throw new HttpErr(400, `Il codice ${c} è già dell'agente ${dup.username}`);
+      s.storeOwnerCode = c;
+    }
     if (b.appLinks !== undefined) s.appLinks = cleanAppLinks(b.appLinks);
     if (typeof b.agentHost === 'string') {
       // indirizzo separato da cui entrano gli agenti (così non vedono quello del titolare)
