@@ -2,7 +2,7 @@
    Le linee non vengono copiate: questa sezione legge e scrive direttamente su WOLF, quindi una linea creata o
    modificata su WOLF si vede qui e una creata o modificata qui si vede su WOLF. Una linea si può collegare a un
    cliente KAIROS: se cambiano utente o password (da qui o da WOLF) la sua playlist si aggiorna da sola.
-   Solo il titolare. Utente e password di WOLF restano cifrati sul server. Usa le funzioni di app.js. */
+   Titolare, e agenti con il permesso «Pannello WOLF» (con il loro account reseller WOLF). Utente e password di WOLF restano cifrati sul server. Usa le funzioni di app.js. */
 (() => {
   const css = document.createElement('style');
   css.textContent = `
@@ -32,6 +32,7 @@
   TITLES.wolf = 'Pannello WOLF';
 
   const W = { cfg: null, data: null, pk: null, err: '', q: '', f: '', own: '', limit: 100, show: new Set(), busy: false, tab: 'lines', rs: null, rsBusy: false, rsErr: '' };
+  const isAg = () => D.role === 'agent';
   const DAY = 864e5, fmtD = (t) => (t ? new Date(t).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Illimitata');
   const left = (t) => { if (!t) return ''; const d = Math.ceil((t - Date.now()) / DAY); return d < 0 ? `scaduta da ${-d} g` : d === 0 ? 'scade oggi' : `tra ${d} g`; };
   const copy = (t, w) => navigator.clipboard.writeText(t).then(() => toast(w + ' copiato'), () => toast('Copia non consentita dal browser', 1));
@@ -57,6 +58,11 @@
   async function loadPk() { if (W.pk) return; try { W.pk = (await api('GET', '/admin/wolf/packages')).packages || []; } catch (e) { W.pk = []; toast(e.message, 1); } }
 
   function cfgForm(c) {
+    if (isAg()) return `<div class="wf-f" style="margin-top:12px">
+      <label>Pannello WOLF<input class="inp mono" value="${esc(c.url || '')}" readonly></label>
+      <label>Il tuo utente WOLF<input class="inp" id="wfUser" value="${esc(c.user || '')}" autocomplete="off"></label>
+      <label>La tua password WOLF<input class="inp" id="wfPass" type="password" autocomplete="new-password" placeholder="${c.set ? 'lascia vuoto per non cambiarla' : ''}"></label></div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" id="wfSave">${c.set ? 'Salva' : 'Collega il mio account'}</button>${c.set ? '<button class="btn sm ghost" id="wfOff">Scollega</button>' : ''}</div>`;
     return `<div class="wf-f" style="margin-top:12px">
       <label>Indirizzo di WOLF<input class="inp mono" id="wfUrl" value="${esc(c.url || '')}" placeholder="https://pannello.esempio.com"></label>
       <label>Utente<input class="inp" id="wfUser" value="${esc(c.user || '')}" autocomplete="off"></label>
@@ -83,13 +89,14 @@
     const V = $('#v-wolf'); if (!V) return;
     if (!W.cfg) { V.innerHTML = '<div class="card glass"><p class="mut">Carico…</p></div>'; return; }
     if (!W.cfg.set) {
-      V.innerHTML = `<div class="card glass"><b style="font-size:15px">Collega il pannello WOLF</b>
-        <p class="mut" style="margin:6px 0 0">Scrivi indirizzo, utente e password del tuo account WOLF. Restano cifrati sul server e servono a KAIROS per leggere e modificare le linee come fai tu dal browser.</p>
+      if (isAg() && !W.cfg.ownerSet) { V.innerHTML = `<div class="card glass"><b style="font-size:15px">Pannello WOLF</b><p class="mut" style="margin:6px 0 0">Chi ti gestisce non ha ancora collegato WOLF a KAIROS.</p>${W.err ? `<p style="color:#ff8f8f">${esc(W.err)}</p>` : ''}</div>`; return; }
+      V.innerHTML = `<div class="card glass"><b style="font-size:15px">${isAg() ? 'Collega il tuo account WOLF' : 'Collega il pannello WOLF'}</b>
+        <p class="mut" style="margin:6px 0 0">${isAg() ? 'Scrivi utente e password con cui entri su WOLF. Vedrai le tue linee e i tuoi crediti; restano cifrati sul server.' : 'Scrivi indirizzo, utente e password del tuo account WOLF. Restano cifrati sul server e servono a KAIROS per leggere e modificare le linee come fai tu dal browser.'}</p>
         ${W.err ? `<p style="color:#ff8f8f">${esc(W.err)}</p>` : ''}${cfgForm(W.cfg)}</div>`;
       bindCfg(); return;
     }
     const d = W.data || {}, list = filtered(), shown = list.slice(0, W.limit);
-    const FL = [['', 'Tutte'], ['on', 'Attive'], ['exp', 'In scadenza / scadute'], ['off', 'Disattivate'], ['link', 'Collegate a clienti']];
+    const FL = [['', 'Tutte'], ['on', 'Attive'], ['exp', 'In scadenza / scadute'], ['off', 'Disattivate'], ...(isAg() ? [] : [['link', 'Collegate a clienti']])];
     V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">✅ Pannello WOLF collegato</b><small>${esc(W.cfg.url)} · ${esc(W.cfg.user)}</small><small>Quello che fai qui succede subito anche su WOLF, e viceversa.</small></div>
         <div><small>Crediti WOLF</small><span class="cr">${d.credits ?? '—'}</span></div><div><small>Linee</small><span class="cr">${d.lines ? d.lines.length : '—'}</span></div>
         <button class="btn sm" id="wfRe">${W.busy || W.rsBusy ? 'Carico…' : 'Aggiorna'}</button><button class="btn sm" id="wfNew">${W.tab === 'rs' ? '+ Nuovo reseller' : '+ Nuova linea'}</button></div>
@@ -108,7 +115,7 @@
             <div><span class="k">Scadenza</span>${fmtD(l.exp)}<br><small class="mut">${left(l.exp)}</small></div>
             <div><span class="k">Stato</span>${status(l)}${l.trial ? '<span class="wf-tag g">Prova</span>' : ''}<br><small class="mut">${l.conns}/${l.max || '?'} conn.</small></div>
             <div><span class="k">Nota / cliente KAIROS</span><div class="mono">${esc(l.note) || '<span class="mut">—</span>'}</div>${k ? `<span class="wf-tag">↔ ${esc(k.name)}</span>` : ''}${l.owner && l.owner !== W.cfg.user ? `<span class="wf-tag g" title="Reseller">${esc(l.owner)}</span>` : ''}</div>
-            <div class="wf-act"><button class="btn sm" data-a="edit">Modifica</button><button class="btn sm" data-a="ext">Rinnova</button><button class="btn sm" data-a="link">${k ? 'Cliente' : 'Collega cliente'}</button><button class="btn sm" data-a="m3u">M3U</button><button class="btn sm ghost" data-a="tgl">${l.enabled ? 'Disattiva' : 'Attiva'}</button><button class="btn sm ghost" data-a="del" style="color:#ff8f8f">Elimina</button></div></div>`;
+            <div class="wf-act"><button class="btn sm" data-a="edit">Modifica</button><button class="btn sm" data-a="ext">Rinnova</button>${isAg() ? '' : `<button class="btn sm" data-a="link">${k ? 'Cliente' : 'Collega cliente'}</button>`}<button class="btn sm" data-a="m3u">M3U</button><button class="btn sm ghost" data-a="tgl">${l.enabled ? 'Disattiva' : 'Attiva'}</button><button class="btn sm ghost" data-a="del" style="color:#ff8f8f">Elimina</button></div></div>`;
         }).join('')}</div>
         ${list.length > shown.length ? `<div style="margin-top:10px"><button class="btn sm" id="wfMore">Mostra altre ${Math.min(100, list.length - shown.length)}</button></div>` : ''}</div>`}`;
     bindCfg();
@@ -189,13 +196,13 @@
     s.onclick = async () => {
       s.disabled = true;
       try {
-        const r = await api('PUT', '/admin/wolf/config', { url: $('#wfUrl').value, user: $('#wfUser').value, pass: $('#wfPass').value, dns: $('#wfDns').value });
+        const r = await api('PUT', '/admin/wolf/config', { url: $('#wfUrl') ? $('#wfUrl').value : '', user: $('#wfUser').value, pass: $('#wfPass').value, dns: $('#wfDns') ? $('#wfDns').value : '' });
         toast('WOLF collegato' + (r.dns ? ' · DNS ' + r.dns : '')); W.pk = null; await loadCfg(); await loadLines(true);
       } catch (e) { toast(e.message, 1); s.disabled = false; }
     };
     const o = $('#wfOff');
     if (o) o.onclick = async () => {
-      if (!(await ask('Scollegare WOLF?', 'KAIROS dimentica utente e password di WOLF. Le linee su WOLF e le playlist dei clienti restano come sono.', 'Scollega'))) return;
+      if (!(await ask('Scollegare WOLF?', isAg() ? 'KAIROS dimentica il tuo utente e la password di WOLF. Le tue linee su WOLF restano come sono.' : 'KAIROS dimentica utente e password di WOLF. Le linee su WOLF e le playlist dei clienti restano come sono.', 'Scollega'))) return;
       try { await api('DELETE', '/admin/wolf/config'); W.data = null; await loadCfg(); render(); toast('WOLF scollegato'); } catch (e) { toast(e.message, 1); }
     };
   }
@@ -207,10 +214,10 @@
       <label>Utente<input class="inp mono" id="wnU" value="${gen(10)}"></label><label>Password<input class="inp mono" id="wnP" value="${gen(10)}"></label>
       <label style="grid-column:1/-1">Pacchetto (usa crediti WOLF)<select class="inp" id="wnK">${pkOpts()}</select></label>
       <label style="grid-column:1/-1">Nota<input class="inp" id="wnN" maxlength="300"></label>
-      <label style="grid-column:1/-1">Collega a un cliente KAIROS (facoltativo)<select class="inp" id="wnD">${devOpts('')}</select></label></div>
+      ${isAg() ? '' : `<label style="grid-column:1/-1">Collega a un cliente KAIROS (facoltativo)<select class="inp" id="wnD">${devOpts('')}</select></label>`}</div>
       <p class="mut" style="font-size:12.5px;margin:10px 0 0">Crediti WOLF disponibili: <b>${(W.data && W.data.credits) ?? '—'}</b>. La linea compare subito anche su WOLF.</p>`, 'Crea linea');
     if (!ok) return;
-    const body = { username: $('#wnU').value, password: $('#wnP').value, package: $('#wnK').value, note: $('#wnN').value, deviceId: $('#wnD').value };
+    const body = { username: $('#wnU').value, password: $('#wnP').value, package: $('#wnK').value, note: $('#wnN').value, deviceId: $('#wnD') ? $('#wnD').value : '' };
     try { await api('POST', '/admin/wolf/lines', body); toast('Linea creata su WOLF'); await loadLines(true); } catch (e) { toast(e.message, 1); }
   }
 
