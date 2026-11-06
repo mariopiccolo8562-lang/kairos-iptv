@@ -153,7 +153,7 @@
     $$('[data-lled]', V).forEach((b) => (b.onclick = () => { const x = byId(b.dataset.lled); const d = (D.devices || []).find((y) => y.id === x.deviceId); form = { id: x.id, app: x.app, username: x.username, password: x.password, dns: x.dns, mac: x.mac, client: d ? clientLabel(d) : '', note: x.note }; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
     $$('[data-lldel]', V).forEach((b) => (b.onclick = async () => {
       const x = byId(b.dataset.lldel);
-      if (!(await ask('Togliere la linea dal registro?', `${esc(x.username)} su ${esc(x.app)}. ${x.source ? 'È registrata dall\'attivazione: l\'app resta attiva finché non la togli dalla scheda del cliente.' : 'La linea sul pannello IPTV e sull\'app non cambia: sparisce solo da qui.'}`, 'Togli'))) return;
+      if (!(await askDanger('Togliere la linea dal registro?', `${esc(x.username)} su ${esc(x.app)}. ${x.source ? 'È registrata dall\'attivazione: l\'app resta attiva finché non la togli dalla scheda del cliente.' : 'La linea sul pannello IPTV e sull\'app non cambia: sparisce solo da qui.'}`, 'ELIMINA', 'Togli'))) return;
       try { await api('DELETE', '/admin/linked-lines/' + x.id); toast('Tolta dal registro'); await loadItems(); } catch (e) { toast(e.message, 1); }
     }));
   }

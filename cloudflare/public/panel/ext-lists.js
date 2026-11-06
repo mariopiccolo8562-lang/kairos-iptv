@@ -66,7 +66,7 @@
     };
     $$('[data-xlrm]', V).forEach((b) => (b.onclick = async () => {
       const x = all.find((y) => y.id === b.dataset.xlrm) || {}, NAME = x.app === 'max' ? 'MaxPlayer' : 'OrbixPlay';
-      if (!(await ask(`Rimuovere la lista da ${NAME}?`, `${esc(x.name || x.ref || '')}: ${x.app === 'max' ? 'l\'account MaxPlayer viene cancellato' : 'la lista sparisce dall\'app OrbixPlay'}.`, 'Rimuovi'))) return;
+      if (!(await askDanger(`Rimuovere la lista da ${NAME}?`, `${esc(x.name || x.ref || '')}: ${x.app === 'max' ? 'l\'account MaxPlayer viene cancellato' : 'la lista sparisce dall\'app OrbixPlay'}.`, 'ELIMINA', 'Rimuovi'))) return;
       try { await api('DELETE', '/admin/ext-lists/' + x.id); toast('Lista rimossa da ' + NAME); loadL(); } catch (e) { toast(e.message, 1); }
     }));
   }

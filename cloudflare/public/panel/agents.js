@@ -171,7 +171,7 @@ body.agent .foot{display:none}
     ['App e link', ['apps3', 'apps3op', 'agop', 'xlist', 'dlc', 'appk', 'agk']],
     ['Richieste', ['store', 'reports', 'creq', 'areq', 'reqai']],
     ['Comunicazione', ['msgs', 'vod']],
-    ['Controllo', ['rctl', 'apperr', 'activity']],
+    ['Controllo', ['rctl', 'apperr', 'activity', 'trash']],
     ['Impostazioni', ['set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api']],
     ['Account', ['sec']],
   ];
@@ -243,7 +243,7 @@ body.agent .foot{display:none}
 
   /* ---------- modalità agente ---------- */
   const agentCan = (v) => v !== 'live' && !!PERM_VIEW[v] && can(PERM_VIEW[v]); // «Online ora» è solo del titolare: mostra tutti i clienti del pannello
-  const OWNER_ONLY = ['dash', 'live', 'rctl', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'dns', 'apps3', 'lines', 'armada', 'wolf', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity'];
+  const OWNER_ONLY = ['dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'dns', 'apps3', 'lines', 'armada', 'wolf', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity'];
   let modeSet = '';
   function applyMode() {
     const ag = isAgent();
@@ -552,7 +552,7 @@ body.agent .foot{display:none}
       try { await api('PUT', '/admin/agents/' + a.id, { resetTotp: true }); closePage(); await load(); toast('2FA azzerata'); } catch (e) { toast(e.message, 1); }
     });
     $('#agDel') && ($('#agDel').onclick = async () => {
-      if (!(await ask('Eliminare l\'agente?', `<b>${esc(a.username)}</b> non potrà più entrare. I suoi ${a.clients} clienti e i suoi sotto-agenti passano a ${a.parentId ? 'chi stava sopra di lui' : 'te'}: nessun cliente smette di funzionare.`, 'Elimina'))) return;
+      if (!(await askDanger('Eliminare l\'agente?', `<b>${esc(a.username)}</b> non potrà più entrare. I suoi ${a.clients} clienti e i suoi sotto-agenti passano a ${a.parentId ? 'chi stava sopra di lui' : 'te'}: nessun cliente smette di funzionare.`, a.username))) return;
       try { await api('DELETE', '/admin/agents/' + a.id); closePage(); await load(); toast('Agente eliminato'); } catch (e) { toast(e.message, 1); }
     });
     page.classList.add('on'); $('#agB').scrollTop = 0;
@@ -645,7 +645,7 @@ body.agent .foot{display:none}
     $('#cNo').onclick = closePage;
     $('#cKick') && ($('#cKick').onclick = () => kickDev(d));
     $('#cDel') && ($('#cDel').onclick = async () => {
-      if (!(await ask('Eliminare il cliente?', `<b class="mono">${esc(d.code)}</b> verrà rimosso e l'app tornerà alla schermata di attivazione.`, 'Elimina'))) return;
+      if (!(await askDanger('Eliminare il cliente?', `<b class="mono">${esc(d.code)}</b> verrà rimosso e l'app tornerà alla schermata di attivazione.`, d.code))) return;
       try { await api('DELETE', '/admin/devices/' + d.id); closePage(); await load(); toast('Eliminato'); } catch (err) { toast(err.message, 1); }
     });
     $('#cOk').onclick = async () => {

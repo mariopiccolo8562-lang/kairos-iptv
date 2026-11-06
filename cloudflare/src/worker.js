@@ -559,6 +559,7 @@ async function extListsRoutes(req, env, path, who, ip, ag) {
     if (!r || (mine && !mine.includes(+r.owner_id))) throw new HttpErr(404, 'Lista non trovata');
     if (r.app === 'orbix') { let pls = []; try { pls = JSON.parse(r.ext || '[]'); } catch {} for (const x of pls) await orbixCall(env, '/delete-playlist', { playlist_id: /^\d+$/.test(x) ? +x : x }).catch((e) => { if (!/non trovato/i.test(e.message)) throw e; }); }
     else if (r.ext) await mxCall(env, 'DELETE', '/users/' + encodeURIComponent(r.ext)).catch((e) => { if (!/non trovato/i.test(e.message)) throw e; });
+    await trashPut(env, 'extlist', r.id, `${r.name || r.username} · ${r.app === 'max' ? 'MaxPlayer' : 'OrbixPlay'}`, r, null, who);
     await env.DB.prepare('DELETE FROM ext_lists WHERE id = ?').bind(r.id).run();
     await log(env, 'del', `${who}: lista tolta da ${r.app === 'max' ? 'MaxPlayer' : 'OrbixPlay'}${r.name ? ' (' + r.name + ')' : ''}`, ip);
     return json({ ok: true });
@@ -574,17 +575,29 @@ function thirdInactive(d, P, days, t = now()) {
   if (!src.active) { const last = Math.max(+d.last_seen || 0, +src.last_seen || 0, orbixOf(d).t, maxpOf(d).t); if (last < lim) return { inactive: true, why: 'disattivato', since: last }; }
   return { inactive: false };
 }
+/** «Reinvia» a OrbixPlay/MaxPlayer: la linea Xtream del cliente con quell'utente (o la prima), senza riscrivere nulla a mano */
+async function resendLine(env, d, username) {
+  const P0 = d.parent && !ownOf(d) ? await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first() : d;
+  const lines = xtreamLines(await unseal(env, (P0 || d).playlists).catch(() => []));
+  const l = lines.find((x) => x.username === username) || lines[0];
+  if (!l) throw new HttpErr(400, 'Questo cliente non ha una linea Xtream da reinviare');
+  return l;
+}
 async function thirdLists(env, days) {
   const rows = ((await env.DB.prepare("SELECT * FROM devices WHERE orbix <> '' OR maxp <> ''").all()).results) || [];
+  // DNS usato e chi ha fatto l'attivazione (tu o quale agente): così la pagina dice tutto quello che Kairos sa
+  const s0 = await getSettings(env), odns = orbixDnsList((s0.playersCfg || {}).orbix, await dnsList(env));
+  let mdoms = []; if (env.MAXPLAYER_KEY) try { mdoms = await mxDomains(env); } catch {}
+  const who = new Map((await agentsAll(env)).map((a) => [a.id, a.username]));
   const pm = new Map();
   for (const r of rows) if (r.parent && !pm.has(r.parent)) pm.set(r.parent, await env.DB.prepare('SELECT id, name, active, expires, last_seen FROM devices WHERE id = ?').bind(r.parent).first());
   const out = [];
   for (const d of rows) {
     const P = d.parent ? pm.get(d.parent) : d, ia = thirdInactive(d, P, days);
-    const base = { id: d.id, name: d.name || (P && P.name) || '', code: d.code, ownerId: +d.owner_id || 0, expires: (P || d).expires || '', status: statusOf(P || d, ['x']), inactive: ia.inactive, why: ia.why || '', since: ia.since || 0 };
+    const base = { id: d.id, name: d.name || (P && P.name) || '', code: d.code, ownerId: +d.owner_id || 0, by: +d.owner_id ? who.get(+d.owner_id) || 'agente eliminato' : 'Tu', expires: (P || d).expires || '', status: statusOf(P || d, ['x']), inactive: ia.inactive, why: ia.why || '', since: ia.since || 0 };
     const o = orbixOf(d), x = maxpOf(d);
-    if (o.id) out.push({ ...base, app: 'orbix', ref: o.id, t: o.t });
-    if (x.uid) out.push({ ...base, app: 'max', ref: x.u, t: x.t });
+    if (o.id) { const dn = odns[o.dns]; out.push({ ...base, app: 'orbix', ref: o.id, t: o.t, dns: dn ? dn.name || dn.host || '' : '', dnsIdx: o.dns, user: o.u }); }
+    if (x.uid) { const dm = mdoms.find((y) => y.id === x.dom); out.push({ ...base, app: 'max', ref: x.u, t: x.t, dns: dm ? dm.label || dm.domain || '' : (x.dom ? 'DNS ' + x.dom : ''), dom: x.dom, user: x.u }); }
   }
   return out.sort((a, b) => (+b.inactive - +a.inactive) || (a.since - b.since) || (b.t - a.t));
 }
@@ -751,6 +764,7 @@ async function linkedLinesRoutes(req, env, path, who, ip, ag) {
     const row = await env.DB.prepare('SELECT * FROM linked_lines WHERE id = ?').bind(+mm[1]).first();
     if (!row || (ag && !ag.tree.includes(+row.owner_id))) throw new HttpErr(404, 'Linea non trovata');
     if (m === 'DELETE') {
+      await trashPut(env, 'line', String(row.id), `${row.username} (${row.app})`, row, null, who);
       await env.DB.prepare('DELETE FROM linked_lines WHERE id = ?').bind(row.id).run();
       await log(env, 'del', `${who}: tolta dal registro la linea ${row.username} (${row.app})`, ip);
       return json({ ok: true });
@@ -3058,6 +3072,10 @@ async function agentsAdmin(req, env, path, who, ip, top) {
   if (m === 'DELETE') {
     // i suoi clienti e i suoi sotto-agenti passano a chi stava sopra di lui
     const up = A.parent_id;
+    const devs = (((await env.DB.prepare('SELECT id FROM devices WHERE owner_id = ?').bind(id).all()).results) || []).map((x) => x.id);
+    const subs = (((await env.DB.prepare("SELECT id FROM admins WHERE parent_id = ? AND role = 'agent'").bind(id).all()).results) || []).map((x) => x.id);
+    const fullA = (await env.DB.prepare('SELECT * FROM admins WHERE id = ?').bind(id).first()) || A; // la riga intera (anche password e TOTP), così il ripristino lo rimette com'era
+    await trashPut(env, 'agent', String(id), A.username, fullA, { up, devices: devs, agents: subs }, who);
     await env.DB.batch([
       env.DB.prepare('UPDATE devices SET owner_id = ? WHERE owner_id = ?').bind(up, id),
       env.DB.prepare("UPDATE admins SET parent_id = ? WHERE parent_id = ? AND role = 'agent'").bind(up, id),
@@ -3417,9 +3435,10 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(orb[1]).first();
     if (!d) throw new HttpErr(404, 'Cliente non trovato');
     if (m === 'DELETE') return json(await orbixRemove(env, d, who, ip));
-    const b = await readJSON(req, 2048);
+    let b = await readJSON(req, 2048);
     let agentLines = null;
     if (ses && ses.agent) { const P0 = d.parent && !ownOf(d) ? await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first() : d; agentLines = xtreamLines(await unseal(env, (P0 || d).playlists).catch(() => [])); }
+    else if (b.resend) { const o = orbixOf(d); if (!o.id) throw new HttpErr(400, 'Nessuna lista OrbixPlay da reinviare per questo cliente'); const l = await resendLine(env, d, o.u); b = { orbixId: o.id, dns: o.dns, username: l.username, password: l.password }; } // «Reinvia»: stessa lista, stesso DNS, stesso dispositivo
     return json(await orbixSend(env, d, b, who, ip, agentLines, ses && ses.agent ? ses.orbDns : null));
   }
   if (path === '/maxplayer/domains' && m === 'GET' && url.searchParams.get('owned') === '1' && !(ses && ses.agent)) {
@@ -3461,9 +3480,10 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(mxm[1]).first();
     if (!d) throw new HttpErr(404, 'Cliente non trovato');
     if (m === 'DELETE') return json(await mxRemove(env, d, who, ip));
-    const b = await readJSON(req, 2048);
+    let b = await readJSON(req, 2048);
     let agentLines = null;
     if (ses && ses.agent) { const P0 = d.parent && !ownOf(d) ? await env.DB.prepare('SELECT playlists FROM devices WHERE id = ?').bind(d.parent).first() : d; agentLines = xtreamLines(await unseal(env, (P0 || d).playlists).catch(() => [])); }
+    else if (b.resend) { const x = maxpOf(d); if (!x.uid && !x.u) throw new HttpErr(400, 'Nessun account MaxPlayer da reinviare per questo cliente'); const l = await resendLine(env, d, x.u); b = { domain: x.dom, username: l.username, password: l.password }; }
     return json(await mxSend(env, d, b, who, ip, agentLines, ses && ses.agent ? ses.mxDns : null));
   }
   if (path === '/devices/inactive' && m === 'GET' && !(ses && ses.agent)) {
@@ -3617,6 +3637,16 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     throw new HttpErr(404, 'Non trovato');
   }
   /* ---------- registro attività: lo svuota solo il titolare dal pannello (mai gli agenti né l'API di integrazione) ---------- */
+  // Cestino (solo titolare): elenco, ripristino, eliminazione definitiva
+  if (path === '/trash' || path.startsWith('/trash/')) {
+    if (ses && ses.agent) throw new HttpErr(403, 'Il cestino è del titolare');
+    if (path === '/trash' && m === 'GET') return json({ items: await trashList(env), days: TRASH_DAYS });
+    if (path === '/trash' && m === 'DELETE') { const r = await env.DB.prepare('DELETE FROM trash').run(); await log(env, 'del', `${who}: cestino svuotato`, ip); return json({ ok: true, deleted: (r.meta && r.meta.changes) || 0 }); }
+    const tm = path.match(/^\/trash\/([A-Za-z0-9_-]{6,20})(\/restore)?$/);
+    if (tm && tm[2] && m === 'POST') return json(await trashRestore(env, tm[1], who, ip));
+    if (tm && !tm[2] && m === 'DELETE') { const r = await env.DB.prepare('SELECT label, kind FROM trash WHERE id = ?').bind(tm[1]).first(); await env.DB.prepare('DELETE FROM trash WHERE id = ?').bind(tm[1]).run(); if (r) await log(env, 'del', `${who}: eliminato per sempre dal cestino ${TRASH_KIND[r.kind] || r.kind} · ${r.label}`, ip); return json({ ok: true }); }
+    throw new HttpErr(404, 'Funzione non trovata');
+  }
   if (path === '/activity' && m === 'DELETE') {
     if (!ses || ses.agent) throw new HttpErr(403, 'Il registro lo può svuotare solo il titolare');
     const days = parseInt(url.searchParams.get('older') || '0', 10);
@@ -3662,7 +3692,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   }
   const vl = path.match(/^\/vpn-locs\/([A-Za-z0-9_-]{4,20})$/);
   if (vl && m === 'DELETE') {
-    const list = (await wgLocs(env)).filter((x) => x.id !== vl[1]);
+    const all0 = await wgLocs(env), gone = all0.find((x) => x.id === vl[1]), list = all0.filter((x) => x.id !== vl[1]);
+    if (gone) await trashPut(env, 'vpnloc', gone.id, gone.name || gone.id, gone, null, who);
     await env.DB.batch([env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('wgl', await seal(env, list)), env.DB.prepare("UPDATE devices SET vpn_loc = '' WHERE vpn_loc = ?").bind(vl[1])]);
     await log(env, 'settings', `${who}: località VPN eliminata`, ip);
     return json({ ok: true });
@@ -3707,7 +3738,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (dsm && (m === 'PUT' || m === 'DELETE')) {
     const list = await dnsList(env), i = list.findIndex((x) => x.id === dsm[1]);
     if (i < 0) throw new HttpErr(404, 'DNS non trovato');
-    if (m === 'DELETE') { const [x] = list.splice(i, 1); await dnsSave(env, list); await log(env, 'settings', `${who}: DNS tolto dall'elenco · ${x.name} (i clienti non cambiano)`, ip); return json({ ok: true }); }
+    if (m === 'DELETE') { const [x] = list.splice(i, 1); await trashPut(env, 'dns', x.id, `${x.name} (${x.host})`, x, null, who); await dnsSave(env, list); await log(env, 'settings', `${who}: DNS tolto dall'elenco · ${x.name} (i clienti non cambiano)`, ip); return json({ ok: true }); }
     const b = await readJSON(req, 4096);
     if (typeof b.name === 'string') list[i].name = nameClean(b.name, 40) || list[i].name;
     if (typeof b.host === 'string') { const h = cleanHost(b.host); if (list.some((x, j) => j !== i && x.host === h)) throw new HttpErr(400, 'Questo DNS è già salvato'); list[i].host = h; }
@@ -3883,6 +3914,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (mm && m === 'DELETE') {
     // un messaggio di gruppo si elimina per tutti i clienti del gruppo
     const r = await env.DB.prepare('SELECT grp FROM messages WHERE id = ?').bind(+mm[1]).first();
+    const rows = ((await (r && r.grp ? env.DB.prepare('SELECT * FROM messages WHERE grp = ?').bind(r.grp) : env.DB.prepare('SELECT * FROM messages WHERE id = ?').bind(+mm[1])).all()).results) || [];
+    if (rows.length) await trashPut(env, 'msg', String(mm[1]), (rows[0].title || rows[0].body || 'messaggio').slice(0, 80) + (rows.length > 1 ? ` (${rows.length} clienti)` : ''), rows, null, who);
     if (r && r.grp) await env.DB.prepare('DELETE FROM messages WHERE grp = ?').bind(r.grp).run(); else await env.DB.prepare('DELETE FROM messages WHERE id = ?').bind(+mm[1]).run();
     return json({ ok: true });
   }
@@ -4187,6 +4220,9 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       if (d.maxp && env.MAXPLAYER_KEY) ctx.waitUntil(mxRemove(env, d, who, ip).catch(() => {}));
       // eliminando un cliente principale le sue connessioni tornano "in attesa" (non restano agganciate al nulla)
       const kids = d.parent ? [] : await linkedOf(env, d.id);
+      // nel cestino: la riga com'era e le connessioni collegate (per rimetterle sotto di lui al ripristino)
+      const kidRows = kids.length ? (((await env.DB.prepare(`SELECT id, active, expires, playlists, profiles, own FROM devices WHERE id IN (${kids.map(() => '?').join(',')})`).bind(...kids.map((k) => k.id)).all()).results) || []) : [];
+      await trashPut(env, 'device', d.id, label, d, { kids: kidRows }, who);
       await env.DB.batch([...kids.map((k) => unlinkStmt(env, k.id)), env.DB.prepare('DELETE FROM devices WHERE id = ?').bind(d.id), env.DB.prepare('DELETE FROM link_pins WHERE device_id = ?').bind(d.id)]);
       await log(env, 'del', `${who}: eliminato ${label}${kids.length ? ` (${kids.length} connessioni tornate in attesa)` : ''}`, ip);
       return json({ ok: true });
@@ -4199,7 +4235,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
 /* Espone le stesse funzioni del pannello (tranne accesso, password, 2FA,   */
 /* chiavi e webhook) più alcune scorciatoie per codice dispositivo.         */
 /* ====================================================================== */
-const API_DENY = /^\/(login|logout|logout-all|password|totp|api-keys|webhook|agents|ai|rctl|activity|armada)(\/|$)/;
+const API_DENY = /^\/(login|logout|logout-all|password|totp|api-keys|webhook|agents|ai|rctl|activity|armada|trash)(\/|$)/;
 const API_KEY_RE = /^kx_[A-Za-z0-9_-]{30,80}$/;
 async function apiV1(req, env, url, ip, ctx) {
   const auth = req.headers.get('Authorization') || '';
@@ -4363,8 +4399,9 @@ async function apiAdmin(req, env, path, who, ip, ctx) {
   }
   const km = path.match(/^\/api-keys\/([A-Za-z0-9_-]{6,20})$/);
   if (km && m === 'DELETE') {
-    const k = await env.DB.prepare('SELECT name FROM api_keys WHERE id = ?').bind(km[1]).first();
+    const k = await env.DB.prepare('SELECT * FROM api_keys WHERE id = ?').bind(km[1]).first();
     if (!k) throw new HttpErr(404, 'Chiave non trovata');
+    await trashPut(env, 'apikey', k.id, k.name, k, null, who);
     await env.DB.prepare('DELETE FROM api_keys WHERE id = ?').bind(km[1]).run();
     await log(env, 'settings', `${who}: revocata chiave API «${k.name}»`, ip);
     return json({ ok: true });
@@ -4491,6 +4528,77 @@ async function login(req, env, ip, ctx) {
   return json({ ok: true, user: a.username, totp: !!a.totp_on, role: a.role === 'agent' ? 'agent' : 'owner' }, 200, { 'Set-Cookie': setCookie(tok, SESSION_TTL) });
 }
 
+/* ====================================================================== */
+/* Cestino: ciò che si elimina resta 30 giorni e si può ripristinare       */
+/* ====================================================================== */
+const TRASH_DAYS = 30;
+const TRASH_KIND = { device: 'Cliente', agent: 'Agente', dns: 'DNS', line: 'Linea collegata', msg: 'Messaggio', apikey: 'Chiave API', vpnloc: 'Località VPN', extlist: 'Lista su app terza' };
+/** mette nel cestino: [data] = righe originali, [extra] = cose da rimettere a posto al ripristino */
+async function trashPut(env, kind, ref, label, data, extra, who) {
+  const id = b64url(rand(9)), t = now();
+  await env.DB.prepare('INSERT INTO trash (id, kind, ref, label, data, extra, by, t, exp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, kind, String(ref || ''), str(label, 120), JSON.stringify(data ?? null), JSON.stringify(extra ?? null), str(who, 60), t, t + TRASH_DAYS * 86400e3).run();
+  return id;
+}
+/** rimette una riga com'era (stesse colonne); false se l'id c'è già */
+async function trashRow(env, table, row) {
+  if (!row || typeof row !== 'object') return false;
+  const keys = Object.keys(row).filter((k) => /^[a-z_]+$/i.test(k));
+  const r = await env.DB.prepare(`INSERT OR IGNORE INTO ${table} (${keys.join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`).bind(...keys.map((k) => row[k])).run();
+  return !!(r.meta && r.meta.changes);
+}
+async function trashList(env) {
+  const rows = ((await env.DB.prepare('SELECT id, kind, ref, label, by, t, exp FROM trash ORDER BY t DESC LIMIT 500').all()).results) || [];
+  return rows.map((r) => ({ ...r, kindLabel: TRASH_KIND[r.kind] || r.kind, daysLeft: Math.max(0, Math.ceil((+r.exp - now()) / 86400e3)) }));
+}
+/** ripristina un elemento del cestino; lancia HttpErr se non si può più (es. codice ormai preso da un altro) */
+async function trashRestore(env, id, who, ip) {
+  const r = await env.DB.prepare('SELECT * FROM trash WHERE id = ?').bind(id).first();
+  if (!r) throw new HttpErr(404, 'Non è più nel cestino');
+  let data = null, extra = null; try { data = JSON.parse(r.data); } catch {} try { extra = JSON.parse(r.extra); } catch {}
+  const done = async (msg) => { await env.DB.prepare('DELETE FROM trash WHERE id = ?').bind(id).run(); await log(env, 'new', `${who}: ripristinato dal cestino ${TRASH_KIND[r.kind] || r.kind} · ${r.label}`, ip); return { ok: true, kind: r.kind, label: r.label, msg: msg || '' }; };
+  if (r.kind === 'device') {
+    const d = { ...data, orbix: '', maxp: '' }; // le liste sulle app terze erano state tolte: si rimandano dalla scheda
+    if (await env.DB.prepare('SELECT id FROM devices WHERE code = ? AND id <> ?').bind(d.code, d.id).first()) throw new HttpErr(409, `Il codice ${d.code} è stato preso da un altro dispositivo: il cliente non si può ripristinare`);
+    if (!(await trashRow(env, 'devices', d))) throw new HttpErr(409, 'Il cliente esiste già');
+    // le connessioni collegate tornano sotto di lui (solo quelle rimaste "in attesa")
+    let n = 0;
+    for (const k of (extra && Array.isArray(extra.kids) ? extra.kids : [])) {
+      const x = await env.DB.prepare('SELECT id FROM devices WHERE id = ? AND parent = \'\'').bind(k.id).first();
+      if (!x) continue;
+      await env.DB.prepare('UPDATE devices SET parent = ?, active = ?, expires = ?, playlists = ?, profiles = ?, own = ? WHERE id = ?').bind(d.id, k.active || 0, k.expires || '', k.playlists || '', k.profiles || '', k.own || 0, k.id).run(); n++;
+    }
+    srcMem.map = null;
+    return done((n ? `${n} connessioni ricollegate. ` : '') + ((data.orbix || data.maxp) ? 'Le liste su OrbixPlay/MaxPlayer vanno rimandate dalla scheda del cliente.' : ''));
+  }
+  if (r.kind === 'agent') {
+    if (await env.DB.prepare('SELECT id FROM admins WHERE username = ? AND id <> ?').bind(data.username, data.id).first()) throw new HttpErr(409, `Il nome «${data.username}» è stato preso da un altro account`);
+    if (!(await trashRow(env, 'admins', data))) throw new HttpErr(409, 'L\'agente esiste già');
+    const devs = (extra && extra.devices) || [], subs = (extra && extra.agents) || [];
+    const q = (a) => a.map(() => '?').join(',');
+    if (devs.length) for (let i = 0; i < devs.length; i += 90) { const part = devs.slice(i, i + 90); await env.DB.prepare(`UPDATE devices SET owner_id = ? WHERE id IN (${q(part)}) AND owner_id = ?`).bind(data.id, ...part, extra.up || 0).run(); }
+    if (subs.length) await env.DB.prepare(`UPDATE admins SET parent_id = ? WHERE id IN (${q(subs)}) AND role = 'agent'`).bind(data.id, ...subs).run();
+    memoDrop(env, 'ags', 'agc');
+    return done(`${devs.length} clienti e ${subs.length} sotto-agenti tornati a lui`);
+  }
+  if (r.kind === 'dns') {
+    const list = await dnsList(env);
+    if (list.some((x) => x.id === data.id)) throw new HttpErr(409, 'Questo DNS è già nell\'elenco');
+    list.push(data); await dnsSave(env, list); return done();
+  }
+  if (r.kind === 'vpnloc') {
+    const list = await wgLocs(env);
+    if (list.some((x) => x.id === data.id)) throw new HttpErr(409, 'Questa località è già nell\'elenco');
+    list.push(data);
+    await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('wgl', await seal(env, list)).run();
+    return done();
+  }
+  if (r.kind === 'line') { if (!(await trashRow(env, 'linked_lines', data))) throw new HttpErr(409, 'La linea esiste già'); return done(); }
+  if (r.kind === 'apikey') { if (!(await trashRow(env, 'api_keys', data))) throw new HttpErr(409, 'La chiave esiste già'); return done(); }
+  if (r.kind === 'msg') { let n = 0; for (const row of (Array.isArray(data) ? data : [data])) if (await trashRow(env, 'messages', row)) n++; return done(`${n} messaggi`); }
+  if (r.kind === 'extlist') { if (!(await trashRow(env, 'ext_lists', { ...data, ext: '' }))) throw new HttpErr(409, 'La lista esiste già'); return done('Sull\'app terza la lista era stata cancellata: va reinviata (pulsante «Reinvia»)'); }
+  throw new HttpErr(400, 'Elemento non ripristinabile');
+}
 async function cleanup(env) {
   const t = now();
   await env.DB.batch([
@@ -4509,6 +4617,7 @@ async function cleanup(env) {
   try { await env.DB.batch([env.DB.prepare("DELETE FROM requests WHERE status = 'done' AND created < ?").bind(t - 90 * 86400e3), env.DB.prepare('DELETE FROM presence WHERE t < ?').bind(t - 30 * 86400e3), env.DB.prepare('DELETE FROM watch WHERE day < ?').bind(dayIT(t - 60 * 86400e3))]); } catch {}
   try { await env.DB.prepare('DELETE FROM armada_spend WHERE t < ?').bind(t - 400 * 86400e3).run(); } catch {} // crediti Armada degli agenti: basta poco più di un anno
   try { await env.DB.prepare('DELETE FROM remote_cmds WHERE created < ?').bind(t - 30 * 86400e3).run(); } catch {} // comandi del controllo remoto: 30 giorni
+  try { await env.DB.prepare('DELETE FROM trash WHERE exp < ?').bind(t).run(); } catch {} // cestino: 30 giorni, poi via per sempre
 }
 
 // esportati per i test

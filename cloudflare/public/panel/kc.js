@@ -512,7 +512,7 @@
     $$('[data-eo]', V).forEach((b) => (b.onclick = () => { F.o = b.dataset.eo; errRender(); }));
     $$('[data-eq]', V).forEach((b) => (b.onclick = () => { F.q = b.dataset.eq; errRender(); }));
     $$('[data-eopen]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.eopen); d ? openQuick(d) : toast('Dispositivo non trovato', 1); }));
-    const c = $('#eClr'); if (c) c.onclick = async () => { if (!(await ask('Svuotare gli errori?', 'Tutti gli errori registrati verranno cancellati. Quelli nuovi continueranno ad arrivare.', 'Svuota'))) return; try { await kapi('DELETE', '/admin/app-errors'); errLoad(); } catch (e) { toast(e.message, 1); } };
+    const c = $('#eClr'); if (c) c.onclick = async () => { if (!(await askDanger('Svuotare gli errori?', 'Tutti gli errori registrati verranno cancellati. Quelli nuovi continueranno ad arrivare.', 'SVUOTA', 'Svuota', false))) return; try { await kapi('DELETE', '/admin/app-errors'); errLoad(); } catch (e) { toast(e.message, 1); } };
   }
 
   /* ---------- Segnalazioni e Richieste contenuti ---------- */
@@ -675,12 +675,12 @@
       if (!x.devices) { const v = prompt('Indirizzo del DNS:', x.host); if (v === null) return; h = v; }
       try { await kapi('PUT', '/admin/dns/saved/' + x.id, { name: n, host: h }); toast('DNS aggiornato'); dnsLoad(); } catch (e) { toast(e.message, 1); }
     }));
-    $$('[data-ddel]', V).forEach((b) => (b.onclick = async () => { if (!(await ask('Togliere il DNS dall\'elenco?', 'I clienti che lo usano non cambiano: viene tolto solo dai DNS salvati.', 'Togli'))) return; try { await kapi('DELETE', '/admin/dns/saved/' + b.dataset.ddel); dnsLoad(); } catch (e) { toast(e.message, 1); } }));
+    $$('[data-ddel]', V).forEach((b) => (b.onclick = async () => { if (!(await askDanger('Togliere il DNS dall\'elenco?', 'I clienti che lo usano non cambiano: viene tolto solo dai DNS salvati.', 'ELIMINA', 'Togli'))) return; try { await kapi('DELETE', '/admin/dns/saved/' + b.dataset.ddel); dnsLoad(); } catch (e) { toast(e.message, 1); } }));
     $('#locAdd').onclick = async () => {
       try { await kapi('POST', '/admin/vpn-locs', { name: $('#locN').value, conf: $('#locC').value }); toast('Località aggiunta'); dnsLoad(); } catch (e) { toast(e.message, 1); }
     };
     $$('[data-ldel]', V).forEach((b) => (b.onclick = async () => {
-      if (!(await ask('Eliminare la località?', 'I clienti che la usano torneranno alla configurazione generale.', 'Elimina'))) return;
+      if (!(await askDanger('Eliminare la località?', 'I clienti che la usano torneranno alla configurazione generale.', 'ELIMINA'))) return;
       try { await kapi('DELETE', '/admin/vpn-locs/' + b.dataset.ldel); await load(); dnsLoad(); } catch (e) { toast(e.message, 1); }
     }));
   }
@@ -730,7 +730,7 @@
       </div>`;
     const showOnce = (title, label, val) => ask(title, `${label}<br><code class="kc-key" id="kcKey">${esc(val)}</code><br><span class="mut">Copiala adesso: per sicurezza non verrà più mostrata.</span>`, 'Copia e chiudi').then((ok) => { if (ok) navigator.clipboard.writeText(val).then(() => toast('Copiata'), () => toast('Copia non consentita: selezionala a mano', 1)); });
     $('#kAdd').onclick = async () => { try { const r = await kapi('POST', '/admin/api-keys', { name: $('#kN').value, scope: $('#kS').value }); await showOnce('Chiave API creata', `<b>${esc(r.name)}</b> (${r.scope === 'read' ? 'sola lettura' : 'completa'}):`, r.key); apiLoad(); } catch (e) { toast(e.message, 1); } };
-    $$('[data-kdel]', V).forEach((b) => (b.onclick = async () => { if (!(await ask('Revocare la chiave?', 'I programmi che la usano smetteranno subito di funzionare.', 'Revoca'))) return; try { await kapi('DELETE', '/admin/api-keys/' + b.dataset.kdel); toast('Chiave revocata'); apiLoad(); } catch (e) { toast(e.message, 1); } }));
+    $$('[data-kdel]', V).forEach((b) => (b.onclick = async () => { if (!(await askDanger('Revocare la chiave?', 'I programmi che la usano smetteranno subito di funzionare.', 'ELIMINA', 'Revoca'))) return; try { await kapi('DELETE', '/admin/api-keys/' + b.dataset.kdel); toast('Chiave revocata'); apiLoad(); } catch (e) { toast(e.message, 1); } }));
     const whBody = (extra) => ({ url: $('#whU').value.trim(), events: $$('[data-ev]', V).filter((c) => c.checked).map((c) => c.dataset.ev), ...extra });
     const whSave = async (extra) => { try { const r = await kapi('PUT', '/admin/webhook', whBody(extra)); if (r.secret) await showOnce('Segreto del webhook', 'Usalo per verificare la firma dei messaggi:', r.secret); else toast('Webhook salvato'); apiLoad(); } catch (e) { toast(e.message, 1); } };
     $('#whSave').onclick = () => whSave();
@@ -936,7 +936,7 @@
         if (a === 'on') { await save(d, { active: true }); return toast('Riattivato'); }
         if (a === 'del') {
           const n = kidsOf(d.id).length;
-          if (!(await ask('Eliminare il dispositivo?', `Il codice <b class="mono">${esc(d.code)}</b> verrà rimosso e il player tornerà alla schermata di attivazione.${n ? ` Le ${n} connessioni collegate torneranno “in attesa”.` : ''}`, 'Elimina'))) return;
+          if (!(await askDanger('Eliminare il cliente?', `Il codice <b class="mono">${esc(d.code)}</b> verrà rimosso e il player tornerà alla schermata di attivazione.${n ? ` Le ${n} connessioni collegate torneranno “in attesa”.` : ''}`, d.code))) return;
           try { await api('DELETE', '/admin/devices/' + d.id); st.sel.delete(d.id); await load(); toast('Eliminato'); } catch (er) { toast(er.message, 1); }
           return;
         }

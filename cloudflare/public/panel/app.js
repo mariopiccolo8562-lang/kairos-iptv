@@ -117,6 +117,24 @@ async function demoApi(method, path, body) {
 
 /* ---------------- toast / modal ---------------- */
 function toast(t, bad) { const e = document.createElement('div'); e.className = 'toast' + (bad ? ' bad' : ''); e.innerHTML = `<i></i>${esc(t)}`; $('#toasts').appendChild(e); setTimeout(() => { e.style.transition = '.4s'; e.style.opacity = 0; e.style.transform = 'translateX(30px)'; setTimeout(() => e.remove(), 400); }, 2800); }
+/** conferma «forte» per le azioni che non si annullano: va scritta la parola richiesta (codice del cliente, nome dell'agente, ELIMINA).
+    [trash] = true aggiunge la nota che l'elemento resta 30 giorni nel Cestino */
+function askDanger(title, body, word, yes = 'Elimina', trash = true) {
+  return new Promise((res) => {
+    const W = String(word || 'ELIMINA').trim();
+    $('#mT').textContent = title;
+    $('#mB').innerHTML = `${body}${trash ? '<br><span class="mut" style="font-size:12.5px">Finisce nel <b>Cestino</b> (menu Controllo): puoi ripristinarlo entro 30 giorni.</span>' : ''}<div style="margin-top:14px"><label class="lbl" style="display:block;margin-bottom:6px">Per confermare scrivi <b class="mono">${esc(W)}</b></label><input class="inp" id="mWord" autocomplete="off" spellcheck="false" placeholder="${esc(W)}" style="width:100%;margin:0"></div>`;
+    $('#mYes').textContent = yes; $('#mYes').disabled = true; $('#mYes').classList.add('danger');
+    $('#modal').classList.add('on');
+    const inp = $('#mWord'); setTimeout(() => inp && inp.focus(), 50);
+    const okNow = () => inp.value.trim().toUpperCase() === W.toUpperCase();
+    inp.oninput = () => { $('#mYes').disabled = !okNow(); };
+    inp.onkeydown = (e) => { if (e.key === 'Enter' && okNow()) done(true); if (e.key === 'Escape') done(false); };
+    const done = (v) => { $('#modal').classList.remove('on'); $('#mYes').disabled = false; $('#mYes').classList.remove('danger'); res(v); };
+    $('#mYes').onclick = () => { if (okNow()) done(true); };
+    $('#mNo').onclick = () => done(false);
+  });
+}
 function ask(title, body, yes = 'Conferma') { return new Promise((res) => { $('#mT').textContent = title; $('#mB').innerHTML = body; $('#mYes').textContent = yes; $('#modal').classList.add('on'); const done = (v) => { $('#modal').classList.remove('on'); res(v); }; $('#mYes').onclick = () => done(true); $('#mNo').onclick = () => done(false); }); }
 
 /* ---------------- login ---------------- */
@@ -606,7 +624,7 @@ function renderDrawer() {
   };
   $('#dDel').onclick = async () => {
     const n = kidsOf(edit.id).length;
-    if (!(await ask('Eliminare il dispositivo?', `Il codice <b class="mono">${esc(edit.code)}</b> verrà rimosso e il player tornerà alla schermata di attivazione.${n ? ` Le ${n} connessioni collegate torneranno “in attesa”.` : ''}`, 'Elimina'))) return;
+    if (!(await askDanger('Eliminare il cliente?', `Il codice <b class="mono">${esc(edit.code)}</b> verrà rimosso e il player tornerà alla schermata di attivazione.${n ? ` Le ${n} connessioni collegate torneranno “in attesa”.` : ''}`, edit.code))) return;
     try { await api('DELETE', '/admin/devices/' + edit.id); closeDrawer(); await load(); toast('Eliminato'); } catch (e) { toast(e.message, 1); }
   };
 }
@@ -645,7 +663,7 @@ function renderMsgs() {
   const devName = (id) => { const d = D.devices.find((x) => x.id === id); return d ? d.name || d.code : 'dispositivo eliminato'; };
   const list = (D.messages || []).filter((m) => !m.until || m.until > Date.now());
   $('#mList').innerHTML = list.length ? list.map((m) => `<div class="mini"><div class="ic" style="color:${LVL[m.level] ? LVL[m.level][1] : 'var(--a1)'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="${AIC.msg[1]}"/></svg></div><div class="tx"><b>${esc(m.title || '(senza titolo)')}</b><small style="display:block">${esc(String(m.body || '').slice(0, 140))}</small><small style="display:block;margin-top:2px">${m.target === 'all' ? 'A tutti' : 'A ' + esc(devName(m.target))} · ${new Date(m.created).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}${m.until ? ' · fino al ' + new Date(m.until).toLocaleDateString('it-IT') : ''}</small></div><button class="btn sm" data-mdel="${m.id}">Elimina</button></div>`).join('') : '<div class="emptyc">Nessun messaggio attivo</div>';
-  $$('[data-mdel]').forEach((b) => (b.onclick = async () => { try { await api('DELETE', '/admin/messages/' + b.dataset.mdel); await load(); toast('Messaggio eliminato'); } catch (e) { toast(e.message, 1); } }));
+  $$('[data-mdel]').forEach((b) => (b.onclick = async () => { if (!(await ask('Eliminare il messaggio?', 'Finisce nel Cestino: puoi ripristinarlo entro 30 giorni.', 'Elimina'))) return; try { await api('DELETE', '/admin/messages/' + b.dataset.mdel); await load(); toast('Messaggio eliminato'); } catch (e) { toast(e.message, 1); } }));
 }
 document.addEventListener('click', async (e) => {
   if (!e.target.closest('#mSend')) return;

@@ -39,7 +39,7 @@
     $$('[data-akf]', V).forEach((b) => (b.onclick = () => { f = b.dataset.akf; drawOp(); }));
     $$('[data-akrm]', V).forEach((b) => (b.onclick = async () => {
       const [app, id] = b.dataset.akrm.split(':'), NAME = app === 'max' ? 'MaxPlayer' : 'OrbixPlay', x = all.find((y) => y.id === id && y.app === app) || {};
-      if (!(await ask(`Rimuovere la lista da ${NAME}?`, `${esc(x.name || x.code || '')}: la lista sparisce da ${NAME}. L'abbonamento Kairos non cambia.`, 'Rimuovi'))) return;
+      if (!(await askDanger(`Rimuovere la lista da ${NAME}?`, `${esc(x.name || x.code || '')}: la lista sparisce da ${NAME}. L'abbonamento Kairos non cambia.`, 'ELIMINA', 'Rimuovi', false))) return;
       try { await api('DELETE', (app === 'max' ? '/admin/maxplayer/' : '/admin/orbix/') + id); toast('Lista rimossa da ' + NAME); await load(); loadLists(); } catch (e) { toast(e.message, 1); }
     }));
   }
