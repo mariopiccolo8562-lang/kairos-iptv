@@ -205,8 +205,16 @@
     const ag = D.role === 'agent';
     el.innerHTML = `<div class="sd-seller"><div><small class="mut">Il tuo codice venditore</small><b class="mono" id="sdSellerCode">${esc(c)}</b></div>
       <div class="mut" style="font-size:12.5px;line-height:1.45;flex:1;min-width:200px">Fallo scrivere ai tuoi clienti nella richiesta dello Store (campo «Codice del venditore», lo ricorda da sola): ${ag ? 'le loro richieste arrivano <b>solo a te</b> (e al titolare), non agli altri agenti.' : 'le richieste con il codice di un agente arrivano a lui e a te; quelle senza codice o con il tuo <b>solo a te</b>.'}</div>
-      <button class="btn sm" id="sdSellerCopy">Copia</button></div>`;
+      <button class="btn sm" id="sdSellerCopy">Copia</button>${ag ? '' : '<button class="btn sm" id="sdSellerEdit">Cambia</button>'}</div>`;
     $('#sdSellerCopy').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(c).then(() => toast('Codice venditore copiato')).catch(() => toast(c)); };
+    // il titolare sceglie il proprio codice (3-8 lettere o cifre)
+    if ($('#sdSellerEdit')) $('#sdSellerEdit').onclick = () => {
+      const box = $('#sdSellerCode'); box.innerHTML = `<input class="inp mono" id="sdSellerInp" maxlength="8" value="${esc(c)}" style="width:150px;margin:0;text-transform:uppercase;letter-spacing:.12em"> <button class="btn sm pri" id="sdSellerOk">Salva</button>`;
+      const inp = $('#sdSellerInp'); inp.focus(); inp.select();
+      inp.oninput = () => { const v = inp.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); if (inp.value !== v) inp.value = v; };
+      const save = async () => { const v = inp.value.trim().toUpperCase(); if (v.length < 3) { toast('Da 3 a 8 lettere o cifre', 1); return; } try { await api('PUT', '/admin/settings', { storeOwnerCode: v }); S.data.sellerCode = v; if (D.settings) D.settings.storeOwnerCode = v; toast('Codice venditore aggiornato: ' + v); renderSeller(); renderAll(); } catch (e) { toast(e.message, 1); } };
+      $('#sdSellerOk').onclick = save; inp.onkeydown = (e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') renderSeller(); };
+    };
   }
   function renderList() {
     renderSeller();

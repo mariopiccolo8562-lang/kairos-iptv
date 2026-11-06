@@ -449,7 +449,7 @@
   }
 
   /* ---------- Errori applicazione ---------- */
-  const PROB = { freeze: ['Immagine ferma', '🧊'], stall: ['Caricamento continuo', '⏳'], error: ['Errore del lettore', '⚠'] };
+  const PROB = { freeze: ['Immagine ferma', '🧊'], stall: ['Caricamento continuo', '⏳'], error: ['Errore del lettore', '⚠'], restart: ['Riavvio per memoria', '🔁'] };
   const OUTC = { risolto: ['Risolto da solo', 'ok'], 'non risolto': ['Non risolto', 'bad'], chiuso: ['Il cliente è uscito', ''], '': ['—', ''] };
   KC.errF = { q: '', p: '', o: '', ow: '', hours: 168 };
   async function errLoad(quiet) {

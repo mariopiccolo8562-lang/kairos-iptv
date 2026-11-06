@@ -4804,7 +4804,24 @@ const RC_CFG_KEYS = ['startScr', 'hw', 'adaptQ', 'liveFmt', 'autoNext', 'introAu
 function rcLiteApply() {
   const v = rcGet('lite'), b = document.body;
   const lite = v === 'on' || v === 'max' ? true : v === 'off' ? false : !!NATIVE;
-  b.classList.toggle('lite', lite); b.classList.toggle('xlite', v === 'max');
+  // memGuard: il dispositivo ha riavviato il motore web per poca memoria → leggerissima da sola (salvo «Spenta» imposta dal pannello)
+  b.classList.toggle('lite', lite); b.classList.toggle('xlite', v === 'max' || (v !== 'off' && !!store.get('memGuard', 0)));
+}
+/** riavvii forzati dal sistema (poca memoria, tipico Fire Stick): segnalati al pannello e, dal secondo in mezz'ora, modalità leggerissima */
+function memGuard() {
+  if (!NATIVE || !NATIVE.renderGone) return;
+  let g = {}; try { g = JSON.parse(NATIVE.renderGone() || '{}'); } catch {}
+  if (!g.last) return;
+  if (g.last !== store.get('rgSeen', 0)) {
+    store.set('rgSeen', g.last);
+    pendEvts.push({ t: g.last, problem: 'restart', action: g.n30 >= 2 ? 'modalità leggerissima attivata da sola' : 'nessuna', outcome: g.n30 >= 2 ? 'risolto' : '', err: `motore web chiuso da Android (${g.why || 'memoria'}) · ${g.n30} negli ultimi 30 min · ${g.total} in tutto` });
+    setTimeout(() => sendPlayEvents().catch(() => {}), 4000);
+  }
+  if (g.n30 >= 2 && !store.get('memGuard', 0)) {
+    store.set('memGuard', Date.now());
+    rcLiteApply();
+    setTimeout(() => toast('Il dispositivo ha poca memoria: attivata la modalità leggerissima'), 2500);
+  }
 }
 /** applica la configurazione ricevuta (se diversa da quella già applicata) */
 function rcApply(rc, rcv) {
@@ -6162,6 +6179,7 @@ async function enterHome() {
   const b = $('#boot');
   if (b.classList.contains('on')) { b.classList.add('out'); await sleep(560); }
   // schermata iniziale scelta nelle impostazioni
+  try { memGuard(); } catch {} // riavvii forzati per memoria: leggerissima da sola e segnalazione al pannello
   const st = rcOpt('startScr') || store.get('startScr', 'home');
   if (st === 'movies' || st === 'series') { buildBrowse($('#cat'), st); show('cat', false); S.stack = ['home']; }
   else if (st === 'live' && S.lib.live.length) { renderLive(); show('live', false); S.stack = ['home']; }

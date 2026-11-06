@@ -429,7 +429,8 @@ body.agent .foot{display:none}
       <div class="ag-c"><h4>Limiti e accesso</h4><small>Quanti clienti può avere e cosa vede</small>
         <div class="row"><div><label class="lbl">Clienti massimi</label><input class="inp" id="agM" type="number" min="0" max="${top ? top.maxClients : 100000}" value="${a ? a.maxClients : Math.min(10, top ? top.maxClients : 10)}"></div>
         <div><label class="lbl">Connessioni per cliente</label><input class="inp" id="agC" type="number" min="1" max="${topP ? topP.maxConn : 10}" value="${P.maxConn || 1}"></div></div>
-        ${a ? `<p class="mut" style="font-size:12.5px;margin-top:8px">Clienti ora: <b>${a.clients}</b>${a.subAgents ? ` (di cui ${a.clients - a.ownClients} dei suoi ${a.subAgents} sotto-agenti)` : ''}${a.storeCode ? ` · Codice venditore Store: <b class="mono" id="agSc">${esc(a.storeCode)}</b> <button type="button" class="btn sm" id="agScCp">Copia</button> <button type="button" class="btn sm" id="agScNew" title="Il vecchio codice smette subito di valere">Rigenera</button> <small>(i clienti lo scrivono nella richiesta dello Store: arriva solo a lui e a te)</small>` : ''}</p>` : ''}
+        ${a ? `<p class="mut" style="font-size:12.5px;margin-top:8px">Clienti ora: <b>${a.clients}</b>${a.subAgents ? ` (di cui ${a.clients - a.ownClients} dei suoi ${a.subAgents} sotto-agenti)` : ''}</p>` : ''}
+        ${!top ? `<label class="lbl" style="margin-top:10px">Codice venditore Store</label><div class="row" style="grid-template-columns:1fr auto auto"><input class="inp mono" id="agSc" maxlength="8" autocapitalize="characters" spellcheck="false" placeholder="es. MARIO o K7M4" value="${esc(a && a.storeCode || '')}" style="text-transform:uppercase;letter-spacing:.12em"><button type="button" class="btn" id="agScCp" title="Copia">Copia</button><button type="button" class="btn" id="agScNew" title="Ne propone uno casuale di 4 caratteri">Casuale</button></div><p class="mut" style="font-size:12px;margin-top:6px">Lo scegli tu (da 3 a 8 lettere o cifre, es. il nome dell'agente). I suoi clienti lo scrivono nella richiesta dello Store: la richiesta arriva solo a lui e a te. Lasciato vuoto, lo crea il pannello.</p>` : ''}
         <label class="lbl">Accesso</label><div class="ag-radio" id="agR">
           <label class="${a && a.canAgents ? '' : 'on'}"><input type="radio" name="agr" value="0" ${a && a.canAgents ? '' : 'checked'}><b>Solo clienti</b><small>Gestisce solo i suoi clienti</small></label>
           <label class="${a && a.canAgents ? 'on' : ''}"><input type="radio" name="agr" value="1" ${a && a.canAgents ? 'checked' : ''}><b>Gestisce agenti</b><small>Può creare sotto-agenti, mai con più permessi dei suoi</small></label></div>
@@ -540,13 +541,15 @@ body.agent .foot{display:none}
     $('#agSaAdd').onclick = () => { const n = $('#agSaN').value.trim(); if (!n) return; if (!$$('#agSa [data-sapp]').some((i) => i.dataset.sapp.toLowerCase() === n.toLowerCase())) $('#agSa').insertAdjacentHTML('beforeend', chk('sapp', n, esc(n), true, false, '')); else $$('#agSa [data-sapp]').forEach((i) => { if (i.dataset.sapp.toLowerCase() === n.toLowerCase()) i.checked = true; }); const all = $('#agSa [data-sapp="*"]'); if (all) all.checked = false; $('#agSaN').value = ''; saSync(); };
     $('#agPwEye') && ($('#agPwEye').onclick = () => { const i = $('#agPwNow'); i.type = i.type === 'password' ? 'text' : 'password'; });
     $('#agPwCp') && ($('#agPwCp').onclick = () => navigator.clipboard.writeText(a.password).then(() => toast('Password copiata'), () => toast('Copia non consentita', 1)));
-    $('#agScCp') && ($('#agScCp').onclick = () => navigator.clipboard.writeText(a.storeCode).then(() => toast('Codice venditore copiato'), () => toast('Copia non consentita', 1)));
-    $('#agScNew') && ($('#agScNew').onclick = async () => { if (!(await ask('Nuovo codice venditore?', `Il codice <b class="mono">${esc(a.storeCode)}</b> di ${esc(a.username)} smette subito di valere: i suoi clienti dovranno scrivere quello nuovo.`, 'Rigenera'))) return; try { const r = await api('POST', '/admin/agents/' + a.id + '/store-code'); a.storeCode = r.storeCode; $('#agSc').textContent = r.storeCode; toast('Nuovo codice: ' + r.storeCode); await load(); } catch (e) { toast(e.message, 1); } });
+    $('#agScCp') && ($('#agScCp').onclick = () => navigator.clipboard.writeText($('#agSc').value.trim().toUpperCase()).then(() => toast('Codice venditore copiato'), () => toast('Copia non consentita', 1)));
+    $('#agScNew') && ($('#agScNew').onclick = () => { const AL = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let c = ''; for (let i = 0; i < 4; i++) c += AL[Math.floor(Math.random() * AL.length)]; $('#agSc').value = c; $('#agSc').focus(); });
+    $('#agSc') && ($('#agSc').oninput = () => { const v = $('#agSc').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); if ($('#agSc').value !== v) $('#agSc').value = v; });
     $$('#agR label').forEach((l) => (l.onclick = () => { $$('#agR label').forEach((x) => x.classList.toggle('on', x === l)); $('input', l).checked = true; }));
     if (sub && !top.canAgents) $$('#agR input').forEach((i) => (i.disabled = true));
     $('#agNo').onclick = closePage;
     const read = () => ({
       email: $('#agE').value.trim(), notes: $('#agN').value, active: $('#agA').classList.contains('on'), maxClients: +$('#agM').value || 0,
+      ...($('#agSc') && $('#agSc').value.trim() ? { storeCode: $('#agSc').value.trim().toUpperCase() } : {}),
       canAgents: $('#agR input:checked') ? $('#agR input:checked').value === '1' : false,
       servers: $$('#agS [data-srv]').filter((i) => i.checked).map((i) => i.dataset.srv),
       perms: { ...Object.fromEntries([...FL, ...FP, ['armadaTrial'], ['oxpNew']].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"], .ag-apps [data-perm="${k}"], #agAr [data-perm="${k}"], #agWf [data-perm="${k}"], #agMx [data-perm="${k}"], #agOx [data-perm="${k}"]`) || {}).checked])), armadaCredits: Math.max(0, +(($('#agArC') || {}).value || 0) || 0), dlcAllow: listRead('agDc', 'dlca'), kAllow: listRead('agKa', 'kapp'), orbDns: listRead('agOd', 'odns'), mxDns: listRead('agMd', 'mdns'), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad),
@@ -751,7 +754,7 @@ body.agent .foot{display:none}
       if (/^\/admin\/agent-maint\/\d+$/.test(p) && m === 'DELETE') { DEMO.maintAg = { on: false, msg: '', allow: [] }; return { ok: true }; }
       if (p === '/admin/agents' && m === 'POST') {
         if (!b.username || !b.password || b.password.length < 10) throw new Error('Nome utente e password (almeno 10 caratteri)');
-        const id = Math.max(...DEMO.agents.map((x) => x.id)) + 1; DEMO.agents.push({ id, username: b.username, email: b.email || '', parentId: demoAgent ? 2 : 0, maxClients: b.maxClients || 10, canAgents: !!b.canAgents, perms: b.perms, servers: b.servers || [], active: b.active !== false, notes: b.notes || '', lastSeen: 0, createdAt: Date.now(), totp: false });
+        const id = Math.max(...DEMO.agents.map((x) => x.id)) + 1; DEMO.agents.push({ id, username: b.username, email: b.email || '', parentId: demoAgent ? 2 : 0, maxClients: b.maxClients || 10, canAgents: !!b.canAgents, perms: b.perms, servers: b.servers || [], active: b.active !== false, storeCode: b.storeCode || ('N' + id + 'X'), notes: b.notes || '', lastSeen: 0, createdAt: Date.now(), totp: false });
         return { ok: true, id };
       }
       const sc = p.match(/^\/admin\/agents\/(\d+)\/store-code$/);
@@ -760,7 +763,7 @@ body.agent .foot{display:none}
       if (am) {
         const a = DEMO.agents.find((x) => x.id === +am[1]);
         if (m === 'DELETE') { DEMO.agents = DEMO.agents.filter((x) => x !== a); DEMO.devices.forEach((d) => { if (d.ownerId === a.id) d.ownerId = a.parentId; }); DEMO.agents.forEach((x) => { if (x.parentId === a.id) x.parentId = a.parentId; }); return { ok: true }; }
-        const { password, resetTotp, ...rest } = b; Object.assign(a, rest); if (resetTotp) a.totp = false; return { ok: true };
+        const { password, resetTotp, ...rest } = b; if (rest.storeCode && DEMO.agents.some((x) => x !== a && x.storeCode === rest.storeCode)) throw new Error('Il codice ' + rest.storeCode + ' è già di un altro agente'); Object.assign(a, rest); if (resetTotp) a.totp = false; return { ok: true };
       }
       if (demoAgent && p === '/admin/devices' && m === 'POST') { const r = await origDemo(m, p, { ...b, active: true, playlists: (b.playlists || []).map((x) => ({ name: 'Linea', type: 'xtream', host: 'http://nki.esempio.tv:8080', username: x.username, password: x.password })) }); const d = DEMO.devices.find((x) => x.code === b.code) || DEMO.devices[0]; d.ownerId = 2; return r; }
       if (b && b.ownerId !== undefined) { const dm = p.match(/^\/admin\/devices\/(.+)$/); const d = dm && DEMO.devices.find((x) => x.id === dm[1]); if (d) d.ownerId = b.ownerId; const { ownerId, ...rest } = b; b = rest; }

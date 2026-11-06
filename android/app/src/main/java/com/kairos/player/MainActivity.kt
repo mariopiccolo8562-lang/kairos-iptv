@@ -173,6 +173,8 @@ class MainActivity : ComponentActivity() {
         setContentView(root)
         hideSystemUi()
 
+        // Android uccide il motore web per primo quando manca memoria (Fire Stick): con la priorità alta lo fa molto meno
+        if (Build.VERSION.SDK_INT >= 26) try { web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false) } catch (_: Throwable) {}
         web.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -222,7 +224,10 @@ class MainActivity : ComponentActivity() {
             }
 
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-                // la WebView morta non si può più usare: tolta e distrutta, poi la schermata si ricrea
+                // la WebView morta non si può più usare: tolta e distrutta, poi la schermata si ricrea.
+                // Succede quasi sempre per poca memoria (Fire Stick): si annota, così l'interfaccia passa da sola alla modalità
+                // leggerissima e il pannello lo vede in «Errori delle app»
+                noteRenderGone(if (Build.VERSION.SDK_INT >= 26 && detail.didCrash()) "crash" else "memoria")
                 webDead = true
                 try { (view.parent as? ViewGroup)?.removeView(view); view.destroy() } catch (_: Throwable) {}
                 ui.post { if (!isFinishing && !isDestroyed) recreate() }
@@ -444,6 +449,16 @@ class MainActivity : ComponentActivity() {
     private val apkBusy = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /** APK scaricato e verificato in background, pronto da installare al primo OK (aggiornamento in background) */
+    /** riavvii forzati del motore web (ultimi 10, con il motivo): li legge l'interfaccia con renderGone() */
+    private fun noteRenderGone(why: String) {
+        try {
+            val a = org.json.JSONArray(prefs.getString("rgone", "[]") ?: "[]")
+            a.put(JSONObject().put("t", System.currentTimeMillis()).put("why", why))
+            while (a.length() > 10) a.remove(0)
+            prefs.edit().putString("rgone", a.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
     @Volatile private var readyApk: File? = null
     @Volatile private var readyUrl = ""
 
@@ -963,6 +978,13 @@ class MainActivity : ComponentActivity() {
     /** Funzioni esposte al player come window.KairosNative */
     inner class Bridge {
         @JavascriptInterface fun version(): String = BuildConfig.VERSION_NAME
+        /** riavvii forzati del motore web: {n30, last, why, total} (n30 = negli ultimi 30 minuti) */
+        @JavascriptInterface fun renderGone(): String = try {
+            val a = org.json.JSONArray(prefs.getString("rgone", "[]") ?: "[]"); val t = System.currentTimeMillis()
+            var n30 = 0; var last = 0L; var why = ""
+            for (i in 0 until a.length()) { val o = a.optJSONObject(i) ?: continue; val tt = o.optLong("t"); if (t - tt < 30 * 60_000L) n30++; if (tt > last) { last = tt; why = o.optString("why") } }
+            JSONObject().put("n30", n30).put("last", last).put("why", why).put("total", a.length()).toString()
+        } catch (_: Exception) { "{}" }
         @JavascriptInterface fun versionCode(): Int = BuildConfig.VERSION_CODE
         @JavascriptInterface fun model(): String = "${Build.MANUFACTURER} ${Build.MODEL}".trim().take(70)
         /** rete (wifi/eth/mobile, segnale Wi-Fi) e dati della visione in corso, per il pannello "Online ora" */
