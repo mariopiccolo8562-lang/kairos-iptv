@@ -5,6 +5,7 @@
 const API = 'https://apis.orbixplay.com';
 const s = (v, n = 200) => String(v ?? '').slice(0, n);
 /* ID OrbixPlay: se è un MAC (12 cifre esadecimali, con o senza separatori) lo scrive come 00:1A:79:AA:BB:CC, come lo mostra l'app */
+const macShort = (v) => /^[0-9A-Fa-f]{2}([:.-][0-9A-Fa-f]{2}){2,4}$/.test(String(v || '').trim()); // sembra un MAC ma ha meno di 6 coppie
 const macNorm = (v) => { v = String(v || '').trim(); const h = v.replace(/[^0-9A-Fa-f]/g, ''); return h.length === 12 && /^[0-9A-Fa-f:.\s-]+$/.test(v) ? h.toUpperCase().match(/../g).join(':') : v; };
 async function call(env, H, path, query) {
   if (!env.ORBIX_KEY) throw new H.HttpErr(400, 'OrbixPlay non è collegato (segreto ORBIX_KEY)');
@@ -14,6 +15,7 @@ async function call(env, H, path, query) {
   const j = await r.json().catch(() => ({}));
   if (r.ok) return j;
   const why = H.str(String(j.error || j.message || ''), 160);
+  if (/device not found/i.test(why)) throw new H.HttpErr(400, 'OrbixPlay non conosce questo dispositivo: l\'app OrbixPlay deve essere stata aperta almeno una volta su quel dispositivo e l\'ID deve essere quello che mostra l\'app (anche sul sito di Orbix comparirà solo dopo)');
   const MSG = { 400: 'Dati non accettati da OrbixPlay', 401: 'Chiave OrbixPlay non valida', 403: 'Abbonamento OrbixPlay scaduto o posti finiti', 404: 'Non trovato su OrbixPlay' };
   throw new H.HttpErr(r.status >= 500 ? 502 : 400, (MSG[r.status] || `Errore di OrbixPlay (${r.status})`) + (why ? ' — ' + why : ''));
 }
@@ -59,6 +61,7 @@ export async function oxpRoutes(req, env, path, who, ip, H, ag = null) {
     const b = await H.readJSON(req, 2048);
     const q = { deviceid: macNorm(str(b.device, 64)), playlistName: str(b.name, 40) || 'Kairos', username: str(b.user, 120), password: typeof b.pass === 'string' ? b.pass.slice(0, 200) : '', host: str(b.host, 300), notes: str(b.notes, 60) };
     if (!/^[A-Za-z0-9:._-]{4,64}$/.test(q.deviceid)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
+    if (macShort(q.deviceid)) throw new HttpErr(400, `ID incompleto: ${q.deviceid} ha ${q.deviceid.split(/[:.-]/).length} coppie, un ID OrbixPlay ne ha 6 (es. 00:1A:79:AA:BB:CC). Controllalo nell'app OrbixPlay`);
     if (!q.username || !q.password || !q.host) throw new HttpErr(400, 'Scrivi DNS, utente e password della linea');
     // agente: niente playlist su un dispositivo OrbixPlay che ha già liste di clienti non suoi (lo vedrebbe tutto)
     if (ag && !(await agDevices(env, ag.tree)).has(q.deviceid)) {
