@@ -958,6 +958,7 @@ img{display:block}
 .vpnbadge{width:22px;height:22px;color:var(--mut);display:inline-grid;place-items:center;opacity:.8}
 .vpnbadge svg{width:20px;height:20px}
 .vpnbadge.on{color:var(--ok);filter:drop-shadow(0 0 6px var(--ok))}
+.vpnbadge.fixed{cursor:default;opacity:.6}.vpnbadge.fixed.on{opacity:.9}
 .lpin{display:flex;gap:10px;justify-content:center;margin:20px 0 14px}
 .lpin span{font-family:Orbitron,monospace;font-size:clamp(34px,5vw,56px);font-weight:700;width:1.25em;padding:8px 0;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff}
 .inp.pinin{text-align:center;font-family:Orbitron,monospace;font-size:34px;letter-spacing:.4em;margin:16px 0 8px}
@@ -1942,7 +1943,16 @@ let navSeq = 0;
 function navHTML(curKey) {
   return `<nav class="tnav">${LOGO_SVG('kgN' + ++navSeq)}<span class="tmeta"><span class="tdate"></span>${expChip()}</span>
     <div class="ttabs">${TABS.map(([k, l]) => `<div class="tt ${k === curKey ? 'cur' : ''}" data-f data-go="${k}">${l}</div>`).join('')}${plBtnHTML()}</div>
-    <div class="ticons">${['refresh', 'search', 'favs', 'settings'].map((k) => `<div class="ti ${k === curKey ? 'cur' : ''}${k === 'refresh' && S.refreshing ? ' spin' : ''}" data-f data-go="${k}" title="${{ refresh: 'Aggiorna contenuti', search: 'Cerca', favs: 'La mia lista', settings: 'Impostazioni' }[k]}">${NAV_IC[k]}</div>`).join('')}${!S.demo && perm('request') && baseServer() ? `<div class="ti" data-f data-go="request" title="Richiedi un contenuto">${NAV_IC.req}</div>` : ''}<div class="ti tbell${unseenMsgs().length ? ' new' : ''}" data-f data-go="messages" title="Messaggi del fornitore">${NAV_IC.bell}${unseenMsgs().length ? `<b class="nb">${unseenMsgs().length}</b>` : ''}</div>${S.vpn && S.vpn.mode !== 'off' && vpnOk() ? `<div class="ti tvpn vpnbadge${S.vpnState === 'on' ? ' on' : ''}" data-f data-go="vpn" title="VPN: premi per accendere o spegnere">${ICX.shield}</div>` : ''}${S.prof && profList().length > 1 ? `<div class="ti tprof" data-f data-go="profiles" title="Cambia profilo">${avatarSVG(S.prof.avatar, S.prof.name)}</div>` : ''}</div></nav>`;
+    <div class="ticons">${['refresh', 'search', 'favs', 'settings'].map((k) => `<div class="ti ${k === curKey ? 'cur' : ''}${k === 'refresh' && S.refreshing ? ' spin' : ''}" data-f data-go="${k}" title="${{ refresh: 'Aggiorna contenuti', search: 'Cerca', favs: 'La mia lista', settings: 'Impostazioni' }[k]}">${NAV_IC[k]}</div>`).join('')}${!S.demo && perm('request') && baseServer() ? `<div class="ti" data-f data-go="request" title="Richiedi un contenuto">${NAV_IC.req}</div>` : ''}<div class="ti tbell${unseenMsgs().length ? ' new' : ''}" data-f data-go="messages" title="Messaggi del fornitore">${NAV_IC.bell}${unseenMsgs().length ? `<b class="nb">${unseenMsgs().length}</b>` : ''}</div>${vpnShieldHTML()}${S.prof && profList().length > 1 ? `<div class="ti tprof" data-f data-go="profiles" title="Cambia profilo">${avatarSVG(S.prof.avatar, S.prof.name)}</div>` : ''}</div></nav>`;
+}
+/* scudo VPN nella barra: compare solo se il fornitore lo ha permesso dal pannello (VPN «Consentita» + permesso «Accendere/spegnere la VPN»);
+   con «Sempre attiva» è un indicatore acceso che non si tocca; negli altri casi non c'è */
+function vpnShieldHTML() {
+  const v = S.vpn; if (!v || !v.conf || !vpnOk()) return '';
+  const can = v.mode === 'allow' && perm('vpn'), forced = v.mode === 'force';
+  if (!can && !forced) return '';
+  const on = S.vpnState === 'on';
+  return `<div class="ti tvpn vpnbadge${on ? ' on' : ''}${forced ? ' fixed' : ''}" ${can ? 'data-f data-go="vpn"' : ''} title="${forced ? 'VPN sempre attiva (impostata dal fornitore)' : on ? 'VPN attiva: premi per spegnerla' : 'VPN spenta: premi per accenderla'}">${ICX.shield}</div>`;
 }
 /* scadenza dell'abbonamento sempre in vista nella barra in alto */
 function expChip() {
@@ -2207,7 +2217,20 @@ async function register() {
   if (mv && /^https:\/\//.test(mv) && mv.replace(/\/+$/, '') !== baseServer()) { S.server = mv.replace(/\/+$/, ''); store.set('server', S.server); }
   S.settings = { ...S.settings, ...j.settings }; store.set('brand', S.settings.brand || '');
   applyBrand();
+  vpnShieldSync();
   return j;
+}
+/** il fornitore ha appena concesso (o tolto) lo scudo VPN: la barra si rifà senza aspettare un cambio di schermata */
+function vpnShieldSync() {
+  try {
+    const sc = $('.screen.on'); if (!sc || !sc.querySelector('.navslot') || S.inPlayer) return;
+    const e = sc.querySelector('.tvpn'), h = vpnShieldHTML();
+    const have = e ? (e.hasAttribute('data-f') ? 'click' : 'fixed') : 'none', want = h ? (h.includes('data-f') ? 'click' : 'fixed') : 'none';
+    if (have === want) return;
+    const f = cur && cur.dataset && cur.dataset.go;
+    fillNav(sc.id === 'cat' ? 'cat' : sc.id);
+    const n = f && sc.querySelector(`.tnav [data-go="${f}"]`); if (n) focus(n, true);
+  } catch {}
 }
 function applyBrand() {
   applyTheme(rcGet('theme') || store.get('theme') || S.settings.accent);
