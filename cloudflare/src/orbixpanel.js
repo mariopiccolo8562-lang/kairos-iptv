@@ -14,6 +14,7 @@ async function call(env, H, path, query) {
   const j = await r.json().catch(() => ({}));
   if (r.ok) return j;
   const why = H.str(String(j.error || j.message || ''), 160);
+  if (/device not found/i.test(why)) throw new H.HttpErr(400, 'OrbixPlay non conosce questo dispositivo: l\'app OrbixPlay deve essere stata aperta almeno una volta su quel dispositivo e l\'ID deve essere quello che mostra l\'app (anche sul sito di Orbix comparirà solo dopo)');
   const MSG = { 400: 'Dati non accettati da OrbixPlay', 401: 'Chiave OrbixPlay non valida', 403: 'Abbonamento OrbixPlay scaduto o posti finiti', 404: 'Non trovato su OrbixPlay' };
   throw new H.HttpErr(r.status >= 500 ? 502 : 400, (MSG[r.status] || `Errore di OrbixPlay (${r.status})`) + (why ? ' — ' + why : ''));
 }
