@@ -6,7 +6,10 @@ import { connect } from 'cloudflare:sockets';
    KAIROS) cambiano utente o password, la playlist del cliente si aggiorna da sola.
    Credenziali e cookie di WOLF sono salvati cifrati (settings 'wolf' e 'wolf:ses'). Solo il titolare. */
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
-let mem = { jar: null, lines: null, t: 0 };
+/* un account WOLF per chiave: 'wolf' = titolare, 'wolf:ag:<id>' = agente con il suo account reseller */
+const MEMS = new Map();
+const memOf = (k, reset) => { if (reset || !MEMS.has(k)) MEMS.set(k, { jar: null, lines: null, t: 0 }); return MEMS.get(k); };
+const agKey = (id) => 'wolf:ag:' + id;
 
 const setRow = (env, k, v) => env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(k, v).run();
 const getRow = async (env, k) => ((await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(k).first()) || {}).v || '';
@@ -14,10 +17,19 @@ const unent = (s) => String(s || '').replace(/&amp;/g, '&').replace(/&lt;/g, '<'
 const tokenOf = (h) => ((h.match(/name="_token"\s+value="([^"]+)"/) || [])[1]) || '';
 const inputVal = (h, name) => unent(((h.match(new RegExp(`name="${name}"[^>]*value="([^"]*)"`)) || [])[1]) || '');
 
-export async function wolfCfg(env, H) {
-  const v = await getRow(env, 'wolf');
+export async function wolfCfg(env, H, k = 'wolf') {
+  const v = await getRow(env, k);
   if (!v) return null;
-  try { const c = await H.unseal(env, v); return c && c.url && c.user ? c : null; } catch { return null; }
+  try { const c = await H.unseal(env, v); return c && c.url && c.user ? { ...c, k, m: memOf(k) } : null; } catch { return null; }
+}
+const sealCfg = (H, env, c) => H.seal(env, { url: c.url, user: c.user, pass: c.pass, dns: c.dns || '' });
+/** entra su WOLF con i dati nuovi e li salva cifrati sotto la chiave k */
+async function connectAcc(env, H, k, url, user, pass, dns, findDns) {
+  const cfg = { url, user, pass, dns, k, m: memOf(k, true) };
+  await login(env, H, cfg);
+  if (findDns && !dns) { const l = await fetchLines(env, H, cfg, true, 20).catch(() => []); cfg.dns = (l.find((x) => x.dns) || {}).dns || ''; }
+  await setRow(env, k, await sealCfg(H, env, cfg));
+  return cfg;
 }
 
 function cookieHeader(jar) { return Object.entries(jar || {}).map(([k, v]) => `${k}=${v}`).join('; '); }
@@ -27,13 +39,14 @@ function eatCookies(jar, res) {
   for (const c of list) { const m = c.match(/^\s*([^=;\s]+)=([^;]*)/); if (m && jar[m[1]] !== m[2]) { jar[m[1]] = m[2]; ch = true; } }
   return ch;
 }
-async function loadJar(env, H) {
+async function loadJar(env, H, cfg) {
+  const mem = cfg.m;
   if (mem.jar) return mem.jar;
-  try { const v = await getRow(env, 'wolf:ses'); mem.jar = v ? await H.unseal(env, v) : {}; } catch { mem.jar = {}; }
+  try { const v = await getRow(env, cfg.k + ':ses'); mem.jar = v ? await H.unseal(env, v) : {}; } catch { mem.jar = {}; }
   if (!mem.jar || Array.isArray(mem.jar)) mem.jar = {};
   return mem.jar;
 }
-async function saveJar(env, H, jar) { mem.jar = jar; await setRow(env, 'wolf:ses', await H.seal(env, jar)).catch(() => {}); }
+async function saveJar(env, H, cfg, jar) { cfg.m.jar = jar; await setRow(env, cfg.k + ':ses', await H.seal(env, jar)).catch(() => {}); }
 
 /* HTTP/1.1 su socket TCP: fetch() dei Worker aggiunge CF-Connecting-IP (2a06:98c0:3600::103), che il firewall di WOLF blocca */
 class WolfNet extends Error {}
@@ -138,22 +151,22 @@ async function login(env, H, cfg) {
   const r = await rawFetch(cfg, jar, '/', { form: { _token: t, username: cfg.user, password: cfg.pass } });
   const loc = r.headers.get('location') || '';
   if (!(r.status >= 300 && r.status < 400 && /dashboard/.test(loc))) throw new H.HttpErr(400, 'WOLF non accetta utente e password: controllali in «Impostazioni WOLF»');
-  await saveJar(env, H, jar);
+  await saveJar(env, H, cfg, jar);
   return jar;
 }
 
 /** richiesta a WOLF con la sessione salvata; se è scaduta rientra una volta da solo */
 async function wf(env, H, cfg, path, o = {}) {
   for (let i = 0; i < 2; i++) {
-    let jar = await loadJar(env, H);
+    let jar = await loadJar(env, H, cfg);
     if (!jar.laravel_session) jar = await login(env, H, cfg);
     const before = JSON.stringify(jar);
     const r = await rawFetch(cfg, jar, path, o);
     const loc = r.headers.get('location') || '';
     let lp = ''; try { lp = new URL(loc, cfg.url).pathname.replace(/\/+$/, ''); } catch {}
     const out = r.status === 401 || r.status === 419 || (r.status >= 300 && r.status < 400 && (lp === '' || lp === '/login'));
-    if (out) { mem.jar = {}; if (i === 0) continue; throw new H.HttpErr(502, 'WOLF ha chiuso la sessione: riprova'); }
-    if (JSON.stringify(jar) !== before) await saveJar(env, H, jar);
+    if (out) { cfg.m.jar = {}; if (i === 0) continue; throw new H.HttpErr(502, 'WOLF ha chiuso la sessione: riprova'); }
+    if (JSON.stringify(jar) !== before) await saveJar(env, H, cfg, jar);
     return r;
   }
 }
@@ -217,6 +230,7 @@ function rowOut(x) {
   };
 }
 async function fetchLines(env, H, cfg, fresh, lim) {
+  const mem = cfg.m;
   if (!fresh && !lim && mem.lines && Date.now() - mem.t < 15e3) return mem.lines;
   const f = { draw: '1', start: '0', length: lim ? String(lim) : '-1', id: 'users', filter: '', reseller: '', 'search[value]': '', 'search[regex]': 'false', 'order[0][column]': '0', 'order[0][dir]': 'desc' };
   COLS.forEach((c, i) => { f[`columns[${i}][data]`] = c; f[`columns[${i}][name]`] = c === 'expired' ? 'username' : c; f[`columns[${i}][searchable]`] = 'true'; f[`columns[${i}][orderable]`] = 'true'; });
@@ -286,45 +300,80 @@ export async function wolfCron(env, H) {
   await syncLinks(env, H, await fetchLines(env, H, cfg, true), 'Controllo automatico', '');
 }
 
-export async function wolfRoutes(req, env, path, who, ip, H) {
-  try { return await routes(req, env, path, who, ip, H); }
+/** ag = { id } per un agente con il permesso «wolf»: usa il suo account reseller WOLF (sue linee, suoi crediti) */
+export async function wolfRoutes(req, env, path, who, ip, H, ag = null) {
+  try { return await routes(req, env, path, who, ip, H, ag); }
   catch (e) { if (e instanceof WolfNet) throw new H.HttpErr(502, e.message); throw e; }
 }
-async function routes(req, env, path, who, ip, H) {
+async function routes(req, env, path, who, ip, H, ag) {
   const m = req.method;
   const { HttpErr, json, str } = H;
-  if (path === '/wolf/config' && m === 'GET') { const c = await wolfCfg(env, H); return json({ set: !!c, url: c ? c.url : '', user: c ? c.user : '', dns: c ? c.dns || '' : '' }); }
+  const K = ag ? agKey(ag.id) : 'wolf';
+  if (ag && (path.startsWith('/wolf/links') || path.startsWith('/wolf/agents'))) throw new HttpErr(403, 'Funzione riservata al titolare');
+  if (path === '/wolf/config' && m === 'GET') {
+    const c = await wolfCfg(env, H, K), own = ag ? await wolfCfg(env, H) : c;
+    return json({ set: !!c, url: own ? own.url : '', user: c ? c.user : '', dns: own ? own.dns || '' : '', agent: !!ag, ownerSet: !!own });
+  }
   if (path === '/wolf/config' && m === 'PUT') {
-    const b = await H.readJSON(req, 4096), old = (await wolfCfg(env, H)) || {};
-    let url = str(b.url, 200).trim();
-    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
-    try { url = new URL(url).origin; } catch {}
-    if (!/^https?:\/\/[^/\s]+$/.test(url)) throw new HttpErr(400, 'Indirizzo di WOLF non valido, es. https://pannello.esempio.com');
+    const b = await H.readJSON(req, 4096), old = (await wolfCfg(env, H, K)) || {};
+    let url, dns;
+    if (ag) {
+      const own = await wolfCfg(env, H); if (!own) throw new HttpErr(400, 'Il titolare non ha ancora collegato WOLF');
+      url = own.url; dns = own.dns || '';
+    } else {
+      url = str(b.url, 200).trim();
+      if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+      try { url = new URL(url).origin; } catch {}
+      if (!/^https?:\/\/[^/\s]+$/.test(url)) throw new HttpErr(400, 'Indirizzo di WOLF non valido, es. https://pannello.esempio.com');
+      dns = str(b.dns, 200).replace(/\/+$/, ''); if (dns && !/^https?:\/\/[^/\s]+$/.test(dns)) throw new HttpErr(400, 'DNS non valido, es. http://server.tv:8080');
+    }
     const user = str(b.user, 120), pass = typeof b.pass === 'string' && b.pass ? b.pass.slice(0, 200) : old.url === url && old.user === user ? old.pass : '';
     if (!user || !pass) throw new HttpErr(400, 'Scrivi utente e password di WOLF');
-    let dns = str(b.dns, 200).replace(/\/+$/, ''); if (dns && !/^https?:\/\/[^/\s]+$/.test(dns)) throw new HttpErr(400, 'DNS non valido, es. http://server.tv:8080');
-    const cfg = { url, user, pass, dns };
-    mem = { jar: null, lines: null, t: 0 };
-    await login(env, H, cfg);
-    if (!dns) { const l = await fetchLines(env, H, cfg, true, 20).catch(() => []); cfg.dns = (l.find((x) => x.dns) || {}).dns || ''; }
-    await setRow(env, 'wolf', await H.seal(env, cfg));
-    await H.log(env, 'edit', `${who}: pannello WOLF collegato (${url})`, ip);
+    const cfg = await connectAcc(env, H, K, url, user, pass, dns, !ag);
+    await H.log(env, 'edit', `${who}: pannello WOLF collegato (${ag ? 'account ' + user : url})`, ip);
     return json({ ok: true, dns: cfg.dns });
   }
   if (path === '/wolf/config' && m === 'DELETE') {
-    await env.DB.prepare("DELETE FROM settings WHERE k IN ('wolf', 'wolf:ses')").run(); mem = { jar: null, lines: null, t: 0 };
+    await env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?)').bind(K, K + ':ses').run(); memOf(K, true);
     await H.log(env, 'del', `${who}: pannello WOLF scollegato`, ip);
     return json({ ok: true });
   }
+  /* il titolare imposta l'account WOLF di un agente (dalla scheda dell'agente) */
+  if (path === '/wolf/agents' && m === 'GET') {
+    const rows = ((await env.DB.prepare("SELECT k, v FROM settings WHERE k LIKE 'wolf:ag:%' AND k NOT LIKE '%:ses'").all()).results) || [];
+    const out = [];
+    for (const r of rows) { try { const c = await H.unseal(env, r.v); if (c && c.user) out.push({ id: +r.k.slice(8), user: c.user }); } catch {} }
+    return json({ agents: out });
+  }
+  const gm = path.match(/^\/wolf\/agents\/(\d{1,9})$/);
+  if (gm) {
+    const id = +gm[1], k = agKey(id);
+    const A = await env.DB.prepare("SELECT username FROM admins WHERE id = ? AND role = 'agent'").bind(id).first();
+    if (!A) throw new HttpErr(404, 'Agente non trovato');
+    if (m === 'PUT') {
+      const own = await wolfCfg(env, H); if (!own) throw new HttpErr(400, 'Collega prima il tuo pannello WOLF');
+      const b = await H.readJSON(req, 2048), old = (await wolfCfg(env, H, k)) || {};
+      const user = str(b.user, 120), pass = typeof b.pass === 'string' && b.pass ? b.pass.slice(0, 200) : old.user === user ? old.pass : '';
+      if (!user || !pass) throw new HttpErr(400, 'Scrivi utente e password WOLF dell\'agente');
+      await connectAcc(env, H, k, own.url, user, pass, own.dns || '', false);
+      await H.log(env, 'edit', `${who}: account WOLF ${user} assegnato all'agente ${A.username}`, ip);
+      return json({ ok: true });
+    }
+    if (m === 'DELETE') {
+      await env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?)').bind(k, k + ':ses').run(); memOf(k, true);
+      await H.log(env, 'del', `${who}: account WOLF tolto all'agente ${A.username}`, ip);
+      return json({ ok: true });
+    }
+  }
   if (!path.startsWith('/wolf/')) return null;
-  const cfg = await wolfCfg(env, H);
-  if (!cfg) throw new HttpErr(400, 'Collega prima il pannello WOLF (indirizzo, utente e password)');
+  const cfg = await wolfCfg(env, H, K);
+  if (!cfg) throw new HttpErr(400, ag ? 'Collega prima il tuo account WOLF (utente e password)' : 'Collega prima il pannello WOLF (indirizzo, utente e password)');
 
   if (path === '/wolf/lines' && m === 'GET') {
     const fresh = new URL(req.url).searchParams.get('fresh') === '1';
     const [lines, cr] = await Promise.all([fetchLines(env, H, cfg, fresh), credits(env, H, cfg).catch(() => null)]);
     const synced = await syncLinks(env, H, lines, who, ip).catch(() => 0);
-    const L = await links(env);
+    const L = ag ? [] : await links(env);
     const names = new Map((((await env.DB.prepare(`SELECT id, name, code FROM devices WHERE id IN (${L.map(() => '?').join(',') || "''"})`).bind(...L.map((k) => k.device_id)).all()).results) || []).map((d) => [d.id, d.name || d.code]));
     return json({ lines, credits: cr, dns: cfg.dns || '', synced, links: L.map((k) => ({ line: +k.line_id, device: k.device_id, name: names.get(k.device_id) || 'cliente eliminato' })) });
   }
@@ -339,7 +388,7 @@ async function routes(req, env, path, who, ip, H) {
     const bq = (pk.bouquets || []).map((x) => x.id).join(',');
     const j = await wfJson(env, H, cfg, '/lines/create/0', { _token: tokenOf(page), current_bouquets: bq, line_type: 'line', username, password, mac: '', package: pkg, description: str(b.note, 300) });
     const l = (await fetchLines(env, H, cfg, true)).find((x) => x.username === username);
-    if (l && b.deviceId) await linkLine(env, H, cfg, l, str(b.deviceId, 20), who, ip).catch(() => {});
+    if (l && b.deviceId && !ag) await linkLine(env, H, cfg, l, str(b.deviceId, 20), who, ip).catch(() => {});
     await H.log(env, 'new', `${who}: WOLF — linea ${username} creata`, ip);
     return json({ ok: true, id: l ? l.id : null, message: unent(j.message || '') });
   }
@@ -366,7 +415,7 @@ async function routes(req, env, path, who, ip, H) {
       const username = inputVal(page, 'username'); if (!username) throw new HttpErr(404, 'Linea non trovata su WOLF');
       const ed = await wfPage(env, H, cfg, `/lines/edit/${id}`);
       await wfJson(env, H, cfg, `/lines/extend/${id}`, { _token: tokenOf(page), current_bouquets: bqOf(ed, H), username, keep_current_bouquet: 'on', package: pkg, description: descOf(ed) });
-      mem.lines = null;
+      cfg.m.lines = null;
       await H.log(env, 'edit', `${who}: WOLF — linea ${username} rinnovata`, ip);
       return json({ ok: true });
     }
@@ -374,16 +423,16 @@ async function routes(req, env, path, who, ip, H) {
       const l = (await fetchLines(env, H, cfg, true)).find((x) => x.id === id);
       if (!l || l.tgl === null) throw new HttpErr(404, 'Linea non trovata su WOLF');
       await wfJson(env, H, cfg, `/lines/disable/${id}/${l.tgl}`);
-      mem.lines = null;
+      cfg.m.lines = null;
       await H.log(env, 'edit', `${who}: WOLF — linea ${l.username} ${l.enabled ? 'disattivata' : 'attivata'}`, ip);
       return json({ ok: true });
     }
-    if (act === '/kick' && m === 'POST') { await wfJson(env, H, cfg, `/lines/kick/${id}`); mem.lines = null; return json({ ok: true }); }
+    if (act === '/kick' && m === 'POST') { await wfJson(env, H, cfg, `/lines/kick/${id}`); cfg.m.lines = null; return json({ ok: true }); }
     if (!act && m === 'DELETE') {
       const l = (await fetchLines(env, H, cfg)).find((x) => x.id === id);
       await wfJson(env, H, cfg, `/lines/delete/${id}`);
       await env.DB.prepare('DELETE FROM wolf_links WHERE line_id = ?').bind(id).run();
-      mem.lines = null;
+      cfg.m.lines = null;
       await H.log(env, 'del', `${who}: WOLF — linea ${l ? l.username : id} eliminata`, ip);
       return json({ ok: true });
     }
@@ -438,7 +487,7 @@ async function routes(req, env, path, who, ip, H) {
       const url = withLines ? `/resellers/disable-client/${id}` : r.tgl ? '/' + r.tgl : '';
       if (!url || (withLines && !r.tglLines)) throw new HttpErr(400, 'WOLF non permette questa azione su questo reseller');
       await wfJson(env, H, cfg, url);
-      mem.lines = null;
+      cfg.m.lines = null;
       await H.log(env, 'edit', `${who}: WOLF — reseller ${r.username} ${r.enabled ? 'disattivato' : 'attivato'}${withLines ? ' con tutte le sue linee' : ''}`, ip);
       return json({ ok: true });
     }
@@ -446,7 +495,7 @@ async function routes(req, env, path, who, ip, H) {
       const b = await H.readJSON(req, 512);
       if (String(b.confirm || '') !== r.username) throw new HttpErr(400, 'Per eliminare scrivi esattamente il nome del reseller');
       await wfJson(env, H, cfg, `/resellers/delete/${id}`);
-      mem.lines = null;
+      cfg.m.lines = null;
       await H.log(env, 'del', `${who}: WOLF — reseller ${r.username} eliminato con tutte le sue linee`, ip);
       return json({ ok: true });
     }
