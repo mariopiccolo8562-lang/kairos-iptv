@@ -39,9 +39,9 @@ export async function oraRoutes(req, env, path, who, ip, H) {
   }
   if (path === '/ora/token' && m === 'PUT') {
     const b = await H.readJSON(req, 8192), t = str(b.token, 6000).trim();
-    if (!isJwt(t)) throw new HttpErr(400, 'Accesso ORA non valido: entra su panel.oraplayers.com e premi di nuovo il pulsante nei Preferiti');
+    if (!isJwt(t)) throw new HttpErr(400, 'Accesso ORA non valido: entra su panel.oraplayers.com e clicca di nuovo KAIROS ORA nei Preferiti');
     const r = await oraGet(t, '/api/resellers/info');
-    if (r.err === 401) throw new HttpErr(400, 'ORA dice che questo accesso è scaduto: esci, rientra su ORA e premi di nuovo il pulsante');
+    if (r.err === 401) throw new HttpErr(400, 'ORA dice che questo accesso è scaduto: rientra su ORA e clicca di nuovo KAIROS ORA nei Preferiti');
     await setRow(env, await H.seal(env, { t, at: Date.now() }));
     await H.log(env, 'edit', `${who}: pannello ORA collegato`, ip).catch(() => {});
     return json({ ok: true });
@@ -50,11 +50,11 @@ export async function oraRoutes(req, env, path, who, ip, H) {
   if (path === '/ora/data' && m === 'GET') {
     const u = new URL(req.url), w = u.searchParams.get('w') || '', p = Math.max(0, Math.min(10000, parseInt(u.searchParams.get('page'), 10) || 0)), q = str(u.searchParams.get('q') || '', 80);
     if (!READS[w]) throw new HttpErr(400, 'Sezione ORA sconosciuta');
-    const c = await tok(env, H); if (!c) throw new HttpErr(400, 'ORA non è collegato: entra su ORA e premi il pulsante «KAIROS ← ORA» nei Preferiti');
+    const c = await tok(env, H); if (!c) throw new HttpErr(400, 'ORA non è collegato: entra su ORA e premi il pulsante «KAIROS ORA» nei Preferiti');
     let last = null;
     for (const pa of READS[w](p, q)) {
       const r = await oraGet(c.t, pa);
-      if (r.err === 401) { await setRow(env, await H.seal(env, { ...c, bad: 1 })); throw new HttpErr(401, 'L\'accesso a ORA è scaduto: entra su ORA e premi di nuovo il pulsante «KAIROS ← ORA» nei Preferiti'); }
+      if (r.err === 401) { await setRow(env, await H.seal(env, { ...c, bad: 1 })); throw new HttpErr(401, 'L\'accesso a ORA è scaduto: entra su ORA e premi di nuovo il pulsante «KAIROS ORA» nei Preferiti'); }
       if (!r.err) return json({ path: pa.split('?')[0], total: r.total, data: r.data });
       last = r;
     }
