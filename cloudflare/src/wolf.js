@@ -51,7 +51,7 @@ async function saveJar(env, H, cfg, jar) { cfg.m.jar = jar; await setRow(env, cf
 /* HTTP/1.1 su socket TCP: fetch() dei Worker aggiunge CF-Connecting-IP (2a06:98c0:3600::103), che il firewall di WOLF blocca */
 class WolfNet extends Error {}
 
-async function sockFetch(url, { method, headers, body }) {
+export async function sockFetch(url, { method, headers, body }) {
   const u = new URL(url), tls = u.protocol === 'https:';
   const enc = new TextEncoder(), data = body ? enc.encode(body) : null;
   let sock;

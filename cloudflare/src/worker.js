@@ -10,7 +10,7 @@ import { ADDON_ASSETS } from './addon-assets.js';
  *  Variabili: ACCESS_TEAM_DOMAIN, ACCESS_AUD, TURNSTILE_SITEKEY (opzionali)
  */
 import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide } from './store.js'; // autorizzazione download dello Store (/api/store/*)
-import { wolfRoutes, wolfCron } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
+import { wolfRoutes, wolfCron, sockFetch } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
 import { oxpRoutes } from './orbixpanel.js'; // playlist OrbixPlay gestite da KAIROS (sezione «Pannello OrbixPlay»)
 import { mxpRoutes } from './mxpanel.js'; // account MaxPlayer gestiti da KAIROS (sezione «Pannello MaxPlayer»)
 import { tgHook, notifyNew, notifyDecided, notifyAdmin } from './notify.js'; // avvisi su Telegram e notifiche del pannello
@@ -797,6 +797,34 @@ async function linkedLinesRoutes(req, env, path, who, ip, ag) {
     return json({ ok: true });
   }
   return null;
+}
+
+/* ---------------- «Collegati ora»: connessioni attive delle linee Xtream dei pannelli esterni ----------------
+   player_api.php → user_info.active_cons (come un'app che entra: non apre il video e non occupa una connessione).
+   Prima fetch(), poi socket TCP (alcuni server bloccano gli IP di Cloudflare come il firewall di WOLF). Cache 60 s. */
+const onMem = new Map();
+async function onlineOne(origin, u, p) {
+  const k = origin + '|' + u, c = onMem.get(k);
+  if (c && now() - c.t < 60e3) return c.v;
+  const url = `${origin}/player_api.php?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`, hd = { 'User-Agent': 'IPTVSmartersPro', Accept: 'application/json' };
+  const parse = async (r) => { if (!r || !r.ok) return null; let j = null; try { j = JSON.parse(await r.text()); } catch { return null; } const ui = j && j.user_info; if (!ui || typeof ui !== 'object') return null; const n = +ui.active_cons || 0; return { on: n > 0, conns: n }; };
+  let v = null;
+  try { v = await parse(await fetch(url, { headers: hd, signal: AbortSignal.timeout(6000) })); } catch {}
+  if (!v) { try { v = await parse(await Promise.race([sockFetch(url, { method: 'GET', headers: hd }), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 7000))])); } catch {} }
+  onMem.set(k, { t: now(), v });
+  if (onMem.size > 5000) onMem.delete(onMem.keys().next().value);
+  return v;
+}
+async function onlineRoute(req) {
+  const b = await readJSON(req, 64 * 1024);
+  const res = {};
+  await Promise.all((Array.isArray(b.lines) ? b.lines : []).slice(0, 15).map(async (x) => {
+    const k = str(x && x.k, 520), u = str(x && x.u, 120), p = str(x && x.p, 200);
+    let h = str(x && x.h, 300); if (h && !/^https?:\/\//i.test(h)) h = 'http://' + h;
+    let o = ''; try { const U = new URL(h); if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|\[)/i.test(U.hostname)) return; o = U.origin; } catch { return; }
+    if (k && u && p) res[k] = await onlineOne(o, u, p);
+  }));
+  return json({ res });
 }
 
 /* ---------------- Pannello Armada: API reseller ufficiale (chiave ARMADA_KEY, solo titolare) ----------------
@@ -3268,6 +3296,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   // Pannello MaxPlayer: con il permesso del titolare, solo i clienti dell'agente MaxPlayer che gli ha assegnato
   if (path.startsWith('/mxp/')) { need('mxp', 'Non puoi usare il Pannello MaxPlayer: chiedilo a chi ti gestisce'); const r = await mxpRoutes(req, env, path, who, ip, WOLF_H, { id: A.id }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
   // Pannello WOLF: con il permesso del titolare, sul proprio account reseller WOLF (sue linee e suoi crediti)
+  if (path === '/online' && m === 'POST') { if (!['wolf', 'armada', 'mxp', 'oxp'].some((k) => P[k])) throw new HttpErr(403, 'Non hai pannelli esterni collegati'); return onlineRoute(req); }
   if (path.startsWith('/wolf/')) { need('wolf', 'Non puoi usare il pannello WOLF: chiedilo a chi ti gestisce'); const r = await wolfRoutes(req, env, path, who, ip, WOLF_H, { id: A.id }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
   // «Crea lista» su OrbixPlay/MaxPlayer senza cliente Kairos: con il permesso di attivarle dal pannello
   if (path === '/ext-lists' || path.startsWith('/ext-lists/')) { need('players', 'Non puoi creare liste su OrbixPlay e MaxPlayer'); const r = await extListsRoutes(req, env, path, who, ip, { id: A.id, tree: ctree, orbDns: P.orbDns, mxDns: P.mxDns }); if (r) return r; }
@@ -3517,6 +3546,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path === '/api-keys' || path.startsWith('/api-keys/') || path === '/webhook' || path.startsWith('/webhook/')) return apiAdmin(req, env, path, who, ip, ctx);
   if (path.startsWith('/oxp/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello OrbixPlay'); const r = await oxpRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
   if (path.startsWith('/mxp/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello MaxPlayer'); const r = await mxpRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
+  if (path === '/online' && m === 'POST') { if (!ses || ses.agent) throw new HttpErr(403, 'Funzione disponibile solo dal pannello'); return onlineRoute(req); }
   if (path.startsWith('/wolf/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare WOLF'); const r = await wolfRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
   if ((path === '/ext-lists' || path.startsWith('/ext-lists/')) && !(ses && ses.agent)) { if (!ses) throw new HttpErr(403, 'Solo dal pannello'); const r = await extListsRoutes(req, env, path, who, ip, null); if (r) return r; }
   const orb = path.match(/^\/orbix\/([A-Za-z0-9_-]{6,20})$/);
