@@ -44,7 +44,16 @@ if (process.env.DIAG_MODE === 'latency') {
     ['ping (nessuna query)', '/api/player/ping', undefined],
     ['battito con codice inesistente (1 query D1)', '/api/player/heartbeat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: 'KXZZ-ZZZZ', secret: 'x'.repeat(43) }) }],
   ]) { const t = []; let st = 0; for (let i = 0; i < 7; i++) { const [ms, s] = await time(path, init); t.push(ms); st = s; } console.log(`${label}: mediana ${med(t)} ms (HTTP ${st}) · ${t.join(', ')}`); }
-  try { const r = await fetch(host + '/cdn-cgi/trace'); const tx = await r.text(); const colo = (tx.match(/colo=([A-Z]+)/) || [])[1]; console.log('Worker eseguito a: ' + (colo || '?')); } catch {}
+  try { const r = await fetch(host + '/cdn-cgi/trace'); const tx = await r.text(); const colo = (tx.match(/colo=([A-Z]+)/) || [])[1]; console.log('Ingresso nella rete Cloudflare: ' + (colo || '?')); } catch {}
+  // dove gira il Worker (se c'è il «placement») e dove sta il database: solo codici dei data center, nessun dato
+  try { const r = await fetch(host + '/api/player/ping'); await r.text(); console.log('cf-placement: ' + (r.headers.get('cf-placement') || '(assente: il Worker gira dove entra la richiesta)')); } catch {}
+  if (dbId) {
+    try {
+      const q = async () => { const a = performance.now(); const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${ACC}/d1/database/${dbId}/query`, { method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ sql: 'SELECT 1 AS x' }) }); const j = await r.json(); return [Math.round(performance.now() - a), (j.result && j.result[0] && j.result[0].meta) || {}]; };
+      let m = {}; const t = []; for (let i = 0; i < 3; i++) { const [ms, mm] = await q(); t.push(ms); m = mm; }
+      console.log(`D1 servito da: ${m.served_by_colo || '?'} (regione ${m.served_by_region || '?'}, primario ${m.served_by_primary}) · durata SQL ${m.timings ? m.timings.sql_duration_ms : '?'} ms · API ${t.join(', ')} ms`);
+    } catch (e) { console.log('query di prova non riuscita: ' + clean(e.message)); }
+  }
   process.exit(0);
 }
 /* 1) presenza nel database */
