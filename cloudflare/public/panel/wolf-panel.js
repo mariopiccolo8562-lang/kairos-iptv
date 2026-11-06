@@ -99,7 +99,7 @@
     const FL = [['', 'Tutte'], ['on', 'Attive'], ['exp', 'In scadenza / scadute'], ['off', 'Disattivate'], ...(isAg() ? [] : [['link', 'Collegate a clienti']])];
     V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">✅ Pannello WOLF collegato</b><small>${esc(W.cfg.url)} · ${esc(W.cfg.user)}</small><small>Quello che fai qui succede subito anche su WOLF, e viceversa.</small></div>
         <div><small>Crediti WOLF</small><span class="cr">${d.credits ?? '—'}</span></div><div><small>Linee</small><span class="cr">${d.lines ? d.lines.length : '—'}</span></div>
-        <button class="btn sm" id="wfRe">${W.busy || W.rsBusy ? 'Carico…' : 'Aggiorna'}</button><button class="btn sm" id="wfNew">${W.tab === 'rs' ? '+ Nuovo reseller' : '+ Nuova linea'}</button></div>
+        <button class="btn sm" id="wfPw">Cambia password</button><button class="btn sm" id="wfRe">${W.busy || W.rsBusy ? 'Carico…' : 'Aggiorna'}</button><button class="btn sm" id="wfNew">${W.tab === 'rs' ? '+ Nuovo reseller' : '+ Nuova linea'}</button></div>
         ${W.err ? `<p style="color:#ff8f8f;margin:10px 0 0">${esc(W.err)}</p>` : ''}
         <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:13px">Impostazioni WOLF</summary>${cfgForm(W.cfg)}</details>
         <div class="wf-tabs"><button data-t="lines" class="${W.tab === 'lines' ? 'on' : ''}">Linee${d.lines ? ' · ' + d.lines.length : ''}</button><button data-t="rs" class="${W.tab === 'rs' ? 'on' : ''}">Reseller${W.rs ? ' · ' + W.rs.resellers.length : ''}</button></div></div>
@@ -120,6 +120,7 @@
         ${list.length > shown.length ? `<div style="margin-top:10px"><button class="btn sm" id="wfMore">Mostra altre ${Math.min(100, list.length - shown.length)}</button></div>` : ''}</div>`}`;
     bindCfg();
     V.querySelectorAll('.wf-tabs [data-t]').forEach((b) => { b.onclick = () => { W.tab = b.dataset.t; render(); if (W.tab === 'rs' && !W.rs && !W.rsBusy) loadRs(); }; });
+    $('#wfPw').onclick = changePw;
     $('#wfRe').onclick = () => (W.tab === 'rs' ? loadRs() : loadLines(true));
     $('#wfNew').onclick = W.tab === 'rs' ? newRs : newLine;
     if (W.tab === 'rs') { V.querySelectorAll('.wf-rs [data-a]').forEach((b) => { b.onclick = () => rsAct(b.dataset.a, +b.closest('.wf-rs').dataset.id); }); return; }
@@ -205,6 +206,13 @@
       if (!(await ask('Scollegare WOLF?', isAg() ? 'KAIROS dimentica il tuo utente e la password di WOLF. Le tue linee su WOLF restano come sono.' : 'KAIROS dimentica utente e password di WOLF. Le linee su WOLF e le playlist dei clienti restano come sono.', 'Scollega'))) return;
       try { await api('DELETE', '/admin/wolf/config'); W.data = null; await loadCfg(); render(); toast('WOLF scollegato'); } catch (e) { toast(e.message, 1); }
     };
+  }
+
+  async function changePw() {
+    const ok = await ask('Cambia password WOLF', `<label class="lbl">Nuova password per ${esc(W.cfg.user)}</label><input class="inp mono" id="wpN" value="${gen(12)}" autocomplete="new-password">
+      <p class="mut" style="font-size:12.5px;margin:10px 0 0">La password cambia <b>su WOLF</b> e KAIROS la aggiorna da solo, così il collegamento continua. D'ora in poi entri su WOLF con questa: copiala prima di confermare.</p>`, 'Cambia password');
+    if (!ok) return;
+    try { await api('POST', '/admin/wolf/password', { pass: $('#wpN').value }); toast('Password cambiata su WOLF e in KAIROS'); await loadCfg(); render(); } catch (e) { toast(e.message, 1); }
   }
 
   async function newLine() {
