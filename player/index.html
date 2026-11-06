@@ -4504,7 +4504,12 @@ function toggleHidden(ch) {
 
 /* ---------------- controllo genitori ---------------- */
 S.locked = new Set(store.get('locked', []));
-const parentalOn = () => !!store.get('pinH', '') && store.get('parental', false) === true;
+/* Il controllo genitori è attivo di serie con il PIN 0000: al primo avvio l'app chiede di sceglierne uno proprio.
+   Il fornitore può riportarlo a 0000 dal pannello (comando «Reimposta PIN») se il cliente lo dimentica. */
+const PIN_DEFAULT = '0000';
+const pinIsDefault = () => !store.get('pinH', '');
+const pinHash = () => store.get('pinH', '') || hashStr('pin:' + PIN_DEFAULT);
+const parentalOn = () => store.get('parental', true) !== false;
 function isLocked(x) {
   if (!x || !parentalOn() || S.unlocked) return false;
   return S.locked.has(x.id) || S.locked.has('g:' + (x.k || '') + '|' + x.group) || (opt('lockAdult') && isAdult(x));
@@ -4531,7 +4536,7 @@ function askPin(title, sub) {
 async function checkPin(title) {
   const p = await askPin(title || 'Inserisci il PIN');
   if (p == null) return false;
-  if (hashStr('pin:' + p) === store.get('pinH', '')) return true;
+  if (hashStr('pin:' + p) === pinHash()) return true;
   fx('err'); toast('PIN errato'); return false;
 }
 /* contenuto bloccato: chiede il PIN una volta per sessione */
@@ -4544,7 +4549,20 @@ async function setNewPin() {
   const a = await askPin('Scegli un PIN di 4 cifre'); if (a == null) return false;
   const b = await askPin('Ripeti il PIN'); if (b == null) return false;
   if (a !== b) { fx('err'); toast('I due PIN non coincidono'); return false; }
-  store.set('pinH', hashStr('pin:' + a)); toast('✓ PIN impostato'); return true;
+  if (a === PIN_DEFAULT) { fx('err'); toast('0000 è il PIN iniziale: scegline un altro'); return false; }
+  store.set('pinH', hashStr('pin:' + a)); store.set('pinLater', 0); toast('✓ PIN impostato'); return true;
+}
+/* primo avvio (o PIN reimpostato dal fornitore): si chiede di scegliere il proprio PIN; «Più tardi» rimanda al giorno dopo */
+async function pinFirstRun(force) {
+  if (!parentalOn() || !pinIsDefault() || $('#pinM') || $('#pinFM') || S.inPlayer) return;
+  if (!force && Date.now() - store.get('pinLater', 0) < 86400e3) return;
+  fx('ok');
+  document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="pinFM"><div class="sbox exitbox"><div class="orb mut" style="font-size:12px;letter-spacing:.35em">CONTROLLO GENITORI</div><h2>Scegli il tuo PIN</h2><p class="mut">Il controllo genitori è attivo: i contenuti per adulti e quelli che bloccherai chiedono un PIN. Ora il PIN è <b>0000</b>: scegline uno tuo di 4 cifre.</p>
+    <div class="sbtn"><button class="btn" data-f id="pfLater">Più tardi</button><button class="btn pri" data-f id="pfGo">Scegli il PIN</button></div></div></div>`);
+  const m = $('#pinFM'); m._onClose = () => { store.set('pinLater', Date.now()); };
+  setTimeout(() => focus($('#pfGo'), true), 30);
+  $('#pfLater').onclick = () => { store.set('pinLater', Date.now()); back(); };
+  $('#pfGo').onclick = async () => { m._onClose = null; m.remove(); if (!(await setNewPin())) { store.set('pinLater', Date.now()); toast('Puoi scegliere il PIN quando vuoi da Impostazioni › Controllo genitori'); } };
 }
 
 /* ---------------- menu del tasto OK tenuto premuto ---------------- */
@@ -4587,7 +4605,7 @@ function itemMenu(x, el) {
     if (a === 'ai') { $('#menuM').remove(); aiDialog(x, live ? nowOf(x) : null); return; }
     // blocchi: serve il PIN
     $('#menuM').remove();
-    if (!store.get('pinH', '')) { if (!(await setNewPin())) return close(); store.set('parental', true); }
+    if (!parentalOn()) store.set('parental', true);
     else if (!(await checkPin('PIN per modificare i blocchi'))) return close();
     const key = a === 'lock' ? x.id : 'g:' + (x.k || '') + '|' + x.group;
     if (S.locked.has(key)) S.locked.delete(key); else S.locked.add(key);
@@ -4676,7 +4694,7 @@ function renderSettings(sec) {
     kids: `<h3>Controllo genitori</h3>
       <div class="sr" data-f id="kOn"><span>Controllo genitori</span><b>${parentalOn() ? 'Attivo' : 'Disattivato'}</b></div>
       ${optRow('lockAdult')}
-      <div class="sr" data-f id="kPin"><span>${store.get('pinH', '') ? 'Cambia PIN' : 'Imposta PIN'}</span><b>›</b></div>
+      <div class="sr" data-f id="kPin"><span>${pinIsDefault() ? 'Scegli il tuo PIN' : 'Cambia PIN'}</span><b>${pinIsDefault() ? 'ora è 0000' : '›'}</b></div>
       ${kv('Canali, titoli e categorie bloccati', `<span id="kCount">${S.locked.size}</span>`)}
       <div class="sbtns"><button class="btn" data-f id="kClear">Sblocca tutto</button></div>
       <div class="snote">Con il controllo attivo, i contenuti bloccati chiedono il PIN prima di essere guardati. Per bloccare un canale, un film o un'intera categoria tieni premuto OK e scegli «Blocca con PIN».</div>`,
@@ -4766,17 +4784,17 @@ function renderSettings(sec) {
   if ($('#sBug')) $('#sBug').onclick = () => reportDialog();
   $('#hRestore').onclick = () => { S.hidden.clear(); store.set('hidden', []); hidVer++; $('#hCount').textContent = '0'; toast('Tutti i canali sono di nuovo visibili'); if (S.lib.live.length) renderChannels(); };
   $('#kPin').onclick = async () => {
-    if (store.get('pinH', '') && !(await checkPin('PIN attuale'))) return;
+    if (!pinIsDefault() && !(await checkPin('PIN attuale'))) return;
     if (await setNewPin()) renderSettings('kids');
     focus($('#kPin'), true);
   };
   $('#kOn').onclick = async () => {
     if (parentalOn()) { if (!(await checkPin('PIN per disattivare'))) return focus($('#kOn'), true); store.set('parental', false); S.unlocked = false; }
-    else { if (!store.get('pinH', '') && !(await setNewPin())) return focus($('#kOn'), true); store.set('parental', true); S.unlocked = false; }
+    else { store.set('parental', true); S.unlocked = false; if (pinIsDefault()) await setNewPin(); }
     renderSettings('kids'); focus($('#kOn'), true);
   };
   $('#kClear').onclick = async () => {
-    if (store.get('pinH', '') && !(await checkPin('PIN per sbloccare tutto'))) return focus($('#kClear'), true);
+    if (!(await checkPin('PIN per sbloccare tutto'))) return focus($('#kClear'), true);
     S.locked.clear(); store.set('locked', []); $('#kCount').textContent = '0'; toast('Tutti i contenuti sbloccati'); focus($('#kClear'), true);
   };
   $('#sTheme') && ($('#sTheme').onclick = () => { const ks = themeList(), nx = ks[(ks.indexOf(store.get('theme') || S.settings.accent || 'cinema') + 1) % ks.length]; store.set('theme', nx); applyTheme(nx); $('#sTheme b').innerHTML = `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(nx) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(nx))}`; });
@@ -4913,6 +4931,7 @@ async function rcRun(cmds) {
         if (c.c === 'sync') { if (S.inPlayer) { await ack(false, 'visione in corso: rimandato'); continue; } whenIdle(() => loadLibrary().then(plRerender), 100); await ack(true, 'liste in aggiornamento'); continue; }
         if (c.c === 'settings') { if (S.inPlayer) { try { NATIVE && NATIVE.playerClose && NATIVE.playerClose(); } catch {} } try { closeFs && $('#fs').classList.contains('on') && closeFs(); } catch {} const sec = (c.a && c.a.sec) || 'dev'; go('settings'); renderSettings(sec); setTimeout(() => { renderSettings(sec); const m = $(`#settBody .sm[data-sec="${sec}"]`); m && focus(m, true); }, 120); await ack(true, 'impostazioni aperte'); continue; }
         if (c.c === 'perm') { if (!NATIVE || !NATIVE.canInstall || !NATIVE.openInstallPerm) { await ack(false, 'solo nell\'app installata'); continue; } if (NATIVE.canInstall()) { await ack(true, 'permesso già concesso'); continue; } if (S.inPlayer) { await ack(false, 'visione in corso: rimandato'); continue; } try { toast('Attiva «Consenti da questa fonte», poi premi INDIETRO'); } catch {} NATIVE.openInstallPerm(); await ack(true, 'schermata del permesso aperta sulla TV'); continue; }
+        if (c.c === 'pin') { store.set('pinH', ''); store.set('pinLater', 0); S.unlocked = false; toast('Il fornitore ha reimpostato il PIN del controllo genitori: ora è 0000'); await ack(true, 'PIN riportato a 0000'); if (!S.inPlayer) setTimeout(() => pinFirstRun(true), 1500); continue; }
         if (c.c === 'speed') { if (S.inPlayer) { await ack(false, 'visione in corso: rimandato'); continue; } speedTest().then(() => heartbeat(true)).catch(() => {}); await ack(true, 'speed test avviato'); continue; }
         await ack(false, 'comando non supportato');
       } catch (e) { await ack(false, String(e && e.message || e).slice(0, 100)); }
@@ -5058,7 +5077,7 @@ function needProfilePick() {
 /* dal profilo bambini si esce (o si modificano i profili) solo con il PIN del controllo genitori, se impostato */
 async function kidsGate() {
   const c = S.prof || profList().find((x) => x.id === store.get('profId', ''));
-  if (!c || !c.kids || !store.get('pinH', '')) return true;
+  if (!c || !c.kids) return true;
   return checkPin('PIN per uscire dal profilo bambini');
 }
 function showProfiles(after) {
@@ -5893,7 +5912,7 @@ async function preLoad() {
   if (vpnWanted() && S.vpn.mode === 'force') { for (let i = 0; i < 24 && S.vpnState !== 'on' && S.vpnState !== 'error' && S.vpnState !== 'denied'; i++) await sleep(250); }
 }
 /* contenuti pronti: prima il profilo (se ce n'è più d'uno), poi la Home */
-function enterApp() { if (needProfilePick()) showProfiles(() => enterHome()); else enterHome(); }
+function enterApp() { if (needProfilePick()) showProfiles(() => enterHome()); else enterHome(); setTimeout(() => pinFirstRun(false), 2500); }
 async function afterActive() {
   show('boot', false); bootMsg('Sincronizzazione');
   await preLoad();
