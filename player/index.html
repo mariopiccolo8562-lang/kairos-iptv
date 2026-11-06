@@ -4883,6 +4883,7 @@ async function rcRun(cmds) {
         if (c.c === 'update') { if (!NATIVE || !hasNativeHttp()) { await ack(false, 'solo nell\'app installata'); continue; } S.lastUpdCheck = 0; await backgroundUpdateCheck(true); if (S.apkUpdate) { await ack(true, S.apkReady === S.apkUpdate.url ? 'versione ' + (S.apkUpdate.version || '') + ' pronta: proposta al cliente' : 'versione ' + (S.apkUpdate.version || '') + ' in scaricamento'); } else await ack(true, 'già aggiornata'); continue; }
         if (c.c === 'sync') { if (S.inPlayer) { await ack(false, 'visione in corso: rimandato'); continue; } whenIdle(() => loadLibrary().then(plRerender), 100); await ack(true, 'liste in aggiornamento'); continue; }
         if (c.c === 'settings') { if (S.inPlayer) { try { NATIVE && NATIVE.playerClose && NATIVE.playerClose(); } catch {} } try { closeFs && $('#fs').classList.contains('on') && closeFs(); } catch {} const sec = (c.a && c.a.sec) || 'dev'; go('settings'); renderSettings(sec); setTimeout(() => { renderSettings(sec); const m = $(`#settBody .sm[data-sec="${sec}"]`); m && focus(m, true); }, 120); await ack(true, 'impostazioni aperte'); continue; }
+        if (c.c === 'perm') { if (!NATIVE || !NATIVE.canInstall || !NATIVE.openInstallPerm) { await ack(false, 'solo nell\'app installata'); continue; } if (NATIVE.canInstall()) { await ack(true, 'permesso già concesso'); continue; } if (S.inPlayer) { await ack(false, 'visione in corso: rimandato'); continue; } try { toast('Attiva «Consenti da questa fonte», poi premi INDIETRO'); } catch {} NATIVE.openInstallPerm(); await ack(true, 'schermata del permesso aperta sulla TV'); continue; }
         if (c.c === 'speed') { if (S.inPlayer) { await ack(false, 'visione in corso: rimandato'); continue; } speedTest().then(() => heartbeat(true)).catch(() => {}); await ack(true, 'speed test avviato'); continue; }
         await ack(false, 'comando non supportato');
       } catch (e) { await ack(false, String(e && e.message || e).slice(0, 100)); }
@@ -5817,7 +5818,7 @@ function showActivate(serverMode) {
     noserver: 'Nessun server collegato. Inserisci l\'indirizzo del server del tuo fornitore, oppure prova la demo.',
   };
   const key = serverMode ? 'noserver' : S.status;
-  const priv = !serverMode && key === 'pending' && !store.get('privOk', 0);
+  const priv = !serverMode && key === 'pending' && !store.get('privOk', 0) && rcGet('privacy') !== 'skip';
   const mt = key === 'maintenance';
   $('#activate').classList.toggle('maint', mt);
   box.parentElement.style.display = priv || mt ? 'none' : '';

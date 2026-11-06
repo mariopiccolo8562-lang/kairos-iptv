@@ -1050,6 +1050,12 @@ class MainActivity : ComponentActivity() {
             runOnUiThread { applyOrientation(mode) }
         }
         @JavascriptInterface fun canInstall(): Boolean = Build.VERSION.SDK_INT < 26 || packageManager.canRequestPackageInstalls()
+        /** comando «Chiedi il permesso» dal pannello: apre la schermata di Android «Installa app sconosciute» */
+        @JavascriptInterface fun openInstallPerm() {
+            runOnUiThread {
+                for (i in listOf(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")), Intent(Settings.ACTION_SECURITY_SETTINGS), Intent(Settings.ACTION_SETTINGS))) { try { startActivity(i); break } catch (_: Exception) {} }
+            }
+        }
 
         /** Avvia il player nativo (ExoPlayer / VLC) */
         @JavascriptInterface fun play(payload: String) {
