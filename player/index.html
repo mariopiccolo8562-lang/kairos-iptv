@@ -608,6 +608,9 @@ img{display:block}
 .lite .screen.on{animation:fadein .28s ease forwards}
 /* leggerissima (dal pannello o scelta nell'app): nessuna animazione né sfondo grande */
 .xlite *,.xlite *::before,.xlite *::after{animation:none!important;transition:none!important}
+/* senza animazioni, ciò che diventa visibile «animandosi» deve essere visibile da subito (altrimenti schermo nero) */
+.xlite .screen.on,.xlite .detail.on,.xlite .boot-title span,.xlite .sp-svg .lo-orb2,.xlite .sp-svg .lo-kb,.xlite .sp-svg .lo-ku,.xlite .sp-svg .lo-kl,.xlite .sp-svg .lo-sat,.xlite .sp-word,.xlite .sp-tag,.xlite .sp-floor,.xlite .sp-orbit,.xlite .sp-wave,.xlite .sp-tv,.xlite .sp-glow,.xlite .sp-scan{opacity:1!important;transform:none!important}
+.xlite .sp-svg .lo-orb{stroke-dasharray:none!important}
 .xlite .hbg img,.xlite .dhero,.xlite .aurora{display:none!important}
 .xlite .post img{filter:none!important}
 .lite .detail{background:rgba(0,0,0,.9)}
