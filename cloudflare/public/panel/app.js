@@ -11,8 +11,20 @@ const D = { demo: false, security: {}, settings: {}, devices: [], activity: [], 
 addEventListener('pointermove', (e) => { const s = $('#spot'); s.style.left = e.clientX + 'px'; s.style.top = e.clientY + 'px'; });
 
 /* ---------------- API (con fallback demo) ---------------- */
-async function api(method, path, body) {
+// due letture uguali nello stesso momento (es. /admin/store all'avvio da due moduli) = una sola richiesta al server;
+// chi arriva per secondo riceve una copia, così nessuno modifica i dati dell'altro
+const API_INFLIGHT = new Map();
+function api(method, path, body) {
   if (D.demo) return demoApi(method, path, body);
+  if (method !== 'GET') return apiNet(method, path, body);
+  const k = path + '|' + (window.__assist || ''), cur = API_INFLIGHT.get(k);
+  if (cur) return cur.then((j) => (typeof structuredClone === 'function' ? structuredClone(j) : JSON.parse(JSON.stringify(j))));
+  const p = apiNet(method, path, body);
+  API_INFLIGHT.set(k, p);
+  p.then(() => {}, () => {}).then(() => { if (API_INFLIGHT.get(k) === p) API_INFLIGHT.delete(k); });
+  return p;
+}
+async function apiNet(method, path, body) {
   const r = await fetch('/api' + path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Kairos': '1', ...(window.__assist ? { 'X-Assist': String(window.__assist) } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const j = await r.json().catch(() => ({}));
   if (r.status === 503 && j.maint) { agMaintScreen(j.error); throw new Error(j.error || 'Pannello in manutenzione'); }

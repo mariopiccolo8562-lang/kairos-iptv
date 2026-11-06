@@ -293,16 +293,22 @@ export async function notifyAdmin(req, env, path, me, ip, origin, h) {
     const canTg = !me.agent || cfg.tgAgents.includes(me.id), canPush = !me.agent || cfg.pushAgents.includes(me.id);
     const who = (me.agent ? 'Agente ' : '') + me.username;
     if (path === '/notify' && m === 'GET') {
-      const link = await env.DB.prepare('SELECT tg_chat, tg_name, tg_linked FROM notify_links WHERE admin_id = ?').bind(me.id).first();
-      const subs = await env.DB.prepare('SELECT COUNT(*) AS n FROM push_subs WHERE admin_id = ?').bind(me.id).first();
+      // tutte le letture insieme: il database è lontano e prima erano sei attese una dopo l'altra
+      const [link, subs, key, agents, linksR, pushR] = await Promise.all([
+        env.DB.prepare('SELECT tg_chat, tg_name, tg_linked FROM notify_links WHERE admin_id = ?').bind(me.id).first(),
+        env.DB.prepare('SELECT COUNT(*) AS n FROM push_subs WHERE admin_id = ?').bind(me.id).first(),
+        canPush ? vapid(env).then((v) => v.pub) : '',
+        me.agent ? null : h.agents(),
+        me.agent ? null : env.DB.prepare("SELECT admin_id, tg_chat FROM notify_links WHERE tg_chat <> ''").all(),
+        me.agent ? null : env.DB.prepare('SELECT admin_id, COUNT(*) AS n FROM push_subs GROUP BY admin_id').all(),
+      ]);
       const out = {
         tg: { ready: tgReady(env), bot: cfg.bot, hooked: !!cfg.bot && cfg.hook === origin + '/api/tg/hook', allowed: canTg, linked: !!(link && link.tg_chat), name: (link && link.tg_name) || '', since: (link && link.tg_linked) || 0 },
-        push: { allowed: canPush, key: canPush ? (await vapid(env)).pub : '', devices: (subs && +subs.n) || 0 },
+        push: { allowed: canPush, key, devices: (subs && +subs.n) || 0 },
       };
       if (!me.agent) {
-        const agents = await h.agents();
-        const links = new Map((((await env.DB.prepare("SELECT admin_id, tg_chat FROM notify_links WHERE tg_chat <> ''").all()).results) || []).map((x) => [x.admin_id, true]));
-        const pushN = new Map((((await env.DB.prepare('SELECT admin_id, COUNT(*) AS n FROM push_subs GROUP BY admin_id').all()).results) || []).map((x) => [x.admin_id, +x.n]));
+        const links = new Map((((linksR && linksR.results) || [])).map((x) => [x.admin_id, true]));
+        const pushN = new Map((((pushR && pushR.results) || [])).map((x) => [x.admin_id, +x.n]));
         out.agents = agents.map((a) => ({ id: a.id, username: a.username, store: a.store, active: a.active, tg: cfg.tgAgents.includes(a.id), push: cfg.pushAgents.includes(a.id), tgLinked: !!links.get(a.id), pushDevices: pushN.get(a.id) || 0 }));
       }
       return json(out);

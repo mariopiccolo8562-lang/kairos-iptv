@@ -24,14 +24,15 @@ export default {
   async fetch(req, env, ctx) {
     let res;
     try {
-      res = await route(req, env, ctx);
+      res = await route(req, reqEnv(env), ctx);
     } catch (e) {
       console.error('ERR', e && e.stack || e);
       res = json({ error: 'Errore interno' }, 500);
     }
     return harden(res, req);
   },
-  async scheduled(_ev, env) {
+  async scheduled(_ev, env0) {
+    const env = reqEnv(env0);
     await cleanup(env);
     // app terzi: se l'hai chiesto, ogni notte si tolgono le liste inattive
     try { const c = (await getSettings(env)).playersCfg || {}; if (c.autoClean) await thirdCleanup(env, c.cleanDays || 60, 'Pulizia automatica', ''); } catch {}
@@ -42,6 +43,20 @@ export default {
 /* Utility                                                                */
 /* ====================================================================== */
 const now = () => Date.now();
+/* Memoria della singola richiesta. Il database è lontano (ogni lettura è un viaggio): la stessa lettura — impostazioni,
+   DNS salvati, agenti, presenza — chiesta da più funzioni durante la stessa richiesta si fa una volta sola.
+   env di ogni richiesta è un oggetto suo (Object.create: i binding restano quelli veri), quindi niente resta
+   tra una richiesta e l'altra e non c'è nessun dato vecchio. Fuori da una richiesta (env non avvolto) non memorizza. */
+const REQ_MEMO = new WeakMap();
+function reqEnv(env) { const e = Object.create(env); REQ_MEMO.set(e, new Map()); return e; }
+function reqMemo(env, k, fn) {
+  const m = REQ_MEMO.get(env);
+  if (!m) return fn();
+  if (!m.has(k)) { const p = fn(); m.set(k, p); Promise.resolve(p).catch(() => { if (m.get(k) === p) m.delete(k); }); }
+  return m.get(k);
+}
+/** dopo una scrittura: la prossima lettura nella stessa richiesta torna al database */
+function memoDrop(env, ...ks) { const m = REQ_MEMO.get(env); if (m) for (const k of ks) m.delete(k); }
 const json = (obj, status = 200, headers = {}) =>
   new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', ...headers } });
 const ipOf = (req) => req.headers.get('CF-Connecting-IP') || req.headers.get('X-Forwarded-For') || '0.0.0.0';
@@ -765,6 +780,7 @@ async function settingsPatch(env, patch) {
   let raw = {}; try { raw = row ? JSON.parse(row.v) : {}; } catch {}
   Object.assign(raw, patch);
   await env.DB.prepare("INSERT INTO settings (k, v) VALUES ('app', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(JSON.stringify(raw)).run();
+  cfgDirty(env);
 }
 async function armadaRoutes(req, env, url, path, who, ip) {
   const m = req.method, s = await getSettings(env);
@@ -817,9 +833,17 @@ async function armadaRoutes(req, env, url, path, who, ip) {
   return null;
 }
 
+/** impostazioni ('app') e DNS salvati ('dnsl'): un solo viaggio al database per richiesta (vedi reqMemo).
+    Ogni chiamata restituisce oggetti nuovi (JSON riletto), quindi chi li modifica non tocca gli altri */
+const cfgRows = (env) => reqMemo(env, 'cfg', async () => {
+  const o = {};
+  for (const r of ((await env.DB.prepare("SELECT k, v FROM settings WHERE k IN ('app', 'dnsl')").all()).results) || []) o[r.k] = r.v;
+  return o;
+});
+const cfgDirty = (env) => memoDrop(env, 'cfg');
 async function getSettings(env) {
-  const row = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('app').first();
-  let s = {}; try { s = row ? JSON.parse(row.v) : {}; } catch {}
+  const v = (await cfgRows(env)).app;
+  let s = {}; try { s = v ? JSON.parse(v) : {}; } catch {}
   return { ...DEFAULT_SETTINGS, ...s };
 }
 const publicSettings = (s) => ({ brand: s.brand, tagline: s.tagline, accent: s.accent, announcement: s.announcement, supportContact: s.supportContact, allowLocalPlaylists: !!s.allowLocalPlaylists, serverUrl: s.serverUrl || '', showFootball: s.showFootball !== false, price: typeof s.price === 'string' ? s.price : DEFAULT_SETTINGS.price, privacy: typeof s.privacy === 'string' ? s.privacy : '' });
@@ -973,12 +997,13 @@ function playerInput(v) {
 }
 /* DNS salvati dal pannello (elenco indipendente dai clienti) */
 async function dnsList(env) {
-  const r = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('dnsl').first();
-  let l = []; try { l = r ? JSON.parse(r.v) : []; } catch {}
+  const v = (await cfgRows(env)).dnsl;
+  let l = []; try { l = v ? JSON.parse(v) : []; } catch {}
   return Array.isArray(l) ? l.filter((x) => x && typeof x.host === 'string' && typeof x.id === 'string') : [];
 }
 async function dnsSave(env, list) {
   await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('dnsl', JSON.stringify(list.slice(0, 100))).run();
+  cfgDirty(env);
 }
 /* Elenco DNS per OrbixPlay: i DNS Orbix dedicati (con eventuale «codice host») PIÙ tutti i DNS salvati in «Server DNS».
    Così nella scheda del cliente si sceglie tra TUTTI i propri DNS, non uno solo. Dedup per host, l'ordine resta stabile
@@ -1032,6 +1057,7 @@ async function mediaTouch(env, id) {
   const s = await getSettings(env);
   s.addonMedia = { ...(s.addonMedia || {}), [id]: now() };
   await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('app', JSON.stringify(s)).run();
+  cfgDirty(env);
 }
 /** anteprima di un tema (miniature a bassa risoluzione): per tutti i temi visibili nello store, anche non posseduti */
 async function playerAddonPreview(req, env, ip) {
@@ -1560,11 +1586,15 @@ async function playerHeartbeat(req, env, ip, ctx) {
   // limite per dispositivo (prima era per IP: più TV nella stessa casa, o tanti clienti dietro lo stesso IP
   // dell'operatore, si bloccavano a vicenda e sparivano da «Online ora»); per IP resta solo un tetto alto anti-abuso
   const code = str(b && b.code, 20).toUpperCase();
-  if (await limited(env.RL_HB, 'hbip:' + ip)) return json({ error: 'Troppe richieste' }, 429);
-  if (await limited(env.RL_DEVICE, 'hb:' + (CODE_RE.test(code) ? code : ip))) return json({ error: 'Troppe richieste' }, 429);
+  const [l1, l2] = await Promise.all([limited(env.RL_HB, 'hbip:' + ip), limited(env.RL_DEVICE, 'hb:' + (CODE_RE.test(code) ? code : ip))]);
+  if (l1 || l2) return json({ error: 'Troppe richieste' }, 429);
   const [d, bad] = await deviceAuth(env, b);
   if (bad) return bad;
   const t = now();
+  // il database è lontano: abbonamento, impostazioni e messaggi non letti partono subito, insieme alla presenza
+  // (prima erano sei attese una dopo l'altra, ora tre)
+  const accP = activeAccount(env, d), setP = getSettings(env), unP = unseenCount(env, d, d.parent);
+  for (const x of [accP, setP, unP]) x.catch(() => {});
   const old = await env.DB.prepare('SELECT * FROM presence WHERE device_id = ?').bind(d.id).first();
   // il limite conta solo i battiti (register e inizio visione aggiornano la presenza ma non contano)
   if (old && t - (+old.hb_t || 0) < HB_MIN_MS) return json({ error: 'Troppi battiti: attendi qualche secondo', wait: Math.ceil((HB_MIN_MS - (t - old.hb_t)) / 1000) }, 429);
@@ -1604,7 +1634,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
     side.push(env.DB.prepare('INSERT INTO watch (day, kind, title, n) VALUES (?, ?, ?, 1) ON CONFLICT(day, kind, title) DO UPDATE SET n = watch.n + 1').bind(dayIT(t), state, f.title).run());
   if (side.length) ctx.waitUntil(Promise.allSettled(side));
   // modalità VPN e permessi attuali: se il pannello li ha cambiati l'app si riallinea subito (senza aspettare 20 minuti)
-  const [P, pls0] = await activeAccount(env, d);
+  const [P, pls0] = await accP;
   const { C, pls } = P ? await effOf(env, d, P, pls0) : { C: null, pls: [] }; // connessione indipendente: le sue playlist e il suo lettore
   const vm = P ? (+P.vpn === 2 ? 'force' : +P.vpn === 1 ? 'allow' : 'off') : 'off';
   // impronta dei server delle playlist: se cambia (DNS cambiato dal pannello) l'app aggiorna gli indirizzi senza ricaricare la lista
@@ -1615,14 +1645,14 @@ async function playerHeartbeat(req, env, ip, ctx) {
     if (b.kickAck && +b.kickAck === +d.kick_t) await env.DB.prepare('UPDATE devices SET kick_t = 0 WHERE id = ? AND kick_t = ?').bind(d.id, +d.kick_t).run();
     else if (t - +d.kick_t < 180e3) kick = +d.kick_t;
   }
-  const S0 = await getSettings(env), mt = maintFor(S0, P) ? 1 : 0;
+  const S0 = await setP, mt = maintFor(S0, P) ? 1 : 0;
   // «Invia aggiornamento» dal pannello (o in automatico se l'app è vecchia e il titolare l'ha scelto): l'app controlla subito
   let upd = +d.upd_req || 0;
   if (!upd && S0.health && S0.health.on && S0.health.autoUpd) {
     // ultima versione: di solito già in memoria; se va scaricata il battito non aspetta più di 800 ms
     if (appOfVer(f.ver, d.app) === 'tv') try { const lp = latestFor(env, S0, 'tv'); ctx.waitUntil(lp.catch(() => {})); const L = await Promise.race([lp, new Promise((r) => setTimeout(() => r(null), 800))]); if (L && verBehind(f.ver, L.version)) upd = L.versionCode || 1; } catch {}
   }
-  return json({ ok: true, mt, ...(upd ? { upd } : {}), unseen: await unseenCount(env, d, d.parent), ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
+  return json({ ok: true, mt, ...(upd ? { upd } : {}), unseen: await unP, ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
 }
 /* ---------------- dati del cliente e salute delle app ---------------- */
 const verNum = (v) => { const m = String(v || '').match(/(\d{1,3})\.(\d{1,3})(?:\.(\d{1,3}))?/); return m ? +m[1] * 1e6 + +m[2] * 1e3 + +(m[3] || 0) : 0; };
@@ -1691,9 +1721,15 @@ async function insightFor(env, d, s) {
 /** riepilogo per il pannello: clienti con problemi (versione vecchia, errori, blocchi), dal più grave */
 async function healthList(env, s, ids) {
   const t = now();
-  const rows = ((await env.DB.prepare("SELECT p.device_id AS id, p.ver, p.state, p.stalls_h, p.net, p.rssi, p.speed_dl, p.t, d.name, d.code, d.app, d.parent, d.upd_req FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ?").bind(t - 3 * 864e5).all()).results) || [];
-  const er = new Map(((await env.DB.prepare('SELECT device_id, problem, outcome, codec, dec FROM app_errors WHERE t > ?').bind(t - 864e5).all().catch(() => ({ results: [] }))).results || []).reduce((m, e) => { const a = m.get(e.device_id) || []; a.push(e); m.set(e.device_id, a); return m; }, new Map()));
-  const L = {}; await Promise.all(['tv', 'ktv', 'lite', 'xc', 'plus'].map(async (a) => { L[a] = await latestFor(env, s, a).catch(() => null); }));
+  // presenza, errori e ultime versioni: tutto insieme (prima erano tre attese una dopo l'altra)
+  const L = {};
+  const [rowsR, erR] = await Promise.all([
+    env.DB.prepare("SELECT p.device_id AS id, p.ver, p.state, p.stalls_h, p.net, p.rssi, p.speed_dl, p.t, d.name, d.code, d.app, d.parent, d.upd_req FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ?").bind(t - 3 * 864e5).all(),
+    env.DB.prepare('SELECT device_id, problem, outcome, codec, dec FROM app_errors WHERE t > ?').bind(t - 864e5).all().catch(() => ({ results: [] })),
+    ...['tv', 'ktv', 'lite', 'xc', 'plus'].map(async (a) => { L[a] = await latestFor(env, s, a).catch(() => null); }),
+  ]);
+  const rows = (rowsR && rowsR.results) || [];
+  const er = new Map(((erR && erR.results) || []).reduce((m, e) => { const a = m.get(e.device_id) || []; a.push(e); m.set(e.device_id, a); return m; }, new Map()));
   const out = [];
   for (const r of rows) {
     if (ids && !ids.has(r.id)) continue;
@@ -2088,14 +2124,16 @@ async function trailerItunes(title, year, kind, want) {
 }
 async function adminPresence(env) {
   const t = now();
-  const rows = ((await env.DB.prepare('SELECT p.*, d.name, d.code, d.expires, d.active, d.parent, d.playlists AS has_pl, d.model AS dmodel FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ? ORDER BY p.t DESC LIMIT 1000').bind(t - 86400e3).all()).results) || [];
-  const pids = [...new Set(rows.filter((r) => r.parent).map((r) => r.parent))];
+  // una sola andata al database: presenza + dispositivo + (per le connessioni collegate) il loro principale, e insieme
+  // i titoli più visti e il totale. Delle playlist basta sapere se ci sono (prima viaggiava tutto il blocco cifrato)
+  const [rowsR, topR, totR] = await Promise.all([
+    env.DB.prepare("SELECT p.*, d.name, d.code, d.expires, d.active, d.parent, (d.playlists <> '') AS has_pl, d.model AS dmodel, pd.id AS p_id, pd.name AS p_name, pd.code AS p_code, pd.active AS p_active, pd.expires AS p_expires, (pd.playlists <> '') AS p_has_pl, pd.parent AS p_parent FROM presence p JOIN devices d ON d.id = p.device_id LEFT JOIN devices pd ON d.parent <> '' AND pd.id = d.parent WHERE p.t > ? ORDER BY p.t DESC LIMIT 1000").bind(t - 86400e3).all(),
+    env.DB.prepare('SELECT kind, title, n FROM watch WHERE day = ? ORDER BY n DESC, title LIMIT 15').bind(dayIT(t)).all().catch(() => null),
+    env.DB.prepare('SELECT COUNT(*) AS n FROM devices').first(),
+  ]);
+  const rows = (rowsR && rowsR.results) || [];
   const parents = new Map();
-  // clienti principali delle connessioni collegate: una sola query ogni 90 (il piano gratuito ne concede 50 per richiesta)
-  for (let i = 0; i < pids.length; i += 90) {
-    const part = pids.slice(i, i + 90);
-    for (const p of (await env.DB.prepare(`SELECT id, name, code, active, expires, playlists, parent FROM devices WHERE id IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results || []) parents.set(p.id, p);
-  }
+  for (const r of rows) if (r.parent && r.p_id && !parents.has(r.p_id)) parents.set(r.p_id, { id: r.p_id, name: r.p_name, code: r.p_code, active: r.p_active, expires: r.p_expires, has_pl: r.p_has_pl, parent: r.p_parent || '' });
   const stOf = (d) => statusOf(d, d.playlists || d.has_pl ? [1] : []);
   const online = [], recent = [];
   for (const r of rows) {
@@ -2111,17 +2149,16 @@ async function adminPresence(env) {
     if (r.home_country && r.country && r.country !== r.home_country) o.flags.push('country'); // paese diverso dal solito
     (o.online ? online : recent).push(o);
   }
-  let top = [];
-  try { top = ((await env.DB.prepare('SELECT kind, title, n FROM watch WHERE day = ? ORDER BY n DESC, title LIMIT 15').bind(dayIT(t)).all()).results) || []; } catch {}
-  const total = ((await env.DB.prepare('SELECT COUNT(*) AS n FROM devices').first()) || { n: 0 }).n;
+  const top = (topR && topR.results) || [];
+  const total = (totR || { n: 0 }).n;
   const watching = online.filter((o) => o.state !== 'idle').length;
   return { online, recent, top, counts: { online: online.length, watching, idle: online.length - watching, total }, ts: t };
 }
 const onlineCount = async (env) => { try { return (await env.DB.prepare('SELECT COUNT(*) AS n FROM presence WHERE t > ?').bind(now() - ONLINE_MS).first()).n; } catch { return 0; } };
 /** ultimo contatto di ogni dispositivo dalla presenza (battiti): «Ultimo accesso» prima guardava solo l'apertura dell'app,
     così chi guardava da ore risultava «visto 3 ore fa» anche se era collegato */
-async function presenceMap(env) {
-  try { return new Map((((await env.DB.prepare('SELECT device_id, t, state FROM presence WHERE t > ?').bind(now() - 30 * 864e5).all()).results) || []).map((r) => [r.device_id, r])); } catch { return new Map(); }
+function presenceMap(env) {
+  return reqMemo(env, 'pm', async () => { try { return new Map((((await env.DB.prepare('SELECT device_id, t, state FROM presence WHERE t > ?').bind(now() - 30 * 864e5).all()).results) || []).map((r) => [r.device_id, r])); } catch { return new Map(); } });
 }
 /** aggiunge ai dispositivi del pannello l'ultimo contatto vero e, se collegati adesso, cosa stanno facendo (live: idle|live|movie|series|rec) */
 function withPresence(devs, pm) {
@@ -2483,17 +2520,18 @@ async function playerRegister(req, env, ip, ctx) {
   ctx.waitUntil(presenceFromRegister(env, d, b, ip, cfOf(req)));
 
   // un dispositivo collegato usa stato, scadenza, profili e limiti del suo principale; le playlist e il lettore
-  // anche, salvo «gestione indipendente» (allora sono i suoi)
+  // anche, salvo «gestione indipendente» (allora sono i suoi). Impostazioni e messaggi partono insieme al principale
+  const sP = getSettings(env), msgP = deviceMessages(env, d.id, d.parent || d.id);
+  sP.catch(() => {});
   const P = await primaryOf(env, d);
   const Ppls = P ? await unseal(env, P.playlists).catch(() => []) : [];
-  const s = await getSettings(env);
+  const s = await sP;
   let status = P ? statusOf(P, Ppls) : 'pending';
   const { C, pls } = status === 'active' ? await effOf(env, d, P, Ppls) : { C: P, pls: [] };
   if (status === 'active' && maintFor(s, P)) status = 'maintenance';
-  const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? pls : [], messages: await deviceMessages(env, d.id, P && P.id) };
+  const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? pls : [], messages: await msgP };
   if (status === 'active') {
-    out.account = await accountOf(env, P, d, pls, C);
-    out.vpn = await vpnOf(env, P, d);
+    [out.account, out.vpn] = await Promise.all([accountOf(env, P, d, pls, C), vpnOf(env, P, d)]);
     out.perms = permsOf(P); // i collegati ereditano i permessi del principale
     if (s.aiOff) out.perms.ai = false; // assistente spento dal pannello
     out.addons = addonsFor(s, P); out.adg = P.addons || ''; // add-on (i collegati usano quelli del principale)
@@ -2571,11 +2609,14 @@ async function adminInner(req, env, url, ip, ctx) {
 
   if (path === '/login' && m === 'POST') return login(req, env, ip, ctx);
 
+  // la sessione e, nello stesso viaggio, impostazioni e agenti (servono quasi a ogni richiesta del pannello)
+  const pre = cookieOf(req) ? Promise.all([cfgRows(env), agentsAll(env)]).catch(() => {}) : null;
   const ses = await getSession(req, env);
   if (!ses) throw new HttpErr(401, 'Sessione scaduta');
-  // rinnovo automatico: chi usa il pannello resta collegato (al massimo un aggiornamento ogni 6 ore)
+  await pre;
+  // rinnovo automatico: chi usa il pannello resta collegato (al massimo un aggiornamento ogni 6 ore; in sottofondo)
   if (ses.expires - now() < SESSION_TTL * 1000 - 6 * 3600e3 && path !== '/logout') {
-    await env.DB.prepare('UPDATE sessions SET expires = ? WHERE id = ?').bind(now() + SESSION_TTL * 1000, ses.id).run();
+    ctx.waitUntil(env.DB.prepare('UPDATE sessions SET expires = ? WHERE id = ?').bind(now() + SESSION_TTL * 1000, ses.id).run().catch(() => {}));
     RENEW.set(req, cookieOf(req));
   }
   if (ses.role === 'agent') return agentRoutes(req, env, url, path, ses, ip, ctx);
@@ -2615,6 +2656,22 @@ const storeAppOk = (list, app) => list.includes('*') || list.some((x) => x.toLow
 /** DNS che un agente può usare per OrbixPlay (scelti dal titolare per nome) e MaxPlayer (per id del dominio); ['*'] = tutti */
 const agOrbList = (s, allow) => (((s.playersCfg || {}).orbix) || []).filter((x) => storeAppOk(Array.isArray(allow) ? allow : ['*'], x.name));
 const agMxList = (doms, allow) => doms.filter((x) => storeAppOk(Array.isArray(allow) ? allow : ['*'], x.id));
+/** «OrbixPlay e MaxPlayer» nel pannello dell'agente: solo i DNS che gli hai concesso (per nome) e i codici cliente
+    dei soli fornitori di quei DNS. Uno slot con il link (il DNS del fornitore) si abbina per host; senza link per nome.
+    mxAll = domini di MaxPlayer (null se non disponibili: con DNS MaxPlayer limitati gli slot MaxPlayer restano nascosti) */
+function agPlayers(env, s, P, mxAll) {
+  const c = s.playersCfg || {}, show = !!c.showDnsAgents, orb = agOrbList(s, P.orbDns);
+  const hn = (x) => String(x || '').trim().replace(/^https?:\/\//i, '').split(/[:/]/)[0].toLowerCase(), lc = (x) => String(x || '').trim().toLowerCase();
+  const allO = !Array.isArray(P.orbDns) || P.orbDns.includes('*'), allM = !Array.isArray(P.mxDns) || P.mxDns.includes('*');
+  const mx = allM ? [] : agMxList(Array.isArray(mxAll) ? mxAll : [], P.mxDns);
+  const ok = (x) => {
+    const h = hn(x.link), n = lc(x.name);
+    if (x.app === 'orbix') return allO || orb.some((d) => (h ? hn(d.host) === h : !!n && lc(d.name).includes(n)));
+    return allM || mx.some((d) => (h ? lc(d.domain) === h : !!n && lc(d.label).includes(n)));
+  };
+  return { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: orb.map((x) => (show ? { name: x.name, host: x.host } : { name: x.name })), max: [] }, showDnsAgents: show,
+    codes: c.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(c).filter(ok).map((x) => (show ? x : { ...x, link: '' })) };
+}
 function agentPerms(src) {
   let o = {}; try { o = typeof src === 'string' ? JSON.parse(src || '{}') : src || {}; } catch {}
   const p = { ...AGENT_DEF };
@@ -2641,7 +2698,8 @@ function agentPermsWithin(req, top) {
   p.maxConn = Math.min(p.maxConn, top.maxConn);
   return p;
 }
-const agentsAll = async (env) => ((await env.DB.prepare("SELECT id, username, email, parent_id, max_clients, can_agents, perms, servers, active, disabled_by, notes, last_seen, created_at, totp_on, pw_seal FROM admins WHERE role = 'agent' ORDER BY id").all()).results) || [];
+/** tutti gli agenti (una lettura per richiesta; chi modifica gli agenti chiama memoDrop(env, 'ags')). Copia nuova a ogni chiamata */
+const agentsAll = async (env) => (await reqMemo(env, 'ags', async () => ((await env.DB.prepare("SELECT id, username, email, parent_id, max_clients, can_agents, perms, servers, active, disabled_by, notes, last_seen, created_at, totp_on, pw_seal FROM admins WHERE role = 'agent' ORDER BY id").all()).results) || [])).map((a) => ({ ...a }));
 /** id dell'agente e di tutti i suoi sotto-agenti (a qualsiasi livello) */
 function agentTree(all, rootId) {
   const out = [rootId], seen = new Set(out);
@@ -2692,26 +2750,34 @@ async function clientsCount(env, ids) {
   for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); n += ((await env.DB.prepare(`SELECT COUNT(*) AS n FROM devices WHERE parent = '' AND owner_id IN (${part.map(() => '?').join(',')})`).bind(...part).first()) || { n: 0 }).n; }
   return n;
 }
-async function agentsOut(env, all, onlyIds, forAgent) {
-  const dns = await dnsList(env), dn = new Map(dns.map((x, i) => [x.id, forAgent ? { ...x, name: svName(x, i) } : x]));
+/** clienti principali per agente (una sola query, condivisa nella stessa richiesta) */
+const agentCounts = (env) => reqMemo(env, 'agc', async () => {
   const counts = new Map();
   for (const r of ((await env.DB.prepare("SELECT owner_id, COUNT(*) AS n FROM devices WHERE parent = '' AND owner_id > 0 GROUP BY owner_id").all()).results) || []) counts.set(r.owner_id, r.n);
-  const list = all.filter((a) => !onlyIds || onlyIds.includes(a.id)), out = [];
-  for (const a of list) out.push(await (async () => {
-    const tree = agentTree(all, a.id);
+  return counts;
+});
+/** forAgent: falso = titolare; un elenco di id = un agente che guarda i suoi sotto-agenti (o sé stesso): solo i server
+    che lui ha davvero (anche se a un sotto-agente ne era rimasto uno tolto più in alto), con i nomi «da agente» */
+async function agentsOut(env, all, onlyIds, forAgent) {
+  const lim = Array.isArray(forAgent) ? new Set(forAgent) : null;
+  const [dns, counts] = await Promise.all([dnsList(env), agentCounts(env)]);
+  const dn = new Map(dns.map((x, i) => [x.id, forAgent ? { ...x, name: svName(x, i) } : x]));
+  const svOk = (x) => dn.has(x) && (!lim || lim.has(x));
+  const list = all.filter((a) => !onlyIds || onlyIds.includes(a.id));
+  return Promise.all(list.map(async (a) => {
+    const tree = agentTree(all, a.id), sv = serverIds(a.servers).filter(svOk);
     return { id: a.id, username: a.username, email: a.email, parentId: a.parent_id, maxClients: a.max_clients, canAgents: !!a.can_agents, perms: agentPerms(a.perms),
-      servers: serverIds(a.servers).filter((x) => dn.has(x)), serverNames: serverIds(a.servers).map((x) => dn.get(x)).filter(Boolean).map((x) => x.name),
+      servers: sv, serverNames: sv.map((x) => dn.get(x).name),
       active: !!a.active, notes: a.notes, lastSeen: a.last_seen, createdAt: a.created_at, totp: !!a.totp_on, password: a.pw_seal ? await unseal(env, a.pw_seal).catch(() => '') : '',
       clients: tree.reduce((n, id) => n + (counts.get(id) || 0), 0), ownClients: counts.get(a.id) || 0, subAgents: tree.length - 1 };
-  })());
-  return out;
+  }));
 }
 /** crea / modifica / elimina agenti. top = agente che sta agendo (null = proprietario) */
 async function agentsAdmin(req, env, path, who, ip, top) {
   const m = req.method;
   const all = await agentsAll(env);
   const scope = top ? agentTree(all, top.id).filter((x) => x !== top.id) : all.map((a) => a.id);
-  if (path === '/agents' && m === 'GET') return json({ agents: await agentsOut(env, all, scope, !!top) });
+  if (path === '/agents' && m === 'GET') return json({ agents: await agentsOut(env, all, scope, top ? serverIds(top.servers) : null) });
   const dnsIds = new Set((await dnsList(env)).map((x) => x.id));
   const clean = async (b, cur) => {
     const o = {};
@@ -2739,6 +2805,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
     const o = await clean({ maxClients: top ? Math.min(10, top.max_clients) : 10, perms: {}, servers: [], ...b }, null);
     const r = await env.DB.prepare("INSERT INTO admins (username, pass_hash, created_at, role, parent_id, email, max_clients, can_agents, perms, servers, active, notes, pw_seal) VALUES (?, ?, ?, 'agent', ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")
       .bind(user, o.pass_hash, now(), top ? top.id : 0, o.email || '', o.max_clients ?? 10, o.can_agents || 0, o.perms || JSON.stringify(AGENT_DEF), o.servers || '', o.active ?? 1, o.notes || '', o.pw_seal || '').first();
+    memoDrop(env, 'ags');
     await log(env, 'new', `${who}: creato l'agente ${user}${top ? ' (sotto-agente)' : ''}`, ip);
     return json({ ok: true, id: r.id });
   }
@@ -2751,7 +2818,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
     const o = await clean(b, A);
     if (b.resetTotp === true) { o.totp_on = 0; o.totp_secret = ''; o.totp_last = 0; }
     const keys = Object.keys(o);
-    if (keys.length) await env.DB.prepare(`UPDATE admins SET ${keys.map((k) => k + ' = ?').join(', ')} WHERE id = ? AND role = 'agent'`).bind(...keys.map((k) => o[k]), id).run();
+    if (keys.length) { await env.DB.prepare(`UPDATE admins SET ${keys.map((k) => k + ' = ?').join(', ')} WHERE id = ? AND role = 'agent'`).bind(...keys.map((k) => o[k]), id).run(); memoDrop(env, 'ags'); }
     if (o.pass_hash || o.active === 0 || b.resetTotp === true) await env.DB.prepare('DELETE FROM sessions WHERE admin_id = ?').bind(id).run(); // nuova password, disattivato o 2FA azzerata: si rientra
     await log(env, 'edit', `${who}: modificato l'agente ${A.username}${o.active === 0 ? ' (disattivato)' : o.active === 1 ? ' (attivato)' : ''}${b.resetTotp === true ? ' · 2FA azzerata' : ''}`, ip);
     return json({ ok: true });
@@ -2765,6 +2832,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
       env.DB.prepare('DELETE FROM sessions WHERE admin_id = ?').bind(id),
       env.DB.prepare("DELETE FROM admins WHERE id = ? AND role = 'agent'").bind(id),
     ]);
+    memoDrop(env, 'ags', 'agc');
     await log(env, 'off', `${who}: eliminato l'agente ${A.username} (clienti e sotto-agenti passati a ${up ? 'chi stava sopra' : 'te'})`, ip);
     return json({ ok: true });
   }
@@ -2803,8 +2871,9 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const dns = (await dnsList(env)).map((x, i) => ({ ...x, name: svName(x, i) })), servers = dns.filter((x) => mine.includes(x.id));
   // l'agente non vede gli indirizzi dei server: solo il nome del server scelto
   let dvOrb = null; // DNS OrbixPlay concessi all'agente (chiavi degli host, in ordine): per indicare quello del cliente senza mostrarlo
+  const dnA = new Map(servers.map((y) => [y.host, y])); // solo i server assegnati: degli altri non vede nemmeno il nome
   const dview = (x) => {
-    const dn = new Map(dns.map((y) => [y.host, y]));
+    const dn = dnA;
     const { hosts, vpnConf, ...rest } = x;
     if (rest.orbix) { const { h, ...ob } = rest.orbix; rest.orbix = dvOrb && h ? { ...ob, di: dvOrb.indexOf(h) } : ob; } // l'host del DNS OrbixPlay resta nascosto all'agente
     return { ...rest, playlists: (x.playlists || []).map((p) => { const sv = dn.get(hostOf(p)); return { id: p.id, name: p.name, type: p.type, serverId: sv ? sv.id : '', serverName: sv ? sv.name : 'Altro server', username: p.username, password: p.password }; }) };
@@ -2848,9 +2917,10 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const scope = async () => {
     if (scopeMem) return scopeMem;
     const ids = new Set();
-    for (let i = 0; i < ctree.length; i += 90) { const part = ctree.slice(i, i + 90); for (const r of ((await env.DB.prepare(`SELECT id FROM devices WHERE parent = '' AND owner_id IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || []) ids.add(r.id); }
-    const pids = [...ids];
-    for (let i = 0; i < pids.length; i += 90) { const part = pids.slice(i, i + 90); for (const r of ((await env.DB.prepare(`SELECT id FROM devices WHERE parent IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || []) ids.add(r.id); }
+    // principali dei suoi agenti e loro collegati: un solo viaggio (prima due, uno dopo l'altro)
+    const parts = []; for (let i = 0; i < ctree.length; i += 45) parts.push(ctree.slice(i, i + 45));
+    for (const r of await Promise.all(parts.map((part) => { const q = part.map(() => '?').join(','); return env.DB.prepare(`SELECT id FROM devices WHERE parent = '' AND owner_id IN (${q}) UNION ALL SELECT id FROM devices WHERE parent IN (SELECT id FROM devices WHERE parent = '' AND owner_id IN (${q}))`).bind(...part, ...part).all(); })))
+      for (const x of (r && r.results) || []) ids.add(x.id);
     return (scopeMem = ids);
   };
   const viaOwner = async (r) => (r instanceof Response ? r.json() : r);
@@ -2971,13 +3041,14 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const row = await env.DB.prepare("SELECT v FROM settings WHERE k = 'app'").first(); let raw = {}; try { raw = row ? JSON.parse(row.v) : {}; } catch {}
     raw.maintAg = maintAg;
     await env.DB.prepare("INSERT INTO settings (k, v) VALUES ('app', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(JSON.stringify(raw)).run();
+    cfgDirty(env);
     if (!!(cur && cur.on) !== on) await log(env, on ? 'off' : 'on', `${who}: manutenzione dei suoi clienti ${on ? 'ATTIVATA' : 'terminata'}`, ip);
     return json(maintAg[A.id] || { on: false, msg: '', allow: [] });
   }
   // Videoteca: solo le linee dei suoi clienti, senza indirizzi
   if (path === '/catalog/sources' || path === '/catalog') {
     need('vod');
-    const sc = await scope(), all2 = await catalogSources(env), keys = new Set(), dn = new Map(dns.map((x) => [x.host, x]));
+    const sc = await scope(), all2 = await catalogSources(env), keys = new Set(), dn = dnA;
     const ids = [...sc];
     for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); for (const d of ((await env.DB.prepare(`SELECT playlists FROM devices WHERE playlists <> '' AND id IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || []) for (const p of await unseal(env, d.playlists).catch(() => [])) { if (p.type !== 'xtream' || !p.host || !p.username) continue; const h = hostOf(p); if (h) keys.add((await sha256(`src:${h}|${p.username}|${p.password}`)).slice(0, 16)); } }
     if (path === '/catalog/sources') return json([...all2.values()].filter((x) => keys.has(x.key)).map((x) => ({ key: x.key, label: `${(dn.get(x.host) || {}).name || 'Server'} · ${x.user}`, devices: x.devices })));
@@ -2986,14 +3057,18 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   }
   if (path === '/state' && m === 'GET') {
     // tutto ciò che non dipende dall'elenco dei clienti parte subito, in parallelo (prima erano una decina di attese una dopo l'altra)
-    const chunks = (arr) => { const o = []; for (let i = 0; i < arr.length; i += 90) o.push(arr.slice(i, i + 90)); return o; };
-    const sP = getSettings(env), meP = agentsOut(env, all, [A.id], true), snP = canAg && P.store ? storeAppNames(env) : Promise.resolve([]), pmP = presenceMap(env);
-    const agP = canAg ? agentsOut(env, all, tree.filter((x) => x !== A.id), true) : Promise.resolve([]);
+    const chunks = (arr, k = 90) => { const o = []; for (let i = 0; i < arr.length; i += k) o.push(arr.slice(i, i + k)); return o; };
+    const sP = getSettings(env), meP = agentsOut(env, all, [A.id], mine), snP = canAg && P.store ? storeAppNames(env) : Promise.resolve([]), pmP = presenceMap(env);
+    // DNS di MaxPlayer limitati: servono i domini per mostrargli solo i codici cliente dei fornitori concessi (al massimo 2,5 s di attesa)
+    const mxP = P.players && env.MAXPLAYER_KEY && !P.mxDns.includes('*') ? Promise.race([mxDomains(env).catch(() => null), new Promise((r) => setTimeout(() => r(null), 2500))]) : Promise.resolve(null);
+    const agP = canAg ? agentsOut(env, all, tree.filter((x) => x !== A.id), mine) : Promise.resolve([]);
     const actP = P.activity ? env.DB.prepare('SELECT t, type, text FROM activity WHERE ' + ctree.map(() => 'text LIKE ?').join(' OR ') + ' ORDER BY t DESC LIMIT 200').bind(...ctree.map((id) => 'Agente ' + (by.get(id) || {}).username + ':%')).all() : null;
     const msgP = P.messages ? env.DB.prepare('SELECT id, target, title, body, level, created, until, grp FROM messages ORDER BY id DESC LIMIT 3000').all() : null;
     const inboxP = ses.assist ? Promise.resolve([]) : (async () => { try { return ((await env.DB.prepare("SELECT id, title, body, level, created FROM agent_msgs WHERE (target = 'all' OR target = ?) AND (until = 0 OR until > ?) ORDER BY id DESC LIMIT 20").bind(String(A.id), now()).all()).results) || []; } catch { return []; } })();
-    const rows = (await Promise.all(chunks(ctree).map((part) => env.DB.prepare(`SELECT * FROM devices WHERE parent = '' AND owner_id IN (${part.map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT 5000`).bind(...part).all()))).flatMap((r) => r.results || []);
-    const kids = (await Promise.all(chunks(rows.map((r) => r.id)).map((part) => env.DB.prepare(`SELECT * FROM devices WHERE parent IN (${part.map(() => '?').join(',')})`).bind(...part).all()))).flatMap((r) => r.results || []);
+    // i suoi clienti (principali) e le loro connessioni collegate: una sola query per gruppo di agenti
+    const fam = (await Promise.all(chunks(ctree, 45).map((part) => { const q = part.map(() => '?').join(','); return env.DB.prepare(`SELECT * FROM devices WHERE parent = '' AND owner_id IN (${q}) UNION ALL SELECT * FROM devices WHERE parent IN (SELECT id FROM devices WHERE parent = '' AND owner_id IN (${q}))`).bind(...part, ...part).all(); }))).flatMap((r) => r.results || []);
+    const rows = fam.filter((d) => !d.parent).sort((a, b) => (+b.created_at || 0) - (+a.created_at || 0)).slice(0, 5000), kept = new Set(rows.map((d) => d.id));
+    const kids = fam.filter((d) => d.parent && kept.has(d.parent));
     dvOrb = agOrbList(await sP, P.orbDns).map((x) => hostKey(x.host));
     const devices = withPresence((await Promise.all([...rows, ...kids].map((d) => deviceOut(env, d)))).map(dview), await pmP); // in parallelo
     const byId = new Map(devices.map((x) => [x.id, x]));
@@ -3002,7 +3077,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const meOut = meArr[0];
     const { password: _pw, ...meSafe } = meOut;
     const sNames = canAg && P.store ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
-    return json({ role: 'agent', user: A.username, me: { ...meSafe, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? (() => { const c = s.playersCfg || {}, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); return { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: v(agOrbList(s, P.orbDns)), max: v(c.max) }, showDnsAgents: !!c.showDnsAgents, codes: c.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(c).map((x) => (c.showDnsAgents ? x : { ...x, link: '' })) }; })() : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
+    return json({ role: 'agent', user: A.username, me: { ...meSafe, perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: agList,
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { name: x.name, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
@@ -3191,7 +3266,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (amd && m === 'DELETE' && !(ses && ses.agent)) {
     // il titolare spegne la manutenzione accesa da un agente
     const row = await env.DB.prepare("SELECT v FROM settings WHERE k = 'app'").first(); let raw = {}; try { raw = row ? JSON.parse(row.v) : {}; } catch {}
-    if (raw.maintAg && raw.maintAg[amd[1]]) { delete raw.maintAg[amd[1]]; await env.DB.prepare("UPDATE settings SET v = ? WHERE k = 'app'").bind(JSON.stringify(raw)).run(); await log(env, 'on', `${who}: spenta la manutenzione accesa da un agente`, ip); }
+    if (raw.maintAg && raw.maintAg[amd[1]]) { delete raw.maintAg[amd[1]]; await env.DB.prepare("UPDATE settings SET v = ? WHERE k = 'app'").bind(JSON.stringify(raw)).run(); cfgDirty(env); await log(env, 'on', `${who}: spenta la manutenzione accesa da un agente`, ip); }
     return json({ ok: true });
   }
   if (path === '/store' && m === 'GET') {
@@ -3216,6 +3291,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
 
   if (path === '/state' && m === 'GET') {
     // tutto in parallelo: le query al database, la decifratura delle playlist e i controlli delle versioni delle app
+    if (ses) agentCounts(env).catch(() => {}); // clienti per agente: parte subito (la usa agentsOut alla fine)
     const settings = await getSettings(env);
     const [rowsR, activityR, messagesR, agentMsgsR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, plusF, sAppNames, nCounts, onl, agAll, presLast] = await Promise.all([
       env.DB.prepare('SELECT * FROM devices ORDER BY created_at DESC LIMIT 5000').all(),
@@ -3607,6 +3683,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       else throw new HttpErr(400, 'Indirizzo server non valido: usa https://dominio (senza percorsi)');
     }
     await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('app', JSON.stringify(s)).run();
+    cfgDirty(env);
     await log(env, 'settings', `${who}: impostazioni aggiornate`, ip);
     return json({ settings: s });
   }

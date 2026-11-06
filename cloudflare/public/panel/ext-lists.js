@@ -20,9 +20,11 @@
   if (dash && !$('#v-xlist')) { const s = document.createElement('section'); s.className = 'view'; s.id = 'v-xlist'; dash.after(s); }
 
   const F = { app: 'orbix', name: '', id: '', u: '', p: '', dns: '', note: '' };
-  let L = null, doms = null, busy = false;
+  let L = null, doms = null, domsT = 0, domsK = '', busy = false;
   const P = () => D.players || {};
-  async function loadDoms() { if (doms || !P().max) return; doms = []; try { doms = (await api('GET', '/admin/maxplayer/domains')).domains || []; } catch (e) { doms = []; doms.err = e.message; } draw(); }
+  // DNS di MaxPlayer: si rileggono se sono passati più di 60 s o se il titolare ha cambiato quelli concessi all'agente
+  const domsKey = () => JSON.stringify([D.role, ((D.me || {}).perms || {}).mxDns || null]);
+  async function loadDoms() { if (!P().max || (doms && !doms.err && Date.now() - domsT < 60e3 && domsK === domsKey())) return; const k = domsKey(); if (!doms || domsK !== k) doms = null; try { const l = (await api('GET', '/admin/maxplayer/domains')).domains || []; doms = l; } catch (e) { doms = []; doms.err = e.message; } domsT = Date.now(); domsK = k; draw(); }
   async function loadL() { try { L = await api('GET', '/admin/ext-lists'); } catch (e) { L = { lists: [], err: e.message }; } draw(); }
   const read = () => { const v = (id) => ($('#' + id) || {}).value || ''; Object.assign(F, { name: v('xlN').trim(), id: v('xlI').trim(), u: v('xlU').trim(), p: v('xlP'), dns: v('xlD'), note: v('xlNo').trim() }); };
   function draw() {

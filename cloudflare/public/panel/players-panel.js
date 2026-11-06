@@ -369,7 +369,17 @@
   const ra = renderAll;
   window.renderAll = renderAll = function () { ra(); if (D.role !== 'agent') renderOp(); };
   const api0 = api;
-  window.api = api = async function (m, p, b) { const r = await api0(m, p, b); if (p === '/admin/state' && m === 'GET' && r) D.players = r.players || null; return r; };
+  // agente: se il titolare cambia i DNS di MaxPlayer concessi, l'elenco già caricato si butta e si rilegge
+  let mxKey = '';
+  window.api = api = async function (m, p, b) {
+    const r = await api0(m, p, b);
+    if (p === '/admin/state' && m === 'GET' && r) {
+      D.players = r.players || null;
+      const k = JSON.stringify([r.role || '', (((r.me || {}).perms) || {}).mxDns || null, !!(r.players && r.players.max)]);
+      if (k !== mxKey) { if (mxKey && !mxBusy) mxDoms = null; mxKey = k; }
+    }
+    return r;
+  };
   if (typeof DEMO !== 'undefined') {
     const dm = demoApi;
     window.demoApi = demoApi = async function (m, p, b) {

@@ -79,10 +79,10 @@
       const cur = document.querySelector('section.view.on');
       const v = cur && cur.id.slice(2);
       // più leggero: sulle pagine-elenco (Online ora, Errori, Richieste…) si ricaricano solo i dati della pagina;
-      // lo stato completo del pannello (clienti, contatori) al massimo ogni 15 s lì, ogni volta sulle altre pagine.
-      // Se i dati non sono cambiati il pannello non si ridisegna (load(true)).
+      // lo stato completo del pannello (clienti, contatori) al massimo ogni 15 s su tutte le pagine (anche con «Auto»
+      // a 5-10 s: è la richiesta più pesante). Se i dati non sono cambiati il pannello non si ridisegna (load(true)).
       const list = PAGES.includes(v);
-      if (!list || Date.now() - lastFull >= 15e3) { lastFull = Date.now(); await load(true); }
+      if (Date.now() - lastFull >= 15e3) { lastFull = Date.now(); await load(true); }
       if (list) view(v);
     } catch {} finally { running = false; }
   }

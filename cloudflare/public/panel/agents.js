@@ -93,6 +93,7 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 .ag-chk label.dis{opacity:.45;cursor:not-allowed}
 .ag-chk input{width:16px;height:16px;accent-color:var(--a1)}
 .ag-chk small{margin-left:auto;color:var(--mut);font-size:12px}
+small.ag-cnt{display:block;margin:6px 0 0 2px;font-size:12px;color:var(--mut)}small.ag-cnt.no{color:var(--warn,#f5b041);font-weight:600}
 .ag-radio{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ag-radio label{display:block;padding:12px;border-radius:8px;border:1px solid var(--line);background:#1a1d22;cursor:pointer}
 .ag-radio label.on{border-color:var(--a1);background:rgba(61,124,245,.1)}.ag-radio b{display:block;font-size:13.5px}.ag-radio small{color:var(--mut);font-size:12px}
 .ag-radio input{display:none}
@@ -163,9 +164,15 @@ body.agent .foot{display:none}
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
   const AG_OK = /^\/admin\/(insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/upd|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
+  // agente: le pagine senza permesso non chiamano nemmeno il server (prima ogni 20-30 s partivano richieste destinate al «non consentito»)
+  const AG_NEED = [[/^\/admin\/store(\/|$)/, 'store'], [/^\/admin\/requests.*[?&]kind=content/, 'contentReq'], [/^\/admin\/requests.*[?&]kind=addon/, 'addonReq'], [/^\/admin\/requests.*[?&]kind=ai/, 'ai'],
+    [/^\/admin\/requests(\?(?!.*kind=)|\?.*kind=report|$)/, 'reports'], [/^\/admin\/app-errors/, 'errors'], [/^\/admin\/presence/, 'online'], [/^\/admin\/catalog/, 'vod'], [/^\/admin\/apps3\/lists/, 'appsOp'],
+    [/^\/admin\/ext-lists/, 'players'], [/^\/admin\/linked-lines/, 'lines'], [/^\/admin\/agent-maint/, 'maint']];
+  const agDenied = (m, p) => { if (!isAgent() || !D.me || !D.me.perms || m !== 'GET') return false; const x = AG_NEED.find(([re]) => re.test(p)); return !!x && !D.me.perms[x[1]]; };
   const origApi = api;
   window.api = api = async function (m, p, b) {
     if (isAgent() && !AG_OK.test(p)) throw new Error('Funzione non disponibile per gli agenti');
+    if (agDenied(m, p)) throw new Error('Funzione non consentita: chiedila a chi ti ha creato');
     const asAt = window.__assist || null;
     const r = await origApi(m, p, b);
     if (p === '/admin/state' && m === 'GET' && (window.__assist || null) !== asAt) throw new Error('Pannello cambiato nel frattempo');
@@ -309,7 +316,7 @@ body.agent .foot{display:none}
   const appsAllowBox = (P) => {
     const cur = Array.isArray(P.appsAllow) ? P.appsAllow : ['*'], all = cur.includes('*');
     const names = [...new Set([...(((D.settings && D.settings.appLinks) || []).map((x) => x.name)), ...cur.filter((x) => x !== '*')])].sort((a, b) => a.localeCompare(b));
-    return chk('aapp', '*', '<b>Tutte le app</b>', all, false, 'Anche quelle che aggiungerai in futuro') + (names.length ? names.map((n) => chk('aapp', n, esc(n), all || cur.some((x) => x.toLowerCase() === n.toLowerCase()), false, '')).join('') : '<p class="mut" style="font-size:12.5px">Nessuna app: le aggiungi in APP Store → Attiva app.</p>');
+    return chk('aapp', '*', '<b>Tutte le app</b>', all, false, 'Anche quelle che aggiungerai in futuro') + (names.length ? names.map((n) => chk('aapp', n, esc(n), !all && cur.some((x) => x.toLowerCase() === n.toLowerCase()), false, '')).join('') : '<p class="mut" style="font-size:12.5px">Nessuna app: le aggiungi in APP Store → Attiva app.</p>');
   };
   const APP_KEYS = ['appstore', 'players', 'appsOp', 'dlcodes', 'appk'];
   const KAPPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['plus', 'Kairos Plus'], ['store', 'Kairos Store']];
@@ -318,7 +325,7 @@ body.agent .foot{display:none}
   const listBox = (attr, cur, items, top, empty) => {
     cur = Array.isArray(cur) ? cur : ['*']; const all = cur.includes('*'), topAll = !Array.isArray(top) || top.includes('*');
     const okTop = (k) => topAll || top.some((x) => String(x).toLowerCase() === String(k).toLowerCase());
-    return (topAll ? chk(attr, '*', '<b>Tutti</b>', all, false, 'Anche quelli che aggiungerai in futuro') : '') + (items.length ? items.filter(([k]) => okTop(k)).map(([k, l]) => chk(attr, k, esc(l), all || cur.some((x) => String(x).toLowerCase() === String(k).toLowerCase()), false, '')).join('') : `<p class="mut" style="font-size:12.5px">${empty}</p>`);
+    return (topAll ? chk(attr, '*', '<b>Tutti</b>', all, false, 'Anche quelli che aggiungerai in futuro') : '') + (items.length ? items.filter(([k]) => okTop(k)).map(([k, l]) => chk(attr, k, esc(l), all ? !topAll : cur.some((x) => String(x).toLowerCase() === String(k).toLowerCase()), false, '')).join('') : `<p class="mut" style="font-size:12.5px">${empty}</p>`);
   };
   const listRead = (box, attr) => { const st = $(`#${box} [data-${attr}="*"]`); return st && st.checked ? ['*'] : $$(`#${box} [data-${attr}]`).filter((i) => i.checked && i.dataset[attr] !== '*').map((i) => i.dataset[attr]); };
   async function openAgent(a) {
@@ -388,11 +395,29 @@ body.agent .foot{display:none}
     $('#agFt').innerHTML = `${a ? '<button class="btn danger" id="agDel">Elimina agente</button>' : ''}${a && a.active && !sub ? '<button class="btn" id="agAssist" title="Entra nel pannello di questo agente per fargli assistenza">🛟 Entra per assistenza</button>' : ''}<div style="flex:1"></div><button class="btn" id="agNo">Annulla</button><button class="btn pri" id="agOk">${isNew ? 'Crea agente' : 'Salva modifiche'}</button>`;
     $('#agAssist') && ($('#agAssist').onclick = () => { if (D.demo) { toast('In demo l\'assistenza non è disponibile', 1); return; } KXAssist.enter(a.id, a.username); });
     $('#agA').onclick = () => $('#agA').classList.toggle('on');
-    const saSync = () => { const all = $('#agSa [data-sapp="*"]'); $$('#agSa [data-sapp]').forEach((i) => { if (i.dataset.sapp !== '*') i.closest('label').style.opacity = all && all.checked ? '.45' : ''; }); };
-    $('#agSa').onchange = saSync; saSync();
-    const aaSync = () => { const all = $('#agAa [data-aapp="*"]'); $$('#agAa [data-aapp]').forEach((i) => { if (i.dataset.aapp !== '*') i.closest('label').style.opacity = all && all.checked ? '.45' : ''; }); };
-    $('#agAa') && ($('#agAa').onchange = aaSync); aaSync();
-    for (const [bx, at] of [['agDc', 'dlca'], ['agKa', 'kapp'], ['agOd', 'odns'], ['agMd', 'mdns']]) { const el = $('#' + bx); if (!el) continue; const sy = () => { const all = $(`#${bx} [data-${at}="*"]`); $$(`#${bx} [data-${at}]`).forEach((i) => { if (i.dataset[at] !== '*') i.closest('label').style.opacity = all && all.checked ? '.45' : ''; }); }; el.onchange = sy; sy(); }
+    // elenchi con «Tutti»: quello che vedi spuntato è quello che vede l'agente.
+    // «Tutti» acceso copre le voci (non spuntate, in grigio); scegliere una voce spegne «Tutti» e restano solo quelle spuntate
+    const SYNC = {};
+    for (const [bx, at, f] of [['agSa', 'sapp', 1], ['agAa', 'aapp', 1], ['agDc', 'dlca', 0], ['agKa', 'kapp', 1], ['agOd', 'odns', 0], ['agMd', 'mdns', 0]]) {
+      const el = $('#' + bx); if (!el) continue;
+      const star = () => $(`#${bx} [data-${at}="*"]`), items = () => $$(`#${bx} [data-${at}]`).filter((i) => i.dataset[at] !== '*');
+      const paint = () => {
+        const st = star(), on = !!(st && st.checked), its = items(), n = its.filter((i) => i.checked).length;
+        its.forEach((i) => { i.closest('label').style.opacity = on ? '.45' : ''; });
+        let c = el.nextElementSibling; if (!c || !c.classList.contains('ag-cnt')) { c = document.createElement('small'); c.className = 'ag-cnt'; el.after(c); } // fuori dall'elenco (che può scorrere): sempre visibile
+        c.textContent = !its.length && !on ? '' : on ? (f ? 'Le vede tutte, anche quelle che aggiungerai' : 'Li vede tutti, anche quelli che aggiungerai') : n ? `Ne vede ${n} su ${its.length}` : (f ? 'Non ne vede nessuna' : 'Non ne vede nessuno');
+        c.classList.toggle('no', !on && !n && !!its.length);
+      };
+      el.onchange = (e) => {
+        const t = e.target; if (!t || !t.matches || !t.matches(`[data-${at}]`)) return;
+        const st = star();
+        if (t.dataset[at] === '*') { if (t.checked) items().forEach((i) => (i.checked = false)); }
+        else if (t.checked && st && st.checked) st.checked = false;
+        paint();
+      };
+      paint(); SYNC[bx] = paint;
+    }
+    const saSync = () => SYNC.agSa && SYNC.agSa();
     $('#agSaAdd').onclick = () => { const n = $('#agSaN').value.trim(); if (!n) return; if (!$$('#agSa [data-sapp]').some((i) => i.dataset.sapp.toLowerCase() === n.toLowerCase())) $('#agSa').insertAdjacentHTML('beforeend', chk('sapp', n, esc(n), true, false, '')); else $$('#agSa [data-sapp]').forEach((i) => { if (i.dataset.sapp.toLowerCase() === n.toLowerCase()) i.checked = true; }); const all = $('#agSa [data-sapp="*"]'); if (all) all.checked = false; $('#agSaN').value = ''; saSync(); };
     $('#agPwEye') && ($('#agPwEye').onclick = () => { const i = $('#agPwNow'); i.type = i.type === 'password' ? 'text' : 'password'; });
     $('#agPwCp') && ($('#agPwCp').onclick = () => navigator.clipboard.writeText(a.password).then(() => toast('Password copiata'), () => toast('Copia non consentita', 1)));
@@ -577,7 +602,13 @@ body.agent .foot{display:none}
         return { role: 'agent', user: A.username, me: { ...out(A), clientsUsed: out(A).clients }, devices: devs, agents: DEMO.agents.filter((x) => x.parentId === 2).map(out), servers: DEMO.srv.slice(0, 2).map(({ id, name }) => ({ id, name })),
           addonCat: addonCatNow().filter((x) => A.perms.addons.includes(x.id) && x.mode === 'some'), settings: (() => { const ka = Array.isArray(A.perms.kAllow) ? A.perms.kAllow : ['*'], ok = (k) => ka.includes('*') || ka.includes(k), S = r.settings; return { brand: S.brand, accent: S.accent, downloaderCode: ok('pro') ? S.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? S.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? S.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? S.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? S.xcDownloaderCode || '' : '', apkUrl: ok('pro') ? S.apkUrl || '' : '' }; })(),
           kairosApps: A.perms.appk ? [['pro', 'Kairos Pro', r.settings.apkUrl || 'https://github.com/tuo-utente/kairos-iptv/releases/latest/download/kairos.apk', r.settings.downloaderCode], ['tv', 'Kairos TV', 'https://github.com/mariopiccolo8562-lang/kairos-tv/releases/latest/download/kairos-tv.apk', r.settings.ktvDownloaderCode], ['lite', 'Kairos Lite', 'https://github.com/mariopiccolo8562-lang/kairos-lite/releases/latest/download/kairos-lite.apk', r.settings.liteDownloaderCode], ['xc', 'Kairos XC', 'https://github.com/mariopiccolo8562-lang/kairos-xc/releases/latest/download/kairos-xc.apk', r.settings.xcDownloaderCode], ['store', 'Kairos Store', '', r.settings.storeDownloaderCode]].filter(([k]) => { const ka = Array.isArray(A.perms.kAllow) ? A.perms.kAllow : ['*']; return ka.includes('*') || ka.includes(k); }).map(([key, name, apk, code]) => ({ key, name, apk, code: code || '' })) : [],
-          security: { totp: true }, activity: [], messages: [], counts: {}, dlCodes: A.perms.dlcodes ? (r.dlCodes || []).filter((x) => !Array.isArray(A.perms.dlcAllow) || A.perms.dlcAllow.includes('*') || A.perms.dlcAllow.includes(x.name)) : [], storeAppNames: ['IBO Player', 'OrbixPlay'], maint: A.perms.maint ? { ...DEMO.maintAg } : null, appLinks: A.perms.appstore ? (DEMO.settings.appLinks || []).filter((x) => !Array.isArray(A.perms.appsAllow) || A.perms.appsAllow.includes('*') || A.perms.appsAllow.some((y) => y.toLowerCase() === x.name.toLowerCase())) : [], players: A.perms.players ? (() => { const c = DEMO.settings.playersCfg || { orbix: [{ name: 'Principale', host: 'http://dns.kairos-esempio.tv:8080' }], max: [] }, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); const okO = (n) => !Array.isArray(A.perms.orbDns) || A.perms.orbDns.includes('*') || A.perms.orbDns.some((y) => y.toLowerCase() === String(n).toLowerCase()); return { orbix: true, max: true, dns: { orbix: v((c.orbix || []).filter((x) => okO(x.name))), max: v(c.max) }, codes: c.codes || { orbix: '265847', max: '265847' }, slots: (c.slots || [{ id: 'nki-max', name: 'NKI', app: 'max', link: '', code: '265847' }, { id: 'armada-max', name: 'Armada', app: 'max', link: '', code: '265847' }, { id: 'nki-orbix', name: 'NKI', app: 'orbix', link: '', code: '265847' }]).map((x) => ({ ...x, link: '' })) }; })() : null };
+          security: { totp: true }, activity: [], messages: [], counts: {}, dlCodes: A.perms.dlcodes ? (r.dlCodes || []).filter((x) => !Array.isArray(A.perms.dlcAllow) || A.perms.dlcAllow.includes('*') || A.perms.dlcAllow.includes(x.name)) : [], storeAppNames: ['IBO Player', 'OrbixPlay'], maint: A.perms.maint ? { ...DEMO.maintAg } : null, appLinks: A.perms.appstore ? (DEMO.settings.appLinks || []).filter((x) => !Array.isArray(A.perms.appsAllow) || A.perms.appsAllow.includes('*') || A.perms.appsAllow.some((y) => y.toLowerCase() === x.name.toLowerCase())) : [], players: A.perms.players ? (() => { const c = DEMO.settings.playersCfg || { orbix: [{ name: 'Principale', host: 'http://dns.kairos-esempio.tv:8080' }], max: [] }, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); const okO = (n) => !Array.isArray(A.perms.orbDns) || A.perms.orbDns.includes('*') || A.perms.orbDns.some((y) => y.toLowerCase() === String(n).toLowerCase());
+            // come il worker: codici cliente solo dei fornitori dei DNS concessi (per host del link, o per nome se lo slot non ha link)
+            const orbOk = (c.orbix || []).filter((x) => okO(x.name)), mxAl = A.perms.mxDns, allM = !Array.isArray(mxAl) || mxAl.includes('*');
+            const mxOk = [DEMO.mx0 || { id: '1', domain: 'dns.kairos-esempio.tv', label: 'Principale' }, ...(DEMO.mxNew || [])].filter((x) => allM || mxAl.includes(x.id));
+            const hn = (x) => String(x || '').trim().replace(/^https?:\/\//i, '').split(/[:/]/)[0].toLowerCase(), lc = (x) => String(x || '').toLowerCase();
+            const slotOk = (x) => { const h = hn(x.link), n = lc(x.name); return x.app === 'orbix' ? (!Array.isArray(A.perms.orbDns) || A.perms.orbDns.includes('*') || orbOk.some((d) => (h ? hn(d.host) === h : !!n && lc(d.name).includes(n)))) : (allM || mxOk.some((d) => (h ? lc(d.domain) === h : !!n && lc(d.label).includes(n)))); };
+            return { orbix: true, max: true, dns: { orbix: v(orbOk), max: [] }, codes: c.codes || { orbix: '265847', max: '265847' }, slots: (c.slots || [{ id: 'nki-max', name: 'NKI', app: 'max', link: 'maxplayer.nki-max.stream', code: '265847' }, { id: 'armada-max', name: 'Armada', app: 'max', link: 'maxplayer-armada.chasertv2.stream', code: '265847' }, { id: 'nki-orbix', name: 'NKI', app: 'orbix', link: 'orbx.nki-orbx.download', code: '265847' }]).filter(slotOk).map((x) => (c.showDnsAgents ? x : { ...x, link: '' })) }; })() : null };
       }
       if (p === '/admin/agent-maint' && m === 'PUT') { DEMO.maintAg = { on: !!b.on, msg: b.msg || '', allow: b.allow || [] }; return { ...DEMO.maintAg }; }
       if (/^\/admin\/agent-maint\/\d+$/.test(p) && m === 'DELETE') { DEMO.maintAg = { on: false, msg: '', allow: [] }; return { ok: true }; }

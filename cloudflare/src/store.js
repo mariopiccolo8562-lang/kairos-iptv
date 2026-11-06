@@ -507,8 +507,15 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
   try {
     if (path === '/store' && m === 'GET') {
       const t = now();
-      const settings = await getStoreSettings(env);
-      const rows = ((await env.DB.prepare('SELECT id, app, app_url, did, device, note, country, code, status, via, tries, uses, created, decided, by_admin FROM store_requests WHERE created > ? ORDER BY created DESC LIMIT 300').bind(t - KEEP).all()).results) || [];
+      // tutte le letture insieme (il database è lontano: prima erano quattro attese una dopo l'altra, più gli agenti)
+      const [settings, rowsR, sent, smsSent, agents] = await Promise.all([
+        getStoreSettings(env),
+        env.DB.prepare('SELECT id, app, app_url, did, device, note, country, code, status, via, tries, uses, created, decided, by_admin FROM store_requests WHERE created > ? ORDER BY created DESC LIMIT 300').bind(t - KEEP).all(),
+        env.DB.prepare('SELECT COUNT(*) AS n FROM store_requests WHERE mailed = 1 AND created > ?').bind(t - 86400e3).first(),
+        env.DB.prepare('SELECT COALESCE(SUM(sms), 0) AS n FROM store_requests WHERE created > ?').bind(t - 86400e3).first(),
+        typeof opts.smsAgentList === 'function' ? Promise.resolve().then(() => opts.smsAgentList()).catch(() => []) : [],
+      ]);
+      const rows = (rowsR && rowsR.results) || [];
       const requests = rows.map((r) => {
         const st = effStatus(r, t);
         return { id: r.id, app: r.app, appUrl: r.app_url, did: r.did, device: r.device, note: r.note, country: r.country, code: st === 'pending' ? r.code : '', status: st, via: r.via, tries: r.tries, uses: r.uses, created: r.created, decided: r.decided, by: +r.by_admin || 0 };
@@ -525,10 +532,6 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       }
       for (const did of settings.blocked) if (!byDid.has(did)) byDid.set(did, { did, device: '', note: '', country: '', last: 0, requests: 0, downloads: 0, pending: 0, blocked: true });
       const devices = [...byDid.values()].sort((a, b) => (+b.blocked - +a.blocked) || (b.last - a.last));
-      const sent = await env.DB.prepare('SELECT COUNT(*) AS n FROM store_requests WHERE mailed = 1 AND created > ?').bind(t - 86400e3).first();
-      const smsSent = await env.DB.prepare('SELECT COALESCE(SUM(sms), 0) AS n FROM store_requests WHERE created > ?').bind(t - 86400e3).first();
-      let agents = [];
-      if (typeof opts.smsAgentList === 'function') { try { agents = await opts.smsAgentList(); } catch {} }
       return json({
         settings,
         mail: { resend: !!env.RESEND_KEY, envEmail: !!str(env.OWNER_EMAIL, 200), links: !!env.ENC_KEY, sentToday: (sent && sent.n) || 0, limit: MAIL_PER_DAY },

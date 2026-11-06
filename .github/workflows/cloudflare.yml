@@ -79,7 +79,14 @@ jobs:
           done
           ARGS+=(--var "UI_VERSION:${UI_VERSION}")
           ARGS+=(--var "APK_FEED:https://github.com/${STORE_REPO}/releases/download/kairos-tv/kairos-tv.json")
-          if ! wrangler deploy "${ARGS[@]}"; then
+          dep() { wrangler deploy "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/deploy.log"; }
+          if ! dep; then
+            # posizionamento vicino al database non accettato (versione di Wrangler o piano): si pubblica senza, come prima
+            if grep -qi 'placement' "$RUNNER_TEMP/deploy.log"; then
+              echo "::warning::Cloudflare non ha accettato il posizionamento vicino al database ([placement] in wrangler.toml): pubblicato senza, il pannello resta più lento."
+              sed -i '/^\[placement\]/,/^$/d' wrangler.toml
+              if dep; then exit 0; fi
+            fi
             # il dominio non è ancora nel tuo account Cloudflare (o il token non può collegarlo): si pubblica sul vecchio indirizzo
             echo "::warning::Dominio panel-kairos.com non collegato: aggiungilo al tuo account Cloudflare (Add a domain) e dai al token il permesso Zone → Workers Routes → Edit. Pubblicato sul vecchio indirizzo."
             sed -i '/^routes = \[/d' wrangler.toml

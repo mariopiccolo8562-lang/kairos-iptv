@@ -10,6 +10,12 @@ directory = "./public"
 binding = "ASSETS"
 run_worker_first = true
 
+# Il Worker gira vicino al database: D1 sta a Chicago (ORD, regione ENAM) e prima ogni lettura del database faceva
+# andata e ritorno Italia ↔ Chicago (~110 ms), 3-10 volte per richiesta. Così la richiesta fa un solo viaggio (dentro
+# la rete Cloudflare) e le letture del database diventano di pochi millisecondi. Azure «North Central US» = Chicago.
+[placement]
+region = "azure:northcentralus"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "kairos-iptv-db"
