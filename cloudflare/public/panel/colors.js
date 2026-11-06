@@ -58,3 +58,23 @@ main .card > .hd h3{position:relative}
 })();
 /* Online ora: i riquadri seguono i colori dei pallini (blu collegati, verde guardano, giallo nei menu) */
 (() => { const st = document.createElement('style'); st.textContent = '#v-live .kc-k>.kpi:nth-child(1){--c:#4f8cff}#v-live .kc-k>.kpi:nth-child(2){--c:#22c55e}#v-live .kc-k>.kpi:nth-child(3){--c:#facc15}#v-live .kc-k>.kpi:nth-child(4){--c:#a78bfa}'; document.head.appendChild(st); })();
+
+/* Menu a sinistra: ogni sezione ha il suo colore (titolo, icone, voce selezionata) e il titolo della pagina
+   prende il colore della sezione in cui sei, così si vede subito quando cambi categoria. */
+(() => {
+  const SC = [['', '#4f8cff'], ['Linee e pannelli', '#2dd4bf'], ['App e Store', '#a78bfa'], ['Richieste e controllo', '#fb923c'], ['Impostazioni', '#f5b041']];
+  const css = document.createElement('style');
+  css.textContent = SC.map(([s, c]) => `#side [data-sec="${s}"],body[data-navsec="${s}"] .topbar{--sc:${c}}`).join('\n') + `
+#side .nav[data-sec] svg{color:var(--sc);transition:color .2s}
+#side .nav-h[data-sec]{color:color-mix(in srgb,var(--sc) 80%,#fff)}
+#side .nav-h[data-sec]:hover{color:var(--sc)}
+#side .nav[data-sec]:hover{background:color-mix(in srgb,var(--sc) 10%,transparent)}
+#side .nav.on[data-sec]{background:linear-gradient(100deg,color-mix(in srgb,var(--sc) 24%,transparent),transparent)}
+#side .nav.on[data-sec]::before{background:var(--sc);box-shadow:0 0 14px var(--sc)}
+body[data-navsec] .topbar h2{color:#fff;padding-left:14px;border-left:4px solid var(--sc);transition:border-color .25s}`;
+  document.head.appendChild(css);
+  const mark = (v) => { const b = document.querySelector(`#side .nav[data-v="${v}"]`); document.body.dataset.navsec = b && b.dataset.sec !== undefined ? b.dataset.sec : ''; };
+  const v0 = view;
+  window.view = view = function (v) { const r = v0.apply(this, arguments); mark(v); return r; };
+  const on = document.querySelector('#side .nav.on[data-v]'); if (on) mark(on.dataset.v);
+})();
