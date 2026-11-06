@@ -5,7 +5,7 @@
 (() => {
   const old = $('#gq'); if (!old) return;
   const gq = old.cloneNode(true); old.replaceWith(gq); // toglie il vecchio «salta ai Clienti a ogni lettera»
-  gq.placeholder = 'Cerca cliente, linea, MAC, agente o pagina…   /';
+  gq.placeholder = 'Cerca ovunque…  ( / )'; gq.title = 'Cliente, utente della linea, MAC, agente o pagina';
   gq.autocomplete = 'off'; gq.spellcheck = false;
   const css = document.createElement('style');
   css.textContent = `
