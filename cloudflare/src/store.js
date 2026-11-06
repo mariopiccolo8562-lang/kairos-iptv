@@ -272,7 +272,10 @@ async function notifySms(env, origin, r, s, ip, opts) {
   const sms = s.sms;
   if (!sms || !sms.on || !smsReady(env)) return;
   let to = sms.owner ? [sms.owner] : [];
-  const cand = sms.agents.filter((a) => a.on);
+  // agli agenti solo le richieste col loro codice venditore (o di un loro sotto-agente); senza codice avvisato solo il titolare
+  let chain = [];
+  if (r.seller && opts && typeof opts.sellerChain === 'function') { try { chain = await opts.sellerChain(r); } catch {} }
+  const cand = sms.agents.filter((a) => a.on && chain.includes(a.id));
   if (cand.length && opts && typeof opts.smsAgents === 'function') {
     try {
       const ok = new Set(await opts.smsAgents(r.app, cand.map((a) => a.id)));
@@ -305,6 +308,12 @@ export async function storeApi(req, env, ctx, url, ip, opts = {}) {
       if (await limited(env.RL_DEVICE, 'scfg:' + ip)) return json({ error: 'Troppe richieste' }, 429);
       const S = await getStoreSettings(env), cl = storeClosedNow(S.closed);
       return json({ on: S.approval, closed: cl, ...(cl ? { msg: closedMsg(S.closed) } : {}) });
+    }
+    if (p === '/seller' && m === 'GET') {
+      // il cliente scrive il codice del suo venditore nello Store: si conferma solo che esiste (nome del venditore), niente altro
+      if (await limited(env.RL_DEVICE, 'ssel:' + ip)) return json({ error: 'Troppe richieste' }, 429);
+      const who = typeof opts.sellerOf === 'function' ? await opts.sellerOf(str(url.searchParams.get('c'), 8)) : null;
+      return json(who ? { ok: true, name: who.name } : { ok: false, error: 'Codice venditore non valido' });
     }
     if (p === '/request' && m === 'POST') return await create(req, env, ctx, url, ip, opts);
     if (p === '/status' && m === 'GET') return await status(url, env, ip);
@@ -339,6 +348,10 @@ async function create(req, env, ctx, url, ip, opts) {
   const b = await readBody(req);
   const app = str(b.app, 80), did = str(b.did, 64), device = str(b.device, 80), note = str(b.note, 40);
   let appUrl = str(b.appUrl, 1000);
+  // venditore: il codice scritto dal cliente (o arrivato col link dello store); sconosciuto o assente = titolare
+  const sellerRaw = str(b.seller, 8);
+  const seller = sellerRaw && typeof opts.sellerOf === 'function' ? await opts.sellerOf(sellerRaw) : null;
+  if (sellerRaw && !seller) return json({ error: 'Codice venditore non valido: controllalo o lascialo vuoto' }, 400);
   if (!app) return json({ error: 'App mancante' }, 400);
   if (!DID_RE.test(did)) return json({ error: 'Dispositivo non valido' }, 400);
   if (appUrl && !/^https?:\/\/[^\s]+$/i.test(appUrl)) return json({ error: 'Link non valido' }, 400);
@@ -367,23 +380,23 @@ async function create(req, env, ctx, url, ip, opts) {
 
   const cf = req.cf || {};
   const country = [str(cf.country, 4), str(cf.city, 40)].filter(Boolean).join(' · ');
-  const r = { id: b64url(rand(12)), app, app_url: appUrl, did, device, note, ip, country, code: sixDigits(), status: 'pending', created: t };
+  const r = { id: b64url(rand(12)), app, app_url: appUrl, did, device, note, ip, country, code: sixDigits(), status: 'pending', created: t, seller: seller ? seller.id : 0, sellerName: seller ? seller.name : '' };
   const auto = !s.approval;
   const token = auto ? b64url(rand(24)) : '';
-  await env.DB.prepare('INSERT INTO store_requests (id, app, app_url, did, device, note, ip, country, code, status, token, via, created, decided) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(r.id, app, appUrl, did, device, note, ip, country, r.code, auto ? 'approved' : 'pending', token, auto ? 'auto' : '', t, auto ? t : 0).run();
+  await env.DB.prepare('INSERT INTO store_requests (id, app, app_url, did, device, note, ip, country, code, status, token, via, created, decided, seller) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(r.id, app, appUrl, did, device, note, ip, country, r.code, auto ? 'approved' : 'pending', token, auto ? 'auto' : '', t, auto ? t : 0, r.seller).run();
   const bg = [env.DB.prepare('DELETE FROM store_requests WHERE created < ?').bind(t - KEEP).run().catch(() => {})];
   if (auto) {
     bg.push(log(env, 'on', `Store: download ${app} su ${device || 'dispositivo'}${note ? ' (' + note + ')' : ''} · approvazione spenta`, ip));
     ctx.waitUntil(Promise.all(bg));
     return json({ id: r.id, status: 'approved', token, auto: true });
   }
-  bg.push(log(env, 'new', `Store: richiesta download ${app} da ${device || 'dispositivo'}${note ? ' (' + note + ')' : ''}${country ? ' · ' + country : ''}`, ip));
+  bg.push(log(env, 'new', `Store: richiesta download ${app} da ${device || 'dispositivo'}${note ? ' (' + note + ')' : ''}${country ? ' · ' + country : ''}${r.seller ? ' · venditore ' + r.sellerName : ''}`, ip));
   bg.push(notify(env, url.origin, r, s, ip));
   bg.push(notifySms(env, url.origin, r, s, ip, opts).catch(() => {}));
   if (typeof HOOKS.created === 'function') bg.push(Promise.resolve().then(() => HOOKS.created(env, r, url.origin, ip)).catch(() => {}));
   ctx.waitUntil(Promise.all(bg));
-  return json({ id: r.id, status: 'pending' });
+  return json({ id: r.id, status: 'pending', seller: r.sellerName });
 }
 
 async function status(url, env, ip) {
@@ -510,7 +523,7 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       // tutte le letture insieme (il database è lontano: prima erano quattro attese una dopo l'altra, più gli agenti)
       const [settings, rowsR, sent, smsSent, agents] = await Promise.all([
         getStoreSettings(env),
-        env.DB.prepare('SELECT id, app, app_url, did, device, note, country, code, status, via, tries, uses, created, decided, by_admin FROM store_requests WHERE created > ? ORDER BY created DESC LIMIT 300').bind(t - KEEP).all(),
+        env.DB.prepare('SELECT id, app, app_url, did, device, note, country, code, status, via, tries, uses, created, decided, by_admin, seller FROM store_requests WHERE created > ? ORDER BY created DESC LIMIT 300').bind(t - KEEP).all(),
         env.DB.prepare('SELECT COUNT(*) AS n FROM store_requests WHERE mailed = 1 AND created > ?').bind(t - 86400e3).first(),
         env.DB.prepare('SELECT COALESCE(SUM(sms), 0) AS n FROM store_requests WHERE created > ?').bind(t - 86400e3).first(),
         typeof opts.smsAgentList === 'function' ? Promise.resolve().then(() => opts.smsAgentList()).catch(() => []) : [],
@@ -518,7 +531,7 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       const rows = (rowsR && rowsR.results) || [];
       const requests = rows.map((r) => {
         const st = effStatus(r, t);
-        return { id: r.id, app: r.app, appUrl: r.app_url, did: r.did, device: r.device, note: r.note, country: r.country, code: st === 'pending' ? r.code : '', status: st, via: r.via, tries: r.tries, uses: r.uses, created: r.created, decided: r.decided, by: +r.by_admin || 0 };
+        return { id: r.id, app: r.app, appUrl: r.app_url, did: r.did, device: r.device, note: r.note, country: r.country, code: st === 'pending' ? r.code : '', status: st, via: r.via, tries: r.tries, uses: r.uses, created: r.created, decided: r.decided, by: +r.by_admin || 0, seller: +r.seller || 0 };
       });
       requests.sort((a, b) => (+(b.status === 'pending') - +(a.status === 'pending')) || (b.created - a.created));
       // vista per dispositivo: le richieste raggruppate per installazione dello store (did)

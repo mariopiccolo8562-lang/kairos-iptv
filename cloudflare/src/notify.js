@@ -59,10 +59,12 @@ async function getCfg(env) { const c = await getJ(env, 'notify'); return { tgAge
 
 /* ---------------- chi riceve ---------------- */
 // h = { owners(): [{id,username}], eligible(app, ids): [ids], agents(): [{id, username, store, active}] }
-async function recipients(env, app, kind, h) {
+// r = richiesta: agli agenti arriva solo se porta il loro codice venditore (o di un sotto-agente); senza codice è del titolare
+async function recipients(env, app, kind, h, r) {
   const cfg = await getCfg(env);
   const owners = (await h.owners()).map((o) => ({ id: o.id, name: o.username, owner: true }));
-  const allow = kind === 'tg' ? cfg.tgAgents : cfg.pushAgents;
+  let allow = kind === 'tg' ? cfg.tgAgents : cfg.pushAgents;
+  if (r !== undefined) { const chain = r && r.seller && typeof h.sellerChain === 'function' ? await h.sellerChain(r) : []; allow = allow.filter((id) => chain.includes(id)); }
   let agents = [];
   if (allow.length) {
     const ok = new Set(await h.eligible(app, allow));
@@ -129,7 +131,7 @@ const tgKeys = (id) => ({ inline_keyboard: [[{ text: '✅ Autorizza', callback_d
 /** nuova richiesta: messaggio con i pulsanti a tutti i collegati che possono riceverla */
 async function tgNew(env, r, h, ip) {
   if (!tgReady(env)) return 0;
-  const who = await recipients(env, r.app, 'tg', h);
+  const who = await recipients(env, r.app, 'tg', h, r);
   if (!who.length) return 0;
   const rows = ((await env.DB.prepare(`SELECT admin_id, tg_chat FROM notify_links WHERE tg_chat <> '' AND admin_id IN (${who.map(() => '?').join(',')})`).bind(...who.map((w) => w.id)).all()).results) || [];
   const chats = [...new Set(rows.map((x) => x.tg_chat))];
@@ -211,7 +213,8 @@ async function tgCallback(env, q, ip, h) {
   let actor = owner ? { by: 0, who: owner.username, name: owner.username } : null;
   if (!actor) {
     const cfg = await getCfg(env);
-    const cand = links.filter((l) => l.role === 'agent' && cfg.tgAgents.includes(l.admin_id)).map((l) => l.admin_id);
+    let cand = links.filter((l) => l.role === 'agent' && cfg.tgAgents.includes(l.admin_id)).map((l) => l.admin_id);
+    if (typeof h.sellerChain === 'function') { const ch = await h.sellerChain(r); cand = cand.filter((id) => ch.includes(id)); } // un agente decide solo le richieste col suo codice
     const ok = cand.length ? await h.eligible(r.app, cand) : [];
     const l = links.find((x) => ok.includes(x.admin_id));
     if (l) actor = { by: l.admin_id, who: 'Agente ' + l.username, name: l.username };
@@ -264,7 +267,7 @@ async function pushOne(env, row, origin) {
   } catch { return false; }
 }
 async function pushNew(env, r, h, origin) {
-  const who = await recipients(env, r.app, 'push', h);
+  const who = await recipients(env, r.app, 'push', h, r);
   if (!who.length) return 0;
   const rows = ((await env.DB.prepare(`SELECT id, endpoint FROM push_subs WHERE admin_id IN (${who.map(() => '?').join(',')})`).bind(...who.map((w) => w.id)).all()).results) || [];
   const ok = await Promise.all(rows.map((row) => pushOne(env, row, origin)));

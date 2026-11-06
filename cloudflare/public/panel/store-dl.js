@@ -45,12 +45,14 @@
 .nf-btns{display:flex;gap:8px;flex-wrap:wrap}
 .nf-ok{color:var(--ok,#3dffb0)}.nf-warn{color:var(--warn)}
 .sd-ag.off .nm b{color:var(--mut)}
+.sd-seller{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:12px 14px;margin:0 0 12px;border:1px dashed var(--line);border-radius:12px;background:var(--card2,rgba(255,255,255,.03))}.sd-seller b.mono{display:block;font-size:26px;letter-spacing:4px;line-height:1.1}
 @media (max-width:820px){.sd-act{width:100%}.sd-act .btn{flex:1}.sd-dev .tog{width:100%;justify-content:space-between}}`;
   document.head.appendChild(css);
 
   V.innerHTML = `<div class="g2">
   <div class="card glass">
     <div class="hd"><h3>Richieste di download<small>I clienti chiedono il tuo permesso prima di scaricare un'app dallo store</small></h3><button class="btn sm" id="sdReload">Aggiorna</button></div>
+    <div id="sdSeller"></div>
     <div id="sdPend"></div>
     <div class="sd-sub">Storico · ultimi 30 giorni</div>
     <div id="sdHist"></div>
@@ -115,9 +117,10 @@
       settings: { approval: true, ownerEmail: 'tuo@email.it', blocked: ['demo-did-mt-firetv-000000'], sms: { on: true, owner: '+393331234567', link: false, perDay: 50, agents: [{ id: 2, phone: '+393409876543', on: true }] } },
       mail: { resend: true, envEmail: false, links: true, sentToday: 3, limit: 90 },
       sms: { ready: true, sentToday: 5, agents: [{ id: 2, username: 'luca', store: true, active: true }, { id: 3, username: 'sara', store: false, active: true }] },
+      sellerCode: 'K7M4',
       requests: [
         { id: 'demo-req-0001', app: 'IboPro', did: 'demo-did-marco-firetv-0000', device: 'Amazon AFTKA (Fire TV)', note: 'Marco', country: 'IT · Milano', code: '482913', status: 'pending', tries: 0, uses: 0, created: t - 90e3 },
-        { id: 'demo-req-0002', app: 'TiviMate', did: 'demo-did-xiaomi-tv-000000', device: 'Xiaomi MiTV-AXSO0 (Android TV)', note: '', country: 'IT', code: '105377', status: 'pending', tries: 1, uses: 0, created: t - 11 * 60e3 },
+        { id: 'demo-req-0002', app: 'TiviMate', did: 'demo-did-xiaomi-tv-000000', device: 'Xiaomi MiTV-AXSO0 (Android TV)', note: '', country: 'IT', code: '105377', status: 'pending', sellerName: 'luca', tries: 1, uses: 0, created: t - 11 * 60e3 },
         { id: 'demo-req-0006', app: 'OraPlayer', did: 'demo-did-marco-firetv-0000', device: 'Amazon AFTKA (Fire TV)', note: 'Marco', country: 'IT · Milano', code: '', status: 'approved', via: 'panel', tries: 0, uses: 0, created: t - 6 * 60e3, decided: t - 4 * 60e3 },
         { id: 'demo-req-0003', app: 'OrbixPlay', did: 'demo-did-giulia-phone-0000', device: 'Samsung SM-A546B', note: 'Giulia', country: 'IT · Roma', code: '', status: 'used', via: 'email', tries: 0, uses: 1, created: t - 3 * 3600e3, decided: t - 3 * 3600e3 + 120e3 },
         { id: 'demo-req-0007', app: 'IboOne', did: 'demo-did-giulia-phone-0000', device: 'Samsung SM-A546B', note: 'Giulia', country: 'IT · Roma', code: '', status: 'revoked', via: 'code', tries: 0, uses: 0, created: t - 5 * 3600e3, decided: t - 5 * 3600e3 + 60e3 },
@@ -160,7 +163,7 @@
   /* ---------------- disegno ---------------- */
   const when = (t) => new Date(t).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
   function item(r) {
-    const meta = [r.device || 'Dispositivo sconosciuto', r.note, r.country].filter(Boolean).map(esc).join(' · ');
+    const meta = [r.device || 'Dispositivo sconosciuto', r.note, r.country, D.role === 'agent' ? (r.mine === false ? 'sotto-agente' : '') : (r.sellerName ? 'venditore ' + r.sellerName : 'senza codice venditore')].filter(Boolean).map(esc).join(' · ');
     if (r.status === 'pending') {
       const left = Math.max(1, Math.ceil((r.created + 24 * 3600e3 - Date.now()) / 3600e3));
       return `<div class="sd-req on" data-id="${esc(r.id)}"><div class="ic" style="color:var(--warn)">${IC}</div>
@@ -188,7 +191,19 @@
     const n = S.data ? S.data.pending || 0 : 0, b = $('#storeB');
     if (b) { b.style.display = n ? '' : 'none'; b.textContent = n; }
   }
+  /** codice venditore: il cliente lo scrive nella richiesta dello Store e la richiesta arriva solo a chi ha quel codice */
+  function renderSeller() {
+    const el = $('#sdSeller'); if (!el) return;
+    const c = S.data && S.data.sellerCode;
+    if (!c) { el.innerHTML = ''; return; }
+    const ag = D.role === 'agent';
+    el.innerHTML = `<div class="sd-seller"><div><small class="mut">Il tuo codice venditore</small><b class="mono" id="sdSellerCode">${esc(c)}</b></div>
+      <div class="mut" style="font-size:12.5px;line-height:1.45;flex:1;min-width:200px">Fallo scrivere ai tuoi clienti nella richiesta dello Store (campo «Codice del venditore», lo ricorda da sola): ${ag ? 'le loro richieste arrivano <b>solo a te</b> (e al titolare), non agli altri agenti.' : 'le richieste con il codice di un agente arrivano a lui e a te; quelle senza codice o con il tuo <b>solo a te</b>.'}</div>
+      <button class="btn sm" id="sdSellerCopy">Copia</button></div>`;
+    $('#sdSellerCopy').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(c).then(() => toast('Codice venditore copiato')).catch(() => toast(c)); };
+  }
   function renderList() {
+    renderSeller();
     const list = (S.data && S.data.requests) || [];
     const pend = list.filter((r) => r.status === 'pending'), hist = list.filter((r) => r.status !== 'pending');
     $('#sdPend').innerHTML = pend.length ? pend.map(item).join('') : '<div class="emptyc">Nessuna richiesta in attesa ✓</div>';

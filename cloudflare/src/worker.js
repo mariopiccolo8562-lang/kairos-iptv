@@ -2644,7 +2644,7 @@ async function route(req, env, ctx) {
 
   /* ---------- autorizzazione dei download dello Store (pubblica, vedi store.js) ---------- */
   if (path === '/api/tg/hook' && req.method === 'POST') return tgHook(req, env, ctx, ip, notifyH(env)); // webhook del bot Telegram
-  if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { smsAgents: (app, ids) => storeSmsAgents(env, app, ids), waitMin: async () => cleanReqWait((await getSettings(env)).reqWait).store, waitTxt });
+  if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { sellerOf: (c) => sellerOf(env, c), sellerChain: (r) => sellerChain(env, r), smsAgents: (app, ids) => storeSmsAgents(env, app, ids), waitMin: async () => cleanReqWait((await getSettings(env)).reqWait).store, waitTxt });
 
   /* ---------- informativa privacy e condizioni (pubblica, la apre anche l'app) ---------- */
   if ((path === '/privacy' || path === '/privacy/') && (req.method === 'GET' || req.method === 'HEAD')) return privacyPage(env);
@@ -2946,7 +2946,7 @@ function agentPermsWithin(req, top) {
   return p;
 }
 /** tutti gli agenti (una lettura per richiesta; chi modifica gli agenti chiama memoDrop(env, 'ags')). Copia nuova a ogni chiamata */
-const agentsAll = async (env) => (await reqMemo(env, 'ags', async () => ((await env.DB.prepare("SELECT id, username, email, parent_id, max_clients, can_agents, perms, servers, active, disabled_by, notes, last_seen, created_at, totp_on, pw_seal FROM admins WHERE role = 'agent' ORDER BY id").all()).results) || [])).map((a) => ({ ...a }));
+const agentsAll = async (env) => (await reqMemo(env, 'ags', async () => ((await env.DB.prepare("SELECT id, username, email, parent_id, max_clients, can_agents, perms, servers, active, disabled_by, notes, last_seen, created_at, totp_on, store_code, pw_seal FROM admins WHERE role = 'agent' ORDER BY id").all()).results) || [])).map((a) => ({ ...a }));
 /** id dell'agente e di tutti i suoi sotto-agenti (a qualsiasi livello) */
 function agentTree(all, rootId) {
   const out = [rootId], seen = new Set(out);
@@ -2973,7 +2973,15 @@ const notifyH = (env) => ({
   eligible: (app, ids) => storeSmsAgents(env, app, ids),
   agents: () => storeSmsAgentList(env),
   decide: storeDecide,
+  /** per una richiesta: quali agenti la riguardano (il venditore e chi sta sopra di lui); nessuno se è del titolare */
+  sellerChain: (r) => sellerChain(env, r),
 });
+async function sellerChain(env, r) {
+  const id = +(r && r.seller) || 0; if (!id) return [];
+  const by = new Map((await agentsAll(env)).map((a) => [a.id, a])), out = [];
+  for (let a = by.get(id), n = 0; a && n < 20; a = by.get(a.parent_id), n++) out.push(a.id);
+  return out;
+}
 storeHooks({
   created: (env, r, origin, ip) => notifyNew(env, r, origin, ip, notifyH(env)),
   decided: (env, r, st, via, who) => notifyDecided(env, r, st, via, who),
@@ -2982,6 +2990,39 @@ storeHooks({
 async function storeSmsAgentList(env) {
   const all = await agentsAll(env), ok = new Set(await storeSmsAgents(env, null, all.map((a) => a.id), all));
   return all.map((a) => ({ id: a.id, username: a.username, store: ok.has(a.id), active: !!a.active }));
+}
+/* ---- codice venditore dello Store: corto, senza lettere ambigue; il cliente lo scrive nello Store (o arriva col link) ---- */
+const SELLER_ALPHA = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const SELLER_RE = /^[A-HJ-NP-Z2-9]{4}$/;
+function sellerCodeGen() { const b = rand(4); let o = ''; for (let i = 0; i < 4; i++) o += SELLER_ALPHA[b[i] % SELLER_ALPHA.length]; return o; }
+const sellerNorm = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/O/g, '0').replace(/I|L/g, '1').slice(0, 4);
+/** codice venditore del titolare (creato la prima volta che serve) */
+async function sellerOwnerCode(env) {
+  const s = await getSettings(env);
+  if (SELLER_RE.test(s.storeOwnerCode || '')) return s.storeOwnerCode;
+  let c = sellerCodeGen(); for (let i = 0; i < 20 && (await env.DB.prepare('SELECT id FROM admins WHERE store_code = ?').bind(c).first()); i++) c = sellerCodeGen();
+  await settingsPatch(env, { storeOwnerCode: c });
+  return c;
+}
+/** codice venditore di un agente (creato la prima volta che serve) */
+async function sellerAgentCode(env, A) {
+  if (SELLER_RE.test(A.store_code || '')) return A.store_code;
+  const own = (await getSettings(env)).storeOwnerCode || '';
+  let c = sellerCodeGen(); for (let i = 0; i < 20 && (c === own || (await env.DB.prepare('SELECT id FROM admins WHERE store_code = ?').bind(c).first())); i++) c = sellerCodeGen();
+  await env.DB.prepare('UPDATE admins SET store_code = ? WHERE id = ?').bind(c, A.id).run();
+  memoDrop(env, 'ags');
+  A.store_code = c;
+  return c;
+}
+/** da codice venditore a {id, name}: 0 = titolare; null = codice sconosciuto */
+async function sellerOf(env, code) {
+  const c = sellerNorm(code);
+  if (!SELLER_RE.test(c)) return null;
+  const s = await getSettings(env);
+  if (c === (s.storeOwnerCode || '')) return { id: 0, name: s.brand || 'Kairos' };
+  const A = (await agentsAll(env)).find((a) => a.store_code === c);
+  if (!A || !(await agentChainActive(env, A.id))) return null;
+  return { id: A.id, name: A.username };
 }
 async function agentChainActive(env, id, all) {
   all = all || (await agentsAll(env));
@@ -3017,7 +3058,7 @@ async function agentsOut(env, all, onlyIds, forAgent) {
       servers: sv, serverNames: sv.map((x) => dn.get(x).name),
       active: !!a.active, notes: a.notes, lastSeen: a.last_seen, createdAt: a.created_at, totp: !!a.totp_on, password: a.pw_seal ? await unseal(env, a.pw_seal).catch(() => '') : '',
       clients: tree.reduce((n, id) => n + (counts.get(id) || 0), 0), ownClients: counts.get(a.id) || 0, subAgents: tree.length - 1,
-      armadaUsed: Math.round(armUsedBy(all, armSp, a.id) * 100) / 100 };
+      armadaUsed: Math.round(armUsedBy(all, armSp, a.id) * 100) / 100, storeCode: await sellerAgentCode(env, a) };
   }));
 }
 /** crea / modifica / elimina agenti. top = agente che sta agendo (null = proprietario) */
@@ -3267,14 +3308,16 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   if (path === '/store' && m === 'GET') {
     need('store'); const j = await viaOwner(await storeAdmin(req, env, path, who, ip));
     const mineSet = new Set(ctree);
-    const reqs = (j.requests || []).filter((r) => storeAppOk(P.storeApps, r.app) && (r.status === 'pending' || P.storeAll || mineSet.has(+r.by || 0)));
-    return json({ requests: reqs.map(({ by, ...x }) => ({ ...x, byMe: by === A.id })), pending: reqs.filter((r) => r.status === 'pending').length, settings: { approval: !!(j.settings && j.settings.approval) }, mail: {}, agent: true, apps: P.storeApps });
+    // le richieste arrivano a chi ha dato il codice venditore (lui o i suoi sotto-agenti); quelle senza codice sono del titolare
+    const reqs = (j.requests || []).filter((r) => storeAppOk(P.storeApps, r.app) && (P.storeAll || mineSet.has(+r.seller || 0) || (r.status !== 'pending' && mineSet.has(+r.by || 0))));
+    return json({ requests: reqs.map(({ by, seller, ...x }) => ({ ...x, byMe: by === A.id, mine: seller === A.id })), pending: reqs.filter((r) => r.status === 'pending').length, settings: { approval: !!(j.settings && j.settings.approval) }, mail: {}, agent: true, apps: P.storeApps, sellerCode: await sellerAgentCode(env, A) });
   }
   const sdm = path.match(/^\/store\/([A-Za-z0-9_-]{12,40})\/(approve|deny|revoke)$/);
   if (sdm && m === 'POST') {
     need('store');
-    const r = await env.DB.prepare('SELECT app, by_admin FROM store_requests WHERE id = ?').bind(sdm[1]).first();
+    const r = await env.DB.prepare('SELECT app, by_admin, seller FROM store_requests WHERE id = ?').bind(sdm[1]).first();
     if (!r || !storeAppOk(P.storeApps, r.app)) throw new HttpErr(404, 'Richiesta non trovata');
+    if (!P.storeAll && !ctree.includes(+r.seller || 0)) throw new HttpErr(404, 'Richiesta non trovata'); // non è di un suo cliente
     if (sdm[2] === 'revoke' && !ctree.includes(+r.by_admin || 0)) throw new HttpErr(403, 'Puoi revocare solo i download che hai autorizzato tu');
     return storeAdmin(req, env, path, who, ip, A.id);
   }
@@ -3534,7 +3577,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     // accanto a ogni download deciso da un agente compare il suo nome
     const j = await (await storeAdmin(req, env, path, who, ip, 0, { smsAgentList: () => storeSmsAgentList(env) })).json();
     const names = new Map((await agentsAll(env)).map((a) => [a.id, a.username]));
-    for (const r of j.requests || []) if (r.by) r.byName = names.get(r.by) || 'agente eliminato';
+    for (const r of j.requests || []) { if (r.by) r.byName = names.get(r.by) || 'agente eliminato'; r.sellerName = r.seller ? names.get(r.seller) || 'agente eliminato' : ''; }
+    j.sellerCode = await sellerOwnerCode(env);
     return json(j);
   }
   if (path === '/store' || path.startsWith('/store/')) return storeAdmin(req, env, path, who, ip, 0, { smsAgentList: () => storeSmsAgentList(env) }); // Download store

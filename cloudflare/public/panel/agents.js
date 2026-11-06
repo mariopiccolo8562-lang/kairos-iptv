@@ -428,7 +428,7 @@ body.agent .foot{display:none}
       <div class="ag-c"><h4>Limiti e accesso</h4><small>Quanti clienti può avere e cosa vede</small>
         <div class="row"><div><label class="lbl">Clienti massimi</label><input class="inp" id="agM" type="number" min="0" max="${top ? top.maxClients : 100000}" value="${a ? a.maxClients : Math.min(10, top ? top.maxClients : 10)}"></div>
         <div><label class="lbl">Connessioni per cliente</label><input class="inp" id="agC" type="number" min="1" max="${topP ? topP.maxConn : 10}" value="${P.maxConn || 1}"></div></div>
-        ${a ? `<p class="mut" style="font-size:12.5px;margin-top:8px">Clienti ora: <b>${a.clients}</b>${a.subAgents ? ` (di cui ${a.clients - a.ownClients} dei suoi ${a.subAgents} sotto-agenti)` : ''}</p>` : ''}
+        ${a ? `<p class="mut" style="font-size:12.5px;margin-top:8px">Clienti ora: <b>${a.clients}</b>${a.subAgents ? ` (di cui ${a.clients - a.ownClients} dei suoi ${a.subAgents} sotto-agenti)` : ''}${a.storeCode ? ` · Codice venditore Store: <b class="mono">${esc(a.storeCode)}</b> <small>(i clienti lo scrivono nella richiesta: arriva solo a lui e a te)</small>` : ''}</p>` : ''}
         <label class="lbl">Accesso</label><div class="ag-radio" id="agR">
           <label class="${a && a.canAgents ? '' : 'on'}"><input type="radio" name="agr" value="0" ${a && a.canAgents ? '' : 'checked'}><b>Solo clienti</b><small>Gestisce solo i suoi clienti</small></label>
           <label class="${a && a.canAgents ? 'on' : ''}"><input type="radio" name="agr" value="1" ${a && a.canAgents ? 'checked' : ''}><b>Gestisce agenti</b><small>Può creare sotto-agenti, mai con più permessi dei suoi</small></label></div>
