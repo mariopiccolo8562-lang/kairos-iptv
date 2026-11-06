@@ -338,7 +338,7 @@ body.agent .foot{display:none}
     V.innerHTML = `${hostCard}<div class="ag-bar"><input class="inp" id="agQ" placeholder="Cerca agente per nome, email o note" value="${esc(st.q)}">
       <div class="seg" id="agF">${[['all', 'Tutti'], ['on', 'Attivi'], ['off', 'Disattivati']].map(([k, l]) => `<button data-f="${k}" class="${st.f === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       <button class="btn pri" id="agNew">+ Nuovo ${sub ? 'sotto-agente' : 'agente'}</button></div>
-      <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Codice Store</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th><th>DNS</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
+      <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Codice Store</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th><th>Link accesso</th><th>DNS</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
       ${list.map((a) => { const pct = a.maxClients ? Math.min(100, Math.round((a.clients / a.maxClients) * 100)) : 100; const up = a.parentId && byId.get(a.parentId);
         return `<tr data-ag="${a.id}"><td class="num">${a.id}</td>
         <td><b>${esc(a.username)}</b><small>${esc(a.email || '—')}${up ? ' · sotto ' + esc(up.username) : ''}</small></td>
@@ -346,6 +346,7 @@ body.agent .foot{display:none}
         <td><b>${a.clients}</b><small>Limite: ${a.maxClients}</small><div class="ag-bar2"><s style="width:${pct}%"></s></div></td>
         <td class="hm">${a.subAgents}</td>
         <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span>${(a.perms || {}).armada ? '<br><span class="chip" style="margin-top:4px">Armada</span>' : ''}${(a.perms || {}).wolf ? '<br><span class="chip" style="margin-top:4px">WOLF</span>' : ''}${(a.perms || {}).mxp ? '<br><span class="chip" style="margin-top:4px">MaxPlayer</span>' : ''}${(a.perms || {}).oxp ? '<br><span class="chip" style="margin-top:4px">OrbixPlay</span>' : ''}</td>
+        <td><button type="button" class="btn sm" data-aglink="${a.id}" title="Link personale e codice di accesso">🔗 Link accesso</button></td>
         <td class="dn">${dnsSum(a)}</td>
         <td class="hm">${a.lastSeen ? esc(ago(a.lastSeen)) : '<span class="mut">mai</span>'}</td>
         <td class="hm">${a.totp ? '<span class="chip g">Attiva</span>' : '<span class="chip">No</span>'}</td>
@@ -365,6 +366,7 @@ body.agent .foot{display:none}
     }
     $('#agNew').onclick = () => openAgent(null);
     $$('[data-ag]', V).forEach((r) => (r.onclick = () => openAgent(L.find((a) => a.id === +r.dataset.ag))));
+    $$('[data-aglink]', V).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); linkBox(L.find((a) => a.id === +b.dataset.aglink)); }));
   }
 
   /* ---------- pagina intera: crea / modifica agente ---------- */
@@ -392,20 +394,20 @@ body.agent .foot{display:none}
   async function linkBox(a) {
     const P = `/admin/agents/${a.id}/access-link`, day = (t) => (t ? new Date(t).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
     let L; try { L = await api('GET', P); } catch (e) { return toast(e.message, 1); }
-    const html = () => L.on ? `<p class="mut" style="font-size:12.5px;margin:0 0 10px">Il link apre il pannello solo con l'account di <b>${esc(a.username)}</b> e non contiene utente o password. Per entrare serve anche il codice di accesso: dagli link e codice${D.settings && D.settings.agentHost ? '' : ' (se imposti l\'«Indirizzo degli agenti» il link userà quello, non il tuo)'}.</p>
-        <label class="lbl">Link personale</label><div class="row" style="grid-template-columns:1fr auto"><input class="inp mono" readonly value="${esc(L.url)}" style="font-size:12px"><button type="button" class="btn" data-lk="url">Copia</button></div>
-        <small class="mut">Creato ${esc(day(L.created))} · ultimo accesso ${esc(day(L.used))}</small>
-        <label class="lbl" style="margin-top:10px">Codice di accesso</label><div class="row" style="grid-template-columns:1fr auto"><input class="inp mono" readonly value="${esc(L.code)}" style="letter-spacing:.12em"><button type="button" class="btn" data-lk="code">Copia codice</button></div>
-        <small class="mut">Conservato cifrato: lo rivedi solo tu da qui.</small>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button type="button" class="btn danger" data-lk="del">Revoca</button><button type="button" class="btn" data-lk="new">Rigenera</button></div>`
-      : `<p class="mut" style="margin:0 0 12px">${esc(a.username)} non ha ancora un link di accesso. Creandolo ottieni un link personale e un codice: con quelli entra nel pannello senza utente e password (la sua password continua a funzionare).</p><button type="button" class="btn pri" data-lk="new">Crea link e codice</button>`;
+    const html = () => `<div style="font-size:11px;letter-spacing:.14em;font-weight:800;color:#8fb3ff;margin:-6px 0 2px">🔗 ACCESSO PROTETTO</div>
+      <p class="mut" style="font-size:12.5px;margin:8px 0 12px">Il link apre il pannello esclusivamente con l'account di <b>${esc(a.username)}</b>. Non contiene username o password: per entrare serve anche il codice di accesso.</p>
+      <label class="lbl">Link personale</label><div class="row" style="grid-template-columns:1fr auto"><input class="inp mono" readonly value="${esc(L.on ? L.url : '')}" placeholder="Nessun link generato" style="font-size:12px"><button type="button" class="btn" data-lk="url" ${L.on ? '' : 'disabled'}>⧉ Copia</button></div>
+      <small class="mut">${L.on ? `Link attivo · creato ${esc(day(L.created))} · ultimo accesso ${esc(day(L.used))}` : 'Nessun link attivo per questo agente.'}</small>
+      ${L.on ? `<label class="lbl" style="margin-top:10px">Codice di accesso</label><div class="row" style="grid-template-columns:1fr auto"><input class="inp mono" readonly value="${esc(L.code)}" style="letter-spacing:.12em"><button type="button" class="btn" data-lk="code">⧉ Copia codice</button></div>
+      <small class="mut">Il codice è conservato cifrato e può essere rivisto solo da questa gestione.</small>` : ''}
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap"><button type="button" class="btn danger" data-lk="del" ${L.on ? '' : 'disabled'}>⊘ Revoca</button><button type="button" class="btn" data-lk="new" ${L.on ? '' : 'disabled'}>↻ Rigenera</button>${L.on ? '' : '<button type="button" class="btn pri" data-lk="new">🔗 Genera link</button>'}</div>`;
     const bind = () => $$('#mB [data-lk]').forEach((b) => (b.onclick = async () => {
       const k = b.dataset.lk;
       if (k === 'url' || k === 'code') return navigator.clipboard.writeText(L[k]).then(() => toast(k === 'url' ? 'Link copiato' : 'Codice copiato'), () => toast('Copia non consentita', 1));
-      if ((k === 'del' || (k === 'new' && L.on)) && !confirm(k === 'del' ? 'Revocare il link? Il vecchio link smette subito di funzionare e l\'agente viene scollegato.' : 'Rigenerare? Link e codice vecchi smettono subito di funzionare.')) return;
-      try { if (k === 'del') { await api('DELETE', P); L = { on: false }; toast('Link revocato'); } else { L = await api('POST', P); toast('Nuovo link e codice pronti'); } $('#mB').innerHTML = html(); bind(); } catch (e) { toast(e.message, 1); }
+      if ((k === 'del' || (k === 'new' && L.on)) && !confirm(k === 'del' ? 'Revocare il link? Smette subito di funzionare e l\'agente viene scollegato.' : 'Rigenerare? Link e codice vecchi smettono subito di funzionare.')) return;
+      try { if (k === 'del') { await api('DELETE', P); L = { on: false }; toast('Link revocato'); } else { L = await api('POST', P); toast('Link e codice pronti: copiali e mandali all\'agente'); } $('#mB').innerHTML = html(); bind(); } catch (e) { toast(e.message, 1); }
     }));
-    const pr = ask('Accesso protetto · ' + a.username, html(), 'Chiudi'); bind(); await pr;
+    const pr = ask('Link accesso · ' + a.username, html(), 'Chiudi'); bind(); await pr;
   }
   const APP_KEYS = ['appstore', 'players', 'appsOp', 'dlcodes', 'appk', 'armada', 'wolf', 'mxp', 'oxp']; // hanno la loro sezione nell'editor
   const KAPPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['prem', 'Kairos Premium'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova'], ['store', 'Kairos Store']];
