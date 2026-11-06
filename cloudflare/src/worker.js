@@ -10,6 +10,7 @@ import { ADDON_ASSETS } from './addon-assets.js';
  *  Variabili: ACCESS_TEAM_DOMAIN, ACCESS_AUD, TURNSTILE_SITEKEY (opzionali)
  */
 import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide } from './store.js'; // autorizzazione download dello Store (/api/store/*)
+import { wolfRoutes, wolfCron } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
 import { tgHook, notifyNew, notifyDecided, notifyAdmin } from './notify.js'; // avvisi su Telegram e notifiche del pannello
 
 const SESSION_TTL = 30 * 86400; // secondi: l'accesso resta valido 30 giorni dall'ultimo uso (si rinnova da solo)
@@ -36,6 +37,7 @@ export default {
     await cleanup(env);
     // app terzi: se l'hai chiesto, ogni notte si tolgono le liste inattive
     try { const c = (await getSettings(env)).playersCfg || {}; if (c.autoClean) await thirdCleanup(env, c.cleanDays || 60, 'Pulizia automatica', ''); } catch {}
+    try { await wolfCron(env, WOLF_H); } catch {}
   },
 };
 
@@ -85,6 +87,8 @@ async function readJSON(req, max = 64 * 1024) {
   return v;
 }
 class HttpErr extends Error { constructor(status, msg, extra) { super(msg); this.status = status; this.extra = extra; } }
+// strumenti passati al modulo WOLF (src/wolf.js)
+const WOLF_H = { seal: (...a) => seal(...a), unseal: (...a) => unseal(...a), HttpErr, json, readJSON, str, log: (...a) => log(...a), pid: () => b64url(rand(6)), plsChanged: () => { srcMem.map = null; } };
 const AGM_MSG = 'Pannello in manutenzione: torniamo operativi a breve. Riprova tra poco.';
 
 /* ---------------- password (PBKDF2-SHA256) ---------------- */
@@ -3386,6 +3390,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   const m = req.method;
   if (!ses && API_DENY.test(path)) throw new HttpErr(403, 'Funzione disponibile solo dal pannello');
   if (path === '/api-keys' || path.startsWith('/api-keys/') || path === '/webhook' || path.startsWith('/webhook/')) return apiAdmin(req, env, path, who, ip, ctx);
+  if (path.startsWith('/wolf/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare WOLF'); const r = await wolfRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
   if ((path === '/ext-lists' || path.startsWith('/ext-lists/')) && !(ses && ses.agent)) { if (!ses) throw new HttpErr(403, 'Solo dal pannello'); const r = await extListsRoutes(req, env, path, who, ip, null); if (r) return r; }
   const orb = path.match(/^\/orbix\/([A-Za-z0-9_-]{6,20})$/);
   if (orb && (m === 'POST' || m === 'DELETE')) {
