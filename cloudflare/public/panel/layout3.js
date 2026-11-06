@@ -48,7 +48,7 @@
   };
   // nomi delle voci: chiari e distinguibili (il titolo della pagina segue)
   const LABEL = {
-    lmap: 'Linee IPTV', lines: 'Linee collegate', dns: 'DNS e server', armada: 'Pannello Armada', wolf: 'Pannello WOLF', mxp: 'Pannello MaxPlayer',
+    lmap: 'Linee IPTV', lines: 'Linee collegate', dns: 'DNS e server', armada: 'Pannello Armada', wolf: 'Pannello WOLF', mxp: 'Pannello MaxPlayer', oxp: 'Pannello OrbixPlay',
     apps3: 'Link di attivazione', apps3op: 'OrbixPlay e MaxPlayer', xlist: 'Crea lista', dlc: 'Codici downloader', appk: 'App Kairos', agop: 'OrbixPlay e MaxPlayer', agk: 'App Kairos',
     store: 'App da approvare', reports: 'Segnalazioni', creq: 'Contenuti richiesti', areq: 'Temi richiesti', reqai: 'Domande all\'IA',
     live: 'Online ora', rctl: 'Controllo remoto', apperr: 'Errori delle app', activity: 'Registro attività', trash: 'Cestino',
