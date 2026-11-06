@@ -92,7 +92,7 @@ async function readJSON(req, max = 64 * 1024) {
 }
 class HttpErr extends Error { constructor(status, msg, extra) { super(msg); this.status = status; this.extra = extra; } }
 // strumenti passati al modulo WOLF (src/wolf.js)
-const WOLF_H = { seal: (...a) => seal(...a), unseal: (...a) => unseal(...a), HttpErr, json, readJSON, str, log: (...a) => log(...a), pid: () => b64url(rand(6)), plsChanged: () => { srcMem.map = null; } };
+const WOLF_H = { seal: (...a) => seal(...a), unseal: (...a) => unseal(...a), HttpErr, json, readJSON, str, log: (...a) => log(...a), note: (...a) => llNote(...a), pid: () => b64url(rand(6)), plsChanged: () => { srcMem.map = null; } };
 const AGM_MSG = 'Pannello in manutenzione: torniamo operativi a breve. Riprova tra poco.';
 
 /* ---------------- password (PBKDF2-SHA256) ---------------- */
@@ -604,6 +604,7 @@ async function extListsRoutes(req, env, path, who, ip, ag) {
     const id = b64url(rand(9));
     await env.DB.prepare('INSERT INTO ext_lists (id, owner_id, app, name, ref, ext, username, pass_seal, dns, note, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(id, ag ? ag.id : 0, app, name, ref, ext, username, await seal(env, [password]), dnsName, note, t, t).run();
+    await llNote(env, { src: app === 'max' ? 'mxp' : 'oxp', app: app === 'max' ? 'MaxPlayer' : 'OrbixPlay', owner: ag ? ag.id : 0, username, password, mac: app === 'orbix' ? ref : '', note: [name, note, dnsName].filter(Boolean).join(' · ') });
     await log(env, 'new', `${who}: lista creata su ${app === 'max' ? 'MaxPlayer' : 'OrbixPlay'}${name ? ' per ' + name : ''} (${app === 'max' ? 'utente ' + username : 'dispositivo ' + ref}, ${dnsName})`, ip);
     return json({ ok: true, id, app, ref, dns: dnsName });
   }
@@ -782,6 +783,18 @@ async function llAuto(env, d, src, username, password, dns, dnsName, mac) {
   if (ex) await env.DB.prepare('UPDATE linked_lines SET owner_id = ?, app = ?, username = ?, pass_seal = ?, dns = ?, dns_name = ?, mac = ?, updated = ? WHERE id = ?').bind(o ? o.owner : 0, app, str(username, 120), ps, str(dns, 300), str(dnsName, 60), str(mac, 64), t, ex.id).run();
   else await env.DB.prepare('INSERT INTO linked_lines (owner_id, app, username, pass_seal, dns, dns_name, mac, device_id, note, source, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(o ? o.owner : 0, app, str(username, 120), ps, str(dns, 300), str(dnsName, 60), str(mac, 64), d.id, '', src, t, t).run();
 }
+/** appunto automatico di un'attivazione fatta da un pannello (WOLF, Armada, Atlantix, MaxPlayer, OrbixPlay): source 'p-…' */
+async function llNote(env, o) {
+  try {
+    const t = now(), src = 'p-' + o.src, user = str(o.username || '', 120), mac = str(o.mac || '', 64);
+    if (!user && !mac) return;
+    const ex = await env.DB.prepare('SELECT id FROM linked_lines WHERE source = ? AND app = ? AND username = ? AND mac = ?').bind(src, o.app, user, mac).first();
+    if (ex) { await env.DB.prepare('UPDATE linked_lines SET updated = ? WHERE id = ?').bind(t, ex.id).run(); return; }
+    if (((await env.DB.prepare('SELECT COUNT(*) AS n FROM linked_lines').first()) || { n: 0 }).n >= LL_MAX) return;
+    await env.DB.prepare('INSERT INTO linked_lines (owner_id, app, username, pass_seal, dns, dns_name, mac, device_id, note, source, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(+o.owner || 0, o.app, user, await seal(env, o.password || ''), str(o.dns || '', 300), '', mac, '', str(o.note || '', 200), src, t, t).run();
+  } catch (e) { console.error('llNote', e && e.message); }
+}
 const llAutoOff = (env, d, src) => env.DB.prepare('DELETE FROM linked_lines WHERE device_id = ? AND source = ?').bind(d.id, src).run();
 /** ag: null = titolare (vede tutto) · { id, tree, hideHosts } = agente (solo le linee sue e dei sotto-agenti visibili) */
 async function linkedLinesRoutes(req, env, path, who, ip, ag) {
@@ -795,9 +808,9 @@ async function linkedLinesRoutes(req, env, path, who, ip, ag) {
     const names = new Map((await agentsAll(env)).map((a) => [a.id, a.username]));
     const items = [];
     for (const r of rows) {
-      const auto = r.source === 'orbix' || r.source === 'max';
+      const auto = !!r.source;
       items.push({ id: r.id, ownerId: +r.owner_id || 0, ownerName: names.get(+r.owner_id) || '', app: r.app, username: r.username, password: await unsealText(env, r.pass_seal),
-        dns: ag && ag.hideHosts && auto ? '' : r.dns, dnsName: r.dns_name || '', mac: r.mac, deviceId: r.device_id, deviceName: r.dname || '', deviceCode: r.dcode || '', deviceGone: !!r.device_id && !r.dcode,
+        dns: ag && ((ag.hideHosts && auto) || String(r.source).startsWith('p-')) ? '' : r.dns, dnsName: r.dns_name || '', mac: r.mac, deviceId: r.device_id, deviceName: r.dname || '', deviceCode: r.dcode || '', deviceGone: !!r.device_id && !r.dcode,
         note: r.note, source: r.source, created: r.created, updated: r.updated });
     }
     return json({ items });
@@ -823,7 +836,7 @@ async function linkedLinesRoutes(req, env, path, who, ip, ag) {
       await log(env, 'del', `${who}: tolta dal registro la linea ${row.username} (${row.app})`, ip);
       return json({ ok: true });
     }
-    if (row.source) throw new HttpErr(400, 'Questa linea è registrata in automatico dall\'attivazione: la modifichi dalla scheda del cliente');
+    if (row.source === 'orbix' || row.source === 'max') throw new HttpErr(400, 'Questa linea è registrata in automatico dall\'attivazione: la modifichi dalla scheda del cliente');
     const b = llClean(await readJSON(req, 4096));
     let owner = +row.owner_id || 0;
     if (b.deviceId && b.deviceId !== row.device_id) { const d = await devOwnerOf(env, b.deviceId); if (!d || (ag && !ag.tree.includes(d.owner))) throw new HttpErr(400, 'Cliente non trovato'); if (!ag) owner = d.owner; }
@@ -938,6 +951,7 @@ async function armadaRoutes(req, env, url, path, who, ip, agentId = 0) {
     if (type === 'm3u') { try { const u = new URL(out.url); out.username = u.searchParams.get('username') || ''; out.password = u.searchParams.get('password') || ''; out.host = u.origin; } catch {} }
     if (out.host && !s.armadaDns) await settingsPatch(env, { armadaDns: out.host }); // il DNS delle linee si impara dalla prima linea creata
     try { await env.DB.prepare('INSERT INTO armada_own (agent_id, type, line_id, username, mac, created) VALUES (?, ?, ?, ?, ?, ?)').bind(agentId, type, out.userId, out.username, type === 'mag' ? out.mac.toUpperCase() : '', now()).run(); memoDrop(env, 'armown'); } catch (e) { console.error('armada_own', e && e.message); }
+    await llNote(env, { src: 'armada', app: 'Armada', owner: agentId, username: out.username || (type === 'mag' ? '' : out.userId), password: out.password, dns: out.host, mac: type === 'mag' ? out.mac : '', note: notes || '' });
     await log(env, 'new', `${who}: Armada — creata ${type === 'mag' ? 'MAG ' + out.mac : 'linea ' + (out.username || out.userId)} (${sub ? sub + (sub === 1 ? ' mese' : ' mesi') : 'prova'})`, ip);
     return json(out);
   }

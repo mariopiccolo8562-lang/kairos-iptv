@@ -408,6 +408,7 @@ async function routes(req, env, path, who, ip, H, ag) {
     const j = await wfJson(env, H, cfg, '/lines/create/0', { _token: tokenOf(page), current_bouquets: bq, line_type: 'line', username, password, mac: '', package: pkg, description: str(b.note, 300) });
     const l = (await fetchMine(true)).find((x) => x.username === username);
     if (l && b.deviceId && !ag) await linkLine(env, H, cfg, l, str(b.deviceId, 20), who, ip).catch(() => {});
+    await H.note(env, { src: 'wolf', app: 'WOLF', owner: ag ? ag.id : 0, username, password, dns: cfg.dns || '', note: str(b.note, 200) });
     await H.log(env, 'new', `${who}: WOLF — linea ${username} creata`, ip);
     return json({ ok: true, id: l ? l.id : null, message: unent(j.message || '') });
   }

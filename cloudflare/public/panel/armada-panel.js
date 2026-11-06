@@ -1,6 +1,6 @@
 /* KAIROS Control — «Pannello Armada»: il pannello IPTV Armada collegato con la sua API reseller ufficiale.
    Crei linee e MAG (prova o 1/3/6/12 mesi), vedi crediti, linee, MAG e sotto-reseller, rinnovi, attivi/disattivi.
-   La linea creata si aggiunge a un cliente Kairos o si registra in «Linee collegate» con un clic.
+   La linea creata si aggiunge a un cliente Kairos o si registra in «Appunti App» con un clic.
    Titolare; agenti solo con il suo permesso (suoi crediti, tetto mensile, solo le linee create da loro, niente
    sotto-reseller né saldo). La chiave ARMADA_KEY resta sul server. Usa le funzioni di app.js. */
 (() => {
@@ -88,7 +88,7 @@
     const bd = (A.st && A.st.budget) || null, subs = bd && !bd.trial ? SUBS.filter(([v]) => v) : SUBS;
     if (bd && !bd.trial && f.sub === 0) f.sub = 1;
     const noCr = bd && !bd.left && !bd.trial ? '<p class="mut" style="margin:0 0 12px">⚠️ Questo mese non hai più crediti Armada: chiedi a chi ti gestisce di aumentarli.</p>' : '';
-    return `<div class="card glass"><div class="hd"><h3>Nuova linea<small>${bd ? 'Si crea su Armada con i crediti di chi ti gestisce (entro il tuo tetto del mese).' : 'Si crea su Armada con i tuoi crediti.'} Poi la aggiungi a un cliente${bd ? '' : ' o la registri in «Linee collegate»'}.</small></h3></div>${noCr}
+    return `<div class="card glass"><div class="hd"><h3>Nuova linea<small>${bd ? 'Si crea su Armada con i crediti di chi ti gestisce (entro il tuo tetto del mese).' : 'Si crea su Armada con i tuoi crediti.'} Poi la aggiungi a un cliente${bd ? '' : ' o la registri in «Appunti App»'}.</small></h3></div>${noCr}
       <div class="ar-f">
         <label>Tipo<div class="ar-ch" id="arType"><button type="button" data-t="m3u" class="${f.type === 'm3u' ? 'on' : ''}">Linea M3U / Xtream</button><button type="button" data-t="mag" class="${f.type === 'mag' ? 'on' : ''}">MAG</button></div></label>
         <label style="grid-column:span 2">Durata<div class="ar-ch" id="arSub">${subs.map(([v, l]) => `<button type="button" data-s="${v}" class="${+f.sub === v ? 'on' : ''}">${l}</button>`).join('')}${+f.sub === 0 ? `<select class="inp" id="arH" style="width:auto;padding:5px 8px">${Array.from({ length: 24 }, (_, i) => i + 1).map((h) => `<option value="${h}" ${+f.htime === h ? 'selected' : ''}>${h} ${h === 1 ? 'ora' : 'ore'}</option>`).join('')}</select>` : ''}</div></label>
@@ -109,7 +109,7 @@
       ${x.type === 'm3u' && x.username ? `<div style="margin-top:14px;display:grid;gap:10px">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b style="font-size:13px">Aggiungila a un cliente:</b><input class="inp" id="arCl" list="arClL" placeholder="nome o codice del cliente" style="margin:0;max-width:280px"><button class="btn sm" id="arToCl">Apri la scheda</button></div>
         <datalist id="arClL">${(D.devices || []).filter((d) => !d.parent).slice(0, 3000).map((d) => `<option value="${esc((d.name || 'Senza nome') + ' · ' + d.code)}">`).join('')}</datalist>
-        ${isAg() ? '' : `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><b style="font-size:13px">Registrala in «Linee collegate» con l'app:</b>${apps.map((a) => `<button class="btn sm" data-arapp="${esc(a)}">${esc(a)}</button>`).join('')}</div>`}</div>` : ''}${x.cost ? `<p class="mut" style="margin:10px 0 0;font-size:12.5px">Crediti usati: <b>${fmtC(x.cost)}</b></p>` : ''}</div>`;
+        ${isAg() ? '' : `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><b style="font-size:13px">Registrala in «Appunti App» con l'app:</b>${apps.map((a) => `<button class="btn sm" data-arapp="${esc(a)}">${esc(a)}</button>`).join('')}</div>`}</div>` : ''}${x.cost ? `<p class="mut" style="margin:10px 0 0;font-size:12.5px">Crediti usati: <b>${fmtC(x.cost)}</b></p>` : ''}</div>`;
   }
 
   function listHtml(kind) {
@@ -208,7 +208,7 @@
       setTimeout(() => { try { edit.playlists.push({ id: 'p' + Date.now(), name: 'Armada', type: 'xtream', url: '', host: L.host, username: L.username, password: L.password }); renderDrawer(); toast('Linea aggiunta alle playlist: controlla e premi Salva'); } catch (e) { toast('Aggiungila a mano con «Incolla linea»', 1); } }, 60);
     });
     $$('[data-arapp]', V).forEach((b) => (b.onclick = async () => {
-      try { await api('POST', '/admin/linked-lines', { app: b.dataset.arapp, username: L.username, password: L.password, dns: L.host, note: A.form.notes || '' }); toast('Registrata in Linee collegate su ' + b.dataset.arapp); } catch (e) { toast(e.message, 1); }
+      try { await api('POST', '/admin/linked-lines', { app: b.dataset.arapp, username: L.username, password: L.password, dns: L.host, note: A.form.notes || '' }); toast('Registrata in Appunti App su ' + b.dataset.arapp); } catch (e) { toast(e.message, 1); }
     }));
     // elenchi
     if ($('#arOn')) $('#arOn').onchange = (e) => { A.F.on = e.target.value; A.limit = 100; render(); };

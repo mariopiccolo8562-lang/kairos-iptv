@@ -138,6 +138,7 @@ export async function atxRoutes(req, env, path, who, ip, H) {
     }
     const j = await ax(env, H, '/api/users/create.php', { form });
     const d = j.data || {};
+    await H.note(env, { src: 'atx', app: 'Atlantix', owner: 0, username: d.username || form.username || '', password: d.password || form.password || '' });
     await H.log(env, 'edit', `${who}: Atlantix — linea ${str(d.username || form.username || '', 60)} creata`, ip).catch(() => {});
     return json({ ok: true, username: d.username || '', password: d.password || '' });
   }

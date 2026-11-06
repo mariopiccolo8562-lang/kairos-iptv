@@ -177,6 +177,7 @@ export async function mxpRoutes(req, env, path, who, ip, H, ag = null) {
     }
     const j = await call(H, key, 'POST', '/users', body);
     drop();
+    await H.note(env, { src: 'mxp', app: 'MaxPlayer', owner: ag ? ag.id : 0, username: body.iptv_user, password: body.iptv_pass, note: body.fullname || '' });
     await H.log(env, 'new', `${who}: Pannello MaxPlayer — cliente ${body.iptv_user} creato`, ip);
     return json({ ok: true, id: s(j.user_id ?? (j.data && j.data.id) ?? '', 30) });
   }
@@ -193,6 +194,7 @@ export async function mxpRoutes(req, env, path, who, ip, H, ag = null) {
     const body = { user_id: lm[1], domain_id: str(String(b.domain || ''), 30), iptv_username: okIptv(b.user, H, 'Utente della linea'), iptv_password: okIptv(b.pass, H, 'Password della linea') };
     if (!/^\d{1,30}$/.test(body.domain_id)) throw new HttpErr(400, 'Scegli il DNS (dominio)');
     await call(H, key, 'POST', '/users/list', body); drop();
+    await H.note(env, { src: 'mxp', app: 'MaxPlayer', owner: ag ? ag.id : 0, username: body.iptv_username, password: body.iptv_password, note: `cliente MaxPlayer ${uname(lm[1])}` });
     await H.log(env, 'new', `${who}: Pannello MaxPlayer — lista aggiunta a ${uname(lm[1])}`, ip);
     return json({ ok: true });
   }

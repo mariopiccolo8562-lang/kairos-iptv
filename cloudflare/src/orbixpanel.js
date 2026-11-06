@@ -79,6 +79,7 @@ export async function oxpRoutes(req, env, path, who, ip, H, ag = null) {
     const j = await call(env, H, '/add-playlist', q);
     if (ag) await env.DB.prepare('INSERT INTO ext_lists (id, owner_id, app, name, ref, ext, username, pass_seal, dns, note, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(H.pid(), ag.id, 'orbix', q.playlistName, q.deviceid, s(j.playlist_id, 64), q.username, await H.seal(env, q.password), q.host.slice(0, 80), q.notes, Date.now(), Date.now()).run().catch(() => {});
+    await H.note(env, { src: 'oxp', app: 'OrbixPlay', owner: ag ? ag.id : 0, username: q.username, password: q.password, dns: q.host, mac: q.deviceid, note: q.notes || q.playlistName });
     await H.log(env, 'new', `${who}: Pannello OrbixPlay — playlist ${q.playlistName} aggiunta al dispositivo ${q.deviceid}`, ip);
     return json({ ok: true, id: s(j.playlist_id, 64) });
   }

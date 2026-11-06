@@ -1,4 +1,4 @@
-/* KAIROS Control — App → «Crea lista»: carichi una lista su OrbixPlay o MaxPlayer scrivendo utente e password
+/* KAIROS Control — App → «Attivazione Max/Orbix»: carichi una lista su OrbixPlay o MaxPlayer scrivendo utente e password
    (e l'ID del dispositivo per OrbixPlay), senza creare un cliente Kairos. Titolare e agenti con il permesso
    «Attivare OrbixPlay e MaxPlayer dal pannello». Il DNS si sceglie per nome; chiavi e indirizzi restano nel pannello. */
 (() => {
@@ -14,9 +14,9 @@
   document.head.appendChild(css);
   const isAg = () => D.role === 'agent';
   const canUse = () => !isAg() || !!(((D.me || {}).perms) || {}).players;
-  TITLES.xlist = 'Crea lista';
+  TITLES.xlist = 'Attivazione Max/Orbix';
   const side = $('#side'), dash = $('#v-dash');
-  if (side && !$('.nav[data-v="xlist"]')) { const b = document.createElement('button'); b.className = 'nav'; b.dataset.v = 'xlist'; b.textContent = 'Crea lista'; b.style.display = 'none'; b.onclick = () => view('xlist'); side.appendChild(b); }
+  if (side && !$('.nav[data-v="xlist"]')) { const b = document.createElement('button'); b.className = 'nav'; b.dataset.v = 'xlist'; b.textContent = 'Attivazione Max/Orbix'; b.style.display = 'none'; b.onclick = () => view('xlist'); side.appendChild(b); }
   if (dash && !$('#v-xlist')) { const s = document.createElement('section'); s.className = 'view'; s.id = 'v-xlist'; dash.after(s); }
 
   const F = { app: 'orbix', name: '', id: '', u: '', p: '', dns: '', note: '' };
@@ -37,7 +37,7 @@
       : (!doms ? '<small class="mut">Carico i DNS di MaxPlayer…</small>' : doms.length ? `<select class="inp" id="xlD">${doms.map((x) => `<option value="${esc(x.id)}" ${x.id === F.dns ? 'selected' : ''}>${esc(x.label || x.domain || 'DNS ' + x.id)}</option>`).join('')}</select>` : `<small class="mut">${esc(doms.err || 'Nessun DNS su MaxPlayer')}</small>`);
     const all = (L && L.lists) || [];
     const fmt = (t) => (t ? new Date(t).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
-    V.innerHTML = `<div class="card glass"><div class="hd"><h3>Crea lista su OrbixPlay o MaxPlayer<small>Scrivi utente e password della linea${F.app === 'orbix' ? ' e l\'ID che il cliente vede nell\'app OrbixPlay' : ''}: premi «Crea e attiva» e la lista arriva sull'app. Non serve un cliente Kairos.</small></h3></div>
+    V.innerHTML = `<div class="card glass"><div class="hd"><h3>Attivazione su OrbixPlay o MaxPlayer<small>Scrivi utente e password della linea${F.app === 'orbix' ? ' e l\'ID che il cliente vede nell\'app OrbixPlay' : ''}: premi «Crea e attiva» e la lista arriva sull'app. Non serve un cliente Kairos.</small></h3></div>
       <div class="xl-apps"><button type="button" data-xla="orbix" class="${F.app === 'orbix' ? 'on' : ''}" ${ok.orbix ? '' : 'disabled title="OrbixPlay non è collegato"'}><i>OP</i>OrbixPlay</button><button type="button" data-xla="max" class="mx ${F.app === 'max' ? 'on' : ''}" ${ok.max ? '' : 'disabled title="MaxPlayer non è collegato"'}><i>MX</i>MaxPlayer</button></div>
       ${!ok.orbix && !ok.max ? `<p class="mut">${isAg() ? 'OrbixPlay e MaxPlayer non sono disponibili: chiedi al titolare.' : 'Collega prima OrbixPlay o MaxPlayer (chiavi ORBIX_KEY / MAXPLAYER_KEY su GitHub, guida in App → OrbixPlay e MaxPlayer).'}</p>` : `
       <label class="lbl">Incolla la linea (facoltativo)</label><input class="inp" id="xlPaste" placeholder="Incolla il link M3U o il messaggio con server, utente e password" autocomplete="off">
