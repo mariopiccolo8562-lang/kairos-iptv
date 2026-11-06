@@ -104,11 +104,13 @@
     form = { ...form, app, username: $('#llU').value.trim(), password: $('#llP').value, dns: $('#llD').value.trim(), mac: $('#llM').value.trim(), client: $('#llC').value.trim(), note: $('#llN').value.trim() };
   }
 
+  let manual = false;
   function render() {
     const V = $('#v-lines'); if (!V) return;
     if (!isOwner() && !((D.me || {}).perms || {}).lines) { V.innerHTML = '<div class="emptyc">Funzione non disponibile</div>'; return; }
     const y = window.scrollY;
-    V.innerHTML = formHtml() + `<div class="card glass" style="margin-top:16px"><div class="hd"><h3>Appunti App<small>Quale app hai attivato a ogni cliente: le attivazioni da WOLF, Armada, Atlantix, MaxPlayer e OrbixPlay si segnano da sole${isOwner() ? ' — tue e dei tuoi agenti' : ''}</small></h3><button class="btn sm" id="llRe">Aggiorna</button></div>${rowsHtml()}</div>`;
+    const fo = manual || form.id;
+    V.innerHTML = `<div class="card glass"><div class="hd"><h3>Appunti App<small>Quale app hai attivato a ogni cliente: le attivazioni da WOLF, Armada, Atlantix, MaxPlayer e OrbixPlay si segnano da sole${isOwner() ? ' — tue e dei tuoi agenti' : ''}</small></h3><div style="display:flex;gap:6px">${fo ? '' : '<button class="btn sm pri" id="llAdd">+ Aggiungi a mano</button>'}<button class="btn sm" id="llRe">Aggiorna</button></div></div>${rowsHtml()}</div>` + (fo ? `<div style="margin-top:16px">${formHtml()}</div>` : '');
     window.scrollTo(0, y);
     bind(V);
   }
@@ -126,8 +128,9 @@
     }
     $$('[data-lla]', V).forEach((b) => (b.onclick = () => { readForm(); form.app = b.dataset.lla; $('#llApp').value = ''; $$('[data-lla]', V).forEach((x) => x.classList.toggle('on', x === b)); }));
     const ai = $('#llApp'); if (ai) ai.oninput = () => { if (ai.value.trim()) $$('[data-lla]', V).forEach((x) => x.classList.remove('on')); };
-    $('#llCancel') && ($('#llCancel').onclick = () => { form = blank(); render(); });
-    $('#llSave').onclick = async () => {
+    $('#llCancel') && ($('#llCancel').onclick = () => { form = blank(); manual = false; render(); });
+    $('#llAdd') && ($('#llAdd').onclick = () => { manual = true; render(); const f = $('#llForm'); if (f) f.scrollIntoView({ behavior: 'smooth' }); });
+    if ($('#llSave')) $('#llSave').onclick = async () => {
       if (busy) return; readForm();
       if (!form.app) return toast('Scegli l\'app a cui hai collegato la linea', 1);
       if (!form.username) return toast('Scrivi il nome utente della linea', 1);
@@ -150,7 +153,7 @@
     $$('[data-llcm]', V).forEach((b) => (b.onclick = () => copy(byId(b.dataset.llcm).mac, 'MAC')));
     $$('[data-lleye]', V).forEach((b) => (b.onclick = () => { const id = +b.dataset.lleye; show.has(id) ? show.delete(id) : show.add(id); render(); }));
     $$('[data-llopen]', V).forEach((a) => (a.onclick = (e) => { e.preventDefault(); const d = (D.devices || []).find((x) => x.id === a.dataset.llopen); d ? openQuick(d) : toast('Cliente non trovato', 1); }));
-    $$('[data-lled]', V).forEach((b) => (b.onclick = () => { const x = byId(b.dataset.lled); const d = (D.devices || []).find((y) => y.id === x.deviceId); form = { id: x.id, app: x.app, username: x.username, password: x.password, dns: x.dns, mac: x.mac, client: d ? clientLabel(d) : '', note: x.note }; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
+    $$('[data-lled]', V).forEach((b) => (b.onclick = () => { const x = byId(b.dataset.lled); const d = (D.devices || []).find((y) => y.id === x.deviceId); manual = true; form = { id: x.id, app: x.app, username: x.username, password: x.password, dns: x.dns, mac: x.mac, client: d ? clientLabel(d) : '', note: x.note }; render(); const f = $('#llForm'); if (f) f.scrollIntoView({ behavior: 'smooth' }); }));
     $$('[data-lldel]', V).forEach((b) => (b.onclick = async () => {
       const x = byId(b.dataset.lldel);
       if (!(await askDanger('Togliere la linea dal registro?', `${esc(x.username)} su ${esc(x.app)}. ${x.source && x.source.startsWith('p-') ? 'È solo un appunto: la linea sul pannello e sull\'app non cambia.' : x.source ? 'È registrata dall\'attivazione: l\'app resta attiva finché non la togli dalla scheda del cliente.' : 'La linea sul pannello IPTV e sull\'app non cambia: sparisce solo da qui.'}`, 'ELIMINA', 'Togli'))) return;
