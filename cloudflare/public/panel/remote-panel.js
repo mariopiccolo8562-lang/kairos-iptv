@@ -35,7 +35,7 @@
   document.head.appendChild(css);
 
   const owner = () => D.role !== 'agent' && !window.__assist;
-  const APPS = [['tv', 'Kairos Pro'], ['ktv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova']];
+  const APPS = [['tv', 'Kairos Pro'], ['ktv', 'Kairos TV'], ['prem', 'Kairos Premium'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova']];
   /** app che non si collegano al pannello con un codice (nessuna, oggi): niente clienti né comandi, solo la politica degli aggiornamenti */
   const unlinked = (app) => R.data && Array.isArray(R.data.linked) && !R.data.linked.includes(app);
   const R = { data: null, app: 'tv', q: '', busy: false, draft: {}, t: 0 };
@@ -55,7 +55,7 @@
     try { R.data = await api('GET', '/admin/rctl'); R.t = Date.now(); } catch (e) { R.data = { err: e.message }; } finally { R.busy = false; }
     draw();
   }
-  const appOf = (d) => { const v = String(((R.data || {}).devs || {})[d.id] && R.data.devs[d.id].ver || '').trim(); if (/vega/i.test(v)) return 'vega'; if (/^lite\b/i.test(v)) return 'lite'; if (/^xc\b/i.test(v)) return 'xc'; if (/^plus\b/i.test(v)) return 'plus'; if (/^nova\b/i.test(v)) return 'nova'; if (/^tv\b/i.test(v)) return 'ktv'; if (/^\d+\.\d+/.test(v)) return 'tv'; return d.app || 'tv'; };
+  const appOf = (d) => { const v = String(((R.data || {}).devs || {})[d.id] && R.data.devs[d.id].ver || '').trim(); if (/vega/i.test(v)) return 'vega'; if (/^lite\b/i.test(v)) return 'lite'; if (/^xc\b/i.test(v)) return 'xc'; if (/^plus\b/i.test(v)) return 'plus'; if (/^nova\b/i.test(v)) return 'nova'; if (/premium/i.test(v)) return 'prem'; if (/^tv\b/i.test(v)) return 'ktv'; if (/^\d+\.\d+/.test(v)) return 'tv'; return d.app || 'tv'; };
   const catFor = (app) => ((R.data || {}).cat || []).filter((c) => c[4].includes(app));
   const cmdsFor = (app) => ((R.data || {}).cmds || []).filter((c) => !app || c[3].includes(app));
   const lblOf = (c, v) => { if (v === undefined || v === null || v === '') return ''; const o = c[3].find((x) => x[0] === v || String(x[0]) === String(v)); return o ? o[1] : String(v); };

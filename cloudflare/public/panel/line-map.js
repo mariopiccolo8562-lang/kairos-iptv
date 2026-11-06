@@ -14,7 +14,7 @@
 .lm-box h4{margin:0 0 6px;font-size:14px}.lm-warn{color:#fbbf24;font-size:12px;font-weight:700}`;
   document.head.appendChild(css);
   const COL = { 'Kairos Pro': '#4f8cff', 'Kairos TV': '#22d3ee', 'Kairos Lite': '#34d399', 'Kairos XC': '#a78bfa', 'Kairos Plus': '#e879f9', OrbixPlay: '#38bdf8', MaxPlayer: '#fb7185' };
-  const APPN = { tv: 'Kairos Pro', ktv: 'Kairos TV', lite: 'Kairos Lite', xc: 'Kairos XC', plus: 'Kairos Plus', '': 'Kairos Pro' };
+  const APPN = { tv: 'Kairos Pro', ktv: 'Kairos TV', prem: 'Kairos Premium', lite: 'Kairos Lite', xc: 'Kairos XC', plus: 'Kairos Plus', '': 'Kairos Pro' };
   const norm = (u) => String(u || '').trim().toLowerCase();
   const uOf = (p) => { if (p.username) return { u: p.username, p: p.password || '' }; try { const x = new URL(p.url || ''); const u = x.searchParams.get('username'); if (u) return { u, p: x.searchParams.get('password') || '' }; } catch {} return null; };
   let LL = null, XL = null, lt = 0;

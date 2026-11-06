@@ -6,6 +6,7 @@
 .app-chip{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:5px;margin-left:8px;vertical-align:2px;background:rgba(224,164,49,.16);color:#ecc06f}
 .app-chip.tv{background:rgba(61,124,245,.15);color:#8fb3ff}
 .app-chip.ktv{background:rgba(34,211,238,.15);color:#7fe3f5}
+.app-chip.prem{background:rgba(212,175,55,.18);color:#f5d77a}
 .app-chip.xc{background:rgba(167,139,250,.18);color:#c4b5fd}
 .app-chip.plus{background:rgba(192,38,211,.18);color:#f0abfc}
 .lite-note{padding:12px 14px;border-radius:10px;border:1px solid rgba(224,164,49,.45);background:rgba(224,164,49,.08);font-size:13.5px;margin-bottom:14px}
@@ -16,11 +17,12 @@
   const PLUS_PERMS = new Set(['link', 'plSwitch']); // Kairos Plus: collegamento di altre TV e cambio playlist (niente profili né VPN)
   const appOf = (d) => { if (!d) return ''; if (d.parent && !d.app) { const p = D.devices.find((x) => x.id === d.parent); return p ? p.app || '' : ''; } return d.app || ''; };
   const isLite = (d) => appOf(d) === 'lite';
-  const isKtv = (d) => appOf(d) === 'ktv';
+  const isPrem = (d) => appOf(d) === 'prem';
+  const isKtv = (d) => appOf(d) === 'ktv' || isPrem(d); // Kairos Premium nasce da Kairos TV: stesse funzioni
   const isXc = (d) => appOf(d) === 'xc';
   const isPlus = (d) => appOf(d) === 'plus';
   const isNova = (d) => appOf(d) === 'nova';
-  const kindOf = (d) => (isLite(d) ? 'lite' : isKtv(d) ? 'ktv' : isXc(d) ? 'xc' : isPlus(d) ? 'plus' : isNova(d) ? 'nova' : 'tv');
+  const kindOf = (d) => (isLite(d) ? 'lite' : isPrem(d) ? 'prem' : isKtv(d) ? 'ktv' : isXc(d) ? 'xc' : isPlus(d) ? 'plus' : isNova(d) ? 'nova' : 'tv');
   let flt = 'all';
   try { flt = localStorage.getItem('kc_app') || 'all'; } catch {}
 
@@ -30,7 +32,7 @@
     let seg = $('#dvApp');
     if (!seg) { seg = document.createElement('div'); seg.className = 'seg'; seg.id = 'dvApp'; bar.insertBefore(seg, $('#dvView')); }
     const prim = D.devices.filter((d) => !d.parent), n = (k) => prim.filter((d) => k === 'all' || kindOf(d) === k).length;
-    seg.innerHTML = [['all', 'Tutte le app'], ['tv', 'Kairos Pro'], ['ktv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova']].map(([k, l]) => `<button data-app="${k}" class="${flt === k ? 'on' : ''}" title="${k === 'tv' ? 'Comprende i dispositivi non ancora collegati' : ''}">${l} <span style="opacity:.6">${n(k)}</span></button>`).join('');
+    seg.innerHTML = [['all', 'Tutte le app'], ['tv', 'Kairos Pro'], ['ktv', 'Kairos TV'], ['prem', 'Kairos Premium'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova']].map(([k, l]) => `<button data-app="${k}" class="${flt === k ? 'on' : ''}" title="${k === 'tv' ? 'Comprende i dispositivi non ancora collegati' : ''}">${l} <span style="opacity:.6">${n(k)}</span></button>`).join('');
     $$('[data-app]', seg).forEach((b) => (b.onclick = () => { flt = b.dataset.app; try { localStorage.setItem('kc_app', flt); } catch {} renderDevices(); }));
   }
   const rd = renderDevices;
@@ -43,7 +45,7 @@
     try { rd(); } finally { D.devices = all; }
     filterBar();
     // etichetta «LITE» / «TV» su schede e tabella
-    const chip = (d) => (isLite(d) ? '<span class="app-chip">LITE</span>' : isKtv(d) ? '<span class="app-chip ktv">TV</span>' : isXc(d) ? '<span class="app-chip xc">XC</span>' : isPlus(d) ? '<span class="app-chip plus">PLUS</span>' : isNova(d) ? '<span class="app-chip plus">NOVA</span>' : '');
+    const chip = (d) => (isLite(d) ? '<span class="app-chip">LITE</span>' : isPrem(d) ? '<span class="app-chip prem">PREMIUM</span>' : isKtv(d) ? '<span class="app-chip ktv">TV</span>' : isXc(d) ? '<span class="app-chip xc">XC</span>' : isPlus(d) ? '<span class="app-chip plus">PLUS</span>' : isNova(d) ? '<span class="app-chip plus">NOVA</span>' : '');
     $$('#dvCards .dv-card[data-id]').forEach((c) => { const d = all.find((x) => x.id === c.dataset.id); const b = $('.dv-n b', c); if (b && chip(d) && !$('.app-chip', b)) b.insertAdjacentHTML('beforeend', chip(d)); });
     $$('#dvTbl tbody tr[data-id]').forEach((r) => { const d = all.find((x) => x.id === r.dataset.id); const b = $('.dvt-u b', r); if (b && chip(d) && !$('.app-chip', b)) b.insertAdjacentHTML('beforeend', chip(d)); });
   };
@@ -57,7 +59,7 @@
     $$('#ds-perm [data-perm]').forEach((t) => { t.style.display = (plus && !PLUS_PERMS.has(t.dataset.perm)) || ((on || ktv) && !LITE_PERMS.has(t.dataset.perm)) ? 'none' : ''; });
     for (const sel of ['#eAiProv', '#eAiLim']) { const el = $(sel); if (!el) continue; const box = sel === '#eAiLim' ? el.parentElement : el; box.style.display = on || ktv || plus ? 'none' : ''; const lb = box.previousElementSibling; if (lb && lb.classList.contains('lbl')) lb.style.display = on || ktv || plus ? 'none' : ''; }
     const note = $('#dBody .lite-note'); if (note) note.style.display = on ? '' : 'none';
-    const kn = $('#dBody .ktv-note'); if (kn) kn.style.display = ktv && !xc ? '' : 'none';
+    const kn = $('#dBody .ktv-note'); if (kn) kn.style.display = ktv && !xc && !isPrem(edit) ? '' : 'none';
     const xn = $('#dBody .xc-note'); if (xn) xn.style.display = xc ? '' : 'none';
     const pn = $('#dBody .plus-note'); if (pn) pn.style.display = plus ? '' : 'none';
     $$('#eApp [data-eapp]').forEach((b) => b.classList.toggle('on', b.dataset.eapp === kindOf(edit)));
@@ -68,7 +70,7 @@
     if (!edit) return;
     const main = $('#dBody .dmain'); if (!main) return;
     if (!edit.parent && !$('#eAppBox', main)) {
-      main.insertAdjacentHTML('afterbegin', `<div id="eAppBox" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px"><b style="font-size:13.5px">App del cliente</b><div class="seg" id="eApp"><button data-eapp="tv">Kairos Pro</button><button data-eapp="ktv">Kairos TV</button><button data-eapp="lite">Kairos Lite</button><button data-eapp="xc">Kairos XC</button><button data-eapp="plus">Kairos Plus</button></div><small class="mut">Si aggiorna da sola quando l'app si collega</small></div>`);
+      main.insertAdjacentHTML('afterbegin', `<div id="eAppBox" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px"><b style="font-size:13.5px">App del cliente</b><div class="seg" id="eApp"><button data-eapp="tv">Kairos Pro</button><button data-eapp="ktv">Kairos TV</button><button data-eapp="prem">Kairos Premium</button><button data-eapp="lite">Kairos Lite</button><button data-eapp="xc">Kairos XC</button><button data-eapp="plus">Kairos Plus</button></div><small class="mut">Si aggiorna da sola quando l'app si collega</small></div>`);
       $$('#eApp [data-eapp]').forEach((b) => (b.onclick = () => { edit.app = b.dataset.eapp; edit._appSet = true; applyLite(); }));
     }
     if (!$('.lite-note', main)) $('#eAppBox', main) ? $('#eAppBox', main).insertAdjacentHTML('afterend', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa: niente lettore a scelta, add-on, assistente IA, registrazioni, speed test e multi-schermo.</div>') : main.insertAdjacentHTML('afterbegin', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa.</div>');
