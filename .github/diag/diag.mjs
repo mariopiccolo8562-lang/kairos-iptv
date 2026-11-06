@@ -29,6 +29,24 @@ async function gql(query, variables) {
 let dbId = '';
 try { dbId = (JSON.parse(sh(['d1', 'list', '--json'])).find((d) => d.name === DBN) || {}).uuid || ''; } catch (e) { console.log('Elenco database non disponibile'); }
 
+
+if (process.env.DIAG_MODE === 'latency') {
+  console.log('\n== Database e tempi del Worker');
+  try {
+    const info = JSON.parse(sh(['d1', 'info', DBN, '--json']));
+    const pick = {}; for (const k of Object.keys(info)) if (/region|replica|version|num_tables|size/i.test(k)) pick[k] = info[k];
+    console.log('D1:', JSON.stringify(pick));
+  } catch (e) { console.log('d1 info non disponibile: ' + clean(e.stderr || e.message)); }
+  const host = 'https://panel-kairos.com';
+  const time = async (path, init) => { const a = performance.now(); try { const r = await fetch(host + path, init); await r.text(); return [Math.round(performance.now() - a), r.status]; } catch { return [-1, 0]; } };
+  const med = (a) => { const b = a.filter((x) => x >= 0).sort((x, y) => x - y); return b.length ? b[Math.floor(b.length / 2)] : -1; };
+  for (const [label, path, init] of [
+    ['ping (nessuna query)', '/api/player/ping', undefined],
+    ['battito con codice inesistente (1 query D1)', '/api/player/heartbeat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: 'KXZZ-ZZZZ', secret: 'x'.repeat(43) }) }],
+  ]) { const t = []; let st = 0; for (let i = 0; i < 7; i++) { const [ms, s] = await time(path, init); t.push(ms); st = s; } console.log(`${label}: mediana ${med(t)} ms (HTTP ${st}) · ${t.join(', ')}`); }
+  try { const r = await fetch(host + '/cdn-cgi/trace'); const tx = await r.text(); const colo = (tx.match(/colo=([A-Z]+)/) || [])[1]; console.log('Worker eseguito a: ' + (colo || '?')); } catch {}
+  process.exit(0);
+}
 /* 1) presenza nel database */
 console.log('\n== Presenza nel database (adesso)');
 try {

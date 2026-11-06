@@ -32,3 +32,5 @@ jobs:
           sed -i "s/REPLACE_WITH_D1_ID/$ID/" wrangler.toml
       - name: Diagnosi
         run: node ../.github/diag/diag.mjs
+        env:
+          DIAG_MODE: latency
