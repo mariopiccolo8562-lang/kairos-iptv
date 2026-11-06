@@ -83,11 +83,39 @@ async function wfJson(env, H, cfg, path, form) {
   if (j.type === 'error' || j.success === 0 || j.result === false) throw new H.HttpErr(400, 'WOLF: ' + String(unent(j.message || 'operazione non riuscita')).replace(/<[^>]+>/g, ' ').slice(0, 300));
   return j;
 }
-async function wfPage(env, H, cfg, path) {
+async function wfPage(env, H, cfg, path, nf = 'Linea non trovata su WOLF') {
   const r = await wf(env, H, cfg, path);
-  if (r.status >= 300 && r.status < 400) throw new H.HttpErr(404, 'Linea non trovata su WOLF');
+  if (r.status >= 300 && r.status < 400) throw new H.HttpErr(404, nf);
   if (!r.ok) throw new H.HttpErr(502, `WOLF: pagina non disponibile (${r.status})`);
   return r.text();
+}
+
+/* reseller: stessa tabella DataTables della pagina «Resellers» di WOLF */
+const strip = (s) => unent(String(s || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+function resOut(x) {
+  const act = String(x.action || '');
+  const tg = act.match(/data-url="[^"]*?(resellers\/(?:disable|enable)\/\d+(?:\/\d)?)"/) || [];
+  return {
+    id: +x.id, username: unent(x.username), credits: +x.credits || 0, enabled: +x.status === 1,
+    dns: unent(x.reseller_dns || ''), type: strip(String(x.type || '').replace(/<span[\s\S]*$/, '')), canSub: /Create/.test(String(x.type || '')),
+    owner: unent(x.ownerusername || ''), lines: +x.total_lines || 0, mags: +x.total_mag || 0, enigma: +x.total_enigma || 0,
+    login: String(x.last_login_date || ''), ip: String(x.ip || ''), tgl: tg[1] || '', tglLines: /resellers\/disable-client\/\d+/.test(act),
+  };
+}
+async function fetchResellers(env, H, cfg) {
+  const f = { draw: '1', start: '0', length: '-1', id: 'members', filter: '', reseller: '', 'search[value]': '', 'search[regex]': 'false', 'order[0][column]': '0', 'order[0][dir]': 'desc', 'columns[0][data]': 'id', 'columns[0][name]': 'id' };
+  const j = await wfJson(env, H, cfg, '/resellers/data', f);
+  if (!Array.isArray(j.data)) throw new H.HttpErr(502, 'Elenco reseller di WOLF non valido');
+  return j.data.map(resOut);
+}
+const okMail = (s, H) => { const v = H.str(s, 120); if (v && !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(v)) throw new H.HttpErr(400, 'Email non valida'); return v; };
+const okHost = (s, H) => { const v = H.str(s, 120).replace(/^https?:\/\//, '').replace(/\/+$/, ''); if (v && !/^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?$/i.test(v)) throw new H.HttpErr(400, 'DNS non valido, es. server.tv'); return v; };
+/** i form dei reseller su WOLF non sono AJAX: si invia la pagina e si controlla l'elenco dopo */
+async function resForm(env, H, cfg, path, form) {
+  const r = await wf(env, H, cfg, path, { form });
+  const loc = r.headers.get('location') || '';
+  if (r.status === 422 || r.status >= 500) throw new H.HttpErr(502, `WOLF ha risposto con un errore (${r.status})`);
+  return { status: r.status, loc };
 }
 
 const COLS = ['id', 'expired', 'password', 'exp_date_show', 'admin_notes_show'];
@@ -265,6 +293,69 @@ export async function wolfRoutes(req, env, path, who, ip, H) {
       await env.DB.prepare('DELETE FROM wolf_links WHERE line_id = ?').bind(id).run();
       mem.lines = null;
       await H.log(env, 'del', `${who}: WOLF — linea ${l ? l.username : id} eliminata`, ip);
+      return json({ ok: true });
+    }
+  }
+  if (path === '/wolf/resellers' && m === 'GET') {
+    const [resellers, cr] = await Promise.all([fetchResellers(env, H, cfg), credits(env, H, cfg).catch(() => null)]);
+    return json({ resellers, credits: cr, me: cfg.user });
+  }
+  if (path === '/wolf/resellers' && m === 'POST') {
+    const b = await H.readJSON(req, 4096);
+    const username = okUser(b.username, H, 'Utente'), password = okUser(b.password, H, 'Password');
+    const page = await wfPage(env, H, cfg, '/resellers/create', 'Non posso creare reseller su questo account WOLF');
+    const dns = b.dns !== undefined && String(b.dns).trim() ? okHost(b.dns, H) : inputVal(page, 'reseller_dns');
+    if ((await fetchResellers(env, H, cfg)).some((x) => x.username.toLowerCase() === username.toLowerCase())) throw new HttpErr(400, 'Esiste già un reseller con questo utente');
+    await resForm(env, H, cfg, '/resellers/create/0', { _token: tokenOf(page), username, email: okMail(b.email, H), password, reseller_dns: dns, description: str(b.note, 500) });
+    const r = (await fetchResellers(env, H, cfg)).find((x) => x.username === username);
+    if (!r) throw new HttpErr(400, 'WOLF non ha creato il reseller: controlla utente (forse già usato), email e DNS');
+    await H.log(env, 'new', `${who}: WOLF — reseller ${username} creato`, ip);
+    return json({ ok: true, id: r.id });
+  }
+  const rm = path.match(/^\/wolf\/resellers\/(\d+)(\/credits|\/toggle|\/delete)?$/);
+  if (rm) {
+    const id = +rm[1], act = rm[2] || '';
+    const r = (await fetchResellers(env, H, cfg)).find((x) => x.id === id);
+    if (!r) throw new HttpErr(404, 'Reseller non trovato su WOLF');
+    if (!act && m === 'PUT') {
+      const b = await H.readJSON(req, 4096);
+      const page = await wfPage(env, H, cfg, `/resellers/edit/${id}`, 'Reseller non trovato su WOLF');
+      if (inputVal(page, 'username') !== r.username) throw new HttpErr(502, 'La pagina del reseller su WOLF non corrisponde: modifica annullata');
+      const email = b.email !== undefined ? okMail(b.email, H) : inputVal(page, 'email');
+      const dns = b.dns !== undefined ? okHost(b.dns, H) : inputVal(page, 'reseller_dns');
+      const password = b.password ? okUser(b.password, H, 'Password') : '';
+      const description = b.note !== undefined ? str(b.note, 500) : descOf(page);
+      if (!dns) throw new HttpErr(400, 'Scrivi il DNS del reseller');
+      await resForm(env, H, cfg, `/resellers/edit/${id}`, { _token: tokenOf(page), email, password, reseller_dns: dns, description });
+      const after = await wfPage(env, H, cfg, `/resellers/edit/${id}`, 'Reseller non trovato su WOLF');
+      if (inputVal(after, 'reseller_dns') !== dns || inputVal(after, 'email') !== email) throw new HttpErr(400, 'WOLF non ha accettato la modifica: controlla email e DNS');
+      await H.log(env, 'edit', `${who}: WOLF — reseller ${r.username} modificato${password ? ' (nuova password)' : ''}`, ip);
+      return json({ ok: true });
+    }
+    if (act === '/credits' && m === 'POST') {
+      const b = await H.readJSON(req, 2048), n = Math.trunc(+b.credits);
+      if (!Number.isFinite(n) || !n || Math.abs(n) > 100000) throw new HttpErr(400, 'Scrivi quanti crediti (es. 10, oppure -5 per toglierli)');
+      const j = await wfJson(env, H, cfg, '/resellers/credits', { id: String(id), credits: String(n), message: str(b.message, 300) });
+      if (j.success !== true) throw new HttpErr(400, 'WOLF non ha cambiato i crediti');
+      await H.log(env, 'edit', `${who}: WOLF — ${n > 0 ? '+' : ''}${n} crediti al reseller ${r.username}`, ip);
+      return json({ ok: true, message: strip(j.data || '') });
+    }
+    if (act === '/toggle' && m === 'POST') {
+      const b = await H.readJSON(req, 512);
+      const withLines = !!b.lines && r.enabled;
+      const url = withLines ? `/resellers/disable-client/${id}` : r.tgl ? '/' + r.tgl : '';
+      if (!url || (withLines && !r.tglLines)) throw new HttpErr(400, 'WOLF non permette questa azione su questo reseller');
+      await wfJson(env, H, cfg, url);
+      mem.lines = null;
+      await H.log(env, 'edit', `${who}: WOLF — reseller ${r.username} ${r.enabled ? 'disattivato' : 'attivato'}${withLines ? ' con tutte le sue linee' : ''}`, ip);
+      return json({ ok: true });
+    }
+    if (act === '/delete' && m === 'POST') {
+      const b = await H.readJSON(req, 512);
+      if (String(b.confirm || '') !== r.username) throw new HttpErr(400, 'Per eliminare scrivi esattamente il nome del reseller');
+      await wfJson(env, H, cfg, `/resellers/delete/${id}`);
+      mem.lines = null;
+      await H.log(env, 'del', `${who}: WOLF — reseller ${r.username} eliminato con tutte le sue linee`, ip);
       return json({ ok: true });
     }
   }
