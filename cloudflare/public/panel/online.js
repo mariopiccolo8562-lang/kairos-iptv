@@ -83,11 +83,11 @@
     const list = rows.filter((r) => (!S.p || r.p === S.p) && (!S.f || stOf(r) === S.f || (S.f === 'na' && stOf(r) === 'wait')) && (!q || `${r.u} ${r.n} ${r.p} ${r.w || ''}`.toLowerCase().includes(q)))
       .sort((a, b) => ({ on: 0, wait: 1, off: 2, na: 3 }[stOf(a)] - { on: 0, wait: 1, off: 2, na: 3 }[stOf(b)]));
     const shown = list.slice(0, S.limit), panels = [...new Set(rows.map((r) => r.p))];
-    const FL = [['', 'Tutti'], ['on', '🟢 Collegati'], ['off', '🔴 Scollegati'], ['na', 'Non verificabili']];
+    const FL = [['', 'Tutti'], ['on', 'Collegati'], ['off', 'Scollegati'], ['na', 'Non verificabili']];
     const keep = document.activeElement && document.activeElement.id === 'cnQ' ? document.activeElement.selectionStart : -1;
     V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">Collegati ora</b><small>${isAg() ? 'I tuoi clienti' : 'I clienti'} di WOLF, Armada, MaxPlayer e OrbixPlay: verde se stanno guardando adesso, rosso se no. Si aggiorna ogni 2 minuti.</small>${S.t ? `<small>Ultimo controllo: ${new Date(S.t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</small>` : ''}</div>
         <button class="btn sm" id="cnRe">${S.busy ? 'Carico…' : 'Aggiorna'}</button></div>
-      <div class="cn-k"><div><small>🟢 Collegati</small><b style="color:#4ade80">${n('on')}</b></div><div><small>🔴 Scollegati</small><b style="color:#f87171">${n('off')}</b></div><div><small>Non verificabili${n('wait') ? ' · ' + n('wait') + ' in verifica' : ''}</small><b style="color:var(--mut)">${n('na')}</b></div></div>
+      <div class="cn-k"><div><small><i class="on-dot g"></i>Collegati</small><b style="color:#4ade80">${n('on')}</b></div><div><small><i class="on-dot r"></i>Scollegati</small><b style="color:#f87171">${n('off')}</b></div><div><small><i class="on-dot"></i>Non verificabili${n('wait') ? ' · ' + n('wait') + ' in verifica' : ''}</small><b style="color:var(--mut)">${n('na')}</b></div></div>
       ${S.errs.length ? `<p style="color:#ff8f8f;margin:10px 0 0;font-size:12.5px">${S.errs.map(esc).join('<br>')}</p>` : ''}</div>
       <div class="card glass" style="margin-top:14px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input class="inp" id="cnQ" placeholder="Cerca utente, cliente o canale" value="${esc(S.q)}" style="max-width:280px;margin:0">
