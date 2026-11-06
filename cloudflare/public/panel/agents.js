@@ -140,7 +140,7 @@ body.agent .foot{display:none}
     ['clientPerms', 'Cambiare i permessi dell\'app', 'Cosa può fare il cliente nell\'app'], ['vpn', 'Cambiare la VPN del cliente', ''],
     ['link', 'Collegare altri dispositivi', 'Codice a 6 cifre, sblocca, scollega'], ['subClients', 'Vedere i clienti dei suoi sotto-agenti', 'Se spento vede e gestisce solo i clienti attivati da lui'], ['players', 'Inviare le linee a OrbixPlay e MaxPlayer', 'Solo per i suoi clienti, con le tue chiavi (che non vede)'], ['account', 'Profili, lettore e visioni contemporanee', 'Entro le connessioni che gli concedi'], ['ai', 'Assistente IA dei clienti', 'Quale IA, domande al giorno, domande extra']];
   // pagine del pannello: sempre e solo con i dati dei suoi clienti
-  const FP = [['dash', 'Dashboard', 'Riepilogo dei suoi clienti', 'dash'], ['online', 'Online ora', 'Chi sta guardando, tra i suoi clienti', 'live'], ['errors', 'Errori applicazione', 'Dei suoi clienti', 'apperr'],
+  const FP = [['dash', 'Dashboard', 'Riepilogo dei suoi clienti', 'dash'], ['errors', 'Errori applicazione', 'Dei suoi clienti', 'apperr'],
     ['reports', 'Segnalazioni', 'Dei suoi clienti', 'reports'], ['contentReq', 'Richieste contenuti', 'Dei suoi clienti', 'creq'], ['addonReq', 'Richieste temi', 'Assegna solo gli add-on che gli concedi', 'areq'],
     ['messages', 'Messaggi', 'Solo ai suoi clienti, mai a tutti', 'msgs'], ['store', 'Download store: accettare le richieste', 'Solo per le app che scegli qui sotto (le impostazioni restano tue)', 'store'],
     ['storeAll', 'Download store: vedere anche i download degli altri', 'Se spento nello storico vede solo quelli approvati da lui', ''],
@@ -242,7 +242,7 @@ body.agent .foot{display:none}
   };
 
   /* ---------- modalità agente ---------- */
-  const agentCan = (v) => !!PERM_VIEW[v] && can(PERM_VIEW[v]);
+  const agentCan = (v) => v !== 'live' && !!PERM_VIEW[v] && can(PERM_VIEW[v]); // «Online ora» è solo del titolare: mostra tutti i clienti del pannello
   const OWNER_ONLY = ['dash', 'live', 'rctl', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'dns', 'apps3', 'lines', 'armada', 'wolf', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity'];
   let modeSet = '';
   function applyMode() {

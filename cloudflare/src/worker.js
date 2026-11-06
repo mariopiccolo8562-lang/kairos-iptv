@@ -3160,7 +3160,6 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   // «Dati» dei suoi clienti, salute delle loro app, «Invia aggiornamento» ai suoi clienti
   const ains = path.match(/^\/insight\/([A-Za-z0-9_-]{6,20})$/);
   if (ains && m === 'GET') { const d = await own(ains[1]); if (!d) throw new HttpErr(404, 'Cliente non trovato'); return json(await insightFor(env, d, await getSettings(env))); }
-  if (path === '/health' && m === 'GET') { const r = await healthList(env, await getSettings(env), await scope()); return json({ ...r, settings: { on: r.settings.on } }); }
   const aup = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})\/upd$/);
   if (aup && m === 'POST') { if (!(await own(aup[1]))) throw new HttpErr(404, 'Cliente non trovato'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
   // Pannello Armada: solo con il permesso del titolare (suoi crediti, tetto mensile, solo le linee create da lui)
@@ -3176,12 +3175,8 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     return json({ days, lists: (await thirdLists(env, days)).filter((x) => sc.has(x.id)).map(({ ownerId, ...x }) => x) });
   }
   const REQ_PERM = { report: 'reports', content: 'contentReq', addon: 'addonReq', ai: 'ai' };
-  // Online ora
-  if (path === '/presence' && m === 'GET') {
-    need('online'); const sc = await scope(), j = await adminPresence(env);
-    const f = (l) => (l || []).filter((x) => sc.has(x.id));
-    return json({ ...j, online: f(j.online), recent: f(j.recent), top: [] });
-  }
+  // «Online ora» e «Salute delle app» sono del titolare: mostrano tutti i clienti del pannello (totali, più visti, app da aggiornare)
+  if ((path === '/presence' || path === '/health') && m === 'GET') throw new HttpErr(403, '«Online ora» è riservata al titolare');
   // Linee collegate: solo le sue (e dei sotto-agenti, se li vede); gli host delle attivazioni automatiche restano nascosti
   if (path === '/linked-lines' || path.startsWith('/linked-lines/')) { need('lines', 'Non puoi usare le linee collegate'); const r = await linkedLinesRoutes(req, env, path, who, ip, { id: A.id, tree: ctree, hideHosts: !((await getSettings(env)).playersCfg || {}).showDnsAgents }); if (r) return r; throw new HttpErr(404, 'Non trovato'); }
   // Errori dell'applicazione

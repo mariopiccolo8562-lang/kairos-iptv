@@ -79,7 +79,7 @@
 
   /* ---------- 🩺 Salute delle app ---------- */
   let H = null, hT = 0, lastBad = -1;
-  async function loadH(force) { if (!force && Date.now() - hT < 45e3) return; hT = Date.now(); try { H = await api('GET', '/admin/health'); } catch { H = null; } drawH(); }
+  async function loadH(force) { if (D.role === 'agent' || window.__assist) { H = null; drawH(); return; } if (!force && Date.now() - hT < 45e3) return; hT = Date.now(); try { H = await api('GET', '/admin/health'); } catch { H = null; } drawH(); } // «Salute delle app» è del titolare (tutti i clienti del pannello)
   function cardHtml(full) {
     if (!H) return '';
     const on = H.settings && H.settings.on, L = on ? H.list || [] : [], bad = L.filter((x) => x.bad).length;
