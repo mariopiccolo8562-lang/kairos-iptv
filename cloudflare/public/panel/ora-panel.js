@@ -1,5 +1,5 @@
 /* KAIROS Control — «Pannello ORA» (panel.oraplayers.com): dispositivi, sub-reseller e crediti del tuo account ORA.
-   ORA non ha API e il suo login ha la verifica «sono umano»: entri tu su ORA e con il pulsante «KAIROS ← ORA»
+   ORA non ha API e il suo login ha la verifica «sono umano»: entri tu su ORA e con il pulsante «KAIROS ORA»
    nei Preferiti passi l'accesso a KAIROS. Solo il titolare. Usa app.js. */
 (() => {
   const IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
@@ -12,7 +12,7 @@
   const isAg = () => D.role === 'agent';
   const TABS = [['devices', 'Dispositivi'], ['subs', 'Sub-reseller'], ['credits', 'Crediti'], ['history', 'Movimenti'], ['info', 'Il mio account']];
   const R = { st: null, tab: 'devices', page: 0, q: '', data: null, total: null, path: '', err: '', busy: false };
-  const BM = `javascript:(()=>{const t=localStorage.getItem('accessToken');if(!/oraplayers\\.com$/.test(location.hostname)||!t){alert('Apri panel.oraplayers.com, entra con utente e password e poi premi di nuovo questo pulsante.');return}window.open('${location.origin}/panel/#ora='+encodeURIComponent(t),'_blank')})()`;
+  const BM = `javascript:(()=>{const S=[localStorage,sessionStorage];let t='';for(const s of S){t=s.getItem('accessToken')||s.getItem('access_token')||'';if(t)break}if(!t)for(const s of S)for(let i=0;i<s.length&&!t;i++){const m=/eyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+/.exec(s.getItem(s.key(i))||'');if(m)t=m[0]}t=t.replace(/^"|"$/g,'');if(!/oraplayers\\.com$/.test(location.hostname)){alert('Questo pulsante va cliccato quando sei dentro il pannello ORA (panel.oraplayers.com).');return}if(!t){alert('Prima entra su ORA con utente e password, poi clicca di nuovo KAIROS ORA.');return}const u='${location.origin}/panel/#ora='+encodeURIComponent(t);const w=window.open(u,'_blank');if(!w)location.href=u})()`;
 
   /* il pulsante nei Preferiti apre KAIROS con l'accesso nel «#»: lo prendo, lo tolgo dall'indirizzo e lo salvo appena sei dentro */
   const pend = () => { try { return sessionStorage.getItem('kxOraTok') || ''; } catch { return ''; } };
@@ -64,22 +64,30 @@
     V.innerHTML = `<div class="card glass" style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start">
         <div><b style="font-size:16px">${ok ? '✅ ORA collegato' : st.connected ? '⚠️ Accesso ORA scaduto' : 'ORA non collegato'}</b>
-          <p class="mut" style="margin:4px 0 0;font-size:13px">${ok ? `Account ${esc(st.user || '')}${exp ? ' · l\'accesso scade il ' + esc(exp) : ''}` : 'Entra su ORA nel tuo browser e premi il pulsante «KAIROS ← ORA» nei Preferiti.'}</p></div>
+          <p class="mut" style="margin:4px 0 0;font-size:13px">${ok ? `Account ${esc(st.user || '')}${exp ? ' · l\'accesso scade il ' + esc(exp) : ''}` : 'Entra su ORA nel tuo browser e clicca «KAIROS ORA» nei Preferiti (come crearlo è spiegato qui sotto).'}</p></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn sm" href="https://panel.oraplayers.com/sign-in" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Apri ORA</a>${st.connected ? '<button class="btn sm" data-o="reload">Aggiorna</button><button class="btn sm" data-o="off">Scollega</button>' : ''}</div>
       </div>
       <details style="margin-top:12px"${ok ? '' : ' open'}><summary style="cursor:pointer;font-weight:600">Come si collega (una volta sola, da computer)</summary>
         <ol style="margin:10px 0 0;padding-left:20px;line-height:1.8;font-size:13.5px">
-          <li>Trascina questo pulsante nella barra dei Preferiti di Chrome/Edge (se non la vedi: Ctrl+Maiusc+B): <a class="btn sm pri" id="oraBm" href="#" style="cursor:grab;text-decoration:none" title="Trascinami nei Preferiti">KAIROS ← ORA</a></li>
-          <li>Apri <b>panel.oraplayers.com</b> ed entra come sempre (utente, password, «Verify you are human»).</li>
-          <li>Quando sei dentro ORA, clicca <b>KAIROS ← ORA</b> nei Preferiti: si apre KAIROS e ORA risulta collegato.</li>
+          <li><b>Crea il pulsante nei Preferiti</b> (una volta sola):
+            <ol type="a" style="padding-left:18px;margin:4px 0">
+              <li>premi <button class="btn sm pri" data-o="cpbm">Copia il pulsante</button></li>
+              <li>in Chrome/Edge premi <b>Ctrl + Maiusc + B</b>: sotto la barra degli indirizzi compare la barra dei Preferiti;</li>
+              <li>clicca col <b>tasto destro</b> su quella barra → <b>«Aggiungi pagina…»</b> (Edge: «Aggiungi preferito»);</li>
+              <li>come <b>Nome</b> scrivi <b>KAIROS ORA</b>, nel campo <b>URL</b> cancella tutto e premi <b>Ctrl + V</b>, poi <b>Salva</b>.</li>
+            </ol>
+            <span class="mut" style="font-size:12.5px">Oppure trascina questo pulsante sulla barra dei Preferiti: <a class="btn sm" id="oraBm" href="#" style="cursor:grab;text-decoration:none;color:inherit" title="Trascinami nei Preferiti">KAIROS ORA</a></span></li>
+          <li>Apri <a href="https://panel.oraplayers.com/sign-in" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline"><b>panel.oraplayers.com</b></a> ed entra come sempre (utente, password, «Verify you are human»).</li>
+          <li>Quando vedi il pannello ORA aperto, clicca <b>KAIROS ORA</b> nella barra dei Preferiti: si apre KAIROS con «ORA collegato».</li>
         </ol>
-        <p class="mut" style="font-size:12.5px;margin:8px 0 0">Quando ORA fa scadere l'accesso, ripeti i passi 2 e 3. Utente e password di ORA non passano mai da KAIROS.</p></details></div>
+        <p class="mut" style="font-size:12.5px;margin:8px 0 0">Quando ORA fa scadere l'accesso, ripeti solo i passi 2 e 3. Utente e password di ORA non passano mai da KAIROS.</p></details></div>
       ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.map(([k, n]) => `<button class="btn sm${R.tab === k ? ' pri' : ''}" data-t="${k}">${n}</button>`).join('')}
         ${R.tab === 'devices' || R.tab === 'subs' ? `<input class="inp" id="oraQ" placeholder="Cerca…" value="${esc(R.q)}" style="max-width:240px;margin-left:auto">` : ''}</div>${body()}</div>` : ''}`;
-    const bm = $('#oraBm'); if (bm) { bm.setAttribute('href', BM); bm.onclick = (e) => { e.preventDefault(); toast('Non cliccarlo qui: trascinalo nella barra dei Preferiti', 1); }; }
+    const bm = $('#oraBm'); if (bm) { bm.setAttribute('href', BM); bm.onclick = (e) => { e.preventDefault(); toast('Non cliccarlo qui: usa «Copia il pulsante» oppure trascinalo nella barra dei Preferiti', 1); }; }
     $$('[data-t]', V).forEach((b) => (b.onclick = () => { R.tab = b.dataset.t; R.page = 0; R.q = ''; load(); }));
     $$('[data-o]', V).forEach((b) => (b.onclick = async () => {
       const o = b.dataset.o;
+      if (o === 'cpbm') return navigator.clipboard.writeText(BM).then(() => toast('Pulsante copiato: ora incollalo nei Preferiti come URL'), () => toast('Il browser non permette di copiare: trascina il pulsante KAIROS ORA', 1));
       if (o === 'prev') { R.page--; return load(); } if (o === 'next') { R.page++; return load(); }
       if (o === 'reload') { R.st = null; return open(); }
       if (o === 'off') { if (!(await ask('Scollegare ORA?', 'KAIROS dimentica l\'accesso a ORA. Su ORA non cambia niente.', 'Scollega'))) return; await api('DELETE', '/admin/ora/token').catch((e) => toast(e.message, 1)); R.st = null; R.data = null; return open(); }
