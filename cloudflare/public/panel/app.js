@@ -117,21 +117,17 @@ async function demoApi(method, path, body) {
 
 /* ---------------- toast / modal ---------------- */
 function toast(t, bad) { const e = document.createElement('div'); e.className = 'toast' + (bad ? ' bad' : ''); e.innerHTML = `<i></i>${esc(t)}`; $('#toasts').appendChild(e); setTimeout(() => { e.style.transition = '.4s'; e.style.opacity = 0; e.style.transform = 'translateX(30px)'; setTimeout(() => e.remove(), 400); }, 2800); }
-/** conferma «forte» per le azioni che non si annullano: va scritta la parola richiesta (codice del cliente, nome dell'agente, ELIMINA).
-    [trash] = true aggiunge la nota che l'elemento resta 30 giorni nel Cestino */
+/** conferma per le azioni che non si annullano: una finestra chiara, un solo tasto (niente da scrivere).
+    [trash] = true aggiunge la nota che l'elemento resta 30 giorni nel Cestino; [word] non si usa più (resta per i vecchi richiami) */
 function askDanger(title, body, word, yes = 'Elimina', trash = true) {
   return new Promise((res) => {
-    const W = String(word || 'ELIMINA').trim();
     $('#mT').textContent = title;
-    $('#mB').innerHTML = `${body}${trash ? '<br><span class="mut" style="font-size:12.5px">Finisce nel <b>Cestino</b> (menu Controllo): puoi ripristinarlo entro 30 giorni.</span>' : ''}<div style="margin-top:14px"><label class="lbl" style="display:block;margin-bottom:6px">Per confermare scrivi <b class="mono">${esc(W)}</b></label><input class="inp" id="mWord" autocomplete="off" spellcheck="false" placeholder="${esc(W)}" style="width:100%;margin:0"></div>`;
-    $('#mYes').textContent = yes; $('#mYes').disabled = true; $('#mYes').classList.add('danger');
+    $('#mB').innerHTML = `${body}${trash ? '<br><span class="mut" style="font-size:12.5px">Finisce nel <b>Cestino</b> (menu Controllo): puoi ripristinarlo entro 30 giorni.</span>' : '<br><span class="mut" style="font-size:12.5px">Questa azione non si può annullare.</span>'}`;
+    $('#mYes').textContent = yes; $('#mYes').disabled = false; $('#mYes').classList.add('danger');
     $('#modal').classList.add('on');
-    const inp = $('#mWord'); setTimeout(() => inp && inp.focus(), 50);
-    const okNow = () => inp.value.trim().toUpperCase() === W.toUpperCase();
-    inp.oninput = () => { $('#mYes').disabled = !okNow(); };
-    inp.onkeydown = (e) => { if (e.key === 'Enter' && okNow()) done(true); if (e.key === 'Escape') done(false); };
-    const done = (v) => { $('#modal').classList.remove('on'); $('#mYes').disabled = false; $('#mYes').classList.remove('danger'); res(v); };
-    $('#mYes').onclick = () => { if (okNow()) done(true); };
+    setTimeout(() => $('#mYes').focus(), 50);
+    const done = (v) => { $('#modal').classList.remove('on'); $('#mYes').classList.remove('danger'); res(v); };
+    $('#mYes').onclick = () => done(true);
     $('#mNo').onclick = () => done(false);
   });
 }
