@@ -447,13 +447,19 @@ function xtreamLines(pls) {
   }
   return out.slice(0, 10);
 }
+const macVariants = (v) => { const h = String(v || '').replace(/[^0-9A-Fa-f]/g, ''); if (h.length !== 12 || !/^[0-9A-Fa-f:.\s-]+$/.test(String(v || '').trim())) return [v]; const u = h.toUpperCase(), l = h.toLowerCase(), c = (x, sp) => x.match(/../g).join(sp); return [...new Set([v, c(u, ':'), c(l, ':'), u, l, c(u, '-'), c(l, '-')])]; }; // OrbixPlay a volte salva il MAC in un'altra scrittura
 async function orbixCall(env, path, query) {
   if (!env.ORBIX_KEY) throw new HttpErr(400, 'OrbixPlay non è collegato: aggiungi il segreto ORBIX_KEY su GitHub (vedi la guida in Impostazioni)');
-  let r;
-  try { r = await fetch(ORBIX_API + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-customer-key': env.ORBIX_KEY }, body: JSON.stringify({ query }) }); } catch { throw new HttpErr(502, 'OrbixPlay non risponde, riprova tra poco'); }
-  const j = await r.json().catch(() => ({}));
-  if (r.ok) return j;
-  const why = str(j.error || j.message || '', 160);
+  const ids = path === '/add-playlist' && query && query.deviceid ? macVariants(query.deviceid) : [null];
+  let r, j, why = '';
+  for (const id of ids) {
+    const qq = id ? { ...query, deviceid: id } : query;
+    try { r = await fetch(ORBIX_API + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-customer-key': env.ORBIX_KEY }, body: JSON.stringify({ query: qq }) }); } catch { throw new HttpErr(502, 'OrbixPlay non risponde, riprova tra poco'); }
+    j = await r.json().catch(() => ({}));
+    if (r.ok) { if (id) query.deviceid = id; return j; }
+    why = str(j.error || j.message || '', 160);
+    if (!/device not found/i.test(why)) break;
+  }
   const MSG = { 400: 'Dati non accettati da OrbixPlay', 401: 'Chiave OrbixPlay non valida', 403: 'Abbonamento OrbixPlay scaduto o posti finiti', 404: 'Dispositivo non trovato su OrbixPlay: controlla l\'ID (il cliente deve prima aprire l\'app OrbixPlay)' };
   throw new HttpErr(r.status === 404 || r.status === 403 || r.status === 400 ? 400 : 502, (MSG[r.status] || 'Errore di OrbixPlay') + (why ? ' — ' + why : ''));
 }
@@ -462,7 +468,7 @@ const orbixOf = (d) => { try { const o = JSON.parse(d.orbix || '{}'); return { i
     (l'indirizzo non lo scrive nessuno: lo prende dalle impostazioni; con il «codice host» non viaggia nemmeno in chiaro) */
 async function orbixSend(env, d, b, who, ip, agentLines, allow) {
   if (!env.ORBIX_KEY) throw new HttpErr(400, 'OrbixPlay non è collegato: aggiungi il segreto ORBIX_KEY su GitHub (vedi la guida in Impostazioni)');
-  const orbixId = macNorm(str(b.orbixId, 64)), username = str(b.username, 120), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '';
+  let orbixId = macNorm(str(b.orbixId, 64)); const username = str(b.username, 120), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '';
   if (!ORBIX_ID_RE.test(orbixId)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
   if (macShort(orbixId)) throw new HttpErr(400, `ID incompleto: ${orbixId} ha ${orbixId.split(/[:.-]/).length} coppie, un ID OrbixPlay ne ha 6 (es. 00:1A:79:AA:BB:CC). Controllalo nell'app OrbixPlay`);
   if (!username || !password) throw new HttpErr(400, 'Scrivi utente e password della linea');
@@ -471,7 +477,9 @@ async function orbixSend(env, d, b, who, ip, agentLines, allow) {
   if (!list.length) throw new HttpErr(400, agentLines ? 'Nessun DNS di OrbixPlay disponibile per te: chiedilo a chi ti gestisce' : 'Imposta prima un DNS (OrbixPlay in APP Store, oppure in «Server DNS»)');
   const di = Math.max(0, Math.min(list.length - 1, parseInt(b.dns, 10) || 0)), dns = list[di];
   const old = orbixOf(d);
-  const j = await orbixCall(env, '/add-playlist', { deviceid: orbixId, playlistName: str(s.brand || 'Kairos', 40), username, password, host: dns.code || dns.host, notes: str(d.name || d.code, 60) });
+  const oq = { deviceid: orbixId, playlistName: str(s.brand || 'Kairos', 40), username, password, host: dns.code || dns.host, notes: str(d.name || d.code, 60) };
+  const j = await orbixCall(env, '/add-playlist', oq);
+  orbixId = oq.deviceid;
   const pid = j.playlist_id ?? (j.playlist && j.playlist.playlist_id) ?? j.id;
   const pls = pid !== undefined && pid !== null ? [String(pid)] : [];
   // solo ora (se l'invio è riuscito) si toglie quella mandata l'ultima volta: un ID sbagliato non svuota il dispositivo giusto
@@ -569,13 +577,15 @@ async function extListsRoutes(req, env, path, who, ip, ag) {
     let ref = '', ext = '', dnsName = '';
     if (app === 'orbix') {
       if (!env.ORBIX_KEY) throw new HttpErr(400, 'OrbixPlay non è collegato: aggiungi il segreto ORBIX_KEY su GitHub');
-      const orbixId = macNorm(str(b.orbixId, 64));
+      let orbixId = macNorm(str(b.orbixId, 64));
       if (!ORBIX_ID_RE.test(orbixId)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
       if (macShort(orbixId)) throw new HttpErr(400, `ID incompleto: ${orbixId} ha ${orbixId.split(/[:.-]/).length} coppie, un ID OrbixPlay ne ha 6 (es. 00:1A:79:AA:BB:CC). Controllalo nell'app OrbixPlay`);
       const list = ag ? agOrbList(s, ag.orbDns) : orbixDnsList((s.playersCfg || {}).orbix, await dnsList(env));
       if (!list.length) throw new HttpErr(400, ag ? 'Nessun DNS di OrbixPlay disponibile per te: chiedilo a chi ti gestisce' : 'Imposta prima un DNS di OrbixPlay');
       const dns = list[Math.max(0, Math.min(list.length - 1, parseInt(b.dns, 10) || 0))];
-      const j = await orbixCall(env, '/add-playlist', { deviceid: orbixId, playlistName: str(s.brand || 'Kairos', 40), username, password, host: dns.code || dns.host, notes: name || username });
+      const oq = { deviceid: orbixId, playlistName: str(s.brand || 'Kairos', 40), username, password, host: dns.code || dns.host, notes: name || username };
+      const j = await orbixCall(env, '/add-playlist', oq);
+      orbixId = oq.deviceid;
       const pid = j.playlist_id ?? (j.playlist && j.playlist.playlist_id) ?? j.id;
       ref = orbixId; ext = JSON.stringify(pid !== undefined && pid !== null ? [String(pid)] : []); dnsName = dns.name || 'DNS';
     } else {
