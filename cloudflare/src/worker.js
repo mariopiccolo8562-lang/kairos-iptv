@@ -1723,6 +1723,8 @@ async function playerErrors(req, env, ip, ctx) {
       .bind(at, d.id, problem, nameClean(x.action, 60), outcome, str(x.err, 120), nameClean(x.title, 120), str(x.id, 60), x.k === 'live' ? 'live' : x.k ? 'vod' : '', str(x.engine, 12), str(x.codec, 16), x.dec === 'sw' ? 'sw' : x.dec === 'hw' ? 'hw' : '', str(x.res, 12), str(x.var, 12), model, ver));
   }
   if (stmts.length) await env.DB.batch(stmts);
+  // «Risolvi da solo»: al massimo ogni 6 ore per dispositivo, solo correzioni che non interrompono la visione
+  if (t - (+d.fix_t || 0) > 6 * 3600e3) ctx.waitUntil((async () => { const S = await getSettings(env); if (S.health && S.health.on && S.health.autoFix) await fixDevice(env, S, d, 'Pannello', true); })().catch(() => {}));
   // pulizia: ogni tanto si tolgono quelli più vecchi di 7 giorni
   if (Math.random() < 0.1) ctx.waitUntil(env.DB.prepare('DELETE FROM app_errors WHERE t < ?').bind(t - ERR_KEEP_MS).run().catch(() => {}));
   return json({ ok: true, saved: stmts.length });
@@ -1969,6 +1971,69 @@ function appOfVer(ver, saved) {
 /** come si aggiorna ogni app: solo Kairos Pro riceve «Invia aggiornamento» dal pannello */
 const UPD_HOW = { tv: 'Invia l\'aggiornamento: l\'app lo propone subito al cliente', prem: 'Invia l\'aggiornamento: Kairos Premium lo scarica in background e propone «Installa ora»', ktv: 'Invia l\'aggiornamento: Kairos TV lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', lite: 'Invia l\'aggiornamento: Kairos Lite lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', xc: 'Invia l\'aggiornamento: Kairos XC lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', plus: 'Invia l\'aggiornamento: Kairos Plus lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie si aggiornano dal Kairos Store)', nova: 'Invia l\'aggiornamento: Kairos Nova lo scarica in background e propone «Installa ora»' };
 /** problemi trovati per un cliente, con la soluzione suggerita (sev: bad | warn) */
+/* «Risolvi»: azioni vere sui problemi trovati da healthIssues. auto = solo quelle che non interrompono la visione
+   (impostazioni dell'app); a mano anche svuota cache e riavvio. Linee scadute o piene: solo segnalate (rinnovare usa crediti). */
+async function xtUserInfo(origin, u, p) {
+  const url = `${origin}/player_api.php?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`, hd = { 'User-Agent': 'IPTVSmartersPro', Accept: 'application/json' };
+  const parse = async (r) => { if (!r || !r.ok) return null; try { const j = JSON.parse(await r.text()); return j && typeof j === 'object' ? j.user_info || { auth: 0 } : null; } catch { return null; } };
+  let v = null;
+  try { v = await parse(await fetch(url, { headers: hd, signal: AbortSignal.timeout(6000) })); } catch {}
+  if (!v) { try { v = await parse(await Promise.race([sockFetch(url, { method: 'GET', headers: hd }), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 7000))])); } catch {} }
+  return v;
+}
+async function lineProblem(pl) {
+  let o = ''; try { o = new URL(/^https?:\/\//i.test(pl.host) ? pl.host : 'http://' + pl.host).origin; } catch { return ''; }
+  const ui = await xtUserInfo(o, pl.username, pl.password);
+  if (!ui) return 'il server della linea non risponde';
+  if (ui.auth !== undefined && +ui.auth === 0) return 'il server rifiuta utente e password (linea cancellata o password cambiata)';
+  const exp = +ui.exp_date ? +ui.exp_date * 1000 : 0;
+  if (exp && exp < now()) return `linea scaduta il ${new Date(exp).toLocaleDateString('it-IT')}: va rinnovata`;
+  if (ui.status && !/^active$/i.test(String(ui.status))) return `linea in stato «${str(String(ui.status), 30)}» sul server`;
+  const a = +ui.active_cons || 0, mx = +ui.max_connections || 0;
+  if (mx && a >= mx) return `connessioni piene (${a}/${mx}): qualcun altro usa la stessa linea`;
+  return '';
+}
+async function fixDevice(env, s, d, who, auto = false) {
+  const t = now();
+  const p = await env.DB.prepare('SELECT * FROM presence WHERE device_id = ?').bind(d.id).first();
+  const app = appOfVer(p && p.ver, d.app);
+  if (!RC_LINKED.includes(app)) throw new HttpErr(400, `${APP_NAME[app] || 'Questa app'} non si gestisce dal pannello`);
+  const errs = ((await env.DB.prepare('SELECT t, problem, outcome, codec, dec FROM app_errors WHERE device_id = ? AND t > ?').bind(d.id, Math.max(t - 864e5, +d.fix_t || 0)).all().catch(() => ({ results: [] }))).results) || [];
+  const latest = auto ? null : await latestFor(env, s, app).catch(() => null);
+  const iss = healthIssues(p, errs, latest, app);
+  const rc = rcDevOf(d), rc0 = JSON.stringify(rc), cmds = new Set(), done = [], todo = [];
+  const set = (k, v, why) => { const c = rcCatByKey.get(k); if (!c || !(c[4] || []).includes(app) || rc[k] === v) return; rc[k] = v; done.push(why); };
+  let upd = false;
+  for (const i of iss) {
+    if (i.key === 'upd') { upd = true; done.push(`Aggiornamento alla versione ${latest ? latest.version : 'nuova'} inviato`); }
+    else if (i.key === 'restart') { set('lite', 'max', 'Modalità leggerissima attivata: il dispositivo ha poca memoria'); cmds.add('cache'); }
+    else if (i.key === 'err') {
+      cmds.add('cache');
+      if (errs.some((e) => /hevc|h\.?265/i.test(e.codec || ''))) { set('lite', 'on', 'Modalità leggera attivata: i canali HEVC pesano sul dispositivo'); todo.push('Canali HEVC/H.265: se la playlist ha la versione H.264 del canale, è più leggera'); }
+    } else if (i.key === 'dec') set('o.hw', 'on', 'Decodifica hardware attivata');
+    else if (i.key === 'stall' || i.key === 'speed' || i.key === 'wifi') {
+      set('o.adaptQ', true, 'Qualità adattiva attivata: con la rete lenta passa da sola alla versione più leggera del canale');
+      if (i.key === 'wifi') todo.push('Wi-Fi debole: il cliente deve avvicinare il router, usare un ripetitore o il cavo');
+      if (i.key === 'speed') todo.push('Connessione del cliente lenta: per l\'HD servono almeno 8–10 Mbps stabili');
+    }
+  }
+  if (!auto) for (const pl of (await unseal(env, d.playlists).catch(() => [])).filter((x) => x && x.type === 'xtream' && x.host && x.username && x.password).slice(0, 3)) {
+    const why = await lineProblem(pl); if (why) todo.push(`Linea «${pl.name || pl.username}»: ${why}`);
+  }
+  if (auto) cmds.clear();
+  const stmts = [];
+  if (JSON.stringify(rc) !== rc0) stmts.push(env.DB.prepare('UPDATE devices SET rc = ? WHERE id = ?').bind(JSON.stringify(rc), d.id));
+  if (upd) stmts.push(env.DB.prepare('UPDATE devices SET upd_req = ? WHERE id = ? OR parent = ?').bind(t, d.id, d.id));
+  for (const c of cmds) {
+    const have = await env.DB.prepare('SELECT 1 AS x FROM remote_cmds WHERE device_id = ? AND cmd = ? AND done = 0').bind(d.id, c).first();
+    if (!have) stmts.push(env.DB.prepare('INSERT INTO remote_cmds (device_id, cmd, args, created, by) VALUES (?, ?, ?, ?, ?)').bind(d.id, c, '', t, who));
+  }
+  if (cmds.has('cache')) done.push('Cache svuotata e app riavviata (appena l\'app si collega: entro 1 minuto se è aperta)');
+  if (done.length) stmts.push(env.DB.prepare('UPDATE devices SET fix_t = ? WHERE id = ?').bind(t, d.id));
+  if (stmts.length) await env.DB.batch(stmts);
+  if (done.length) await log(env, 'edit', `${who}: «Risolvi»${auto ? ' automatico' : ''} su ${d.name || d.code} — ${done.join('; ')}`, '');
+  return { ok: true, done, todo, issues: iss.length };
+}
 function healthIssues(p, errs, latest, app) {
   const out = [];
   const pro = !app || RC_APPS.includes(app);
@@ -1993,7 +2058,7 @@ async function insightFor(env, d, s) {
   const since = dayIT(t - 6 * 864e5);
   const wd = ((await env.DB.prepare('SELECT day, kind, title, secs, last FROM watch_dev WHERE device_id = ? AND day >= ? ORDER BY last DESC LIMIT 500').bind(d.id, since).all().catch(() => ({ results: [] }))).results) || [];
   const errs = ((await env.DB.prepare('SELECT t, problem, action, outcome, err, title, kind, engine, codec, dec, res, ver FROM app_errors WHERE device_id = ? AND t > ? ORDER BY t DESC LIMIT 200').bind(d.id, t - 7 * 864e5).all().catch(() => ({ results: [] }))).results) || [];
-  const errs24 = errs.filter((e) => e.t > t - 864e5);
+  const errs24 = errs.filter((e) => e.t > t - 864e5 && e.t > (+d.fix_t || 0));
   const today = dayIT(t), byTitle = new Map(), byDay = new Map();
   for (const w of wd) { const k = w.kind + '|' + w.title, x = byTitle.get(k) || { kind: w.kind, title: w.title, secs: 0, last: 0 }; x.secs += +w.secs; x.last = Math.max(x.last, +w.last); byTitle.set(k, x); byDay.set(w.day, (byDay.get(w.day) || 0) + +w.secs); }
   const online = p && t - (+p.t || 0) <= ONLINE_MS;
@@ -2015,8 +2080,8 @@ async function healthList(env, s, ids) {
   // presenza, errori e ultime versioni: tutto insieme (prima erano tre attese una dopo l'altra)
   const L = {};
   const [rowsR, erR] = await Promise.all([
-    env.DB.prepare("SELECT p.device_id AS id, p.ver, p.state, p.stalls_h, p.net, p.rssi, p.speed_dl, p.t, d.name, d.code, d.app, d.parent, d.upd_req FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ?").bind(t - 3 * 864e5).all(),
-    env.DB.prepare('SELECT device_id, problem, outcome, codec, dec FROM app_errors WHERE t > ?').bind(t - 864e5).all().catch(() => ({ results: [] })),
+    env.DB.prepare("SELECT p.device_id AS id, p.ver, p.state, p.stalls_h, p.net, p.rssi, p.speed_dl, p.t, d.name, d.code, d.app, d.parent, d.upd_req, d.fix_t FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ?").bind(t - 3 * 864e5).all(),
+    env.DB.prepare('SELECT device_id, t, problem, outcome, codec, dec FROM app_errors WHERE t > ?').bind(t - 864e5).all().catch(() => ({ results: [] })),
     ...['tv', 'ktv', 'prem', 'lite', 'xc', 'plus'].map(async (a) => { L[a] = await latestFor(env, s, a).catch(() => null); }),
   ]);
   const rows = (rowsR && rowsR.results) || [];
@@ -2024,11 +2089,11 @@ async function healthList(env, s, ids) {
   const out = [];
   for (const r of rows) {
     if (ids && !ids.has(r.id)) continue;
-    const app = appOfVer(r.ver, r.app), iss = healthIssues(r, er.get(r.id) || [], L[app] || null, app);
+    const app = appOfVer(r.ver, r.app), iss = healthIssues(r, (er.get(r.id) || []).filter((e) => +e.t > (+r.fix_t || 0)), L[app] || null, app);
     if (iss.length) out.push({ id: r.id, name: r.name || '', code: r.code, app, appName: APP_NAME[app] || '', canUpd: RC_LINKED.includes(app), ver: r.ver, online: t - +r.t <= ONLINE_MS, lastSeen: +r.t, updSent: +r.upd_req || 0, issues: iss, bad: iss.filter((x) => x.sev === 'bad').length });
   }
   out.sort((a, b) => b.bad - a.bad || b.issues.length - a.issues.length || b.lastSeen - a.lastSeen);
-  return { list: out.slice(0, 300), latest: Object.fromEntries(Object.entries(L).map(([k, v]) => [k, v ? v.version : ''])), settings: { on: !!(s.health && s.health.on), autoUpd: !!(s.health && s.health.autoUpd) } };
+  return { list: out.slice(0, 300), latest: Object.fromEntries(Object.entries(L).map(([k, v]) => [k, v ? v.version : ''])), settings: { on: !!(s.health && s.health.on), autoUpd: !!(s.health && s.health.autoUpd), autoFix: !!(s.health && s.health.autoFix) } };
 }
 /** vista pannello: chi è collegato e cosa guarda */
 /* visioni contemporanee: prima di iniziare a guardare l'app chiede il permesso (solo se il pannello ha messo un limite) */
@@ -3290,7 +3355,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   // «Dati» dei suoi clienti, salute delle loro app, «Invia aggiornamento» ai suoi clienti
   const ains = path.match(/^\/insight\/([A-Za-z0-9_-]{6,20})$/);
   if (ains && m === 'GET') { const d = await own(ains[1]); if (!d) throw new HttpErr(404, 'Cliente non trovato'); return json(await insightFor(env, d, await getSettings(env))); }
-  const aup = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})\/upd$/);
+  const aup = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})\/(upd|fix)$/);
   if (aup && m === 'POST') { if (!(await own(aup[1]))) throw new HttpErr(404, 'Cliente non trovato'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
   // Pannello Armada: solo con il permesso del titolare (suoi crediti, tetto mensile, solo le linee create da lui)
   if (path.startsWith('/armada/')) { need('armada', 'Non puoi usare il pannello Armada: chiedilo a chi ti gestisce'); return agentArmada(req, env, url, path, who, ip, ctx, { A, P, all, tree: ctree }); }
@@ -3795,12 +3860,14 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (ins && m === 'GET') { const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(ins[1]).first(); if (!d) throw new HttpErr(404, 'Cliente non trovato'); return json(await insightFor(env, d, await getSettings(env))); }
   if (path === '/health' && m === 'GET') return json(await healthList(env, await getSettings(env), null));
   if (path === '/health/settings' && m === 'PUT' && !(ses && ses.agent)) {
-    const b = await readJSON(req, 1024), s0 = await getSettings(env), h = { on: !!(s0.health && s0.health.on), autoUpd: !!(s0.health && s0.health.autoUpd) };
-    if (typeof b.on === 'boolean') h.on = b.on; if (typeof b.autoUpd === 'boolean') h.autoUpd = b.autoUpd;
+    const b = await readJSON(req, 1024), s0 = await getSettings(env), h = { on: !!(s0.health && s0.health.on), autoUpd: !!(s0.health && s0.health.autoUpd), autoFix: !!(s0.health && s0.health.autoFix) };
+    if (typeof b.on === 'boolean') h.on = b.on; if (typeof b.autoUpd === 'boolean') h.autoUpd = b.autoUpd; if (typeof b.autoFix === 'boolean') h.autoFix = b.autoFix;
     await settingsPatch(env, { health: h });
-    await log(env, 'settings', `${who}: salute delle app — controllo ${h.on ? 'attivo' : 'spento'}, aggiornamento automatico ${h.autoUpd ? 'attivo' : 'spento'}`, ip);
+    await log(env, 'settings', `${who}: salute delle app — controllo ${h.on ? 'attivo' : 'spento'}, aggiornamento automatico ${h.autoUpd ? 'attivo' : 'spento'}, risolvi da solo ${h.autoFix ? 'attivo' : 'spento'}`, ip);
     return json({ ok: true, health: h });
   }
+  const fxm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})\/fix$/);
+  if (fxm && m === 'POST') { const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(fxm[1]).first(); if (!d) throw new HttpErr(404, 'Cliente non trovato'); return json(await fixDevice(env, await getSettings(env), d, who)); }
   const upm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})\/upd$/);
   if (upm && m === 'POST') {
     const d = await env.DB.prepare('SELECT d.id, d.name, d.code, d.app, p.ver FROM devices d LEFT JOIN presence p ON p.device_id = d.id WHERE d.id = ?').bind(upm[1]).first(); if (!d) throw new HttpErr(404, 'Cliente non trovato');

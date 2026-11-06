@@ -47,7 +47,7 @@
     const maxDay = Math.max(1, ...x.watch.days.map((d) => d.secs));
     const days = []; for (let i = 6; i >= 0; i--) { const dt = new Date(Date.now() - i * 864e5), key = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome' }).format(dt); days.push({ key, lbl: dt.toLocaleDateString('it-IT', { weekday: 'short' }), secs: (x.watch.days.find((d) => d.day === key) || {}).secs || 0 }); }
     const updTile = !x.ver ? `<b>—</b><em>versione non nota</em>` : x.needsUpdate ? `<b style="color:#f5b041">${esc(x.ver)}</b><em>⬆ disponibile ${esc(x.latest)}</em>` : `<b style="color:#22c55e">${esc(x.ver)}</b><em>✓ aggiornata${x.latest ? ' (ultima ' + esc(x.latest) + ')' : ''}</em>`;
-    $('#insB').innerHTML = `<div class="in-h"><span class="in-dot ${x.online ? 'on' : 'off'}"></span><h3>${esc(x.name || x.code)}</h3><span class="mono mut">${esc(x.code)}</span><span class="ms-tag" style="margin-left:4px">${esc(x.appName)}</span><span class="sp"></span>${x.needsUpdate && x.canUpd !== false ? '<button class="btn sm pri" id="insUpd">⬆ Invia aggiornamento</button>' : ''}<button class="btn sm" id="insOpen">Scheda</button><button class="icb" id="insX" title="Chiudi">✕</button></div>
+    $('#insB').innerHTML = `<div class="in-h"><span class="in-dot ${x.online ? 'on' : 'off'}"></span><h3>${esc(x.name || x.code)}</h3><span class="mono mut">${esc(x.code)}</span><span class="ms-tag" style="margin-left:4px">${esc(x.appName)}</span><span class="sp"></span>${x.needsUpdate && x.canUpd !== false ? '<button class="btn sm pri" id="insUpd">⬆ Invia aggiornamento</button>' : ''}${x.issues.length ? '<button class="btn sm pri" id="insFix">🛠 Risolvi</button>' : ''}<button class="btn sm" id="insOpen">Scheda</button><button class="icb" id="insX" title="Chiudi">✕</button></div>
       <div class="in-k">
         <div style="--c:${x.online ? '#22c55e' : '#ef4444'}"><small>${x.online ? 'Collegato ora' : 'Ultima connessione'}</small><b>${x.online ? 'Adesso' : esc(when(x.lastSeen))}</b><em>${esc(x.lastIp || '')}${x.city ? ' · ' + esc(x.city) : ''}</em></div>
         <div style="--c:${x.needsUpdate ? '#f5b041' : '#22c55e'}"><small>Versione dell'app</small>${updTile}</div>
@@ -74,8 +74,20 @@
     $('#insX').onclick = close;
     $('#insOpen').onclick = () => { close(); const d = D.devices.find((y) => y.id === x.id); if (d) openDrawer(d); };
     $$('#insUpd, [data-insupd]').forEach((b) => (b.onclick = () => sendUpd(x.id, b)));
+    if ($('#insFix')) $('#insFix').onclick = async () => { if (await fixDev(x.id, $('#insFix'))) open(x.id); };
   }
-  window.KXInsight = { open, sendUpd };
+  async function fixDev(id, btn) {
+    if (!(await ask('Risolvere i problemi di questo cliente?', '<p class="mut" style="margin:0;font-size:13.5px">Il pannello applica le correzioni sull\'app del cliente (aggiornamento, modalità leggera, qualità adattiva, decodifica) e controlla la sua linea sul server. Se serve svuota la cache e riavvia l\'app: la visione si ferma per qualche secondo.</p>', 'Risolvi'))) return false;
+    const t0 = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = 'Risolvo…'; }
+    try {
+      const r = await api('POST', '/admin/devices/' + id + '/fix');
+      const li = (a) => a.map((x) => `<li style="margin:4px 0">${esc(x)}</li>`).join('');
+      await ask(r.done.length ? '🛠 Fatto' : 'Niente da correggere sull\'app', `${r.done.length ? `<b style="font-size:13px">Cosa ho fatto</b><ul style="margin:6px 0 12px;padding-left:18px;font-size:13.5px">${li(r.done)}</ul>` : '<p class="mut" style="font-size:13.5px">L\'app non ha problemi che si possano correggere da qui.</p>'}${r.todo.length ? `<b style="font-size:13px;color:#f5b041">Da fare fuori dall\'app</b><ul style="margin:6px 0 0;padding-left:18px;font-size:13.5px">${li(r.todo)}</ul>` : ''}`, 'Ok');
+      if (btn) btn.textContent = r.done.length ? '✓ Risolto' : t0;
+      return true;
+    } catch (e) { toast(e.message, 1); if (btn) btn.textContent = t0; return false; } finally { if (btn) btn.disabled = false; }
+  }
+  window.KXInsight = { open, sendUpd, fixDev };
 
   /* ---------- 🩺 Salute delle app ---------- */
   let H = null, hT = 0, lastBad = -1;
@@ -83,9 +95,9 @@
   function cardHtml(full) {
     if (!H) return '';
     const on = H.settings && H.settings.on, L = on ? H.list || [] : [], bad = L.filter((x) => x.bad).length;
-    const tg = isAg() ? '' : `<div class="hl-tg"><div class="tog ${on ? 'on' : ''}" data-hlt="on"><div><b>Controllo salute delle app</b><small>Il pannello controlla di continuo versioni, errori e blocchi e te li segnala qui (consigliato)</small></div><i></i></div><div class="tog ${H.settings && H.settings.autoUpd ? 'on' : ''}" data-hlt="autoUpd"><div><b>Aggiorna da solo le app vecchie</b><small>Chi ha una versione vecchia riceve subito l'aggiornamento, senza che tu lo mandi (Kairos Pro)</small></div><i></i></div></div>`;
+    const tg = isAg() ? '' : `<div class="hl-tg"><div class="tog ${on ? 'on' : ''}" data-hlt="on"><div><b>Controllo salute delle app</b><small>Il pannello controlla di continuo versioni, errori e blocchi e te li segnala qui (consigliato)</small></div><i></i></div><div class="tog ${H.settings && H.settings.autoFix ? 'on' : ''}" data-hlt="autoFix"><div><b>Risolvi da solo</b><small>Quando un'app ha errori il pannello applica da solo le correzioni che non interrompono la visione (modalità leggera, qualità adattiva, decodifica)</small></div><i></i></div><div class="tog ${H.settings && H.settings.autoUpd ? 'on' : ''}" data-hlt="autoUpd"><div><b>Aggiorna da solo le app vecchie</b><small>Chi ha una versione vecchia riceve subito l'aggiornamento, senza che tu lo mandi (Kairos Pro)</small></div><i></i></div></div>`;
     const lat = H.latest ? Object.entries(H.latest).filter(([, v]) => v).map(([k, v]) => `${{ tv: 'Pro', ktv: 'TV', prem: 'Premium', lite: 'Lite', xc: 'XC', plus: 'Plus' }[k]} ${esc(v)}`).join(' · ') : '';
-    const items = L.slice(0, full ? 30 : 5).map((x) => `<div class="hl-it"><span>${x.bad ? '🔴' : '🟠'}</span><div class="tx"><b>${esc(x.name || x.code)} <span class="mono mut" style="font-weight:400;font-size:12px">${esc(x.code)}</span></b><small>${x.issues.map((i) => esc(i.what)).join(' · ')}</small><small>💡 ${esc(x.issues[0].fix)}</small></div>${x.issues.some((i) => i.act === 'upd') ? `<button class="btn sm pri" data-hlupd="${esc(x.id)}">${x.updSent ? '⬆ Reinvia' : '⬆ Invia aggiornamento'}</button>` : ''}<button class="btn sm" data-hldati="${esc(x.id)}">📊 Dati</button></div>`).join('');
+    const items = L.slice(0, full ? 30 : 5).map((x) => `<div class="hl-it"><span>${x.bad ? '🔴' : '🟠'}</span><div class="tx"><b>${esc(x.name || x.code)} <span class="mono mut" style="font-weight:400;font-size:12px">${esc(x.code)}</span></b><small>${x.issues.map((i) => esc(i.what)).join(' · ')}</small><small>💡 ${esc(x.issues[0].fix)}</small></div>${x.issues.some((i) => i.act === 'upd') ? `<button class="btn sm pri" data-hlupd="${esc(x.id)}">${x.updSent ? '⬆ Reinvia' : '⬆ Invia aggiornamento'}</button>` : ''}<button class="btn sm pri" data-hlfix="${esc(x.id)}">🛠 Risolvi</button><button class="btn sm" data-hldati="${esc(x.id)}">📊 Dati</button></div>`).join('');
     return `<div class="card glass hl-card ${on && !L.length ? 'ok' : ''}" data-hlcard><div class="hd"><h3>🩺 Salute delle app<span class="hl-pri">PRIORITÀ ASSOLUTA</span><small>Le app dei clienti devono essere sempre fluide e senza errori${lat ? ' · ultime versioni: ' + lat : ''}</small></h3>${!on ? '<b style="color:#f5b041;font-size:14px">Controllo spento</b>' : L.length ? `<b style="color:${bad ? '#ef4444' : '#f5b041'};font-size:14px">${L.length} ${L.length === 1 ? 'cliente' : 'clienti'} da controllare</b>` : '<b style="color:#22c55e">Tutto a posto ✓</b>'}</div>
       ${tg}${!on ? `<p style="margin:0;font-size:13.5px;color:#fde68a">${isAg() ? 'Il controllo della salute delle app lo attiva il titolare.' : '⚠️ Accendi «Controllo salute delle app»: il pannello ti segnala qui e in alto ogni cliente con app vecchia, errori o blocchi, con la soluzione.'}</p>` : L.length ? items + (L.length > (full ? 30 : 5) ? `<small class="mut">…e altri ${L.length - (full ? 30 : 5)}</small>` : '') : '<p class="mut" style="margin:0;font-size:13px">Nessun cliente con app vecchia, errori o blocchi negli ultimi giorni.</p>'}</div>`;
   }
@@ -106,7 +118,8 @@
       const html = cardHtml(full); if (c.dataset.h !== html) { c.dataset.h = html; c.innerHTML = html; }
       $$('[data-hlupd]', c).forEach((b) => (b.onclick = async () => { await sendUpd(b.dataset.hlupd, b); loadH(true); }));
       $$('[data-hldati]', c).forEach((b) => (b.onclick = () => open(b.dataset.hldati)));
-      $$('[data-hlt]', c).forEach((t) => (t.onclick = async () => { const k = t.dataset.hlt, v = !t.classList.contains('on'); try { const r = await api('PUT', '/admin/health/settings', { [k]: v }); H.settings = r.health; toast(k === 'on' ? (v ? 'Controllo salute attivo' : 'Controllo salute spento') : v ? 'Le app vecchie si aggiornano da sole' : 'Aggiornamento automatico spento'); delete c.dataset.h; drawH(); } catch (e) { toast(e.message, 1); } }));
+      $$('[data-hlfix]', c).forEach((b) => (b.onclick = async () => { if (await fixDev(b.dataset.hlfix, b)) loadH(true); }));
+      $$('[data-hlt]', c).forEach((t) => (t.onclick = async () => { const k = t.dataset.hlt, v = !t.classList.contains('on'); try { const r = await api('PUT', '/admin/health/settings', { [k]: v }); H.settings = r.health; toast(k === 'on' ? (v ? 'Controllo salute attivo' : 'Controllo salute spento') : k === 'autoFix' ? (v ? 'Il pannello risolve da solo i problemi delle app' : 'Risoluzione automatica spenta') : v ? 'Le app vecchie si aggiornano da sole' : 'Aggiornamento automatico spento'); delete c.dataset.h; drawH(); } catch (e) { toast(e.message, 1); } }));
     }
   }
   // l'elenco di «Online ora» si ridisegna da solo: la scheda della salute torna in fondo
