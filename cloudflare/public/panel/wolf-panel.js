@@ -11,6 +11,8 @@
 .wf-f label{display:flex;flex-direction:column;gap:5px;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}
 .wf-row{display:grid;grid-template-columns:60px minmax(0,1.2fr) minmax(0,1fr) minmax(0,.9fr) minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);font-size:13px}
 .wf-row .k{font-size:11px;color:var(--mut);display:block}.wf-row .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wf-v{display:flex;align-items:center;gap:4px;min-width:0}.wf-v .mono{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wf-v button{flex:none;background:none;border:0;color:var(--mut);cursor:pointer;padding:2px 5px;border-radius:5px;font:inherit;font-size:12px}.wf-v button:hover{color:var(--txt,#fff);background:#ffffff14}
 .wf-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:5px;background:rgba(52,199,123,.15);color:#6ee3a6;margin-right:4px}
 .wf-tag.w{background:rgba(224,164,49,.16);color:#ecc06f}.wf-tag.b{background:rgba(255,107,107,.14);color:#ff8f8f}.wf-tag.g{background:#ffffff12;color:var(--mut)}
 .wf-act{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
@@ -91,7 +93,7 @@
         <div style="margin-top:8px">${!d.lines ? `<p class="mut">${W.busy ? 'Carico le linee da WOLF…' : 'Nessun dato'}</p>` : shown.map((l) => {
           const k = linkOf(l.id), sh = W.show.has(l.id);
           return `<div class="wf-row" data-id="${l.id}"><div><span class="k">ID</span>${l.id}</div>
-            <div><span class="k">Utente / password</span><div class="mono"><b>${esc(l.username)}</b> <button class="btn sm ghost" data-a="cu" title="Copia utente">⧉</button></div><div class="mono">${sh ? esc(l.password) : '••••••'} <button class="btn sm ghost" data-a="eye">${sh ? 'Nascondi' : 'Mostra'}</button> <button class="btn sm ghost" data-a="cp" title="Copia password">⧉</button></div></div>
+            <div><span class="k">Utente / password</span><div class="wf-v"><b class="mono">${esc(l.username)}</b><button data-a="cu" title="Copia utente">⧉</button></div><div class="wf-v"><span class="mono">${sh ? esc(l.password) : '••••••'}</span><button data-a="eye" title="${sh ? 'Nascondi' : 'Mostra'} password">${sh ? 'Nascondi' : 'Mostra'}</button><button data-a="cp" title="Copia password">⧉</button></div></div>
             <div><span class="k">Scadenza</span>${fmtD(l.exp)}<br><small class="mut">${left(l.exp)}</small></div>
             <div><span class="k">Stato</span>${status(l)}${l.trial ? '<span class="wf-tag g">Prova</span>' : ''}<br><small class="mut">${l.conns}/${l.max || '?'} conn.</small></div>
             <div><span class="k">Nota / cliente KAIROS</span><div class="mono">${esc(l.note) || '<span class="mut">—</span>'}</div>${k ? `<span class="wf-tag">↔ ${esc(k.name)}</span>` : ''}</div>
