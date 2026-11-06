@@ -114,18 +114,20 @@ body{overscroll-behavior-y:none}
     devices: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
     bell: '<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 21a2 2 0 0 0 4 0"/>',
     menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+    pan: '<rect x="3" y="3" width="18" height="6" rx="2"/><rect x="3" y="15" width="18" height="6" rx="2"/><path d="M7 6h.01M7 18h.01M12 9v6"/>',
   };
   const ico = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">${IC[k]}</svg>`;
   const tab = document.createElement('nav'); tab.id = 'kcTab';
   tab.innerHTML = `<button data-t="dash">${ico('dash')}Panoramica</button><button data-t="devices">${ico('devices')}Clienti</button>
     <button data-t="new" class="plus"><span class="p"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="22" height="22"><path d="M12 5v14M5 12h14"/></svg></span>Nuovo</button>
-    <button data-t="bell">${ico('bell')}<span class="n" id="tabN"></span>Richieste</button><button data-t="menu">${ico('menu')}Menu</button>`;
+    <button data-t="hub:pan">${ico('pan')}Pannelli</button><button data-t="menu">${ico('menu')}<span class="n" id="tabN"></span>Menu</button>`;
   document.body.appendChild(tab);
   $$('[data-t]', tab).forEach((b) => (b.onclick = (e) => {
     const t = b.dataset.t;
     if (t === 'menu') return side.classList.toggle('open');
     side.classList.remove('open');
     if (t === 'new') return $('#newDev').click();
+    if (t.startsWith('hub:')) return window.KXHub && KXHub(t.slice(4));
     // «Richieste»: l'elenco delle richieste in attesa per tipo (il clic non deve arrivare al «clic fuori» che lo chiude)
     if (t === 'bell') e.stopPropagation();
     if (t === 'bell') { const bb = $('#bellB'); if (bb) { bb.style.display = 'inline-grid'; bb.click(); bb.style.display = ''; const m = $('#bellM'); if (m) { m.style.top = 'auto'; m.style.bottom = `calc(78px + env(safe-area-inset-bottom))`; } } return; }
@@ -136,7 +138,9 @@ body{overscroll-behavior-y:none}
     $('[data-t="dash"]', tab).style.display = ag && $('.nav[data-v="dash"]') && $('.nav[data-v="dash"]').style.display === 'none' ? 'none' : '';
     $('[data-t="new"]', tab).style.display = $('#newDev').style.display === 'none' ? 'none' : '';
     tab.style.gridTemplateColumns = `repeat(${$$('[data-t]', tab).filter((b) => b.style.display !== 'none').length},1fr)`;
-    $$('[data-t]', tab).forEach((b) => b.classList.toggle('on', on === 'v-' + b.dataset.t));
+    { const p = $('[data-t="hub:pan"]', tab); if (p) p.style.display = window.KXHub && KXHub.has('pan') ? '' : 'none'; }
+    tab.style.gridTemplateColumns = `repeat(${$$('[data-t]', tab).filter((b) => b.style.display !== 'none').length},1fr)`;
+    $$('[data-t]', tab).forEach((b) => b.classList.toggle('on', b.dataset.t.startsWith('hub:') ? !!window.KXHub && KXHub.cur() === b.dataset.t.slice(4) : on === 'v-' + b.dataset.t));
     const bn = $('#bellN'), tn = $('#tabN'); if (bn && tn) { tn.textContent = bn.textContent; tn.classList.toggle('on', bn.classList.contains('on')); }
     if (!$('#bellM') || !$('#bellM').classList.contains('on')) { const m = $('#bellM'); if (m) m.style.bottom = ''; }
   }

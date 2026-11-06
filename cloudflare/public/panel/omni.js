@@ -50,7 +50,7 @@
   const fits = (hay, toks) => toks.every((t) => hay.includes(t));
   let items = [], sel = 0, seq = 0;
   function pages(toks) {
-    return $$('.nav[data-v]').filter((b) => b.style.display !== 'none' && b.offsetParent !== null).map((b) => ({ v: b.dataset.v, name: (b.textContent || '').replace(/\d+\s*$/, '').trim() }))
+    return $$('.nav[data-v]').filter((b) => b.style.display !== 'none' && (b.offsetParent !== null || !!b.closest('#side.m4'))).map((b) => ({ v: b.dataset.v, name: (b.textContent || '').replace(/\d+\s*$/, '').trim() }))
       .filter((x) => x.name && fits(x.name.toLowerCase(), toks)).slice(0, 5).map((x) => ({ k: 'page', tag: 'VAI', t: x.name, s: 'Pagina del pannello', go: () => x.v }));
   }
   function clients(q, toks) {
