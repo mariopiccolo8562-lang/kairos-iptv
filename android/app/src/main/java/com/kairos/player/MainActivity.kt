@@ -85,6 +85,7 @@ class MainActivity : ComponentActivity() {
         if (previewEngine != null && previewEngine !== b) { previewEngine?.release(); previewBox.removeAllViews() }
         previewEngine = b
         b.l = previewListener
+        b.feed = false // tornato anteprima: niente campioni di banda
         previewId = Handoff.id
         previewAlt = ""
         previewTriedAlt = false
@@ -201,6 +202,8 @@ class MainActivity : ComponentActivity() {
         web.isFocusable = true
         web.isFocusableInTouchMode = true
         web.addJavascriptInterface(Bridge(), "KairosNative")
+        // il lettore nativo avvisa la pagina del canale in onda dopo lo zapping (window.kxNowPlaying)
+        UiBridge.js = { code -> js(code) }
         web.webChromeClient = WebChromeClient()
         web.webViewClient = object : WebViewClient() {
             // il player non deve mai navigare fuori dai propri file (il ponte KairosNative è esposto a ogni pagina caricata)
@@ -301,7 +304,7 @@ class MainActivity : ComponentActivity() {
     /* Anteprima nativa nel riquadro della Live TV                         */
     /* ------------------------------------------------------------------ */
     private var previewEngine: ExoEngine? = null
-    private var previewId = ""
+    @Volatile private var previewId = ""
     private var previewAlt = ""
     private var previewTriedAlt = false
 
@@ -333,7 +336,8 @@ class MainActivity : ComponentActivity() {
         previewBox.visibility = View.VISIBLE
         previewWanted = true
         Handoff.box = intArrayOf(lp.leftMargin, lp.topMargin, lp.width, lp.height)
-        val e = previewEngine ?: ExoEngine(this, previewListener, userAgent(), PlayPrefs("auto", "fast", "fit", live = true), overlay = true).also {
+        // feed = false: l'anteprima non alimenta la memoria della linea (misurerebbe il bitrate della versione leggera)
+        val e = previewEngine ?: ExoEngine(this, previewListener, userAgent(), PlayPrefs("auto", "fast", "fit", live = true, feed = false), overlay = true).also {
             previewEngine = it
             previewBox.addView(it.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         }
@@ -532,8 +536,18 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) { false }
     }
 
+    /** scaricamento rinviato perché c'è una visione in corso: si riprova dopo */
+    @Volatile private var apkDeferred: Runnable? = null
     private fun prefetchApk(url: String) {
         if (apkReadyFor(url)) { js("window.kxApkReady && kxApkReady(${JSONObject.quote(url)})"); return }
+        // niente lavoro di fondo durante la visione (schermo intero, multischermo o anteprima): si riprova tra un minuto
+        if (PlayerActivity.current != null || MultiActivity.open || previewId.isNotEmpty()) {
+            apkDeferred?.let { ui.removeCallbacks(it) }
+            val r = Runnable { apkDeferred = null; thread(name = "kx-apk-defer") { prefetchApk(url) } } // fuori dal thread dell'interfaccia (verifica dell'APK)
+            apkDeferred = r
+            ui.postDelayed(r, 60_000L)
+            return
+        }
         if (metered() || !apkBusy.compareAndSet(false, true)) return
         thread(name = "kx-apk-bg") {
             try {
@@ -976,6 +990,7 @@ class MainActivity : ComponentActivity() {
             if (Handoff.host === handoffHost) Handoff.host = null
         }
         ui.removeCallbacksAndMessages(null)
+        UiBridge.js = null
         previewEngine?.release()
         previewEngine = null
         httpPool.shutdownNow()

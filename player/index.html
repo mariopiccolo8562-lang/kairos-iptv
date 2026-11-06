@@ -1536,6 +1536,7 @@ const S = {
   sound: store.get('sound', true),
   stack: [],
   liveCat: 'all', liveIndex: [], playingLive: null,
+  viewEndT: Date.now(), // fine dell'ultima visione (o avvio): da qui si contano i minuti «nei menu»
 };
 if (!S.code) {
   const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -1819,11 +1820,25 @@ let okDown = 0, okLast = 0, longFired = false;
    così non rallentano chi sta scorrendo i menu subito dopo l'avvio */
 let lastInput = Date.now();
 for (const ev of ['keydown', 'pointerdown', 'wheel']) document.addEventListener(ev, () => { lastInput = Date.now(); }, { capture: true, passive: true });
+/* Kairos Adaptive §7: con un lettore attivo (schermo intero nativo o web, anteprima) niente lavoro di fondo */
+const inView = () => !!(S.inPlayer || S.previewing || $('#fs').classList.contains('on'));
+/* da quanto si è nei menu senza guardare nulla (0 in visione): l'APK si scarica solo dopo 3 minuti */
+const menuMs = () => (inView() ? 0 : Date.now() - (S.viewEndT || 0));
+const heldJobs = new Set(); // lavori rimandati perché c'era un lettore attivo: ripartono con jobsResume()
 function whenIdle(fn, delay = 0, quiet = 2500, maxWait = 90e3) {
-  const t0 = Date.now() + delay;
-  const tick = () => { if (Date.now() - lastInput >= quiet || Date.now() - t0 > maxWait) { try { fn(); } catch (e) { console.error(e); } } else setTimeout(tick, 400); };
+  let t0 = Date.now() + delay;
+  const job = { t: 0 };
+  const tick = () => {
+    clearTimeout(job.t); heldJobs.delete(job);
+    // in visione il lavoro aspetta (l'attesa massima non scorre): riprova ogni 2 s o appena il lettore si chiude
+    if (inView()) { t0 += 2000; job.t = setTimeout(tick, 2000); heldJobs.add(job); return; }
+    if (Date.now() - lastInput >= quiet || Date.now() - t0 > maxWait) { try { fn(); } catch (e) { console.error(e); } } else setTimeout(tick, 400);
+  };
+  job.tick = tick;
   setTimeout(tick, delay);
 }
+/* lettore o anteprima chiusi: i lavori rimandati ripartono (quando il telecomando è fermo) */
+function jobsResume() { S.viewEndT = Date.now(); for (const j of [...heldJobs]) { clearTimeout(j.t); heldJobs.delete(j); setTimeout(j.tick, 300); } }
 document.addEventListener('visibilitychange', () => { okDown = 0; });
 /* frecce: se arrivano più pressioni prima del prossimo frame (tasto tenuto premuto) si fa un solo spostamento multiplo,
    così su Fire TV lo scorrimento resta fluido invece di accumulare ritardo */
@@ -2493,6 +2508,9 @@ async function loadLibrary() {
 /* aggiornamento silenzioso dopo un avvio da cache */
 async function refreshLibrary(manual) {
   if (S.demo || S.refreshing) return;
+  // in visione il catalogo non si scarica (§7): si riprova a lettore chiuso; una cache più fresca di 60 minuti non si riscarica
+  if (!manual && inView()) return whenIdle(() => refreshLibrary(), 2000, 2000, 120e3);
+  if (!manual && S.cacheT && Date.now() - S.cacheT < 60 * 60e3) return;
   S.refreshing = true;
   const gen = libLoadGen;
   try {
@@ -2544,7 +2562,9 @@ const LibCache = {
     return null;
   },
   async save(lib) {
+    if (inView()) { whenIdle(() => S.fullLib && this.save(S.fullLib), 1000, 2000, 60e3); return; } // mai durante la visione (§7)
     const k = this.key(), data = { live: lib.live, movies: lib.movies, series: lib.series, t: Date.now(), sig: lib.sig || S.libSig || '', clean: lib.clean ? 1 : 0 };
+    S.cacheT = data.t;
     try {
       const db = await this.db();
       await new Promise((res, rej) => { const tx = db.transaction('kv', 'readwrite'), st = tx.objectStore('kv'); st.clear(); st.put(data, k); tx.oncomplete = res; tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); });
@@ -2656,6 +2676,7 @@ window.kxLogoBad = (id, img) => {
 };
 async function autoLogos() {
   if (S.demo || S.logoRun || !autoLogoOn() || !S.lib.live.length) return;
+  if (inView()) return whenIdle(autoLogos, 2000, 2000, 120e3); // la banca dati dei loghi non si scarica in visione (§7)
   // le ricerche andate a vuoto si ripetono dopo 7 giorni (la banca dati viene aggiornata spesso)
   if (Date.now() - store.get('logoDbT', 0) > 7 * 864e5) for (const k in logoMap) if (!logoMap[k]) delete logoMap[k];
   const need = new Map();
@@ -2744,15 +2765,17 @@ function stopVideo(v) {
   v.removeAttribute('src'); try { v.load(); } catch {}
 }
 /* librerie dei lettori web: solo nel browser (nell'app il video è nativo), scaricate al primo uso */
-let webLibsP = null;
+let webLibsP = null, webLibsFailed = false; // CDN non raggiungibili: si passa al lettore del browser (niente tentativi a vuoto)
 function webLibs() {
   if (webLibsP) return webLibsP;
-  const load = (src) => new Promise((res) => { const sc = document.createElement('script'); sc.src = src; sc.async = true; sc.onload = sc.onerror = () => res(); document.head.appendChild(sc); });
-  webLibsP = Promise.all([load('https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js'), load('https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js')]);
+  const load = (src) => new Promise((res) => { const sc = document.createElement('script'); sc.src = src; sc.async = true; sc.onload = () => res(true); sc.onerror = () => res(false); document.head.appendChild(sc); });
+  webLibsP = Promise.all([load('https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js'), load('https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js')])
+    .then((ok) => { webLibsFailed = !(window.Hls || window.mpegts); if (webLibsFailed) toast('Lettore web non scaricato: provo la riproduzione diretta'); return ok; });
   return webLibsP;
 }
-function playUrl(v, item, box) {
-  if (!(window.Hls || window.mpegts) && !(item.demo || item.url === 'demo')) { stopVideo(v); box.classList.add('loading'); const tok = (v._libTok = (v._libTok || 0) + 1); webLibs().then(() => { if (v._libTok === tok) playUrl(v, item, box); }); return; }
+/* triedAlt: l'indirizzo alternativo è già stato provato (variabile locale: nulla finisce sull'oggetto canale, che va in cache) */
+function playUrl(v, item, box, triedAlt) {
+  if (!(window.Hls || window.mpegts) && !webLibsFailed && !(item.demo || item.url === 'demo')) { stopVideo(v); box.classList.add('loading'); const tok = (v._libTok = (v._libTok || 0) + 1); webLibs().then(() => { if (v._libTok === tok) playUrl(v, item, box, triedAlt); }); return; }
   stopVideo(v);
   box.classList.toggle('demo', !!item.demo || item.url === 'demo');
   if (item.demo || item.url === 'demo') { box.classList.remove('loading'); return; }
@@ -2760,21 +2783,30 @@ function playUrl(v, item, box) {
   const url = viaProxy(item.url);
   const done = () => box.classList.remove('loading');
   v.onplaying = done; v.onwaiting = () => box.classList.add('loading');
-  const fail = (msg) => { done(); if (item.alt && !item._triedAlt) { item._triedAlt = true; playUrl(v, { ...item, url: item.alt, alt: null, _triedAlt: true }, box); } else toast(msg || 'Impossibile riprodurre questo contenuto'); };
+  const fail = (msg) => { done(); if (item.alt && !triedAlt) playUrl(v, { ...item, url: item.alt, alt: null }, box, true); else toast(msg || 'Impossibile riprodurre questo contenuto'); };
   v.onerror = () => fail();
   const low = item.url.toLowerCase();
   if (/\.m3u8(\?|$)|\/live\/|mpegurl/.test(low) && !/\.ts(\?|$)/.test(low)) {
     if (window.Hls && Hls.isSupported()) {
-      const h = new Hls({ enableWorker: true, lowLatencyMode: false, maxBufferLength: 30, maxMaxBufferLength: 60, backBufferLength: 30, startLevel: -1,
-        abrEwmaDefaultEstimate: 3e6, abrBandWidthFactor: 0.8, abrBandWidthUpFactor: 0.6, fragLoadingMaxRetry: 6, manifestLoadingMaxRetry: 4, levelLoadingMaxRetry: 4 });
+      // Kairos Adaptive: buffer e frazione di banda per classe della linea (§2, §4); stima iniziale dall'ultima misura
+      const lc = lineClass(), bw = bwKnown();
+      const h = new Hls({ enableWorker: true, lowLatencyMode: false, maxBufferLength: lc === 'good' ? 60 : 30, maxMaxBufferLength: lc === 'good' ? 90 : 60, backBufferLength: 30, startLevel: -1,
+        abrEwmaDefaultEstimate: bw ? bw * 1e6 * 0.7 : 3e6, abrBandWidthFactor: lc === 'weak' ? 0.55 : lc === 'good' ? 0.8 : 0.7, abrBandWidthUpFactor: 0.6, fragLoadingMaxRetry: 6, manifestLoadingMaxRetry: 4, levelLoadingMaxRetry: 4 });
+      let netRetry = false, mediaFix = false;
       h.loadSource(url); h.attachMedia(v); engines.set(v, h);
       h.on(Hls.Events.MANIFEST_PARSED, () => {
         const q = playPrefs().quality, lv = h.levels || [];
         if (lv.length > 1 && q === 'max') { h.currentLevel = lv.length - 1; }
         else if (lv.length > 1 && /^\d+$/.test(q)) { let cap = -1; lv.forEach((l, i) => { if ((l.height || 0) <= +q) cap = i; }); if (cap >= 0) h.autoLevelCapping = cap; }
+        else if (lv.length > 1 && lc === 'weak') { let cap = -1; lv.forEach((l, i) => { if ((l.height || 0) <= 1080) cap = i; }); if (cap >= 0) h.autoLevelCapping = cap; } // linea debole: tetto 1080p (§4)
         v.play().catch(() => {});
       });
-      h.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) { if (d.type === 'networkError' && !item._retry) { item._retry = 1; h.startLoad(); } else { h.destroy(); engines.delete(v); fail(); } } });
+      h.on(Hls.Events.ERROR, (_, d) => {
+        if (!d.fatal) return;
+        if (d.type === 'networkError' && !netRetry) { netRetry = true; h.startLoad(); }
+        else if (d.type === 'mediaError' && !mediaFix) { mediaFix = true; h.recoverMediaError(); } // prima si prova a recuperare, poi si ricomincia
+        else { h.destroy(); engines.delete(v); fail(); }
+      });
       return;
     }
     v.src = url; v.play().catch(() => {}); return;
@@ -2830,31 +2862,112 @@ function qualityOf(ch) {
 const RX_QTOK = /\b(4K|UHD|2160P?|FHD|FULL ?HD|1080[PI]?|HD|720P?|SD|480P?|576P?|LQ|LOW|HQ|HEVC|H\.?26[45]|50 ?FPS|60 ?FPS|BACKUP|BK|ALT)\b|[\[\](){}|]/g;
 const varKey = (c) => (c.pl || '') + '|' + String(c.name || '').toUpperCase().replace(RX_CC, '').replace(RX_QTOK, ' ').replace(/[^A-Z0-9+]+/g, ' ').trim();
 const varRank = (c) => { const n = (c.name || '').toUpperCase(); return /\b(4K|UHD|2160P?)\b/.test(n) ? 4 : /\b(FHD|FULL ?HD|1080[PI]?)\b/.test(n) ? 3 : /\b(SD|480P?|576P?|LQ|LOW)\b/.test(n) ? 1 : /\b(HD|720P?)\b/.test(n) ? 2 : 0; };
+/* rango effettivo: altezza misurata durante la visione (qMap) se c'è, altrimenti il nome; 0 = versione «base» senza indicazioni */
+const varRankOf = (c) => { const h = qMap[c.id]; return h ? (h >= 2000 ? 4 : h >= 1000 ? 3 : h >= 700 ? 2 : 1) : varRank(c); };
+const VAR_LBL = { 4: '4K', 3: 'FHD', 2: 'HD', 1: 'SD', 0: 'base' };
 let varCache = null;
-function variantsOf(c) {
+/* tutte le versioni dello stesso canale (compreso c), dalla più pesante alla più leggera; null se non ne ha.
+   La versione «base» senza token («Rai 1» accanto a «Rai 1 HD») conta come la più leggera: è il ripiego dell'HD */
+function varGroup(c) {
   const list = S.lib && S.lib.live;
-  if (!list || !list.length) return [];
+  if (!list || !list.length) return null;
   if (!varCache || varCache.src !== list) {
     const m = new Map();
-    for (const x of list) { const r = varRank(x); if (!r) continue; const k = varKey(x); if (k.length < 2) continue; let a = m.get(k); if (!a) m.set(k, (a = [])); a.push(x); }
-    for (const [k, a] of m) if (a.length < 2) m.delete(k);
+    for (const x of list) { const k = varKey(x); if (k.length < 2) continue; let a = m.get(k); if (!a) m.set(k, (a = [])); a.push(x); }
+    for (const [k, a] of m) if (a.length < 2 || !a.some(varRankOf)) m.delete(k); // doppioni tutti senza qualità: non sono versioni
     varCache = { src: list, m };
   }
-  const r = varRank(c); if (!r) return [];
-  const a = varCache.m.get(varKey(c)); if (!a) return [];
+  const a = varCache.m.get(varKey(c)); if (!a) return null;
   const hevc = (x) => /\b(HEVC|H\.?265)\b/i.test(x.name);
-  // solo versioni più leggere; mai passare a HEVC (più pesante da decodificare) se il canale non lo è
-  return a.filter((x) => x !== c && varRank(x) < r && (hevc(c) || !hevc(x))).sort((x, y) => varRank(y) - varRank(x)).slice(0, 3);
+  // mai passare a HEVC (più pesante da decodificare) se il canale non lo è
+  return a.filter((x) => x === c || hevc(c) || !hevc(x)).sort((x, y) => varRankOf(y) - varRankOf(x));
+}
+/* solo le versioni più leggere di c (al massimo 3, dalla più pesante) */
+function variantsOf(c) {
+  const g = varGroup(c); if (!g) return [];
+  const r = varRankOf(c);
+  return g.filter((x) => x !== c && varRankOf(x) < r).slice(0, 3);
+}
+/* la versione più leggera disponibile (c stesso se non ne ha): anteprima e multi-schermo */
+const lightestOf = (c) => { const v = variantsOf(c); return v.length ? v[v.length - 1] : c; };
+
+/* =====================================================================
+   KAIROS ADAPTIVE v1 — classe della linea e scelta della versione di partenza (KAIROS_ADAPTIVE.md §1, §5)
+   ===================================================================== */
+/* stalli riportati dal nativo (eventi «stall» e aumento di stats.stallsH): [{t, id}] delle ultime ore */
+let stallLog = store.get('stallLog', []); if (!Array.isArray(stallLog)) stallLog = [];
+function noteStall(id, t) {
+  id = String(id || ''); t = +t || Date.now();
+  const now = Date.now();
+  stallLog = stallLog.filter((s) => now - s.t < 2 * 3600e3);
+  if (stallLog.some((s) => s.id === id && Math.abs(s.t - t) < 90e3)) return; // stesso stallo visto da due fonti
+  stallLog.push({ t, id }); if (stallLog.length > 40) stallLog = stallLog.slice(-40);
+  store.set('stallLog', stallLog);
+}
+/* canali «alleggeriti» dal lettore nelle ultime 24 h: ripartono già dalla versione leggera */
+const isLiteVar = (v) => !!v && !/^(full|piena|auto)$/i.test(String(v)); // il campo var del nativo: "full" = versione piena, non alleggerita
+function noteLite(id) { const m = store.get('liteSeen', {}), now = Date.now(); for (const k in m) if (now - m[k] > 24 * 3600e3) delete m[k]; delete m[id]; m[id] = now; store.set('liteSeen', capObj(m, 300)); }
+const liteSeen = (id) => { const t = store.get('liteSeen', {})[id]; return !!t && Date.now() - t < 24 * 3600e3; };
+/* dispositivo: D debole (≤ 1,2 GB), O ottimo (≥ 1,8 GB reali ≈ 2 GB nominali), N il resto, '' sconosciuto (browser) */
+function devClass() {
+  if (S.devClass !== undefined) return S.devClass;
+  let mb = 0; try { mb = +(JSON.parse((NATIVE && NATIVE.memInfo && NATIVE.memInfo()) || '{}').totalMb) || 0; } catch {}
+  return (S.devClass = !mb ? '' : mb <= 1200 ? 'D' : mb >= 1800 ? 'O' : 'N');
+}
+/* banda nota {v Mbps, t}: la misura più recente fra lettore nativo (stats.bw, EMA sui campioni validi) e speed test; null se nulla da 12 h */
+{ const l = store.get('lineClass', null); if (l && +l.bw > 0 && l.t) S.bwNative = { v: +l.bw, t: +l.t }; } // ultima banda salvata, per il primo avvio
+function bwInfo() {
+  const now = Date.now(), H12 = 12 * 3600e3, out = [];
+  if (S.bwNative && S.bwNative.v > 0 && now - S.bwNative.t < H12) out.push(S.bwNative);
+  if (speedLast && +speedLast.mbps > 0 && now - (speedLast.t || 0) < H12) out.push({ v: +speedLast.mbps, t: speedLast.t || 0 });
+  return out.sort((a, b) => b.t - a.t)[0] || null;
+}
+const bwKnown = () => { const b = bwInfo(); return b ? +b.v.toFixed(1) : null; };
+/* classe effettiva della linea: weak | normal | good (peggiore fra linea e dispositivo), salvata in 'lineClass' {c, t, bw};
+   senza misure recenti vale quella salvata, che dopo 12 h scende di un gradino (⇒ normal) */
+function lineClass() {
+  const now = Date.now(), H12 = 12 * 3600e3;
+  const sp = speedLast && isFinite(speedLast.mbps) && now - (speedLast.t || 0) < H12 ? speedLast : null;
+  const bi = bwInfo(), bw = bi ? bi.v : 0;
+  const spNew = !!sp && (!bi || bi.t <= (sp.t || 0)); // la banda dello speed test conta se è la misura più recente (ping e jitter sempre)
+  const st30 = stallLog.filter((s) => now - s.t < 30 * 60e3), chans = new Set(st30.map((s) => s.id)).size;
+  const st20 = stallLog.some((s) => now - s.t < 20 * 60e3);
+  const saved = store.get('lineClass', null) || {};
+  let c = '';
+  if ((bw > 0 && bw < 4) || (st30.length >= 2 && chans >= 2) || (sp && ((spNew && sp.mbps < 6) || sp.jitter > 40 || sp.ping > 150))) c = 'weak';
+  else if (!st20 && (bw >= 15 || (spNew && sp.mbps >= 15 && sp.ping < 60 && sp.jitter < 20))) c = 'good';
+  else if (bw > 0 || sp) c = 'normal';
+  if (c) { const b = +(bw || 0).toFixed(1); if (saved.c !== c || !saved.t || now - saved.t > 3600e3 || (saved.bw || 0) !== b) store.set('lineClass', { c, t: now, bw: b }); }
+  else c = saved.c && now - (saved.t || 0) < H12 ? saved.c : 'normal';
+  const d = devClass();
+  if (d === 'D') return 'weak'; // dispositivo debole ⇒ debole comunque
+  return c === 'good' && d && d !== 'O' ? 'normal' : c; // ottima solo con dispositivo ottimo (nel browser il dispositivo non si conosce)
+}
+/* versione di partenza per la classe (§5): debole ⇒ ≤ HD (SD se banda < 2,5 Mbps); normale ⇒ ≤ FHD; ottima ⇒ piena;
+   canale alleggerito di recente ⇒ un gradino sotto; la qualità scelta nelle impostazioni (1080/720/480) è un tetto in più.
+   Ritorna { c: canale da avviare, v: versioni più leggere di quello } */
+function startVariant(c, lc, bw, quality) {
+  const g = varGroup(c); if (!g) return { c, v: [] };
+  let cap = lc === 'weak' ? (bw && bw < 2.5 ? 1 : 2) : lc === 'normal' ? 3 : 4;
+  const r = varRankOf(c);
+  if (quality === 'max') cap = 4; // «Massima» scelta dall'utente: si parte sempre dalla versione piena
+  else { if (quality === '1080') cap = Math.min(cap, 3); else if (quality === '720') cap = Math.min(cap, 2); else if (quality === '480') cap = Math.min(cap, 1); if (liteSeen(c.id)) cap = Math.min(cap, r - 1); }
+  // la più pesante entro il tetto, altrimenti la più leggera che c'è; mai più pesante del canale scelto
+  const ok = g.filter((x) => varRankOf(x) <= Math.min(cap, r));
+  const pick = ok.length ? ok[0] : g[g.length - 1];
+  const pr = varRankOf(pick);
+  return { c: pick, v: g.filter((x) => x !== pick && varRankOf(x) < pr).slice(0, 3) };
 }
 const qBadge = (ch) => { const q = qualityOf(ch); return q ? `<span class="qb q${q}" data-q="${esc(ch.id)}">${q}</span>` : `<span class="qb qnone" data-q="${esc(ch.id)}"></span>`; };
 function setMeasuredQuality(id, h) {
   if (!id || !(h > 0)) return;
   delete qMap[id]; qMap[id] = h; store.set('qmap', capObj(qMap, 1500));
+  varCache = null; // l'altezza misurata cambia il rango fra le versioni dello stesso canale
   const ch = S.byId && S.byId.get(id); if (!ch) return;
   const q = qualityOf(ch);
   $$(`.qb[data-q="${CSS.escape(id)}"]`).forEach((e) => { e.className = 'qb q' + q; e.textContent = q; });
 }
-window.kxPreviewInfo = (id, h) => setMeasuredQuality(id, +h);
+window.kxPreviewInfo = (id, h) => setMeasuredQuality(S.pvVar && S.pvVar.id === id ? S.pvVar.vid : id, +h);
 let chRendered = 0, chStart = 0; // finestra di canali disegnati: [chStart, chRendered)
 function renderChannels(from = 0) {
   const c = S.liveCat;
@@ -2878,7 +2991,7 @@ function epgOf(ch, depth) {
   }
   return xepgItems(ch) || (S.epg.get(ch.id) || {}).items || null;
 }
-const XM = new WeakMap();
+let XM = new WeakMap(); // let: kxTrim la ricrea per liberare memoria
 function xepgByKey(ch, key) {
   const c = XM.get(ch); if (c && c.v === S.xepgVer && c.k === key) return c.items;
   const X = S.xepg, arr = X.byId.get(key) || X.byName.get(key) || null;
@@ -2996,15 +3109,18 @@ function previewRect() {
   return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height), vw: innerWidth, vh: innerHeight };
 }
 function nativePreview(ch) {
-  const [u, a] = liveUrls(ch);
+  const src = lightestOf(ch), [u, a] = liveUrls(src); // anteprima: sempre la versione più leggera del canale (§5)
+  S.pvVar = src !== ch ? { id: ch.id, vid: src.id } : null; // l'altezza misurata dall'anteprima appartiene a quella versione
   try { NATIVE.preview(JSON.stringify({ id: ch.id, u, a, ...previewRect() })); } catch {}
 }
 window.kxPreviewState = (state) => { const b = $('#guide').classList.contains('on') ? $('#gBox') : $('#pvBox'); if (!b) return; b.classList.toggle('loading', state === 'loading'); if (state === 'error') { b.classList.add('demo'); $('#pvDemo').textContent = 'Anteprima non disponibile'; } };
 addEventListener('resize', () => { if (HAS_PREVIEW && S.previewing && ($('#live').classList.contains('on') || $('#guide').classList.contains('on')) && !$('#drawer').classList.contains('on')) setTimeout(() => nativePreview(S.previewing), 260); });
 function stopPreview() {
   stopVideo($('#pv')); if (HAS_PREVIEW) try { NATIVE.previewStop(); } catch {}
+  const was = S.previewing;
   S.previewing = null;
   $$('#liveList .ch.playing').forEach((x) => x.classList.remove('playing'));
+  if (was) jobsResume(); // anteprima finita: i lavori rimandati ripartono
 }
 /* ---------------- guida TV (Xtream: get_short_epg) ---------------- */
 S.epg = new Map();
@@ -3035,7 +3151,7 @@ async function loadEpg(ch) {
 }
 /* ---------------- guida TV completa (XMLTV), letta dall'app ---------------- */
 S.xepg = null; S.xepgVer = Date.now();
-const XE = new WeakMap(); // canale → programmi (fuori dall'oggetto: non finisce nella cache della libreria)
+let XE = new WeakMap(); // canale → programmi (fuori dall'oggetto: non finisce nella cache della libreria; let: kxTrim la ricrea)
 function xepgItems(ch) {
   const X = S.xepg; if (!X || !ch) return null;
   const c = XE.get(ch); if (c && c.v === S.xepgVer) return c.items;
@@ -3074,6 +3190,8 @@ let epgSeq = 0;
 window.kxEpgCb = (id, ok, path, n, err) => { const f = S.epgWait && S.epgWait[id]; if (f) { delete S.epgWait[id]; f({ ok, path, n, err }); } };
 async function buildXmltv(force) {
   if (S.demo || !NATIVE || !NATIVE.epgBuild || S.epgRunning || !S.lib.live.length) return { ok: false, err: 'non disponibile' };
+  // in visione la guida non si scarica (§7): si riprova a lettore chiuso (a richiesta dalle impostazioni si procede)
+  if (!force && inView()) { whenIdle(() => buildXmltv(), 2000, 2000, 120e3); return { ok: false, err: 'visione in corso: rimandata' }; }
   const urls = epgSources();
   if (!urls.length) return { ok: false, err: 'nessuna sorgente della guida: aggiungi un indirizzo EPG nelle impostazioni' };
   const sig = hashStr(urls.join('|') + '|' + S.libSig), meta = store.get('epgMeta', {});
@@ -3369,27 +3487,36 @@ function engineFor(kind, item) {
 }
 function nativePlay(item, kind, fromSec, extra) {
   if (!HAS_PLAYER || item.demo || item.url === 'demo') return false;
-  // l'anteprima si ferma solo se non mostra già questo canale: in quel caso il video passa allo schermo intero senza interruzioni
-  if (HAS_PREVIEW && !(kind === 'live' && S.previewing && S.previewing.id === item.id)) try { NATIVE.previewStop(); } catch {}
-  const P = playPrefs();
+  const P = playPrefs(), adapt = !!opt('adaptQ');
+  const lc = lineClass(), bw = bwKnown(); // classe della linea ricalcolata a ogni avvio (§1): il lettore ne ricava buffer, ABR e versione
+  // l'anteprima si ferma solo se non mostra già questo canale nella stessa versione: in quel caso il video passa allo schermo intero senza
+  // interruzioni (l'anteprima usa la versione più leggera: se la partenza prevista è un'altra il lettore riparte da quella, così sa cosa riproduce)
+  if (HAS_PREVIEW) {
+    const same = kind === 'live' && S.previewing && S.previewing.id === item.id && (!adapt || liveUrls(startVariant(item, lc, bw, P.quality).c)[0] === liveUrls(lightestOf(item))[0]);
+    if (!same) try { NATIVE.previewStop(); } catch {}
+  }
   let items, index = 0, pk = kind;
   if (kind === 'live') {
     let list = S.liveIndex.length && S.liveIndex.includes(item) ? S.liveIndex : visLive(S.lib.live);
     // controllo genitori: nel player si può passare solo ai canali non bloccati
     if (parentalOn() && !S.unlocked) list = list.filter((c) => c === item || !isLocked(c));
     index = Math.max(0, list.indexOf(item));
-    // al player si passa al massimo una finestra di 3000 canali attorno a quello scelto (liste enormi = JSON enorme)
+    // al player si passa una finestra di ±300 canali attorno a quello scelto (guida e versioni calcolate solo lì: avvio rapido, JSON piccolo)
     let from = 0, sub = list;
-    if (list.length > 3000) { from = Math.max(0, Math.min(index - 1500, list.length - 3000)); sub = list.slice(from, from + 3000); index -= from; }
-    const t = Date.now(), adapt = !!opt('adaptQ');
+    if (list.length > 601) { from = Math.max(0, Math.min(index - 300, list.length - 601)); sub = list.slice(from, from + 601); index -= from; }
+    const t = Date.now(), pv = {};
     items = sub.map((c) => {
-      const [u, a] = liveUrls(c);
+      // versione di partenza secondo la classe della linea (§5); in v solo quelle più leggere di essa
+      const sv = adapt ? startVariant(c, lc, bw, P.quality) : { c, v: [] };
+      const [u, a] = liveUrls(sv.c);
       const o = { id: c.id, t: c.name, u, a, n: c.num || 0, g: c.group || '', l: c.logo || '' };
-      if (adapt) { const v = variantsOf(c); if (v.length) o.v = v.map((x) => [liveUrls(x)[0], ({ 4: '4K', 3: 'FHD', 2: 'HD', 1: 'SD' })[varRank(x)]]); }
+      if (sv.c !== c) { o.var = VAR_LBL[varRankOf(sv.c)] || ''; pv[c.id] = sv.c.id; } // si parte già alleggeriti: il lettore lo sa (e la qualità misurata va alla versione giusta)
+      if (sv.v.length) o.v = sv.v.map((x) => [liveUrls(x)[0], VAR_LBL[varRankOf(x)] || '']);
       const ep = epgOf(c);
       if (ep && ep.length) { const i = ep.findIndex((x) => x.start <= t && x.end > t); if (i >= 0) { const a2 = ep[i], b = ep[i + 1]; o.e = [a2.title, Math.floor(a2.start / 1000), Math.floor(a2.end / 1000), b ? b.title : '', b ? Math.floor(b.start / 1000) : 0]; } }
       return o;
     });
+    S.playVars = pv; // canale ⇒ versione avviata al suo posto (per attribuire l'altezza misurata alla chiusura)
   } else if (extra && extra.list && extra.list.length) {
     // episodi: tutta la stagione, così il player passa da solo al successivo
     pk = 'vod';
@@ -3402,9 +3529,10 @@ function nativePlay(item, kind, fromSec, extra) {
     NATIVE.play(JSON.stringify({ kind: pk, items, index, start: Math.floor(start * 1000), engine: engineFor(kind, item), engineKey: kind === 'live' ? 'engLive' : kind === 'series' ? 'engSeries' : 'engMovie',
       quality: P.quality, buffer: P.buffer, aspect: P.aspect, brand: S.settings.brand || 'KAIROS',
       hw: opt('hw'), sub: opt('subSize'), res: !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list), adapt: !!opt('adaptQ'), pip: false,
+      line: lc, ...(bw != null ? { bw } : {}), // Kairos Adaptive: "weak" | "normal" | "good" e banda nota in Mbps (assente se sconosciuta)
       ...(extra && extra.parent ? { introKey: String(extra.parent.id), intro: store.get('intro', {})[extra.parent.id] || [], introAuto: !!opt('introAuto') } : {}) }));
   } catch (e) { return false; }
-  S.inPlayer = true;
+  S.inPlayer = true; S.playT = Date.now(); S.lastStallsH = -1;
   if (kind === 'live') { S.playingLive = item; S.playingVod = null; addRecent(item, 'live'); store.set('lastCh', item.id); } else { S.playingVod = item; S.playingLive = null; }
   setTimeout(() => heartbeat(true), 1500);
   return true;
@@ -3431,16 +3559,15 @@ function multiStart(ch, n) {
   const i = Math.max(0, list.indexOf(ch));
   const sub = list.length > 3000 ? list.slice(Math.max(0, Math.min(i - 1500, list.length - 3000)), Math.max(0, Math.min(i - 1500, list.length - 3000)) + 3000) : list;
   // versione più leggera del canale, se c'è: meno banda e meno lavoro per la chiavetta
-  const urlOf = (c) => { const v = variantsOf(c); return liveUrls(v.length ? v[v.length - 1] : c); };
-  const chans = sub.map((c) => { const [u, a] = urlOf(c); return { id: c.id, t: c.name, u, a, n: c.num || 0 }; });
+  const chans = sub.map((c) => { const [u, a] = liveUrls(lightestOf(c)); return { id: c.id, t: c.name, u, a, n: c.num || 0 }; });
   const others = [...recentLive(), ...sub].filter((c) => c !== ch && sub.includes(c));
   const start = [ch, ...others].filter((c, k, a) => a.indexOf(c) === k).slice(0, n).map((c) => c.id);
-  try { NATIVE.multi(JSON.stringify({ layout: n, quality: n >= 4 ? '480' : '720', start, chans })); } catch { return toast('Multi-schermo non disponibile'); }
+  try { NATIVE.multi(JSON.stringify({ layout: n, quality: n >= 4 ? '480' : '720', start, chans, line: lineClass() })); } catch { return toast('Multi-schermo non disponibile'); }
   stopPreview();
-  S.inPlayer = true; S.playingLive = ch;
+  S.inPlayer = true; S.playingLive = ch; S.playT = Date.now();
 }
 window.kxMultiClosed = (r) => {
-  S.inPlayer = false;
+  S.inPlayer = false; jobsResume();
   try { r = r ? JSON.parse(r) : null; } catch { r = null; }
   setTimeout(() => heartbeat(true), 800);
   const ch = r && r.full && S.byId && S.byId.get(r.full);
@@ -3555,9 +3682,11 @@ function kickedByPanel() {
   setTimeout(() => { S.kicked = false; }, 4000);
 }
 window.kxPlayerClosed = (r) => {
-  S.inPlayer = false; S.playingVod = null;
+  S.inPlayer = false; S.playingVod = null; S.lastStallsH = -1;
+  jobsResume(); // lettore chiuso: i lavori di fondo rimandati ripartono
   setTimeout(() => heartbeat(true), 800);
   try { r = typeof r === 'string' ? JSON.parse(r) : r; } catch { r = null; }
+  if (r && r.id && isLiteVar(r.var)) noteLite(r.id); // chiuso su una versione più leggera: per 24 h il canale riparte già leggero
   if (r && r.kicked) { try { stopPreview(); } catch {} if (!$('#home').classList.contains('on')) go('home', true); return; }
   if (!r) { evReturn(); return; }
   // intro segnata nel lettore: vale per tutti gli episodi della serie
@@ -3572,13 +3701,21 @@ window.kxPlayerClosed = (r) => {
     const dp = $('#detail').classList.contains('on') && $('#dPlay');
     if (dp && dp.lastChild && dp.lastChild.nodeType === 3) dp.lastChild.textContent = pos[r.id] ? 'Riprendi' : 'Riproduci';
   }
-  if (r.height) setMeasuredQuality(r.id, +r.height);
+  // altezza misurata: va alla versione davvero riprodotta (avviata alleggerita dall'interfaccia); se l'ha alleggerita il lettore (var) non si sa quale ⇒ si lascia stare
+  if (r.height && !isLiteVar(r.var)) setMeasuredQuality((S.playVars && S.playVars[r.id]) || r.id, +r.height);
   if (r.kind === 'live' && r.id && S.byId) {
     const ch = S.byId.get(r.id);
     if (ch) { S.playingLive = ch; addRecent(ch, 'live'); if ($('#live').classList.contains('on')) focusChannel(ch, true); else if ($('#guide').classList.contains('on')) guideFocusChannel(ch, true); }
   }
   if (evReturn()) return;
   setTimeout(placeRing, 100);
+};
+/* zapping dentro il lettore nativo (canale o episodio successivo): il contenuto corrente cambia e il pannello lo sa subito */
+window.kxNowPlaying = (id) => {
+  const x = S.byId && S.byId.get(String(id || '')); if (!x) return;
+  if (x.k === 'l') { S.playingLive = x; S.playingVod = null; store.set('lastCh', x.id); } else { S.playingVod = x; S.playingLive = null; }
+  S.inPlayer = true; S.lastStallsH = -1;
+  heartbeat(true);
 };
 function openFs(item, kind, fromSec, extra, gated) {
   if (!gated && (streamGateNeeded() || lineGateNeeded(item))) { streamGate(kind, item && item.name, item).then((ok) => ok && openFs(item, kind, fromSec, extra, true)); return; }
@@ -3598,6 +3735,7 @@ function openFs(item, kind, fromSec, extra, gated) {
 function closeFs() {
   stopVideo($('#fv'));
   $('#fs').classList.remove('on');
+  jobsResume();
   try { document.fullscreenElement && document.exitFullscreen(); } catch {}
   if (evReturn()) return;
   if (fsKind === 'live' && $('#live').classList.contains('on')) focusChannel(fsItem, true);
@@ -4330,14 +4468,14 @@ function heroPlay(scr) {
   if (x.folder) return openFolder(x);
   if (x.home && x.away) return openEvent(x);
   if (x.k === 'r') return playRec(x.rec); // registrazione: non ha un url proprio né va in "Continua a guardare"
-  if (isLiveItem(x)) { S.liveIndex = S.lib.live; addRecent(x, 'live'); return openFs(x, 'live'); }
+  if (isLiveItem(x)) { S.liveIndex = visLive(S.lib.live); addRecent(x, 'live'); return openFs(x, 'live'); } // senza i canali nascosti
   if (isSeriesItem(x)) return openDetail(x);
   const pos = store.get('pos', {})[x.id];
   openFs(x, 'vod', pos || 0); addRecent(x, 'movie');
 }
 setInterval(() => {
   const scr = $('.bscr.on'); if (!scr || !scr._feat || scr._feat.length < 2) return;
-  if ($('#detail').classList.contains('on') || $('#fs').classList.contains('on')) return;
+  if ($('#detail').classList.contains('on') || inView()) return; // niente immagini a rotazione in visione (§7)
   if (cur && !cur.closest('.tnav')) return;
   scr._fi = (scr._fi + 1) % scr._feat.length; setHero(scr, scr._feat[scr._fi]);
 }, 9000);
@@ -4856,8 +4994,17 @@ function rcLiteApply() {
 /** riavvii forzati dal sistema (poca memoria, tipico Fire Stick): segnalati al pannello e, dal secondo in mezz'ora, modalità leggerissima */
 /** Android chiede memoria: si liberano le cache dell'interfaccia prima che il sistema chiuda l'app */
 window.kxTrim = (level) => {
+  level = +level || 0;
   try { if (typeof imgCache !== 'undefined' && imgCache && imgCache.clear) imgCache.clear(); } catch {}
-  try { if (S.epg && S.epg.data && level >= 60) S.epg.data = null; } catch {}
+  // cache ricostruibili: indici di ricerca e tendenze, versioni dei canali, schede dal server, guida breve
+  try { titleIdx = null; actorRes = null; trendIdx = null; trendCache = null; varCache = null; metaMem.clear(); adPrev.clear(); } catch {}
+  try { S.epg.clear(); XM = new WeakMap(); } catch {}
+  try { capObj(qMap, 500); store.set('qmap', qMap); } catch {} // misure di qualità: restano le 500 più recenti
+  // memoria davvero scarsa (RUNNING_CRITICAL 15, o app in sfondo ≥ 40): via anche la guida completa, riletta dal file quando si è fermi nei menu
+  if (level >= 15 && S.xepg) {
+    try { S.xepg = null; S.xepgVer++; XE = new WeakMap(); } catch {}
+    whenIdle(() => buildXmltv(), 2 * 60e3, 3000, 10 * 60e3);
+  }
   try { document.body.classList.add('xlite'); } catch {}
   S.trimAt = Date.now();
 };
@@ -4932,7 +5079,7 @@ async function rcRun(cmds) {
         if (c.c === 'settings') { if (S.inPlayer) { try { NATIVE && NATIVE.playerClose && NATIVE.playerClose(); } catch {} } try { closeFs && $('#fs').classList.contains('on') && closeFs(); } catch {} const sec = (c.a && c.a.sec) || 'dev'; go('settings'); renderSettings(sec); setTimeout(() => { renderSettings(sec); const m = $(`#settBody .sm[data-sec="${sec}"]`); m && focus(m, true); }, 120); await ack(true, 'impostazioni aperte'); continue; }
         if (c.c === 'perm') { if (!NATIVE || !NATIVE.canInstall || !NATIVE.openInstallPerm) { await ack(false, 'solo nell\'app installata'); continue; } if (NATIVE.canInstall()) { await ack(true, 'permesso già concesso'); continue; } if (S.inPlayer) { await ack(false, 'visione in corso: rimandato'); continue; } try { toast('Attiva «Consenti da questa fonte», poi premi INDIETRO'); } catch {} NATIVE.openInstallPerm(); await ack(true, 'schermata del permesso aperta sulla TV'); continue; }
         if (c.c === 'pin') { store.set('pinH', ''); store.set('pinLater', 0); S.unlocked = false; toast('Il fornitore ha reimpostato il PIN del controllo genitori: ora è 0000'); await ack(true, 'PIN riportato a 0000'); if (!S.inPlayer) setTimeout(() => pinFirstRun(true), 1500); continue; }
-        if (c.c === 'speed') { if (S.inPlayer) { await ack(false, 'visione in corso: rimandato'); continue; } speedTest().then(() => heartbeat(true)).catch(() => {}); await ack(true, 'speed test avviato'); continue; }
+        if (c.c === 'speed') { if (inView()) { await ack(false, 'visione in corso: rimandato'); continue; } speedTest().then(() => heartbeat(true)).catch(() => {}); await ack(true, 'speed test avviato'); continue; }
         await ack(false, 'comando non supportato');
       } catch (e) { await ack(false, String(e && e.message || e).slice(0, 100)); }
     }
@@ -5381,16 +5528,19 @@ function normT(s) {
   s = s.replace(RX_QUAL, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
   return s.replace(/^(il|lo|la|i|gli|le|l|un|una|uno|the|a)\s+/, '').replace(/\s(19|20)\d\d$/, '');
 }
+let trendLoading = false;
 async function loadTrending(force) {
   if (S.demo || !baseServer()) return;
   const t = S.trend;
   if (!force && t && Date.now() - t.t < 6 * 3600e3) return buildTrendIdx();
+  if (inView()) return whenIdle(() => loadTrending(force), 2000, 2000, 120e3); // non in visione (§7)
+  if (trendLoading) return; trendLoading = true;
   try {
     const j = await getJSON(baseServer() + '/api/player/trending');
     // classifica vuota (fonti non raggiungibili dal server): si tiene quella vecchia e si riprova al prossimo giro, non tra 6 ore
     const mv = j && Array.isArray(j.movies) ? j.movies : [], sv = j && Array.isArray(j.series) ? j.series : [];
     if (mv.length || sv.length) { S.trend = { t: Date.now(), movies: mv, series: sv, src: j.src || '' }; store.set('trend', S.trend); trendIdx = null; }
-  } catch {}
+  } catch {} finally { trendLoading = false; }
   buildTrendIdx();
 }
 /* indice titolo → contenuto, costruito a pezzi per non bloccare la TV con librerie enormi */
@@ -5775,30 +5925,39 @@ async function speedTest() {
     const head = dl >= 25 ? 'Perfetta: anche i canali 4K andranno fluidi.' : dl >= 10 ? 'Ottima per il Full HD.' : dl >= 5 ? 'Buona per l\'HD. Consiglio qualità 720p e buffer Stabile.' : 'Connessione lenta: consiglio qualità 480p e buffer Stabile.';
     $('#sVerd').textContent = head + (notes.length ? ' Attenzione: ' + notes.join('; ') + '.' : '');
     if (R.server) $('#sSrv').textContent = R.server;
+    lineClass(); // la classe della linea si ricalcola e si salva subito con la nuova misura
     const b = $('#sApply'); b.style.display = '';
-    b.onclick = () => { const P = playPrefs(); Object.assign(P, rec); store.set('play', P); toast('Impostazioni di riproduzione aggiornate'); m.classList.remove('on'); speedRun++; renderSettings('play'); };
+    b.onclick = () => {
+      // si salvano solo le scelte dell'utente: i valori imposti dal pannello (rc) non devono finire nelle sue impostazioni
+      const P = { ...store.get('play', {}) };
+      for (const k in rec) if (rcGet('p.' + k) === undefined) P[k] = rec[k];
+      store.set('play', P); lineClass();
+      toast('Impostazioni di riproduzione aggiornate'); m.classList.remove('on'); speedRun++; renderSettings('play');
+    };
     const r = $('#sLast'); if (r) r.innerHTML = speedLastTxt();
   };
   // 1) misura dell'app (connessioni parallele, upload incluso)
   if (NATIVE && NATIVE.speedTest) {
     const ok = await new Promise((resolve) => {
       let seen = false;
-      const guard = setTimeout(() => { if (!seen) resolve(false); }, 15000);
+      // fine del test nativo (riuscito o no): si stacca la callback; se si passa al test del browser quello nativo va fermato prima
+      const end = (ok, stop) => { clearTimeout(guard); window.kxSpeedCb = null; if (stop) speedStopNative(); resolve(ok); };
+      const guard = setTimeout(() => { if (!seen) end(false, true); }, 15000);
       window.kxSpeedCb = (o) => {
         try { o = typeof o === 'string' ? JSON.parse(o) : o; } catch { return; }
-        if (!alive()) return resolve(true);
+        if (!alive()) return end(true, false);
         seen = true;
-        if (o.error && !o.done) { clearTimeout(guard); return resolve(R.dl != null ? (finish(), true) : false); }
+        if (o.error && !o.done) return R.dl != null ? (finish(), end(true, false)) : end(false, true);
         for (const k of ['ping', 'jitter', 'dl', 'ul']) if (o[k] != null && isFinite(o[k])) R[k] = +o[k];
         if (o.server) { R.server = o.server; $('#sSrv').textContent = o.server; }
-        if (o.done) { clearTimeout(guard); if (R.dl == null && o.mbps != null) R.dl = +o.mbps; finish(); return resolve(true); }
+        if (o.done) { if (R.dl == null && o.mbps != null) R.dl = +o.mbps; finish(); return end(true, false); }
         const ph = o.phase || 'download';
         act(ph === 'ping' ? 'kPing' : ph === 'upload' ? 'kUl' : 'kDl');
         phase(ph === 'ping' ? 'LATENZA…' : ph === 'upload' ? 'UPLOAD…' : 'DOWNLOAD…', o.p != null ? o.p : null);
         if (ph !== 'ping' && o.mbps != null) speedShow(+o.mbps || 0);
         showR();
       };
-      try { NATIVE.speedTest(); } catch { clearTimeout(guard); resolve(false); }
+      try { NATIVE.speedTest(); } catch { end(false, true); }
     });
     if (ok || !alive()) return;
   }
@@ -5988,14 +6147,25 @@ async function backgroundUpdateCheck(fromPanel) {
       S.apkUpdate = u.apk;
       if (S.apkReady !== u.apk.url && NATIVE.apkReady) { try { if (NATIVE.apkReady(u.apk.url)) S.apkReady = u.apk.url; } catch {} } // già scaricato in un'apertura precedente
       // aggiornamento in background: l'APK si scarica e si verifica in silenzio, al cliente resta solo «Installa»
-      if (NATIVE.prefetchApk && (bgUpdOn() || fromPanel) && S.apkReady !== u.apk.url) { try { NATIVE.prefetchApk(u.apk.url); } catch {} if (!fromPanel) return; } // la proposta arriva con kxApkReady (o, se il download non parte, al prossimo controllo)
+      if (NATIVE.prefetchApk && (bgUpdOn() || fromPanel) && S.apkReady !== u.apk.url) { apkPrefetchWhenFree(u.apk.url, fromPanel); if (!fromPanel) return; } // la proposta arriva con kxApkReady (o, se il download non parte, al prossimo controllo)
       if (updCanOffer()) offerApkUpdate(fromPanel);
     }
   } finally { S.updChecking = false; }
 }
+/* l'APK si scarica mai in visione e solo dopo 3 minuti nei menu (§7); dal pannello basta non essere in visione */
+let apkPrefT = 0;
+function apkPrefetchWhenFree(url, fromPanel) {
+  clearTimeout(apkPrefT);
+  const wait = inView() ? 30e3 : fromPanel ? 0 : Math.max(0, 3 * 60e3 - menuMs());
+  if (wait > 0) { apkPrefT = setTimeout(() => apkPrefetchWhenFree(url, fromPanel), wait + 500); return; }
+  if (S.apkReady === url || !S.apkUpdate || S.apkUpdate.url !== url) return;
+  try { NATIVE.prefetchApk(url); } catch {}
+}
 setInterval(backgroundUpdateCheck, 3 * 3600e3);
 window.kxResume = () => {
   setTimeout(() => heartbeat(true), 800); // di nuovo nell'app: il pannello lo sa subito
+  // il lettore nativo può sparire senza risultato (errore, chiuso dal sistema): se entro 1,5 s non arriva kxPlayerClosed lo stato si riallinea
+  if (S.inPlayer) { const t0 = Date.now(); setTimeout(() => { if (S.inPlayer && (S.playT || 0) < t0) { S.inPlayer = false; S.playingVod = null; jobsResume(); heartbeat(true); } }, 1500); }
   // tornando nell'app l'anteprima della Live riparte (Android la ferma quando l'app va in pausa)
   if (HAS_PREVIEW && S.previewing && ($('#live').classList.contains('on') || $('#guide').classList.contains('on')) && !$('#drawer').classList.contains('on') && !$('.speedm.on') && !S.inPlayer) setTimeout(() => S.previewing && nativePreview(S.previewing), 300);
   if (Date.now() - (S.lastUpdCheck || 0) > 45 * 60e3) setTimeout(backgroundUpdateCheck, 2500);
@@ -6074,15 +6244,24 @@ function hbState() {
   return ['idle', null];
 }
 /* problemi della visione (recupero automatico, errori del lettore) → pannello «Errori applicazione» */
-let pendEvts = [];
+let pendEvts = [], evSending = false;
 async function sendPlayEvents() {
-  try { const r = NATIVE && NATIVE.playEvents && NATIVE.playEvents(); if (r) pendEvts.push(...JSON.parse(r)); } catch {}
-  if (!pendEvts.length || S.demo || !baseServer()) return;
+  try {
+    const r = NATIVE && NATIVE.playEvents && NATIVE.playEvents();
+    if (r) for (const e of JSON.parse(r)) {
+      pendEvts.push(e);
+      // Kairos Adaptive: gli stalli e le riduzioni di qualità del lettore alimentano la classe della linea e i canali «alleggeriti»
+      try { if (e && e.id && e.k !== 'vod') { if (e.problem === 'stall') noteStall(e.id, e.t); if (isLiteVar(e.var) || /^qualità ridotta/.test(e.action || '')) noteLite(e.id); } } catch {}
+    }
+  } catch {}
+  if (!pendEvts.length || S.demo || !baseServer() || evSending) return; // un invio alla volta: niente doppioni nel pannello
+  evSending = true;
   const items = pendEvts.slice(0, 20);
   try {
     const j = await apiPost('/api/player/errors', { items, ver: (NATIVE && NATIVE.version && NATIVE.version()) || 'web', model: (NATIVE && NATIVE.model && NATIVE.model()) || 'browser' });
     if (j && j.ok) pendEvts = pendEvts.slice(items.length); else if (pendEvts.length > 60) pendEvts = pendEvts.slice(-60);
   } catch { if (pendEvts.length > 60) pendEvts = pendEvts.slice(-60); }
+  finally { evSending = false; }
 }
 async function heartbeat(force) {
   if (S.demo || !baseServer() || S.status !== 'active' || $('#activate').classList.contains('on')) return;
@@ -6090,11 +6269,18 @@ async function heartbeat(force) {
   const sig = state + '|' + (it ? it.id : '');
   const now = Date.now();
   if (!force && sig === hbLast && now - hbT < (state === 'idle' ? 60e3 : 20e3)) return; // durante la visione ogni 20 s: «Disconnetti» dal pannello arriva in fretta
-  if (now - hbT < 15e3) return; // mai più di una ogni 15 s
+  if (now - hbT < (force ? 3e3 : 15e3)) return; // mai più di una ogni 15 s (i battiti forzati, es. zapping, almeno ogni 3 s)
   hbLast = sig; hbT = now;
   let net = null, stats = null;
   try { if (NATIVE && NATIVE.netInfo) net = JSON.parse(NATIVE.netInfo() || 'null'); } catch {}
   try { if (NATIVE && NATIVE.playStats && it) stats = JSON.parse(NATIVE.playStats() || 'null'); } catch {}
+  // Kairos Adaptive §9: dal lettore arrivano banda misurata, stalli e versione in uso; qui si imparano e si passano al pannello così come sono
+  if (stats && typeof stats === 'object') {
+    if (+stats.bw > 0) S.bwNative = { v: +stats.bw, t: now };
+    if (stats.stallsH != null) { const h = +stats.stallsH || 0; if (S.lastStallsH >= 0 && h > S.lastStallsH && it) noteStall(it.id, now); S.lastStallsH = h; }
+    if ((isLiteVar(stats.var) || stats.reduced) && it && it.k === 'l') noteLite(it.id);
+  }
+  net = { ...(net && typeof net === 'object' ? net : {}), line: lineClass(), bw: bwKnown() }; // classe della linea e banda nota (Mbps, null se ignota)
   const n = it && it.k === 'l' ? nowOf(it) : null;
   const sp = speedLast && isFinite(speedLast.mbps) ? { dl: +(+speedLast.mbps).toFixed(1), ul: speedLast.ul != null && speedLast.ul >= 0 ? +speedLast.ul.toFixed(1) : null, ping: Math.round(speedLast.ping || 0), jitter: Math.round(speedLast.jitter || 0), t: speedLast.t } : null;
   const body = { state, title: it ? (it.k === 'l' ? (n ? n.title : '') : it.name) : '', ch: it && it.k === 'l' ? it.name : '', chId: it ? it.id : '', group: it ? it.group || '' : '', pl: it ? it.pl || '' : '', prof: S.prof ? S.prof.name : '',
@@ -6312,7 +6498,7 @@ async function loadOrCache() {
   S.fromCache = false;
   const c = await LibCache.load();
   if (c) {
-    setLib(c); S.fromCache = true;
+    setLib(c); S.fromCache = true; S.cacheT = +c.t || 0;
     if (c.sig) S.libSig = c.sig; else { S.libSig = ''; whenIdle(() => { if (S.fullLib === c) S.libSig = libSig(c); }, 2000); }
     // il fornitore può aver cambiato il server ("DNS") mentre l'app era chiusa: si riscrivono solo gli indirizzi
     const snap = store.get('plSnap', null);

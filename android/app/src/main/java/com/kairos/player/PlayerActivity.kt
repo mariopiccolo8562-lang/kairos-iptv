@@ -184,12 +184,32 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         override fun onError(message: String) = evError(g, playTok, message)
         override fun onEnded() = evEnded(g, playTok)
         override fun onFirstFrame() = evFirstFrame(g, playTok)
+        override fun onAudioDisabled() = evAudioOff(g)
     }
     private fun live(g: Int, t: Int) = g == engineGen && t == playTok && !closing
     private fun cancelRetry() { retryRun?.let { ui.removeCallbacks(it) }; retryRun = null }
     private var okSince = 0L
     /** problema in corso, mandato al pannello quando si sa com'è finita */
     private var pendingEvt: JSONObject? = null
+    /* ---- politica Kairos Adaptive ---- */
+    /** classe della linea indicata dall'interfaccia web per questo avvio (vince su quella misurata qui) */
+    private var uiLine = ""
+    /** cuscinetto crescente: numero di blocchi recenti da compensare al prossimo READY (0 = nessuno) */
+    private var cushionN = 0
+    private var cushionRun: Runnable? = null
+    /** fill-ratio dei primi 10 s (TS in diretta): Δ posizione scaricata / Δ tempo, dal watchdog; -1 = non ancora misurato */
+    private var fillT0 = 0L
+    private var fillP0 = -1L
+    private var fillLowSec = 0
+    private var fillDoneFor = ""
+    /** ENDED in diretta: istanti dei riavvii (al più 5 in 5 minuti) · ENDED precoce nei film ritentato (al più 2) */
+    private val endTimes = java.util.ArrayDeque<Long>()
+    private var endRetries = 0
+    /** film/serie: ultima posizione buona (ogni secondo), usata quando il motore non la sa più (VLC dopo un errore) */
+    private var lastGoodPos = 0L
+    /** errore arrivato durante il cooldown di un recupero: rimandato alla fine del cooldown, non scartato */
+    private var deferredErr: Runnable? = null
+    private fun curClass(): String = NetMem.effectiveClass(this, uiLine)
 
     private fun liteOf(a: org.json.JSONArray?): List<Pair<String, String>> {
         if (a == null) return emptyList()
@@ -211,6 +231,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
                 .put("title", item.title.take(120)).put("id", item.id.take(60)).put("k", kind).put("engine", engineName)
                 .put("codec", PlayStats.codec).put("dec", if (PlayStats.decoder.isEmpty()) "" else if (isSoftware(PlayStats.decoder)) "sw" else "hw")
                 .put("res", if (PlayStats.height > 0) "${PlayStats.height}p" else "").put("var", if (varIdx >= 0) item.lite.getOrNull(varIdx)?.second ?: "" else "")
+                // stessi campi del battito (§9)
+                .put("bw", PlayStats.bw).put("line", PlayStats.line).put("dev", PlayStats.dev).put("cls", PlayStats.cls).put("fill", PlayStats.fill).put("fmt", PlayStats.fmt)
         } catch (_: Exception) { null }
     }
 
@@ -220,11 +242,73 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         readyOnce = false; isBuffering = false; bufferingSince = 0L; stallTimes.clear(); stallCounted = false
         lastFrames = -1L; lastQueued = -1L; lastPos = -1L; freezeSec = 0; okSince = 0L; frameSeen = false
         cancelRetry()
+        cancelCushion(); cushionN = 0
+        deferredErr?.let { ui.removeCallbacks(it) }; deferredErr = null
         startAt = System.currentTimeMillis()
         PlayStats.recovery = ""; PlayStats.reduced = ""
     }
 
-    private fun curPos(): Long = if (isLive) 0L else if (seekTarget >= 0) seekTarget else engine?.position() ?: 0L
+    private fun curPos(): Long = if (isLive) 0L else if (seekTarget >= 0) seekTarget else (engine?.position() ?: 0L).let { if (it <= 0L) lastGoodPos else it }
+
+    /**
+     * Cuscinetto crescente (§6.1): dopo un blocco, al ritorno in READY si resta in pausa tecnica finché la scorta non
+     * raggiunge «ripresa + 2 s × blocchi» (al più +6 s), per al massimo 15 s (controllo ogni 250 ms); poi si riparte.
+     * Niente riavvio del flusso: il buffer continua a riempirsi.
+     */
+    private fun startCushion(e: ExoEngine, n: Int) {
+        cancelCushion()
+        val target = e.rebufferMs() + minOf(2000L * n, 6000L)
+        if (e.bufferedMs() >= target) return
+        val until = System.currentTimeMillis() + 15_000L
+        e.hold(true)
+        spinner.visibility = View.VISIBLE
+        val r = object : Runnable {
+            override fun run() {
+                if (closing || engine !== e) { cushionRun = null; return }
+                if (e.bufferedMs() >= target || System.currentTimeMillis() >= until || stopped || zapPending) {
+                    cushionRun = null; e.hold(false); spinner.visibility = View.GONE; return
+                }
+                ui.postDelayed(this, 250)
+            }
+        }
+        cushionRun = r
+        ui.postDelayed(r, 250)
+    }
+
+    private fun cancelCushion() {
+        val r = cushionRun ?: return
+        ui.removeCallbacks(r); cushionRun = null
+        (engine as? ExoEngine)?.hold(false)
+    }
+
+    /** rango di qualità da un'etichetta di variante (4K/FHD/HD/SD) o dal nome di un canale; 0 = sconosciuto/base */
+    private fun rankOf(s: String): Int {
+        val u = s.uppercase(Locale.ROOT)
+        return when {
+            Regex("\\b(4K|UHD)\\b").containsMatchIn(u) -> 4
+            Regex("\\b(FHD|1080P?)\\b").containsMatchIn(u) -> 3
+            Regex("\\bHD\\b").containsMatchIn(u) -> 2
+            Regex("\\bSD\\b").containsMatchIn(u) -> 1
+            else -> 0
+        }
+    }
+
+    /**
+     * Variante di partenza secondo la classe effettiva (§5, allo zapping dentro il lettore; il canale iniziale lo sceglie
+     * già l'interfaccia): debole ⇒ al più HD (SD sotto 2,5 Mbps misurati); normale ⇒ niente 4K; ottima ⇒ piena.
+     * Dopo un calo recente ([weakUntil]) si riparte comunque un gradino sotto. «Massima» scelta dall'utente: sempre piena.
+     * Ritorna l'indice in [Item.lite] (dalla più pesante alla più leggera) oppure -1 = versione originale.
+     */
+    private fun startVarIdx(): Int {
+        val v = item.lite
+        if (!adapt || v.isEmpty() || prefs.quality == "max") return -1
+        val r = rankOf(item.title)
+        val bw = NetMem.bwMbps(this)
+        val cap = when (curClass()) { "weak" -> if (bw > 0 && bw < 2.5) 1 else 2; "normal" -> 3; else -> 4 }
+        // rango noto e sopra il tetto: la più pesante entro il tetto, altrimenti la più leggera che c'è
+        val pick = if (r > cap) (v.indexOfFirst { rankOf(it.second) in 1..cap }.takeIf { it >= 0 } ?: v.size - 1) else -1
+        return if (pick < 0 && System.currentTimeMillis() < weakUntil) 0 else pick
+    }
 
     /**
      * Prova da sola una soluzione quando la visione ha un problema, senza far uscire l'utente.
@@ -238,16 +322,27 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         val canAlt = item.alt.isNotEmpty() && currentUrl != item.alt && !triedAlt
         val canSw = engine is ExoEngine && !hwOff && prefs.hw != "off"
         val canLite = adapt && varIdx + 1 < item.lite.size
+        // scale per problema e per famiglia di errore (§6): mai il riavvio come primo passo per i blocchi
         val ladder = when (problem) {
             "freeze" -> listOf("reload", "sw", "engine", "lite")
-            "stall" -> listOf("alt", "lite", "reload", "engine")
-            else -> listOf("alt", if (err.contains("DECOD", true) || err.contains("CODEC", true)) "sw" else "", "engine", "retry", "retry2", "retry3", "lite")
+            "stall" -> listOf("lite", "alt", "reload", "engine")
+            "long" -> listOf("reload", "alt", "lite", "engine")
+            "fill" -> listOf("lite")
+            else -> when {
+                // decoder video (avvio o decodifica): prima la decodifica software, poi l'altro motore
+                err.contains("DECOD", true) || err.contains("CODEC", true) -> listOf("sw", "engine", "alt", "retry")
+                // contenitore/manifest illeggibili o non supportati: l'altro motore subito
+                err.contains("PARSING", true) || err.contains("UNSUPPORTED", true) -> listOf("engine", "alt", "retry", "lite")
+                // rete/HTTP (404, 503, timeout): formato alternativo, poi nuovi tentativi a 1,5/3/6 s, versione leggera, motore
+                err.contains("_IO_", true) -> listOf("alt", "retry", "retry2", "retry3", "lite", "engine")
+                else -> listOf("alt", "engine", "retry", "retry2", "retry3", "lite")
+            }
         }
+        // «lite» si può ripetere (FHD → HD → SD) finché ci sono versioni più leggere; gli altri passi una volta per contenuto
         val step = ladder.firstOrNull { st ->
-            st.isNotEmpty() && !recDone.contains(st) && when (st) {
+            (st == "lite" || !recDone.contains(st)) && when (st) {
                 "alt" -> canAlt; "sw" -> canSw; "lite" -> canLite
                 "engine" -> !triedFallback
-                "retry", "retry2", "retry3" -> isLive
                 else -> true
             }
         } ?: return false
@@ -255,13 +350,13 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         recCooldownUntil = now + 8000L; lastActionAt = now
         freezeSec = 0; stallTimes.clear(); okSince = 0L
         val pos = curPos()
-        val what = when (problem) { "freeze" -> "Immagine ferma"; "stall" -> "Caricamento continuo"; else -> "Errore" }
+        val what = when (problem) { "freeze" -> "Immagine ferma"; "stall" -> "Caricamento continuo"; "long" -> "Caricamento lungo"; "fill" -> "Linea insufficiente"; else -> "Errore" }
         when (step) {
             "reload", "retry", "retry2", "retry3" -> {
                 newEvt(problem, "ricaricato", err)
                 PlayStats.recovery = "$what → ricaricato"
                 if (step == "reload") toast("Problema di riproduzione: riparto…")
-                val delay = when (step) { "retry" -> 1500L; "retry2" -> 3000L; "retry3" -> 4500L; else -> 0L }
+                val delay = when (step) { "retry" -> 1500L; "retry2" -> 3000L; "retry3" -> 6000L; else -> 0L }
                 val u = currentUrl; val idx = index
                 cancelRetry()
                 if (delay == 0L) startUrl(u, pos)
@@ -298,7 +393,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
                 varIdx++
                 PlayStats.recovery = "$what → qualità ridotta"
                 PlayStats.reduced = v.second.ifEmpty { "ridotta" }
-                weakUntil = now + 10 * 60_000L
+                // i canali successivi partono leggeri solo se è la linea (misurata debole o blocchi su più canali), non il singolo canale
+                if (NetMem.lineClass(this) == "weak" || NetMem.multiStalls(this)) weakUntil = now + 10 * 60_000L
                 toast("Qualità ridotta per la tua connessione" + (if (v.second.isNotEmpty()) " (${v.second})" else ""))
                 startUrl(v.first, pos)
             }
@@ -320,7 +416,24 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         if (zapPending || stopped) return
         val now = System.currentTimeMillis()
         val e = engine
-        while (stallTimes.isNotEmpty() && now - stallTimes.first > 75_000L) stallTimes.removeFirst()
+        while (stallTimes.isNotEmpty() && now - stallTimes.first > 90_000L) stallTimes.removeFirst()
+        // film/serie: posizione buona aggiornata ogni secondo (dopo un errore alcuni motori riportano 0)
+        if (!isLive && e != null && readyOnce && !isBuffering && seekTarget < 0) { val p = e.position(); if (p > 0) lastGoodPos = p }
+        // fill-ratio (§1, §5): nei primi 10 s dopo il READY di un TS in diretta, Δ posizione scaricata / Δ tempo = velocità di
+        // download ÷ bitrate. Sotto 1 per 10 s di fila la linea non regge questa versione: si scende alla più leggera PRIMA
+        // dello stallo, una volta per canale. (Il solo Δ buffer misurerebbe «download ÷ bitrate − 1»: soglie senza senso.)
+        if (e is ExoEngine && readyOnce && isLive && fillT0 > 0 && fillP0 >= 0 && now - fillT0 <= 15_000L && !e.isHls()) {
+            val dt = now - fillT0
+            if (dt >= 1500L) {
+                val fill = (e.bufferedPos() - fillP0).toDouble() / dt
+                PlayStats.fill = fill
+                if (fill < 1.0) fillLowSec++ else fillLowSec = 0
+                if (fillLowSec >= 10 && adapt && fillDoneFor != item.id && varIdx + 1 < item.lite.size && seekTarget < 0 && now >= recCooldownUntil) {
+                    fillDoneFor = item.id; fillLowSec = 0
+                    recover("fill")
+                }
+            }
+        }
         // immagine ferma: il tempo avanza ma non arriva nessun fotogramma nuovo (solo ExoPlayer espone i contatori).
         // Solo dopo il primo fotogramma e 8 s dall'avvio; per i video quasi fermi (radio con immagine, slide) serve che il
         // decoder stia ricevendo dati, altrimenti un fotogramma ogni tanto è normale.
@@ -336,14 +449,17 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             stallCounted = true
             PlayStats.buffers++
             PlayStats.stall()
+            NetMem.stall(this, item.id) // solo il lettore principale alimenta la memoria della linea (per canale)
             stallTimes.addLast(now)
             // tornati alla qualità piena da poco e di nuovo blocchi: si resta su quella ridotta
             if (upAt > 0 && now - upAt < 120_000L) stayDown = true
+            // 1º-2º blocco in 90 s: nessun riavvio, al ritorno in READY si aspetta un cuscinetto più grande; dal 3º si interviene
+            cushionN = stallTimes.size
             if (stallTimes.size >= 3 && !recover("stall")) closeEvt("non risolto")
         }
         // caricamento che non finisce
         val longMs = if (isLive) 12_000L else 20_000L
-        if (readyOnce && isBuffering && bufferingSince > 0 && now - bufferingSince > longMs && now - startAt > longMs) { bufferingSince = now; if (!recover("stall")) closeEvt("non risolto") }
+        if (readyOnce && isBuffering && bufferingSince > 0 && now - bufferingSince > longMs && now - startAt > longMs) { bufferingSince = now; if (!recover("long")) closeEvt("non risolto") }
         // tutto regolare da un po': il problema è risolto
         val fine = readyOnce && !isBuffering && freezeSec == 0
         if (fine) { if (okSince == 0L) okSince = now } else okSince = 0L
@@ -398,6 +514,9 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             showRes = j.optBoolean("res", true)
             autoNext = j.optBoolean("autoNext", false)
             adapt = j.optBoolean("adapt", true)
+            // indizi dall'interfaccia web (politica §1): classe della linea per questo avvio e banda (seme se qui manca una misura)
+            uiLine = j.optString("line", "").let { if (it == "weak" || it == "normal" || it == "good") it else "" }
+            j.optDouble("bw", 0.0).let { if (it > 0.0) NetMem.seed(this, it) }
             introKey = j.optString("introKey", "")
             introAuto = j.optBoolean("introAuto", false)
             j.optJSONArray("intro")?.let { a -> if (a.length() == 2 && a.optLong(1) > a.optLong(0)) intro = longArrayOf(a.optLong(0) * 1000, a.optLong(1) * 1000) }
@@ -413,6 +532,9 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         if (items.isEmpty()) { closing = true; handed?.release(); finish(); return }
         index = index.coerceIn(0, items.size - 1)
         playingIndex = index
+        // contatori di sessione per il pannello
+        PlayStats.stallMs = 0L; PlayStats.ttff = 0; PlayStats.fill = 0.0; PlayStats.nowId = item.id; PlayStats.variant = ""; PlayStats.fmt = ""
+        lastGoodPos = if (isLive) 0L else resumeMs
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         @Suppress("DEPRECATION") overridePendingTransition(0, 0)
@@ -425,8 +547,10 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             engine = h
             adopted = h
             if (prefs.quality != "auto") h.selectQuality(prefs.quality) // rispetta la qualità scelta nelle impostazioni
+            h.feed = true; h.chanKey = item.id // da schermo intero le misure di banda valgono (nell'anteprima no)
             engineName = h.name
             currentUrl = h.playingUrl.ifEmpty { item.url }
+            PlayStats.fmt = h.format(); PlayStats.variant = "full"
             statsStart()
             markPlaying()
             resetRecovery(); readyOnce = h.isActive()
@@ -600,7 +724,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         tTime = text(13f, Color.argb(190, 255, 255, 255)).apply { setPadding(0, dp(6), 0, dp(14)) }
 
         bar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        bPause = button("Pausa") { commitSeek(); engine?.togglePause(); ui.postDelayed({ updatePauseLabel() }, 150) }
+        bPause = button("Pausa") { commitSeek(); cancelCushion(); engine?.togglePause(); ui.postDelayed({ updatePauseLabel() }, 150) }
         if (!isLive) bar.addView(bPause)
         if (isLive) {
             bar.addView(button("Lista canali") { openList() })
@@ -661,8 +785,10 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             val e = engine
             if (e != null) {
                 PlayStats.engine = e.name
-                if (e is ExoEngine) e.fillStats() else { PlayStats.width = 0; PlayStats.height = e.videoHeight() }
+                if (e is ExoEngine) { e.fillStats(); PlayStats.fmt = e.format() } else { PlayStats.width = 0; PlayStats.height = e.videoHeight() }
             }
+            // classi e banda per il pannello (§9)
+            try { PlayStats.bw = NetMem.bwMbps(this@PlayerActivity); PlayStats.line = NetMem.lineClass(this@PlayerActivity); PlayStats.dev = DeviceClass.of(this@PlayerActivity); PlayStats.cls = (e as? ExoEngine)?.cls ?: curClass() } catch (_: Throwable) {}
             ui.postDelayed(this, 5000)
         }
     }
@@ -786,7 +912,9 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         engine = null
         cancelRetry()
         val gl = GenL(++engineGen)
-        fun make(n: String): Engine = if (n == "vlc") VlcEngine(this, gl, "", prefs.copy(aspect = aspect, hw = if (hwOff) "off" else prefs.hw)) else ExoEngine(this, gl, userAgent(), prefs.copy(aspect = aspect, hw = if (hwOff) "off" else prefs.hw))
+        // classe effettiva calcolata adesso: buffer, ABR e offset della diretta del nuovo lettore seguono la tabella della politica
+        val p = prefs.copy(aspect = aspect, hw = if (hwOff) "off" else prefs.hw, cls = curClass())
+        fun make(n: String): Engine = if (n == "vlc") VlcEngine(this, gl, "", p) else ExoEngine(this, gl, userAgent(), p)
         val e: Engine? = try { make(name) } catch (t: Throwable) {
             // se un motore non si avvia su questo dispositivo, usa l'altro
             try { make(if (name == "vlc") "exo" else "vlc") } catch (t2: Throwable) { null }
@@ -814,29 +942,41 @@ class PlayerActivity : ComponentActivity(), EngineListener {
 
     private fun playCurrent(startMs: Long) {
         markPlaying()
-        triedAlt = false; triedFallback = false; retries = 0
+        triedAlt = false; triedFallback = false; retries = 0; endRetries = 0; endTimes.clear()
+        lastGoodPos = if (isLive) 0L else startMs
         resetRecovery()
         // il recupero aveva cambiato lettore o decodifica per il contenuto precedente: il nuovo riparte con quelli scelti
         if (recEngineChanged && !userChangedEngine && baseEngine.isNotEmpty()) { recEngineChanged = false; hwOff = false; startEngine(baseEngine) }
         ui.removeCallbacks(watchRunnable); ui.postDelayed(watchRunnable, 1000)
-        // linea debole negli ultimi minuti: si parte già dalla versione più leggera (nessun blocco iniziale)
-        if (adapt && item.lite.isNotEmpty() && System.currentTimeMillis() < weakUntil) {
-            varIdx = 0
-            PlayStats.reduced = item.lite[0].second.ifEmpty { "ridotta" }
-            startUrl(item.lite[0].first, startMs)
+        // l'interfaccia web (e quindi il pannello) vede il canale in onda anche dopo lo zapping dentro il lettore
+        PlayStats.nowId = item.id
+        UiBridge.call("window.kxNowPlaying && kxNowPlaying(${JSONObject.quote(item.id)})")
+        // versione di partenza per classe effettiva / linea debole di recente: si parte già leggeri (nessun blocco iniziale)
+        val sv = startVarIdx()
+        if (sv >= 0 && sv < item.lite.size) {
+            varIdx = sv
+            PlayStats.reduced = item.lite[sv].second.ifEmpty { "ridotta" }
+            startUrl(item.lite[sv].first, startMs)
             return
         }
         startUrl(item.url, startMs)
     }
 
     private fun startUrl(url: String, startMs: Long) {
+        // la classe effettiva si ricalcola a ogni avvio: se è cambiata, il lettore (buffer immutabili) si ricrea prima di partire
+        val e0 = engine
+        if (e0 is ExoEngine && e0.cls != curClass()) startEngine(engineName)
         currentUrl = url
         playTok++
         startAt = System.currentTimeMillis() // i primi secondi di caricamento non sono «blocchi»
         frameSeen = false; isBuffering = false; bufferingSince = 0L; stallCounted = false
-        PlayStats.lastCodecError = ""
+        cancelCushion(); cushionN = 0
+        fillT0 = 0L; fillP0 = -1L; fillLowSec = 0
+        PlayStats.lastCodecError = ""; PlayStats.ttff = 0; PlayStats.fmt = fmtOf(url)
+        PlayStats.variant = if (varIdx >= 0) (item.lite.getOrNull(varIdx)?.second ?: "").ifEmpty { "ridotta" } else "full"
         showMsg(null)
         spinner.visibility = View.VISIBLE
+        (engine as? ExoEngine)?.chanKey = item.id
         engine?.play(url, startMs)
     }
 
@@ -912,26 +1052,82 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     override fun onFirstFrame() = evFirstFrame(engineGen, playTok)
     override fun onEnded() = evEnded(engineGen, playTok)
     override fun onError(message: String) = evError(engineGen, playTok, message)
+    override fun onAudioDisabled() = evAudioOff(engineGen)
 
     private fun evBuffering(g: Int, t: Int, buffering: Boolean) {
         ui.post {
             if (!live(g, t)) return@post
-            spinner.visibility = if (buffering) View.VISIBLE else View.GONE
+            spinner.visibility = if (buffering || cushionRun != null) View.VISIBLE else View.GONE
             if (buffering == isBuffering) return@post
             isBuffering = buffering
-            if (!buffering) { bufferingSince = 0L; return@post }
+            if (!buffering) {
+                // durata del blocco appena finito (totale di sessione per il pannello)
+                if (stallCounted && bufferingSince > 0) PlayStats.stallMs += System.currentTimeMillis() - bufferingSince
+                bufferingSince = 0L; return@post
+            }
             bufferingSince = System.currentTimeMillis(); stallCounted = false
         }
     }
 
-    private fun evReady(g: Int, t: Int) { ui.post { if (!live(g, t)) return@post; spinner.visibility = View.GONE; showMsg(null); retries = 0; readyOnce = true; isBuffering = false; bufferingSince = 0L; veil.animate().alpha(0f).setDuration(260).start() } }
-    private fun evFirstFrame(g: Int, t: Int) { ui.post { if (g != engineGen || closing) return@post; frameSeen = true; veil.animate().alpha(0f).setDuration(260).start() } }
+    private fun evReady(g: Int, t: Int) {
+        ui.post {
+            if (!live(g, t)) return@post
+            spinner.visibility = View.GONE; showMsg(null); retries = 0; readyOnce = true; isBuffering = false; bufferingSince = 0L
+            veil.animate().alpha(0f).setDuration(260).start()
+            val e = engine
+            // primo READY dell'avvio: da qui il watchdog misura il fill-ratio dei primi 10 s
+            if (fillT0 == 0L && e is ExoEngine) { fillT0 = System.currentTimeMillis(); fillP0 = e.bufferedPos() }
+            // ritorno da un blocco: cuscinetto crescente invece di ripartire con la scorta minima
+            if (cushionN > 0 && e is ExoEngine && !stopped && !zapPending) startCushion(e, cushionN)
+            cushionN = 0
+        }
+    }
+    private fun evFirstFrame(g: Int, t: Int) {
+        ui.post {
+            if (g != engineGen || closing) return@post
+            if (!frameSeen && startAt > 0 && PlayStats.ttff == 0) PlayStats.ttff = (System.currentTimeMillis() - startAt).toInt().coerceAtLeast(1)
+            frameSeen = true; veil.animate().alpha(0f).setDuration(260).start()
+        }
+    }
+    private fun evAudioOff(g: Int) {
+        ui.post {
+            if (g != engineGen || closing) return@post
+            newEvt("error", "traccia audio disattivata (decoder mancante)", "AUDIO_DECODER")
+            PlayStats.recovery = "audio non supportato → disattivato"
+            toast("Audio non supportato dal dispositivo: il video continua senza audio")
+        }
+    }
+
+    /** film/serie: ENDED vale come fine solo con durata nota e posizione ≥ 90 %; altrimenti il server ha chiuso il flusso (si riprende, al più 2 volte) */
+    private fun endedEarly(): Boolean {
+        val e = engine ?: return false
+        val d = e.duration(); val p = maxOf(lastGoodPos, e.position())
+        return d > 0 && p > 0 && p < d * 9 / 10 && endRetries < 2
+    }
 
     private fun evEnded(g: Int, t: Int) {
         ui.post {
             if (!live(g, t)) return@post
-            if (isLive) { if (retries < 3) { retries++; startUrl(currentUrl, 0) } }
-            else if (autoNext && index < items.size - 1) {
+            val now = System.currentTimeMillis()
+            if (isLive) {
+                // la diretta non finisce: riavvio con attesa crescente 1-2-4 s, al più 5 volte in 5 minuti, poi gli altri rimedi
+                while (endTimes.isNotEmpty() && now - endTimes.first > 5 * 60_000L) endTimes.removeFirst()
+                if (endTimes.size < 5) {
+                    endTimes.addLast(now)
+                    val delay = 1000L shl minOf(endTimes.size - 1, 2)
+                    val u = currentUrl; val idx = index
+                    cancelRetry()
+                    val r = Runnable { retryRun = null; if (!closing && !stopped && !zapPending && index == idx && currentUrl == u) startUrl(u, 0) }
+                    retryRun = r; ui.postDelayed(r, delay)
+                } else if (!recover("error", "ENDED")) { spinner.visibility = View.GONE; showMsg("Il canale si è interrotto\n(riprova tra poco)") }
+            } else if (endedEarly()) {
+                endRetries++
+                PlayStats.recovery = "flusso interrotto dal server → ripreso"
+                val u = currentUrl; val idx = index; val pos = lastGoodPos
+                cancelRetry()
+                val r = Runnable { retryRun = null; if (!closing && !stopped && !zapPending && index == idx && currentUrl == u) startUrl(u, pos) }
+                retryRun = r; ui.postDelayed(r, 1500L)
+            } else if (autoNext && index < items.size - 1) {
                 index++
                 toast("Episodio successivo: ${item.title}")
                 veil.animate().alpha(0.7f).setDuration(150).start()
@@ -944,8 +1140,17 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private fun evError(g: Int, t: Int, message: String) {
         ui.post {
             if (!live(g, t)) return@post
-            // un errore va gestito subito, ma non due volte di fila per lo stesso tentativo
-            if (System.currentTimeMillis() - lastActionAt > 1500L) recCooldownUntil = 0L
+            val now = System.currentTimeMillis()
+            // errore subito dopo un recupero (dentro il suo cooldown): non si scarta, si rimanda alla fine del cooldown
+            if (now < recCooldownUntil && now - lastActionAt <= 1500L) {
+                if (deferredErr == null) {
+                    val r = Runnable { deferredErr = null; if (live(g, t)) { recCooldownUntil = 0L; evError(g, t, message) } }
+                    deferredErr = r
+                    ui.postDelayed(r, (recCooldownUntil - now).coerceAtLeast(0L) + 50L)
+                }
+                return@post
+            }
+            recCooldownUntil = 0L
             if (!recover("error", message)) {
                 if (pendingEvt != null) closeEvt("non risolto") else PlayStats.event(try { JSONObject().put("t", System.currentTimeMillis()).put("problem", "error").put("action", "nessuna soluzione").put("err", message.take(120)).put("title", item.title.take(120)).put("id", item.id.take(60)).put("k", kind).put("engine", engineName).put("codec", PlayStats.codec).put("outcome", "non risolto") } catch (_: Exception) { JSONObject() })
                 spinner.visibility = View.GONE; showMsg("Impossibile riprodurre questo contenuto\n($message)")
@@ -1022,7 +1227,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             KeyEvent.KEYCODE_GUIDE -> if (isLive) openList() else showOsd(true)
             KeyEvent.KEYCODE_LAST_CHANNEL -> previousChannel()
             KeyEvent.KEYCODE_PROG_RED, KeyEvent.KEYCODE_MEDIA_RECORD -> if (isLive) { toggleRecording(); showOsd(false) }
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE, KeyEvent.KEYCODE_SPACE -> { commitSeek(); engine?.togglePause(); showOsd(false) }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE, KeyEvent.KEYCODE_SPACE -> { commitSeek(); cancelCushion(); engine?.togglePause(); showOsd(false) }
             KeyEvent.KEYCODE_CAPTIONS -> menuSubtitles()
             KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK -> menuAudio()
             in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> {
@@ -1473,6 +1678,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         completeHandoff(true)
         stopped = true
         ui.removeCallbacks(watchRunnable); cancelRetry()
+        cancelCushion(); deferredErr?.let { ui.removeCallbacks(it) }; deferredErr = null
         // in secondo piano niente lavoro inutile ogni secondo (statistiche, orologio dell'OSD)
         ui.removeCallbacks(statsRunnable); ui.removeCallbacks(tickRunnable)
         PlayStats.stop()

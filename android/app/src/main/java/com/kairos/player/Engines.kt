@@ -10,6 +10,7 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.OptIn
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
@@ -22,8 +23,10 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
+import androidx.media3.exoplayer.hls.HlsManifest
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -48,6 +51,8 @@ interface EngineListener {
     fun onEnded()
     /** primo fotogramma disegnato (per le animazioni del cambio canale) */
     fun onFirstFrame() {}
+    /** decoder audio mancante: la traccia audio è stata disattivata, il video continua */
+    fun onAudioDisabled() {}
 }
 
 /** Passaggio del video tra anteprima e schermo intero senza interruzioni (stesso player, nessun nuovo caricamento). */
@@ -83,18 +88,44 @@ object NoopListener : EngineListener {
     override fun onEnded() {}
 }
 
-/** Impostazioni di riproduzione scelte nell'app. */
-data class PlayPrefs(val quality: String, val buffer: String, val aspect: String, val live: Boolean = false, val hw: String = "auto") {
-    /** millisecondi di video da accumulare prima di partire / dopo un'interruzione.
-     *  In diretta si parte prima: il cambio canale è molto più rapido. */
-    // film/serie: dopo un salto (avanti/indietro) la riproduzione riparte con poco video pronto → ricerca veloce
-    val startMs: Int get() = if (live) when (buffer) { "fast" -> 350; "stable" -> 1800; else -> 650 } else when (buffer) { "fast" -> 800; "stable" -> 2500; else -> 1000 }
-    val rebufferMs: Int get() = if (live) when (buffer) { "fast" -> 2500; "stable" -> 8000; else -> 4000 } else when (buffer) { "fast" -> 1500; "stable" -> 5000; else -> 2000 }
-    /** video già visto tenuto in memoria (film): «indietro di 10 s» è immediato, senza ricaricare */
-    val backMs: Int get() = if (live) 0 else 12_000
-    val maxMs: Int get() = when (buffer) { "fast" -> 30000; "stable" -> 90000; else -> 50000 }
-    val vlcCacheMs: Int get() = if (live) when (buffer) { "fast" -> 600; "stable" -> 3000; else -> 1200 } else when (buffer) { "fast" -> 1000; "stable" -> 5000; else -> 2500 }
+/**
+ * Impostazioni di riproduzione scelte nell'app.
+ * [cls] = classe effettiva (weak/normal/good) con cui costruire il lettore; vuota = la calcola il motore ([NetMem.effectiveClass]).
+ * [feed] = banda e blocchi alimentano [NetMem]: no per anteprima e multischermo. [focus] = gestione del focus audio (no nel multischermo).
+ * I buffer ExoPlayer vengono dalle tabelle di [Adaptive]; «veloce»/«stabile» le modulano dentro la classe.
+ */
+data class PlayPrefs(val quality: String, val buffer: String, val aspect: String, val live: Boolean = false, val hw: String = "auto", val cls: String = "", val feed: Boolean = true, val focus: Boolean = true) {
+    /** cache di rete di VLC: mai sotto 1 s in diretta (1,5 s bilanciata) */
+    val vlcCacheMs: Int get() = if (live) when (buffer) { "fast" -> 1000; "stable" -> 3000; else -> 1500 } else when (buffer) { "fast" -> 1000; "stable" -> 5000; else -> 2500 }
     val maxHeight: Int get() = quality.toIntOrNull() ?: 0
+}
+
+/**
+ * Tabelle della politica «Kairos Adaptive v1» (vedi KAIROS_ADAPTIVE.md) per classe effettiva: weak / normal / good.
+ * La classe effettiva è la peggiore fra dispositivo ([DeviceClass]) e linea ([NetMem.lineClass]).
+ */
+@OptIn(UnstableApi::class)
+object Adaptive {
+    fun slower(cls: String): String = if (cls == "good") "normal" else "weak"
+    fun faster(cls: String): String = if (cls == "weak") "normal" else "good"
+    /** buffer ExoPlayer in ms: [min, max, partenza, ripresa dopo un blocco] (§2) */
+    fun buffers(cls: String, live: Boolean): IntArray = when (cls) {
+        "weak" -> if (live) intArrayOf(12_000, 30_000, 1_500, 6_000) else intArrayOf(20_000, 40_000, 2_500, 4_000)
+        "good" -> if (live) intArrayOf(15_000, 60_000, 800, 3_000) else intArrayOf(25_000, 90_000, 800, 2_500)
+        else -> if (live) intArrayOf(15_000, 50_000, 1_000, 4_000) else intArrayOf(20_000, 60_000, 1_000, 3_000)
+    }
+    /** tetto in memoria del buffer (byte): è la vera protezione dalla memoria esaurita sulle chiavette da 1 GB */
+    fun targetBytes(cls: String, live: Boolean): Int = (when (cls) { "weak" -> if (live) 16 else 32; "good" -> if (live) 32 else 64; else -> if (live) 24 else 48 }) shl 20
+    /** video già visto tenuto in memoria (film): «indietro di 10 s» senza ricaricare; in diretta niente */
+    fun backMs(cls: String, live: Boolean): Int = if (live) 0 else when (cls) { "weak" -> 6_000; "good" -> 12_000; else -> 10_000 }
+    /** ABR per HLS a più varianti (§4): frazione di banda usata e attesa prima di salire di qualità */
+    fun abr(cls: String): AdaptiveTrackSelection.Factory = when (cls) {
+        "weak" -> AdaptiveTrackSelection.Factory(15_000, 25_000, 25_000, 0.55f)
+        "good" -> AdaptiveTrackSelection.Factory(6_000, 25_000, 25_000, 0.80f)
+        else -> AdaptiveTrackSelection.Factory(10_000, 25_000, 25_000, 0.70f)
+    }
+    /** stima iniziale della banda senza misure salvate (bit/s) */
+    fun defaultBitrate(cls: String): Long = when (cls) { "weak" -> 2_000_000L; "good" -> 12_000_000L; else -> 6_000_000L }
 }
 
 /** Motore di riproduzione: ExoPlayer oppure VLC. */
@@ -124,12 +155,22 @@ interface Engine {
 private fun mimeOf(url: String): String? {
     val u = url.lowercase(Locale.ROOT).substringBefore('?')
     return when {
-        u.endsWith(".m3u8") || u.contains("/hls/") -> MimeTypes.APPLICATION_M3U8
+        // l'estensione vince sul percorso: un «.ts» dentro /hls/ è comunque un TS
         u.endsWith(".ts") -> MimeTypes.VIDEO_MP2T
+        u.endsWith(".m3u8") || u.contains("/hls/") -> MimeTypes.APPLICATION_M3U8
         u.endsWith(".mkv") -> MimeTypes.VIDEO_MATROSKA
         u.endsWith(".mp4") || u.endsWith(".m4v") -> MimeTypes.VIDEO_MP4
         else -> null
     }
+}
+
+/** formato dedotto dall'indirizzo, per le statistiche: hls / ts / mkv / mp4 / "" */
+fun fmtOf(url: String): String = when (mimeOf(url)) {
+    MimeTypes.APPLICATION_M3U8 -> "hls"
+    MimeTypes.VIDEO_MP2T -> "ts"
+    MimeTypes.VIDEO_MATROSKA -> "mkv"
+    MimeTypes.VIDEO_MP4 -> "mp4"
+    else -> ""
 }
 
 private fun langName(code: String?): String {
@@ -150,15 +191,22 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
         fun frozenMs(ctx: Context): Long = if (SurfaceFix.needed(ctx)) 6000L else 2500L
     }
     override val name = "exo"
-    private val selector = DefaultTrackSelector(
-        ctx,
-        // passa a una qualità più alta solo dopo 10s stabili, scende solo se davvero necessario:
-        // evita i cali improvvisi di qualità
-        // con la rete lenta usa una parte minore della banda misurata: più margine contro i cali
-        AdaptiveTrackSelection.Factory(10_000, 25_000, 25_000, if (NetMem.slow(ctx)) 0.6f else 0.7f),
-    )
-    /** il video era già partito: un nuovo caricamento in diretta è un blocco vero (serve a [NetMem]) */
-    @Volatile private var wasReady = false
+    /** classe effettiva (weak/normal/good) con cui è stato costruito il lettore: i buffer sono immutabili, se cambia il lettore va ricreato */
+    val cls: String = prefs.cls.ifEmpty { NetMem.effectiveClass(ctx) }
+    // sale di qualità solo dopo un periodo stabile e usa una parte della banda misurata (più margine nelle classi deboli)
+    private val selector = DefaultTrackSelector(ctx, Adaptive.abr(cls))
+    /** campioni di banda verso [NetMem]: no per anteprima e multischermo (cambia quando il video passa di schermata) */
+    @Volatile var feed = prefs.feed
+    /** canale in onda (per [PlayerActivity]: blocchi contati per canale) */
+    @Volatile var chanKey = ""
+    private val initialBitrate: Long = NetMem.initialBitrate(ctx, cls)
+    /** scorta da raggiungere per ripartire dopo un blocco (cuscinetto crescente del recupero) */
+    private var rebMs = 4000
+    /** tipo dedotto dall'indirizzo in riproduzione (TS/HLS/…), prima che il manifest sia noto */
+    private var curMime: String? = null
+    /** traccia audio disattivata per decoder mancante (una volta per avvio) · ritorni al bordo della diretta (al più 3 per avvio) */
+    private var audioOff = false
+    private var behindN = 0
     private var currentQuality = "auto"
     private val player: ExoPlayer
     private var resize = AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -191,22 +239,31 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
         val http = DefaultHttpDataSource.Factory()
             .setUserAgent(ua)
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15_000)
+            // 8 s, non 15: con l'IPv6 morto si perde tutto il timeout prima di passare all'IPv4
+            .setConnectTimeoutMs(8_000)
             .setReadTimeoutMs(20_000)
         val extractors = DefaultExtractorsFactory()
             .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
         val sources = DefaultMediaSourceFactory(DefaultDataSource.Factory(ctx, http), extractors)
-        // si adatta alla connessione del cliente: con rete lenta o blocchi recenti tiene più scorta e, dopo un
-        // blocco, riparte solo con qualche secondo pronto (niente stop-and-go); la partenza resta rapida
-        val slow = NetMem.slow(ctx)
-        val reb = maxOf(prefs.rebufferMs, NetMem.rebufferMs(ctx))
-        val minB = maxOf(if (slow) 30_000 else 15_000, prefs.startMs + 1000, reb)
-        val meter = DefaultBandwidthMeter.Builder(ctx).setInitialBitrateEstimate(NetMem.initialBitrate(ctx)).build()
+        // tabelle per classe effettiva (§2-3): «stabile» usa i valori della classe più lenta, «veloce» solo partenza/ripresa
+        // della classe più rapida (min/max e tetto in byte restano quelli della classe: proteggono la memoria)
+        val bc = if (prefs.buffer == "stable") Adaptive.slower(cls) else cls
+        val b = Adaptive.buffers(bc, prefs.live)
+        val q = if (prefs.buffer == "fast") Adaptive.buffers(Adaptive.faster(cls), prefs.live) else b
+        rebMs = minOf(q[3], b[0])
+        // HLS in diretta: il buffer reale è ~3 segmenti e il lettore rincorre il bordo; con la classe debole si sta 20 s
+        // dietro senza rincorsa, con la normale 12 s e rincorsa minima; l'ottima usa i valori del lettore
+        when (bc) {
+            "weak" -> sources.setLiveTargetOffsetMs(20_000).setLiveMinSpeed(1f).setLiveMaxSpeed(1f)
+            "normal" -> sources.setLiveTargetOffsetMs(12_000).setLiveMaxSpeed(1.02f)
+        }
+        val meter = DefaultBandwidthMeter.Builder(ctx).setInitialBitrateEstimate(initialBitrate).build()
         val load = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(minB, maxOf(prefs.maxMs, minB), prefs.startMs, reb)
-            .setTargetBufferBytes(if (prefs.live) 24 shl 20 else 48 shl 20) // tetto in memoria: 24 MB in diretta, 48 MB per i film (Fire TV ha 1 GB)
-            .setBackBuffer(prefs.backMs, true)
-            .setPrioritizeTimeOverSizeThresholds(true)
+            .setBufferDurationsMs(b[0], b[1], minOf(q[2], b[0]), rebMs)
+            .setTargetBufferBytes(Adaptive.targetBytes(bc, prefs.live))
+            .setBackBuffer(Adaptive.backMs(bc, prefs.live), true)
+            // sempre false: con true il tetto in byte viene ignorato fino a minBuffer (15 s di 4K = 50-80 MB di heap)
+            .setPrioritizeTimeOverSizeThresholds(false)
             .build()
         val renderers = KxRenderersFactory(ctx)
             .setEnableDecoderFallback(true)
@@ -224,6 +281,8 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
             .setTrackSelector(selector)
             .setLoadControl(load)
             .setMediaSourceFactory(sources)
+            // focus audio: in pausa durante una notifica o un'altra app, poi riprende (non nel multischermo: i riquadri se lo toglierebbero a vicenda)
+            .setAudioAttributes(AudioAttributes.DEFAULT, prefs.focus)
             .build()
         // allinea la frequenza dello schermo a quella del video (50/60 fps fluidi) quando possibile
         player.setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_ONLY_IF_SEAMLESS)
@@ -241,14 +300,15 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
                 PlayStats.lastCodecError = videoCodecError.javaClass.simpleName
             }
             override fun onBandwidthEstimate(eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, totalLoadTimeMs: Int, totalBytesLoaded: Long, bitrateEstimate: Long) {
-                NetMem.observe(appCtx, bitrateEstimate)
+                // un TS progressivo in diretta arriva alla velocità del canale: il meter misurerebbe il bitrate, non la linea
+                if (feed && !tsLive()) NetMem.observe(appCtx, bitrateEstimate, totalBytesLoaded, totalLoadTimeMs, initialBitrate)
             }
         })
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 when (state) {
-                    Player.STATE_BUFFERING -> { if (wasReady && (prefs.live || player.isCurrentMediaItemLive)) NetMem.stall(appCtx); l.onBuffering(true) }
-                    Player.STATE_READY -> { wasReady = true; l.onBuffering(false); l.onReady() }
+                    Player.STATE_BUFFERING -> l.onBuffering(true)
+                    Player.STATE_READY -> { l.onBuffering(false); l.onReady() }
                     Player.STATE_ENDED -> l.onEnded()
                     else -> {}
                 }
@@ -259,13 +319,39 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
             override fun onRenderedFirstFrame() { moveFrameSeen = true; main.removeCallbacks(frozenCheck); if (moveArmed) fireMoved(); l.onFirstFrame() }
 
             override fun onPlayerError(error: PlaybackException) {
-                if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
-                    player.seekToDefaultPosition(); player.prepare(); return
+                // dietro la finestra della diretta: si torna al bordo (al più 3 volte per avvio, poi è un errore vero)
+                if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW && behindN < 3) {
+                    behindN++; player.seekToDefaultPosition(); player.prepare(); return
+                }
+                // decoder audio mancante (AC-3, MP2…): via la traccia audio, il video continua; una volta sola per avvio
+                val f = (error as? ExoPlaybackException)?.rendererFormat
+                val audioCodes = intArrayOf(PlaybackException.ERROR_CODE_DECODER_INIT_FAILED, PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+                    PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES, PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED, PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED)
+                if (!audioOff && f?.sampleMimeType?.startsWith("audio/") == true && audioCodes.contains(error.errorCode)) {
+                    audioOff = true
+                    player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true).build()
+                    player.prepare(); player.playWhenReady = true
+                    l.onAudioDisabled()
+                    return
                 }
                 l.onError(error.errorCodeName)
             }
         })
     }
+
+    /** flusso HLS in riproduzione (dal manifest o dall'estensione dell'indirizzo) */
+    fun isHls(): Boolean = curMime == MimeTypes.APPLICATION_M3U8 || player.currentManifest is HlsManifest
+    /** TS progressivo in diretta: la banda non si misura (vale il fill-ratio) */
+    private fun tsLive(): Boolean = (prefs.live || player.isCurrentMediaItemLive) && !isHls()
+    /** formato effettivo per le statistiche: hls / ts / mp4 / mkv */
+    fun format(): String = if (isHls()) "hls" else fmtOf(playingUrl)
+    /** millisecondi di video già pronti oltre la posizione attuale */
+    fun bufferedMs(): Long = maxOf(0L, player.totalBufferedDuration)
+    /** posizione fino a cui il flusso è stato scaricato: Δ / Δtempo = velocità di download ÷ bitrate (fill-ratio) */
+    fun bufferedPos(): Long = maxOf(0L, player.bufferedPosition)
+    fun rebufferMs(): Int = rebMs
+    /** pausa tecnica (cuscinetto crescente del recupero): il buffer continua a riempirsi, poi si riparte */
+    fun hold(on: Boolean) { player.playWhenReady = !on }
 
     /* ---------------- vista del video ---------------- */
     private fun resizeOf(mode: String) = when (mode) {
@@ -346,9 +432,12 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
 
     override fun play(url: String, startMs: Long) {
         val b = MediaItem.Builder().setUri(Uri.parse(url))
-        mimeOf(url)?.let { b.setMimeType(it) }
+        curMime = mimeOf(url)
+        curMime?.let { b.setMimeType(it) }
         playingUrl = url
-        wasReady = false
+        behindN = 0
+        // la traccia audio tolta per un decoder mancante torna attiva: il nuovo contenuto può averne una supportata
+        if (audioOff) { audioOff = false; player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false).build() }
         // senza posizione: si parte da quella predefinita (in diretta HLS vicino al presente, come indica la
         // playlist) e non dall'inizio della finestra, dove i segmenti stanno per scadere
         if (startMs > 0) player.setMediaItem(b.build(), startMs) else player.setMediaItem(b.build())
@@ -363,7 +452,7 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
     /** la superficie video va sopra (anteprima) o sotto (schermo intero, con i menu sopra) la finestra */
     fun setOverlay(on: Boolean) { (pv.videoSurfaceView as? SurfaceView)?.setZOrderMediaOverlay(on) }
 
-    override fun stop() { player.stop(); playingUrl = "" }
+    override fun stop() { player.stop(); playingUrl = ""; NetMem.flush(appCtx) }
     /** volume del solo riquadro (multi-schermo): 0 = muto */
     fun setVolume(v: Float) { player.volume = v }
     override fun togglePause() { player.playWhenReady = !player.playWhenReady }
@@ -433,11 +522,17 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
 
     private fun applyQuality(q: String) {
         val b = player.trackSelectionParameters.buildUpon().clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+        // classe debole: tetto 1920×1080 e 5 Mbps; sotto un tetto l'ABR resta attivo (mai «massima forzata» insieme a un tetto)
+        val weak = cls == "weak"
+        val capW = if (weak) 1920 else Int.MAX_VALUE
+        val capH = if (weak) 1080 else Int.MAX_VALUE
+        b.setMaxVideoBitrate(if (weak) 5_000_000 else Int.MAX_VALUE)
         when {
-            q == "max" -> b.setForceHighestSupportedBitrate(true).clearVideoSizeConstraints()
-            q.toIntOrNull() != null -> b.setForceHighestSupportedBitrate(true).setMaxVideoSize(Int.MAX_VALUE, q.toInt())
+            q == "max" -> b.setForceHighestSupportedBitrate(!weak).setMaxVideoSize(capW, capH)
+            // «fino a Np»: solo il limite di risoluzione, la scelta sotto il limite resta adattiva
+            q.toIntOrNull() != null -> b.setForceHighestSupportedBitrate(false).setMaxVideoSize(capW, minOf(q.toInt(), capH))
             // automatica: mai più della risoluzione dello schermo (una TV 720p non scarica il 1080p)
-            else -> b.setForceHighestSupportedBitrate(false).clearVideoSizeConstraints().setViewportSizeToPhysicalDisplaySize(appCtx, true)
+            else -> b.setForceHighestSupportedBitrate(false).setMaxVideoSize(capW, capH).setViewportSizeToPhysicalDisplaySize(appCtx, true)
         }
         player.trackSelectionParameters = b.build()
         currentQuality = q
@@ -528,6 +623,7 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
         dropOldView()
         pv.player = null
         player.release()
+        NetMem.flush(appCtx)
     }
 }
 
@@ -562,6 +658,8 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
     }
     override val name = "vlc"
     @Volatile private var vlcBuf = false
+    /** il nuovo media si è aperto: solo da allora errore e fine valgono (prima arrivano quelli del media sostituito) */
+    @Volatile private var armed = false
     private val layout = VLCVideoLayout(ctx)
     override val view: View get() = layout
     private val lib: LibVLC
@@ -577,12 +675,13 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
         mp.attachViews(layout, null, true, false)
         mp.setEventListener { e ->
             when (e.type) {
-                MediaPlayer.Event.Buffering -> { val b = e.buffering < 99.9f; vlcBuf = b; l.onBuffering(b) }
+                MediaPlayer.Event.Opening -> armed = true
+                MediaPlayer.Event.Buffering -> { armed = true; val b = e.buffering < 99.9f; vlcBuf = b; l.onBuffering(b) }
                 // il tempo avanza: non sta caricando (VLC non sempre manda «100%» alla fine del caricamento)
                 MediaPlayer.Event.TimeChanged -> if (vlcBuf) { vlcBuf = false; l.onBuffering(false) }
-                MediaPlayer.Event.Playing -> { l.onBuffering(false); l.onReady() }
-                MediaPlayer.Event.EncounteredError -> l.onError("VLC_ERROR")
-                MediaPlayer.Event.EndReached -> l.onEnded()
+                MediaPlayer.Event.Playing -> { armed = true; l.onBuffering(false); l.onReady() }
+                MediaPlayer.Event.EncounteredError -> if (armed) l.onError("VLC_ERROR")
+                MediaPlayer.Event.EndReached -> if (armed) l.onEnded()
                 MediaPlayer.Event.Vout -> if (e.voutCount > 0) l.onFirstFrame()
                 else -> {}
             }
@@ -593,6 +692,7 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
     override fun play(url: String, startMs: Long) {
         this.url = url
         val mh = maxH
+        armed = false // errore/fine del media precedente (fermato dal cambio) non riguardano questo
         io.execute {
             if (released) return@execute
             try {
@@ -732,36 +832,124 @@ class KxRenderersFactory(private val ctx: Context) : DefaultRenderersFactory(ctx
 }
 
 /**
- * Memoria della connessione del cliente (come Kairos Premium): banda media misurata e blocchi recenti.
- * Il player successivo parte già con la qualità giusta e, se la rete è lenta, con più scorta.
+ * Classe del dispositivo (politica §1): D debole · N normale · O ottimo. Calcolata una volta per processo.
+ * Unico punto che conosce i modelli low-end (lo usa anche lo speed test).
+ */
+object DeviceClass {
+    /** chiavette con poca CPU e 1 GB di memoria (MediaTek MT8695/MT8127): Fire TV Stick 1ª-3ª gen, Lite, 4K 2018 */
+    val LOW_END = setOf("AFTSSS", "AFTSS", "AFTMM", "AFTT", "AFTM")
+    @Volatile private var cached = ""
+    fun of(ctx: Context): String {
+        cached.takeIf { it.isNotEmpty() }?.let { return it }
+        val mb = try {
+            val am = ctx.applicationContext.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val mi = android.app.ActivityManager.MemoryInfo(); am.getMemoryInfo(mi); mi.totalMem / 1048576L
+        } catch (_: Exception) { 0L }
+        val sdk = android.os.Build.VERSION.SDK_INT
+        // i «2 GB» nominali risultano 1,8-1,9 GB al sistema: soglia dell'ottimo a 1,7 GB
+        val c = when {
+            (mb in 1..1228) || LOW_END.contains(android.os.Build.MODEL) || sdk < 24 -> "D"
+            mb >= 1700 && sdk >= 28 -> "O"
+            else -> "N"
+        }
+        cached = c
+        return c
+    }
+}
+
+/**
+ * Memoria della connessione del cliente: banda misurata (solo campioni validi: HLS e VOD progressivi, mai TS in diretta,
+ * anteprime o multischermo) e blocchi recenti per canale. Da qui escono la classe della linea e quella effettiva (§1).
  */
 object NetMem {
     private const val PREF = "net"
-    @Volatile private var bw = -1L
-    @Volatile private var stallAt = 0L
-    @Volatile private var stalls = 0
+    private const val WINDOW_MS = 30 * 60_000L
+    private const val DECAY_MS = 12 * 3600_000L
+    @Volatile private var loaded = false
+    /** banda media (bit/s, EMA 0,2) e istante dell'ultimo campione valido */
+    @Volatile private var bw = 0L
+    @Volatile private var bwAt = 0L
+    private var dirty = false
+    private var savedAt = 0L
+    /** blocchi degli ultimi 30 minuti: chiave del canale → istante */
+    private val stalls = ArrayList<Pair<String, Long>>()
     private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-    private fun load(ctx: Context) {
-        if (bw >= 0) return
-        val p = prefs(ctx)
-        bw = p.getLong("bw", 0L); stallAt = p.getLong("stallAt", 0L); stalls = p.getInt("stalls", 0)
+    @Synchronized private fun load(ctx: Context) {
+        if (loaded) return
+        loaded = true
+        try {
+            val p = prefs(ctx)
+            bw = p.getLong("bw", 0L); bwAt = p.getLong("bwAt", 0L)
+            val now = System.currentTimeMillis()
+            for (s in (p.getString("stallList", "") ?: "").split('\n')) {
+                val k = s.substringBefore('\t'); val t = s.substringAfter('\t', "").toLongOrNull() ?: continue
+                if (k.isNotEmpty() && now - t < WINDOW_MS) stalls.add(k to t)
+            }
+        } catch (_: Exception) {}
     }
-    fun observe(ctx: Context, bitrate: Long) {
-        if (bitrate <= 0) return
-        load(ctx)
-        bw = if (bw <= 0) bitrate else (bw * 0.8 + bitrate * 0.2).toLong()
-        prefs(ctx).edit().putLong("bw", bw).apply()
+    private fun save(ctx: Context) {
+        savedAt = System.currentTimeMillis(); dirty = false
+        try { prefs(ctx).edit().putLong("bw", bw).putLong("bwAt", bwAt).apply() } catch (_: Exception) {}
     }
-    fun stall(ctx: Context) {
+    /** campione del meter: vale solo con ≥ 512 KB e ≥ 2 s di trasferimento e se non è la stima iniziale; su disco al più ogni 30 s */
+    fun observe(ctx: Context, bitrate: Long, bytes: Long, loadMs: Int, initial: Long) {
+        if (bitrate <= 0 || bytes < 512L * 1024 || loadMs < 2000 || bitrate == initial) return
         load(ctx)
+        synchronized(this) {
+            bw = if (bw <= 0) bitrate else (bw * 0.8 + bitrate * 0.2).toLong()
+            bwAt = System.currentTimeMillis()
+            dirty = true
+            if (bwAt - savedAt >= 30_000L) save(ctx)
+        }
+    }
+    /** scrive le misure non ancora salvate (allo stop del lettore) */
+    fun flush(ctx: Context) { synchronized(this) { if (dirty) save(ctx) } }
+    /** banda stimata dall'interfaccia web (Mbps): seme solo se manca una misura valida */
+    fun seed(ctx: Context, mbps: Double) {
+        if (mbps <= 0.0) return
+        load(ctx)
+        synchronized(this) {
+            val now = System.currentTimeMillis()
+            if (bw > 0 && now - bwAt < DECAY_MS) return
+            bw = (mbps * 1_000_000).toLong(); bwAt = now; save(ctx)
+        }
+    }
+    /** blocco durante la visione del canale [key] (solo dal lettore principale) */
+    fun stall(ctx: Context, key: String) {
+        load(ctx)
+        synchronized(this) {
+            val now = System.currentTimeMillis()
+            stalls.removeAll { now - it.second >= WINDOW_MS }
+            stalls.add(key.ifEmpty { "?" } to now)
+            while (stalls.size > 12) stalls.removeAt(0)
+            try { prefs(ctx).edit().putString("stallList", stalls.joinToString("\n") { it.first + "\t" + it.second }).apply() } catch (_: Exception) {}
+        }
+    }
+    private fun recent(now: Long): List<Pair<String, Long>> = synchronized(this) { stalls.filter { now - it.second < WINDOW_MS } }
+    /** ≥ 2 blocchi in 30 minuti su almeno 2 canali diversi: è la linea, non il singolo canale */
+    fun multiStalls(ctx: Context): Boolean { load(ctx); val r = recent(System.currentTimeMillis()); return r.size >= 2 && r.map { it.first }.toSet().size >= 2 }
+    /** banda misurata (Mbps); 0 se manca o se l'ultima misura ha più di 12 h (decadimento) */
+    fun bwMbps(ctx: Context): Double { load(ctx); return if (bw > 0 && System.currentTimeMillis() - bwAt < DECAY_MS) bw / 1_000_000.0 else 0.0 }
+    /** classe della linea: weak / normal / good (§1) */
+    fun lineClass(ctx: Context): String {
         val now = System.currentTimeMillis()
-        stalls = if (now - stallAt < 30 * 60_000L) stalls + 1 else 1
-        stallAt = now
-        prefs(ctx).edit().putLong("stallAt", stallAt).putInt("stalls", stalls).apply()
+        val mb = bwMbps(ctx)
+        if (multiStalls(ctx) || (mb > 0 && mb < 4.0)) return "weak"
+        if (mb >= 15.0 && recent(now).none { now - it.second < 20 * 60_000L }) return "good"
+        return "normal"
     }
-    private fun recent(ctx: Context): Int { load(ctx); return if (System.currentTimeMillis() - stallAt < 30 * 60_000L) stalls else 0 }
-    fun slow(ctx: Context): Boolean { load(ctx); return (bw in 1 until 4_000_000L) || recent(ctx) >= 2 }
-    /** scorta minima dopo un blocco: 0 senza blocchi recenti (vale la scelta dell'utente), poi da 4 a 8 s */
-    fun rebufferMs(ctx: Context): Int { val n = recent(ctx); return if (n == 0) 0 else (2_500 + n * 1_500).coerceAtMost(8_000) }
-    fun initialBitrate(ctx: Context): Long { load(ctx); return if (bw > 0) (bw * 0.8).toLong() else 3_000_000L }
+    /** classe effettiva = la peggiore fra dispositivo e linea; [line] dall'interfaccia web (che conosce anche lo speed test), se valida,
+     *  vale al posto di quella locale, salvo che qui la linea risulti debole (blocchi su più canali o banda misurata < 4 Mbps) */
+    fun effectiveClass(ctx: Context, line: String = ""): String {
+        val dev = DeviceClass.of(ctx)
+        val local = lineClass(ctx)
+        val ln = if ((line == "weak" || line == "normal" || line == "good") && local != "weak") line else local
+        return when {
+            dev == "D" || ln == "weak" -> "weak"
+            dev == "O" && ln == "good" -> "good"
+            else -> "normal"
+        }
+    }
+    /** stima iniziale del meter: quella salvata (×0,8) oppure 2 / 6 / 12 Mbps per classe */
+    fun initialBitrate(ctx: Context, cls: String): Long { val mb = bwMbps(ctx); return if (mb > 0) (mb * 800_000).toLong() else Adaptive.defaultBitrate(cls) }
 }

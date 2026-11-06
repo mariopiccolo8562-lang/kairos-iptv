@@ -45,6 +45,8 @@ class MultiActivity : ComponentActivity() {
         var ch: Ch? = null
         var triedAlt = false
         var gen = 0
+        /** istanti dei riavvii dopo ENDED (al più 5 in 5 minuti) */
+        val ends = java.util.ArrayDeque<Long>()
     }
 
     private val ui = Handler(Looper.getMainLooper())
@@ -137,7 +139,7 @@ class MultiActivity : ComponentActivity() {
 
     private fun playIn(t: Tile, c: Ch) {
         val g = ++t.gen
-        t.ch = c; t.triedAlt = false
+        t.ch = c; t.triedAlt = false; t.ends.clear()
         t.label.text = (if (c.num > 0) "${c.num}  " else "") + c.title
         t.msg.visibility = View.GONE; t.spin.visibility = View.VISIBLE
         t.engine?.let { t.box.removeView(it.view); it.release() }
@@ -145,7 +147,21 @@ class MultiActivity : ComponentActivity() {
         val l = object : EngineListener {
             override fun onBuffering(buffering: Boolean) { ui.post { if (g == t.gen && !closing) t.spin.visibility = if (buffering) View.VISIBLE else View.GONE } }
             override fun onReady() { ui.post { if (g == t.gen && !closing) { t.spin.visibility = View.GONE; t.msg.visibility = View.GONE } } }
-            override fun onEnded() { ui.post { if (g == t.gen && !closing) t.engine?.play(t.ch?.url ?: return@post, 0) } }
+            // la diretta non finisce: riavvio con attesa crescente 1-2-4 s, al più 5 volte in 5 minuti, poi formato alternativo o messaggio
+            override fun onEnded() {
+                ui.post {
+                    if (g != t.gen || closing) return@post
+                    val ch = t.ch ?: return@post
+                    val now = System.currentTimeMillis()
+                    while (t.ends.isNotEmpty() && now - t.ends.first > 5 * 60_000L) t.ends.removeFirst()
+                    if (t.ends.size < 5) {
+                        t.ends.addLast(now)
+                        val u = t.engine?.playingUrl?.takeIf { it.isNotEmpty() } ?: ch.url
+                        ui.postDelayed({ if (g == t.gen && !closing) t.engine?.play(u, 0) }, 1000L shl minOf(t.ends.size - 1, 2))
+                    } else if (!t.triedAlt && ch.alt.isNotEmpty()) { t.triedAlt = true; t.engine?.play(ch.alt, 0) }
+                    else { t.spin.visibility = View.GONE; t.msg.text = "Canale interrotto\n(premi OK per cambiarlo)"; t.msg.visibility = View.VISIBLE }
+                }
+            }
             override fun onError(message: String) {
                 ui.post {
                     if (g != t.gen || closing) return@post
@@ -156,7 +172,8 @@ class MultiActivity : ComponentActivity() {
                 }
             }
         }
-        val e = try { ExoEngine(this, l, ua, PlayPrefs(quality, "balanced", "fit", live = true, hw = "auto")) } catch (x: Throwable) { null }
+        // feed = false: i riquadri non alimentano la memoria della linea; focus = false: più lettori insieme non devono togliersi il focus audio a vicenda
+        val e = try { ExoEngine(this, l, ua, PlayPrefs(quality, "balanced", "fit", live = true, hw = "auto", feed = false, focus = false)) } catch (x: Throwable) { null }
         if (e == null) { t.spin.visibility = View.GONE; t.msg.text = "Lettore non disponibile"; t.msg.visibility = View.VISIBLE; return }
         t.engine = e
         t.box.addView(e.view, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))

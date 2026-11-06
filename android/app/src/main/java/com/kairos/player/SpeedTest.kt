@@ -29,10 +29,9 @@ object SpeedTest {
     private const val UL_MS = 6000.0
     private val lock = Any()
     private var current: Run? = null
-    /** chiavette con poca CPU (1 GB, MediaTek MT8695/MT8127): molte connessioni cifrate insieme abbassano il risultato */
-    private val LOW_END = setOf("AFTSSS", "AFTSS", "AFTMM", "AFTT", "AFTM")
-    private val DL_CONNS: Int get() = if (LOW_END.contains(android.os.Build.MODEL)) 3 else 6
-    private val UL_CONNS: Int get() = if (LOW_END.contains(android.os.Build.MODEL)) 2 else 4
+    /** chiavette con poca CPU (1 GB, MediaTek MT8695/MT8127): molte connessioni cifrate insieme abbassano il risultato (elenco in [DeviceClass]) */
+    private val DL_CONNS: Int get() = if (DeviceClass.LOW_END.contains(android.os.Build.MODEL)) 3 else 6
+    private val UL_CONNS: Int get() = if (DeviceClass.LOW_END.contains(android.os.Build.MODEL)) 2 else 4
 
     fun start(ua: String, cb: (String) -> Unit) {
         val r = Run(ua, cb)

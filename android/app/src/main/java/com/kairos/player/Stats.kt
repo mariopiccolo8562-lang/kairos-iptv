@@ -23,6 +23,18 @@ object PlayStats {
     /** ultimo recupero automatico (testo breve per il pannello) e qualità ridotta in corso */
     @Volatile var recovery = ""
     @Volatile var reduced = ""
+    /* politica Kairos Adaptive (§9): banda valida (Mbps), classi linea/dispositivo/effettiva, fill-ratio dell'ultimo avvio,
+       ms al primo fotogramma, ms totali di blocco nella sessione, versione in uso (full/HD/SD), formato effettivo, canale in onda */
+    @Volatile var bw = 0.0
+    @Volatile var line = ""
+    @Volatile var dev = ""
+    @Volatile var cls = ""
+    @Volatile var fill = 0.0
+    @Volatile var ttff = 0
+    @Volatile var stallMs = 0L
+    @Volatile var variant = ""
+    @Volatile var fmt = ""
+    @Volatile var nowId = ""
     /** istanti dei blocchi (caricamento durante la visione) dell'ultima ora */
     private val stalls = java.util.ArrayDeque<Long>()
     /** problemi da mandare al pannello («Errori applicazione»): letti e svuotati dall'interfaccia */
@@ -37,6 +49,8 @@ object PlayStats {
 
     fun stall() { synchronized(stalls) { val t = System.currentTimeMillis(); stalls.addLast(t); while (stalls.isNotEmpty() && t - stalls.first > 3_600_000L) stalls.removeFirst() } }
     fun stallsLastHour(): Int = synchronized(stalls) { val t = System.currentTimeMillis(); while (stalls.isNotEmpty() && t - stalls.first > 3_600_000L) stalls.removeFirst(); stalls.size }
+    /** blocchi negli ultimi [ms] millisecondi (al più un'ora) */
+    fun stallsLast(ms: Long): Int = synchronized(stalls) { val t = System.currentTimeMillis(); stalls.count { t - it < ms } }
 
     fun event(o: JSONObject) { events.add(o); while (events.size > 30) events.poll() }
     fun drainEvents(): String {
@@ -58,11 +72,29 @@ object PlayStats {
                 put("dec", if (decoder.isEmpty()) "" else if (isSoftware(decoder)) "sw" else "hw")
                 put("dropped", dropped)
                 put("stallsH", stallsLastHour())
+                put("stalls10", stallsLast(10 * 60_000L))
                 if (recovery.isNotEmpty()) put("rec", recovery)
                 if (reduced.isNotEmpty()) put("reduced", reduced)
+                // politica Kairos Adaptive (§9)
+                if (bw > 0) put("bw", Math.round(bw * 10) / 10.0)
+                if (line.isNotEmpty()) put("line", line)
+                if (dev.isNotEmpty()) put("dev", dev)
+                if (cls.isNotEmpty()) put("cls", cls)
+                if (fill > 0) put("fill", Math.round(fill * 100) / 100.0)
+                if (ttff > 0) put("ttff", ttff)
+                put("stallMs", stallMs)
+                if (variant.isNotEmpty()) put("var", variant)
+                if (fmt.isNotEmpty()) put("fmt", fmt)
+                if (nowId.isNotEmpty()) put("id", nowId)
             }.toString()
         } catch (t: Throwable) { "" }
     }
+}
+
+/** Ponte verso la WebView dell'interfaccia (impostato da MainActivity): il lettore nativo le dice il canale in onda dopo lo zapping. */
+object UiBridge {
+    @Volatile var js: ((String) -> Unit)? = null
+    fun call(code: String) { try { js?.invoke(code) } catch (_: Throwable) {} }
 }
 
 /** Tipo di rete (wifi | eth | mobile | none) e, sul Wi-Fi, potenza del segnale e velocità del collegamento. */
