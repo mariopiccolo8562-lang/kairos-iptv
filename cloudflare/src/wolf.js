@@ -1,3 +1,4 @@
+import { connect } from 'cloudflare:sockets';
 /* ---------------- WOLF: pannello reseller collegato a KAIROS ----------------
    WOLF non ha API: il Worker entra con utente e password del titolare (come dal browser) e usa le stesse richieste
    della pagina «Lines». Le linee non vengono copiate: la sezione «WOLF» del pannello legge e scrive su WOLF, così
@@ -34,14 +35,80 @@ async function loadJar(env, H) {
 }
 async function saveJar(env, H, jar) { mem.jar = jar; await setRow(env, 'wolf:ses', await H.seal(env, jar)).catch(() => {}); }
 
+/* HTTP/1.1 su socket TCP: fetch() dei Worker aggiunge CF-Connecting-IP (2a06:98c0:3600::103), che il firewall di WOLF blocca */
+async function sockFetch(url, { method, headers, body }) {
+  const u = new URL(url), tls = u.protocol === 'https:';
+  const enc = new TextEncoder(), data = body ? enc.encode(body) : null;
+  let sock;
+  try {
+    sock = connect({ hostname: u.hostname, port: +u.port || (tls ? 443 : 80) }, { secureTransport: tls ? 'on' : 'off' });
+    await sock.opened;
+  } catch (e) { try { sock && sock.close(); } catch {} throw Object.assign(new Error('socket'), { early: true }); }
+  const timer = new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 25000));
+  try {
+    let head = `${method} ${u.pathname}${u.search} HTTP/1.1\r\nHost: ${u.host}\r\nConnection: close\r\nAccept-Encoding: identity\r\n`;
+    for (const [k, v] of Object.entries(headers)) if (v) head += `${k}: ${String(v).replace(/[\r\n]/g, '')}\r\n`;
+    if (data) head += `Content-Length: ${data.length}\r\n`;
+    const w = sock.writable.getWriter();
+    await Promise.race([w.write(enc.encode(head + '\r\n')), timer]);
+    if (data) await Promise.race([w.write(data), timer]);
+    w.releaseLock();
+    const rd = sock.readable.getReader();
+    let buf = new Uint8Array(0), hEnd = -1, meta = null;
+    for (;;) {
+      const { value, done } = await Promise.race([rd.read(), timer]);
+      if (value && value.length) { const n = new Uint8Array(buf.length + value.length); n.set(buf); n.set(value, buf.length); buf = n; }
+      if (buf.length > 40e6) throw new Error('risposta troppo grande');
+      if (hEnd < 0) { for (let i = 0; i + 3 < buf.length; i++) if (buf[i] === 13 && buf[i + 1] === 10 && buf[i + 2] === 13 && buf[i + 3] === 10) { hEnd = i; break; } }
+      if (hEnd >= 0 && !meta) meta = parseHead(new TextDecoder('latin1').decode(buf.subarray(0, hEnd)));
+      if (meta && meta.done(buf.subarray(hEnd + 4))) break;
+      if (done) break;
+    }
+    if (!meta) throw new Error('risposta non valida');
+    let b = buf.subarray(hEnd + 4);
+    if (meta.chunked) b = unchunk(b); else if (meta.len >= 0) b = b.subarray(0, meta.len);
+    meta.headers.delete('transfer-encoding'); meta.headers.delete('content-length');
+    const nobody = meta.status === 204 || meta.status === 304 || method === 'HEAD';
+    return new Response(nobody ? null : b, { status: meta.status, headers: meta.headers });
+  } finally { try { sock.close(); } catch {} }
+}
+function parseHead(t) {
+  const lines = t.split('\r\n'), st = +((lines[0] || '').match(/^HTTP\/\d(?:\.\d)?\s+(\d{3})/) || [])[1];
+  if (!(st >= 200 && st <= 599)) throw new Error('risposta non valida');
+  const headers = new Headers();
+  for (const l of lines.slice(1)) { const i = l.indexOf(':'); if (i > 0) headers.append(l.slice(0, i).trim(), l.slice(i + 1).trim()); }
+  const chunked = /chunked/i.test(headers.get('transfer-encoding') || ''), cl = headers.get('content-length'), len = !chunked && cl !== null ? +cl : -1;
+  const done = (b) => (st === 204 || st === 304) ? true : chunked ? endsChunked(b) : len >= 0 ? b.length >= len : false;
+  return { status: st, headers, chunked, len, done };
+}
+function endsChunked(b) { try { unchunk(b, true); return true; } catch { return false; } }
+function unchunk(b, strict) {
+  const out = []; let p = 0, tot = 0;
+  for (;;) {
+    let e = p; while (e + 1 < b.length && !(b[e] === 13 && b[e + 1] === 10)) e++;
+    if (e + 1 >= b.length) { if (strict) throw new Error('incompleto'); break; }
+    const n = parseInt(new TextDecoder().decode(b.subarray(p, e)).split(';')[0].trim(), 16);
+    if (!Number.isFinite(n)) throw new Error('chunk non valido');
+    if (n === 0) break;
+    if (e + 2 + n > b.length) { if (strict) throw new Error('incompleto'); out.push(b.subarray(e + 2)); tot += b.length - e - 2; break; }
+    out.push(b.subarray(e + 2, e + 2 + n)); tot += n; p = e + 2 + n + 2;
+  }
+  const r = new Uint8Array(tot); let o = 0; for (const c of out) { r.set(c, o); o += c.length; } return r;
+}
+
 async function rawFetch(cfg, jar, path, o = {}) {
   const headers = { 'User-Agent': UA, Accept: o.ajax ? 'application/json, text/javascript, */*; q=0.01' : 'text/html,application/xhtml+xml', Cookie: cookieHeader(jar), Referer: cfg.url + '/lines' };
   if (o.ajax) { headers['X-Requested-With'] = 'XMLHttpRequest'; if (jar['XSRF-TOKEN']) headers['X-XSRF-TOKEN'] = decodeURIComponent(jar['XSRF-TOKEN']); }
   let body;
   if (o.form) { headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8'; body = new URLSearchParams(o.form).toString(); }
+  const req = { method: o.method || (o.form ? 'POST' : 'GET'), headers, body };
   let r;
-  try { r = await fetch(cfg.url + path, { method: o.method || (o.form ? 'POST' : 'GET'), headers, body, redirect: 'manual' }); }
-  catch { throw new Error('WOLF non risponde: controlla l\'indirizzo del pannello'); }
+  try { r = await sockFetch(cfg.url + path, req); }
+  catch (e) {
+    if (!e || !e.early) throw new Error('WOLF non risponde: riprova');
+    try { r = await fetch(cfg.url + path, { ...req, redirect: 'manual' }); }
+    catch { throw new Error('WOLF non risponde: controlla l\'indirizzo del pannello'); }
+  }
   eatCookies(jar, r);
   return r;
 }
