@@ -392,7 +392,7 @@ body.agent .foot{display:none}
     return chk('aapp', '*', '<b>Tutte le app</b>', all, false, 'Anche quelle che aggiungerai in futuro') + (names.length ? names.map((n) => chk('aapp', n, esc(n), !all && cur.some((x) => x.toLowerCase() === n.toLowerCase()), false, '')).join('') : '<p class="mut" style="font-size:12.5px">Nessuna app: le aggiungi in APP Store → Attiva app.</p>');
   };
   const APP_KEYS = ['appstore', 'players', 'appsOp', 'dlcodes', 'appk', 'armada', 'wolf', 'mxp', 'oxp']; // hanno la loro sezione nell'editor
-  const KAPPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['plus', 'Kairos Plus'], ['store', 'Kairos Store']];
+  const KAPPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['prem', 'Kairos Premium'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova'], ['store', 'Kairos Store']];
   const dlcNames = () => (Array.isArray(D.dlCodes) ? D.dlCodes : []).map((x) => [x.name, x.name]);
   // elenco «tutti» + voci singole (['*'] = tutte, anche future); un sotto-agente mai oltre chi lo crea
   const listBox = (attr, cur, items, top, empty) => {

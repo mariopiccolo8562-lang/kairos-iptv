@@ -207,6 +207,20 @@
       <div class="mut" style="font-size:12.5px;line-height:1.45;flex:1;min-width:200px">Fallo scrivere ai tuoi clienti nella richiesta dello Store (campo «Codice del venditore», lo ricorda da sola): ${ag ? 'le loro richieste arrivano <b>solo a te</b> (e al titolare), non agli altri agenti.' : 'le richieste con il codice di un agente arrivano a lui e a te; quelle senza codice o con il tuo <b>solo a te</b>.'}</div>
       <button class="btn sm" id="sdSellerCopy">Copia</button>${ag ? '' : '<button class="btn sm" id="sdSellerEdit">Cambia</button>'}</div>`;
     $('#sdSellerCopy').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(c).then(() => toast('Codice venditore copiato')).catch(() => toast(c)); };
+    // titolare: i codici di tutti gli agenti in un posto solo (ognuno ha il suo, creato da solo la prima volta)
+    const AG = !ag && Array.isArray(D.agents) ? D.agents.slice().sort((x, y) => String(x.username).localeCompare(String(y.username))) : [];
+    if (AG.length) {
+      el.insertAdjacentHTML('beforeend', `<details class="sd-agc" style="margin-top:10px"${AG.length <= 25 ? ' open' : ''}><summary style="cursor:pointer;font-weight:700">Codici venditore dei tuoi agenti (${AG.length})</summary>
+        <p class="mut" style="font-size:12.5px;margin:6px 0 8px">Ogni agente ha il suo codice: dallo a lui. Le richieste dei clienti che scrivono quel codice arrivano a lui (e le vedi anche tu); quelle senza codice o con il tuo arrivano solo a te. «Nuovo» cambia il codice: il vecchio smette subito di valere.</p>
+        <div class="tbl-wrap"><table class="tbl" style="width:100%"><thead><tr><th>Agente</th><th>Codice</th><th></th></tr></thead><tbody>${AG.map((a) => `<tr><td>${esc(a.username)}${a.active === false ? ' <span class="mut">(sospeso)</span>' : ''}${a.parentId ? ' <span class="mut">· sotto-agente</span>' : ''}</td>
+          <td><b class="mono" style="letter-spacing:.12em">${esc(a.storeCode || '—')}</b></td><td style="text-align:right;white-space:nowrap">${a.storeCode ? `<button class="btn sm" data-agcp="${esc(a.storeCode)}">Copia</button> ` : ''}<button class="btn sm" data-agnew="${a.id}">Nuovo</button></td></tr>`).join('')}</tbody></table></div></details>`);
+      $$('[data-agcp]', el).forEach((b) => (b.onclick = () => navigator.clipboard.writeText(b.dataset.agcp).then(() => toast('Codice copiato'), () => toast(b.dataset.agcp))));
+      $$('[data-agnew]', el).forEach((b) => (b.onclick = async () => {
+        const a = AG.find((x) => String(x.id) === b.dataset.agnew);
+        if (!(await ask('Nuovo codice per ' + a.username + '?', 'Il codice attuale <b>' + esc(a.storeCode || '—') + '</b> smette subito di valere: i clienti dovranno scrivere quello nuovo.', 'Cambia codice'))) return;
+        try { const r = await api('POST', `/admin/agents/${a.id}/store-code`); a.storeCode = r.storeCode; toast('Nuovo codice: ' + r.storeCode); renderSeller(); } catch (e) { toast(e.message, 1); }
+      }));
+    }
     // il titolare sceglie il proprio codice (3-8 lettere o cifre)
     if ($('#sdSellerEdit')) $('#sdSellerEdit').onclick = () => {
       const box = $('#sdSellerCode'); box.innerHTML = `<input class="inp mono" id="sdSellerInp" maxlength="8" value="${esc(c)}" style="width:150px;margin:0;text-transform:uppercase;letter-spacing:.12em"> <button class="btn sm pri" id="sdSellerOk">Salva</button>`;

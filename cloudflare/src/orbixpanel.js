@@ -58,6 +58,11 @@ export async function oxpRoutes(req, env, path, who, ip, H, ag = null) {
     const q = { deviceid: str(b.device, 64), playlistName: str(b.name, 40) || 'Kairos', username: str(b.user, 120), password: typeof b.pass === 'string' ? b.pass.slice(0, 200) : '', host: str(b.host, 300), notes: str(b.notes, 60) };
     if (!/^[A-Za-z0-9:._-]{4,64}$/.test(q.deviceid)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
     if (!q.username || !q.password || !q.host) throw new HttpErr(400, 'Scrivi DNS, utente e password della linea');
+    // agente: niente playlist su un dispositivo OrbixPlay che ha già liste di clienti non suoi (lo vedrebbe tutto)
+    if (ag && !(await agDevices(env, ag.tree)).has(q.deviceid)) {
+      const cur = ((await call(env, H, '/list-playlists', {})).playlists || []).map(plOut);
+      if (cur.some((p) => p.device === q.deviceid)) throw new HttpErr(403, 'Questo dispositivo OrbixPlay ha già liste di un altro cliente');
+    }
     const j = await call(env, H, '/add-playlist', q);
     if (ag) await env.DB.prepare('INSERT INTO ext_lists (id, owner_id, app, name, ref, ext, username, pass_seal, dns, note, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(H.pid(), ag.id, 'orbix', q.playlistName, q.deviceid, s(j.playlist_id, 64), q.username, await H.seal(env, q.password), q.host.slice(0, 80), q.notes, Date.now(), Date.now()).run().catch(() => {});

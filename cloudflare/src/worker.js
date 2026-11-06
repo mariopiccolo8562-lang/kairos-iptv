@@ -286,7 +286,7 @@ function harden(res, req) {
 const DEFAULT_SETTINGS = {
   brand: 'KAIROS', tagline: 'Streaming', accent: 'cinema',
   announcement: 'Benvenuto su KAIROS — buona visione!', supportContact: '',
-  allowLocalPlaylists: true, apkUrl: '', apkVersionCode: 0, downloaderCode: '', storeDownloaderCode: '', liteDownloaderCode: '', liteApkUrl: '', ktvDownloaderCode: '', ktvApkUrl: '', xcDownloaderCode: '', xcApkUrl: '', plusDownloaderCode: '', plusApkUrl: '',
+  allowLocalPlaylists: true, apkUrl: '', apkVersionCode: 0, downloaderCode: '', storeDownloaderCode: '', liteDownloaderCode: '', liteApkUrl: '', ktvDownloaderCode: '', ktvApkUrl: '', xcDownloaderCode: '', xcApkUrl: '', plusDownloaderCode: '', plusApkUrl: '', premDownloaderCode: '', novaDownloaderCode: '',
   serverUrl: '', showFootball: true,
   price: '22 € / anno', privacy: '',
   aiDaily: 20, aiProvider: 'gm', aiClaude: 'haiku', aiGemini: 'flash',
@@ -389,6 +389,8 @@ async function xcFeed(s) {
 const PLUS_APK = 'https://github.com/mariopiccolo8562-lang/kairos-flutter/releases/latest/download/kairos-plus.apk';
 let plusMem = { t: 0, k: '', v: null };
 const NOVA_FEED = 'https://github.com/mariopiccolo8562-lang/Lairos-nova/releases/download/latest/kairos-nova.json';
+// 32 bit: si installa su tutte le chiavette, anche le Fire TV Stick vecchie
+const NOVA_APK = NOVA_FEED.replace('kairos-nova.json', 'KairosNova-arm32.apk');
 let novaMem = { t: 0, v: null };
 /** Kairos Nova: feed kairos-nova.json della release «latest» (versione, numero, link dell'APK arm64) */
 async function novaFeed() {
@@ -3025,11 +3027,11 @@ function storeAppsList(v) {
   return out.includes('*') ? ['*'] : out;
 }
 /* app Kairos (link per scaricarle e codice Downloader): quali vede l'agente lo decide il titolare (kAllow) */
-const KAIROS_APPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['prem', 'Kairos Premium'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['plus', 'Kairos Plus'], ['store', 'Kairos Store']];
+const KAIROS_APPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['prem', 'Kairos Premium'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova'], ['store', 'Kairos Store']];
 function kairosAppsOf(s) {
   return [
-    ['pro', s.apkUrl || '', s.downloaderCode || ''], ['tv', s.ktvApkUrl || KTV_APK, s.ktvDownloaderCode || ''], ['prem', PREM_APK, ''], ['lite', s.liteApkUrl || LITE_APK, s.liteDownloaderCode || ''],
-    ['xc', s.xcApkUrl || XC_APK, s.xcDownloaderCode || ''], ['plus', s.plusApkUrl || PLUS_APK, s.plusDownloaderCode || ''], ['store', '', s.storeDownloaderCode || ''],
+    ['pro', s.apkUrl || '', s.downloaderCode || ''], ['tv', s.ktvApkUrl || KTV_APK, s.ktvDownloaderCode || ''], ['prem', PREM_APK, s.premDownloaderCode || ''], ['lite', s.liteApkUrl || LITE_APK, s.liteDownloaderCode || ''],
+    ['xc', s.xcApkUrl || XC_APK, s.xcDownloaderCode || ''], ['plus', s.plusApkUrl || PLUS_APK, s.plusDownloaderCode || ''], ['nova', NOVA_APK, s.novaDownloaderCode || ''], ['store', '', s.storeDownloaderCode || ''],
   ].map(([k, apk, code]) => ({ key: k, name: KAIROS_APPS.find((x) => x[0] === k)[1], apk, code }));
 }
 const storeAppOk = (list, app) => list.includes('*') || list.some((x) => x.toLowerCase() === String(app || '').toLowerCase());
@@ -3532,7 +3534,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { name: x.name, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
       // codici Downloader e link delle app Kairos: solo quelli che il titolare gli concede (kAllow)
-      settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', plusDownloaderCode: ok('plus') ? s.plusDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),
+      settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', plusDownloaderCode: ok('plus') ? s.plusDownloaderCode || '' : '', premDownloaderCode: ok('prem') ? s.premDownloaderCode || '' : '', novaDownloaderCode: ok('nova') ? s.novaDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),
       kairosApps: P.appk ? kairosAppsOf(s).filter((x) => storeAppOk(P.kAllow, x.key)) : [], permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on) }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
       activity: actR ? actR.results || [] : [],
       messages: msgR ? msgGroups((msgR.results || []).filter((x) => byId.has(x.target))).slice(0, 150) : [],
@@ -3774,6 +3776,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       ktv: { apk: settings.ktvApkUrl || KTV_APK, feed: ktvF },
       xc: { apk: settings.xcApkUrl || XC_APK, feed: xcF },
       plus: { apk: settings.plusApkUrl || PLUS_APK, feed: plusF },
+      ...(await Promise.all([premFeed(), novaFeed()]).then(([pf, nf]) => ({ prem: { apk: PREM_APK, feed: pf }, nova: { apk: NOVA_APK, feed: nf } })).catch(() => ({}))),
       players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: orbixDnsList(settings.playersCfg.orbix, dnslOwner), max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents, codes: settings.playersCfg.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(settings.playersCfg) },
       dlCodes: dlCodesOf(settings),
       storeOwnerCode: await sellerOwnerCode(env),
@@ -4139,7 +4142,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path === '/settings' && m === 'PUT') {
     const b = await readJSON(req);
     const s = await getSettings(env);
-    for (const k of ['brand', 'tagline', 'accent', 'announcement', 'supportContact', 'downloaderCode', 'storeDownloaderCode', 'liteDownloaderCode', 'ktvDownloaderCode', 'xcDownloaderCode', 'plusDownloaderCode']) if (typeof b[k] === 'string') s[k] = str(b[k], k === 'announcement' ? 300 : 80);
+    for (const k of ['brand', 'tagline', 'accent', 'announcement', 'supportContact', 'downloaderCode', 'storeDownloaderCode', 'liteDownloaderCode', 'ktvDownloaderCode', 'xcDownloaderCode', 'plusDownloaderCode', 'premDownloaderCode', 'novaDownloaderCode']) if (typeof b[k] === 'string') s[k] = str(b[k], k === 'announcement' ? 300 : 80);
     if (typeof b.apkUrl === 'string') { const u = str(b.apkUrl, 500); s.apkUrl = !u || /^https:\/\//.test(u) ? u : s.apkUrl; }
     if (typeof b.plusApkUrl === 'string') { const u = str(b.plusApkUrl, 500); if (u && !/^https:\/\//.test(u)) throw new HttpErr(400, 'Il link di Kairos Plus deve iniziare con https://'); s.plusApkUrl = u; }
     if (typeof b.xcApkUrl === 'string') { const u = str(b.xcApkUrl, 500); if (u && !/^https:\/\//.test(u)) throw new HttpErr(400, 'Il link di Kairos XC deve iniziare con https://'); s.xcApkUrl = u; }
