@@ -24,9 +24,14 @@ function api(method, path, body) {
   p.then(() => {}, () => {}).then(() => { if (API_INFLIGHT.get(k) === p) API_INFLIGHT.delete(k); });
   return p;
 }
+/* /admin/state: il server risponde { same: true } se non è cambiato niente dall'ultima volta (meno dati sulle connessioni lente) */
+const ST_MEM = { tag: '', txt: '' };
 async function apiNet(method, path, body) {
-  const r = await fetch('/api' + path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Kairos': '1', ...(window.__assist ? { 'X-Assist': String(window.__assist) } : {}) }, body: body ? JSON.stringify(body) : undefined });
-  const j = await r.json().catch(() => ({}));
+  const st = method === 'GET' && path === '/admin/state' && !window.__assist;
+  const r = await fetch('/api' + path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Kairos': '1', ...(st && ST_MEM.tag ? { 'X-Kairos-Etag': ST_MEM.tag } : {}), ...(window.__assist ? { 'X-Assist': String(window.__assist) } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const txt = await r.text().catch(() => '');
+  let j = {}; try { j = txt ? JSON.parse(txt) : {}; } catch {}
+  if (st && r.ok) { if (j && j.same === true && ST_MEM.txt) j = JSON.parse(ST_MEM.txt); else { const t = r.headers.get('X-Kairos-Etag'); ST_MEM.tag = t || ''; ST_MEM.txt = t ? txt : ''; } }
   if (r.status === 503 && j.maint) { agMaintScreen(j.error); throw new Error(j.error || 'Pannello in manutenzione'); }
   if (r.status === 401 && path !== '/admin/login') { showLogin(); throw new Error('Sessione scaduta, accedi di nuovo'); }
   if (!r.ok) throw new Error(j.error || 'Errore ' + r.status);

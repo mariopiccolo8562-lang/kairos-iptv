@@ -122,12 +122,26 @@ async function seal(env, obj) {
   const out = new Uint8Array(12 + ct.byteLength); out.set(iv); out.set(new Uint8Array(ct), 12);
   return 'v1:' + b64(out);
 }
+/* playlist già decifrate in questa istanza: /admin/state ogni 15-20 s decifrava di nuovo migliaia di clienti */
+const unsealMem = new Map();
 async function unseal(env, s) {
   if (!s) return [];
   if (!s.startsWith('v1:')) return [];
+  const c = unsealMem.get(s);
+  if (c !== undefined) return JSON.parse(c);
   const raw = unb64(s.slice(3));
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.slice(0, 12) }, await getKey(env), raw.slice(12));
-  return JSON.parse(dec.decode(pt));
+  const txt = dec.decode(pt);
+  unsealMem.set(s, txt);
+  if (unsealMem.size > 12000) unsealMem.delete(unsealMem.keys().next().value);
+  return JSON.parse(txt);
+}
+/* /admin/state: se dall'ultima volta non è cambiato niente (stessa impronta) risponde { same: true } invece di rimandare tutto */
+async function stateJson(req, obj) {
+  const body = JSON.stringify(obj);
+  const tag = [...new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(body)))].slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('');
+  const h = { 'Content-Type': 'application/json; charset=utf-8', 'X-Kairos-Etag': tag, 'Cache-Control': 'no-store' };
+  return new Response(req.headers.get('X-Kairos-Etag') === tag ? '{"same":true}' : body, { headers: h });
 }
 
 /* ---------------- TOTP (RFC 6238) ---------------- */
@@ -3443,7 +3457,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const meOut = meArr[0];
     const { password: _pw, ...meSafe } = meOut;
     const sNames = canAg && P.store ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
-    return json({ role: 'agent', user: A.username, me: { ...meSafe, storeCode: await sellerAgentCode(env, A), perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
+    return stateJson(req, { role: 'agent', user: A.username, me: { ...meSafe, storeCode: await sellerAgentCode(env, A), perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: agList,
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { name: x.name, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
@@ -3682,7 +3696,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p && !p.parent ? p.status : 'pending'; }
     const activity = activityR.results || [], messages = msgGroups(messagesR.results || []).slice(0, 150), agentMsgs = msgGroups(agentMsgsR.results || []).slice(0, 100), sessions = sessionsR ? sessionsR.n : 0;
-    return json({
+    return stateJson(req, {
       settings, devices, activity, messages, agentMsgs, user: who, apk, apkFeed: apkF,
       wgConf: !!wgR,
       security: { totp: !!(ses && ses.totp_on), encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
