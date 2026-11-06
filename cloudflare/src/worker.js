@@ -11,6 +11,7 @@ import { ADDON_ASSETS } from './addon-assets.js';
  */
 import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide } from './store.js'; // autorizzazione download dello Store (/api/store/*)
 import { wolfRoutes, wolfCron, sockFetch } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
+import { oraRoutes } from './orapanel.js'; // Pannello ORA (panel.oraplayers.com), accesso passato dal titolare
 import { oxpRoutes } from './orbixpanel.js'; // playlist OrbixPlay gestite da KAIROS (sezione «Pannello OrbixPlay»)
 import { mxpRoutes } from './mxpanel.js'; // account MaxPlayer gestiti da KAIROS (sezione «Pannello MaxPlayer»)
 import { tgHook, notifyNew, notifyDecided, notifyAdmin } from './notify.js'; // avvisi su Telegram e notifiche del pannello
@@ -3671,6 +3672,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (!ses && API_DENY.test(path)) throw new HttpErr(403, 'Funzione disponibile solo dal pannello');
   if (path === '/api-keys' || path.startsWith('/api-keys/') || path === '/webhook' || path.startsWith('/webhook/')) return apiAdmin(req, env, path, who, ip, ctx);
   if (path.startsWith('/oxp/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello OrbixPlay'); const r = await oxpRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
+  if (path.startsWith('/ora/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello ORA'); const r = await oraRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
   if (path.startsWith('/mxp/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello MaxPlayer'); const r = await mxpRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
   if (path === '/online' && m === 'POST') { if (!ses || ses.agent) throw new HttpErr(403, 'Funzione disponibile solo dal pannello'); return onlineRoute(req); }
   if (path.startsWith('/wolf/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare WOLF'); const r = await wolfRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
