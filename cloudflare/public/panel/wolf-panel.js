@@ -31,7 +31,7 @@
   }
   TITLES.wolf = 'Pannello WOLF';
 
-  const W = { cfg: null, data: null, pk: null, err: '', q: '', f: '', own: '', limit: 100, show: new Set(), busy: false, tab: 'lines', rs: null, rsBusy: false, rsErr: '' };
+  const W = { cfg: null, data: null, pk: null, err: '', q: '', f: '', own: '', limit: 100, show: new Set(), busy: false, tab: 'lines', rs: null, rsBusy: false, rsErr: '', sel: new Set(), st: false };
   const isAg = () => D.role === 'agent';
   const DAY = 864e5, fmtD = (t) => (t ? new Date(t).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Illimitata');
   const left = (t) => { if (!t) return ''; const d = Math.ceil((t - Date.now()) / DAY); return d < 0 ? `scaduta da ${-d} g` : d === 0 ? 'scade oggi' : `tra ${d} g`; };
@@ -110,9 +110,10 @@
           <select class="inp" id="wfF" style="width:auto;margin:0">${FL.map(([k, t]) => `<option value="${k}"${W.f === k ? ' selected' : ''}>${t}</option>`).join('')}</select>
           <select class="inp" id="wfO" style="width:auto;margin:0"><option value="">Tutti i reseller</option>${owners().map(([o, n]) => `<option value="${esc(o)}"${W.own === o ? ' selected' : ''}>${esc(o)} · ${n}</option>`).join('')}</select>
           <span class="mut" style="font-size:12.5px">${list.length} linee</span></div>
+        ${d.lines && window.KXTools ? KXTools.bar('wf', selOf(list).length, list.length, [['ext', 'Rinnova', 'pri'], ['on', 'Attiva'], ['off', 'Disattiva'], ['msg', 'Messaggio ai clienti']]) + (W.st ? statsHtml() : '') : ''}
         <div style="margin-top:8px">${!d.lines ? `<p class="mut">${W.busy ? 'Carico le linee da WOLF…' : 'Nessun dato'}</p>` : shown.map((l) => {
           const k = linkOf(l.id), sh = W.show.has(l.id);
-          return `<div class="wf-row" data-id="${l.id}"><div><span class="k">ID</span>${l.id}</div>
+          return `<div class="wf-row" data-id="${l.id}"><div><span class="k">${window.KXTools ? KXTools.ck('wf', l.id, W.sel.has(String(l.id))) : ''}ID</span>${l.id}</div>
             <div><span class="k">Utente / password</span><div class="wf-v"><b class="mono">${esc(l.username)}</b><button data-a="cu" title="Copia utente">⧉</button></div><div class="wf-v"><span class="mono">${sh ? esc(l.password) : '••••••'}</span><button data-a="eye" title="${sh ? 'Nascondi' : 'Mostra'} password">${sh ? 'Nascondi' : 'Mostra'}</button><button data-a="cp" title="Copia password">⧉</button></div></div>
             <div><span class="k">Scadenza</span>${fmtD(l.exp)}<br><small class="mut">${left(l.exp)}</small></div>
             <div><span class="k">Stato</span>${window.KXOnline ? KXOnline.dot({ on: l.conns > 0, conns: l.conns }) + (l.conns > 0 && l.watching ? `<small class="mut" title="Sta guardando"> ▶ ${esc(l.watching)}</small>` : '') + '<br>' : ''}${status(l)}${l.trial ? '<span class="wf-tag g">Prova</span>' : ''}<br><small class="mut">${l.conns}/${l.max || '?'} conn.</small></div>
@@ -131,7 +132,48 @@
     $('#wfF').onchange = (e) => { W.f = e.target.value; W.limit = 100; render(); };
     if ($('#wfMore')) $('#wfMore').onclick = () => { W.limit += 100; render(); };
     V.querySelectorAll('.wf-row [data-a]').forEach((b) => { b.onclick = () => act(b.dataset.a, +b.closest('.wf-row').dataset.id); });
+    if (window.KXTools && d.lines) KXTools.bind(V, 'wf', W.sel, () => filtered().map((l) => l.id), { ext: bulkExt, on: () => bulkTgl(true), off: () => bulkTgl(false), msg: bulkMsg, csv: exportCsv, stats: () => { W.st = !W.st; render(); } }, render);
   }
+  /* azioni su più linee: solo quelle selezionate e visibili con i filtri attuali */
+  const selOf = (list) => (list || filtered()).filter((l) => W.sel.has(String(l.id)));
+  function statsHtml() {
+    const L = (W.data && W.data.lines) || [], now = Date.now(), ok = L.filter((l) => l.enabled && (!l.exp || l.exp > now));
+    return KXTools.stats([
+      ['Linee', L.length], ['Attive', ok.length, 'g'], ['Scadono in 7 giorni', ok.filter((l) => l.exp && l.exp - now < 7 * DAY).length, 'w'],
+      ['Scadono in 30 giorni', ok.filter((l) => l.exp && l.exp - now < 30 * DAY).length, 'w'], ['Scadute', L.filter((l) => l.exp && l.exp < now).length, 'b'],
+      ['Disattivate', L.filter((l) => !l.enabled).length, 'b'], ['Prove', L.filter((l) => l.trial).length], ['Collegate ora', L.filter((l) => l.conns > 0).length, 'g'],
+      ...(isAg() ? [] : [['Collegate a clienti', L.filter((l) => linkOf(l.id)).length]]), ['Crediti WOLF', (W.data && W.data.credits) ?? '—']
+    ], [['Linee per reseller', KXTools.count(L, (l) => l.owner)], ['Stanno guardando', KXTools.count(L.filter((l) => l.conns > 0 && l.watching), (l) => l.watching)]]);
+  }
+  function exportCsv() {
+    const S = selOf(), L = S.length ? S : filtered();
+    KXTools.csv('wolf-linee', [['ID', (l) => l.id], ['Utente', (l) => l.username], ['Password', (l) => l.password], ['Scadenza', (l) => KXTools.day(l.exp) || 'Illimitata'],
+      ['Stato', (l) => (!l.enabled ? 'Disattivata' : l.exp && l.exp < Date.now() ? 'Scaduta' : 'Attiva')], ['Prova', (l) => (l.trial ? 'sì' : '')], ['Collegata ora', (l) => (l.conns > 0 ? 'sì' : 'no')],
+      ['Nota', (l) => l.note], ['Reseller', (l) => l.owner], ['Cliente KAIROS', (l) => (linkOf(l.id) || {}).name || ''], ['Link M3U', (l) => m3u(l)]], L);
+  }
+  async function bulkExt() {
+    const S = selOf(); if (!S.length) return;
+    await loadPk(); if (!W.pk.length) return toast('Non trovo i pacchetti su WOLF', 1);
+    const cr = (W.data && W.data.credits) ?? null;
+    const pr = ask(`Rinnova ${S.length === 1 ? '1 linea' : S.length + ' linee'} su WOLF`, `<label class="lbl">Pacchetto per tutte (usa crediti WOLF)</label><select class="inp" id="wbK">${pkOpts()}</select>
+      <p id="wbC" style="margin:12px 0 0;font-size:13.5px"></p><p class="mut" style="font-size:12.5px;margin:6px 0 0">${S.slice(0, 12).map((l) => esc(l.username)).join(', ')}${S.length > 12 ? ` e altre ${S.length - 12}` : ''}</p>`, 'Rinnova tutte');
+    const cost = () => { const p = W.pk.find((x) => String(x.id) === $('#wbK').value) || {}; return (+p.credits || 0) * S.length; };
+    const upd = () => { const c = cost(); $('#wbC').innerHTML = `Costo totale: <b>${c} crediti</b>${cr !== null ? ` · disponibili <b>${cr}</b>${c > cr ? ' · <span style="color:#ff8f8f">non bastano</span>' : ''}` : ''}`; };
+    $('#wbK').onchange = upd; upd();
+    if (!(await pr)) return;
+    const pkg = $('#wbK').value, c = cost();
+    if (cr !== null && c > cr) return toast(`Servono ${c} crediti, ne hai ${cr}`, 1);
+    await KXTools.run(S, (l) => api('POST', `/admin/wolf/lines/${l.id}/extend`, { package: pkg }), 'Rinnovo');
+    W.sel.clear(); loadLines(true);
+  }
+  async function bulkTgl(on) {
+    const S = selOf().filter((l) => !!l.enabled !== on);
+    if (!S.length) return toast(on ? 'Sono già tutte attive' : 'Sono già tutte disattivate');
+    if (!(await ask(`${on ? 'Attivare' : 'Disattivare'} ${S.length === 1 ? '1 linea' : S.length + ' linee'}?`, on ? 'Le linee tornano a funzionare, anche su WOLF.' : 'I clienti di queste linee smettono di vedere finché non le riattivi. Succede anche su WOLF.', on ? 'Attiva' : 'Disattiva'))) return;
+    await KXTools.run(S, (l) => api('POST', `/admin/wolf/lines/${l.id}/toggle`), on ? 'Attivazione' : 'Disattivazione');
+    W.sel.clear(); loadLines(true);
+  }
+  function bulkMsg() { const S = selOf(); KXTools.msg(KXTools.devsFor(S.map((l) => l.username), S.map((l) => (linkOf(l.id) || {}).device).filter(Boolean)), S.length); }
   const owners = () => { const c = new Map(); ((W.data && W.data.lines) || []).forEach((l) => c.set(l.owner, (c.get(l.owner) || 0) + 1)); return [...c.entries()].sort((a, b) => b[1] - a[1]); };
   function rsHtml() {
     const R = W.rs;

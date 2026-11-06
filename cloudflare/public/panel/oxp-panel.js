@@ -12,7 +12,7 @@
   const isAg = () => D.role === 'agent';
   const canNew = () => !isAg() || !!(((D.me || {}).perms || {}).oxpNew);
   if (!$('#oxCss')) { const c = document.createElement('style'); c.id = 'oxCss'; c.textContent = '.ox-row{grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.3fr) minmax(0,1.2fr) auto!important}.ox-row .oxid{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;word-break:break-all;color:var(--txt,#fff)}@media (max-width:1000px){.ox-row{grid-template-columns:1fr 1fr!important}}'; document.head.appendChild(c); }
-  const O = { st: null, pls: null, slots: null, q: '', limit: 100, show: new Set(), busy: false, err: '' };
+  const O = { st: null, pls: null, slots: null, q: '', limit: 100, show: new Set(), busy: false, err: '', sel: new Set(), stOn: false };
   const copy = (t, w) => navigator.clipboard.writeText(t).then(() => toast(w + ' copiato'), () => toast('Copia non consentita dal browser', 1));
   const dnsOpts = (sel) => { const L = ((((D.settings || {}).playersCfg || {}).orbix) || []).filter((x) => x && (x.host || x.code)); return L.map((x) => { const v = x.code || x.host; return `<option value="${esc(v)}"${v === sel ? ' selected' : ''}>${esc(x.name || v)}</option>`; }).join(''); };
 
@@ -38,8 +38,8 @@
         <button class="btn sm" id="oxRe">${O.busy ? 'Carico…' : 'Aggiorna'}</button>${canNew() ? '<button class="btn sm" id="oxNew">+ Nuova playlist</button>' : ''}${isAg() ? '' : '<button class="btn sm" id="oxDns">Cambia DNS</button><button class="btn sm ghost" id="oxIn">Elimina inattive</button>'}</div>
       ${O.err ? `<p style="color:#ff8f8f;margin:10px 0 0">${esc(O.err)}</p>` : ''}
       ${isAg() ? '' : `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:13px">Impostazioni</summary><div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center"><input class="inp" id="oxEm" type="email" value="${esc(O.st.email || '')}" placeholder="email dell'account OrbixPlay" style="max-width:300px;margin:0"><button class="btn sm" id="oxEmB">Salva</button><small class="mut">Serve solo per leggere i posti.</small></div></details>`}</div>
-      <div class="card glass" style="margin-top:14px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="inp" id="oxQ" placeholder="Cerca dispositivo, nome, utente, DNS" value="${esc(O.q)}" style="max-width:300px;margin:0"><span class="mut" style="font-size:12.5px">${list.length} playlist</span></div>
-      <div style="margin-top:8px">${!O.pls ? `<p class="mut">${O.busy ? 'Carico le playlist da OrbixPlay…' : 'Nessun dato'}</p>` : shown.map((p) => { const sh = O.show.has(p.id); return `<div class="wf-row ox-row" data-id="${esc(p.id)}"><div><span class="k">ID playlist</span><span class="oxid">${esc(p.id)}</span></div>
+      <div class="card glass" style="margin-top:14px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="inp" id="oxQ" placeholder="Cerca dispositivo, nome, utente, DNS" value="${esc(O.q)}" style="max-width:300px;margin:0"><span class="mut" style="font-size:12.5px">${list.length} playlist</span></div>${window.KXTools && O.pls ? KXTools.bar('ox', list.filter((p) => O.sel.has(String(p.id))).length, list.length, [['msg', 'Messaggio ai clienti']]) + (O.stOn ? statsHtml() : '') : ''}
+      <div style="margin-top:8px">${!O.pls ? `<p class="mut">${O.busy ? 'Carico le playlist da OrbixPlay…' : 'Nessun dato'}</p>` : shown.map((p) => { const sh = O.show.has(p.id); return `<div class="wf-row ox-row" data-id="${esc(p.id)}"><div><span class="k">${window.KXTools ? KXTools.ck('ox', p.id, O.sel.has(String(p.id))) : ''}ID playlist</span><span class="oxid">${esc(p.id)}</span></div>
         <div><span class="k">Dispositivo</span><b class="mono">${esc(p.device)}</b>${p.notes ? `<br><small class="mut">${esc(p.notes)}</small>` : ''}</div>
         <div><span class="k">Playlist</span>${esc(p.name) || '—'}<br><small class="mut mono">${esc(p.host)}</small></div>
         <div>${window.KXOnline ? KXOnline.slot(p.host, p.user, p.pass) : ''}<span class="k">Utente / password</span><div class="wf-v"><b class="mono">${esc(p.user)}</b><button data-a="cu">⧉</button></div><div class="wf-v"><span class="mono">${sh ? esc(p.pass) : '••••••'}</span><button data-a="eye">${sh ? 'Nascondi' : 'Mostra'}</button><button data-a="cp">⧉</button></div></div>
@@ -53,6 +53,18 @@
     const q = $('#oxQ'); q.oninput = () => { O.q = q.value; O.limit = 100; const c = q.selectionStart; render(); const n = $('#oxQ'); n.focus(); n.setSelectionRange(c, c); };
     if ($('#oxMore')) $('#oxMore').onclick = () => { O.limit += 100; render(); };
     V.querySelectorAll('.wf-row [data-a]').forEach((b) => { b.onclick = () => act(b.dataset.a, b.closest('.wf-row').dataset.id); });
+    if (window.KXTools && O.pls) KXTools.bind(V, 'ox', O.sel, () => filtered().map((p) => p.id), { csv: exportCsv, stats: () => { O.stOn = !O.stOn; render(); },
+      msg: () => { const S = selP(); KXTools.msg(KXTools.devsFor(S.map((p) => p.user)), S.length); } }, render);
+  }
+  const selP = () => filtered().filter((p) => O.sel.has(String(p.id)));
+  function statsHtml() {
+    const P = O.pls || [], sl = O.slots;
+    return KXTools.stats([['Playlist', P.length], ['Dispositivi', new Set(P.map((p) => p.device)).size], ['DNS diversi', new Set(P.map((p) => p.host)).size],
+      ...(sl ? [['Posti liberi', `${sl.free} / ${sl.total}`, 'g']] : [])], [['Playlist per DNS', KXTools.count(P, (p) => p.host)], ['Per nome', KXTools.count(P, (p) => p.name)]]);
+  }
+  function exportCsv() {
+    const S = selP();
+    KXTools.csv('orbixplay-playlist', [['ID playlist', (p) => p.id], ['Dispositivo', (p) => p.device], ['Nome', (p) => p.name], ['DNS', (p) => p.host], ['Utente', (p) => p.user], ['Password', (p) => p.pass], ['Note', (p) => p.notes]], S.length ? S : filtered());
   }
   async function newPl() {
     const opts = dnsOpts('');
