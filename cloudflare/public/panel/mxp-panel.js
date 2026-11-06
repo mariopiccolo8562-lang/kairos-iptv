@@ -1,7 +1,7 @@
 /* KAIROS Control — «Pannello MaxPlayer»: i tuoi account MaxPlayer gestiti da KAIROS con l'API pubblica ufficiale.
    Clienti, liste, agenti e domini si leggono e si scrivono direttamente su MaxPlayer (niente copie): quello che fai qui
    si vede su my.maxplayer.tv e viceversa. Puoi collegare più account con la loro chiave API (salvata cifrata).
-   Solo il titolare. Usa le funzioni di app.js. */
+   Titolare; gli agenti con il permesso vedono solo i clienti del loro agente MaxPlayer. Usa le funzioni di app.js. */
 (() => {
   const css = document.createElement('style');
   css.textContent = `
@@ -21,6 +21,7 @@
   }
   TITLES.mxp = 'Pannello MaxPlayer';
 
+  const isAg = () => D.role === 'agent';
   const M = { accs: null, acc: '', tab: 'users', ov: null, users: null, doms: null, agents: null, q: '', limit: 100, show: new Set(), busy: false, err: '' };
   const copy = (t, w) => navigator.clipboard.writeText(t).then(() => toast(w + ' copiato'), () => toast('Copia non consentita dal browser', 1));
   const gen = (n) => { const a = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const r = crypto.getRandomValues(new Uint8Array(n)); return [...r].map((x) => a[x % a.length]).join(''); };
@@ -90,19 +91,20 @@
   function render() {
     const V = $('#v-mxp'); if (!V) return;
     if (!M.accs) { V.innerHTML = '<div class="card glass"><p class="mut">Carico…</p></div>'; return; }
+    if (!M.accs.length && isAg()) { V.innerHTML = `<div class="card glass"><b style="font-size:15px">Pannello MaxPlayer</b><p class="mut" style="margin:6px 0 0">Chi ti gestisce non ti ha ancora assegnato un agente MaxPlayer.</p>${M.err ? `<p style="color:#ff8f8f">${esc(M.err)}</p>` : ''}</div>`; return; }
     if (!M.accs.length) {
       V.innerHTML = `<div class="card glass"><b style="font-size:15px">Collega un account MaxPlayer</b><p class="mut" style="margin:6px 0 0">Su my.maxplayer.tv vai in <b>API pubblica → Accesso → Crea chiave</b> e incolla qui la chiave. Resta cifrata sul server; KAIROS la usa per gestire clienti, liste e agenti come fai tu sul sito.</p>${M.err ? `<p style="color:#ff8f8f">${esc(M.err)}</p>` : ''}${connectForm()}</div>`;
       bindConnect(); return;
     }
     const cur = M.accs.find((a) => a.id === M.acc) || {}, o = M.ov || {}, inf = o.info || {};
     V.innerHTML = `<div class="card glass">
-      <div class="mx-acc">${M.accs.map((a) => `<button data-acc="${esc(a.id)}" class="${a.id === M.acc ? 'on' : ''}">${esc(a.name)}${a.main ? ' · attivazioni KAIROS' : ''}</button>`).join('')}<button data-acc="+">+ Account</button></div>
+      <div class="mx-acc" style="${isAg() ? 'display:none' : ''}">${M.accs.map((a) => `<button data-acc="${esc(a.id)}" class="${a.id === M.acc ? 'on' : ''}">${esc(a.name)}${a.main ? ' · attivazioni KAIROS' : ''}</button>`).join('')}<button data-acc="+">+ Account</button></div>
       <div class="wf-st" style="margin-top:12px"><div style="flex:1;min-width:220px"><b style="font-size:15px">✅ ${esc(inf.name || cur.name || 'MaxPlayer')}</b><small>Quello che fai qui succede subito anche su MaxPlayer, e viceversa.</small></div>
-        <div><small>Clienti</small><span class="cr">${inf.users ?? '—'}<span style="font-size:14px;color:var(--mut)">${inf.max ? ' / ' + inf.max : ''}</span></span></div><div><small>Posti liberi</small><span class="cr">${o.cap ? o.cap.free : '—'}</span></div><div><small>Agenti</small><span class="cr">${inf.resellers ?? '—'}</span></div>
+        <div><small>Clienti</small><span class="cr">${inf.users ?? '—'}<span style="font-size:14px;color:var(--mut)">${inf.max ? ' / ' + inf.max : ''}</span></span></div><div><small>Posti liberi</small><span class="cr">${o.cap ? o.cap.free : '—'}</span></div><div><small>${isAg() ? 'Sotto-agenti' : 'Agenti'}</small><span class="cr">${inf.resellers ?? '—'}</span></div>
         <button class="btn sm" id="mxRe">${M.busy ? 'Carico…' : 'Aggiorna'}</button><button class="btn sm" id="mxNew">+ Nuovo cliente</button></div>
       ${M.err ? `<p style="color:#ff8f8f;margin:10px 0 0">${esc(M.err)}</p>` : ''}
-      ${cur.main ? '' : `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:13px">Impostazioni account</summary><div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><input class="inp" id="mxRn" maxlength="40" value="${esc(cur.name || '')}" style="max-width:240px;margin:0"><button class="btn sm" id="mxRnB">Rinomina</button><button class="btn sm ghost" id="mxOff">Scollega account</button></div></details>`}
-      <div class="wf-tabs"><button data-t="users" class="${M.tab === 'users' ? 'on' : ''}">Clienti${M.users ? ' · ' + M.users.length : ''}</button><button data-t="agents" class="${M.tab === 'agents' ? 'on' : ''}">Agenti${M.agents ? ' · ' + M.agents.length : ''}</button><button data-t="doms" class="${M.tab === 'doms' ? 'on' : ''}">Domini (DNS)${M.doms ? ' · ' + M.doms.length : ''}</button></div></div>
+      ${cur.main || isAg() ? '' : `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:13px">Impostazioni account</summary><div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><input class="inp" id="mxRn" maxlength="40" value="${esc(cur.name || '')}" style="max-width:240px;margin:0"><button class="btn sm" id="mxRnB">Rinomina</button><button class="btn sm ghost" id="mxOff">Scollega account</button></div></details>`}
+      <div class="wf-tabs"><button data-t="users" class="${M.tab === 'users' ? 'on' : ''}">Clienti${M.users ? ' · ' + M.users.length : ''}</button><button data-t="agents" class="${M.tab === 'agents' ? 'on' : ''}">${isAg() ? 'Sotto-agenti' : 'Agenti'}${M.agents ? ' · ' + M.agents.length : ''}</button><button data-t="doms" class="${M.tab === 'doms' ? 'on' : ''}">Domini (DNS)${M.doms ? ' · ' + M.doms.length : ''}</button></div></div>
       <div class="card glass" style="margin-top:14px">${M.acc === '+' ? '' : M.tab === 'agents' ? agentsHtml() : M.tab === 'doms' ? domsHtml() : usersHtml()}</div>`;
     bind();
   }

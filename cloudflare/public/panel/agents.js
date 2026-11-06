@@ -145,7 +145,7 @@ body.agent .foot{display:none}
     ['messages', 'Messaggi', 'Solo ai suoi clienti, mai a tutti', 'msgs'], ['store', 'Download store: accettare le richieste', 'Solo per le app che scegli qui sotto (le impostazioni restano tue)', 'store'],
     ['storeAll', 'Download store: vedere anche i download degli altri', 'Se spento nello storico vede solo quelli approvati da lui', ''],
     ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['dlcodes', 'Codici downloader', 'Le app da far installare ai clienti (solo da copiare)', 'dlc'], ['appstore', 'APP Store', 'Le app per caricare le liste: solo quelle che scegli qui sotto, in sola lettura', 'apps3'], ['appsOp', 'OrbixPlay e MaxPlayer', 'Codici cliente e liste create dei suoi clienti', 'agop'], ['appk', 'App Kairos', 'Link e codici Downloader delle app Kairos che scegli', 'agk'], ['lines', 'Linee collegate', 'Il registro delle linee collegate alle app: solo le sue', 'lines'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', ''], ['armada', 'Pannello Armada', 'Con i tuoi crediti, entro il tetto mensile', 'armada']];
-  FP.push(['wolf', 'Pannello WOLF', 'Con il suo account reseller WOLF: sue linee e suoi crediti', 'wolf']);
+  FP.push(['wolf', 'Pannello WOLF', 'Con il suo account reseller WOLF: sue linee e suoi crediti', 'wolf'], ['mxp', 'Pannello MaxPlayer', 'Solo i clienti del suo agente MaxPlayer', 'mxp']);
   const PERM_VIEW = Object.fromEntries(FP.map(([k, , , v]) => [v, k]));
   const isAgent = () => D.role === 'agent';
   const me = () => D.me || {};
@@ -219,11 +219,11 @@ body.agent .foot{display:none}
   { const vw = view; window.view = view = function (v) { const r = vw.apply(this, arguments); const b = nav(v), sec = b && b.dataset.sec; if (sec) { const st = closedSet(); if (st.has(sec)) { st.delete(sec); saveClosed(st); layoutMenu(); } } return r; }; }
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
-  const AG_OK = /^\/admin\/(insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/upd|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|armada\/(state|packages|lines|mags|new|renew|toggle)|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
+  const AG_OK = /^\/admin\/(insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/upd|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|armada\/(state|packages|lines|mags|new|renew|toggle)|mxp\/(accounts|a\/[a-z0-9]{2,20}\/(overview|domains|agents(\/\d+\/(enable|disable))?|users(\/\d+(\/password|\/lists\/[A-Za-z0-9%-]+)?)?(\?fresh=1)?))|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
   // agente: le pagine senza permesso non chiamano nemmeno il server (prima ogni 20-30 s partivano richieste destinate al «non consentito»)
   const AG_NEED = [[/^\/admin\/store(\/|$)/, 'store'], [/^\/admin\/requests.*[?&]kind=content/, 'contentReq'], [/^\/admin\/requests.*[?&]kind=addon/, 'addonReq'], [/^\/admin\/requests.*[?&]kind=ai/, 'ai'],
     [/^\/admin\/requests(\?(?!.*kind=)|\?.*kind=report|$)/, 'reports'], [/^\/admin\/app-errors/, 'errors'], [/^\/admin\/presence/, 'online'], [/^\/admin\/catalog/, 'vod'], [/^\/admin\/apps3\/lists/, 'appsOp'],
-    [/^\/admin\/ext-lists/, 'players'], [/^\/admin\/linked-lines/, 'lines'], [/^\/admin\/agent-maint/, 'maint'], [/^\/admin\/armada\//, 'armada'], [/^\/admin\/wolf\//, 'wolf']];
+    [/^\/admin\/ext-lists/, 'players'], [/^\/admin\/linked-lines/, 'lines'], [/^\/admin\/agent-maint/, 'maint'], [/^\/admin\/armada\//, 'armada'], [/^\/admin\/wolf\//, 'wolf'], [/^\/admin\/mxp\//, 'mxp']];
   const agDenied = (m, p) => { if (!isAgent() || !D.me || !D.me.perms || m !== 'GET') return false; const x = AG_NEED.find(([re]) => re.test(p)); return !!x && !D.me.perms[x[1]]; };
   const origApi = api;
   window.api = api = async function (m, p, b) {
@@ -347,7 +347,7 @@ body.agent .foot{display:none}
         <td><b>${esc(a.username)}</b><small>${esc(a.email || '—')}${up ? ' · sotto ' + esc(up.username) : ''}</small></td>
         <td><b>${a.clients}</b><small>Limite: ${a.maxClients}</small><div class="ag-bar2"><s style="width:${pct}%"></s></div></td>
         <td class="hm">${a.subAgents}</td>
-        <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span>${(a.perms || {}).armada ? '<br><span class="chip" style="margin-top:4px">Armada</span>' : ''}${(a.perms || {}).wolf ? '<br><span class="chip" style="margin-top:4px">WOLF</span>' : ''}</td>
+        <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span>${(a.perms || {}).armada ? '<br><span class="chip" style="margin-top:4px">Armada</span>' : ''}${(a.perms || {}).wolf ? '<br><span class="chip" style="margin-top:4px">WOLF</span>' : ''}${(a.perms || {}).mxp ? '<br><span class="chip" style="margin-top:4px">MaxPlayer</span>' : ''}</td>
         <td class="dn">${dnsSum(a)}</td>
         <td class="hm">${a.lastSeen ? esc(ago(a.lastSeen)) : '<span class="mut">mai</span>'}</td>
         <td class="hm">${a.totp ? '<span class="chip g">Attiva</span>' : '<span class="chip">No</span>'}</td>
@@ -390,7 +390,7 @@ body.agent .foot{display:none}
     const names = [...new Set([...(((D.settings && D.settings.appLinks) || []).map((x) => x.name)), ...cur.filter((x) => x !== '*')])].sort((a, b) => a.localeCompare(b));
     return chk('aapp', '*', '<b>Tutte le app</b>', all, false, 'Anche quelle che aggiungerai in futuro') + (names.length ? names.map((n) => chk('aapp', n, esc(n), !all && cur.some((x) => x.toLowerCase() === n.toLowerCase()), false, '')).join('') : '<p class="mut" style="font-size:12.5px">Nessuna app: le aggiungi in APP Store → Attiva app.</p>');
   };
-  const APP_KEYS = ['appstore', 'players', 'appsOp', 'dlcodes', 'appk', 'armada', 'wolf']; // hanno la loro sezione nell'editor
+  const APP_KEYS = ['appstore', 'players', 'appsOp', 'dlcodes', 'appk', 'armada', 'wolf', 'mxp']; // hanno la loro sezione nell'editor
   const KAPPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['plus', 'Kairos Plus'], ['store', 'Kairos Store']];
   const dlcNames = () => (Array.isArray(D.dlCodes) ? D.dlCodes : []).map((x) => [x.name, x.name]);
   // elenco «tutti» + voci singole (['*'] = tutte, anche future); un sotto-agente mai oltre chi lo crea
@@ -412,7 +412,8 @@ body.agent .foot{display:none}
     if (D.players && D.players.max) { try { mxItems = ((await api('GET', '/admin/maxplayer/domains')).domains || []).map((x) => [x.id, (x.label || 'DNS ' + x.id) + (!sub && x.domain ? ' — ' + x.domain + (x.port && !['80', '443'].includes(String(x.port)) ? ':' + x.port : '') : '')]); } catch (e) { mxErr = 'DNS di MaxPlayer non disponibili: ' + e.message; } }
     const P = a ? a.perms : { create: true, renew: true, disable: true, kick: true, playlists: true, delete: false, clientPerms: false, vpn: false, addons: [], maxConn: 1 };
     const topP = top ? top.perms || {} : null;
-    let wolfAcc = null, wolfErr = '';
+    let wolfAcc = null, wolfErr = '', mxAccs = [], mxMap = null;
+    if (!sub) { try { mxAccs = (await api('GET', '/admin/mxp/accounts')).accounts || []; if (a) mxMap = ((await api('GET', '/admin/mxp/agents')).agents || []).find((x) => x.id === a.id) || null; } catch (e) { mxAccs = []; } }
     if (!sub && a) { try { wolfAcc = ((await api('GET', '/admin/wolf/agents')).agents || []).find((x) => x.id === a.id) || null; } catch (e) { wolfErr = ''; } }
     $('#agT').innerHTML = isNew ? (sub ? 'Nuovo sotto-agente' : 'Nuovo agente') : `${esc(a.username)} <span class="chip ${a.active ? 'g' : 'r'}" style="vertical-align:3px">${a.active ? 'Attivato' : 'Disattivato'}</span>`;
     $('#agB').innerHTML = `<div class="ag-g">
@@ -482,6 +483,14 @@ body.agent .foot{display:none}
             <small class="mut" style="display:block;margin-top:6px">${wolfErr ? esc(wolfErr) : wolfAcc ? 'Account collegato. Svuota l\'utente per scollegarlo.' : 'Facoltativo: se lo lasci vuoto l\'agente lo inserisce da solo. KAIROS controlla che WOLF lo accetti; resta cifrato.'}</small></div>`}
         </div>
       </div>
+      <div class="ag-c ag-arm" id="agMx" style="grid-column:1/-1"><h4>📺 Pannello MaxPlayer</h4><small>Spento di base. Se lo accendi l'agente usa il Pannello MaxPlayer da KAIROS con la tua chiave, ma vede e gestisce <b>solo i clienti dell'agente MaxPlayer</b> che scegli qui (e i suoi posti). Non vede gli altri clienti né le tue impostazioni.</small>
+        <div class="ag-armg">
+          <div class="ag-chk">${chk('perm', 'mxp', '<b>Può usare il Pannello MaxPlayer</b>', !!P.mxp, topP && !topP.mxp, 'Clienti, liste e sotto-agenti del suo agente MaxPlayer')}</div>
+          ${sub ? '<p class="mut" style="font-size:12.5px;margin:0">L\'agente MaxPlayer lo sceglie il titolare.</p>' : `<div><div class="row"><div><label class="lbl" style="margin-top:0">Account MaxPlayer</label><select class="inp" id="agMxA"><option value="">— nessuno —</option>${mxAccs.map((x) => `<option value="${esc(x.id)}"${mxMap && mxMap.acc === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select></div>
+            <div><label class="lbl" style="margin-top:0">Agente MaxPlayer</label><select class="inp" id="agMxG"><option value="">— nessuno —</option>${mxMap ? `<option value="${esc(mxMap.mx)}" selected>${esc(mxMap.name || 'ID ' + mxMap.mx)}</option>` : ''}</select></div></div>
+            <small class="mut" style="display:block;margin-top:6px" id="agMxS">${mxAccs.length ? 'Scegli l\'account e poi il suo agente MaxPlayer.' : 'Collega prima un account in Linee e DNS → Pannello MaxPlayer.'}</small></div>`}
+        </div>
+      </div>
       <div class="ag-c"><h4>Add-on che può assegnare</h4><small>Tra quelli che in Impostazioni → Store add-on sono «solo a chi assegno»</small>
         <div class="ag-chk" id="agAd" style="max-height:300px;overflow:auto">${adCat.length ? adCat.map((x) => chk('ad', x.id, esc(x.name), (P.addons || []).includes(x.id), topP && !(topP.addons || []).includes(x.id), x.price ? esc(x.price) : '')).join('') : '<p class="mut">Nessun add-on da assegnare.</p>'}</div>
       </div>
@@ -493,6 +502,14 @@ body.agent .foot{display:none}
     $('#agFt').innerHTML = `${a ? '<button class="btn danger" id="agDel">Elimina agente</button>' : ''}${a && a.active && !sub ? '<button class="btn" id="agAssist" title="Entra nel pannello di questo agente per fargli assistenza">🛟 Entra per assistenza</button>' : ''}<div style="flex:1"></div><button class="btn" id="agNo">Annulla</button><button class="btn pri" id="agOk">${isNew ? 'Crea agente' : 'Salva modifiche'}</button>`;
     $('#agAssist') && ($('#agAssist').onclick = () => { if (D.demo) { toast('In demo l\'assistenza non è disponibile', 1); return; } KXAssist.enter(a.id, a.username); });
     $('#agA').onclick = () => $('#agA').classList.toggle('on');
+    const mxLoad = async () => {
+      const sel = $('#agMxA'), g = $('#agMxG'); if (!sel || !g) return;
+      const acc = sel.value, keep = g.value; if (!acc) { g.innerHTML = '<option value="">— nessuno —</option>'; return; }
+      $('#agMxS').textContent = 'Carico gli agenti MaxPlayer…';
+      try { const L = (await api('GET', `/admin/mxp/a/${acc}/agents`)).agents || []; g.innerHTML = '<option value="">— nessuno —</option>' + L.map((x) => `<option value="${esc(x.id)}"${x.id === keep ? ' selected' : ''}>${esc(x.name || x.username)} · ${esc(x.username)} (${x.users} clienti)</option>`).join(''); $('#agMxS').textContent = `${L.length} agenti MaxPlayer su questo account.`; }
+      catch (e) { $('#agMxS').textContent = e.message; }
+    };
+    if ($('#agMxA')) { $('#agMxA').onchange = mxLoad; if ($('#agMxA').value) mxLoad(); }
     // elenchi con «Tutti»: quello che vedi spuntato è quello che vede l'agente.
     // «Tutti» acceso copre le voci (non spuntate, in grigio); scegliere una voce spegne «Tutti» e restano solo quelle spuntate
     const SYNC = {};
@@ -526,7 +543,7 @@ body.agent .foot{display:none}
       email: $('#agE').value.trim(), notes: $('#agN').value, active: $('#agA').classList.contains('on'), maxClients: +$('#agM').value || 0,
       canAgents: $('#agR input:checked') ? $('#agR input:checked').value === '1' : false,
       servers: $$('#agS [data-srv]').filter((i) => i.checked).map((i) => i.dataset.srv),
-      perms: { ...Object.fromEntries([...FL, ...FP, ['armadaTrial']].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"], .ag-apps [data-perm="${k}"], #agAr [data-perm="${k}"], #agWf [data-perm="${k}"]`) || {}).checked])), armadaCredits: Math.max(0, +(($('#agArC') || {}).value || 0) || 0), dlcAllow: listRead('agDc', 'dlca'), kAllow: listRead('agKa', 'kapp'), orbDns: listRead('agOd', 'odns'), mxDns: listRead('agMd', 'mdns'), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad),
+      perms: { ...Object.fromEntries([...FL, ...FP, ['armadaTrial']].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"], .ag-apps [data-perm="${k}"], #agAr [data-perm="${k}"], #agWf [data-perm="${k}"], #agMx [data-perm="${k}"]`) || {}).checked])), armadaCredits: Math.max(0, +(($('#agArC') || {}).value || 0) || 0), dlcAllow: listRead('agDc', 'dlca'), kAllow: listRead('agKa', 'kapp'), orbDns: listRead('agOd', 'odns'), mxDns: listRead('agMd', 'mdns'), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad),
         storeApps: $('#agSa [data-sapp="*"]') && $('#agSa [data-sapp="*"]').checked ? ['*'] : $$('#agSa [data-sapp]').filter((i) => i.checked && i.dataset.sapp !== '*').map((i) => i.dataset.sapp),
         appsAllow: $('#agAa [data-aapp="*"]') && $('#agAa [data-aapp="*"]').checked ? ['*'] : $$('#agAa [data-aapp]').filter((i) => i.checked && i.dataset.aapp !== '*').map((i) => i.dataset.aapp) },
     });
@@ -544,7 +561,14 @@ body.agent .foot{display:none}
             else if (!wu && wolfAcc) await api('DELETE', '/admin/wolf/agents/' + id);
           } catch (e) { wErr = e.message; }
         }
-        closePage(); await load(); toast(wErr ? 'Agente salvato, ma account WOLF non collegato: ' + wErr : isNew ? 'Agente creato' : 'Agente aggiornato', !!wErr);
+        if ($('#agMxA') && id) {
+          const ma = $('#agMxA').value, mg = $('#agMxG').value;
+          try {
+            if (ma && mg && (!mxMap || mxMap.acc !== ma || mxMap.mx !== mg)) await api('PUT', '/admin/mxp/agents/' + id, { acc: ma, mx: mg });
+            else if ((!ma || !mg) && mxMap) await api('DELETE', '/admin/mxp/agents/' + id);
+          } catch (e) { wErr = (wErr ? wErr + ' · ' : '') + 'MaxPlayer: ' + e.message; }
+        }
+        closePage(); await load(); toast(wErr ? 'Agente salvato, ma: ' + wErr : isNew ? 'Agente creato' : 'Agente aggiornato', !!wErr);
       } catch (e) { toast(e.message, 1); }
     };
     $('#agTz') && ($('#agTz').onclick = async () => {
