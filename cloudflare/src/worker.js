@@ -1799,11 +1799,11 @@ const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', lite: 'Kairos Lite', xc: 
 /*  - l'app riporta le sue impostazioni attuali (cfg) e la versione della configurazione applicata (rcv)        */
 /* ====================================================================== */
 const RC_APPS = ['tv', 'ktv', 'lite', 'xc', 'plus', 'nova'];
-/** app collegate al pannello con codice (battito e comandi); Kairos Nova non si registra: riceve solo la politica degli aggiornamenti */
-const RC_LINKED = ['tv', 'ktv', 'lite', 'xc', 'plus'];
+/** app collegate al pannello con codice (battito e comandi); Kairos Nova può anche restare libera: allora legge solo la politica degli aggiornamenti */
+const RC_LINKED = ['tv', 'ktv', 'lite', 'xc', 'plus', 'nova'];
 // catalogo: [chiave, nome, tipo, valori [[valore, etichetta]], app che la capiscono, spiegazione]
 const RC_CAT = [
-  ['lite', 'Modalità leggera', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['max', 'Leggerissima'], ['off', 'Spenta']], RC_LINKED, 'Niente animazioni ed effetti, immagini e memoria ridotte: per chiavette e TV vecchie'],
+  ['lite', 'Modalità leggera', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['max', 'Leggerissima'], ['off', 'Spenta']], ['tv', 'ktv', 'lite', 'xc', 'plus'], 'Niente animazioni ed effetti, immagini e memoria ridotte: per chiavette e TV vecchie'],
   ['bgupd', 'Aggiornamenti in background', 'sel', [['on', 'Sì: scarica da sola, poi chiede solo «Installa»'], ['off', 'No: scarica solo quando il cliente accetta']], RC_APPS, 'Con «Sì» l\'app scarica e verifica da sola la versione nuova (solo su Wi-Fi o cavo); al cliente resta un solo OK, quello di Android per installare'],
   ['force', 'Aggiornamento obbligatorio', 'sel', [['off', 'No: il cliente può rimandare'], ['7d', 'Dopo 7 giorni dal primo avviso'], ['3d', 'Dopo 3 giorni dal primo avviso'], ['now', 'Subito']], RC_APPS, 'Scaduto il termine l\'app si apre solo dopo aver installato la versione nuova. Blocca soltanto se l\'APK è già scaricato e verificato sul dispositivo, mai per un problema di rete', 'No: il cliente può rimandare'],
   ['preview', 'Anteprima nella lista canali', 'sel', [['click', 'Al primo OK'], ['off', 'Spenta']], ['ktv', 'lite', 'xc'], 'Spenta: il canale parte subito a schermo intero (meno lavoro per il dispositivo)'],
@@ -1904,7 +1904,7 @@ function appOfVer(ver, saved) {
   return saved || 'tv';
 }
 /** come si aggiorna ogni app: solo Kairos Pro riceve «Invia aggiornamento» dal pannello */
-const UPD_HOW = { tv: 'Invia l\'aggiornamento: l\'app lo propone subito al cliente', ktv: 'Invia l\'aggiornamento: Kairos TV lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', lite: 'Invia l\'aggiornamento: Kairos Lite lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', xc: 'Invia l\'aggiornamento: Kairos XC lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', plus: 'Invia l\'aggiornamento: Kairos Plus lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie si aggiornano dal Kairos Store)' };
+const UPD_HOW = { tv: 'Invia l\'aggiornamento: l\'app lo propone subito al cliente', ktv: 'Invia l\'aggiornamento: Kairos TV lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', lite: 'Invia l\'aggiornamento: Kairos Lite lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', xc: 'Invia l\'aggiornamento: Kairos XC lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', plus: 'Invia l\'aggiornamento: Kairos Plus lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie si aggiornano dal Kairos Store)', nova: 'Invia l\'aggiornamento: Kairos Nova lo scarica in background e propone «Installa ora»' };
 /** problemi trovati per un cliente, con la soluzione suggerita (sev: bad | warn) */
 function healthIssues(p, errs, latest, app) {
   const out = [];
@@ -2693,7 +2693,7 @@ const MAINT_MSG = 'Servizio in manutenzione: torna disponibile a breve. Grazie p
     Kairos TV con «KairosPlayer/x.y KairosTV/x.y», Kairos Pro solo con «KairosPlayer/x.y».
     Chiavi interne: 'tv' = Kairos Pro (nome storico), 'ktv' = Kairos TV, 'lite' = Kairos Lite, 'xc' = Kairos XC
     (Kairos XC si presenta con «KairosTV/x.y KairosXC/x.y» e versione «xc x.y»: va riconosciuta prima di Kairos TV) */
-const APPS = ['tv', 'lite', 'ktv', 'xc', 'plus'];
+const APPS = ['tv', 'lite', 'ktv', 'xc', 'plus', 'nova'];
 function appFrom(req, b) {
   const ua = req.headers.get('User-Agent') || '', ver = String((b && b.ver) || '');
   if (/KairosLite\//i.test(ua) || /^lite\b/i.test(ver)) return 'lite';
