@@ -47,7 +47,7 @@
     W.busy = true; render();
     try { W.data = await api('GET', '/admin/wolf/lines' + (fresh ? '?fresh=1' : '')); W.err = ''; if (W.data.synced) toast(`${W.data.synced} playlist aggiornate da WOLF`); }
     catch (e) { W.err = e.message; }
-    W.busy = false; render();
+    W.busy = false; show();
   }
   async function loadRs() {
     W.rsBusy = true; render();
@@ -257,6 +257,16 @@
     } catch (e) { toast(e.message, 1); }
   }
 
+  function show() {
+    try { render(); } catch (e) { const V = $('#v-wolf'); if (V) V.innerHTML = `<div class="card glass"><p style="color:#ff8f8f">Errore nella sezione WOLF: ${esc(e.message || String(e))}</p></div>`; }
+  }
+  function open() {
+    show();
+    (W.cfg ? Promise.resolve() : loadCfg()).then(() => { show(); if (W.cfg.set && !W.data) loadLines(); });
+  }
   const v0 = view;
-  window.view = view = function (v) { v0(v); if (v === 'wolf') { render(); (W.cfg ? Promise.resolve() : loadCfg()).then(() => { render(); if (W.cfg.set && !W.data) loadLines(); }); } };
+  window.view = view = function (v) { const r = v0.apply(this, arguments); if (v === 'wolf') open(); return r; };
+  /* qualunque menu apra la sezione (anche quelli caricati dopo), la si riempie quando diventa visibile */
+  const sec = $('#v-wolf');
+  if (sec) new MutationObserver(() => { if (sec.classList.contains('on') && !sec.innerHTML.trim()) open(); }).observe(sec, { attributes: true, attributeFilter: ['class'] });
 })();
