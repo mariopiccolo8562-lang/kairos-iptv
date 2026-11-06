@@ -782,7 +782,18 @@ async function settingsPatch(env, patch) {
   await env.DB.prepare("INSERT INTO settings (k, v) VALUES ('app', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(JSON.stringify(raw)).run();
   cfgDirty(env);
 }
-async function armadaRoutes(req, env, url, path, who, ip) {
+/* chi ha creato le linee Armada (0 = titolare) e crediti usati dagli agenti */
+const armOwnRows = (env) => reqMemo(env, 'armown', async () => { try { return ((await env.DB.prepare('SELECT agent_id, type, line_id, username, mac FROM armada_own').all()).results) || []; } catch { return []; } });
+const armKey = (type, x) => (type === 'mag' ? 'm:' + String(x.mac || '').toUpperCase() : 'u:' + String(x.username || ''));
+async function armOwnerMap(env) {
+  const m = new Map();
+  for (const r of await armOwnRows(env)) { m.set(armKey(r.type, r), +r.agent_id); if (r.line_id) m.set('i:' + r.type + ':' + r.line_id, +r.agent_id); }
+  return m;
+}
+const armByOf = (map, type, x) => { const a = map.get('i:' + type + ':' + x.id); return a !== undefined ? a : map.get(armKey(type, x)); };
+const monthIT = (t = now()) => dayIT(t).slice(0, 7);
+const armSpentRows = (env) => reqMemo(env, 'armsp', async () => { const m = new Map(); try { for (const r of ((await env.DB.prepare('SELECT agent_id, SUM(credits) AS c FROM armada_spend WHERE month = ? GROUP BY agent_id').bind(monthIT()).all()).results) || []) m.set(+r.agent_id, +r.c || 0); } catch {} return m; });
+async function armadaRoutes(req, env, url, path, who, ip, agentId = 0) {
   const m = req.method, s = await getSettings(env);
   if (path === '/armada/state' && m === 'GET') {
     const out = { connected: !!env.ARMADA_KEY, url: armadaUrlOf(s), dns: s.armadaDns || '' };
@@ -790,8 +801,13 @@ async function armadaRoutes(req, env, url, path, who, ip) {
     return json(out);
   }
   if (path === '/armada/packages' && m === 'GET') return json({ packages: armList(await armadaCall(env, s, { action: 'bouquet' })).map((x) => ({ id: str(String(x.id ?? ''), 20), name: str(x.name, 80) })).filter((x) => x.id) });
-  if (path === '/armada/lines' && m === 'GET') return json({ lines: armList(await armadaCall(env, s, { action: 'lines_list' })).map((x) => ({ ...armCommon(x), username: str(x.username, 120), password: str(x.password, 200) })) });
-  if (path === '/armada/mags' && m === 'GET') return json({ mags: armList(await armadaCall(env, s, { action: 'mag_devices_list' })).map((x) => ({ ...armCommon(x), mac: str(x.mac, 32) })) });
+  if ((path === '/armada/lines' || path === '/armada/mags') && m === 'GET') {
+    const lines = path === '/armada/lines', type = lines ? 'm3u' : 'mag';
+    const [raw, own, ags] = await Promise.all([armadaCall(env, s, { action: lines ? 'lines_list' : 'mag_devices_list' }), armOwnerMap(env), agentsAll(env)]);
+    const names = new Map(ags.map((a) => [a.id, a.username]));
+    const list = armList(raw).map((x) => { const o = lines ? { ...armCommon(x), username: str(x.username, 120), password: str(x.password, 200) } : { ...armCommon(x), mac: str(x.mac, 32) }; const by = armByOf(own, type, o); o.byAgent = by || 0; o.by = by ? names.get(by) || 'agente eliminato' : by === 0 ? 'Tu' : ''; return o; });
+    return json(lines ? { lines: list } : { mags: list });
+  }
   if (path === '/armada/resellers' && m === 'GET') return json({ resellers: armList(await armadaCall(env, s, { action: 'resellers_list' })).map((x) => ({ id: +x.id || 0, username: str(x.username, 80), email: str(x.email, 120), credits: str(String(x.credits ?? ''), 20), enabled: armOk(x.status), notes: str(x.notes, 300), lastLogin: str(x.last_login, 30), group: str(x.group_name, 60), clients: +x.total_clients || 0, owner: str(x.owner_username, 80), relation: str(x.relation_type, 20) })) });
   if (path === '/armada/new' && m === 'POST') {
     const b = await readJSON(req, 2048);
@@ -808,6 +824,7 @@ async function armadaRoutes(req, env, url, path, who, ip) {
     const out = { type, userId: str(String(x.user_id ?? ''), 20), url: str(x.url, 500), mac: str(x.mac, 32) || params.user || '', message: str(x.message, 120), username: '', password: '', host: '' };
     if (type === 'm3u') { try { const u = new URL(out.url); out.username = u.searchParams.get('username') || ''; out.password = u.searchParams.get('password') || ''; out.host = u.origin; } catch {} }
     if (out.host && !s.armadaDns) await settingsPatch(env, { armadaDns: out.host }); // il DNS delle linee si impara dalla prima linea creata
+    try { await env.DB.prepare('INSERT INTO armada_own (agent_id, type, line_id, username, mac, created) VALUES (?, ?, ?, ?, ?, ?)').bind(agentId, type, out.userId, out.username, type === 'mag' ? out.mac.toUpperCase() : '', now()).run(); memoDrop(env, 'armown'); } catch (e) { console.error('armada_own', e && e.message); }
     await log(env, 'new', `${who}: Armada — creata ${type === 'mag' ? 'MAG ' + out.mac : 'linea ' + (out.username || out.userId)} (${sub ? sub + (sub === 1 ? ' mese' : ' mesi') : 'prova'})`, ip);
     return json(out);
   }
@@ -831,6 +848,90 @@ async function armadaRoutes(req, env, url, path, who, ip) {
     return json({ ok: true });
   }
   return null;
+}
+
+/* ---------------- Pannello Armada per gli agenti (solo con il permesso del titolare) ----------------
+   Usa i crediti del titolare: ogni agente ha un tetto di crediti al mese (vale per lui e i suoi sotto-agenti; il tetto
+   di chi sta sopra conta tutto il suo gruppo). Prove gratuite solo se concesse, al massimo 10 al giorno.
+   Vede e gestisce solo linee e MAG creati da lui (e dai sotto-agenti di cui vede i clienti). Mai il saldo del titolare,
+   mai i sotto-reseller; dall'API di integrazione Armada resta chiuso. Ogni operazione resta nel registro attività. */
+const ARM_TRIALS_DAY = 10;
+const armFmt = (n) => (Math.round(n * 100) / 100).toLocaleString('it-IT');
+async function armCreditsNow(env, s) { try { const x = armList(await armadaCall(env, s, { action: 'reseller' }))[0] || {}; const v = parseFloat(String(x.credits ?? '').replace(',', '.')); return Number.isFinite(v) ? v : null; } catch { return null; } }
+function agEffPerms(all, id) { const by = new Map(all.map((a) => [a.id, a])), A = by.get(id); if (!A) return null; let P = agentPerms(A.perms); for (let x = by.get(A.parent_id), k = 0; x && k < 20; x = by.get(x.parent_id), k++) P = agentPermsWithin(P, agentPerms(x.perms)); return P; }
+/** crediti usati questo mese dal gruppo dell'agente (lui e i suoi sotto-agenti) */
+const armUsedBy = (all, spent, id) => agentTree(all, id).reduce((t, x) => t + (spent.get(x) || 0), 0);
+/** il costo previsto deve stare nel tetto dell'agente e di tutta la catena sopra di lui */
+async function armBudget(env, all, A, cost) {
+  const spent = await armSpentRows(env), by = new Map(all.map((a) => [a.id, a]));
+  for (let x = A, k = 0; x && k < 20; x = by.get(x.parent_id), k++) {
+    const lim = (agEffPerms(all, x.id) || {}).armadaCredits || 0, used = armUsedBy(all, spent, x.id);
+    if (used + cost > lim + 1e-9) throw new HttpErr(400, x.id === A.id ? `Crediti Armada di questo mese finiti: ne hai usati ${armFmt(used)} su ${armFmt(lim)} (questa operazione ne usa circa ${armFmt(cost)}). Chiedi a chi ti gestisce di aumentarli.` : `Crediti Armada del mese finiti per il gruppo di ${x.username} (${armFmt(used)} su ${armFmt(lim)})`);
+  }
+}
+async function armSpend(env, A, credits, action, ref) {
+  const t = now();
+  await env.DB.prepare('INSERT INTO armada_spend (agent_id, t, month, day, credits, action, ref) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(A.id, t, monthIT(t), dayIT(t), credits, action, String(ref || '').slice(0, 120)).run();
+  memoDrop(env, 'armsp');
+}
+const armTrialsToday = async (env, id) => { try { return ((await env.DB.prepare("SELECT COUNT(*) AS n FROM armada_spend WHERE agent_id = ? AND day = ? AND action = 'trial'").bind(id, dayIT()).first()) || {}).n || 0; } catch { return 0; } };
+/** costo vero: crediti del titolare prima e dopo (se Armada li indica); altrimenti 1 credito al mese */
+const armCost = (sub, before, after) => (!sub ? 0 : before !== null && after !== null && before - after >= 0 && before - after <= sub * 3 ? Math.round((before - after) * 100) / 100 : sub);
+async function agentArmada(req, env, url, path, who, ip, ctx, X) {
+  const { A, P, all, tree } = X, m = req.method, s = await getSettings(env), mine = new Set(tree);
+  const sub2 = (body) => new Request(url.href, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const ownFn = async () => { const own = await armOwnerMap(env); return (type, x) => { const by = armByOf(own, type, x); return by !== undefined && mine.has(by); }; };
+  if (path === '/armada/state' && m === 'GET') {
+    const [spent, trials] = await Promise.all([armSpentRows(env), armTrialsToday(env, A.id)]), used = Math.round(armUsedBy(all, spent, A.id) * 100) / 100;
+    return json({ connected: !!env.ARMADA_KEY, agent: true, dns: s.armadaDns || '', budget: { limit: P.armadaCredits, used, left: Math.max(0, Math.round((P.armadaCredits - used) * 100) / 100), trial: !!P.armadaTrial, trials, trialMax: ARM_TRIALS_DAY } });
+  }
+  if (path === '/armada/packages' && m === 'GET') return armadaRoutes(req, env, url, path, who, ip, A.id);
+  if ((path === '/armada/lines' || path === '/armada/mags') && m === 'GET') {
+    const lines = path === '/armada/lines', type = lines ? 'm3u' : 'mag';
+    const [raw, ok] = await Promise.all([armadaCall(env, s, { action: lines ? 'lines_list' : 'mag_devices_list' }), ownFn()]);
+    const list = armList(raw).map((x) => (lines ? { ...armCommon(x), username: str(x.username, 120), password: str(x.password, 200) } : { ...armCommon(x), mac: str(x.mac, 32) })).filter((o) => ok(type, o)).map(({ owner, ...o }) => o);
+    return json(lines ? { lines: list } : { mags: list });
+  }
+  if (path === '/armada/new' && m === 'POST') {
+    const b = await readJSON(req, 2048), sub = parseInt(b.sub, 10), type = b.type === 'mag' ? 'mag' : 'm3u';
+    if (![0, 1, 3, 6, 12].includes(sub)) throw new HttpErr(400, 'Scegli la durata: prova, 1, 3, 6 o 12 mesi');
+    if (sub === 0) {
+      if (!P.armadaTrial) throw new HttpErr(403, 'Non puoi creare prove su Armada: chiedilo a chi ti gestisce');
+      if ((await armTrialsToday(env, A.id)) >= ARM_TRIALS_DAY) throw new HttpErr(400, `Hai già creato ${ARM_TRIALS_DAY} prove oggi: riprova domani`);
+    } else await armBudget(env, all, A, sub);
+    const before = sub ? await armCreditsNow(env, s) : null;
+    const r = await armadaRoutes(sub2({ ...b, type, sub }), env, url, path, who, ip, A.id);
+    if (!r || r.status !== 200) return r;
+    const out = await r.json(), cost = armCost(sub, before, sub ? await armCreditsNow(env, s) : null);
+    await armSpend(env, A, cost, sub ? 'new' : 'trial', type === 'mag' ? out.mac : out.username || out.userId);
+    if (sub) ctx.waitUntil(log(env, 'edit', `${who}: Armada — ${armFmt(cost)} crediti del titolare (${type === 'mag' ? 'MAG ' + out.mac : 'linea ' + (out.username || out.userId)})`, ip));
+    return json({ ...out, cost });
+  }
+  if (path === '/armada/renew' && m === 'POST') {
+    const b = await readJSON(req, 1024), sub = parseInt(b.sub, 10), type = b.type === 'mag' ? 'mag' : 'm3u';
+    if (![1, 3, 6, 12].includes(sub)) throw new HttpErr(400, 'Rinnovo: 1, 3, 6 o 12 mesi');
+    const ok = await ownFn(), x = type === 'mag' ? { mac: armMac(b.mac) } : { username: str(b.username, 120) };
+    if (!(type === 'mag' ? x.mac : x.username) || !ok(type, x)) throw new HttpErr(404, 'Puoi rinnovare solo le linee create da te');
+    await armBudget(env, all, A, sub);
+    const before = await armCreditsNow(env, s);
+    const r = await armadaRoutes(sub2({ ...b, type, sub }), env, url, path, who, ip, A.id);
+    if (!r || r.status !== 200) return r;
+    const out = await r.json(), cost = armCost(sub, before, await armCreditsNow(env, s));
+    await armSpend(env, A, cost, 'renew', type === 'mag' ? x.mac : x.username);
+    ctx.waitUntil(log(env, 'edit', `${who}: Armada — ${armFmt(cost)} crediti del titolare (rinnovo ${type === 'mag' ? 'MAG ' + x.mac : 'linea ' + x.username})`, ip));
+    return json({ ...out, cost });
+  }
+  if (path === '/armada/toggle' && m === 'POST') {
+    const b = await readJSON(req, 512), id = parseInt(b.id, 10);
+    if (!(id > 0)) throw new HttpErr(400, 'Linea non valida');
+    // l'id da solo non basta: si cerca la linea su Armada e deve essere una di quelle create da lui
+    const [ls, ms, ok] = await Promise.all([armadaCall(env, s, { action: 'lines_list' }), armadaCall(env, s, { action: 'mag_devices_list' }), ownFn()]);
+    const L = armList(ls).find((x) => +x.id === id), M = !L && armList(ms).find((x) => +x.id === id);
+    if (!(L ? ok('m3u', { id, username: str(L.username, 120) }) : M ? ok('mag', { id, mac: str(M.mac, 32) }) : false)) throw new HttpErr(404, 'Puoi attivare o disattivare solo le linee create da te');
+    return armadaRoutes(sub2({ id, enabled: b.enabled === true }), env, url, path, who, ip, A.id);
+  }
+  if (path === '/armada/resellers') throw new HttpErr(403, 'I sotto-reseller di Armada li vede solo il titolare');
+  throw new HttpErr(404, 'Non trovato');
 }
 
 /** impostazioni ('app') e DNS salvati ('dnsl'): un solo viaggio al database per richiesta (vedi reqMemo).
@@ -2634,10 +2735,10 @@ async function adminInner(req, env, url, ip, ctx) {
    e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
    ====================================================================== */
 const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'account', 'ai',
-  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk'];
+  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial'];
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
@@ -2684,6 +2785,7 @@ function agentPerms(src) {
   p.orbDns = storeAppsList(o.orbDns); // DNS di OrbixPlay che può usare per le attivazioni (per nome; ['*'] = tutti). Ne vede solo il nome
   p.mxDns = storeAppsList(o.mxDns); // DNS (domini) di MaxPlayer che può usare (per id; ['*'] = tutti). Ne vede solo il nome
   p.maxConn = Math.max(1, Math.min(MAX_CONN, parseInt(o.maxConn, 10) || 1));
+  p.armadaCredits = Math.max(0, Math.min(100000, Math.round((parseFloat(o.armadaCredits) || 0) * 100) / 100)); // crediti Armada del titolare al mese (0 = nessuno)
   return p;
 }
 /** permessi richiesti per un sotto-agente: mai più di quelli di chi lo crea */
@@ -2696,6 +2798,7 @@ function agentPermsWithin(req, top) {
   if (!top.appsAllow.includes('*')) p.appsAllow = p.appsAllow.includes('*') ? [...top.appsAllow] : p.appsAllow.filter((x) => storeAppOk(top.appsAllow, x));
   for (const k of ['dlcAllow', 'kAllow', 'orbDns', 'mxDns']) if (!top[k].includes('*')) p[k] = p[k].includes('*') ? [...top[k]] : p[k].filter((x) => storeAppOk(top[k], x));
   p.maxConn = Math.min(p.maxConn, top.maxConn);
+  p.armadaCredits = Math.min(p.armadaCredits, top.armadaCredits);
   return p;
 }
 /** tutti gli agenti (una lettura per richiesta; chi modifica gli agenti chiama memoDrop(env, 'ags')). Copia nuova a ogni chiamata */
@@ -2760,7 +2863,7 @@ const agentCounts = (env) => reqMemo(env, 'agc', async () => {
     che lui ha davvero (anche se a un sotto-agente ne era rimasto uno tolto più in alto), con i nomi «da agente» */
 async function agentsOut(env, all, onlyIds, forAgent) {
   const lim = Array.isArray(forAgent) ? new Set(forAgent) : null;
-  const [dns, counts] = await Promise.all([dnsList(env), agentCounts(env)]);
+  const [dns, counts, armSp] = await Promise.all([dnsList(env), agentCounts(env), armSpentRows(env)]);
   const dn = new Map(dns.map((x, i) => [x.id, forAgent ? { ...x, name: svName(x, i) } : x]));
   const svOk = (x) => dn.has(x) && (!lim || lim.has(x));
   const list = all.filter((a) => !onlyIds || onlyIds.includes(a.id));
@@ -2769,7 +2872,8 @@ async function agentsOut(env, all, onlyIds, forAgent) {
     return { id: a.id, username: a.username, email: a.email, parentId: a.parent_id, maxClients: a.max_clients, canAgents: !!a.can_agents, perms: agentPerms(a.perms),
       servers: sv, serverNames: sv.map((x) => dn.get(x).name),
       active: !!a.active, notes: a.notes, lastSeen: a.last_seen, createdAt: a.created_at, totp: !!a.totp_on, password: a.pw_seal ? await unseal(env, a.pw_seal).catch(() => '') : '',
-      clients: tree.reduce((n, id) => n + (counts.get(id) || 0), 0), ownClients: counts.get(a.id) || 0, subAgents: tree.length - 1 };
+      clients: tree.reduce((n, id) => n + (counts.get(id) || 0), 0), ownClients: counts.get(a.id) || 0, subAgents: tree.length - 1,
+      armadaUsed: Math.round(armUsedBy(all, armSp, a.id) * 100) / 100 };
   }));
 }
 /** crea / modifica / elimina agenti. top = agente che sta agendo (null = proprietario) */
@@ -2930,6 +3034,8 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   if (path === '/health' && m === 'GET') { const r = await healthList(env, await getSettings(env), await scope()); return json({ ...r, settings: { on: r.settings.on } }); }
   const aup = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})\/upd$/);
   if (aup && m === 'POST') { if (!(await own(aup[1]))) throw new HttpErr(404, 'Cliente non trovato'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
+  // Pannello Armada: solo con il permesso del titolare (suoi crediti, tetto mensile, solo le linee create da lui)
+  if (path.startsWith('/armada/')) { need('armada', 'Non puoi usare il pannello Armada: chiedilo a chi ti gestisce'); return agentArmada(req, env, url, path, who, ip, ctx, { A, P, all, tree: ctree }); }
   // «Crea lista» su OrbixPlay/MaxPlayer senza cliente Kairos: con il permesso di attivarle dal pannello
   if (path === '/ext-lists' || path.startsWith('/ext-lists/')) { need('players', 'Non puoi creare liste su OrbixPlay e MaxPlayer'); const r = await extListsRoutes(req, env, path, who, ip, { id: A.id, tree: ctree, orbDns: P.orbDns, mxDns: P.mxDns }); if (r) return r; }
   // App → OrbixPlay e MaxPlayer: le liste create sulle app terzi, solo dei suoi clienti
@@ -3326,6 +3432,17 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
 
   /* ---------- utenti online ---------- */
   if (path === '/presence' && m === 'GET') return json(await adminPresence(env));
+  /* ---------- registro attività: lo svuota solo il titolare dal pannello (mai gli agenti né l'API di integrazione) ---------- */
+  if (path === '/activity' && m === 'DELETE') {
+    if (!ses || ses.agent) throw new HttpErr(403, 'Il registro lo può svuotare solo il titolare');
+    const days = parseInt(url.searchParams.get('older') || '0', 10);
+    if (!(days >= 0 && days <= 3650)) throw new HttpErr(400, 'Giorni non validi');
+    const r = days ? await env.DB.prepare('DELETE FROM activity WHERE t < ?').bind(now() - days * 864e5).run() : await env.DB.prepare('DELETE FROM activity').run();
+    const n = (r.meta && r.meta.changes) || 0;
+    // resta una riga: chi l'ha svuotato e quando (le azioni successive si registrano come sempre)
+    await log(env, 'settings', `${who}: registro attività svuotato${days ? ` (voci più vecchie di ${days} ${days === 1 ? 'giorno' : 'giorni'})` : ''} · ${n} ${n === 1 ? 'voce tolta' : 'voci tolte'}`, ip);
+    return json({ ok: true, deleted: n });
+  }
   /* ---------- «Dati» di un cliente e salute delle app ---------- */
   const ins = path.match(/^\/insight\/([A-Za-z0-9_-]{6,20})$/);
   if (ins && m === 'GET') { const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(ins[1]).first(); if (!d) throw new HttpErr(404, 'Cliente non trovato'); return json(await insightFor(env, d, await getSettings(env))); }
@@ -4206,6 +4323,7 @@ async function cleanup(env) {
   try { await env.DB.batch([env.DB.prepare('DELETE FROM link_pins WHERE until < ?').bind(t), env.DB.prepare('DELETE FROM throttle WHERE until < ?').bind(t)]); } catch {}
   // segnalazioni/richieste "fatte" da più di 90 giorni, presenze vecchie di 30 giorni, classifiche di oltre 60 giorni
   try { await env.DB.batch([env.DB.prepare("DELETE FROM requests WHERE status = 'done' AND created < ?").bind(t - 90 * 86400e3), env.DB.prepare('DELETE FROM presence WHERE t < ?').bind(t - 30 * 86400e3), env.DB.prepare('DELETE FROM watch WHERE day < ?').bind(dayIT(t - 60 * 86400e3))]); } catch {}
+  try { await env.DB.prepare('DELETE FROM armada_spend WHERE t < ?').bind(t - 400 * 86400e3).run(); } catch {} // crediti Armada degli agenti: basta poco più di un anno
 }
 
 // esportati per i test

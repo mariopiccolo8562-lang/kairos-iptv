@@ -121,12 +121,13 @@ body{overscroll-behavior-y:none}
     <button data-t="new" class="plus"><span class="p"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="22" height="22"><path d="M12 5v14M5 12h14"/></svg></span>Nuovo</button>
     <button data-t="bell">${ico('bell')}<span class="n" id="tabN"></span>Richieste</button><button data-t="menu">${ico('menu')}Menu</button>`;
   document.body.appendChild(tab);
-  $$('[data-t]', tab).forEach((b) => (b.onclick = () => {
+  $$('[data-t]', tab).forEach((b) => (b.onclick = (e) => {
     const t = b.dataset.t;
     if (t === 'menu') return side.classList.toggle('open');
     side.classList.remove('open');
     if (t === 'new') return $('#newDev').click();
-    if (t === 'bell' && $('.nav[data-v="hub-req"]') && $('.nav[data-v="hub-req"]').style.display !== 'none') return $('.nav[data-v="hub-req"]').click();
+    // «Richieste»: l'elenco delle richieste in attesa per tipo (il clic non deve arrivare al «clic fuori» che lo chiude)
+    if (t === 'bell') e.stopPropagation();
     if (t === 'bell') { const bb = $('#bellB'); if (bb) { bb.style.display = 'inline-grid'; bb.click(); bb.style.display = ''; const m = $('#bellM'); if (m) { m.style.top = 'auto'; m.style.bottom = `calc(78px + env(safe-area-inset-bottom))`; } } return; }
     const n = $(`.nav[data-v="${t}"]`); if (n) n.click();
   }));

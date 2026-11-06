@@ -68,6 +68,7 @@ async function demoApi(method, path, body) {
   await new Promise((r) => setTimeout(r, 160));
   const pub = (d) => { const p = d.parent && DEMO.devices.find((x) => x.id === d.parent); return { ...d, status: d.parent ? (p ? statusOf(p) : 'pending') : statusOf(d) }; };
   const log = (type, text) => DEMO.activity.unshift({ t: Date.now(), type, text });
+  if (path.startsWith('/admin/activity') && method === 'DELETE') { const d = +((path.match(/older=(\d+)/) || [])[1] || 0), lim = Date.now() - d * 864e5, n0 = DEMO.activity.length; DEMO.activity = d ? DEMO.activity.filter((a) => a.t >= lim) : []; const n = n0 - DEMO.activity.length; log('settings', `admin: registro attività svuotato · ${n} voci tolte`); return { ok: true, deleted: n }; }
   const used = (id) => 1 + DEMO.devices.filter((x) => x.parent === id).length;
   // come il server: la configurazione VPN non viene mai conservata/rimandata in chiaro
   const accIn = (d, b) => { if (b.vpnConfClear) d.vpnConf = false; else if (typeof b.vpnConf === 'string' && b.vpnConf.trim()) d.vpnConf = true; delete b.vpnConf; delete b.vpnConfClear; if (Array.isArray(b.profiles)) b.profiles = b.profiles.map((p, i) => ({ ...p, id: p.id || 'np' + Date.now().toString(36) + i })); if (b.player && typeof b.player === 'object') b.player = Object.fromEntries(Object.entries(b.player).filter(([k, v]) => ['live', 'movie', 'series'].includes(k) && ['auto', 'exo', 'vlc'].includes(v))); };
@@ -613,8 +614,25 @@ $('#newDev').onclick = () => openDrawer(null);
 
 /* ---------------- attività ---------------- */
 const AIC = { report: ['var(--warn)', 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'], msg: ['var(--a1)', 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'], new: ['var(--warn)', 'M12 5v14M5 12h14'], on: ['var(--ok)', 'M5 12l5 5L20 7'], off: ['var(--bad)', 'M18 6 6 18M6 6l12 12'], edit: ['var(--a1)', 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'], del: ['var(--bad)', 'M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'], settings: ['var(--a2)', 'M4 6h16M4 12h16M4 18h16'], auth: ['var(--a3)', 'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3'] };
+/* registro attività: ricerca tra le ultime 200 voci e (solo titolare) «Svuota registro» */
 function renderFeed() {
-  $('#feed').innerHTML = D.activity.length ? D.activity.map((a) => { const [c, p] = AIC[a.type] || AIC.edit; return `<div class="mini"><div class="ic" style="color:${c}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="${p}"/></svg></div><div class="tx"><b>${esc(a.text)}</b><small>${new Date(a.t).toLocaleString('it-IT', { dateStyle: 'medium', timeStyle: 'short' })} · ${ago(a.t)}</small></div></div>`; }).join('') : '<div class="emptyc">Nessuna attività</div>';
+  const V = $('#v-activity'), own = D.role !== 'agent' && !window.__assist;
+  let bar = $('#actBar');
+  if (!bar && V) {
+    bar = document.createElement('div'); bar.id = 'actBar'; bar.className = 'card glass'; bar.style.marginBottom = '16px'; V.prepend(bar);
+    bar.innerHTML = `<div class="hd" style="flex-wrap:wrap;gap:10px;margin:0"><h3>Ultime azioni<small id="actSub"></small></h3><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input class="inp" id="actQ" placeholder="Cerca nel registro…" autocomplete="off" style="width:230px;margin:0"><button class="btn sm danger" id="actClr" type="button">Svuota registro</button></div></div>`;
+    $('#actQ').oninput = (e) => { D.actQ = e.target.value.trim().toLowerCase(); renderFeed(); };
+    $('#actClr').onclick = clearActivity;
+  }
+  if (bar) { $('#actClr').style.display = own ? '' : 'none'; $('#actSub').textContent = own ? 'Le ultime 200 azioni fatte nel pannello (tue, degli agenti e automatiche) · si cancellano da sole dopo 90 giorni' : 'Le tue azioni e quelle dei tuoi sotto-agenti'; }
+  const q = D.actQ || '', list = q ? D.activity.filter((a) => String(a.text || '').toLowerCase().includes(q)) : D.activity;
+  $('#feed').innerHTML = list.length ? list.map((a) => { const [c, p] = AIC[a.type] || AIC.edit; return `<div class="mini"><div class="ic" style="color:${c}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="${p}"/></svg></div><div class="tx"><b>${esc(a.text)}</b><small>${new Date(a.t).toLocaleString('it-IT', { dateStyle: 'medium', timeStyle: 'short' })} · ${ago(a.t)}</small></div></div>`; }).join('') : `<div class="emptyc">${q ? 'Nessuna voce trovata' : 'Nessuna attività'}</div>`;
+}
+async function clearActivity() {
+  const ok = await ask('Svuotare il registro attività?', `<p class="mut" style="margin:0 0 12px">Le voci tolte non si possono recuperare. Resta una sola riga con chi ha svuotato il registro e quando.</p><label class="lbl">Cosa togliere</label><select class="inp" id="actOlder"><option value="0" selected>Tutto il registro</option><option value="7">Solo le voci più vecchie di 7 giorni</option><option value="30">Solo le voci più vecchie di 30 giorni</option></select>`, 'Svuota');
+  if (!ok) return;
+  const d = +(($('#actOlder') || {}).value || 0);
+  try { const r = await api('DELETE', '/admin/activity' + (d ? '?older=' + d : '')); toast(`Registro svuotato: ${r.deleted} ${r.deleted === 1 ? 'voce tolta' : 'voci tolte'}`); await load(); } catch (e) { toast(e.message, 1); }
 }
 
 /* ---------------- messaggi ai dispositivi ---------------- */

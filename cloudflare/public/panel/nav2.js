@@ -127,7 +127,7 @@
     addEventListener('click', (e) => { if (!e.target.closest('#bellM')) $('#bellM').classList.remove('on'); if (!e.target.closest('.dv-more')) $$('.dv-more .mn').forEach((m) => m.classList.remove('on')); });
     $('#newDev').innerHTML = $('#newDev').innerHTML.replace(/Nuovo\s*$/, 'Nuovo cliente');
   }
-  const BELL = [['reports', 'nb_reports', 'Segnalazioni'], ['creq', 'nb_creq', 'Richieste contenuti'], ['areq', 'nb_areq', 'Richieste temi'], ['reqai', 'nb_ai', 'Richieste IA'], ['store', 'storeB', 'Download store']];
+  const BELL = [['store', 'storeB', 'App da approvare'], ['reports', 'nb_reports', 'Segnalazioni'], ['creq', 'nb_creq', 'Contenuti richiesti'], ['areq', 'nb_areq', 'Temi richiesti'], ['reqai', 'nb_ai', 'Domande all\'IA']]; // stessi nomi del menu
   function bell() {
     const items = BELL.map(([v, id, l]) => { const e = document.getElementById(id), n = e && e.style.display !== 'none' && (e.classList.contains('on') || id === 'storeB') ? parseInt(e.textContent, 10) || 0 : 0; return [v, l, n]; }).filter(([v]) => { const b = navOf(v); return b && b.style.display !== 'none'; });
     const tot = items.reduce((a, x) => a + x[2], 0);

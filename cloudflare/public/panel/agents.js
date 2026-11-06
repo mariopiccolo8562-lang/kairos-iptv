@@ -30,6 +30,18 @@ aside{background:var(--pane)!important;backdrop-filter:none!important;padding:18
 .nav.on::before{left:-12px;top:7px;bottom:7px;width:3px;box-shadow:none;background:var(--a1)}
 .nav .bdg,.kc-nb{background:var(--a1)!important;color:#fff!important}
 .nav-h{font-size:11px;font-weight:700;letter-spacing:.09em;color:#6c7280;padding:16px 12px 6px;text-transform:uppercase}
+#side .nav{padding:7px 12px;font-size:13.5px;min-height:20px}
+#side .nav.nav-col{display:none!important}
+#side .nav-h[data-sec]{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;border-radius:6px;padding:14px 10px 5px 12px;transition:color .15s}
+#side .nav-h[data-sec]:hover{color:#aab1bf}
+#side .nav-h[data-sec] span{flex:1}
+#side .nav-h .chev{width:14px;height:14px;transition:transform .2s;opacity:.7}
+#side .nav-h.closed .chev{transform:rotate(-90deg)}
+#side .nav-h .hn{font-size:10.5px;letter-spacing:0;min-width:16px;height:16px;padding:0 5px;border-radius:8px;background:var(--a1);color:#fff;display:none;place-items:center}
+#side .nav-h .hn:not(:empty){display:grid}
+#side .nav-h:focus-visible{outline:2px solid var(--a1);outline-offset:1px}
+aside .foot{display:none!important}
+#logout{margin-top:auto!important}
 .nav-h.big{font-size:12px;color:#c9ced8;letter-spacing:.14em;padding:22px 12px 2px;margin-top:6px;border-top:1px solid var(--line)}.nav-h.big:first-of-type{border-top:0;margin-top:0;padding-top:10px}
 aside .foot{border-radius:8px;background:#1f2228!important}
 main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
@@ -72,6 +84,9 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 .ag-tbl tbody tr{cursor:pointer}.ag-tbl tbody tr:hover{background:var(--hov)}
 .ag-tbl small{display:block;color:var(--mut);font-size:12px;margin-top:2px}
 .ag-tbl .num{color:var(--mut);width:1%}
+.ag-tbl td.dn{min-width:190px}.dn-r{display:flex;gap:6px;align-items:baseline;font-size:12.5px;line-height:1.35;margin:1px 0}
+.dn-k{flex:none;font-size:9.5px;font-weight:800;letter-spacing:.04em;padding:1px 5px;border-radius:4px;color:#fff;background:#38bdf8}.dn-k.op{background:#a78bfa}.dn-k.mx{background:#fb7185}
+.dn-r i{font-style:normal}.dn-r .dn-all{color:var(--ok)}.dn-r .dn-no{color:var(--warn)}
 .chip{display:inline-block;font-size:11.5px;font-weight:600;padding:3px 8px;border-radius:5px;background:#2a2f39;color:#c9cdd6;margin:2px 4px 2px 0}
 .chip.b{background:rgba(61,124,245,.16);color:#8fb3ff}
 .chip.g{background:rgba(63,191,127,.15);color:#6fd6a1}.chip.r{background:rgba(229,83,75,.15);color:#f08a84}.chip.y{background:rgba(224,164,49,.15);color:#ecc06f}
@@ -93,7 +108,16 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 .ag-chk label.dis{opacity:.45;cursor:not-allowed}
 .ag-chk input{width:16px;height:16px;accent-color:var(--a1)}
 .ag-chk small{margin-left:auto;color:var(--mut);font-size:12px}
-small.ag-cnt{display:block;margin:6px 0 0 2px;font-size:12px;color:var(--mut)}small.ag-cnt.no{color:var(--warn,#f5b041);font-weight:600}
+small.ag-cnt{display:block;margin:6px 0 0 2px;font-size:12px;color:var(--mut)}
+.ag-armg{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px;margin-top:12px;align-items:start}.ag-armu{margin:10px 0 0;font-size:13px}
+@media (max-width:900px){.ag-armg{grid-template-columns:1fr}}
+.ag-dg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}
+.ag-dc{--k:#38bdf8;border:1px solid color-mix(in srgb,var(--k) 35%,var(--line));border-top:3px solid var(--k);border-radius:12px;padding:12px;background:color-mix(in srgb,var(--k) 5%,transparent);min-width:0}
+.ag-dc.op{--k:#a78bfa}.ag-dc.mx{--k:#fb7185}
+.ag-dh{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}.ag-dh b{display:block;font-size:14px}.ag-dh small{display:block;color:var(--mut);font-size:12px;margin-top:2px;line-height:1.35}
+.ag-dt{flex:none;min-width:34px;height:26px;padding:0 7px;border-radius:7px;display:grid;place-items:center;font-size:10.5px;font-weight:800;letter-spacing:.04em;color:#fff;background:var(--k)}
+.ag-dn{font-size:12px;color:var(--mut);margin:10px 0 0}
+@media (max-width:1100px){.ag-dg{grid-template-columns:1fr}}small.ag-cnt.no{color:var(--warn,#f5b041);font-weight:600}
 .ag-radio{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ag-radio label{display:block;padding:12px;border-radius:8px;border:1px solid var(--line);background:#1a1d22;cursor:pointer}
 .ag-radio label.on{border-color:var(--a1);background:rgba(61,124,245,.1)}.ag-radio b{display:block;font-size:13.5px}.ag-radio small{color:var(--mut);font-size:12px}
 .ag-radio input{display:none}
@@ -120,7 +144,7 @@ body.agent .foot{display:none}
     ['reports', 'Segnalazioni', 'Dei suoi clienti', 'reports'], ['contentReq', 'Richieste contenuti', 'Dei suoi clienti', 'creq'], ['addonReq', 'Richieste temi', 'Assegna solo gli add-on che gli concedi', 'areq'],
     ['messages', 'Messaggi', 'Solo ai suoi clienti, mai a tutti', 'msgs'], ['store', 'Download store: accettare le richieste', 'Solo per le app che scegli qui sotto (le impostazioni restano tue)', 'store'],
     ['storeAll', 'Download store: vedere anche i download degli altri', 'Se spento nello storico vede solo quelli approvati da lui', ''],
-    ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['dlcodes', 'Codici downloader', 'Le app da far installare ai clienti (solo da copiare)', 'dlc'], ['appstore', 'APP Store', 'Le app per caricare le liste: solo quelle che scegli qui sotto, in sola lettura', 'apps3'], ['appsOp', 'OrbixPlay e MaxPlayer', 'Codici cliente e liste create dei suoi clienti', 'agop'], ['appk', 'App Kairos', 'Link e codici Downloader delle app Kairos che scegli', 'agk'], ['lines', 'Linee collegate', 'Il registro delle linee collegate alle app: solo le sue', 'lines'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', '']];
+    ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['dlcodes', 'Codici downloader', 'Le app da far installare ai clienti (solo da copiare)', 'dlc'], ['appstore', 'APP Store', 'Le app per caricare le liste: solo quelle che scegli qui sotto, in sola lettura', 'apps3'], ['appsOp', 'OrbixPlay e MaxPlayer', 'Codici cliente e liste create dei suoi clienti', 'agop'], ['appk', 'App Kairos', 'Link e codici Downloader delle app Kairos che scegli', 'agk'], ['lines', 'Linee collegate', 'Il registro delle linee collegate alle app: solo le sue', 'lines'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', ''], ['armada', 'Pannello Armada', 'Con i tuoi crediti, entro il tetto mensile', 'armada']];
   const PERM_VIEW = Object.fromEntries(FP.map(([k, , , v]) => [v, k]));
   const isAgent = () => D.role === 'agent';
   const me = () => D.me || {};
@@ -138,36 +162,67 @@ body.agent .foot{display:none}
   // "Dispositivi" diventa "Clienti"
   { const b = nav('devices'); if (b) for (const n of b.childNodes) if (n.nodeType === 3 && /Dispositivi/.test(n.textContent)) n.textContent = 'Clienti'; }
   Object.assign(TITLES, { devices: 'Clienti', agents: 'Agenti', sec: 'Sicurezza' });
-  // menu (2.11): «Operatività» per il lavoro di tutti i giorni, «Impostazioni» per le cose che si toccano una volta
-  // menu 3.0: 10 voci; le pagine simili sono schede di una voce sola (layout3.js)
-  const GROUPS = [['', ['dash', 'devices', 'agents']], ['Linee e app', ['hub-lines', 'hub-apps']], ['Comunicazione', ['hub-req', 'msgs', 'vod']], ['Gestione', ['hub-ctrl', 'hub-set', 'sec']]];
-  const HIDDEN = ['settings', 'ai']; // sostituite dalle voci qui sopra (le pagine restano)
+  // menu 3.2: una voce per ogni pagina, in sezioni chiare (prima molte pagine erano schede dentro poche voci).
+  // Le voci che un agente non può usare restano nascoste; una sezione senza voci non compare.
+  const GROUPS = [
+    ['', ['dash', 'devices', 'live', 'agents']],
+    ['Linee e DNS', ['lmap', 'lines', 'dns', 'armada']],
+    ['App e link', ['apps3', 'apps3op', 'agop', 'xlist', 'dlc', 'appk', 'agk']],
+    ['Richieste', ['store', 'reports', 'creq', 'areq', 'reqai']],
+    ['Comunicazione', ['msgs', 'vod']],
+    ['Controllo', ['apperr', 'activity']],
+    ['Impostazioni', ['set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api']],
+    ['Account', ['sec']],
+  ];
+  const HIDDEN = ['settings', 'ai']; // pagine vecchie sostituite dalle voci qui sopra (le pagine restano)
+  // sezioni richiudibili (si ricorda la scelta; di base è chiusa solo «Impostazioni»). Se apri una pagina di una sezione
+  // chiusa (campanella, scorciatoie, F5) la sezione si riapre da sola, così vedi dove sei
+  const NAVC = 'kx_navc';
+  const closedSet = () => { try { const v = JSON.parse(localStorage.getItem(NAVC) || 'null'); return new Set(Array.isArray(v) ? v : ['Impostazioni']); } catch { return new Set(['Impostazioni']); } };
+  const saveClosed = (st) => { try { localStorage.setItem(NAVC, JSON.stringify([...st])); } catch {} };
+  const CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+  const badgeOf = (b) => { let t = 0; for (const e of b.querySelectorAll('span')) { const x = (e.textContent || '').trim(); if (/^\d+$/.test(x) && e.style.display !== 'none' && getComputedStyle(e).display !== 'none' && (e.classList.contains('on') || !e.classList.contains('kc-nb'))) t += +x; } return t; };
+  /** numero sulla sezione chiusa: le richieste in attesa non si perdono */
+  function navSums() {
+    for (const h of $$('.nav-h[data-sec]', side)) {
+      const items = $$('.nav[data-v]', side).filter((b) => b.dataset.sec === h.dataset.sec && b.style.display !== 'none');
+      const t = h.classList.contains('closed') ? items.reduce((a, b) => a + badgeOf(b), 0) : 0, el = h.querySelector('.hn'), txt = t ? String(t) : '';
+      if (el && el.textContent !== txt) el.textContent = txt;
+    }
+  }
   window.KXLayoutMenu = () => layoutMenu();
   function layoutMenu() {
-    const foot = $('aside .foot'), brand = $('aside .brand');
+    const foot = $('aside .foot'), brand = $('aside .brand'), closed = closedSet();
     $$('.nav-h', side).forEach((h) => h.remove());
     let at = brand;
     const put = (el) => { at.after(el); at = el; };
     for (const v of HIDDEN) { const b = nav(v); if (b) b.style.display = 'none'; }
-    let big = null;
     for (const [h, vs] of GROUPS) {
-      if (h && h[0] === '§') { big = h.slice(1); continue; }
       const items = (vs || []).map(nav).filter((b) => b && b.style.display !== 'none');
       if (!items.length) continue;
-      if (big) { const e = document.createElement('div'); e.className = 'nav-h big'; e.textContent = big; put(e); big = null; }
-      if (h) { const e = document.createElement('div'); e.className = 'nav-h'; e.textContent = h; put(e); }
-      items.forEach(put);
+      const shut = !!h && closed.has(h);
+      if (h) {
+        const e = document.createElement('div'); e.className = 'nav-h' + (shut ? ' closed' : ''); e.dataset.sec = h; e.setAttribute('role', 'button'); e.tabIndex = 0;
+        e.innerHTML = `<span>${esc(h)}</span><b class="hn"></b>${CHEV}`;
+        e.onclick = () => { const st = closedSet(); if (st.has(h)) st.delete(h); else st.add(h); saveClosed(st); layoutMenu(); };
+        e.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); e.click(); } };
+        put(e);
+      }
+      for (const b of items) { b.dataset.sec = h; b.classList.toggle('nav-col', shut); put(b); }
     }
-    for (const b of $$('.nav[data-v]', side)) if (!HIDDEN.includes(b.dataset.v) && !GROUPS.some(([, vs]) => (vs || []).includes(b.dataset.v))) put(b); // eventuali voci nuove
+    for (const b of $$('.nav[data-v]', side)) if (!HIDDEN.includes(b.dataset.v) && !GROUPS.some(([, vs]) => (vs || []).includes(b.dataset.v))) { b.classList.remove('nav-col'); put(b); } // eventuali voci nuove
     if (foot && $('#logout')) foot.after($('#logout'));
+    navSums();
   }
+  { let raf = 0; new MutationObserver(() => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; navSums(); }); }).observe(side, { subtree: true, characterData: true, childList: true, attributes: true, attributeFilter: ['class', 'style'] }); }
+  { const vw = view; window.view = view = function (v) { const r = vw.apply(this, arguments); const b = nav(v), sec = b && b.dataset.sec; if (sec) { const st = closedSet(); if (st.has(sec)) { st.delete(sec); saveClosed(st); layoutMenu(); } } return r; }; }
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
-  const AG_OK = /^\/admin\/(insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/upd|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
+  const AG_OK = /^\/admin\/(insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/upd|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|armada\/(state|packages|lines|mags|new|renew|toggle)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
   // agente: le pagine senza permesso non chiamano nemmeno il server (prima ogni 20-30 s partivano richieste destinate al «non consentito»)
   const AG_NEED = [[/^\/admin\/store(\/|$)/, 'store'], [/^\/admin\/requests.*[?&]kind=content/, 'contentReq'], [/^\/admin\/requests.*[?&]kind=addon/, 'addonReq'], [/^\/admin\/requests.*[?&]kind=ai/, 'ai'],
     [/^\/admin\/requests(\?(?!.*kind=)|\?.*kind=report|$)/, 'reports'], [/^\/admin\/app-errors/, 'errors'], [/^\/admin\/presence/, 'online'], [/^\/admin\/catalog/, 'vod'], [/^\/admin\/apps3\/lists/, 'appsOp'],
-    [/^\/admin\/ext-lists/, 'players'], [/^\/admin\/linked-lines/, 'lines'], [/^\/admin\/agent-maint/, 'maint']];
+    [/^\/admin\/ext-lists/, 'players'], [/^\/admin\/linked-lines/, 'lines'], [/^\/admin\/agent-maint/, 'maint'], [/^\/admin\/armada\//, 'armada']];
   const agDenied = (m, p) => { if (!isAgent() || !D.me || !D.me.perms || m !== 'GET') return false; const x = AG_NEED.find(([re]) => re.test(p)); return !!x && !D.me.perms[x[1]]; };
   const origApi = api;
   window.api = api = async function (m, p, b) {
@@ -255,8 +310,23 @@ body.agent .foot{display:none}
 
   /* ---------- pagina Agenti ---------- */
   const st = { q: '', f: 'all' };
+  // nomi dei DNS di MaxPlayer (gli agenti li hanno per id): letti una volta ogni 5 minuti per il riepilogo nell'elenco
+  let mxNames = null, mxNamesT = 0, mxNamesBusy = false;
+  async function loadMxNames() {
+    if (mxNamesBusy || !(D.players && D.players.max) || (mxNames && Date.now() - mxNamesT < 5 * 60e3)) return;
+    mxNamesBusy = true;
+    try { const r = await api('GET', '/admin/maxplayer/domains'); mxNames = new Map((r.domains || []).map((x) => [String(x.id), x.label || 'DNS ' + x.id])); mxNamesT = Date.now(); if ($('#v-agents.on')) renderAgents(); } catch { mxNames = mxNames || new Map(); mxNamesT = Date.now(); } finally { mxNamesBusy = false; }
+  }
+  /** riepilogo dei DNS dell'agente: server delle linee, OrbixPlay e MaxPlayer, ognuno col suo colore */
+  function dnsSum(a) {
+    const p = a.perms || {};
+    const lst = (v, names) => (!Array.isArray(v) || v.includes('*') ? '<i class="dn-all">tutti</i>' : v.length ? v.map((x) => esc(names ? names.get(String(x)) || 'DNS ' + x : String(x))).join(', ') : '<i class="dn-no">nessuno</i>');
+    return `<div class="dn-r"><span class="dn-k srv">LINEE</span><span>${(a.serverNames || []).length ? a.serverNames.map(esc).join(', ') : '<i class="dn-no">nessun server</i>'}</span></div>`
+      + (p.players ? `<div class="dn-r"><span class="dn-k op">OP</span><span>${lst(p.orbDns)}</span></div><div class="dn-r"><span class="dn-k mx">MX</span><span>${lst(p.mxDns, mxNames)}</span></div>` : '');
+  }
   function renderAgents() {
     const V = $('#v-agents'); if (!V) return;
+    loadMxNames();
     const L = D.agents || [];
     const sub = isAgent();
     const list = L.filter((a) => (st.f === 'all' || (st.f === 'on' ? a.active : !a.active)) && (!st.q || [a.username, a.email, a.notes].join(' ').toLowerCase().includes(st.q)));
@@ -270,13 +340,14 @@ body.agent .foot{display:none}
     V.innerHTML = `${hostCard}<div class="ag-bar"><input class="inp" id="agQ" placeholder="Cerca agente per nome, email o note" value="${esc(st.q)}">
       <div class="seg" id="agF">${[['all', 'Tutti'], ['on', 'Attivi'], ['off', 'Disattivati']].map(([k, l]) => `<button data-f="${k}" class="${st.f === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       <button class="btn pri" id="agNew">+ Nuovo ${sub ? 'sotto-agente' : 'agente'}</button></div>
-      <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
+      <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th><th>DNS</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
       ${list.map((a) => { const pct = a.maxClients ? Math.min(100, Math.round((a.clients / a.maxClients) * 100)) : 100; const up = a.parentId && byId.get(a.parentId);
         return `<tr data-ag="${a.id}"><td class="num">${a.id}</td>
         <td><b>${esc(a.username)}</b><small>${esc(a.email || '—')}${up ? ' · sotto ' + esc(up.username) : ''}</small></td>
         <td><b>${a.clients}</b><small>Limite: ${a.maxClients}</small><div class="ag-bar2"><s style="width:${pct}%"></s></div></td>
         <td class="hm">${a.subAgents}</td>
-        <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span><br>${(a.serverNames || []).map((n) => `<span class="chip">${esc(n)}</span>`).join('') || '<span class="chip r">nessun server</span>'}</td>
+        <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span>${(a.perms || {}).armada ? '<br><span class="chip" style="margin-top:4px">Armada</span>' : ''}</td>
+        <td class="dn">${dnsSum(a)}</td>
         <td class="hm">${a.lastSeen ? esc(ago(a.lastSeen)) : '<span class="mut">mai</span>'}</td>
         <td class="hm">${a.totp ? '<span class="chip g">Attiva</span>' : '<span class="chip">No</span>'}</td>
         <td><span class="ag-st ${a.active ? 'on' : 'off'}"><i></i>${a.active ? 'Attivato' : 'Disattivato'}</span></td></tr>`; }).join('')}</tbody></table>`
@@ -318,7 +389,7 @@ body.agent .foot{display:none}
     const names = [...new Set([...(((D.settings && D.settings.appLinks) || []).map((x) => x.name)), ...cur.filter((x) => x !== '*')])].sort((a, b) => a.localeCompare(b));
     return chk('aapp', '*', '<b>Tutte le app</b>', all, false, 'Anche quelle che aggiungerai in futuro') + (names.length ? names.map((n) => chk('aapp', n, esc(n), !all && cur.some((x) => x.toLowerCase() === n.toLowerCase()), false, '')).join('') : '<p class="mut" style="font-size:12.5px">Nessuna app: le aggiungi in APP Store → Attiva app.</p>');
   };
-  const APP_KEYS = ['appstore', 'players', 'appsOp', 'dlcodes', 'appk'];
+  const APP_KEYS = ['appstore', 'players', 'appsOp', 'dlcodes', 'appk', 'armada']; // hanno la loro sezione nell'editor
   const KAPPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['plus', 'Kairos Plus'], ['store', 'Kairos Store']];
   const dlcNames = () => (Array.isArray(D.dlCodes) ? D.dlCodes : []).map((x) => [x.name, x.name]);
   // elenco «tutti» + voci singole (['*'] = tutte, anche future); un sotto-agente mai oltre chi lo crea
@@ -327,6 +398,7 @@ body.agent .foot{display:none}
     const okTop = (k) => topAll || top.some((x) => String(x).toLowerCase() === String(k).toLowerCase());
     return (topAll ? chk(attr, '*', '<b>Tutti</b>', all, false, 'Anche quelli che aggiungerai in futuro') : '') + (items.length ? items.filter(([k]) => okTop(k)).map(([k, l]) => chk(attr, k, esc(l), all ? !topAll : cur.some((x) => String(x).toLowerCase() === String(k).toLowerCase()), false, '')).join('') : `<p class="mut" style="font-size:12.5px">${empty}</p>`);
   };
+  const armF = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString('it-IT');
   const listRead = (box, attr) => { const st = $(`#${box} [data-${attr}="*"]`); return st && st.checked ? ['*'] : $$(`#${box} [data-${attr}]`).filter((i) => i.checked && i.dataset[attr] !== '*').map((i) => i.dataset[attr]); };
   async function openAgent(a) {
     const isNew = !a, sub = isAgent(), top = sub ? me() : null;
@@ -357,8 +429,16 @@ body.agent .foot{display:none}
           <label class="${a && a.canAgents ? '' : 'on'}"><input type="radio" name="agr" value="0" ${a && a.canAgents ? '' : 'checked'}><b>Solo clienti</b><small>Gestisce solo i suoi clienti</small></label>
           <label class="${a && a.canAgents ? 'on' : ''}"><input type="radio" name="agr" value="1" ${a && a.canAgents ? 'checked' : ''}><b>Gestisce agenti</b><small>Può creare sotto-agenti, mai con più permessi dei suoi</small></label></div>
       </div>
-      <div class="ag-c"><h4>Server assegnati</h4><small>L'agente sceglie uno di questi server e scrive utente e password del cliente. Non vede gli indirizzi.</small>
-        <div class="ag-chk" id="agS">${servers.length ? servers.map((s) => chk('srv', s.id, `<b>${esc(s.name)}</b>`, a ? (a.servers || []).includes(s.id) : false, false, sub ? '' : esc(s.host.replace(/^https?:\/\//, '')))).join('') : `<p class="mut">${sub ? 'Non hai server assegnati.' : 'Nessun server salvato: aggiungili in Server DNS e VPN.'}</p>`}</div>
+      <div class="ag-c ag-dns" style="grid-column:1/-1"><h4>🌐 DNS e server dell'agente</h4><small>Tre elenchi separati, uno per ogni uso. L'agente vede solo i nomi che scegli qui, mai gli indirizzi, e non può aggiungerne o cambiarli.</small>
+        <div class="ag-dg">
+          <div class="ag-dc srv"><div class="ag-dh"><span class="ag-dt">LINEE</span><div><b>Server delle linee IPTV</b><small>Quando crea o cambia la linea di un cliente sceglie uno di questi server e scrive utente e password</small></div></div>
+            <div class="ag-chk" id="agS">${servers.length ? servers.map((s) => chk('srv', s.id, `<b>${esc(s.name)}</b>`, a ? (a.servers || []).includes(s.id) : false, false, sub ? '' : esc(s.host.replace(/^https?:\/\//, '')))).join('') : `<p class="mut" style="font-size:12.5px">${sub ? 'Non hai server assegnati.' : 'Nessun server salvato: aggiungili in Linee e DNS → DNS e server.'}</p>`}</div></div>
+          <div class="ag-dc op"><div class="ag-dh"><span class="ag-dt">OP</span><div><b>DNS di OrbixPlay</b><small>Per attivare OrbixPlay ai suoi clienti e per «Crea lista». Vede anche solo i codici cliente di questi fornitori</small></div></div>
+            <div class="ag-chk" id="agOd">${listBox('odns', P.orbDns, orbItems, topP && topP.orbDns, sub ? 'Non hai DNS di OrbixPlay.' : 'Nessun DNS di OrbixPlay: lo aggiungi in App e link → OrbixPlay e MaxPlayer.')}</div></div>
+          <div class="ag-dc mx"><div class="ag-dh"><span class="ag-dt">MX</span><div><b>DNS di MaxPlayer</b><small>Per attivare MaxPlayer ai suoi clienti e per «Crea lista». Vede anche solo i codici cliente di questi fornitori</small></div></div>
+            <div class="ag-chk" id="agMd">${listBox('mdns', P.mxDns, mxItems, topP && topP.mxDns, mxErr || (sub ? 'Non hai DNS di MaxPlayer.' : 'Nessun DNS su MaxPlayer: lo aggiungi in App e link → OrbixPlay e MaxPlayer.'))}</div></div>
+        </div>
+        <p class="ag-dn">I DNS di OrbixPlay e MaxPlayer contano solo se gli concedi «Attivare OrbixPlay e MaxPlayer dal pannello» (sezione App qui sotto).</p>
       </div>
       <div class="ag-c"><h4>Permessi</h4><small>Cosa può fare con i suoi clienti${sub ? ' (solo tra quelli che hai anche tu)' : ''}</small>
         <div class="ag-chk" id="agPm">${FL.filter(([k]) => !APP_KEYS.includes(k)).map(([k, l, sm]) => chk('perm', k, l, !!P[k], topP && !topP[k], sm)).join('')}</div>
@@ -375,13 +455,20 @@ body.agent .foot{display:none}
           <div class="ag-ap"><div class="ag-chk">${chk('perm', 'appstore', '<b>Attiva app</b>', !!P.appstore, topP && !topP.appstore, 'Le app con cui carica le liste (solo quelle scelte qui sotto)')}</div>
             <div class="ag-chk ag-sub" id="agAa" style="max-height:220px;overflow:auto">${appsAllowBox(P)}</div></div>
           <div class="ag-ap"><div class="ag-chk">${chk('perm', 'players', '<b>Attivare OrbixPlay e MaxPlayer dal pannello</b>', !!P.players, topP && !topP.players, 'Manda le linee dei suoi clienti con le tue chiavi (che non vede)')}${chk('perm', 'appsOp', '<b>Pagina «OrbixPlay e MaxPlayer»</b>', !!P.appsOp, topP && !topP.appsOp, 'Codici cliente e liste create dei suoi clienti (senza DNS né impostazioni)')}</div>
-            <div class="ag-sub"><small class="mut" style="display:block;margin:2px 0 4px">DNS di <b>OrbixPlay</b> che può usare · vede solo il nome</small><div class="ag-chk" id="agOd">${listBox('odns', P.orbDns, orbItems, topP && topP.orbDns, sub ? 'Non hai DNS di OrbixPlay.' : 'Nessun DNS di OrbixPlay: lo aggiungi in App → Gestione app terzi.')}</div>
-              <small class="mut" style="display:block;margin:10px 0 4px">DNS di <b>MaxPlayer</b> che può usare · vede solo il nome</small><div class="ag-chk" id="agMd">${listBox('mdns', P.mxDns, mxItems, topP && topP.mxDns, mxErr || (sub ? 'Non hai DNS di MaxPlayer.' : 'Nessun DNS su MaxPlayer: lo aggiungi in App → Gestione app terzi.'))}</div></div></div>
+            <p class="ag-dn" style="margin:8px 0 0 18px">Quali DNS può usare lo scegli in alto, in «DNS e server dell'agente».</p></div>
           <div class="ag-ap"><div class="ag-chk">${chk('perm', 'dlcodes', '<b>Codici downloader</b>', !!P.dlcodes, topP && !topP.dlcodes, 'Solo quelli scelti qui sotto, da copiare')}</div>
             <div class="ag-chk ag-sub" id="agDc" style="max-height:220px;overflow:auto">${listBox('dlca', P.dlcAllow, dlcNames(), topP && topP.dlcAllow, 'Nessun codice: li aggiungi in App → Codici downloader.')}</div></div>
           <div class="ag-ap"><div class="ag-chk">${chk('perm', 'appk', '<b>Pagina «App Kairos»</b>', !!P.appk, topP && !topP.appk, 'Link per scaricare e codice Downloader delle app scelte qui sotto')}</div>
             <div class="ag-chk ag-sub" id="agKa">${listBox('kapp', P.kAllow, KAPPS, topP && topP.kAllow, '')}</div>
             <small class="mut" style="display:block;margin-top:6px">Le app Kairos scelte compaiono anche in alto con il loro codice Downloader.</small></div>
+        </div>
+      </div>
+      <div class="ag-c ag-arm" id="agAr" style="grid-column:1/-1"><h4>🛰️ Pannello Armada</h4><small>Spento di base. Se lo accendi l'agente crea e rinnova linee e MAG su Armada <b>con i tuoi crediti</b>, fino al tetto che decidi qui. Vede e gestisce solo le linee create da lui (e dai suoi sotto-agenti); non vede il tuo saldo né i sotto-reseller. Ogni operazione resta nel registro attività.</small>
+        <div class="ag-armg">
+          <div class="ag-chk">${chk('perm', 'armada', '<b>Può usare il pannello Armada</b>', !!P.armada, topP && !topP.armada, 'Crea, rinnova, attiva e disattiva le sue linee')}${chk('perm', 'armadaTrial', '<b>Può creare prove gratuite</b>', !!P.armadaTrial, topP && !topP.armadaTrial, 'Al massimo 10 al giorno')}</div>
+          <div><label class="lbl" style="margin-top:0">Crediti al mese (tuoi)</label><input class="inp" id="agArC" type="number" min="0" step="0.5" max="${topP ? topP.armadaCredits || 0 : 100000}" value="${+P.armadaCredits || 0}" ${topP && !topP.armada ? 'disabled' : ''}>
+            <small class="mut" style="display:block;margin-top:6px">0 = nessun credito (solo prove, se concesse). Vale per lui e per i suoi sotto-agenti${topP ? `; tu ne hai ${armF(topP.armadaCredits || 0)} al mese` : ''}.</small>
+            ${a ? `<p class="ag-armu">Usati questo mese: <b>${armF(a.armadaUsed || 0)}</b>${+P.armadaCredits ? ` su ${armF(P.armadaCredits)}` : ''}</p>` : ''}</div>
         </div>
       </div>
       <div class="ag-c"><h4>Add-on che può assegnare</h4><small>Tra quelli che in Impostazioni → Store add-on sono «solo a chi assegno»</small>
@@ -398,7 +485,7 @@ body.agent .foot{display:none}
     // elenchi con «Tutti»: quello che vedi spuntato è quello che vede l'agente.
     // «Tutti» acceso copre le voci (non spuntate, in grigio); scegliere una voce spegne «Tutti» e restano solo quelle spuntate
     const SYNC = {};
-    for (const [bx, at, f] of [['agSa', 'sapp', 1], ['agAa', 'aapp', 1], ['agDc', 'dlca', 0], ['agKa', 'kapp', 1], ['agOd', 'odns', 0], ['agMd', 'mdns', 0]]) {
+    for (const [bx, at, f] of [['agS', 'srv', 0], ['agSa', 'sapp', 1], ['agAa', 'aapp', 1], ['agDc', 'dlca', 0], ['agKa', 'kapp', 1], ['agOd', 'odns', 0], ['agMd', 'mdns', 0]]) {
       const el = $('#' + bx); if (!el) continue;
       const star = () => $(`#${bx} [data-${at}="*"]`), items = () => $$(`#${bx} [data-${at}]`).filter((i) => i.dataset[at] !== '*');
       const paint = () => {
@@ -428,7 +515,7 @@ body.agent .foot{display:none}
       email: $('#agE').value.trim(), notes: $('#agN').value, active: $('#agA').classList.contains('on'), maxClients: +$('#agM').value || 0,
       canAgents: $('#agR input:checked') ? $('#agR input:checked').value === '1' : false,
       servers: $$('#agS [data-srv]').filter((i) => i.checked).map((i) => i.dataset.srv),
-      perms: { ...Object.fromEntries([...FL, ...FP].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"], .ag-apps [data-perm="${k}"]`) || {}).checked])), dlcAllow: listRead('agDc', 'dlca'), kAllow: listRead('agKa', 'kapp'), orbDns: listRead('agOd', 'odns'), mxDns: listRead('agMd', 'mdns'), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad),
+      perms: { ...Object.fromEntries([...FL, ...FP, ['armadaTrial']].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"], .ag-apps [data-perm="${k}"], #agAr [data-perm="${k}"]`) || {}).checked])), armadaCredits: Math.max(0, +(($('#agArC') || {}).value || 0) || 0), dlcAllow: listRead('agDc', 'dlca'), kAllow: listRead('agKa', 'kapp'), orbDns: listRead('agOd', 'odns'), mxDns: listRead('agMd', 'mdns'), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad),
         storeApps: $('#agSa [data-sapp="*"]') && $('#agSa [data-sapp="*"]').checked ? ['*'] : $$('#agSa [data-sapp]').filter((i) => i.checked && i.dataset.sapp !== '*').map((i) => i.dataset.sapp),
         appsAllow: $('#agAa [data-aapp="*"]') && $('#agAa [data-aapp="*"]').checked ? ['*'] : $$('#agAa [data-aapp]').filter((i) => i.checked && i.dataset.aapp !== '*').map((i) => i.dataset.aapp) },
     });
