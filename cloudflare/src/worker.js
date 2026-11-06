@@ -1587,7 +1587,7 @@ function dayIT(t = now()) {
   try { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t)); }
   catch { return new Date(t).toISOString().slice(0, 10); }
 }
-const PRESENCE_COLS = ['t', 'hb_t', 'ip', 'ip2', 'ip2_t', 'country', 'city', 'home_country', 'ver', 'ui', 'model', 'state', 'title', 'ch', 'ch_id', 'grp', 'pl', 'prof', 'screen', 'net', 'rssi', 'speed_dl', 'speed_ul', 'speed_ping', 'speed_jit', 'speed_t', 'res', 'fps', 'bitrate', 'buffers', 'dropped', 'engine', 'vpn', 'codec', 'dec', 'stalls_h', 'rec', 'reduced'];
+const PRESENCE_COLS = ['t', 'hb_t', 'ip', 'ip2', 'ip2_t', 'country', 'city', 'home_country', 'ver', 'ui', 'model', 'state', 'title', 'ch', 'ch_id', 'grp', 'pl', 'prof', 'screen', 'net', 'rssi', 'speed_dl', 'speed_ul', 'speed_ping', 'speed_jit', 'speed_t', 'res', 'fps', 'bitrate', 'buffers', 'dropped', 'engine', 'vpn', 'codec', 'dec', 'stalls_h', 'rec', 'reduced', 'app_cfg', 'rcv'];
 /** scrive/aggiorna la riga di presenza con i campi indicati (gli altri restano) */
 async function upsertPresence(env, id, fields) {
   const cols = Object.keys(fields).filter((k) => PRESENCE_COLS.includes(k));
@@ -1694,8 +1694,8 @@ async function playerHeartbeat(req, env, ip, ctx) {
   const t = now();
   // il database è lontano: abbonamento, impostazioni e messaggi non letti partono subito, insieme alla presenza
   // (prima erano sei attese una dopo l'altra, ora tre)
-  const accP = activeAccount(env, d), setP = getSettings(env), unP = unseenCount(env, d, d.parent);
-  for (const x of [accP, setP, unP]) x.catch(() => {});
+  const accP = activeAccount(env, d), setP = getSettings(env), unP = unseenCount(env, d, d.parent), cmdP = rcPending(env, ctx, d.id);
+  for (const x of [accP, setP, unP, cmdP]) x.catch(() => {});
   const old = await env.DB.prepare('SELECT * FROM presence WHERE device_id = ?').bind(d.id).first();
   // il limite conta solo i battiti (register e inizio visione aggiornano la presenza ma non contano)
   if (old && t - (+old.hb_t || 0) < HB_MIN_MS) return json({ error: 'Troppi battiti: attendi qualche secondo', wait: Math.ceil((HB_MIN_MS - (t - old.hb_t)) / 1000) }, 429);
@@ -1712,6 +1712,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
     pl: str(b.pl, 40), prof: nameClean(b.prof, 24), screen: str(b.screen, 20),
     net: NETS.includes(net.type) ? net.type : '', rssi: Math.round(num(net.rssi, -120, 0)),
     vpn: b.vpn === 'on' ? 'on' : b.vpn === 'off' ? 'off' : '',
+    ...rcSnapshot(b), // impostazioni attuali dell'app e configurazione remota applicata
   };
   if (sp) Object.assign(f, { speed_dl: num(sp.dl, 0, 1e5), speed_ul: num(sp.ul, 0, 1e5), speed_ping: num(sp.ping, 0, 1e5), speed_jit: num(sp.jitter, 0, 1e5), speed_t: Math.round(num(sp.t, 0, 1e13)) || t });
   if (st) Object.assign(f, { res: str(st.res, 20), fps: num(st.fps, 0, 1e3), bitrate: num(st.bitrate, 0, 1e9), buffers: Math.round(num(st.buffers, 0, 1e6)), dropped: Math.round(num(st.dropped, 0, 1e9)), engine: str(st.engine, 20), codec: str(st.codec, 16), dec: st.dec === 'sw' ? 'sw' : st.dec === 'hw' ? 'hw' : '', stalls_h: Math.round(num(st.stallsH, 0, 1e4)), rec: nameClean(st.rec, 80), reduced: str(st.reduced, 12) });
@@ -1719,7 +1720,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
   // durante la visione l'app batte ogni 20 s (per «Disconnetti»): se non è cambiato niente di importante la riga
   // si riscrive al massimo una volta al minuto, così le scritture su D1 restano quelle di prima
   const same = old && t - (+old.t || 0) < 55e3 && old.state === state && (old.title || '') === f.title && (old.ch_id || '') === f.ch_id
-    && (old.vpn || '') === f.vpn && (old.screen || '') === f.screen && (old.rec || '') === (f.rec ?? old.rec ?? '') && (old.reduced || '') === (f.reduced ?? old.reduced ?? '') && (+old.stalls_h || 0) === (f.stalls_h ?? +old.stalls_h ?? 0) && (!sp || +old.speed_t === f.speed_t) && (old.ip || '') === (f.ip ?? old.ip ?? '');
+    && (old.vpn || '') === f.vpn && (old.screen || '') === f.screen && (old.rcv || '') === (f.rcv || '') && (f.app_cfg === undefined || (old.app_cfg || '') === f.app_cfg) && (old.rec || '') === (f.rec ?? old.rec ?? '') && (old.reduced || '') === (f.reduced ?? old.reduced ?? '') && (+old.stalls_h || 0) === (f.stalls_h ?? +old.stalls_h ?? 0) && (!sp || +old.speed_t === f.speed_t) && (old.ip || '') === (f.ip ?? old.ip ?? '');
   // la presenza è la cosa che conta: si scrive per prima e un errore qui non fa fallire il battito
   if (!same) { try { await upsertPresence(env, d.id, f); } catch (e) { console.error('presenza non scritta', e && e.message); } }
   // il resto (statistiche) va in sottofondo: non rallenta la risposta e non può bloccarla
@@ -1751,9 +1752,10 @@ async function playerHeartbeat(req, env, ip, ctx) {
   let upd = +d.upd_req || 0;
   if (!upd && S0.health && S0.health.on && S0.health.autoUpd) {
     // ultima versione: di solito già in memoria; se va scaricata il battito non aspetta più di 800 ms
-    if (appOfVer(f.ver, d.app) === 'tv') try { const lp = latestFor(env, S0, 'tv'); ctx.waitUntil(lp.catch(() => {})); const L = await Promise.race([lp, new Promise((r) => setTimeout(() => r(null), 800))]); if (L && verBehind(f.ver, L.version)) upd = L.versionCode || 1; } catch {}
+    const apu = appOfVer(f.ver, d.app); if (RC_APPS.includes(apu)) try { const lp = latestFor(env, S0, apu); ctx.waitUntil(lp.catch(() => {})); const L = await Promise.race([lp, new Promise((r) => setTimeout(() => r(null), 800))]); if (L && verBehind(f.ver, L.version)) upd = L.versionCode || 1; } catch {}
   }
-  return json({ ok: true, mt, ...(upd ? { upd } : {}), unseen: await unP, ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
+  const eff = rcEffective(S0, d, appOfVer(f.ver, d.app)), cmds = await cmdP;
+  return json({ ok: true, mt, ...(upd ? { upd } : {}), rc: JSON.stringify(eff.rc), rcv: eff.rcv, ...(cmds.length ? { cmds } : {}), unseen: await unP, ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
 }
 /* ---------------- dati del cliente e salute delle app ---------------- */
 const verNum = (v) => { const m = String(v || '').match(/(\d{1,3})\.(\d{1,3})(?:\.(\d{1,3}))?/); return m ? +m[1] * 1e6 + +m[2] * 1e3 + +(m[3] || 0) : 0; };
@@ -1768,6 +1770,104 @@ async function latestFor(env, s, app) {
   const a = await latestApk(env, s); return a && a.version ? { version: a.version, versionCode: a.versionCode } : null;
 }
 const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', lite: 'Kairos Lite', xc: 'Kairos XC', plus: 'Kairos Plus', vega: 'Kairos per Fire TV (Vega OS)' };
+
+/* ====================================================================== */
+/* Controllo remoto delle app                                              */
+/*  - profilo per app (impostazioni → rcApp[app]) + impostazioni imposte a un singolo cliente (devices.rc)     */
+/*  - l'app riceve la configurazione effettiva nel battito (rc) e nell'apertura (register): ogni voce imposta  */
+/*    vince su quella scelta nell'app e lì risulta «scelta dal fornitore»                                        */
+/*  - comandi (ricarica, svuota cache, apri impostazioni, aggiorna liste, speed test, chiudi): coda per          */
+/*    dispositivo, consegnati nel battito (cmds) e confermati dall'app (POST /api/player/cmd)                    */
+/*  - l'app riporta le sue impostazioni attuali (cfg) e la versione della configurazione applicata (rcv)        */
+/* ====================================================================== */
+const RC_APPS = ['tv', 'ktv', 'lite', 'xc', 'plus'];
+// catalogo: [chiave, nome, tipo, valori [[valore, etichetta]], app che la capiscono, spiegazione]
+const RC_CAT = [
+  ['lite', 'Modalità leggera', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['max', 'Leggerissima'], ['off', 'Spenta']], RC_APPS, 'Niente animazioni ed effetti, immagini e memoria ridotte: per chiavette e TV vecchie'],
+  ['bgupd', 'Aggiornamenti in background', 'sel', [['on', 'Sì: scarica da sola, poi chiede solo «Installa»'], ['off', 'No: scarica solo quando il cliente accetta']], RC_APPS, 'Con «Sì» l\'app scarica e verifica da sola la versione nuova (solo su Wi-Fi o cavo); al cliente resta un solo OK, quello di Android per installare'],
+  ['preview', 'Anteprima nella lista canali', 'sel', [['click', 'Al primo OK'], ['off', 'Spenta']], ['ktv', 'lite', 'xc'], 'Spenta: il canale parte subito a schermo intero (meno lavoro per il dispositivo)'],
+  ['theme', 'Colore', 'sel', [['cinema', 'Cinema'], ['ocean', 'Oceano'], ['forest', 'Foresta'], ['sunset', 'Tramonto'], ['mono', 'Mono']], ['tv'], 'Tema dell\'interfaccia'],
+  ['o.startScr', 'Schermata iniziale', 'sel', [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta'], ['guide', 'Guida TV'], ['lastch', 'Ultimo canale guardato']], ['tv'], ''],
+  ['o.hw', 'Accelerazione hardware', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['off', 'Disattivata (software)']], ['tv'], 'Disattivala solo se il cliente vede immagini verdi o a scatti'],
+  ['o.adaptQ', 'Qualità adattiva automatica', 'sel', [[true, 'Sì'], [false, 'No']], ['tv'], 'Se la linea non regge passa da sola a una versione più leggera del canale'],
+  ['o.liveFmt', 'Formato TV in diretta', 'sel', [['ts', 'Veloce (TS)'], ['hls', 'HLS']], ['tv'], ''],
+  ['o.autoNext', 'Episodio successivo automatico', 'sel', [[true, 'Sì'], [false, 'No']], ['tv'], ''],
+  ['o.introAuto', 'Salta l\'intro delle serie', 'sel', [[true, 'Sì'], [false, 'No']], ['tv'], ''],
+  ['o.resInd', 'Indicatore risoluzione', 'sel', [[true, 'Sì'], [false, 'No']], ['tv'], ''],
+  ['o.subSize', 'Dimensione sottotitoli', 'sel', [['small', 'Piccola'], ['medium', 'Media'], ['large', 'Grande'], ['xl', 'Molto grande']], ['tv'], ''],
+  ['o.textSize', 'Dimensione testi', 'sel', [['s', 'Piccola'], ['m', 'Media'], ['l', 'Grande'], ['xl', 'Molto grande']], ['tv'], ''],
+  ['o.sfx', 'Effetti sonori', 'sel', [['classic', 'Classici'], ['soft', 'Morbidi'], ['futur', 'Futuristici'], ['retro', 'Retrò'], ['off', 'Disattivati']], ['tv'], ''],
+  ['o.epgShift', 'Spostamento orario guida', 'sel', [[0, 'Nessuno'], [1, '+1 ora'], [2, '+2 ore'], [-1, '−1 ora'], [-2, '−2 ore']], ['tv'], ''],
+  ['o.sortCats', 'Ordina categorie', 'sel', [['pl', 'Come la playlist'], ['az', 'A → Z'], ['za', 'Z → A']], ['tv'], ''],
+  ['o.sortCh', 'Ordina canali', 'sel', [['pl', 'Come la playlist'], ['num', 'Per numero'], ['az', 'A → Z'], ['za', 'Z → A'], ['added', 'Aggiunti di recente']], ['tv'], ''],
+  ['o.sortVod', 'Ordina film e serie', 'sel', [['pl', 'Come la playlist'], ['recent', 'Aggiunti di recente'], ['az', 'A → Z'], ['rating', 'Valutazione']], ['tv'], ''],
+  ['o.lockAdult', 'Blocca contenuti per adulti', 'sel', [[true, 'Sì'], [false, 'No']], ['tv'], ''],
+  ['p.quality', 'Qualità video', 'sel', [['auto', 'Automatica'], ['max', 'Massima'], ['1080', '1080p'], ['720', '720p'], ['480', '480p']], ['tv'], ''],
+  ['p.buffer', 'Buffer di rete', 'sel', [['fast', 'Veloce'], ['balanced', 'Bilanciato'], ['stable', 'Stabile']], ['tv'], ''],
+  ['p.aspect', 'Formato immagine', 'sel', [['fit', 'Adatta'], ['fill', 'Riempi'], ['zoom', 'Zoom']], ['tv'], ''],
+];
+// comandi: [chiave, nome, spiegazione, app che li eseguono]
+const RC_CMDS = [
+  ['reload', 'Riavvia l\'app', 'Chiude e riapre l\'interfaccia (la visione in corso si interrompe)', RC_APPS],
+  ['cache', 'Svuota cache e riavvia', 'Cancella liste, immagini e dati temporanei salvati sul dispositivo e riscarica tutto', RC_APPS],
+  ['sync', 'Aggiorna le liste', 'Riscarica canali, film e serie senza riavviare', RC_APPS],
+  ['settings', 'Apri le impostazioni', 'Porta il cliente nella pagina Impostazioni dell\'app', RC_APPS],
+  ['update', 'Aggiorna l\'app', 'L\'app controlla subito se c\'è una versione nuova: la scarica in background e propone «Installa ora»', RC_APPS],
+  ['speed', 'Speed test', 'Misura la connessione del dispositivo (il risultato arriva in «Online ora»)', ['tv']],
+  ['exit', 'Chiudi l\'app', 'L\'app si chiude; il cliente la riapre quando vuole', RC_APPS],
+];
+const rcCatByKey = new Map(RC_CAT.map((x) => [x[0], x]));
+/** oggetto di configurazione pulito: solo chiavi e valori del catalogo (per l'app indicata, o per tutte) */
+function rcClean(src, app) {
+  let o = src; if (typeof src === 'string') { try { o = src ? JSON.parse(src) : {}; } catch { o = {}; } }
+  if (!o || typeof o !== 'object') throw new HttpErr(400, 'Configurazione non valida');
+  const out = {};
+  for (const [k, v] of Object.entries(o)) {
+    const c = rcCatByKey.get(k); if (!c) continue;
+    if (v === '' || v === null || v === undefined) continue;
+    if (app && !c[4].includes(app)) continue;
+    const ok = c[3].find((x) => x[0] === v || String(x[0]) === String(v));
+    if (!ok) throw new HttpErr(400, `${c[1]}: valore non valido`);
+    out[k] = ok[0];
+  }
+  return out;
+}
+const rcProfiles = (s) => { const r = s && s.rcApp && typeof s.rcApp === 'object' ? s.rcApp : {}; const o = {}; for (const a of RC_APPS) { try { o[a] = rcClean(r[a] || {}, a); } catch { o[a] = {}; } } return o; };
+const rcDevOf = (d) => { try { return rcClean(d && d.rc ? d.rc : {}); } catch { return {}; } };
+/** configurazione effettiva per un dispositivo: profilo della sua app + impostazioni sue; «rcv» = impronta corta */
+function rcEffective(s, d, app) {
+  const a = app || appOfVer('', d && d.app) || 'tv';
+  const rc = { ...(rcProfiles(s)[a] || {}), ...rcDevOf(d) };
+  const keys = Object.keys(rc).sort();
+  const flat = keys.map((k) => k + '=' + JSON.stringify(rc[k])).join('&');
+  let h = 0; for (let i = 0; i < flat.length; i++) h = (h * 31 + flat.charCodeAt(i)) >>> 0;
+  return { rc, rcv: keys.length ? h.toString(36) : '' };
+}
+/** comandi in attesa per un dispositivo (al massimo 5 per battito); si segnano come consegnati */
+async function rcPending(env, ctx, deviceId) {
+  try {
+    const rows = ((await env.DB.prepare('SELECT id, cmd, args FROM remote_cmds WHERE device_id = ? AND done = 0 AND created > ? ORDER BY id LIMIT 5').bind(deviceId, now() - 7 * 864e5).all()).results) || [];
+    if (!rows.length) return [];
+    const w = env.DB.prepare(`UPDATE remote_cmds SET sent = ? WHERE sent = 0 AND id IN (${rows.map(() => '?').join(',')})`).bind(now(), ...rows.map((r) => r.id)).run().catch(() => {});
+    ctx && ctx.waitUntil ? ctx.waitUntil(w) : await w;
+    return rows.map((r) => { let a = null; try { a = r.args ? JSON.parse(r.args) : null; } catch {} return { id: r.id, c: r.cmd, ...(a ? { a } : {}) }; });
+  } catch { return []; }
+}
+/** l'app conferma un comando eseguito */
+async function playerCmdAck(req, env, ip) {
+  let b; try { b = await readJSON(req, 2048); } catch (e) { return json({ error: e.message }, e.status || 400); }
+  const [d, bad] = await deviceAuth(env, b); if (bad) return bad;
+  const id = parseInt(b.id, 10); if (!(id > 0)) return json({ error: 'Comando non valido' }, 400);
+  await env.DB.prepare('UPDATE remote_cmds SET done = ?, ok = ?, info = ? WHERE id = ? AND device_id = ? AND done = 0').bind(now(), b.ok === false ? 0 : 1, str(b.info, 200), id, d.id).run();
+  return json({ ok: true });
+}
+/** impostazioni attuali dell'app come le manda il dispositivo (cfg) e versione della configurazione applicata (rcv) */
+function rcSnapshot(b) {
+  const cfg = b && b.cfg && typeof b.cfg === 'object' && !Array.isArray(b.cfg) ? b.cfg : null;
+  const out = { rcv: str(b && b.rcv, 16) };
+  if (cfg) { const o = {}; let n = 0; for (const [k, v] of Object.entries(cfg)) { if (n++ > 60) break; const kk = str(k, 30); if (!kk) continue; o[kk] = typeof v === 'boolean' || typeof v === 'number' ? v : str(String(v ?? ''), 60); } out.app_cfg = JSON.stringify(o).slice(0, 2000); }
+  return out;
+}
 /** quale app sta usando il cliente: dalla versione che manda l'app stessa («lite 1.3.0», «tv 2.2.4», «xc 2.0.2», «plus 0.1.5»,
     Kairos Pro solo il numero «2.5.3»), che è la cosa più affidabile; altrimenti quella salvata nel pannello.
     Prima la salute delle app confrontava tutti con la versione della Pro e proponeva aggiornamenti sbagliati. */
@@ -1782,11 +1882,11 @@ function appOfVer(ver, saved) {
   return saved || 'tv';
 }
 /** come si aggiorna ogni app: solo Kairos Pro riceve «Invia aggiornamento» dal pannello */
-const UPD_HOW = { tv: 'Invia l\'aggiornamento: l\'app lo propone subito al cliente', ktv: 'Kairos TV propone l\'aggiornamento da sola all\'avvio: chiedi al cliente di riaprirla', lite: 'Kairos Lite propone l\'aggiornamento da sola all\'avvio: chiedi al cliente di riaprirla', xc: 'Kairos XC propone l\'aggiornamento da sola all\'avvio: chiedi al cliente di riaprirla', plus: 'Fai aggiornare Kairos Plus dal Kairos Store (o dal link dell\'app)' };
+const UPD_HOW = { tv: 'Invia l\'aggiornamento: l\'app lo propone subito al cliente', ktv: 'Invia l\'aggiornamento: Kairos TV lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', lite: 'Invia l\'aggiornamento: Kairos Lite lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', xc: 'Invia l\'aggiornamento: Kairos XC lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie lo propongono all\'avvio)', plus: 'Invia l\'aggiornamento: Kairos Plus lo scarica in background e propone «Installa ora» (dalla versione con il controllo remoto; le vecchie si aggiornano dal Kairos Store)' };
 /** problemi trovati per un cliente, con la soluzione suggerita (sev: bad | warn) */
 function healthIssues(p, errs, latest, app) {
   const out = [];
-  const pro = !app || app === 'tv';
+  const pro = !app || RC_APPS.includes(app);
   if (p && latest && verBehind(p.ver, latest.version)) out.push({ sev: 'warn', key: 'upd', what: `App vecchia: ${APP_NAME[app || 'tv'] || ''} ${String(p.ver || '?').replace(/^(lite|tv|xc|plus)\s+/i, '')} (ultima ${latest.version})`, fix: UPD_HOW[app || 'tv'] || 'Aggiorna l\'app del cliente', ...(pro ? { act: 'upd' } : {}) });
   const nr = errs.filter((e) => e.outcome === 'non risolto').length, fr = errs.filter((e) => e.problem === 'freeze').length;
   if (nr >= 3) out.push({ sev: 'bad', key: 'err', what: `${nr} errori non risolti nelle ultime 24 ore`, fix: errs.some((e) => /hevc|h\.?265/i.test(e.codec || '')) ? 'Canali HEVC/H.265 su un dispositivo che fatica: usa la versione H.264 del canale o un dispositivo più recente' : 'Controlla il canale o la linea: se succede su più clienti è il server', ...(pro ? { act: 'upd' } : {}) });
@@ -1810,7 +1910,7 @@ async function insightFor(env, d, s) {
   return {
     id: d.id, name: d.name || '', code: d.code, app, appName: APP_NAME[app] || 'Kairos', model: (p && p.model) || d.model || '',
     online, lastSeen: Math.max(+d.last_seen || 0, p ? +p.t : 0), lastIp: (p && p.ip) || d.last_ip || '', city: p ? [p.city, p.country].filter(Boolean).join(', ') : '',
-    ver: (p && p.ver) || '', latest: latest ? latest.version : '', needsUpdate: !!(p && latest && verBehind(p.ver, latest.version)), canUpd: app === 'tv', updSent: +d.upd_req || 0,
+    ver: (p && p.ver) || '', latest: latest ? latest.version : '', needsUpdate: !!(p && latest && verBehind(p.ver, latest.version)), canUpd: RC_APPS.includes(app), updSent: +d.upd_req || 0,
     now: p && p.state !== 'idle' && online ? { kind: p.state, title: p.title, ch: p.ch, res: p.res, codec: p.codec, engine: p.engine } : null,
     last: wd.length ? { kind: wd[0].kind, title: wd[0].title, t: +wd[0].last } : p && p.title ? { kind: p.state, title: p.title, t: +p.t } : null,
     net: p ? { type: p.net, rssi: +p.rssi || 0, dl: +p.speed_dl || 0, ul: +p.speed_ul || 0, ping: +p.speed_ping || 0, t: +p.speed_t || 0 } : null,
@@ -1835,7 +1935,7 @@ async function healthList(env, s, ids) {
   for (const r of rows) {
     if (ids && !ids.has(r.id)) continue;
     const app = appOfVer(r.ver, r.app), iss = healthIssues(r, er.get(r.id) || [], L[app] || null, app);
-    if (iss.length) out.push({ id: r.id, name: r.name || '', code: r.code, app, appName: APP_NAME[app] || '', canUpd: app === 'tv', ver: r.ver, online: t - +r.t <= ONLINE_MS, lastSeen: +r.t, updSent: +r.upd_req || 0, issues: iss, bad: iss.filter((x) => x.sev === 'bad').length });
+    if (iss.length) out.push({ id: r.id, name: r.name || '', code: r.code, app, appName: APP_NAME[app] || '', canUpd: RC_APPS.includes(app), ver: r.ver, online: t - +r.t <= ONLINE_MS, lastSeen: +r.t, updSent: +r.upd_req || 0, issues: iss, bad: iss.filter((x) => x.sev === 'bad').length });
   }
   out.sort((a, b) => b.bad - a.bad || b.issues.length - a.issues.length || b.lastSeen - a.lastSeen);
   return { list: out.slice(0, 300), latest: Object.fromEntries(Object.entries(L).map(([k, v]) => [k, v ? v.version : ''])), settings: { on: !!(s.health && s.health.on), autoUpd: !!(s.health && s.health.autoUpd) } };
@@ -2470,6 +2570,7 @@ async function route(req, env, ctx) {
     if (path === '/api/player/link' && req.method === 'POST') return playerLink(req, env, ip, ctx);
     if (path === '/api/player/heartbeat' && req.method === 'POST') return playerHeartbeat(req, env, ip, ctx);
     if (path === '/api/player/errors' && req.method === 'POST') return playerErrors(req, env, ip, ctx);
+    if (path === '/api/player/cmd' && req.method === 'POST') { if (await limited(env.RL_DEVICE, 'cmd:' + ip)) return json({ error: 'Troppe richieste' }, 429); return playerCmdAck(req, env, ip); }
     if (path === '/api/player/stream' && req.method === 'POST') return playerStream(req, env, ip, ctx);
     if (path === '/api/player/trailer' && req.method === 'GET') return playerTrailer(req, env, ip, url, ctx);
     if (path === '/api/player/meta' && req.method === 'GET') return playerMeta(req, env, ip, url, ctx);
@@ -2630,7 +2731,8 @@ async function playerRegister(req, env, ip, ctx) {
   let status = P ? statusOf(P, Ppls) : 'pending';
   const { C, pls } = status === 'active' ? await effOf(env, d, P, Ppls) : { C: P, pls: [] };
   if (status === 'active' && maintFor(s, P)) status = 'maintenance';
-  const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? pls : [], messages: await msgP };
+  const eff = rcEffective(s, d, appFrom(req, b) || appOfVer('', d.app));
+  const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? pls : [], messages: await msgP, rc: eff.rc, rcv: eff.rcv };
   if (status === 'active') {
     [out.account, out.vpn] = await Promise.all([accountOf(env, P, d, pls, C), vpnOf(env, P, d)]);
     out.perms = permsOf(P); // i collegati ereditano i permessi del principale
@@ -3432,6 +3534,63 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
 
   /* ---------- utenti online ---------- */
   if (path === '/presence' && m === 'GET') return json(await adminPresence(env));
+  /* ---------- controllo remoto delle app: solo il titolare, dal pannello ---------- */
+  if (path === '/rctl' || path.startsWith('/rctl/')) {
+    if (!ses || ses.agent) throw new HttpErr(403, 'Il controllo remoto delle app è riservato al titolare');
+    const s0 = await getSettings(env);
+    if (path === '/rctl' && m === 'GET') {
+      // per ogni dispositivo visto negli ultimi 30 giorni: impostazioni attuali dell'app, configurazione applicata, ultimo comando
+      const [pr, dr, cr] = await Promise.all([
+        env.DB.prepare('SELECT device_id, app_cfg, rcv, ver, t FROM presence WHERE t > ?').bind(now() - 30 * 864e5).all(),
+        env.DB.prepare("SELECT id, app, rc FROM devices WHERE rc <> ''").all(),
+        env.DB.prepare('SELECT device_id, cmd, created, sent, done, ok, info FROM remote_cmds WHERE created > ? ORDER BY id DESC LIMIT 3000').bind(now() - 7 * 864e5).all(),
+      ]);
+      const ov = {}; for (const r of dr.results || []) ov[r.id] = rcDevOf(r);
+      const last = {}, pend = {}; for (const c of cr.results || []) { if (!c.done) pend[c.device_id] = (pend[c.device_id] || 0) + 1; if (!last[c.device_id]) last[c.device_id] = { cmd: c.cmd, t: c.created, sent: c.sent, done: c.done, ok: !!c.ok, info: c.info }; }
+      const devs = {}; for (const r of pr.results || []) { let cfg = null; try { cfg = r.app_cfg ? JSON.parse(r.app_cfg) : null; } catch {} devs[r.device_id] = { cfg, rcv: r.rcv || '', ver: r.ver || '', t: +r.t }; }
+      return json({ apps: rcProfiles(s0), cat: RC_CAT, cmds: RC_CMDS, appNames: APP_NAME, devs, over: ov, last, pending: pend });
+    }
+    const pa = path.match(/^\/rctl\/app\/(tv|ktv|lite|xc|plus)$/);
+    if (pa && m === 'PUT') {
+      const b = await readJSON(req, 8192), rc = rcClean(b.rc || {}, pa[1]);
+      await settingsPatch(env, { rcApp: { ...rcProfiles(s0), [pa[1]]: rc } });
+      await log(env, 'settings', `${who}: controllo remoto — profilo ${APP_NAME[pa[1]]} aggiornato (${Object.keys(rc).length} impostazioni imposte)`, ip);
+      return json({ ok: true, rc });
+    }
+    const pd = path.match(/^\/rctl\/device\/([A-Za-z0-9_-]{6,20})$/);
+    if (pd && m === 'PUT') {
+      const d = await env.DB.prepare('SELECT id, name, code, app FROM devices WHERE id = ?').bind(pd[1]).first();
+      if (!d) throw new HttpErr(404, 'Cliente non trovato');
+      const b = await readJSON(req, 8192), rc = rcClean(b.rc || {});
+      await env.DB.prepare('UPDATE devices SET rc = ? WHERE id = ?').bind(Object.keys(rc).length ? JSON.stringify(rc) : '', d.id).run();
+      await log(env, 'edit', `${who}: controllo remoto — ${d.name || d.code}: ${Object.keys(rc).length ? Object.keys(rc).length + ' impostazioni imposte' : 'tolte le impostazioni imposte'}`, ip);
+      return json({ ok: true, rc, ...rcEffective(s0, { ...d, rc: JSON.stringify(rc) }) });
+    }
+    if (path === '/rctl/cmd' && m === 'POST') {
+      const b = await readJSON(req, 65536);
+      const C = RC_CMDS.find((x) => x[0] === b.cmd); if (!C) throw new HttpErr(400, 'Comando non valido');
+      let ids = [];
+      if (Array.isArray(b.ids)) ids = [...new Set(b.ids.map((x) => str(x, 20)).filter(Boolean))].slice(0, 2000);
+      else if (b.app === 'all' || RC_APPS.includes(b.app)) {
+        // tutti i dispositivi di quell'app aperti negli ultimi 7 giorni (gli altri lo ricevono quando riaprono: inutile accodare)
+        const rows = ((await env.DB.prepare('SELECT d.id, d.app, p.ver FROM devices d JOIN presence p ON p.device_id = d.id WHERE p.t > ?').bind(now() - 7 * 864e5).all()).results) || [];
+        ids = rows.filter((r) => b.app === 'all' || appOfVer(r.ver, r.app) === b.app).map((r) => r.id).slice(0, 5000);
+      } else throw new HttpErr(400, 'Indica i clienti (ids) o l\'app');
+      if (!ids.length) return json({ ok: true, queued: 0 });
+      const args = b.args && typeof b.args === 'object' ? JSON.stringify(b.args).slice(0, 500) : '', t = now();
+      // un comando uguale già in attesa non si duplica
+      const have = new Set();
+      for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); for (const r of ((await env.DB.prepare(`SELECT device_id FROM remote_cmds WHERE done = 0 AND cmd = ? AND device_id IN (${part.map(() => '?').join(',')})`).bind(C[0], ...part).all()).results) || []) have.add(r.device_id); }
+      const todo = ids.filter((x) => !have.has(x));
+      for (let i = 0; i < todo.length; i += 50) await env.DB.batch(todo.slice(i, i + 50).map((id) => env.DB.prepare('INSERT INTO remote_cmds (device_id, cmd, args, created, by) VALUES (?, ?, ?, ?, ?)').bind(id, C[0], args, t, who)));
+      await log(env, 'edit', `${who}: controllo remoto — «${C[1]}» inviato a ${todo.length} ${todo.length === 1 ? 'dispositivo' : 'dispositivi'}${b.app ? ' (' + (b.app === 'all' ? 'tutte le app' : APP_NAME[b.app]) + ')' : ''}`, ip);
+      return json({ ok: true, queued: todo.length, skipped: ids.length - todo.length });
+    }
+    const pc = path.match(/^\/rctl\/cmds\/([A-Za-z0-9_-]{6,20})$/);
+    if (pc && m === 'GET') return json({ items: ((await env.DB.prepare('SELECT id, cmd, created, sent, done, ok, info, by FROM remote_cmds WHERE device_id = ? ORDER BY id DESC LIMIT 30').bind(pc[1]).all()).results) || [] });
+    if (pc && m === 'DELETE') { const r = await env.DB.prepare('DELETE FROM remote_cmds WHERE device_id = ? AND done = 0').bind(pc[1]).run(); return json({ ok: true, deleted: (r.meta && r.meta.changes) || 0 }); }
+    throw new HttpErr(404, 'Non trovato');
+  }
   /* ---------- registro attività: lo svuota solo il titolare dal pannello (mai gli agenti né l'API di integrazione) ---------- */
   if (path === '/activity' && m === 'DELETE') {
     if (!ses || ses.agent) throw new HttpErr(403, 'Il registro lo può svuotare solo il titolare');
@@ -3457,8 +3616,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   const upm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})\/upd$/);
   if (upm && m === 'POST') {
     const d = await env.DB.prepare('SELECT d.id, d.name, d.code, d.app, p.ver FROM devices d LEFT JOIN presence p ON p.device_id = d.id WHERE d.id = ?').bind(upm[1]).first(); if (!d) throw new HttpErr(404, 'Cliente non trovato');
-    // solo Kairos Pro riceve l'aggiornamento dal pannello: le altre app si aggiornano a modo loro
-    const app = appOfVer(d.ver, d.app); if (app !== 'tv') throw new HttpErr(400, `${APP_NAME[app] || 'Questa app'} non riceve l'aggiornamento dal pannello. ${UPD_HOW[app] || ''}`.trim());
+    // tutte le app Kairos ricevono l'aggiornamento dal pannello: la scaricano in background e propongono «Installa ora»
+    const app = appOfVer(d.ver, d.app); if (!RC_APPS.includes(app)) throw new HttpErr(400, `${APP_NAME[app] || 'Questa app'} non riceve l'aggiornamento dal pannello.`);
     const t = now(); await env.DB.batch([env.DB.prepare('UPDATE devices SET upd_req = ? WHERE id = ? OR parent = ?').bind(t, d.id, d.id)]);
     await log(env, 'edit', `${who}: aggiornamento dell'app inviato a ${d.name || d.code}`, ip);
     return json({ ok: true, t });
@@ -4015,7 +4174,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
 /* Espone le stesse funzioni del pannello (tranne accesso, password, 2FA,   */
 /* chiavi e webhook) più alcune scorciatoie per codice dispositivo.         */
 /* ====================================================================== */
-const API_DENY = /^\/(login|logout|logout-all|password|totp|api-keys|webhook|agents|ai)(\/|$)/;
+const API_DENY = /^\/(login|logout|logout-all|password|totp|api-keys|webhook|agents|ai|rctl|activity|armada)(\/|$)/;
 const API_KEY_RE = /^kx_[A-Za-z0-9_-]{30,80}$/;
 async function apiV1(req, env, url, ip, ctx) {
   const auth = req.headers.get('Authorization') || '';
@@ -4324,6 +4483,7 @@ async function cleanup(env) {
   // segnalazioni/richieste "fatte" da più di 90 giorni, presenze vecchie di 30 giorni, classifiche di oltre 60 giorni
   try { await env.DB.batch([env.DB.prepare("DELETE FROM requests WHERE status = 'done' AND created < ?").bind(t - 90 * 86400e3), env.DB.prepare('DELETE FROM presence WHERE t < ?').bind(t - 30 * 86400e3), env.DB.prepare('DELETE FROM watch WHERE day < ?').bind(dayIT(t - 60 * 86400e3))]); } catch {}
   try { await env.DB.prepare('DELETE FROM armada_spend WHERE t < ?').bind(t - 400 * 86400e3).run(); } catch {} // crediti Armada degli agenti: basta poco più di un anno
+  try { await env.DB.prepare('DELETE FROM remote_cmds WHERE created < ?').bind(t - 30 * 86400e3).run(); } catch {} // comandi del controllo remoto: 30 giorni
 }
 
 // esportati per i test

@@ -606,6 +606,10 @@ img{display:block}
 .lite .glass{background:rgba(24,24,30,.94)}
 .lite .aurora,.lite .hbg img.blur{display:none!important}
 .lite .screen.on{animation:fadein .28s ease forwards}
+/* leggerissima (dal pannello o scelta nell'app): nessuna animazione né sfondo grande */
+.xlite *,.xlite *::before,.xlite *::after{animation:none!important;transition:none!important}
+.xlite .hbg img,.xlite .dhero,.xlite .aurora{display:none!important}
+.xlite .post img{filter:none!important}
 .lite .detail{background:rgba(0,0,0,.9)}
 .lite .detail.on{animation:fadein .25s ease forwards}
 .lite .nc.focused,.lite .nc:hover{box-shadow:none}
@@ -1543,8 +1547,8 @@ if (!S.secret) {
 }
 const NATIVE = window.KairosNative || null;
 const HAS_PLAYER = !!(NATIVE && NATIVE.play);
-if (NATIVE) document.body.classList.add('lite');
-const playPrefs = () => ({ engine: 'exo', quality: 'auto', buffer: 'balanced', aspect: 'fit', ...store.get('play', {}) });
+if (NATIVE) document.body.classList.add('lite'); // poi decide il pannello (rcLiteApply)
+const playPrefs = () => { const o = { engine: 'exo', quality: 'auto', buffer: 'balanced', aspect: 'fit', ...store.get('play', {}) }; for (const k of ['quality', 'buffer', 'aspect']) { const v = rcGet('p.' + k); if (v !== undefined) o[k] = String(v); } return o; };
 
 /* ---------------- audio FX (WebAudio, nessun file) ---------------- */
 let AC;
@@ -2187,6 +2191,7 @@ async function register() {
   S.perms = j.perms && typeof j.perms === 'object' ? j.perms : null;
   if (Array.isArray(j.addons)) { S.addons = j.addons; store.set('addons', j.addons); } else if (j.status === 'active') { S.addons = null; }
   S.adg = typeof j.adg === 'string' ? j.adg : '';
+  if (j.rc && typeof j.rc === 'object') rcApply(j.rc, j.rcv || ''); // impostazioni imposte dal pannello (profilo dell'app + questo cliente)
   { const th = store.get('theme') || ''; if (th.startsWith('x:') && !themePal(th)) { store.set('theme', 'cinema'); applyTheme('cinema'); } } // add-on tolto dal fornitore
   { const c = $('#shopCard'); if (c) c.dataset.ok = ''; }
   adAssetsApply(); setTimeout(() => adAssetsSync(), 1500); // con calma, dopo l'avvio
@@ -2201,7 +2206,7 @@ async function register() {
   return j;
 }
 function applyBrand() {
-  applyTheme(store.get('theme') || S.settings.accent);
+  applyTheme(rcGet('theme') || store.get('theme') || S.settings.accent);
   const brandU = (S.settings.brand || 'KAIROS').toUpperCase();
   $$('.brandName').forEach((e) => { if (e.dataset.b !== brandU) { e.innerHTML = kxWord(brandU, ''); e.dataset.b = brandU; } });
   { const bt = $('#bootTitle'); if (bt.dataset.b !== brandU) { bt.innerHTML = kxWord(brandU, 'draw'); bt.dataset.b = brandU; } }
@@ -4392,9 +4397,12 @@ const OPT = {
 /* lettore scelto dal fornitore nel pannello per questo cliente (vince sulla scelta fatta nell'app) */
 const ENG_KIND = { engLive: 'live', engMovie: 'movie', engSeries: 'series' };
 const panelEng = (k) => { const p = S.account && S.account.player, m = ENG_KIND[k], v = p && m && p[m]; return v === 'auto' || v === 'exo' || v === 'vlc' ? v : ''; };
-const opt = (k) => { const pe = panelEng(k); if (pe) return pe; const v = store.get('o_' + k, null); return v === null ? (k === 'startScr' ? store.get('startScr', OPT[k][2]) : k === 'sfx' && store.get('sound', true) === false ? 'off' : OPT[k][2]) : v; };
+/* controllo remoto: impostazioni imposte dal pannello (profilo dell'app o questo cliente). Vincono su quelle scelte qui */
+const rcGet = (k) => { const v = S.rc && S.rc[k]; return v === undefined || v === null || v === '' ? undefined : v; };
+const rcOpt = (k) => { const v = rcGet('o.' + k); if (v === undefined) return undefined; const o = OPT[k]; return o && o[1].some((x) => x[0] === v || String(x[0]) === String(v)) ? (o[1].find((x) => x[0] === v || String(x[0]) === String(v)))[0] : undefined; };
+const opt = (k) => { const pe = panelEng(k); if (pe) return pe; const rv = rcOpt(k); if (rv !== undefined) return rv; const v = store.get('o_' + k, null); return v === null ? (k === 'startScr' ? store.get('startScr', OPT[k][2]) : k === 'sfx' && store.get('sound', true) === false ? 'off' : OPT[k][2]) : v; };
 const optLabel = (k) => { const [, o] = OPT[k], v = opt(k); return (o.find((x) => x[0] === v) || o[0])[1]; };
-const optRow = (k) => panelEng(k) ? `<div class="sr static"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))} <small class="mut">· scelto dal fornitore</small></b></div>` : `<div class="sr" data-f data-opt="${k}"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))}</b></div>`;
+const optRow = (k) => panelEng(k) || rcOpt(k) !== undefined ? `<div class="sr static"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))} <small class="mut">· scelto dal fornitore</small></b></div>` : `<div class="sr" data-f data-opt="${k}"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))}</b></div>`;
 function cycleOpt(k, el) {
   const [, o, , after] = OPT[k], v = opt(k), i = o.findIndex((x) => x[0] === v), nx = o[(i + 1) % o.length];
   store.set('o_' + k, nx[0]);
@@ -4595,7 +4603,7 @@ function renderSettings(sec) {
   const plHid = new Set(store.get('plHidden', [])), plT = new Map(plList().map((p) => [p.id, p]));
   const allPl = allPlaylists().map((p) => ({ ...p, srv: !S.local.some((x) => x.id === p.id) }));
   const plCur = plSel(), canSw = perm('plSwitch') && plList().length > 1;
-  const P = playPrefs(), theme = store.get('theme') || S.settings.accent || 'cinema';
+  const P = playPrefs(), theme = rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema';
   const MENU = [['dev', 'Account'], ['acct', 'Profili e dispositivi'], ['pl', 'Gestione playlist'], ['org', 'Organizza'], ['shop', 'Store add-on'], ['play', 'Lettore'], ['tv', 'TV in diretta e guida TV'], ['rec', 'Registrazioni'], ['kids', 'Controllo genitori'], ['net', 'Rete e speed test'], ['priv', 'Privacy e VPN'], ['look', 'Generali'], ['info', 'Informazioni']];
   const kv = (k, v) => `<div class="sr static"><span>${k}</span><b>${v}</b></div>`;
   const cards = {
@@ -4611,7 +4619,7 @@ function renderSettings(sec) {
       <h3 style="margin-top:26px">Ordinamento</h3>${optRow('sortCats')}${optRow('sortCh')}${optRow('sortVod')}`,
     play: `<h3>Lettore</h3>${HAS_PLAYER ? '' : '<div class="snote">Queste opzioni valgono nell\'app (Fire TV, Android TV, telefoni).</div>'}
       ${optRow('engLive')}${optRow('engMovie')}${optRow('engSeries')}
-      ${PLAY_OPTS.filter((o) => o[0] !== 'engine').map(([k, lbl, opts]) => `<div class="sr" data-f data-pk="${k}"><span>${lbl}</span><b>${(opts.find((o) => o[0] === P[k]) || opts[0])[1]}</b></div>`).join('')}
+      ${PLAY_OPTS.filter((o) => o[0] !== 'engine').map(([k, lbl, opts]) => rcGet('p.' + k) !== undefined ? `<div class="sr static"><span>${lbl}</span><b>${(opts.find((o) => o[0] === P[k]) || opts[0])[1]} <small class="mut">· scelto dal fornitore</small></b></div>` : `<div class="sr" data-f data-pk="${k}"><span>${lbl}</span><b>${(opts.find((o) => o[0] === P[k]) || opts[0])[1]}</b></div>`).join('')}
       ${optRow('hw')}${optRow('adaptQ')}<div class="snote" style="margin:-4px 0 10px">Se la connessione non regge, il canale passa da solo a una sua versione più leggera (es. da FHD a HD) e torna alla qualità piena quando la linea migliora. Se il video si blocca, l'app prova da sola a ripartire, la decodifica software o l'altro lettore.</div>${optRow('autoNext')}${optRow('introAuto')}${optRow('subSize')}${optRow('resInd')}
       <div class="snote"><b>Automatico avanzato</b> sceglie da solo il lettore migliore per ogni contenuto (ExoPlayer, oppure VLC per i formati che ExoPlayer non legge) e cambia lettore da solo se qualcosa non parte. Disattiva l'accelerazione hardware solo se vedi immagini verdi o a scatti. Durante la visione premi OK per audio, qualità e sottotitoli.</div>`,
     shop: '<div id="shopCard"></div>',
@@ -4647,10 +4655,11 @@ function renderSettings(sec) {
       <div class="sbtns">${perm('speed') ? '<button class="btn pri" data-f id="sSpeed">⚡ Avvia speed test</button>' : ''}<button class="btn" data-f id="sTest">Test connessione al server</button></div>
       <div class="snote">Lo speed test misura la velocità reale della tua linea e ti consiglia le impostazioni migliori per il lettore.</div>`,
     look: `<h3>Generali</h3>${optRow('startScr')}${optRow('sfx')}${optRow('textSize')}
-      <div class="sr" data-f id="sTheme"><span>Colore</span><b><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(theme) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(theme))}</b></div>
+      ${rcGet('theme') ? `<div class="sr static"><span>Colore</span><b><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(theme) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(theme))} <small class="mut">· scelto dal fornitore</small></b></div>` : `<div class="sr" data-f id="sTheme"><span>Colore</span><b><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(theme) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(theme))}</b></div>`}
       ${optRow('orient')}
       <div class="sr" data-f id="sAdult"><span>Contenuti per adulti nella Home e nei consigliati</span><b>${showAdult() ? 'Sì' : 'No'}</b></div>
       <div class="sr" data-f id="sLogo"><span>Loghi dei canali automatici</span><b>${store.get('autoLogo', true) === false ? 'No' : 'Sì'}</b></div>
+      ${NATIVE && NATIVE.prefetchApk ? `<div class="sr${rcGet('bgupd') != null ? ' static' : ''}" ${rcGet('bgupd') != null ? '' : 'data-f'} id="sBgUpd"><span>Aggiornamenti in background${rcGet('bgupd') != null ? ' <small class="mut">· scelto dal fornitore</small>' : ''}</span><b>${bgUpdOn() ? 'Sì' : 'No'}</b></div>` : ''}
       <div class="sr" data-f id="sClearCont"><span>Cancella «Continua a guardare» (film e serie)</span><b>›</b></div>
       <div class="sr" data-f id="sClearSeen"><span>Cancella «Ultimi visti» (canali e titoli aperti)</span><b>›</b></div>
       <div class="sr" data-f id="sClear"><span>Svuota preferiti e cronologia</span><b>›</b></div>
@@ -4741,7 +4750,7 @@ function renderSettings(sec) {
     if (store.get('pinH', '') && !(await checkPin('PIN per sbloccare tutto'))) return focus($('#kClear'), true);
     S.locked.clear(); store.set('locked', []); $('#kCount').textContent = '0'; toast('Tutti i contenuti sbloccati'); focus($('#kClear'), true);
   };
-  $('#sTheme').onclick = () => { const ks = themeList(), nx = ks[(ks.indexOf(store.get('theme') || S.settings.accent || 'cinema') + 1) % ks.length]; store.set('theme', nx); applyTheme(nx); $('#sTheme b').innerHTML = `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(nx) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(nx))}`; };
+  $('#sTheme') && ($('#sTheme').onclick = () => { const ks = themeList(), nx = ks[(ks.indexOf(store.get('theme') || S.settings.accent || 'cinema') + 1) % ks.length]; store.set('theme', nx); applyTheme(nx); $('#sTheme b').innerHTML = `<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(nx) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(nx))}`; });
   $('#sAdult').onclick = () => { const on = !showAdult(); store.set('adultHome', on); $('#sAdult b').textContent = on ? 'Sì' : 'No'; buildBrowse($('#home'), 'all'); };
   $('#sUpd').onclick = async () => {
     const t = $('#sUpdTxt'); t.textContent = 'Controllo in corso…';
@@ -4753,6 +4762,7 @@ function renderSettings(sec) {
     if (u.ui && u.ui.version && u.ui.version !== curUi() && NATIVE.applyUi && !badUi(u.ui.version)) { t.textContent = 'Nuova interfaccia trovata: riavvio…'; const html = await fetchUi(u); if (html) { NATIVE.applyUi(html, u.ui.version); return; } }
     t.textContent = '✓ Hai già l\'ultima versione' + (NATIVE.version ? ' (' + NATIVE.version() + ')' : '') + '.';
   };
+  if ($('#sBgUpd') && rcGet('bgupd') == null) $('#sBgUpd').onclick = () => { const on = !bgUpdOn(); store.set('bgUpd', on); $('#sBgUpd b').textContent = on ? 'Sì' : 'No'; toast(on ? 'La versione nuova si scaricherà da sola: ti chiederemo solo di installarla' : 'Scaricheremo la versione nuova solo quando accetti'); };
   $('#sLogo').onclick = () => { const on = store.get('autoLogo', true) === false; store.set('autoLogo', on); $('#sLogo b').textContent = on ? 'Sì' : 'No'; if (on) { applyLogos(S.lib.live, true); autoLogos(); } else toast('Valido dal prossimo avvio'); };
   $('#sClear').onclick = () => { S.favs.clear(); S.recent = []; store.set('favs', []); store.set('recent', []); store.set('pos', {}); updFavCount(); toast('Preferiti e cronologia svuotati'); };
   $('#sCache').onclick = async () => { await LibCache.clear(); toast('Memoria svuotata: al prossimo avvio i contenuti verranno riscaricati'); };
@@ -4787,6 +4797,55 @@ const ICX = {
 const fmtBytes = (b) => (b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b >= 1e6 ? Math.round(b / 1e6) + ' MB' : Math.max(0, Math.round(b / 1e3)) + ' KB');
 const fmtDur = (ms) => { const m = Math.max(0, Math.round(ms / 60000)), h = Math.floor(m / 60); return h ? `${h} h ${m % 60} min` : `${m} min`; };
 const dayTime = (t) => { const d = new Date(t), td = new Date(); const day = d.toDateString() === td.toDateString() ? 'Oggi' : d.toDateString() === new Date(+td + 864e5).toDateString() ? 'Domani' : d.toDateString() === new Date(+td - 864e5).toDateString() ? 'Ieri' : d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }); return day + ' ' + hhmm(t); };
+
+/* ---------- controllo remoto dal pannello: impostazioni imposte (rc) e comandi (cmds) ---------- */
+const RC_CFG_KEYS = ['startScr', 'hw', 'adaptQ', 'liveFmt', 'autoNext', 'introAuto', 'resInd', 'subSize', 'textSize', 'sfx', 'epgShift', 'sortCats', 'sortCh', 'sortVod', 'lockAdult'];
+function rcLiteApply() {
+  const v = rcGet('lite'), b = document.body;
+  const lite = v === 'on' || v === 'max' ? true : v === 'off' ? false : !!NATIVE;
+  b.classList.toggle('lite', lite); b.classList.toggle('xlite', v === 'max');
+}
+/** applica la configurazione ricevuta (se diversa da quella già applicata) */
+function rcApply(rc, rcv) {
+  const next = rc && typeof rc === 'object' ? rc : {};
+  const same = JSON.stringify(next) === JSON.stringify(S.rc || {});
+  S.rc = next; S.rcv = rcv || '';
+  if (same) return;
+  try { rcLiteApply(); } catch {}
+  try { applyTheme(rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema'); } catch {}
+  try { S.sound = opt('sfx') !== 'off'; applyTextSize(opt('textSize')); if (opt('orient') !== 'auto') applyOrient(opt('orient')); } catch {}
+  try { if ($('#settings') && $('#settings').classList.contains('on')) renderSettings(); } catch {}
+  try { if (S.lib && S.lib.live && S.lib.live.length && !S.inPlayer) plRerender(); } catch {}
+}
+/** impostazioni attuali dell'app, come le vede il pannello (stesse chiavi del suo catalogo) */
+/** aggiornamento in background: imposto dal fornitore (bgupd) o scelto dal cliente (default sì) */
+function bgUpdOn() { const v = rcGet('bgupd'); return v != null ? v !== 'off' : store.get('bgUpd', true) !== false; }
+function rcSnapshot() {
+  const o = { bgupd: bgUpdOn() ? 'on' : 'off', lite: document.body.classList.contains('xlite') ? 'max' : document.body.classList.contains('lite') ? 'on' : 'off', theme: rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema' };
+  try { for (const k of RC_CFG_KEYS) if (OPT[k]) o['o.' + k] = opt(k); } catch {}
+  try { const P = playPrefs(); for (const k of ['quality', 'buffer', 'aspect']) o['p.' + k] = P[k]; } catch {}
+  return o;
+}
+let rcBusy = false;
+/** esegue i comandi arrivati col battito e li conferma al pannello */
+async function rcRun(cmds) {
+  if (rcBusy || !Array.isArray(cmds) || !cmds.length) return; rcBusy = true;
+  try {
+    for (const c of cmds) {
+      const ack = (ok, info) => apiPost('/api/player/cmd', { id: c.id, ok, info: info || '' }).catch(() => {});
+      try {
+        if (c.c === 'reload') { await ack(true, 'riavvio'); setTimeout(() => location.reload(), 300); return; }
+        if (c.c === 'cache') { try { await LibCache.clear(); } catch {} try { store.set('plSnap', null); } catch {} await ack(true, 'cache svuotata'); setTimeout(() => location.reload(), 300); return; }
+        if (c.c === 'exit') { await ack(true, 'chiusa'); setTimeout(() => { try { NATIVE && NATIVE.exit ? NATIVE.exit() : window.close(); } catch {} }, 300); return; }
+        if (c.c === 'update') { if (!NATIVE || !hasNativeHttp()) { await ack(false, 'solo nell\'app installata'); continue; } S.lastUpdCheck = 0; await backgroundUpdateCheck(true); if (S.apkUpdate) { await ack(true, S.apkReady === S.apkUpdate.url ? 'versione ' + (S.apkUpdate.version || '') + ' pronta: proposta al cliente' : 'versione ' + (S.apkUpdate.version || '') + ' in scaricamento'); } else await ack(true, 'già aggiornata'); continue; }
+        if (c.c === 'sync') { if (S.inPlayer) { await ack(false, 'visione in corso: rimandato'); continue; } whenIdle(() => loadLibrary().then(plRerender), 100); await ack(true, 'liste in aggiornamento'); continue; }
+        if (c.c === 'settings') { if (S.inPlayer) { try { NATIVE && NATIVE.playerClose && NATIVE.playerClose(); } catch {} } try { closeFs && $('#fs').classList.contains('on') && closeFs(); } catch {} const sec = (c.a && c.a.sec) || 'dev'; go('settings'); renderSettings(sec); setTimeout(() => { renderSettings(sec); const m = $(`#settBody .sm[data-sec="${sec}"]`); m && focus(m, true); }, 120); await ack(true, 'impostazioni aperte'); continue; }
+        if (c.c === 'speed') { if (S.inPlayer) { await ack(false, 'visione in corso: rimandato'); continue; } speedTest().then(() => heartbeat(true)).catch(() => {}); await ack(true, 'speed test avviato'); continue; }
+        await ack(false, 'comando non supportato');
+      } catch (e) { await ack(false, String(e && e.message || e).slice(0, 100)); }
+    }
+  } finally { rcBusy = false; }
+}
 
 /* chiamate al server (stessa strada di register: http nativo nell'app, fetch nel browser) */
 async function apiPost(path, obj) {
@@ -5819,8 +5878,12 @@ async function checkUpdates() {
   return false;
 }
 /* mentre l'app è aperta (le TV restano accese per giorni): controllo ogni 3 ore e al ritorno nell'app */
-async function backgroundUpdateCheck() {
-  if (S.demo || S.inPlayer || S.updChecking) return;
+/** l'APK scaricato in background è pronto: lo si propone appena si è in un menu */
+window.kxApkReady = (url) => { S.apkReady = url; if (S.apkUpdate && S.apkUpdate.url === url) updOfferWhenFree(); };
+function updCanOffer() { return !$('#updM') && !$('.speedm.on') && !S.inPlayer && !$('#boot').classList.contains('on') && !$('#activate').classList.contains('on'); }
+function updOfferWhenFree() { if (updCanOffer()) offerApkUpdate(); else whenIdle(() => { if (updCanOffer()) offerApkUpdate(); }, 2000, 2000, 30 * 60e3); }
+async function backgroundUpdateCheck(fromPanel) {
+  if (S.demo || S.inPlayer && !fromPanel || S.updChecking) return;
   S.updChecking = true;
   try {
     const u = await fetchUpdateInfo(); if (!u) return;
@@ -5829,7 +5892,12 @@ async function backgroundUpdateCheck() {
       const html = await fetchUi(u);
       if (html) NATIVE.stageUi(html, u.ui.version); // pronta per il prossimo avvio, senza interrompere la visione
     }
-    if (apkNewer(u.apk) && !apkTriedSame(u.apk)) { S.apkUpdate = u.apk; if (!$('#updM') && !$('.speedm.on') && !S.inPlayer && !$('#boot').classList.contains('on') && !$('#activate').classList.contains('on')) offerApkUpdate(); }
+    if (apkNewer(u.apk) && !apkTriedSame(u.apk)) {
+      S.apkUpdate = u.apk;
+      // aggiornamento in background: l'APK si scarica e si verifica in silenzio, al cliente resta solo «Installa»
+      if (NATIVE.prefetchApk && (bgUpdOn() || fromPanel) && S.apkReady !== u.apk.url) { try { NATIVE.prefetchApk(u.apk.url); } catch {} if (!fromPanel) return; } // la proposta arriva con kxApkReady (o, se il download non parte, al prossimo controllo)
+      if (updCanOffer()) offerApkUpdate(fromPanel);
+    }
   } finally { S.updChecking = false; }
 }
 setInterval(backgroundUpdateCheck, 3 * 3600e3);
@@ -5938,13 +6006,15 @@ async function heartbeat(force) {
   const sp = speedLast && isFinite(speedLast.mbps) ? { dl: +(+speedLast.mbps).toFixed(1), ul: speedLast.ul != null && speedLast.ul >= 0 ? +speedLast.ul.toFixed(1) : null, ping: Math.round(speedLast.ping || 0), jitter: Math.round(speedLast.jitter || 0), t: speedLast.t } : null;
   const body = { state, title: it ? (it.k === 'l' ? (n ? n.title : '') : it.name) : '', ch: it && it.k === 'l' ? it.name : '', chId: it ? it.id : '', group: it ? it.group || '' : '', pl: it ? it.pl || '' : '', prof: S.prof ? S.prof.name : '',
     ver: (NATIVE && NATIVE.version && NATIVE.version()) || 'web', ui: (NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || '', model: (NATIVE && NATIVE.model && NATIVE.model()) || 'browser', screen: ($('.screen.on') || {}).id || '',
-    net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off', ...(S.kickAck ? { kickAck: S.kickAck } : {}) };
+    net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off', cfg: rcSnapshot(), rcv: S.rcv || '', ...(S.kickAck ? { kickAck: S.kickAck } : {}) };
   try {
     const j = await apiPost('/api/player/heartbeat', body); if (!j) return;
     sendPlayEvents();
+    if (typeof j.rc === 'string') { try { rcApply(JSON.parse(j.rc), j.rcv || ''); } catch {} } // impostazioni imposte dal pannello
+    if (Array.isArray(j.cmds) && j.cmds.length) rcRun(j.cmds);
     if (j.kick) { S.kickAck = j.kick; if (j.kick !== store.get('kickSeen', 0)) { store.set('kickSeen', j.kick); kickedByPanel(); } }
     // «Invia aggiornamento» dal pannello (o aggiornamento automatico scelto dal fornitore): si controlla subito, senza interrompere la visione
-    if (j.upd && j.upd !== store.get('updSeen', 0) && !S.inPlayer && !S.updChecking && !S.demo) { store.set('updSeen', j.upd); setTimeout(async () => { S.lastUpdCheck = 0; await backgroundUpdateCheck(); if (S.apkUpdate && !S.inPlayer && !$('#updM')) { try { offerApkUpdate(); } catch {} } }, 1500); }
+    if (j.upd && j.upd !== store.get('updSeen', 0) && !S.inPlayer && !S.updChecking && !S.demo) { store.set('updSeen', j.upd); setTimeout(async () => { S.lastUpdCheck = 0; await backgroundUpdateCheck(true); }, 1500); }
     if (j.mt && S.status === 'active') { // manutenzione appena attivata dal fornitore: si interrompe la visione e si mostra l'avviso
       register().then(() => { if (S.status !== 'active') { try { if (S.inPlayer && NATIVE && NATIVE.playerClose) NATIVE.playerClose(); } catch {} try { if ($('#fs').classList.contains('on')) closeFs(); } catch {} try { stopPreview(); stopVideo($('#pv')); } catch {} vpnApply(); showActivate(false); } }).catch(() => {});
       return;
@@ -6028,9 +6098,9 @@ function offerApkUpdate(force) {
   if (!force && skip.v === a.versionCode && Date.now() - skip.t < 12 * 3600e3) return;
   modalPause(); // l'anteprima nativa coprirebbe la finestra
   document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="updM"><div class="sbox"><div class="orb mut" style="font-size:12px;letter-spacing:.35em">AGGIORNAMENTO</div>
-    <h2 style="margin:14px 0 8px;font-size:26px">Nuova versione ${esc(a.version || '')} disponibile</h2><p class="mut" style="line-height:1.5">Contiene miglioramenti e correzioni. Il download richiede pochi secondi, poi conferma l'installazione.</p>
+    <h2 style="margin:14px 0 8px;font-size:26px">${S.apkReady === a.url ? `Aggiornamento ${esc(a.version || '')} pronto` : `Nuova versione ${esc(a.version || '')} disponibile`}</h2><p class="mut" style="line-height:1.5">${S.apkReady === a.url ? 'È già scaricato e verificato: premi Installa e conferma nella schermata di Android. Ci vuole meno di un minuto.' : 'Contiene miglioramenti e correzioni. Il download richiede pochi secondi, poi conferma l\'installazione.'}</p>
     <div class="ubar"><i id="uBar"></i></div><div class="mut" id="uTxt" style="font-size:13px;min-height:18px;line-height:1.4"></div>
-    <div class="sbtn"><button class="btn pri" data-f id="uGo">Aggiorna ora</button><button class="btn" data-f id="uLater">Più tardi</button></div></div></div>`);
+    <div class="sbtn"><button class="btn pri" data-f id="uGo">${S.apkReady === a.url ? 'Installa ora' : 'Aggiorna ora'}</button><button class="btn" data-f id="uLater">Più tardi</button></div></div></div>`);
   setTimeout(() => focus($('#uGo'), true), 80);
   $('#uLater').onclick = () => { store.set('apkSkip', { v: a.versionCode, t: Date.now() }); back(); };
   $('#uGo').onclick = () => {
@@ -6082,7 +6152,7 @@ async function enterHome() {
   const b = $('#boot');
   if (b.classList.contains('on')) { b.classList.add('out'); await sleep(560); }
   // schermata iniziale scelta nelle impostazioni
-  const st = store.get('startScr', 'home');
+  const st = rcOpt('startScr') || store.get('startScr', 'home');
   if (st === 'movies' || st === 'series') { buildBrowse($('#cat'), st); show('cat', false); S.stack = ['home']; }
   else if (st === 'live' && S.lib.live.length) { renderLive(); show('live', false); S.stack = ['home']; }
   else if (st === 'guide' && S.lib.live.length) { openGuide(true); S.stack = ['home']; }

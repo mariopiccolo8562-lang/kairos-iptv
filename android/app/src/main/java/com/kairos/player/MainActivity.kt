@@ -236,6 +236,9 @@ class MainActivity : ComponentActivity() {
                 for (d in listOfNotNull(File(cacheDir, "apk"), externalCacheDir)) {
                     val f = File(d, "kairos-update.apk")
                     if (f.exists() && System.currentTimeMillis() - f.lastModified() > 10 * 60_000L && !apkBusy.get()) f.delete()
+                    // APK pronto in background: resta una settimana (poi la versione nuova si riscarica)
+                    val g = File(d, "kairos-ready.apk")
+                    if (g.exists() && (System.currentTimeMillis() - g.lastModified() > 7 * 86_400_000L || ApkCheck.verify(this, g) != null) && !apkBusy.get()) g.delete()
                 }
             } catch (_: Exception) {}
         }
@@ -440,60 +443,94 @@ class MainActivity : ComponentActivity() {
     /* ------------------------------------------------------------------ */
     private val apkBusy = java.util.concurrent.atomic.AtomicBoolean(false)
 
+    /** APK scaricato e verificato in background, pronto da installare al primo OK (aggiornamento in background) */
+    @Volatile private var readyApk: File? = null
+    @Volatile private var readyUrl = ""
+
+    private fun apkDir(): File = (if (Build.VERSION.SDK_INT >= 24) File(cacheDir, "apk") else (externalCacheDir ?: cacheDir)).apply { mkdirs() }
+
+    /** scarica [url] in [out] seguendo i redirect sicuri; [progress] riceve 0-99 */
+    private fun fetchApk(url: String, out: File, progress: ((Int) -> Unit)?) {
+        var target = URL(url)
+        var conn = target.openConnection() as HttpURLConnection
+        var hops = 0
+        while (true) {
+            conn.instanceFollowRedirects = false
+            conn.connectTimeout = 20_000
+            conn.readTimeout = 30_000
+            val code = conn.responseCode
+            val loc = conn.getHeaderField("Location")
+            if (code in 300..399 && loc != null && hops < 8) {
+                val next = URL(target, loc)
+                if (target.protocol == "https" && next.protocol != "https") throw Exception("il link dell'APK rimanda a un indirizzo non sicuro (http)")
+                conn.disconnect(); target = next; hops++
+                conn = target.openConnection() as HttpURLConnection
+                continue
+            }
+            if (code != 200) throw Exception(if (code == 404) "file non trovato (HTTP 404): il link dell'APK non è pubblico o è sbagliato" else "HTTP $code")
+            break
+        }
+        val total = conn.contentLength.toLong()
+        var done = 0L
+        var last = -1
+        conn.inputStream.use { input ->
+            FileOutputStream(out).use { fo ->
+                val buf = ByteArray(64 * 1024)
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    fo.write(buf, 0, n)
+                    done += n
+                    if (total > 0 && progress != null) {
+                        val p = ((done * 100) / total).toInt().coerceAtMost(99)
+                        if (p != last) { last = p; progress(p) }
+                    }
+                }
+            }
+        }
+        conn.disconnect()
+        if (total > 0 && done != total) { out.delete(); throw Exception("download interrotto: controlla la connessione e riprova") }
+        // deve essere davvero un APK (un link sbagliato spesso scarica una pagina web)
+        val head = ByteArray(2)
+        java.io.FileInputStream(out).use { it.read(head) }
+        if (out.length() < 500_000 || head[0] != 'P'.code.toByte() || head[1] != 'K'.code.toByte()) {
+            out.delete(); throw Exception("il link non porta a un file APK")
+        }
+        // stessa versione (o più vecchia) o firma diversa: l'installer non va aperto (evita il ciclo di aggiornamenti)
+        ApkCheck.verify(this, out)?.let { msg -> out.delete(); throw Exception(msg) }
+    }
+
+    /** rete a consumo (dati mobili, hotspot): niente download non richiesti */
+    private fun metered(): Boolean = try {
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        cm.isActiveNetworkMetered
+    } catch (_: Exception) { false }
+
+    /** aggiornamento in background: l'APK si scarica e si verifica in silenzio; la pagina riceve kxApkReady(url) quando è pronto */
+    private fun prefetchApk(url: String) {
+        if (readyUrl == url && readyApk?.exists() == true) { js("window.kxApkReady && kxApkReady(${JSONObject.quote(url)})"); return }
+        if (metered() || !apkBusy.compareAndSet(false, true)) return
+        thread(name = "kx-apk-bg") {
+            try {
+                val out = File(apkDir(), "kairos-ready.apk")
+                fetchApk(url, out, null)
+                readyApk = out; readyUrl = url
+                js("window.kxApkReady && kxApkReady(${JSONObject.quote(url)})")
+            } catch (_: Exception) {
+                // si riproverà al prossimo controllo
+            } finally { apkBusy.set(false) }
+        }
+    }
+
     private fun downloadAndInstall(url: String) {
+        // già scaricato in background: si passa subito all'installazione
+        val r = readyApk
+        if (r != null && readyUrl == url && r.exists()) { js("window.kxApkCb && kxApkCb(100)"); runOnUiThread { launchInstaller(r) }; return }
         if (!apkBusy.compareAndSet(false, true)) return // un solo download alla volta
         thread(name = "kx-apk") {
             try {
-                val dir = if (Build.VERSION.SDK_INT >= 24) File(cacheDir, "apk") else (externalCacheDir ?: cacheDir)
-                dir.mkdirs()
-                val out = File(dir, "kairos-update.apk")
-                var target = URL(url)
-                var conn = target.openConnection() as HttpURLConnection
-                var hops = 0
-                while (true) {
-                    conn.instanceFollowRedirects = false
-                    conn.connectTimeout = 20_000
-                    conn.readTimeout = 30_000
-                    val code = conn.responseCode
-                    val loc = conn.getHeaderField("Location")
-                    if (code in 300..399 && loc != null && hops < 8) {
-                        val next = URL(target, loc)
-                        if (target.protocol == "https" && next.protocol != "https") throw Exception("il link dell'APK rimanda a un indirizzo non sicuro (http)")
-                        conn.disconnect(); target = next; hops++
-                        conn = target.openConnection() as HttpURLConnection
-                        continue
-                    }
-                    if (code != 200) throw Exception(if (code == 404) "file non trovato (HTTP 404): il link dell'APK non è pubblico o è sbagliato" else "HTTP $code")
-                    break
-                }
-                val total = conn.contentLength.toLong()
-                var done = 0L
-                var last = -1
-                conn.inputStream.use { input ->
-                    FileOutputStream(out).use { fo ->
-                        val buf = ByteArray(64 * 1024)
-                        while (true) {
-                            val n = input.read(buf)
-                            if (n < 0) break
-                            fo.write(buf, 0, n)
-                            done += n
-                            if (total > 0) {
-                                val p = ((done * 100) / total).toInt().coerceAtMost(99)
-                                if (p != last) { last = p; js("window.kxApkCb && kxApkCb($p)") }
-                            }
-                        }
-                    }
-                }
-                conn.disconnect()
-                if (total > 0 && done != total) { out.delete(); throw Exception("download interrotto: controlla la connessione e riprova") }
-                // deve essere davvero un APK (un link sbagliato spesso scarica una pagina web)
-                val head = ByteArray(2)
-                java.io.FileInputStream(out).use { it.read(head) }
-                if (out.length() < 500_000 || head[0] != 'P'.code.toByte() || head[1] != 'K'.code.toByte()) {
-                    out.delete(); throw Exception("il link non porta a un file APK")
-                }
-                // stessa versione (o più vecchia) o firma diversa: l'installer non va aperto (evita il ciclo di aggiornamenti)
-                ApkCheck.verify(this, out)?.let { msg -> out.delete(); throw Exception(msg) }
+                val out = File(apkDir(), "kairos-update.apk")
+                fetchApk(url, out) { p -> js("window.kxApkCb && kxApkCb($p)") }
                 js("window.kxApkCb && kxApkCb(100)")
                 runOnUiThread { launchInstaller(out) }
             } catch (e: Exception) {
@@ -993,6 +1030,10 @@ class MainActivity : ComponentActivity() {
         /** «Disconnetti» dal pannello: chiude il player a schermo intero, se aperto */
         @JavascriptInterface fun playerClose() { runOnUiThread { PlayerActivity.current?.killByPanel() } }
         @JavascriptInterface fun installApk(url: String) { downloadAndInstall(url) }
+        /** aggiornamento in background: scarica e verifica l'APK senza disturbare; poi kxApkReady(url) */
+        @JavascriptInterface fun prefetchApk(url: String) { this@MainActivity.prefetchApk(url) }
+        /** true se l'APK di [url] è già scaricato e verificato */
+        @JavascriptInterface fun apkReady(url: String): Boolean = readyUrl == url && readyApk?.exists() == true
         @JavascriptInterface fun speedTest() { runSpeedTest() }
         /** ferma lo speed test in corso (es. finestra chiusa) */
         @JavascriptInterface fun speedStop() { SpeedTest.stop() }
