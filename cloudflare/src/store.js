@@ -107,7 +107,9 @@ async function getStoreSettings(env) {
   const row = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('store').first();
   let s = {}; try { s = row ? JSON.parse(row.v) : {}; } catch {}
   const blocked = Array.isArray(s.blocked) ? s.blocked.filter((d) => typeof d === 'string' && DID_RE.test(d)).slice(0, MAX_BLOCKED) : [];
-  return { approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, sms: smsNorm(s.sms), closed: closedNorm(s.closed) };
+  // dispositivi «senza limiti»: eccezione del titolare (installatori, negozi): niente tetto orario né tempo di attesa
+  const trusted = Array.isArray(s.trusted) ? s.trusted.filter((d) => typeof d === 'string' && DID_RE.test(d)).slice(0, MAX_BLOCKED) : [];
+  return { approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, trusted, sms: smsNorm(s.sms), closed: closedNorm(s.closed) };
 }
 /** numero in formato internazionale (+39…); i numeri italiani scritti senza prefisso vengono completati */
 function phoneNorm(v) {
@@ -357,6 +359,7 @@ async function create(req, env, ctx, url, ip, opts) {
   if (appUrl && !/^https?:\/\/[^\s]+$/i.test(appUrl)) return json({ error: 'Link non valido' }, 400);
   const s = await getStoreSettings(env), t = now();
   if (s.blocked.includes(did)) return json({ error: 'Dispositivo bloccato dal venditore' }, 403);
+  const trusted = s.trusted.includes(did); // eccezione del titolare: salta tempo di attesa e tetto orario
   if (storeClosedNow(s.closed)) return json({ error: closedMsg(s.closed), closed: true }, 403); // fascia oraria di chiusura decisa dal titolare
 
   // stessa app dallo stesso dispositivo già in attesa: nessuna nuova email (una richiesta = una app = un download)
@@ -365,7 +368,7 @@ async function create(req, env, ctx, url, ip, opts) {
 
   // tempo di attesa deciso dal titolare: con una richiesta ancora in attesa (anche di un'altra app) non se ne inviano altre
   // finché il venditore non risponde o finché non passa il tempo
-  if (s.approval && opts.waitMin) {
+  if (s.approval && opts.waitMin && !trusted) {
     const W = await opts.waitMin();
     if (W > 0) {
       const p = await env.DB.prepare("SELECT created FROM store_requests WHERE did = ? AND status = 'pending' AND created > ? ORDER BY created DESC LIMIT 1").bind(did, t - W * 60e3).first();
@@ -375,7 +378,7 @@ async function create(req, env, ctx, url, ip, opts) {
   const c = await env.DB.prepare("SELECT (SELECT COUNT(*) FROM store_requests WHERE ip = ? AND created > ?) AS byIp, (SELECT COUNT(*) FROM store_requests WHERE did = ? AND created > ?) AS byDid, (SELECT COUNT(*) FROM store_requests WHERE status = 'pending' AND created > ?) AS pend")
     .bind(ip, t - 3600e3, did, t - 3600e3, t - REQ_TTL).first();
   const lim = s.approval ? PER_HOUR : PER_HOUR * 10;
-  if (c.byIp >= lim || c.byDid >= lim) return json({ error: 'Hai già inviato molte richieste: attendi la risposta del venditore' }, 429);
+  if (!trusted && (c.byIp >= lim || c.byDid >= lim)) return json({ error: 'Hai già inviato molte richieste: attendi la risposta del venditore' }, 429);
   if (s.approval && c.pend >= MAX_PENDING) return json({ error: 'Troppe richieste in attesa, riprova più tardi' }, 503);
 
   const cf = req.cf || {};
@@ -538,12 +541,13 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       const byDid = new Map();
       for (const r of [...requests].sort((a, b) => b.created - a.created)) {
         let d = byDid.get(r.did);
-        if (!d) { d = { did: r.did, device: r.device, note: r.note, country: r.country, last: r.created, requests: 0, downloads: 0, pending: 0, blocked: settings.blocked.includes(r.did) }; byDid.set(r.did, d); }
+        if (!d) { d = { did: r.did, device: r.device, note: r.note, country: r.country, last: r.created, requests: 0, downloads: 0, pending: 0, blocked: settings.blocked.includes(r.did), trusted: settings.trusted.includes(r.did) }; byDid.set(r.did, d); }
         if (!d.device && r.device) d.device = r.device;
         if (!d.note && r.note) d.note = r.note;
         d.requests++; if (r.uses > 0) d.downloads++; if (r.status === 'pending') d.pending++;
       }
       for (const did of settings.blocked) if (!byDid.has(did)) byDid.set(did, { did, device: '', note: '', country: '', last: 0, requests: 0, downloads: 0, pending: 0, blocked: true });
+      for (const did of settings.trusted) if (!byDid.has(did)) byDid.set(did, { did, device: '', note: '', country: '', last: 0, requests: 0, downloads: 0, pending: 0, blocked: false, trusted: true });
       const devices = [...byDid.values()].sort((a, b) => (+b.blocked - +a.blocked) || (b.last - a.last));
       return json({
         settings,
@@ -603,6 +607,7 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       if (blocked) {
         if (s.blocked.length >= MAX_BLOCKED) throw new StoreErr(400, 'Troppi dispositivi bloccati');
         s.blocked.unshift(did);
+        s.trusted = s.trusted.filter((d) => d !== did); // bloccato e senza limiti insieme non ha senso
       }
       await putStoreSettings(env, s);
       let revoked = 0;
@@ -614,6 +619,25 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       const name = await env.DB.prepare('SELECT device, note FROM store_requests WHERE did = ? ORDER BY created DESC LIMIT 1').bind(did).first();
       await log(env, blocked ? 'off' : 'on', `${who}: Store — dispositivo ${blocked ? 'bloccato' : 'sbloccato'} · ${(name && name.device) || 'dispositivo'}${name && name.note ? ' (' + name.note + ')' : ''}`, ip);
       return json({ ok: true, did, blocked, revoked, settings: s });
+    }
+    if (path === '/store/device/trust' && m === 'POST') {
+      // «Senza limiti»: eccezione del titolare per un dispositivo che fa tante richieste legittime (installatore, negozio)
+      if (by) throw new StoreErr(403, 'Le eccezioni ai limiti le decide il titolare');
+      const b = await readBody(req);
+      const did = str(b.did, 64);
+      if (!DID_RE.test(did)) throw new StoreErr(400, 'Dispositivo non valido');
+      const s = await getStoreSettings(env);
+      const trusted = b.trusted !== false;
+      s.trusted = s.trusted.filter((d) => d !== did);
+      if (trusted) {
+        if (s.trusted.length >= MAX_BLOCKED) throw new StoreErr(400, 'Troppi dispositivi senza limiti');
+        s.trusted.unshift(did);
+        s.blocked = s.blocked.filter((d) => d !== did);
+      }
+      await putStoreSettings(env, s);
+      const name = await env.DB.prepare('SELECT device, note FROM store_requests WHERE did = ? ORDER BY created DESC LIMIT 1').bind(did).first();
+      await log(env, 'settings', `${who}: Store — dispositivo ${trusted ? 'senza limiti' : 'di nuovo con i limiti normali'} · ${(name && name.device) || 'dispositivo'}${name && name.note ? ' (' + name.note + ')' : ''}`, ip);
+      return json({ ok: true, did, trusted, settings: s });
     }
     const dm = path.match(/^\/store\/([A-Za-z0-9_-]{12,40})\/(approve|deny|revoke)$/);
     if (dm && m === 'POST') {

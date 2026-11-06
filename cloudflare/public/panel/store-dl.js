@@ -133,7 +133,7 @@
     const by = new Map();
     for (const r of [...DM.requests].sort((a, b) => b.created - a.created)) {
       let d = by.get(r.did);
-      if (!d) { d = { did: r.did, device: r.device, note: r.note, country: r.country, last: r.created, requests: 0, downloads: 0, pending: 0, blocked: DM.settings.blocked.includes(r.did) }; by.set(r.did, d); }
+      if (!d) { d = { did: r.did, device: r.device, note: r.note, country: r.country, last: r.created, requests: 0, downloads: 0, pending: 0, blocked: DM.settings.blocked.includes(r.did), trusted: (DM.settings.trusted || []).includes(r.did) }; by.set(r.did, d); }
       d.requests++; if (r.uses) d.downloads++; if (r.status === 'pending') d.pending++;
     }
     for (const did of DM.settings.blocked) if (!by.has(did)) by.set(did, { did, device: '', note: '', country: '', last: 0, requests: 0, downloads: 0, pending: 0, blocked: true });
@@ -145,9 +145,14 @@
     if (path === '/settings') { Object.assign(DM.settings, body); return { settings: DM.settings }; }
     if (path === '/sms/test') return { ok: true, to: '+39•••567' };
     if (path === '' && method === 'DELETE') { DM.requests = DM.requests.filter((r) => r.status === 'pending'); return { ok: true }; }
+    if (path === '/device/trust') {
+      DM.settings.trusted = (DM.settings.trusted || []).filter((d) => d !== body.did);
+      if (body.trusted !== false) { DM.settings.trusted.unshift(body.did); DM.settings.blocked = DM.settings.blocked.filter((d) => d !== body.did); }
+      return { ok: true, did: body.did, trusted: body.trusted !== false, settings: DM.settings };
+    }
     if (path === '/device/block') {
       DM.settings.blocked = DM.settings.blocked.filter((d) => d !== body.did);
-      if (body.blocked !== false) { DM.settings.blocked.unshift(body.did); DM.requests.forEach((r) => { if (r.did === body.did && (r.status === 'pending' || r.status === 'approved')) Object.assign(r, { status: 'revoked', code: '', decided: Date.now() }); }); }
+      if (body.blocked !== false) { DM.settings.trusted = (DM.settings.trusted || []).filter((d) => d !== body.did); DM.settings.blocked.unshift(body.did); DM.requests.forEach((r) => { if (r.did === body.did && (r.status === 'pending' || r.status === 'approved')) Object.assign(r, { status: 'revoked', code: '', decided: Date.now() }); }); }
       return { ok: true, did: body.did, blocked: body.blocked !== false, settings: DM.settings };
     }
     const m = path.match(/^\/(.+)\/(approve|deny|revoke)$/);
@@ -182,9 +187,10 @@
   const DEVI = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>';
   function devItem(d) {
     const meta = [d.note, d.country].filter(Boolean).map(esc).join(' · ');
-    const nums = [`${d.requests} ${d.requests === 1 ? 'richiesta' : 'richieste'}`, `${d.downloads} download`, d.pending ? `${d.pending} in attesa` : ''].filter(Boolean).join(' · ');
+    const nums = [`${d.requests} ${d.requests === 1 ? 'richiesta' : 'richieste'}`, `${d.downloads} download`, d.pending ? `${d.pending} in attesa` : '', d.trusted ? 'senza limiti' : ''].filter(Boolean).join(' · ');
     return `<div class="sd-dev${d.blocked ? ' blk' : ''}" data-did="${esc(d.did)}"><div class="ic" style="color:${d.blocked ? 'var(--bad)' : 'var(--mut)'}">${DEVI}</div>
       <div class="tx"><b>${esc(d.device || 'Dispositivo sconosciuto')}</b>${meta ? `<small>${meta}</small>` : ''}<small>${nums}${d.last ? ' · ultima ' + esc(ago(d.last)) : ''}${d.blocked ? ' · <b style="color:var(--bad);display:inline;font-size:12px">bloccato</b>' : ''}</small></div>
+      ${D.role !== 'agent' ? `<div class="tog${d.trusted ? ' on' : ''}" data-sdt="1" role="switch" aria-checked="${d.trusted ? 'true' : 'false'}" tabindex="0" title="Eccezione: niente tetto orario né tempo di attesa (per installatori e negozi che fanno tante richieste legittime)"><div><b>Senza limiti</b></div><i></i></div>` : ''}
       <div class="tog${d.blocked ? ' on' : ''}" data-sdb="1" role="switch" aria-checked="${d.blocked ? 'true' : 'false'}" tabindex="0"><div><b>Blocca dispositivo</b></div><i></i></div></div>`;
   }
   function badge() {
@@ -279,6 +285,8 @@
   V.addEventListener('click', async (e) => {
     const tg = e.target.closest('[data-sdb]');
     if (tg) { await blockDevice(tg); return; }
+    const tt = e.target.closest('[data-sdt]');
+    if (tt) { await trustDevice(tt); return; }
     const b = e.target.closest('[data-sda]');
     if (!b) return;
     const row = b.closest('[data-id]'), id = row.dataset.id, act = b.dataset.sda;
@@ -294,6 +302,19 @@
     await refresh();
   });
   V.addEventListener('keydown', (e) => { const tg = e.target.closest && e.target.closest('[data-sdb]'); if (tg && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); blockDevice(tg); } });
+  V.addEventListener('keydown', (e) => { const tt = e.target.closest && e.target.closest('[data-sdt]'); if (tt && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); trustDevice(tt); } });
+  /** eccezione ai limiti dello Store per un dispositivo (solo titolare) */
+  async function trustDevice(tg) {
+    const row = tg.closest('[data-did]'), did = row.dataset.did, trusted = !tg.classList.contains('on');
+    const name = row.querySelector('.tx b') ? row.querySelector('.tx b').textContent : 'questo dispositivo';
+    if (trusted && !(await ask('Togliere i limiti a questo dispositivo?', `<b>${esc(name)}</b> potrà inviare quante richieste vuole, senza tetto orario né tempo di attesa tra una e l'altra. Ogni download resta comunque da autorizzare. Potrai rimettere i limiti quando vuoi.`, 'Senza limiti'))) return;
+    tg.classList.toggle('on', trusted); tg.setAttribute('aria-checked', trusted ? 'true' : 'false');
+    try {
+      await sApi('POST', '/device/trust', { did, trusted });
+      toast(trusted ? 'Dispositivo senza limiti' : 'Limiti normali ripristinati');
+    } catch (err) { toast(err.message, 1); }
+    await refresh();
+  }
   async function blockDevice(tg) {
     const row = tg.closest('[data-did]'), did = row.dataset.did, blocked = !tg.classList.contains('on');
     const name = row.querySelector('.tx b') ? row.querySelector('.tx b').textContent : 'questo dispositivo';
