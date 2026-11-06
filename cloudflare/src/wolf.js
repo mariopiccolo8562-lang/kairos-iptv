@@ -56,18 +56,29 @@ async function sockFetch(url, { method, headers, body }) {
     if (data) await Promise.race([w.write(data), timer]);
     w.releaseLock();
     const rd = sock.readable.getReader();
-    let buf = new Uint8Array(0), hEnd = -1, meta = null;
+    const parts = []; let tot = 0, hEnd = -1, meta = null, head8 = new Uint8Array(0), tail = new Uint8Array(0);
     for (;;) {
       const { value, done } = await Promise.race([rd.read(), timer]);
-      if (value && value.length) { const n = new Uint8Array(buf.length + value.length); n.set(buf); n.set(value, buf.length); buf = n; }
-      if (buf.length > 40e6) throw new Error('risposta troppo grande');
-      if (hEnd < 0) { for (let i = 0; i + 3 < buf.length; i++) if (buf[i] === 13 && buf[i + 1] === 10 && buf[i + 2] === 13 && buf[i + 3] === 10) { hEnd = i; break; } }
-      if (hEnd >= 0 && !meta) meta = parseHead(new TextDecoder('latin1').decode(buf.subarray(0, hEnd)));
-      if (meta && meta.done(buf.subarray(hEnd + 4))) break;
+      if (value && value.length) {
+        parts.push(value); tot += value.length;
+        if (tot > 40e6) throw new Error('risposta troppo grande');
+        if (hEnd < 0) {
+          const scan = new Uint8Array(head8.length + value.length); scan.set(head8); scan.set(value, head8.length);
+          for (let i = 0; i + 3 < scan.length; i++) if (scan[i] === 13 && scan[i + 1] === 10 && scan[i + 2] === 13 && scan[i + 3] === 10) { hEnd = tot - scan.length + i; break; }
+          head8 = hEnd < 0 ? (scan.length > 65536 ? (() => { throw new Error('intestazioni troppo lunghe'); })() : scan) : head8;
+          if (hEnd >= 0) { const all = cat(parts, tot); meta = parseHead(new TextDecoder('latin1').decode(all.subarray(0, hEnd))); parts.length = 0; parts.push(all); }
+        }
+        const t = new Uint8Array(Math.min(7, tail.length + value.length)); const src = cat([tail, value], tail.length + value.length); t.set(src.subarray(src.length - t.length)); tail = t;
+      }
+      if (meta) {
+        const bodyLen = tot - hEnd - 4;
+        if (meta.status === 204 || meta.status === 304) break;
+        if (meta.chunked ? bodyLen >= 5 && endsZero(tail) : meta.len >= 0 && bodyLen >= meta.len) break;
+      }
       if (done) break;
     }
     if (!meta) throw new Error('risposta non valida');
-    let b = buf.subarray(hEnd + 4);
+    let b = cat(parts, tot).subarray(hEnd + 4);
     if (meta.chunked) b = unchunk(b); else if (meta.len >= 0) b = b.subarray(0, meta.len);
     meta.headers.delete('transfer-encoding'); meta.headers.delete('content-length');
     const nobody = meta.status === 204 || meta.status === 304 || method === 'HEAD';
@@ -80,16 +91,16 @@ function parseHead(t) {
   const headers = new Headers();
   for (const l of lines.slice(1)) { const i = l.indexOf(':'); if (i > 0) headers.append(l.slice(0, i).trim(), l.slice(i + 1).trim()); }
   const chunked = /chunked/i.test(headers.get('transfer-encoding') || ''), cl = headers.get('content-length'), len = !chunked && cl !== null ? +cl : -1;
-  const done = (b) => (st === 204 || st === 304) ? true : chunked ? endsChunked(b) : len >= 0 ? b.length >= len : false;
-  return { status: st, headers, chunked, len, done };
+  return { status: st, headers, chunked, len };
 }
-function endsChunked(b) { try { unchunk(b, true); return true; } catch { return false; } }
+function cat(parts, tot) { if (parts.length === 1 && parts[0].length === tot) return parts[0]; const r = new Uint8Array(tot); let o = 0; for (const p of parts) { r.set(p, o); o += p.length; } return r; }
+function endsZero(t) { const z = [48, 13, 10, 13, 10]; if (t.length < 5) return false; for (let i = 0; i < 5; i++) if (t[t.length - 5 + i] !== z[i]) return false; return t.length < 6 || t[t.length - 6] === 10; }
 function unchunk(b, strict) {
-  const out = []; let p = 0, tot = 0;
+  const out = [], dec = new TextDecoder(); let p = 0, tot = 0;
   for (;;) {
     let e = p; while (e + 1 < b.length && !(b[e] === 13 && b[e + 1] === 10)) e++;
     if (e + 1 >= b.length) { if (strict) throw new Error('incompleto'); break; }
-    const n = parseInt(new TextDecoder().decode(b.subarray(p, e)).split(';')[0].trim(), 16);
+    const n = parseInt(dec.decode(b.subarray(p, e)).split(';')[0].trim(), 16);
     if (!Number.isFinite(n)) throw new Error('chunk non valido');
     if (n === 0) break;
     if (e + 2 + n > b.length) { if (strict) throw new Error('incompleto'); out.push(b.subarray(e + 2)); tot += b.length - e - 2; break; }
@@ -205,12 +216,14 @@ function rowOut(x) {
     tgl: tg[1] !== undefined ? +tg[1] : null, tglLabel: (tg[2] || '').trim(), dns: unent(m3u),
   };
 }
-async function fetchLines(env, H, cfg, fresh) {
-  if (!fresh && mem.lines && Date.now() - mem.t < 15e3) return mem.lines;
-  const f = { draw: '1', start: '0', length: '-1', id: 'users', filter: '', reseller: '', 'search[value]': '', 'search[regex]': 'false', 'order[0][column]': '0', 'order[0][dir]': 'desc' };
+async function fetchLines(env, H, cfg, fresh, lim) {
+  if (!fresh && !lim && mem.lines && Date.now() - mem.t < 15e3) return mem.lines;
+  const f = { draw: '1', start: '0', length: lim ? String(lim) : '-1', id: 'users', filter: '', reseller: '', 'search[value]': '', 'search[regex]': 'false', 'order[0][column]': '0', 'order[0][dir]': 'desc' };
   COLS.forEach((c, i) => { f[`columns[${i}][data]`] = c; f[`columns[${i}][name]`] = c === 'expired' ? 'username' : c; f[`columns[${i}][searchable]`] = 'true'; f[`columns[${i}][orderable]`] = 'true'; });
   const j = await wfJson(env, H, cfg, '/lines/data', f);
-  mem.lines = (j.data || []).map(rowOut); mem.t = Date.now();
+  const out = (j.data || []).map(rowOut);
+  if (lim) return out;
+  mem.lines = out; mem.t = Date.now();
   return mem.lines;
 }
 async function credits(env, H, cfg) {
@@ -293,7 +306,7 @@ async function routes(req, env, path, who, ip, H) {
     const cfg = { url, user, pass, dns };
     mem = { jar: null, lines: null, t: 0 };
     await login(env, H, cfg);
-    if (!dns) { const l = await fetchLines(env, H, cfg, true).catch(() => []); cfg.dns = (l.find((x) => x.dns) || {}).dns || ''; }
+    if (!dns) { const l = await fetchLines(env, H, cfg, true, 20).catch(() => []); cfg.dns = (l.find((x) => x.dns) || {}).dns || ''; }
     await setRow(env, 'wolf', await H.seal(env, cfg));
     await H.log(env, 'edit', `${who}: pannello WOLF collegato (${url})`, ip);
     return json({ ok: true, dns: cfg.dns });
