@@ -10,6 +10,7 @@ const macNorm = (v) => { v = String(v || '').trim(); const h = v.replace(/[^0-9A
 const macVariants = (v) => { const h = String(v || '').replace(/[^0-9A-Fa-f]/g, ''); if (h.length !== 12 || !/^[0-9A-Fa-f:.\s-]+$/.test(String(v || '').trim())) return [v]; const u = h.toUpperCase(), l = h.toLowerCase(), c = (x, sp) => x.match(/../g).join(sp); return [...new Set([v, c(u, ':'), c(l, ':'), u, l, c(u, '-'), c(l, '-')])]; }; // OrbixPlay a volte salva il MAC in un'altra scrittura
 async function call(env, H, path, query) {
   if (!env.ORBIX_KEY) throw new H.HttpErr(400, 'OrbixPlay non è collegato (segreto ORBIX_KEY)');
+  const alt = query && query.hostUrl; if (query && 'hostUrl' in query) delete query.hostUrl; // indirizzo del DNS, se OrbixPlay non riconosce il codice host
   const ids = path === '/add-playlist' && query && query.deviceid ? macVariants(query.deviceid) : [null];
   let r, j, why = '';
   for (const id of ids) {
@@ -21,6 +22,7 @@ async function call(env, H, path, query) {
     why = H.str(String(j.error || j.message || ''), 160);
     if (!/device not found/i.test(why)) break;
   }
+  if (/host code not found/i.test(why)) { if (alt && query.host !== alt) { query.host = alt; return call(env, H, path, query); } throw new H.HttpErr(400, 'OrbixPlay non riconosce il «codice host» di questo DNS: correggilo (o toglilo) in Impostazioni → App e aggiornamenti → DNS di OrbixPlay'); }
   if (/device not found/i.test(why)) throw new H.HttpErr(400, 'OrbixPlay non conosce questo dispositivo: l\'app OrbixPlay deve essere stata aperta almeno una volta su quel dispositivo e l\'ID deve essere quello che mostra l\'app' + (ids.length > 1 ? ` (provato anche come ${ids.slice(1, 3).join(' e ')})` : '') + '. Se sul sito di Orbix il dispositivo c\'è, aggiungilo prima lì al tuo account');
   const MSG = { 400: 'Dati non accettati da OrbixPlay', 401: 'Chiave OrbixPlay non valida', 403: 'Abbonamento OrbixPlay scaduto o posti finiti', 404: 'Non trovato su OrbixPlay' };
   throw new H.HttpErr(r.status >= 500 ? 502 : 400, (MSG[r.status] || `Errore di OrbixPlay (${r.status})`) + (why ? ' — ' + why : ''));
@@ -65,7 +67,7 @@ export async function oxpRoutes(req, env, path, who, ip, H, ag = null) {
   }
   if (path === '/oxp/playlists' && m === 'POST') {
     const b = await H.readJSON(req, 2048);
-    const q = { deviceid: macNorm(str(b.device, 64)), playlistName: str(b.name, 40) || 'Kairos', username: str(b.user, 120), password: typeof b.pass === 'string' ? b.pass.slice(0, 200) : '', host: str(b.host, 300), notes: str(b.notes, 60) };
+    const q = { deviceid: macNorm(str(b.device, 64)), playlistName: str(b.name, 40) || 'Kairos', username: str(b.user, 120), password: typeof b.pass === 'string' ? b.pass.slice(0, 200) : '', host: str(b.host, 300), hostUrl: str(b.hostUrl, 300), notes: str(b.notes, 60) };
     if (!/^[A-Za-z0-9:._-]{4,64}$/.test(q.deviceid)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
     if (macShort(q.deviceid)) throw new HttpErr(400, `ID incompleto: ${q.deviceid} ha ${q.deviceid.split(/[:.-]/).length} coppie, un ID OrbixPlay ne ha 6 (es. 00:1A:79:AA:BB:CC). Controllalo nell'app OrbixPlay`);
     if (!q.username || !q.password || !q.host) throw new HttpErr(400, 'Scrivi DNS, utente e password della linea');

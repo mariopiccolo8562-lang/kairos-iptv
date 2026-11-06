@@ -450,6 +450,7 @@ function xtreamLines(pls) {
 const macVariants = (v) => { const h = String(v || '').replace(/[^0-9A-Fa-f]/g, ''); if (h.length !== 12 || !/^[0-9A-Fa-f:.\s-]+$/.test(String(v || '').trim())) return [v]; const u = h.toUpperCase(), l = h.toLowerCase(), c = (x, sp) => x.match(/../g).join(sp); return [...new Set([v, c(u, ':'), c(l, ':'), u, l, c(u, '-'), c(l, '-')])]; }; // OrbixPlay a volte salva il MAC in un'altra scrittura
 async function orbixCall(env, path, query) {
   if (!env.ORBIX_KEY) throw new HttpErr(400, 'OrbixPlay non è collegato: aggiungi il segreto ORBIX_KEY su GitHub (vedi la guida in Impostazioni)');
+  const alt = query && query.hostUrl; if (query && 'hostUrl' in query) delete query.hostUrl; // indirizzo del DNS, se OrbixPlay non riconosce il codice host
   const ids = path === '/add-playlist' && query && query.deviceid ? macVariants(query.deviceid) : [null];
   let r, j, why = '';
   for (const id of ids) {
@@ -460,6 +461,7 @@ async function orbixCall(env, path, query) {
     why = str(j.error || j.message || '', 160);
     if (!/device not found/i.test(why)) break;
   }
+  if (/host code not found/i.test(why)) { if (alt && query.host !== alt) { query.host = alt; return orbixCall(env, path, query); } throw new HttpErr(400, 'OrbixPlay non riconosce il «codice host» di questo DNS: correggilo (o toglilo) in Impostazioni → App e aggiornamenti → DNS di OrbixPlay'); }
   const MSG = { 400: 'Dati non accettati da OrbixPlay', 401: 'Chiave OrbixPlay non valida', 403: 'Abbonamento OrbixPlay scaduto o posti finiti', 404: 'Dispositivo non trovato su OrbixPlay: controlla l\'ID (il cliente deve prima aprire l\'app OrbixPlay)' };
   throw new HttpErr(r.status === 404 || r.status === 403 || r.status === 400 ? 400 : 502, (MSG[r.status] || 'Errore di OrbixPlay') + (why ? ' — ' + why : ''));
 }
@@ -477,7 +479,7 @@ async function orbixSend(env, d, b, who, ip, agentLines, allow) {
   if (!list.length) throw new HttpErr(400, agentLines ? 'Nessun DNS di OrbixPlay disponibile per te: chiedilo a chi ti gestisce' : 'Imposta prima un DNS (OrbixPlay in APP Store, oppure in «Server DNS»)');
   const di = Math.max(0, Math.min(list.length - 1, parseInt(b.dns, 10) || 0)), dns = list[di];
   const old = orbixOf(d);
-  const oq = { deviceid: orbixId, playlistName: str(s.brand || 'Kairos', 40), username, password, host: dns.code || dns.host, notes: str(d.name || d.code, 60) };
+  const oq = { deviceid: orbixId, playlistName: str(s.brand || 'Kairos', 40), username, password, host: dns.code || dns.host, hostUrl: dns.code ? dns.host : '', notes: str(d.name || d.code, 60) };
   const j = await orbixCall(env, '/add-playlist', oq);
   orbixId = oq.deviceid;
   const pid = j.playlist_id ?? (j.playlist && j.playlist.playlist_id) ?? j.id;
@@ -583,7 +585,7 @@ async function extListsRoutes(req, env, path, who, ip, ag) {
       const list = ag ? agOrbList(s, ag.orbDns) : orbixDnsList((s.playersCfg || {}).orbix, await dnsList(env));
       if (!list.length) throw new HttpErr(400, ag ? 'Nessun DNS di OrbixPlay disponibile per te: chiedilo a chi ti gestisce' : 'Imposta prima un DNS di OrbixPlay');
       const dns = list[Math.max(0, Math.min(list.length - 1, parseInt(b.dns, 10) || 0))];
-      const oq = { deviceid: orbixId, playlistName: str(s.brand || 'Kairos', 40), username, password, host: dns.code || dns.host, notes: name || username };
+      const oq = { deviceid: orbixId, playlistName: str(s.brand || 'Kairos', 40), username, password, host: dns.code || dns.host, hostUrl: dns.code ? dns.host : '', notes: name || username };
       const j = await orbixCall(env, '/add-playlist', oq);
       orbixId = oq.deviceid;
       const pid = j.playlist_id ?? (j.playlist && j.playlist.playlist_id) ?? j.id;
