@@ -22,7 +22,7 @@
   TITLES.mxp = 'Pannello MaxPlayer';
 
   const isAg = () => D.role === 'agent';
-  const M = { accs: null, acc: '', tab: 'users', ov: null, users: null, doms: null, agents: null, q: '', limit: 100, show: new Set(), busy: false, err: '' };
+  const M = { accs: null, acc: '', tab: 'users', ov: null, users: null, doms: null, agents: null, q: '', limit: 100, show: new Set(), busy: false, err: '', sel: new Set(), stOn: false };
   const copy = (t, w) => navigator.clipboard.writeText(t).then(() => toast(w + ' copiato'), () => toast('Copia non consentita dal browser', 1));
   const gen = (n) => { const a = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const r = crypto.getRandomValues(new Uint8Array(n)); return [...r].map((x) => a[x % a.length]).join(''); };
   const P = (p) => `/admin/mxp/a/${M.acc}${p}`;
@@ -43,7 +43,7 @@
     M.busy = false; show();
   }
   async function loadAgents() { try { M.agents = (await api('GET', P('/agents'))).agents || []; } catch (e) { M.agents = []; M.err = e.message; } }
-  function switchAcc(id) { M.acc = id; M.ov = M.users = M.doms = M.agents = null; M.q = ''; M.limit = 100; M.show.clear(); loadAll(); }
+  function switchAcc(id) { M.acc = id; M.sel.clear(); M.ov = M.users = M.doms = M.agents = null; M.q = ''; M.limit = 100; M.show.clear(); loadAll(); }
 
   function connectForm() {
     return `<div class="wf-f" style="margin-top:12px;grid-template-columns:1fr 2fr">
@@ -67,8 +67,9 @@
     if (!M.users) return `<p class="mut">${M.busy ? 'Carico i clienti da MaxPlayer…' : 'Nessun dato'}</p>`;
     const list = filtered(), shown = list.slice(0, M.limit);
     return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="inp" id="mxQ" placeholder="Cerca utente, ID, linea o DNS" value="${esc(M.q)}" style="max-width:300px;margin:0"><span class="mut" style="font-size:12.5px">${list.length} clienti</span></div>
+      ${window.KXTools ? KXTools.bar('mx', list.filter((u) => M.sel.has(String(u.id))).length, list.length, [['msg', 'Messaggio ai clienti']]) + (M.stOn ? statsHtml() : '') : ''}
       <div style="margin-top:8px">${shown.map((u) => `<div class="mx-row" data-id="${esc(u.id)}">
-        <div><span class="k">ID</span>${esc(u.id)}</div>
+        <div><span class="k">${window.KXTools ? KXTools.ck('mx', u.id, M.sel.has(String(u.id))) : ''}ID</span>${esc(u.id)}</div>
         <div><span class="k">Utente app</span><b class="mono">${esc(u.username) || '—'}</b>${u.email ? `<br><small class="mut">${esc(u.email)}</small>` : ''}</div>
         <div><span class="k">Liste</span>${u.lists.length ? u.lists.map((l) => { const k = u.id + '|' + l.id, sh = M.show.has(k); return `<div class="mx-l" data-l="${esc(l.id)}">${window.KXOnline ? KXOnline.slot((l.ssl ? 'https://' : 'http://') + l.fqdn + (l.port ? ':' + l.port : ''), l.user, l.pass) : ''}<span class="wf-tag g">${esc(l.name || 'Lista')}</span><span class="mono" title="${esc(l.fqdn)}">${esc(domName(l.dom) || l.fqdn)}</span><span class="mono"><b>${esc(l.user)}</b></span><span class="mono">${sh ? esc(l.pass) : '••••••'}</span><button data-a="eye">${sh ? 'Nascondi' : 'Mostra'}</button><button data-a="cp">⧉</button><button data-a="le">Modifica</button><button data-a="ld" style="color:#ff8f8f">Togli</button></div>`; }).join('') : '<span class="mut">nessuna lista</span>'}</div>
         <div class="wf-act"><button class="btn sm" data-a="la">+ Lista</button><button class="btn sm" data-a="dv">Dispositivi</button><button class="btn sm" data-a="pw">Password app</button><button class="btn sm ghost" data-a="del" style="color:#ff8f8f">Elimina</button></div></div>`).join('')}</div>
@@ -125,6 +126,19 @@
     if ($('#mxMore')) $('#mxMore').onclick = () => { M.limit += 100; render(); };
     V.querySelectorAll('.mx-row [data-a]').forEach((b) => { b.onclick = () => userAct(b.dataset.a, b.closest('.mx-row').dataset.id, (b.closest('.mx-l') || {}).dataset ? b.closest('.mx-l') && b.closest('.mx-l').dataset.l : ''); });
     V.querySelectorAll('.mx-ag [data-a]').forEach((b) => { b.onclick = () => agentAct(b.dataset.a, b.closest('.mx-ag').dataset.id); });
+    if (window.KXTools && M.tab === 'users' && M.users) KXTools.bind(V, 'mx', M.sel, () => filtered().map((u) => u.id), { csv: exportCsv, stats: () => { M.stOn = !M.stOn; render(); },
+      msg: () => { const S = selU(); KXTools.msg(KXTools.devsFor(S.flatMap((u) => u.lists.map((l) => l.user))), S.length); } }, render);
+  }
+  const selU = () => filtered().filter((u) => M.sel.has(String(u.id)));
+  function statsHtml() {
+    const U = M.users || [], L = U.flatMap((u) => u.lists), o = M.ov || {};
+    return KXTools.stats([['Clienti', U.length], ['Liste', L.length], ['Clienti senza liste', U.filter((u) => !u.lists.length).length, 'w'], ['Con più liste', U.filter((u) => u.lists.length > 1).length],
+      ['Posti liberi', o.cap ? o.cap.free : '—', 'g'], ['DNS', (M.doms || []).length]], [['Liste per DNS', KXTools.count(L, (l) => domName(l.dom) || l.fqdn)]]);
+  }
+  function exportCsv() {
+    const S = selU(), U = S.length ? S : filtered(), rows = U.flatMap((u) => (u.lists.length ? u.lists : [{}]).map((l) => ({ u, l })));
+    KXTools.csv('maxplayer-clienti', [['ID', (r) => r.u.id], ['Utente app', (r) => r.u.username], ['Email', (r) => r.u.email], ['Lista', (r) => r.l.name], ['DNS', (r) => (r.l.dom ? domName(r.l.dom) : '') || r.l.fqdn],
+      ['Utente linea', (r) => r.l.user], ['Password linea', (r) => r.l.pass]], rows);
   }
   async function addAcc() {
     const ok = await ask('Collega un altro account MaxPlayer', `<p class="mut" style="margin:0 0 6px;font-size:12.5px">Su my.maxplayer.tv: API pubblica → Accesso → Crea chiave.</p>${connectForm().replace(/<div style="display:flex;gap:8px;margin-top:12px"><button class="btn" id="mxAdd">Collega account<\/button><\/div>/, '')}`, 'Collega');

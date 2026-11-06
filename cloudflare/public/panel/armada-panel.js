@@ -32,7 +32,7 @@
   }
   TITLES.armada = 'Pannello Armada';
 
-  const A = { st: null, tab: 'new', pk: null, lines: null, mags: null, res: null, F: { q: '', f: '' }, show: new Set(), last: null,
+  const A = { st: null, tab: 'new', pk: null, lines: null, mags: null, res: null, F: { q: '', f: '' }, show: new Set(), last: null, sel: new Set(), vis: [], stOn: false,
     form: { type: 'm3u', sub: 12, htime: 24, pack: '', mac: '', country: '', adult: false, notes: '' } };
   const DAY = 864e5, fmtD = (t) => (t ? new Date(t).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
   const left = (t) => { if (!t) return ''; const d = Math.ceil((t - Date.now()) / DAY); return d < 0 ? `scaduta da ${-d} g` : d === 0 ? 'scade oggi' : `tra ${d} g`; };
@@ -120,11 +120,12 @@
     const st = (x) => (!x.enabled ? 'off' : x.exp && x.exp < now ? 'exp' : x.trial ? 'trial' : x.exp && x.exp - now < 7 * DAY ? 'soon' : 'ok');
     const FL = [['', 'Tutte'], ['ok', 'Attive'], ['soon', 'In scadenza'], ['exp', 'Scadute'], ['trial', 'Prova'], ['off', 'Disattivate']];
     const list = L.filter((x) => (!F.f || st(x) === F.f) && (!q || [x.username, x.mac, x.notes, x.owner, x.isp, x.country, x.by].join(' ').toLowerCase().includes(q)));
+    A.vis = list.map((x) => (kind === 'lines' ? 'l' : 'm') + x.id);
     const TAG = { ok: ['Attiva', ''], soon: ['In scadenza', 'w'], exp: ['Scaduta', 'b'], trial: ['Prova', 'w'], off: ['Disattivata', 'g'] };
     const row = (x) => {
       const t = TAG[st(x)], id = kind === 'lines' ? 'l' + x.id : 'm' + x.id, vis = A.show.has(id), link = kind === 'lines' ? m3u(x.username, x.password) : '';
       return `<div class="ar-row">
-        <div>${kind === 'lines' ? `<span class="k">Utente</span><div class="ar-v"><span class="mono">${esc(x.username)}</span><button data-arc="u" data-ari="${x.id}" title="Copia">⧉</button></div><span class="k" style="margin-top:4px">Password</span><div class="ar-v"><span class="mono">${vis ? esc(x.password) : '••••••••'}</span><button data-areye="${id}" title="Mostra / nascondi">👁</button><button data-arc="p" data-ari="${x.id}" title="Copia">⧉</button></div>`
+        <div>${window.KXTools ? KXTools.ck('ar', id, A.sel.has(id)) : ''}${kind === 'lines' ? `<span class="k">Utente</span><div class="ar-v"><span class="mono">${esc(x.username)}</span><button data-arc="u" data-ari="${x.id}" title="Copia">⧉</button></div><span class="k" style="margin-top:4px">Password</span><div class="ar-v"><span class="mono">${vis ? esc(x.password) : '••••••••'}</span><button data-areye="${id}" title="Mostra / nascondi">👁</button><button data-arc="p" data-ari="${x.id}" title="Copia">⧉</button></div>`
           : `<span class="k">MAC</span><div class="ar-v"><span class="mono">${esc(x.mac)}</span><button data-arc="m" data-ari="${x.id}" title="Copia">⧉</button></div>`}</div>
         <div><span class="k">Scadenza</span>${esc(fmtD(x.exp))}<br><span class="mut" style="font-size:12px">${esc(left(x.exp))}</span></div>
         <div><span class="ar-tag ${t[1]}">${t[0]}</span>${x.trial && st(x) !== 'trial' ? '<span class="ar-tag w">prova</span>' : ''}<br><span class="mut" style="font-size:12px">${x.maxConn ? x.maxConn + ' conn.' : ''}${x.country ? ' · ' + esc(x.country) : ''}</span></div>
@@ -134,6 +135,7 @@
     const cnt = (k) => L.filter((x) => !k || st(x) === k).length;
     return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><input class="inp" id="arQ" placeholder="Cerca ${kind === 'lines' ? 'utente' : 'MAC'}, note${isAg() ? '' : ', reseller, agente'}…" value="${esc(F.q)}" style="flex:1;min-width:220px;margin:0"></div>
       <div class="filters" style="margin:0 0 6px">${FL.map(([k, l]) => `<button class="fchip ${F.f === k ? 'on' : ''}" data-arf="${k}">${l}<span>${cnt(k)}</span></button>`).join('')}</div>
+      ${window.KXTools ? KXTools.bar('ar', A.vis.filter((k) => A.sel.has(k)).length, list.length, [['ren', 'Rinnova', 'pri'], ['on', 'Attiva'], ['off', 'Disattiva'], ...(kind === 'lines' ? [['msg', 'Messaggio ai clienti']] : [])]) + (A.stOn ? statsHtml(L, st) : '') : ''}
       ${list.length ? list.slice(0, 500).map(row).join('') : `<p class="mut" style="padding:12px 0">${L.length ? 'Nessuna con questi filtri.' : 'Ancora niente.'}</p>`}
       ${list.length > 500 ? `<p class="mut">Mostrate 500 su ${list.length}: usa la ricerca.</p>` : ''}`;
   }
@@ -160,7 +162,7 @@
     const y = window.scrollY;
     V.innerHTML = stateHtml() + (on ? `<div class="ar-tabs filters">${[['new', 'Nuova linea'], ['lines', 'Linee' + nL], ['mags', 'MAG' + nM], ...(isAg() ? [] : [['res', 'Sotto-reseller']])].map(([k, l]) => `<button class="fchip ${A.tab === k ? 'on' : ''}" data-artab="${k}">${l}</button>`).join('')}</div>` + body : '');
     window.scrollTo(0, y);
-    bind(V);
+    bind(V); bindTools(V);
   }
 
   function readForm() {
@@ -176,7 +178,7 @@
     if (!V.dataset.bound) { V.dataset.bound = '1'; for (const ev of ['input', 'change']) V.addEventListener(ev, (e) => e.stopPropagation()); } // non conta tra le «modifiche non salvate»
     $('#arRe') && ($('#arRe').onclick = () => loadState());
     $('#arCfg') && ($('#arCfg').onclick = async () => { try { await api('PUT', '/admin/settings', { armadaUrl: $('#arUrl').value.trim(), armadaDns: $('#arDns').value.trim() }); toast('Indirizzi salvati'); A.pk = A.lines = A.mags = A.res = null; await loadState(); loadTab(); } catch (e) { toast(e.message, 1); } });
-    $$('[data-artab]', V).forEach((b) => (b.onclick = () => { readForm(); A.tab = b.dataset.artab; A.F = { q: '', f: '' }; render(); loadTab(); }));
+    $$('[data-artab]', V).forEach((b) => (b.onclick = () => { readForm(); A.tab = b.dataset.artab; A.F = { q: '', f: '' }; A.sel.clear(); render(); loadTab(); }));
     $('#arReT') && ($('#arReT').onclick = () => loadTab(true));
     // nuova linea
     $$('#arType [data-t]').forEach((b) => (b.onclick = () => { readForm(); A.form.type = b.dataset.t; render(); }));
@@ -226,6 +228,45 @@
       try { await api('POST', '/admin/armada/toggle', { id: x.id, enabled: on }); x.enabled = on; toast(on ? 'Attivata' : 'Disattivata'); render(); } catch (e) { toast(e.message, 1); }
     }));
   }
+
+  /* azioni su più linee/MAG: solo quelle selezionate e visibili con i filtri attuali */
+  const selX = () => { const L = (A.tab === 'lines' ? A.lines : A.mags) || [], p = A.tab === 'lines' ? 'l' : 'm', V = new Set(A.vis); return L.filter((x) => V.has(p + x.id) && A.sel.has(p + x.id)); };
+  const who = (x) => x.username || x.mac;
+  function statsHtml(L, st) {
+    const now = Date.now(), c = (k) => L.filter((x) => st(x) === k).length;
+    return KXTools.stats([[A.tab === 'lines' ? 'Linee' : 'MAG', L.length], ['Attive', c('ok') + c('soon'), 'g'], ['Scadono in 7 giorni', c('soon'), 'w'],
+      ['Scadono in 30 giorni', L.filter((x) => x.enabled && x.exp && x.exp > now && x.exp - now < 30 * DAY).length, 'w'], ['Scadute', c('exp'), 'b'], ['Prove', c('trial')], ['Disattivate', c('off'), 'b'],
+      ['Create negli ultimi 30 giorni', L.filter((x) => x.created && now - x.created < 30 * DAY).length]],
+      [['Per reseller', KXTools.count(L, (x) => x.by || x.owner)], ['Per paese', KXTools.count(L.filter((x) => x.country), (x) => x.country)], ['Per operatore', KXTools.count(L.filter((x) => x.isp), (x) => x.isp)]]);
+  }
+  function exportCsv() {
+    const S = selX(), V = new Set(A.vis), p = A.tab === 'lines' ? 'l' : 'm', L = S.length ? S : ((A.tab === 'lines' ? A.lines : A.mags) || []).filter((x) => V.has(p + x.id));
+    const ln = A.tab === 'lines';
+    KXTools.csv(ln ? 'armada-linee' : 'armada-mag', [['ID', (x) => x.id], ...(ln ? [['Utente', (x) => x.username], ['Password', (x) => x.password]] : [['MAC', (x) => x.mac]]),
+      ['Scadenza', (x) => KXTools.day(x.exp)], ['Stato', (x) => (!x.enabled ? 'Disattivata' : x.exp && x.exp < Date.now() ? 'Scaduta' : 'Attiva')], ['Prova', (x) => (x.trial ? 'sì' : '')],
+      ['Connessioni', (x) => x.maxConn || ''], ['Paese', (x) => x.country], ['Ultima attività', (x) => x.lastActivity], ['Note', (x) => x.notes], ['Reseller', (x) => x.by || x.owner],
+      ...(ln ? [['Link M3U', (x) => m3u(x.username, x.password)]] : [])], L);
+  }
+  async function bulkRen() {
+    const S = selX(); if (!S.length) return;
+    const bd = A.st && A.st.budget;
+    const ok = await ask(`Rinnovare ${S.length} ${A.tab === 'lines' ? (S.length === 1 ? 'linea' : 'linee') : 'MAG'} su Armada?`, `<label class="lbl">Durata per tutte</label><select class="inp" id="abS">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select>
+      <p style="margin:12px 0 0;font-size:13.5px">Costa come <b>${S.length === 1 ? '1 rinnovo singolo' : S.length + ' rinnovi singoli'}</b>. ${bd ? `Usa i crediti del tuo tetto (ne restano ${fmtC(bd.left)} questo mese).` : A.st && A.st.reseller ? `Crediti disponibili: <b>${esc(A.st.reseller.credits)}</b>.` : ''}</p>
+      <p class="mut" style="font-size:12.5px;margin:6px 0 0">${S.slice(0, 12).map((x) => esc(who(x))).join(', ')}${S.length > 12 ? ` e altre ${S.length - 12}` : ''}</p>`, 'Rinnova tutte');
+    if (!ok) return;
+    const sub = +$('#abS').value;
+    await KXTools.run(S, async (x) => { const r = await api('POST', '/admin/armada/renew', x.mac && !x.username ? { type: 'mag', mac: x.mac, sub } : { type: 'm3u', username: x.username, password: x.password, sub }); if (r.exp) x.exp = r.exp; }, 'Rinnovo');
+    A.sel.clear(); loadState(); render();
+  }
+  async function bulkTgl(on) {
+    const S = selX().filter((x) => !!x.enabled !== on);
+    if (!S.length) return toast(on ? 'Sono già tutte attive' : 'Sono già tutte disattivate');
+    if (!(await ask(`${on ? 'Attivare' : 'Disattivare'} ${S.length} su Armada?`, on ? 'Tornano a funzionare.' : 'Smettono di funzionare finché non le riattivi.', on ? 'Attiva' : 'Disattiva'))) return;
+    await KXTools.run(S, async (x) => { await api('POST', '/admin/armada/toggle', { id: x.id, enabled: on }); x.enabled = on; }, on ? 'Attivazione' : 'Disattivazione');
+    A.sel.clear(); render();
+  }
+  const bindTools = (V) => window.KXTools && (A.tab === 'lines' || A.tab === 'mags') && KXTools.bind(V, 'ar', A.sel, () => A.vis, { ren: bulkRen, on: () => bulkTgl(true), off: () => bulkTgl(false), csv: exportCsv,
+    msg: () => { const S = selX(); KXTools.msg(KXTools.devsFor(S.map((x) => x.username)), S.length); }, stats: () => { A.stOn = !A.stOn; render(); } }, render);
 
   const v0 = view;
   window.view = view = function (v) { v0(v); if (v === 'armada') { render(); loadState().then(() => loadTab()); } };
