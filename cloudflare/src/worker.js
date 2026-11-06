@@ -1714,7 +1714,7 @@ function dayIT(t = now()) {
   try { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t)); }
   catch { return new Date(t).toISOString().slice(0, 10); }
 }
-const PRESENCE_COLS = ['t', 'hb_t', 'ip', 'ip2', 'ip2_t', 'country', 'city', 'home_country', 'ver', 'ui', 'model', 'state', 'title', 'ch', 'ch_id', 'grp', 'pl', 'prof', 'screen', 'net', 'rssi', 'speed_dl', 'speed_ul', 'speed_ping', 'speed_jit', 'speed_t', 'res', 'fps', 'bitrate', 'buffers', 'dropped', 'engine', 'vpn', 'codec', 'dec', 'stalls_h', 'rec', 'reduced', 'app_cfg', 'rcv'];
+const PRESENCE_COLS = ['t', 'hb_t', 'ip', 'ip2', 'ip2_t', 'country', 'city', 'home_country', 'ver', 'ui', 'model', 'state', 'title', 'ch', 'ch_id', 'grp', 'pl', 'prof', 'screen', 'net', 'rssi', 'speed_dl', 'speed_ul', 'speed_ping', 'speed_jit', 'speed_t', 'res', 'fps', 'bitrate', 'buffers', 'dropped', 'engine', 'vpn', 'codec', 'dec', 'stalls_h', 'rec', 'reduced', 'app_cfg', 'rcv', 'bw', 'line', 'dev_class', 'fill', 'ttff', 'stall_ms', 'var', 'fmt'];
 /** scrive/aggiorna la riga di presenza con i campi indicati (gli altri restano) */
 async function upsertPresence(env, id, fields) {
   const cols = Object.keys(fields).filter((k) => PRESENCE_COLS.includes(k));
@@ -1844,8 +1844,13 @@ async function playerHeartbeat(req, env, ip, ctx) {
     ...rcSnapshot(b), // impostazioni attuali dell'app e configurazione remota applicata
   };
   if (sp) Object.assign(f, { speed_dl: num(sp.dl, 0, 1e5), speed_ul: num(sp.ul, 0, 1e5), speed_ping: num(sp.ping, 0, 1e5), speed_jit: num(sp.jitter, 0, 1e5), speed_t: Math.round(num(sp.t, 0, 1e13)) || t });
-  if (st) Object.assign(f, { res: str(st.res, 20), fps: num(st.fps, 0, 1e3), bitrate: num(st.bitrate, 0, 1e9), buffers: Math.round(num(st.buffers, 0, 1e6)), dropped: Math.round(num(st.dropped, 0, 1e9)), engine: str(st.engine, 20), codec: str(st.codec, 16), dec: st.dec === 'sw' ? 'sw' : st.dec === 'hw' ? 'hw' : '', stalls_h: Math.round(num(st.stallsH, 0, 1e4)), rec: nameClean(st.rec, 80), reduced: str(st.reduced, 12) });
-  else if (state === 'idle') Object.assign(f, { res: '', fps: 0, bitrate: 0, buffers: 0, dropped: 0, engine: '', codec: '', dec: '', rec: '', reduced: '' });
+  if (st) Object.assign(f, { res: str(st.res, 20), fps: num(st.fps, 0, 1e3), bitrate: num(st.bitrate, 0, 1e9), buffers: Math.round(num(st.buffers, 0, 1e6)), dropped: Math.round(num(st.dropped, 0, 1e9)), engine: str(st.engine, 20), codec: str(st.codec, 16), dec: st.dec === 'sw' ? 'sw' : st.dec === 'hw' ? 'hw' : '', stalls_h: Math.round(num(st.stallsH, 0, 1e4)), rec: nameClean(st.rec, 80), reduced: str(st.reduced, 12),
+    // Kairos Adaptive: linea e lettore come li vede l'app (solo se l'app li manda)
+    ...(st.bw !== undefined ? { bw: Math.round(num(st.bw, 0, 1e4) * 10) / 10 } : {}), ...(st.line ? { line: ['weak', 'normal', 'good'].includes(st.line) ? st.line : '' } : {}),
+    ...(st.dev ? { dev_class: ['D', 'N', 'O'].includes(st.dev) ? st.dev : '' } : {}), ...(st.fill !== undefined ? { fill: Math.round(num(st.fill, 0, 100) * 100) / 100 } : {}),
+    ...(st.ttff !== undefined ? { ttff: Math.round(num(st.ttff, 0, 1e6)) } : {}), ...(st.stallMs !== undefined ? { stall_ms: Math.round(num(st.stallMs, 0, 1e8)) } : {}),
+    ...(st.var !== undefined ? { var: str(st.var, 16) } : {}), ...(st.fmt !== undefined ? { fmt: str(st.fmt, 8) } : {}) });
+  else if (state === 'idle') Object.assign(f, { res: '', fps: 0, bitrate: 0, buffers: 0, dropped: 0, engine: '', codec: '', dec: '', rec: '', reduced: '', fill: 0, ttff: 0, stall_ms: 0, var: '', fmt: '' });
   // durante la visione l'app batte ogni 20 s (per «Disconnetti»): se non è cambiato niente di importante la riga
   // si riscrive al massimo una volta al minuto, così le scritture su D1 restano quelle di prima
   const same = old && t - (+old.t || 0) < 55e3 && old.state === state && (old.title || '') === f.title && (old.ch_id || '') === f.ch_id
