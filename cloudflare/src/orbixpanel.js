@@ -50,7 +50,7 @@ export async function oxpRoutes(req, env, path, who, ip, H, ag = null) {
   if (path === '/oxp/playlists' && m === 'GET') {
     const j = await call(env, H, '/list-playlists', {});
     let list = (Array.isArray(j.playlists) ? j.playlists : []).map(plOut).filter((p) => p.id);
-    if (ag) { const mine = await agDevices(env, ag.tree); list = list.filter((p) => mine.has(p.device)); }
+    if (ag) { const mine = await agDevices(env, ag.tree); list = list.filter((p) => mine.has(p.device)).map((p) => ({ ...p, host: '' })); } // il DNS lo vede solo il Master
     return json({ playlists: list });
   }
   if (path === '/oxp/playlists' && m === 'POST') {
