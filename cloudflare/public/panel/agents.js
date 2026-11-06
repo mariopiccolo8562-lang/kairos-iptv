@@ -167,7 +167,7 @@ body.agent .foot{display:none}
   // Le voci che un agente non può usare restano nascoste; una sezione senza voci non compare.
   const GROUPS = [
     ['', ['dash', 'devices', 'live', 'agents']],
-    ['Linee e DNS', ['lmap', 'lines', 'dns', 'armada', 'wolf']],
+    ['Linee e DNS', ['lmap', 'lines', 'dns', 'armada', 'wolf', 'mxp']],
     ['App e link', ['apps3', 'apps3op', 'agop', 'xlist', 'dlc', 'appk', 'agk']],
     ['Richieste', ['store', 'reports', 'creq', 'areq', 'reqai']],
     ['Comunicazione', ['msgs', 'vod']],
@@ -243,7 +243,7 @@ body.agent .foot{display:none}
 
   /* ---------- modalità agente ---------- */
   const agentCan = (v) => v !== 'live' && !!PERM_VIEW[v] && can(PERM_VIEW[v]); // «Online ora» è solo del titolare: mostra tutti i clienti del pannello
-  const OWNER_ONLY = ['dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'dns', 'apps3', 'lines', 'armada', 'wolf', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity'];
+  const OWNER_ONLY = ['dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'dns', 'apps3', 'lines', 'armada', 'wolf', 'mxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity'];
   let modeSet = '';
   function applyMode() {
     const ag = isAgent();
