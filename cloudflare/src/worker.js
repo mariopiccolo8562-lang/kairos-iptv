@@ -977,7 +977,7 @@ async function agentArmada(req, env, url, path, who, ip, ctx, X) {
   const ownFn = async () => { const own = await armOwnerMap(env); return (type, x) => { const by = armByOf(own, type, x); return by !== undefined && mine.has(by); }; };
   if (path === '/armada/state' && m === 'GET') {
     const [spent, trials] = await Promise.all([armSpentRows(env), armTrialsToday(env, A.id)]), used = Math.round(armUsedBy(all, spent, A.id) * 100) / 100;
-    return json({ connected: !!env.ARMADA_KEY, agent: true, dns: s.armadaDns || '', budget: { limit: P.armadaCredits, used, left: Math.max(0, Math.round((P.armadaCredits - used) * 100) / 100), trial: !!P.armadaTrial, trials, trialMax: ARM_TRIALS_DAY } });
+    return json({ connected: !!env.ARMADA_KEY, agent: true, dns: '', budget: { limit: P.armadaCredits, used, left: Math.max(0, Math.round((P.armadaCredits - used) * 100) / 100), trial: !!P.armadaTrial, trials, trialMax: ARM_TRIALS_DAY } });
   }
   if (path === '/armada/packages' && m === 'GET') return armadaRoutes(req, env, url, path, who, ip, A.id);
   if ((path === '/armada/lines' || path === '/armada/mags') && m === 'GET') {

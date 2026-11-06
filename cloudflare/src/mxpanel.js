@@ -155,7 +155,7 @@ export async function mxpRoutes(req, env, path, who, ip, H, ag = null) {
     const [ids, all] = await Promise.all([agIds(H, acc, key, mx, fresh), usersAll(H, acc, key, fresh)]);
     return json({ users: all.filter((u) => ids.has(u.id)) });
   }
-  if (mx && sub === '/domains' && m === 'GET') { const j = await call(H, key, 'GET', `/agents/${mx}/domains`); return json({ domains: (Array.isArray(j.data) ? j.data : []).map(domOut).filter((x) => x.id) }); }
+  if (mx && sub === '/domains' && m === 'GET') { const j = await call(H, key, 'GET', `/agents/${mx}/domains`); return json({ domains: (Array.isArray(j.data) ? j.data : []).map(domOut).filter((x) => x.id).map((d) => ({ id: d.id, label: d.label || 'DNS ' + d.id, domain: '', port: 0, https: !!d.https })) }); } // solo nome: l'indirizzo lo vede il Master
   if (mx && sub === '/agents' && m === 'GET') return json({ agents: (await allPages(H, key, `/agents/${mx}/agents`, 10)).map(agentOut) });
 
   if (sub === '/overview' && m === 'GET') {

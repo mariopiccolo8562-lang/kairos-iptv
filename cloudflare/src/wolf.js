@@ -312,7 +312,7 @@ async function routes(req, env, path, who, ip, H, ag) {
   if (ag && (path.startsWith('/wolf/links') || path.startsWith('/wolf/agents'))) throw new HttpErr(403, 'Funzione riservata al titolare');
   if (path === '/wolf/config' && m === 'GET') {
     const c = await wolfCfg(env, H, K), own = ag ? await wolfCfg(env, H) : c;
-    return json({ set: !!c, url: own ? own.url : '', user: c ? c.user : '', dns: own ? own.dns || '' : '', agent: !!ag, ownerSet: !!own });
+    return json({ set: !!c, url: own ? own.url : '', user: c ? c.user : '', dns: ag ? '' : own ? own.dns || '' : '', agent: !!ag, ownerSet: !!own });
   }
   if (path === '/wolf/config' && m === 'PUT') {
     const b = await H.readJSON(req, 4096), old = (await wolfCfg(env, H, K)) || {};
@@ -367,6 +367,9 @@ async function routes(req, env, path, who, ip, H, ag) {
   }
   if (!path.startsWith('/wolf/')) return null;
   const cfg = await wolfCfg(env, H, K);
+  /* Master: tutte le linee. Agente: solo quelle di cui il suo account WOLF è proprietario, mai quelle del Master o degli altri */
+  const fetchMine = async (fresh) => { const L = await fetchLines(env, H, cfg, !!fresh); return ag ? L.filter((l) => String(l.owner || '').toLowerCase() === String(cfg.user || '').toLowerCase()) : L; };
+  if (ag && cfg) { const own = await wolfCfg(env, H); if (own && String(own.user).toLowerCase() === String(cfg.user).toLowerCase()) throw new HttpErr(403, 'Questo agente usa l\'account WOLF del Master: assegnagli il suo account reseller'); }
   if (!cfg) throw new HttpErr(400, ag ? 'Collega prima il tuo account WOLF (utente e password)' : 'Collega prima il pannello WOLF (indirizzo, utente e password)');
 
   /* «Cambia password»: la cambia su WOLF (pagina Profilo, lasciando DNS e blocco IP come sono) e poi in KAIROS */
@@ -387,11 +390,11 @@ async function routes(req, env, path, who, ip, H, ag) {
   }
   if (path === '/wolf/lines' && m === 'GET') {
     const fresh = new URL(req.url).searchParams.get('fresh') === '1';
-    const [lines, cr] = await Promise.all([fetchLines(env, H, cfg, fresh), credits(env, H, cfg).catch(() => null)]);
+    const [lines, cr] = await Promise.all([fetchMine(fresh), credits(env, H, cfg).catch(() => null)]);
     const synced = await syncLinks(env, H, lines, who, ip).catch(() => 0);
     const L = ag ? [] : await links(env);
     const names = new Map((((await env.DB.prepare(`SELECT id, name, code FROM devices WHERE id IN (${L.map(() => '?').join(',') || "''"})`).bind(...L.map((k) => k.device_id)).all()).results) || []).map((d) => [d.id, d.name || d.code]));
-    return json({ lines, credits: cr, dns: cfg.dns || '', synced, links: L.map((k) => ({ line: +k.line_id, device: k.device_id, name: names.get(k.device_id) || 'cliente eliminato' })) });
+    return json({ lines, credits: cr, dns: ag ? '' : cfg.dns || '', synced, links: L.map((k) => ({ line: +k.line_id, device: k.device_id, name: names.get(k.device_id) || 'cliente eliminato' })) });
   }
   if (path === '/wolf/packages' && m === 'GET') return json({ packages: await packages(env, H, cfg), credits: await credits(env, H, cfg).catch(() => null) });
 
@@ -403,7 +406,7 @@ async function routes(req, env, path, who, ip, H, ag) {
     const pk = await wfJson(env, H, cfg, '/lines/packages', { package_id: pkg, trial: '0' });
     const bq = (pk.bouquets || []).map((x) => x.id).join(',');
     const j = await wfJson(env, H, cfg, '/lines/create/0', { _token: tokenOf(page), current_bouquets: bq, line_type: 'line', username, password, mac: '', package: pkg, description: str(b.note, 300) });
-    const l = (await fetchLines(env, H, cfg, true)).find((x) => x.username === username);
+    const l = (await fetchMine(true)).find((x) => x.username === username);
     if (l && b.deviceId && !ag) await linkLine(env, H, cfg, l, str(b.deviceId, 20), who, ip).catch(() => {});
     await H.log(env, 'new', `${who}: WOLF — linea ${username} creata`, ip);
     return json({ ok: true, id: l ? l.id : null, message: unent(j.message || '') });
@@ -411,6 +414,7 @@ async function routes(req, env, path, who, ip, H, ag) {
   const lm = path.match(/^\/wolf\/lines\/(\d+)(\/extend|\/toggle|\/kick)?$/);
   if (lm) {
     const id = +lm[1], act = lm[2] || '';
+    if (ag && !(await fetchMine(false)).some((x) => x.id === id)) throw new HttpErr(404, 'Linea non trovata');
     if (!act && m === 'PUT') {
       const b = await H.readJSON(req, 4096);
       const page = await wfPage(env, H, cfg, `/lines/edit/${id}`);
@@ -419,7 +423,7 @@ async function routes(req, env, path, who, ip, H, ag) {
       const password = b.password !== undefined ? okUser(b.password, H, 'Password') : inputVal(page, 'password');
       const description = b.note !== undefined ? str(b.note, 300) || '-' : descOf(page);
       await wfJson(env, H, cfg, `/lines/edit/${id}`, { _token: tokenOf(page), current_bouquets: bqOf(page, H), username, password, owner: '', description });
-      const lines = await fetchLines(env, H, cfg, true);
+      const lines = await fetchMine(true);
       const synced = await syncLinks(env, H, lines, who, ip).catch(() => 0);
       await H.log(env, 'edit', `${who}: WOLF — linea ${ou}${ou !== username ? ' → ' + username : ''} modificata`, ip);
       return json({ ok: true, synced });
@@ -436,7 +440,7 @@ async function routes(req, env, path, who, ip, H, ag) {
       return json({ ok: true });
     }
     if (act === '/toggle' && m === 'POST') {
-      const l = (await fetchLines(env, H, cfg, true)).find((x) => x.id === id);
+      const l = (await fetchMine(true)).find((x) => x.id === id);
       if (!l || l.tgl === null) throw new HttpErr(404, 'Linea non trovata su WOLF');
       await wfJson(env, H, cfg, `/lines/disable/${id}/${l.tgl}`);
       cfg.m.lines = null;
@@ -445,7 +449,7 @@ async function routes(req, env, path, who, ip, H, ag) {
     }
     if (act === '/kick' && m === 'POST') { await wfJson(env, H, cfg, `/lines/kick/${id}`); cfg.m.lines = null; return json({ ok: true }); }
     if (!act && m === 'DELETE') {
-      const l = (await fetchLines(env, H, cfg)).find((x) => x.id === id);
+      const l = (await fetchMine(false)).find((x) => x.id === id);
       await wfJson(env, H, cfg, `/lines/delete/${id}`);
       await env.DB.prepare('DELETE FROM wolf_links WHERE line_id = ?').bind(id).run();
       cfg.m.lines = null;
@@ -518,7 +522,7 @@ async function routes(req, env, path, who, ip, H, ag) {
   }
   if (path === '/wolf/links' && m === 'POST') {
     const b = await H.readJSON(req, 1024);
-    const l = (await fetchLines(env, H, cfg)).find((x) => x.id === +b.line);
+    const l = (await fetchMine(false)).find((x) => x.id === +b.line);
     if (!l) throw new HttpErr(404, 'Linea non trovata su WOLF');
     return json(await linkLine(env, H, cfg, l, str(b.device, 20), who, ip));
   }
