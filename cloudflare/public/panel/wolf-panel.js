@@ -118,7 +118,7 @@
             <div><span class="k">Scadenza</span>${fmtD(l.exp)}<br><small class="mut">${left(l.exp)}</small></div>
             <div><span class="k">Stato</span>${window.KXOnline ? KXOnline.dot({ on: l.conns > 0, conns: l.conns }) + (l.conns > 0 && l.watching ? `<small class="mut" title="Sta guardando"> ▶ ${esc(l.watching)}</small>` : '') + '<br>' : ''}${status(l)}${l.trial ? '<span class="wf-tag g">Prova</span>' : ''}<br><small class="mut">${l.conns}/${l.max || '?'} conn.</small></div>
             <div><span class="k">Nota / cliente KAIROS</span><div class="mono">${esc(l.note) || '<span class="mut">—</span>'}</div>${k ? `<span class="wf-tag">↔ ${esc(k.name)}</span>` : ''}${l.owner && l.owner !== W.cfg.user ? `<span class="wf-tag g" title="Reseller">${esc(l.owner)}</span>` : ''}</div>
-            <div class="wf-act"><button class="btn sm" data-a="edit">Modifica</button><button class="btn sm" data-a="ext">Rinnova</button>${isAg() ? '' : `<button class="btn sm" data-a="link">${k ? 'Cliente' : 'Collega cliente'}</button>`}<button class="btn sm" data-a="m3u">M3U</button><button class="btn sm ghost" data-a="tgl">${l.enabled ? 'Disattiva' : 'Attiva'}</button><button class="btn sm ghost" data-a="del" style="color:#ff8f8f">Elimina</button></div></div>`;
+            <div class="wf-act"><button class="btn sm" data-a="edit">Modifica</button><button class="btn sm" data-a="ext">Rinnova</button>${isAg() ? '' : `<button class="btn sm" data-a="link">${k ? 'Cliente' : 'Collega cliente'}</button>`}<button class="btn sm" data-a="m3u">M3U</button>${window.KXMxpNew ? '<button class="btn sm" data-a="mxp" title="Crea il cliente su MaxPlayer con questa linea">MaxPlayer</button>' : ''}${window.KXOxpNew ? '<button class="btn sm" data-a="oxp" title="Aggiungi questa linea a un dispositivo OrbixPlay">OrbixPlay</button>' : ''}<button class="btn sm ghost" data-a="tgl">${l.enabled ? 'Disattiva' : 'Attiva'}</button><button class="btn sm ghost" data-a="del" style="color:#ff8f8f">Elimina</button></div></div>`;
         }).join('')}</div>
         ${list.length > shown.length ? `<div style="margin-top:10px"><button class="btn sm" id="wfMore">Mostra altre ${Math.min(100, list.length - shown.length)}</button></div>` : ''}</div>`}`;
     bindCfg();
@@ -280,6 +280,7 @@
       if (a === 'cu') return copy(l.username, 'Utente');
       if (a === 'cp') return copy(l.password, 'Password');
       if (a === 'm3u') { const u = m3u(l); return u ? copy(u, 'Link M3U') : toast('Imposta il DNS in «Impostazioni WOLF»', 1); }
+      if (a === 'mxp' || a === 'oxp') { const k = linkOf(l.id), pre = { user: l.username, pass: l.password, name: (k && k.name) || l.username, note: 'WOLF #' + l.id }; return a === 'mxp' ? KXMxpNew(pre) : KXOxpNew(pre); }
       if (a === 'edit') {
         const ok = await ask('Modifica linea ' + l.username, `<div class="wf-f" style="grid-template-columns:1fr 1fr">
           <label>Utente<input class="inp mono" id="weU" value="${esc(l.username)}"></label><label>Password<input class="inp mono" id="weP" value="${esc(l.password)}"></label>

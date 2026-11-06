@@ -145,12 +145,13 @@
     if (!ok) return;
     try { const r = await api('POST', '/admin/mxp/accounts', { name: $('#mxN').value, key: $('#mxK').value }); toast('Account MaxPlayer collegato'); await loadAccs(); switchAcc(r.id); } catch (e) { toast(e.message, 1); }
   }
-  async function newUser() {
+  async function newUser(pre) {
+    pre = pre || {};
     if (!M.doms || !M.doms.length) return toast('Nessun dominio (DNS) su questo account', 1);
     const ok = await ask('Nuovo cliente su MaxPlayer', `<div class="wf-f" style="grid-template-columns:1fr 1fr">
-      <label>Utente della linea<input class="inp mono" id="mnU" autocomplete="off"></label><label>Password della linea<input class="inp mono" id="mnP" autocomplete="off"></label>
+      <label>Utente della linea<input class="inp mono" id="mnU" autocomplete="off" value="${esc(pre.user || '')}"></label><label>Password della linea<input class="inp mono" id="mnP" autocomplete="off" value="${esc(pre.pass || '')}"></label>
       <label style="grid-column:1/-1">DNS (dominio)<select class="inp" id="mnD">${domOpts('')}</select></label>
-      <label>Nome (facoltativo)<input class="inp" id="mnN" maxlength="60"></label><label>Dispositivi (facoltativo)<input class="inp" id="mnX" type="number" min="1" max="50" placeholder="come da account"></label></div>
+      <label>Nome (facoltativo)<input class="inp" id="mnN" maxlength="60" value="${esc(pre.name || '')}"></label><label>Dispositivi (facoltativo)<input class="inp" id="mnX" type="number" min="1" max="50" placeholder="come da account"></label></div>
       <p class="mut" style="font-size:12.5px;margin:10px 0 0">Usa un posto dell'account (liberi: <b>${M.ov && M.ov.cap ? M.ov.cap.free : '—'}</b>). Il cliente compare subito anche su MaxPlayer.</p>`, 'Crea cliente');
     if (!ok) return;
     try { await api('POST', P('/users'), { user: $('#mnU').value, pass: $('#mnP').value, domain: $('#mnD').value, name: $('#mnN').value, devices: $('#mnX').value }); toast('Cliente creato su MaxPlayer'); await loadAll(true); } catch (e) { toast(e.message, 1); }
@@ -221,6 +222,8 @@
   };
   function show() { try { render(); } catch (e) { const V = $('#v-mxp'); if (V) V.innerHTML = `<div class="card glass"><p style="color:#ff8f8f">Errore nella sezione MaxPlayer: ${esc(e.message || String(e))}</p></div>`; } }
   function open() { show(); (M.accs ? Promise.resolve() : loadAccs()).then(() => { show(); if (M.acc && !M.users && !M.busy) loadAll(); }); }
+  /* da WOLF/Armada: apre MaxPlayer con «Nuovo cliente» già compilato con utente e password della linea */
+  window.KXMxpNew = async (pre) => { view('mxp'); if (!M.accs) await loadAccs(); if (!M.acc) return toast('Collega prima un account MaxPlayer', 1); if (!M.doms) await loadAll(); newUser(pre); };
   const v0 = view;
   window.view = view = function (v) { const r = v0.apply(this, arguments); if (v === 'mxp') open(); return r; };
   const sec = $('#v-mxp');

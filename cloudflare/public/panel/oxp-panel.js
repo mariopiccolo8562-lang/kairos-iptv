@@ -66,13 +66,14 @@
     const S = selP();
     KXTools.csv('orbixplay-playlist', [['ID playlist', (p) => p.id], ['Dispositivo', (p) => p.device], ['Nome', (p) => p.name], ['DNS', (p) => p.host], ['Utente', (p) => p.user], ['Password', (p) => p.pass], ['Note', (p) => p.notes]], S.length ? S : filtered());
   }
-  async function newPl() {
+  async function newPl(pre) {
+    pre = pre || {};
     const opts = dnsOpts('');
     const ok = await ask('Nuova playlist su OrbixPlay', `<div class="wf-f" style="grid-template-columns:1fr 1fr">
       <label style="grid-column:1/-1">ID del dispositivo (dall'app OrbixPlay)<input class="inp mono" id="onD"></label>
-      <label>Utente della linea<input class="inp mono" id="onU"></label><label>Password della linea<input class="inp mono" id="onP"></label>
-      <label>DNS${opts ? `<select class="inp" id="onH">${opts}</select>` : '<input class="inp mono" id="onH" placeholder="http://dns.esempio.com:8080">'}</label><label>Nome<input class="inp" id="onN" maxlength="40" value="Kairos"></label>
-      <label style="grid-column:1/-1">Note (facoltative)<input class="inp" id="onT" maxlength="60"></label></div>
+      <label>Utente della linea<input class="inp mono" id="onU" value="${esc(pre.user || '')}"></label><label>Password della linea<input class="inp mono" id="onP" value="${esc(pre.pass || '')}"></label>
+      <label>DNS${opts ? `<select class="inp" id="onH">${opts}</select>` : '<input class="inp mono" id="onH" placeholder="http://dns.esempio.com:8080">'}</label><label>Nome<input class="inp" id="onN" maxlength="40" value="${esc(pre.name || 'Kairos')}"></label>
+      <label style="grid-column:1/-1">Note (facoltative)<input class="inp" id="onT" maxlength="60" value="${esc(pre.note || '')}"></label></div>
       <p class="mut" style="font-size:12.5px;margin:10px 0 0">Usa un posto del tuo account OrbixPlay.</p>`, 'Aggiungi');
     if (!ok) return;
     try { await api('POST', '/admin/oxp/playlists', { device: $('#onD').value, user: $('#onU').value, pass: $('#onP').value, host: $('#onH').value, name: $('#onN').value, notes: $('#onT').value }); toast('Playlist aggiunta su OrbixPlay'); load(); } catch (e) { toast(e.message, 1); }
@@ -110,6 +111,8 @@
   }
   function show() { try { render(); } catch (e) { const V = $('#v-oxp'); if (V) V.innerHTML = `<div class="card glass"><p style="color:#ff8f8f">Errore nella sezione OrbixPlay: ${esc(e.message || String(e))}</p></div>`; } }
   function open() { show(); if (!O.pls && !O.busy) load(); }
+  /* da WOLF/Armada: apre OrbixPlay con «Nuova playlist» già compilata, resta solo l'ID del dispositivo */
+  window.KXOxpNew = async (pre) => { view('oxp'); if (!O.pls) await load(); if (!canNew()) return toast('OrbixPlay non è collegato o non puoi creare playlist', 1); setTimeout(() => { newPl(pre); $('#onD') && $('#onD').focus(); }, 50); };
   const v0 = view;
   window.view = view = function (v) { const r = v0.apply(this, arguments); if (v === 'oxp') open(); return r; };
   const sec = $('#v-oxp');
