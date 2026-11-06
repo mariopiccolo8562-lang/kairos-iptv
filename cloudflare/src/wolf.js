@@ -225,7 +225,7 @@ function rowOut(x) {
     id: +x.id, username: unent(x.username), password: unent(x.password),
     exp: +x.expire_date ? +x.expire_date * 1000 : 0, trial: +x.is_trial === 1,
     enabled: +x.enabled === 1 && +x.admin_enabled !== 0, conns: +x.active_connections || 0, max: +x.user_connection || 0,
-    note: note === '-' ? '' : note, owner: unent(x.owner || ''), created: String(x.created_at || ''), watching: unent(x.stream_display_name || ''),
+    note: note === '-' ? '' : note, owner: unent(String(x.owner || '').replace(/<[^>]+>/g, '')).trim(), created: String(x.created_at || ''), watching: unent(x.stream_display_name || ''),
     tgl: tg[1] !== undefined ? +tg[1] : null, tglLabel: (tg[2] || '').trim(), dns: unent(m3u),
   };
 }
@@ -368,7 +368,7 @@ async function routes(req, env, path, who, ip, H, ag) {
   if (!path.startsWith('/wolf/')) return null;
   const cfg = await wolfCfg(env, H, K);
   /* Master: tutte le linee. Agente: solo quelle di cui il suo account WOLF è proprietario, mai quelle del Master o degli altri */
-  const fetchMine = async (fresh) => { const L = await fetchLines(env, H, cfg, !!fresh); return ag ? L.filter((l) => String(l.owner || '').toLowerCase() === String(cfg.user || '').toLowerCase()) : L; };
+  const fetchMine = async (fresh) => { const L = await fetchLines(env, H, cfg, !!fresh); const me = String(cfg.user || '').trim().toLowerCase(); return ag ? L.filter((l) => String(l.owner || '').trim().toLowerCase() === me).map((l) => ({ ...l, dns: '' })) : L; };
   if (ag && cfg) { const own = await wolfCfg(env, H); if (own && String(own.user).toLowerCase() === String(cfg.user).toLowerCase()) throw new HttpErr(403, 'Questo agente usa l\'account WOLF del Master: assegnagli il suo account reseller'); }
   if (!cfg) throw new HttpErr(400, ag ? 'Collega prima il tuo account WOLF (utente e password)' : 'Collega prima il pannello WOLF (indirizzo, utente e password)');
 
