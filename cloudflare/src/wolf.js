@@ -49,8 +49,12 @@ async function rawFetch(cfg, jar, path, o = {}) {
 async function login(env, H, cfg) {
   const jar = {};
   const r0 = await rawFetch(cfg, jar, '/');
-  const t = tokenOf(await r0.text());
-  if (!t) throw new H.HttpErr(502, 'Non trovo la pagina di accesso di WOLF: controlla l\'indirizzo');
+  const h0 = await r0.text();
+  const t = tokenOf(h0);
+  if (!t) {
+    const why = (h0.match(/<title[^>]*>([^<]{1,80})/i) || [])[1] || h0.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+    throw new H.HttpErr(502, `Non trovo la pagina di accesso di WOLF (risposta ${r0.status}${why ? ': ' + why.trim() : ''})`);
+  }
   const r = await rawFetch(cfg, jar, '/', { form: { _token: t, username: cfg.user, password: cfg.pass } });
   const loc = r.headers.get('location') || '';
   if (!(r.status >= 300 && r.status < 400 && /dashboard/.test(loc))) throw new H.HttpErr(400, 'WOLF non accetta utente e password: controllali in «Impostazioni WOLF»');
