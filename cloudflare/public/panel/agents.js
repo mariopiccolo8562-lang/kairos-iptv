@@ -388,6 +388,25 @@ body.agent .foot{display:none}
     const names = [...new Set([...(((D.settings && D.settings.appLinks) || []).map((x) => x.name)), ...cur.filter((x) => x !== '*')])].sort((a, b) => a.localeCompare(b));
     return chk('aapp', '*', '<b>Tutte le app</b>', all, false, 'Anche quelle che aggiungerai in futuro') + (names.length ? names.map((n) => chk('aapp', n, esc(n), !all && cur.some((x) => x.toLowerCase() === n.toLowerCase()), false, '')).join('') : '<p class="mut" style="font-size:12.5px">Nessuna app: le aggiungi in APP Store → Attiva app.</p>');
   };
+  /* link di accesso personale di un agente + codice: copia, rigenera, revoca (come i pannelli dei fornitori) */
+  async function linkBox(a) {
+    const P = `/admin/agents/${a.id}/access-link`, day = (t) => (t ? new Date(t).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
+    let L; try { L = await api('GET', P); } catch (e) { return toast(e.message, 1); }
+    const html = () => L.on ? `<p class="mut" style="font-size:12.5px;margin:0 0 10px">Il link apre il pannello solo con l'account di <b>${esc(a.username)}</b> e non contiene utente o password. Per entrare serve anche il codice di accesso: dagli link e codice${D.settings && D.settings.agentHost ? '' : ' (se imposti l\'«Indirizzo degli agenti» il link userà quello, non il tuo)'}.</p>
+        <label class="lbl">Link personale</label><div class="row" style="grid-template-columns:1fr auto"><input class="inp mono" readonly value="${esc(L.url)}" style="font-size:12px"><button type="button" class="btn" data-lk="url">Copia</button></div>
+        <small class="mut">Creato ${esc(day(L.created))} · ultimo accesso ${esc(day(L.used))}</small>
+        <label class="lbl" style="margin-top:10px">Codice di accesso</label><div class="row" style="grid-template-columns:1fr auto"><input class="inp mono" readonly value="${esc(L.code)}" style="letter-spacing:.12em"><button type="button" class="btn" data-lk="code">Copia codice</button></div>
+        <small class="mut">Conservato cifrato: lo rivedi solo tu da qui.</small>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button type="button" class="btn danger" data-lk="del">Revoca</button><button type="button" class="btn" data-lk="new">Rigenera</button></div>`
+      : `<p class="mut" style="margin:0 0 12px">${esc(a.username)} non ha ancora un link di accesso. Creandolo ottieni un link personale e un codice: con quelli entra nel pannello senza utente e password (la sua password continua a funzionare).</p><button type="button" class="btn pri" data-lk="new">Crea link e codice</button>`;
+    const bind = () => $$('#mB [data-lk]').forEach((b) => (b.onclick = async () => {
+      const k = b.dataset.lk;
+      if (k === 'url' || k === 'code') return navigator.clipboard.writeText(L[k]).then(() => toast(k === 'url' ? 'Link copiato' : 'Codice copiato'), () => toast('Copia non consentita', 1));
+      if ((k === 'del' || (k === 'new' && L.on)) && !confirm(k === 'del' ? 'Revocare il link? Il vecchio link smette subito di funzionare e l\'agente viene scollegato.' : 'Rigenerare? Link e codice vecchi smettono subito di funzionare.')) return;
+      try { if (k === 'del') { await api('DELETE', P); L = { on: false }; toast('Link revocato'); } else { L = await api('POST', P); toast('Nuovo link e codice pronti'); } $('#mB').innerHTML = html(); bind(); } catch (e) { toast(e.message, 1); }
+    }));
+    const pr = ask('Accesso protetto · ' + a.username, html(), 'Chiudi'); bind(); await pr;
+  }
   const APP_KEYS = ['appstore', 'players', 'appsOp', 'dlcodes', 'appk', 'armada', 'wolf', 'mxp', 'oxp']; // hanno la loro sezione nell'editor
   const KAPPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['prem', 'Kairos Premium'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova'], ['store', 'Kairos Store']];
   const dlcNames = () => (Array.isArray(D.dlCodes) ? D.dlCodes : []).map((x) => [x.name, x.name]);
@@ -428,6 +447,7 @@ body.agent .foot{display:none}
         <div><label class="lbl">Connessioni per cliente</label><input class="inp" id="agC" type="number" min="1" max="${topP ? topP.maxConn : 10}" value="${P.maxConn || 1}"></div></div>
         ${a ? `<p class="mut" style="font-size:12.5px;margin-top:8px">Clienti ora: <b>${a.clients}</b>${a.subAgents ? ` (di cui ${a.clients - a.ownClients} dei suoi ${a.subAgents} sotto-agenti)` : ''}</p>` : ''}
         ${!top ? `<label class="lbl" style="margin-top:10px">Codice venditore Store</label><div class="row" style="grid-template-columns:1fr auto auto"><input class="inp mono" id="agSc" maxlength="8" autocapitalize="characters" spellcheck="false" placeholder="es. MARIO o K7M4" value="${esc(a && a.storeCode || '')}" style="text-transform:uppercase;letter-spacing:.12em"><button type="button" class="btn" id="agScCp" title="Copia">Copia</button><button type="button" class="btn" id="agScNew" title="Ne propone uno casuale di 4 caratteri">Casuale</button></div><p class="mut" style="font-size:12px;margin-top:6px">Lo scegli tu (da 3 a 8 lettere o cifre, es. il nome dell'agente). I suoi clienti lo scrivono nella richiesta dello Store: la richiesta arriva solo a lui e a te. Lasciato vuoto, lo crea il pannello.</p>` : ''}
+        ${a && !top ? `<label class="lbl" style="margin-top:10px">Link di accesso personale</label><button type="button" class="btn" id="agLink" style="width:100%">🔗 Link e codice di accesso</button><small class="mut" style="display:block;margin-top:4px">Apre il pannello solo con il suo account, senza utente e password</small>` : ''}
         <label class="lbl">Accesso</label><div class="ag-radio" id="agR">
           <label class="${a && a.canAgents ? '' : 'on'}"><input type="radio" name="agr" value="0" ${a && a.canAgents ? '' : 'checked'}><b>Solo clienti</b><small>Gestisce solo i suoi clienti</small></label>
           <label class="${a && a.canAgents ? 'on' : ''}"><input type="radio" name="agr" value="1" ${a && a.canAgents ? 'checked' : ''}><b>Gestisce agenti</b><small>Può creare sotto-agenti, mai con più permessi dei suoi</small></label></div>
@@ -539,6 +559,7 @@ body.agent .foot{display:none}
     $('#agPwEye') && ($('#agPwEye').onclick = () => { const i = $('#agPwNow'); i.type = i.type === 'password' ? 'text' : 'password'; });
     $('#agPwCp') && ($('#agPwCp').onclick = () => navigator.clipboard.writeText(a.password).then(() => toast('Password copiata'), () => toast('Copia non consentita', 1)));
     $('#agScCp') && ($('#agScCp').onclick = () => navigator.clipboard.writeText($('#agSc').value.trim().toUpperCase()).then(() => toast('Codice venditore copiato'), () => toast('Copia non consentita', 1)));
+    $('#agLink') && ($('#agLink').onclick = () => linkBox(a));
     $('#agScNew') && ($('#agScNew').onclick = () => { const AL = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let c = ''; for (let i = 0; i < 4; i++) c += AL[Math.floor(Math.random() * AL.length)]; $('#agSc').value = c; $('#agSc').focus(); });
     $('#agSc') && ($('#agSc').oninput = () => { const v = $('#agSc').value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); if ($('#agSc').value !== v) $('#agSc').value = v; });
     $$('#agR label').forEach((l) => (l.onclick = () => { $$('#agR label').forEach((x) => x.classList.toggle('on', x === l)); $('input', l).checked = true; }));

@@ -33,7 +33,7 @@ async function apiNet(method, path, body) {
   let j = {}; try { j = txt ? JSON.parse(txt) : {}; } catch {}
   if (st && r.ok) { if (j && j.same === true && ST_MEM.txt) j = JSON.parse(ST_MEM.txt); else { const t = r.headers.get('X-Kairos-Etag'); ST_MEM.tag = t || ''; ST_MEM.txt = t ? txt : ''; } }
   if (r.status === 503 && j.maint) { agMaintScreen(j.error); throw new Error(j.error || 'Pannello in manutenzione'); }
-  if (r.status === 401 && path !== '/admin/login') { showLogin(); throw new Error('Sessione scaduta, accedi di nuovo'); }
+  if (r.status === 401 && path !== '/admin/login' && path !== '/admin/link-login') { showLogin(); throw new Error('Sessione scaduta, accedi di nuovo'); }
   if (!r.ok) throw new Error(j.error || 'Errore ' + r.status);
   return j;
 }
