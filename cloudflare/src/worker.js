@@ -3011,6 +3011,7 @@ async function adminInner(req, env, url, ip, ctx) {
   }
 
   if (path === '/login' && m === 'POST') return login(req, env, ip, ctx);
+  if (path === '/link-login' && m === 'POST') return linkLogin(req, env, ip, ctx);
 
   // la sessione e, nello stesso viaggio, impostazioni e agenti (servono quasi a ogni richiesta del pannello)
   const pre = cookieOf(req) ? Promise.all([cfgRows(env), agentsAll(env)]).catch(() => {}) : null;
@@ -3875,6 +3876,32 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (tm && tm[2] && m === 'POST') return json(await trashRestore(env, tm[1], who, ip));
     if (tm && !tm[2] && m === 'DELETE') { const r = await env.DB.prepare('SELECT label, kind FROM trash WHERE id = ?').bind(tm[1]).first(); await env.DB.prepare('DELETE FROM trash WHERE id = ?').bind(tm[1]).run(); if (r) await log(env, 'del', `${who}: eliminato per sempre dal cestino ${TRASH_KIND[r.kind] || r.kind} · ${r.label}`, ip); return json({ ok: true }); }
     throw new HttpErr(404, 'Funzione non trovata');
+  }
+  // link di accesso personale di un agente (+ codice): vedere, creare/rigenerare, revocare
+  const alm = path.match(/^\/agents\/(\d+)\/access-link$/);
+  if (alm) {
+    if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare, dal pannello');
+    const A = await env.DB.prepare("SELECT id, username, link_seal, code_seal, link_t, link_used FROM admins WHERE id = ? AND role = 'agent'").bind(+alm[1]).first();
+    if (!A) throw new HttpErr(404, 'Agente non trovato');
+    const S = await getSettings(env), base = S.agentHost ? 'https://' + S.agentHost : url.origin;
+    const out = async (r) => { const k = r.link_seal ? await unseal(env, r.link_seal).catch(() => '') : ''; return json({ on: !!k, url: k ? `${base}/panel/?k=${k}` : '', code: k ? await unseal(env, r.code_seal).catch(() => '') : '', created: r.link_t || 0, used: r.link_used || 0 }); };
+    if (m === 'GET') return out(A);
+    if (m === 'POST') {
+      const k = b64url(rand(24)), AL = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789', rb = rand(10);
+      let code = ''; for (let i = 0; i < 10; i++) code += AL[rb[i] % AL.length];
+      const r = { link_seal: await seal(env, k), code_seal: await seal(env, code), link_t: now(), link_used: 0 };
+      await env.DB.prepare('UPDATE admins SET link_hash = ?, link_seal = ?, code_seal = ?, link_t = ?, link_used = 0 WHERE id = ?').bind(await sha256('lnk:' + k), r.link_seal, r.code_seal, r.link_t, A.id).run();
+      memoDrop(env, 'ags');
+      await log(env, 'settings', `${who}: ${A.link_seal ? 'nuovo' : 'creato il'} link di accesso dell'agente ${A.username}`, ip);
+      return out(r);
+    }
+    if (m === 'DELETE') {
+      await env.DB.prepare("UPDATE admins SET link_hash = '', link_seal = '', code_seal = '', link_t = 0, link_used = 0 WHERE id = ?").bind(A.id).run();
+      await env.DB.prepare('DELETE FROM sessions WHERE admin_id = ?').bind(A.id).run(); // chi era dentro viene scollegato
+      memoDrop(env, 'ags');
+      await log(env, 'settings', `${who}: link di accesso dell'agente ${A.username} revocato (sessioni chiuse)`, ip);
+      return json({ ok: true });
+    }
   }
   // nuovo codice venditore per un agente (il vecchio smette subito di valere)
   const scm = path.match(/^\/agents\/(\d+)\/store-code$/);
@@ -4772,6 +4799,48 @@ async function login(req, env, ip, ctx) {
   await log(env, 'auth', `Accesso di ${a.username}`, ip);
   ctx.waitUntil(cleanup(env));
   return json({ ok: true, user: a.username, totp: !!a.totp_on, role: a.role === 'agent' ? 'agent' : 'owner' }, 200, { 'Set-Cookie': setCookie(tok, SESSION_TTL) });
+}
+
+/** accesso di un agente con il link personale (…/panel/?k=token) + codice di accesso, senza utente e password */
+async function linkLogin(req, env, ip, ctx) {
+  if (await limited(env.RL_LOGIN, 'login:' + ip)) throw new HttpErr(429, 'Troppi tentativi, attendi un minuto');
+  const fail = await env.DB.prepare('SELECT * FROM login_fail WHERE ip = ?').bind(ip).first();
+  if (fail && fail.until > now()) throw new HttpErr(429, `Accesso bloccato per sicurezza. Riprova tra ${Math.ceil((fail.until - now()) / 60000)} minuti`);
+  const b = await readJSON(req, 8192);
+  if (!(await verifyTurnstile(env, str(b.turnstile, 4096), ip))) throw new HttpErr(400, 'Verifica anti-bot non superata, riprova');
+  const k = str(b.k, 64), code = str(b.code, 20);
+  const strike = async () => {
+    const c = (fail && fail.until <= now() && now() - fail.updated > 3600e3 ? 0 : (fail ? fail.count : 0)) + 1, until = c >= 5 ? now() + 15 * 60e3 : 0;
+    await env.DB.prepare('INSERT INTO login_fail (ip, count, until, updated) VALUES (?, ?, ?, ?) ON CONFLICT(ip) DO UPDATE SET count = excluded.count, until = excluded.until, updated = excluded.updated').bind(ip, until ? 0 : c, until, now()).run();
+    return until ? ' — IP bloccato 15 min' : '';
+  };
+  const a = /^[A-Za-z0-9_-]{20,64}$/.test(k) ? await env.DB.prepare("SELECT * FROM admins WHERE link_hash = ? AND role = 'agent'").bind(await sha256('lnk:' + k)).first() : null;
+  const want = a && a.code_seal ? await unseal(env, a.code_seal).catch(() => '') : '';
+  if (!a || !want || !code || !safeEq(code, want)) {
+    const blocked = await strike();
+    await log(env, 'off', `Accesso con link fallito${a ? ' per ' + a.username + ' (codice errato)' : ' (link non valido o revocato)'}${blocked}`, ip);
+    throw new HttpErr(401, a ? 'Codice di accesso errato' : 'Link non valido o revocato: chiedine uno nuovo');
+  }
+  const S0 = await getSettings(env), host = new URL(req.url).hostname.toLowerCase();
+  if (S0.agentHost && S0.agentHostOnly && host !== S0.agentHost) throw new HttpErr(403, 'Accedi dall\'indirizzo del pannello che ti è stato dato');
+  if (!(await agentChainActive(env, a.id))) { await log(env, 'off', `Accesso rifiutato all'agente ${a.username}: account disattivato`, ip); throw new HttpErr(403, 'Account disattivato: contatta il tuo fornitore'); }
+  { const am = S0.agMaint; if (am && am.on) throw new HttpErr(503, am.msg || AGM_MSG, { maint: true }); }
+  if (a.totp_on) {
+    if (!b.totp) return json({ needTotp: true }, 200);
+    const ctr = await checkTotp(a.totp_secret, b.totp, a.totp_last);
+    if (ctr < 0) { const blocked = await strike(); await log(env, 'off', `Codice 2FA errato per ${a.username}${blocked}`, ip); throw new HttpErr(401, 'Codice di verifica errato'); }
+    await env.DB.prepare('UPDATE admins SET totp_last = ? WHERE id = ?').bind(ctr, a.id).run();
+  }
+  await env.DB.prepare('DELETE FROM login_fail WHERE ip = ?').bind(ip).run();
+  const old = cookieOf(req);
+  if (old) await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(await sha256('ses:' + old)).run();
+  const tok = b64url(rand(32));
+  await env.DB.prepare('INSERT INTO sessions (id, admin_id, expires, ip, ua, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(await sha256('ses:' + tok), a.id, now() + SESSION_TTL * 1000, ip, str(req.headers.get('User-Agent') || '', 200), now()).run();
+  await env.DB.prepare('UPDATE admins SET link_used = ? WHERE id = ?').bind(now(), a.id).run();
+  await log(env, 'auth', `Accesso di ${a.username} con il link personale`, ip);
+  ctx.waitUntil(cleanup(env));
+  return json({ ok: true, user: a.username, totp: !!a.totp_on, role: 'agent' }, 200, { 'Set-Cookie': setCookie(tok, SESSION_TTL) });
 }
 
 /* ====================================================================== */
