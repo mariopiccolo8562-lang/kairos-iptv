@@ -14,7 +14,7 @@
   if (!$('#oxCss')) { const c = document.createElement('style'); c.id = 'oxCss'; c.textContent = '.ox-row{grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.3fr) minmax(0,1.2fr) auto!important}.ox-row .oxid{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;word-break:break-all;color:var(--txt,#fff)}@media (max-width:1000px){.ox-row{grid-template-columns:1fr 1fr!important}}'; document.head.appendChild(c); }
   const O = { st: null, pls: null, slots: null, q: '', limit: 100, show: new Set(), busy: false, err: '', sel: new Set(), stOn: false };
   const copy = (t, w) => navigator.clipboard.writeText(t).then(() => toast(w + ' copiato'), () => toast('Copia non consentita dal browser', 1));
-  const dnsOpts = (sel) => { const L = ((((D.settings || {}).playersCfg || {}).orbix) || []).filter((x) => x && (x.host || x.code)); return L.map((x) => { const v = x.code || x.host; return `<option value="${esc(v)}"${v === sel ? ' selected' : ''}>${esc(x.name || v)}</option>`; }).join(''); };
+  const dnsOpts = (sel) => { const L = ((((D.settings || {}).playersCfg || {}).orbix) || []).filter((x) => x && (x.host || x.code)); return L.map((x) => { const v = x.code || x.host; return `<option value="${esc(v)}" data-h="${esc(x.code ? x.host || '' : '')}"${v === sel ? ' selected' : ''}>${esc(x.name || v)}</option>`; }).join(''); };
 
   async function load() {
     O.busy = true; O.err = ''; render();
@@ -76,7 +76,7 @@
       <label style="grid-column:1/-1">Note (facoltative)<input class="inp" id="onT" maxlength="60" value="${esc(pre.note || '')}"></label></div>
       <p class="mut" style="font-size:12.5px;margin:10px 0 0">Usa un posto del tuo account OrbixPlay.</p>`, 'Aggiungi');
     if (!ok) return;
-    try { await api('POST', '/admin/oxp/playlists', { device: $('#onD').value, user: $('#onU').value, pass: $('#onP').value, host: $('#onH').value, name: $('#onN').value, notes: $('#onT').value }); toast('Playlist aggiunta su OrbixPlay'); load(); } catch (e) { toast(e.message, 1); }
+    try { await api('POST', '/admin/oxp/playlists', { device: $('#onD').value, user: $('#onU').value, pass: $('#onP').value, host: $('#onH').value, hostUrl: ($('#onH').selectedOptions && $('#onH').selectedOptions[0] && $('#onH').selectedOptions[0].dataset.h) || '', name: $('#onN').value, notes: $('#onT').value }); toast('Playlist aggiunta su OrbixPlay'); load(); } catch (e) { toast(e.message, 1); }
   }
   async function chDns() {
     const hosts = [...new Set((O.pls || []).map((p) => p.host).filter(Boolean))];
