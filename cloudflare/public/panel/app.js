@@ -445,9 +445,12 @@ function profRow(p, i) {
     <div class="row3"><select class="inp" data-pk="avatar" title="Avatar">${avOptions(p.avatar)}</select>
     <select class="inp" data-pk="pl" title="Playlist del profilo"><option value="all">Tutte le playlist</option>${edit.playlists.map((x) => `<option value="${esc(x.id)}" ${p.pl === x.id ? 'selected' : ''}>${esc(x.name || 'Playlist')}</option>`).join('')}</select>
     <button class="btn sm kid ${p.kids ? 'on' : ''}" data-pkids title="Controllo genitori per questo profilo: niente contenuti per adulti">${p.kids ? '✓ ' : ''}Bambini</button></div>
-    ${p.kids || p.pinH ? `<div class="row3" style="margin-top:6px;align-items:center">${p.kids ? `<select class="inp" data-pk="age" title="Età massima dei contenuti (film e serie con la classificazione)"><option value="">Nessun limite di età</option>${[16, 14, 12, 7].map((a) => `<option value="${a}" ${+p.age === a ? 'selected' : ''}>Fino a ${a}+${a === 7 ? ' (bambini)' : ''}</option>`).join('')}</select>` : '<span></span>'}
-    ${p.pinH ? '<span class="mut" style="font-size:12px">🔒 PIN del profilo impostato dal cliente</span><button class="btn sm" data-ppin title="Il cliente non ricorda il PIN del profilo: lo togli da qui">Togli PIN</button>' : ''}</div>` : ''}</div>`;
+    <div class="row3" style="margin-top:6px;align-items:center">${p.kids ? `<select class="inp" data-pk="age" title="Età massima dei contenuti (film e serie con la classificazione)"><option value="">Nessun limite di età</option>${[16, 14, 12, 7].map((a) => `<option value="${a}" ${+p.age === a ? 'selected' : ''}>Fino a ${a}+${a === 7 ? ' (bambini)' : ''}</option>`).join('')}</select>` : '<span class="mut" style="font-size:12px">Età: accendi «Bambini» per impostarla</span>'}
+      <span class="mut" style="font-size:12px;white-space:nowrap">${p.pinH ? '🔒 PIN del profilo impostato' : 'PIN del profilo: nessuno'}</span>
+      <span style="display:flex;gap:6px;justify-content:flex-end"><button class="btn sm" data-ppset title="${p.pinH ? 'Cambia il PIN del profilo (4 cifre)' : 'Imposta un PIN di 4 cifre per entrare in questo profilo'}">${p.pinH ? 'Cambia PIN' : 'Imposta PIN'}</button>${p.pinH ? '<button class="btn sm" data-ppin title="Toglie il PIN: il profilo si apre senza chiederlo">Togli PIN</button>' : ''}</span></div></div>`;
 }
+/* PIN del profilo: stessa impronta calcolata dall'app (FNV-1a, "ppin:" + PIN); il PIN in chiaro non viene mai salvato */
+function profPinHash(pin) { const t = 'ppin:' + pin; let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
 const PERM_L = [
   ['report', 'Segnalare problemi', 'Pulsante «Segnala un problema» nell\'app'],
   ['request', 'Richiedere contenuti', 'Il cliente può chiederti film e serie'],
@@ -585,6 +588,16 @@ function renderDrawer() {
     $('[data-prm]', el).onclick = () => { sync(); edit.profiles.splice(i, 1); renderDrawer(); };
     $('[data-pkids]', el).onclick = () => { sync(); edit.profiles[i].kids = !edit.profiles[i].kids; if (!edit.profiles[i].kids) edit.profiles[i].age = null; renderDrawer(); };
     const pp = $('[data-ppin]', el); if (pp) pp.onclick = () => { sync(); edit.profiles[i].pinH = ''; toast('PIN del profilo tolto: salva per confermare'); renderDrawer(); };
+    const ps = $('[data-ppset]', el); if (ps) ps.onclick = () => {
+      // campo inline: 4 cifre, Invio o Salva; il cliente userà questo PIN per entrare nel profilo
+      sync();
+      const wrap = ps.parentNode; wrap.innerHTML = `<input class="inp" data-ppv type="tel" inputmode="numeric" maxlength="4" placeholder="4 cifre" style="width:90px;margin:0;text-align:center;letter-spacing:.3em" autocomplete="off"><button class="btn sm pri" data-ppok>Salva PIN</button><button class="btn sm" data-ppno>Annulla</button>`;
+      const inp = $('[data-ppv]', wrap); inp.focus();
+      const done = () => { const v = inp.value.trim(); if (!/^\d{4}$/.test(v)) { toast('Il PIN del profilo è di 4 cifre', 1); inp.focus(); return; } edit.profiles[i].pinH = profPinHash(v); toast('PIN del profilo impostato: salva la scheda per confermare'); renderDrawer(); };
+      $('[data-ppok]', wrap).onclick = done; $('[data-ppno]', wrap).onclick = () => renderDrawer();
+      inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); done(); } if (e.key === 'Escape') renderDrawer(); };
+      inp.oninput = () => { const v = inp.value.replace(/\D/g, '').slice(0, 4); if (inp.value !== v) inp.value = v; };
+    };
     $('[data-pk="avatar"]', el).onchange = (e) => { $('[data-avd]', el).outerHTML = avDot(e.target.value); };
   });
   /* VPN */
