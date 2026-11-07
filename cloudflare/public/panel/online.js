@@ -1,4 +1,4 @@
-/* KAIROS Control — «Online ora terzi»: chi è collegato in questo momento sui pannelli esterni (WOLF, Armada, MaxPlayer, OrbixPlay).
+/* KAIROS Control — «Online ora terzi»: chi è collegato in questo momento sui pannelli esterni (WOLF, Armada, MaxPlayer, OrbixPlay, MirkoTeam/ORCP).
    WOLF dice da solo le connessioni attive di ogni linea; per le altre KAIROS chiede al server IPTV le «connessioni attive»
    (player_api → user_info.active_cons, come fa un'app quando entra: non apre il video). Verde = collegato, rosso = scollegato,
    grigio = il server non ha risposto. Titolare e agenti (solo i pannelli e i clienti che possono vedere). */
@@ -72,8 +72,16 @@
     S.busy = true; S.errs = []; draw();
     const rows = [], err = (n) => (e) => S.errs.push(n + ': ' + (e && e.message ? e.message : e));
     await Promise.all([
-      canP('wolf') && (async () => { const c = await api('GET', '/admin/wolf/config'); if (!c.set) return; const d = await api('GET', '/admin/wolf/lines');
+      canP('wolf') && (async () => { const c = await api('GET', '/admin/wolf/config'); if (!c.set) return;
+        // WOLF ogni tanto non risponde al primo colpo: un secondo tentativo dopo 4 s prima di segnalare l'errore
+        const d = await api('GET', '/admin/wolf/lines').catch(() => new Promise((ok, no) => setTimeout(() => api('GET', '/admin/wolf/lines').then(ok, no), 4000)));
         for (const l of d.lines || []) rows.push({ p: 'WOLF', u: l.username, n: l.note, w: l.watching, v: { on: l.conns > 0, conns: l.conns, max: l.max }, mx: l.max, en: l.enabled }); })().catch(err('WOLF')),
+      !isAg() && (async () => { const st = await api('GET', '/admin/orcp/state'); if (!st.connected) return; const d = await api('GET', '/admin/orcp/data?w=conns');
+        // MirkoTeam (ORCP): un rigo per utente; «connessioni» = dispositivi online adesso con quell'utente
+        const by = new Map();
+        for (const x of d.list || []) { const k = String(x.user || '').toLowerCase(); if (!k) continue; const r = by.get(k) || { p: 'MirkoTeam', u: x.user, n: '', v: { on: false, conns: 0 }, en: true, last: '' };
+          if (x.online) { r.v.on = true; r.v.conns++; } const tag = [x.device, x.version && 'v' + x.version].filter(Boolean).join(' · '); if (x.online || !r.n) r.n = tag; if (x.last > r.last) r.last = x.last; by.set(k, r); }
+        for (const r of by.values()) rows.push(r); })().catch(err('MirkoTeam')),
       canP('armada') && (async () => { const st = await api('GET', '/admin/armada/state'); if (!st.connected) return; const d = await api('GET', '/admin/armada/lines');
         for (const x of d.lines || []) rows.push({ p: 'Armada', u: x.username, n: x.notes, h: st.dns, pw: x.password, mx: x.maxConn, en: x.enabled }); })().catch(err('Armada')),
       canP('mxp') && (async () => { const a = (await api('GET', '/admin/mxp/accounts')).accounts || [];
@@ -100,7 +108,7 @@
     const shown = list.slice(0, S.limit), panels = [...new Set(rows.map((r) => r.p))];
     const FL = [['', 'Tutti'], ['on', 'Collegati'], ['multi', 'Con più connessioni'], ['off', 'Scollegati'], ['na', 'Non verificabili']];
     const keep = document.activeElement && document.activeElement.id === 'cnQ' ? document.activeElement.selectionStart : -1;
-    V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">Online ora terzi</b><small>${isAg() ? 'I tuoi clienti' : 'I clienti'} di WOLF, Armada, MaxPlayer e OrbixPlay: verde se stanno guardando adesso, arancione se la stessa linea è aperta su più dispositivi insieme, rosso se no. Si aggiorna ogni 2 minuti.</small>${S.t ? `<small>Ultimo controllo: ${new Date(S.t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</small>` : ''}</div>
+    V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">Online ora terzi</b><small>${isAg() ? 'I tuoi clienti di WOLF, Armada, MaxPlayer e OrbixPlay' : 'I clienti di WOLF, Armada, MaxPlayer, OrbixPlay e MirkoTeam'}: verde se stanno guardando adesso, arancione se la stessa linea è aperta su più dispositivi insieme, rosso se no. Si aggiorna ogni 2 minuti.</small>${S.t ? `<small>Ultimo controllo: ${new Date(S.t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</small>` : ''}</div>
         <button class="btn sm" id="cnRe">${S.busy ? 'Carico…' : 'Aggiorna'}</button></div>
       <div class="cn-k"><div><small><i class="on-dot g"></i>Collegati</small><b style="color:#4ade80">${n('on')}</b></div><div><small><i class="on-dot r"></i>Scollegati</small><b style="color:#f87171">${n('off')}</b></div><div data-multi style="cursor:pointer" title="Linee aperte su più dispositivi nello stesso momento"><small><i class="on-dot o"></i>Con più connessioni</small><b style="color:#fbbf24">${nMulti}</b></div><div><small><i class="on-dot"></i>Non verificabili${n('wait') ? ' · ' + n('wait') + ' in verifica' : ''}</small><b style="color:var(--mut)">${n('na')}</b></div></div>
       ${S.errs.length ? `<p style="color:#ff8f8f;margin:10px 0 0;font-size:12.5px">${S.errs.map(esc).join('<br>')}</p>` : ''}</div>
@@ -114,7 +122,7 @@
         <div><span class="wf-tag g">${esc(r.p)}</span>${r.mx ? `<small class="mut" style="display:block;font-size:11px">max ${+r.mx} conn.</small>` : ''}${r.en === false ? '<span class="wf-tag b">Disattivata</span>' : ''}</div>
         <div><span class="k">Utente</span><b class="mono">${esc(r.u) || '—'}</b></div>
         <div><span class="k">Cliente / nota</span><div class="mono">${esc(r.n) || '<span class="mut">—</span>'}</div></div>
-        <div><span class="k">Sta guardando</span><div class="mono">${r.w ? '▶ ' + esc(r.w) : `<span class="mut" title="${r.p === 'WOLF' ? 'Nessun canale aperto in questo momento' : 'Il pannello ' + esc(r.p) + ' non dice quale canale è aperto: lo mostro solo se la stessa linea è anche su WOLF'}">—</span>`}</div></div></div>`).join('')}</div>
+        <div><span class="k">Sta guardando</span><div class="mono">${r.w ? '▶ ' + esc(r.w) : `<span class="mut" title="${r.p === 'WOLF' ? 'Nessun canale aperto in questo momento' : 'Il pannello ' + esc(r.p) + ' non dice quale canale è aperto: lo mostro solo se la stessa linea è anche su WOLF'}">—</span>`}${r.p === 'MirkoTeam' && r.last && !(r.v && r.v.on) ? `<small class="mut" style="display:block;font-size:11px">ultimo accesso ${esc(r.last)}</small>` : ''}</div></div></div>`).join('')}</div>
       ${list.length > shown.length ? `<div style="margin-top:10px"><button class="btn sm" id="cnMore">Mostra altre ${Math.min(200, list.length - shown.length)}</button></div>` : ''}</div>`;
     $('#cnRe').onclick = () => { window.KXOnline.refresh(); loadAll(); };
     const mk = $('[data-multi]', V); if (mk) mk.onclick = () => { S.f = S.f === 'multi' ? '' : 'multi'; S.limit = 200; draw(); };
