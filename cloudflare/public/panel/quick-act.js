@@ -11,6 +11,8 @@
 .qa-pn{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:14px}
 .qa-pn button{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:#eef1f8;font:inherit;font-weight:700;cursor:pointer;text-align:left}
 .qa-pn button small{font-weight:500;color:var(--mut);font-size:11.5px}.qa-pn button.on{border-color:#4f8cff;background:rgba(79,140,255,.14)}.qa-pn button:disabled{opacity:.45;cursor:not-allowed}
+.btn.qa-red{background:linear-gradient(100deg,#ef4444,#b91c1c)!important;color:#fff!important;border:0!important;box-shadow:0 10px 30px -12px #ef4444}.btn.qa-red:disabled{opacity:.55}
+.qa-a.qa-red-c{border-color:rgba(239,68,68,.55)!important;background:rgba(239,68,68,.12)!important}.qa-a.qa-red-c i{color:#ef4444}
 .qa-f{display:grid;grid-template-columns:1fr 1fr;gap:10px}.qa-f .inp{margin:0}.qa-f label,.qa-app label.l{display:flex;flex-direction:column;gap:5px;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}
 .qa-f .w{grid-column:1/-1}@media (max-width:560px){.qa-f{grid-template-columns:1fr}}
 .qa-app{border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:8px;background:rgba(255,255,255,.02)}.qa-app.on{border-color:#22c55e;background:rgba(34,197,94,.08)}
@@ -53,7 +55,7 @@
 
   async function open(pre) {
     pre = pre || {};
-    Object.assign(S, { step: 1, panel: '', name: '', line: null, res: null, busy: false, wolf: null, arm: null, atx: null, mxDoms: null, dns: null, o: { months: 12, mode: 'new', code: '', dev: '', orbixId: '', host: '', mxDom: '', oxDns: '0', note: '' } });
+    Object.assign(S, { step: 1, panel: '', name: '', line: null, res: null, busy: false, wolf: null, arm: null, atx: null, mxDoms: null, dns: null, o: { srv: '', months: 12, mode: 'new', code: '', dev: '', orbixId: '', host: '', mxDom: '', oxDns: '0', note: '' } });
     const ok = panels().filter((p) => p[3]);
     if (!ok.length) return toast('Nessun pannello IPTV disponibile per te', 1);
     S.panel = ok.some((p) => p[0] === pre.panel) ? pre.panel : ok[0][0];
@@ -118,6 +120,7 @@
   }
 
   /* ---------- passo 2: app ---------- */
+  const srvList = () => (Array.isArray(D.servers) ? D.servers : []).filter((x) => x && x.id);
   const devList = () => (Array.isArray(D.devices) ? D.devices : []).filter((d) => d && d.id && !d.parent && d.status !== 'pending');
   function step2() {
     const on = (k) => S.apps.has(k);
@@ -129,7 +132,7 @@
     const ox = card('orbix', 'op', 'OrbixPlay', 'Carica la lista sul dispositivo del cliente', `<label class="l">ID del dispositivo (dall\'app OrbixPlay)<input class="inp mono" id="qaOxI" data-mac maxlength="64" autocomplete="off" value="${esc(S.o.orbixId)}" placeholder="es. 00:1A:79:AA:BB:CC"></label>
       <label class="l">DNS di OrbixPlay${oxd.length ? `<select class="inp" id="qaOxD">${oxd.map((x, i) => `<option value="${i}"${String(i) === String(S.o.oxDns) ? ' selected' : ''}>${esc(x.name)}${x.host && !isAg() ? ' — ' + esc(String(x.host).replace(/^https?:\/\//, '')) : ''}</option>`).join('')}</select>` : '<small class="mut">Nessun DNS di OrbixPlay impostato</small>'}</label>`, oxOk, isAg() ? 'Serve il permesso «Attivare OrbixPlay e MaxPlayer»' : 'OrbixPlay non è collegato');
     const hostField = () => isAg()
-      ? `<label class="l">Server della linea${(D.servers || []).length ? `<select class="inp" id="qaH">${(D.servers || []).map((h, i) => `<option value="${esc(h)}"${h === S.o.host ? ' selected' : ''}>${esc((D.serverNames || [])[i] || 'Server ' + (i + 1))}</option>`).join('')}</select>` : '<small class="mut">Nessun server assegnato: chiedi a chi ti gestisce</small>'}</label>`
+      ? `<label class="l">Server della linea${srvList().length ? `<select class="inp" id="qaH">${srvList().map((x) => `<option value="${esc(x.id)}"${x.id === S.o.srv ? ' selected' : ''}>${esc(x.name || 'Server')}</option>`).join('')}</select>` : '<small class="mut">Nessun server assegnato: chiedi a chi ti gestisce</small>'}</label>`
       : `<label class="l">DNS della linea<input class="inp mono" id="qaH" list="qaHL" value="${esc(S.o.host)}" placeholder="${S.panel === 'armada' ? 'lo dà Armada alla creazione' : 'http://dns.esempio.com:8080'}"><datalist id="qaHL">${(S.dns || []).map((x) => `<option value="${esc(x.host)}">${esc(x.name || '')}</option>`).join('')}</datalist></label>`;
     const kx = card('kairos', 'kx', 'Cliente Kairos', 'App Kairos Pro, TV, Lite, XC…: cliente nuovo o linea aggiunta a uno esistente', `<label class="l">Cliente<select class="inp" id="qaMode"><option value="new"${S.o.mode === 'new' ? ' selected' : ''}>Nuovo cliente</option><option value="ex"${S.o.mode === 'ex' ? ' selected' : ''}>Cliente esistente</option></select></label>
       ${S.o.mode === 'new' ? `<label class="l">Codice sulla TV${isAg() ? '' : ' (vuoto = lo genera KAIROS)'}<input class="inp mono" id="qaCode" maxlength="9" value="${esc(S.o.code)}" placeholder="KXAB-12CD"></label><label class="l">Durata<select class="inp" id="qaMo">${[1, 3, 6, 12].map((m) => `<option value="${m}"${!S.o.date && +S.o.months === m ? ' selected' : ''}>${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}<option value="date"${S.o.date ? ' selected' : ''}>Data precisa…</option></select></label>${S.o.date ? `<label class="l" style="grid-column:1/-1">Scade il<input class="inp" id="qaDate" type="date" value="${esc(S.o.date)}" min="${new Date().toISOString().slice(0, 10)}"></label>` : ''}`
@@ -140,7 +143,7 @@
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${others.map((n) => `<label class="btn sm${on('app:' + n) ? ' pri' : ''}" style="cursor:pointer"><input type="checkbox" data-qaapp="app:${esc(n)}"${on('app:' + n) ? ' checked' : ''}${can('lines') ? '' : ' disabled'} style="display:none">${esc(n)}</label>`).join('')}</div>
       ${others.some((n) => on('app:' + n)) && !S.apps.has('kairos') ? `<div class="b">${hostField()}</div>` : ''}</div>` : '';
     return `<p class="mut" style="margin:0 0 12px;font-size:13px">La linea <b>${esc(S.panel === 'wolf' ? 'WOLF' : S.panel === 'armada' ? 'Armada' : 'Atlantix')}</b>${S.name ? ' per <b>' + esc(S.name) + '</b>' : ''} va su: (puoi sceglierne più di una)</p>${mx}${ox}${kx}${ot}
-      <div class="qa-ft"><button class="btn" id="qaBack">← Indietro</button><span class="sp"></span><button class="btn pri" id="qaGo">⚡ Crea e attiva${S.apps.size ? ' (' + S.apps.size + ')' : ''}</button></div>`;
+      <div class="qa-ft"><button class="btn" id="qaBack">← Indietro</button><span class="sp"></span><button class="btn qa-red" id="qaGo">⚡ Crea e attiva${S.apps.size ? ' (' + S.apps.size + ')' : ''}</button></div>`;
   }
   function read2() {
     const g = (id) => ($('#' + id) ? $('#' + id).value : undefined);
@@ -152,13 +155,14 @@
     if (g('qaMo') !== undefined) { if (g('qaMo') === 'date') { if (!S.o.date) S.o.date = addMonths('', 12); } else { S.o.months = +g('qaMo'); S.o.date = ''; } }
     if (g('qaDate') !== undefined) S.o.date = g('qaDate');
     if (g('qaDev') !== undefined) S.o.dev = g('qaDev').trim();
-    if (g('qaH') !== undefined) S.o.host = g('qaH').trim();
+    if (g('qaH') !== undefined) { if (isAg()) S.o.srv = g('qaH'); else S.o.host = g('qaH').trim(); }
   }
   function check2() {
     if (S.apps.has('orbix') && !S.o.orbixId) return 'Scrivi l\'ID del dispositivo OrbixPlay';
     if (S.apps.has('kairos')) {
       if (S.o.mode === 'new' && isAg() && !/^KX[A-Z0-9]{2}-[A-Z0-9]{4}$/.test(S.o.code)) return 'Scrivi il codice che il cliente vede sulla TV (es. KXAB-12CD)';
       if (S.o.mode === 'ex' && !findDev()) return 'Scegli il cliente esistente dall\'elenco';
+      if (isAg() && !S.o.srv) return 'Scegli il server della linea';
       if (S.o.mode === 'new' && S.o.date && !(/^\d{4}-\d{2}-\d{2}$/.test(S.o.date) && new Date(S.o.date) > new Date())) return 'Scegli una data di scadenza futura';
     }
     return '';
@@ -177,12 +181,21 @@
     if (k === 'max') { const r = await api('POST', '/admin/ext-lists', { app: 'max', name, username: L.username, password: L.password, domain: S.o.mxDom, note: L.ref }); return `Account creato${r.dns ? ' · DNS ' + r.dns : ''}: il cliente entra in MaxPlayer con utente e password della linea`; }
     if (k === 'orbix') { const r = await api('POST', '/admin/ext-lists', { app: 'orbix', name, orbixId: S.o.orbixId, username: L.username, password: L.password, dns: +S.o.oxDns || 0, note: L.ref }); return `Lista caricata sul dispositivo ${r.ref || S.o.orbixId}${r.dns ? ' · DNS ' + r.dns : ''}`; }
     if (k === 'kairos') {
-      if (S.o.mode === 'ex') { const d = findDev(); if (!d) throw new Error('Cliente non trovato'); S.o.exDev = d; return `Linea pronta per ${d.name || d.code}: premi «Apri la scheda» e salva`; }
-      if (!L.host) throw new Error(isAg() ? 'Scegli il server della linea' : 'Scrivi il DNS della linea (es. http://dns.esempio.com:8080)');
-      const r = await api('POST', '/admin/devices', { code: S.o.code, name, notes: L.ref, expires: S.o.date || addMonths('', +S.o.months || 12), active: true, playlists: [{ id: 'p' + Date.now(), name: 'Principale', type: 'xtream', url: '', host: L.host, username: L.username, password: L.password }] });
+      const plName = L.ref.split(' ')[0] || 'Linea';
+      // agente: solo il server assegnato (serverId), mai il DNS; titolare: host della linea
+      const pl = isAg() ? { serverId: S.o.srv, name: plName, username: L.username, password: L.password } : { id: 'p' + Date.now(), name: plName, type: 'xtream', url: '', host: L.host, username: L.username, password: L.password };
+      if (isAg() ? !S.o.srv : !L.host) throw new Error(isAg() ? 'Scegli il server della linea' : 'Scrivi il DNS della linea (es. http://dns.esempio.com:8080)');
+      if (S.o.mode === 'ex') {
+        const d = findDev(); if (!d) throw new Error('Cliente non trovato'); S.o.exDev = d;
+        if (!isAg()) return `Linea pronta per ${d.name || d.code}: premi «Apri la scheda» e salva`;
+        const keep = (d.playlists || []).map((x) => ({ id: x.id, serverId: x.serverId, username: x.username, password: x.password }));
+        await api('PUT', '/admin/devices/' + d.id, { playlists: [...keep, pl] }); S.o.exDev = null;
+        return `Linea aggiunta a ${d.name || d.code}`;
+      }
+      const r = await api('POST', '/admin/devices', { code: S.o.code, name, notes: L.ref, expires: S.o.date || addMonths('', +S.o.months || 12), active: true, playlists: [pl] });
       S.o.newCode = (r && r.code) || S.o.code; return `Cliente creato${S.o.newCode ? ' · codice ' + S.o.newCode : ''} · scade ${S.o.date ? 'il ' + S.o.date.split('-').reverse().join('/') : 'tra ' + S.o.months + ' mesi'}`;
     }
-    if (k.startsWith('app:')) { await api('POST', '/admin/linked-lines', { app: k.slice(4), username: L.username, password: L.password, dns: L.host || '', note: [name, L.ref].filter(Boolean).join(' · ') }); return 'Segnata in Appunti App'; }
+    if (k.startsWith('app:')) { await api('POST', '/admin/linked-lines', { app: k.slice(4), username: L.username, password: L.password, dns: isAg() ? '' : L.host || '', note: [name, L.ref].filter(Boolean).join(' · ') }); return 'Segnata in Appunti App'; }
     throw new Error('App sconosciuta');
   }
   async function go() {
@@ -221,7 +234,7 @@
     const lineRow = !R.line ? '<div class="r"><i>…</i><div><b>Creo la linea…</b></div></div>'
       : R.line.ok ? `<div class="r ok"><i>✓</i><div><b>Linea creata su ${esc(L.ref)}</b><div class="qa-kv">${kv('Utente', L.username)}${kv('Password', L.password)}${isAg() ? '' : kv('DNS', L.host)}</div></div></div>`
       : `<div class="r ko"><i>✕</i><div><b>Linea non creata</b><small>${esc(R.line.msg)}</small></div><button class="btn sm" id="qaBack">Correggi</button></div>`;
-    const apps = R.apps.map((x, i) => `<div class="r ${x.ok === null ? '' : x.ok ? 'ok' : 'ko'}"><i>${x.ok === null ? '…' : x.ok ? '✓' : '✕'}</i><div><b>${esc(lbl(x.k))}</b><small>${esc(x.msg || (x.ok === null ? 'In corso…' : ''))}</small></div>${x.ok === false ? `<button class="btn sm" data-qare="${i}">Riprova</button>` : x.ok && x.k === 'kairos' && S.o.mode === 'ex' ? '<button class="btn sm pri" id="qaOpenDev">Apri la scheda</button>' : ''}</div>`).join('');
+    const apps = R.apps.map((x, i) => `<div class="r ${x.ok === null ? '' : x.ok ? 'ok' : 'ko'}"><i>${x.ok === null ? '…' : x.ok ? '✓' : '✕'}</i><div><b>${esc(lbl(x.k))}</b><small>${esc(x.msg || (x.ok === null ? 'In corso…' : ''))}</small></div>${x.ok === false ? `<button class="btn sm" data-qare="${i}">Riprova</button>` : x.ok && x.k === 'kairos' && S.o.mode === 'ex' && !isAg() && S.o.exDev ? '<button class="btn sm pri" id="qaOpenDev">Apri la scheda</button>' : ''}</div>`).join('');
     const done = R.line && R.line.ok && R.apps.every((x) => x.ok !== null) && !S.busy;
     return `<div class="qa-res">${lineRow}${apps}</div>
       ${done ? `<details style="margin-top:14px"><summary style="cursor:pointer;font-weight:700;font-size:13.5px">Messaggio per il cliente (WhatsApp)</summary><div class="qa-msg" style="margin-top:8px">${esc(waText())}</div></details>` : ''}
@@ -231,7 +244,7 @@
   function draw() {
     const B = $('#qaBox'); if (!B) return;
     const st = ['Pannello e linea', 'App', 'Attivazione'];
-    B.innerHTML = `<h3 style="margin:0 0 4px">⚡ Nuova attivazione</h3><p class="mut" style="margin:0 0 12px;font-size:13px">Crei la linea sul pannello IPTV e la metti subito sulle app del cliente.</p>
+    B.innerHTML = `<h3 style="margin:0 0 4px">⚡ Nuova attivazione: App e Linea IPTV</h3><p class="mut" style="margin:0 0 12px;font-size:13px">Crei la linea sul pannello IPTV e la metti subito sulle app del cliente.</p>
       <div class="qa-steps">${st.map((s, i) => `<span class="${S.step === i + 1 ? 'on' : S.step > i + 1 ? 'ok' : ''}">${i + 1}. ${s}</span>`).join('')}</div>${S.step === 1 ? step1() : S.step === 2 ? step2() : step3()}`;
     bind(B);
   }
@@ -256,7 +269,7 @@
   }
 
   window.KXQuick = { open };
-  const BTN = '<button class="btn sm pri" data-kxquick title="Crea la linea e mettila subito sulle app">⚡ Nuova attivazione</button>';
+  const BTN = '<button class="btn sm qa-red" data-kxquick title="Crea la linea e mettila subito sulle app">⚡ Nuova attivazione: App e Linea IPTV</button>';
   window.KXQuick.button = (panel) => BTN.replace('data-kxquick', `data-kxquick="${panel}"`);
   document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('[data-kxquick]'); if (b) { e.preventDefault(); open({ panel: b.dataset.kxquick }); } });
 })();

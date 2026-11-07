@@ -99,7 +99,7 @@
     }
     const d = W.data || {}, list = filtered(), shown = list.slice(0, W.limit);
     const FL = [['', 'Tutte'], ['on', 'Attive'], ['exp', 'In scadenza / scadute'], ['off', 'Disattivate'], ['conn', 'Collegate ora'], ['disc', 'Scollegate'], ...(isAg() ? [] : [['link', 'Collegate a clienti']])];
-    V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">✅ Pannello WOLF collegato</b><small>${esc(W.cfg.url)} · ${esc(W.cfg.user)}</small><small>Quello che fai qui succede subito anche su WOLF, e viceversa.</small></div>
+    V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">✅ Pannello WOLF collegato</b><small>${isAg() ? esc(W.cfg.user) : esc(W.cfg.url) + ' · ' + esc(W.cfg.user)}</small><small>Quello che fai qui succede subito anche su WOLF, e viceversa.</small></div>
         <div><small>Crediti WOLF</small><span class="cr">${d.credits ?? '—'}</span></div><div><small>Linee</small><span class="cr">${d.lines ? d.lines.length : '—'}</span></div>
         <button class="btn sm" id="wfPw">Cambia password</button><button class="btn sm" id="wfRe">${W.busy || W.rsBusy ? 'Carico…' : 'Aggiorna'}</button><button class="btn sm" id="wfNew">${W.tab === 'rs' ? '+ Nuovo reseller' : '+ Nuova linea'}</button>${W.tab !== 'rs' && window.KXQuick ? KXQuick.button('wolf') : ''}</div>
         ${W.err ? `<p style="color:#ff8f8f;margin:10px 0 0">${esc(W.err)}</p>` : ''}
