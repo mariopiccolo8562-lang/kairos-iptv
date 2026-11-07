@@ -75,7 +75,7 @@
       canP('wolf') && (async () => { const c = await api('GET', '/admin/wolf/config'); if (!c.set) return;
         // WOLF ogni tanto non risponde al primo colpo: un secondo tentativo dopo 4 s prima di segnalare l'errore
         const d = await api('GET', '/admin/wolf/lines').catch(() => new Promise((ok, no) => setTimeout(() => api('GET', '/admin/wolf/lines').then(ok, no), 4000)));
-        for (const l of d.lines || []) rows.push({ p: 'WOLF', u: l.username, n: l.note, w: l.watching, v: { on: l.conns > 0, conns: l.conns, max: l.max }, mx: l.max, en: l.enabled }); })().catch(err('WOLF')),
+        for (const l of d.lines || []) rows.push({ p: 'WOLF', id: l.id, u: l.username, n: l.note, w: l.watching, v: { on: l.conns > 0, conns: l.conns, max: l.max }, mx: l.max, en: l.enabled }); })().catch(err('WOLF')),
       !isAg() && (async () => { const st = await api('GET', '/admin/orcp/state'); if (!st.connected) return; const d = await api('GET', '/admin/orcp/data?w=conns');
         // MirkoTeam (ORCP): un rigo per utente; «connessioni» = dispositivi online adesso con quell'utente
         const by = new Map();
@@ -92,12 +92,27 @@
     ].filter(Boolean));
     // solo WOLF dice il canale in onda: se la stessa linea è anche su OrbixPlay/MaxPlayer/Armada, «Sta guardando» lo prende da lì
     const ww = new Map(rows.filter((r) => r.p === 'WOLF' && r.w && r.u).map((r) => [String(r.u).toLowerCase(), r.w]));
-    for (const r of rows) { if (!r.w && r.u && ww.has(String(r.u).toLowerCase())) r.w = ww.get(String(r.u).toLowerCase()); if (!r.v) r.k = want(r.h, r.u, r.pw); }
+    // «Disconnetti» si può fare solo su WOLF (chiamata kick): per le linee OrbixPlay/MaxPlayer/Armada/MirkoTeam vale se la stessa username è una linea WOLF
+    const wid = new Map(rows.filter((r) => r.p === 'WOLF' && r.id && r.u).map((r) => [String(r.u).toLowerCase(), r.id]));
+    for (const r of rows) { const k = String(r.u || '').toLowerCase(); if (!r.w && k && ww.has(k)) r.w = ww.get(k); if (!r.v) r.k = want(r.h, r.u, r.pw); r.kick = r.p === 'WOLF' ? r.id : wid.get(k) || 0; }
     S.rows = rows; S.busy = false; S.t = Date.now(); draw();
   }
   const vOf = (r) => r.v || (r.k ? window.KXOnline.get(r.k) : null);
   const stOf = (r) => { const v = vOf(r); return v === undefined ? 'wait' : v === null ? 'na' : v.on ? 'on' : 'off'; };
   const multi = (r) => { const v = vOf(r); return !!(v && v.conns > 1); };
+  const KICKED = new Map(); // id WOLF → quando è stata disconnessa (il pannello la mostra «Disconnessa» finché non si ricarica)
+  async function kick(list) {
+    const todo = list.filter((r) => r.kick && !KICKED.has(r.kick)); if (!todo.length) return;
+    const ids = [...new Set(todo.map((r) => r.kick))];
+    const body = ids.length === 1 ? `<p>Chiude adesso tutte le connessioni aperte della linea <b>${esc(todo[0].u)}</b> su WOLF. Il cliente potrà ricollegarsi subito (una sola connessione alla volta se il pacchetto lo prevede).</p>`
+      : `<p>Chiude adesso le connessioni aperte di <b>${ids.length} linee</b> su WOLF: ${todo.slice(0, 15).map((r) => esc(r.u)).join(', ')}${todo.length > 15 ? ` e altre ${todo.length - 15}` : ''}.</p><p class="mut" style="font-size:12.5px">I clienti potranno ricollegarsi subito.</p>`;
+    if (!(await ask(ids.length === 1 ? 'Disconnettere ' + todo[0].u + '?' : `Disconnettere ${ids.length} linee?`, body, 'Disconnetti'))) return;
+    let ok = 0, ko = [];
+    for (const id of ids) { try { await api('POST', `/admin/wolf/lines/${id}/kick`); KICKED.set(id, Date.now()); ok++; } catch (e) { ko.push((todo.find((r) => r.kick === id) || {}).u + ': ' + (e.message || 'errore')); } }
+    toast(ok ? `${ok === 1 ? 'Linea disconnessa' : ok + ' linee disconnesse'} su WOLF` + (ko.length ? ` · ${ko.length} no` : '') : 'Nessuna linea disconnessa', ko.length ? 1 : 0);
+    if (ko.length) S.errs = [...S.errs, ...ko.map((x) => 'Disconnetti ' + x)];
+    draw(); setTimeout(() => { if (!S.busy) loadAll(); }, 4000); // WOLF aggiorna il conteggio connessioni dopo qualche secondo
+  }
   function draw() {
     const V = $('#v-conn'); if (!V) return;
     const rows = S.rows || [], q = S.q.trim().toLowerCase();
@@ -110,7 +125,7 @@
     const keep = document.activeElement && document.activeElement.id === 'cnQ' ? document.activeElement.selectionStart : -1;
     V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">Online ora terzi</b><small>${isAg() ? 'I tuoi clienti di WOLF, Armada, MaxPlayer e OrbixPlay' : 'I clienti di WOLF, Armada, MaxPlayer, OrbixPlay e MirkoTeam'}: verde se stanno guardando adesso, arancione se la stessa linea è aperta su più dispositivi insieme, rosso se no. Si aggiorna ogni 2 minuti.</small>${S.t ? `<small>Ultimo controllo: ${new Date(S.t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</small>` : ''}</div>
         <button class="btn sm" id="cnRe">${S.busy ? 'Carico…' : 'Aggiorna'}</button></div>
-      <div class="cn-k"><div><small><i class="on-dot g"></i>Collegati</small><b style="color:#4ade80">${n('on')}</b></div><div><small><i class="on-dot r"></i>Scollegati</small><b style="color:#f87171">${n('off')}</b></div><div data-multi style="cursor:pointer" title="Linee aperte su più dispositivi nello stesso momento"><small><i class="on-dot o"></i>Con più connessioni</small><b style="color:#fbbf24">${nMulti}</b></div><div><small><i class="on-dot"></i>Non verificabili${n('wait') ? ' · ' + n('wait') + ' in verifica' : ''}</small><b style="color:var(--mut)">${n('na')}</b></div></div>
+      <div class="cn-k"><div><small><i class="on-dot g"></i>Collegati</small><b style="color:#4ade80">${n('on')}</b></div><div><small><i class="on-dot r"></i>Scollegati</small><b style="color:#f87171">${n('off')}</b></div><div data-multi style="cursor:pointer" title="Linee aperte su più dispositivi nello stesso momento"><small><i class="on-dot o"></i>Con più connessioni</small><b style="color:#fbbf24">${nMulti}</b>${rows.some((r) => multi(r) && r.kick && !KICKED.has(r.kick)) ? `<button class="btn sm" id="cnKickAll" style="margin-top:6px;color:#ff8f8f" title="Chiude le connessioni aperte di tutte le linee con più connessioni (solo quelle su WOLF)">Disconnetti tutte</button>` : ''}</div><div><small><i class="on-dot"></i>Non verificabili${n('wait') ? ' · ' + n('wait') + ' in verifica' : ''}</small><b style="color:var(--mut)">${n('na')}</b></div></div>
       ${S.errs.length ? `<p style="color:#ff8f8f;margin:10px 0 0;font-size:12.5px">${S.errs.map(esc).join('<br>')}</p>` : ''}</div>
       <div class="card glass" style="margin-top:14px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input class="inp" id="cnQ" placeholder="Cerca utente, cliente o canale" value="${esc(S.q)}" style="max-width:280px;margin:0">
@@ -118,14 +133,16 @@
         <select class="inp" id="cnP" style="width:auto;margin:0"><option value="">Tutti i pannelli</option>${panels.map((p) => `<option${S.p === p ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select>
         <span class="mut" style="font-size:12.5px">${list.length} linee</span></div>
       <div style="margin-top:8px">${!S.rows ? `<p class="mut">${S.busy ? 'Carico le linee dai pannelli…' : 'Nessun dato'}</p>` : !rows.length ? '<p class="mut">Nessun pannello collegato con linee da controllare.</p>' : shown.map((r) => `<div class="cn-row">
-        <div>${r.v ? dot(r.v) : r.k ? `<span class="kx-on" data-on="${esc(r.k)}">${dot(window.KXOnline.get(r.k))}</span>` : dot(null)}</div>
+        <div>${r.kick && KICKED.has(r.kick) ? '<span class="mut">Disconnessa</span>' : r.v ? dot(r.v) : r.k ? `<span class="kx-on" data-on="${esc(r.k)}">${dot(window.KXOnline.get(r.k))}</span>` : dot(null)}${r.kick && !KICKED.has(r.kick) && stOf(r) === 'on' ? `<button class="btn sm" data-kick="${esc(r.u)}" style="margin-top:4px;color:#ff8f8f" title="${r.p === 'WOLF' ? 'Chiude le connessioni aperte di questa linea su WOLF' : 'La linea ' + esc(r.u) + ' è anche su WOLF: chiude lì le connessioni aperte'}">Disconnetti</button>` : ''}</div>
         <div><span class="wf-tag g">${esc(r.p)}</span>${r.mx ? `<small class="mut" style="display:block;font-size:11px">max ${+r.mx} conn.</small>` : ''}${r.en === false ? '<span class="wf-tag b">Disattivata</span>' : ''}</div>
         <div><span class="k">Utente</span><b class="mono">${esc(r.u) || '—'}</b></div>
         <div><span class="k">Cliente / nota</span><div class="mono">${esc(r.n) || '<span class="mut">—</span>'}</div></div>
         <div><span class="k">Sta guardando</span><div class="mono">${r.w ? '▶ ' + esc(r.w) : `<span class="mut" title="${r.p === 'WOLF' ? 'Nessun canale aperto in questo momento' : 'Il pannello ' + esc(r.p) + ' non dice quale canale è aperto: lo mostro solo se la stessa linea è anche su WOLF'}">—</span>`}${r.p === 'MirkoTeam' && r.last && !(r.v && r.v.on) ? `<small class="mut" style="display:block;font-size:11px">ultimo accesso ${esc(r.last)}</small>` : ''}</div></div></div>`).join('')}</div>
       ${list.length > shown.length ? `<div style="margin-top:10px"><button class="btn sm" id="cnMore">Mostra altre ${Math.min(200, list.length - shown.length)}</button></div>` : ''}</div>`;
     $('#cnRe').onclick = () => { window.KXOnline.refresh(); loadAll(); };
-    const mk = $('[data-multi]', V); if (mk) mk.onclick = () => { S.f = S.f === 'multi' ? '' : 'multi'; S.limit = 200; draw(); };
+    const mk = $('[data-multi]', V); if (mk) mk.onclick = (e) => { if (e.target.closest('#cnKickAll')) return; S.f = S.f === 'multi' ? '' : 'multi'; S.limit = 200; draw(); };
+    const ka = $('#cnKickAll', V); if (ka) ka.onclick = () => kick(rows.filter(multi));
+    $$('[data-kick]', V).forEach((b) => (b.onclick = () => { const u = b.dataset.kick.toLowerCase(); kick(rows.filter((r) => String(r.u || '').toLowerCase() === u && r.kick)); }));
     $('#cnF').onchange = (e) => { S.f = e.target.value; S.limit = 200; draw(); };
     $('#cnP').onchange = (e) => { S.p = e.target.value; S.limit = 200; draw(); };
     const qi = $('#cnQ'); qi.oninput = () => { S.q = qi.value; S.limit = 200; draw(); };
