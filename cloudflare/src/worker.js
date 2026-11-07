@@ -248,6 +248,9 @@ function harden(res, req) {
   if (url.pathname.startsWith('/api/')) {
     h.set('Cache-Control', 'no-store');
     h.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+  } else if (url.pathname.startsWith('/store/') || url.pathname.startsWith('/get/')) {
+    // pagina dello store (da GitHub Pages) e APK (dalle release): link senza nomi; la pagina ha script interni, niente CSP del pannello
+    if (url.pathname.endsWith('.html') || url.pathname.endsWith('/') || url.pathname.endsWith('.json')) h.set('Cache-Control', 'no-cache');
   } else if (url.pathname.startsWith('/app/') && url.searchParams.get('app') === 'vega') {
     // solo per l'app KAIROS delle Fire TV con Vega OS (WebView): la pagina ha script interni e si collega
     // ai server IPTV dei clienti, quindi la CSP del pannello la bloccherebbe. Tutto il resto resta com'era.
@@ -874,6 +877,49 @@ async function onlineRoute(req) {
     if (k && u && p) res[k] = await onlineOne(o, u, p);
   }));
   return json({ res });
+}
+
+/* ---------------- link puliti: /get/<app>.apk e /store/ (proxy delle release GitHub e di GitHub Pages) ----------------
+   Il link che il cliente vede è quello del pannello (es. https://panel-kairos.com/get/store.apk): l'account GitHub resta qui. */
+const GH_OWNER = 'mariopiccolo8562-lang';
+const GET_APK = {
+  store: ['kairos-store/releases/latest/download/KairosStore.apk', 'KairosStore.apk'],
+  pro: ['kairos-store/releases/download/kairos-tv/kairos-tv.apk', 'kairos-pro.apk'],
+  premium: ['kairos-premium/releases/latest/download/kairos-premium.apk', 'kairos-premium.apk'],
+  tv: ['kairos-tv/releases/latest/download/kairos-tv.apk', 'kairos-tv.apk'],
+  plus: ['kairos-flutter/releases/latest/download/kairos-plus.apk', 'kairos-plus.apk'],
+  xc: ['kairos-xc/releases/latest/download/kairos-xc.apk', 'kairos-xc.apk'],
+  lite: ['kairos-lite/releases/latest/download/kairos-lite.apk', 'kairos-lite.apk'],
+  nova: ['Lairos-nova/releases/download/latest/KairosNova-arm64.apk', 'kairos-nova.apk'],
+  'nova-arm32': ['Lairos-nova/releases/download/latest/KairosNova-arm32.apk', 'kairos-nova-arm32.apk'],
+};
+const STORE_PAGES = `https://${GH_OWNER}.github.io/kairos-store/`;
+async function cleanLinks(req, url, path) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return new Response('Metodo non consentito', { status: 405 });
+  const m = path.match(/^\/get\/([a-z0-9-]{1,24})\.apk$/);
+  if (m) {
+    const e = GET_APK[m[1]]; if (!e) return new Response('Non trovato', { status: 404 });
+    const up = await fetch(`https://github.com/${GH_OWNER}/${e[0]}`, { method: req.method === 'HEAD' ? 'HEAD' : 'GET', redirect: 'follow', cf: { cacheTtl: 600, cacheEverything: true } });
+    if (!up.ok) return new Response('App non disponibile al momento, riprova tra poco', { status: 502 });
+    const h = new Headers();
+    h.set('Content-Type', 'application/vnd.android.package-archive');
+    h.set('Content-Disposition', `attachment; filename="${e[1]}"`);
+    const len = up.headers.get('Content-Length'); if (len) h.set('Content-Length', len);
+    h.set('Cache-Control', 'public, max-age=600');
+    h.set('Accept-Ranges', 'none');
+    return new Response(req.method === 'HEAD' ? null : up.body, { status: 200, headers: h });
+  }
+  if (path === '/store') return Response.redirect(url.origin + '/store/' + url.search, 302);
+  let rel = path.slice('/store/'.length);
+  if (!rel || rel.endsWith('/')) rel += 'index.html';
+  if (!/^[A-Za-z0-9_./-]{1,200}$/.test(rel) || rel.includes('..')) return new Response('Non trovato', { status: 404 });
+  const img = /\.(png|jpe?g|webp|gif|svg|ico|woff2?)$/i.test(rel);
+  const up = await fetch(STORE_PAGES + rel + url.search, { cf: { cacheTtl: img ? 3600 : 60, cacheEverything: true } });
+  if (!up.ok) return new Response(up.status === 404 ? 'Non trovato' : 'Store non disponibile al momento, riprova tra poco', { status: up.status === 404 ? 404 : 502 });
+  const h = new Headers();
+  for (const k of ['content-type', 'content-length', 'last-modified', 'etag']) { const v = up.headers.get(k); if (v) h.set(k, v); }
+  h.set('Cache-Control', img ? 'public, max-age=3600' : 'no-cache');
+  return new Response(req.method === 'HEAD' ? null : up.body, { status: 200, headers: h });
 }
 
 /* ---------------- Pannello Armada: API reseller ufficiale (chiave ARMADA_KEY, solo titolare) ----------------
@@ -2844,6 +2890,9 @@ async function route(req, env, ctx) {
 
   /* ---------- informativa privacy e condizioni (pubblica, la apre anche l'app) ---------- */
   if ((path === '/privacy' || path === '/privacy/') && (req.method === 'GET' || req.method === 'HEAD')) return privacyPage(env);
+
+  /* ---------- link puliti: APK delle app e pagina dello store serviti da qui (nessun nome nel link) ---------- */
+  if (path.startsWith('/get/') || path === '/store' || path.startsWith('/store/')) return cleanLinks(req, url, path);
 
   /* ---------- config pubblica del pannello ---------- */
   if (path === '/api/public/config' && req.method === 'GET') {

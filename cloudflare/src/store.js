@@ -50,8 +50,9 @@ const SMS_MAX_DAY = 500;
 const MAIL_RE = /^[^\s@<>"',;:()[\]\\]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,}$/;
 const STORE_MAX_DEF = 50;        // store attivabili per agente se il titolare non sceglie altro
 const STORE_MAX_CAP = 100000;
-const ACT_FAILS = 8;             // codici venditore sbagliati all'attivazione (per IP e per dispositivo) prima della pausa
+const ACT_FAILS = 8;             // codici venditore sbagliati da uno stesso IP in un'ora: pausa (contro i tentativi a raffica)
 const ACT_FAIL_WIN = 3600e3;
+const ACT_BLOCK = 3;             // codici sbagliati da uno stesso store: bloccato finché il titolare non lo sblocca
 
 const enc = new TextEncoder();
 const now = () => Date.now();
@@ -221,9 +222,30 @@ async function actFailed(env, keys, t) {
   return false;
 }
 async function actFail(env, keys, t) {
-  for (const k of keys) await env.DB.prepare('INSERT INTO store_act_fail (k, n, t) VALUES (?, 1, ?) ON CONFLICT(k) DO UPDATE SET n = CASE WHEN ? - store_act_fail.t < ? THEN store_act_fail.n + 1 ELSE 1 END, t = ?').bind(k, t, t, ACT_FAIL_WIN, t).run();
+  let didN = 0;
+  for (const k of keys) {
+    const win = k.startsWith('did:') ? 1e15 : ACT_FAIL_WIN; // per dispositivo il conteggio non scade
+    const r = await env.DB.prepare('INSERT INTO store_act_fail (k, n, t) VALUES (?, 1, ?) ON CONFLICT(k) DO UPDATE SET n = CASE WHEN ? - store_act_fail.t < ? THEN store_act_fail.n + 1 ELSE 1 END, t = ? RETURNING n').bind(k, t, t, win, t).first();
+    if (k.startsWith('did:')) didN = (r && r.n) || 1;
+  }
+  return didN;
 }
 async function actOk(env, keys) { for (const k of keys) await env.DB.prepare('DELETE FROM store_act_fail WHERE k = ?').bind(k).run(); }
+/** terzo codice sbagliato: lo store finisce tra i dispositivi bloccati (lo sblocca solo il titolare, da Dispositivi) */
+async function actBlock(env, s, did, device, note, country, t, ip) {
+  if (!s.blocked.includes(did)) {
+    s.blocked = s.blocked.filter((d) => d !== did); s.trusted = s.trusted.filter((d) => d !== did);
+    if (s.blocked.length >= MAX_BLOCKED) s.blocked.pop();
+    s.blocked.unshift(did);
+    await putStoreSettings(env, s);
+  }
+  // nome e cliente dello store, così nel pannello il dispositivo bloccato non è «sconosciuto» (riga non attiva: nessuna intestazione)
+  await env.DB.prepare(`INSERT INTO store_devices (did, seller, device, note, country, activated, last, downloads, active) VALUES (?, 0, ?, ?, ?, 0, ?, 0, 0)
+    ON CONFLICT(did) DO UPDATE SET device = CASE WHEN excluded.device <> '' THEN excluded.device ELSE store_devices.device END, note = CASE WHEN excluded.note <> '' THEN excluded.note ELSE store_devices.note END, country = excluded.country, active = 0`)
+    .bind(did, device, note, country, t).run().catch(() => {});
+  await env.DB.prepare("UPDATE store_requests SET status = 'revoked', token = '', decided = ? WHERE did = ? AND status IN ('pending', 'approved') AND uses = 0").bind(t, did).run().catch(() => {});
+  await log(env, 'off', `Store: dispositivo bloccato dopo ${ACT_BLOCK} codici venditore sbagliati · ${device || 'dispositivo'}${note ? ' (' + note + ')' : ''} — sbloccalo da Dispositivi`, ip);
+}
 
 /** POST /api/store/activate { did, device, note, seller }: lo store si intesta al venditore di quel codice */
 async function activate(req, env, ctx, url, ip, opts) {
@@ -232,18 +254,22 @@ async function activate(req, env, ctx, url, ip, opts) {
   const did = str(b.did, 64), device = str(b.device, 80), note = str(b.note, 40), code = str(b.seller, 8);
   if (!DID_RE.test(did)) return json({ error: 'Dispositivo non valido' }, 400);
   const s = await getStoreSettings(env), t = now(), keys = ['ip:' + ip, 'did:' + did];
-  if (s.blocked.includes(did)) return json({ error: 'Dispositivo bloccato dal venditore' }, 403);
-  if (await actFailed(env, keys, t)) return json({ error: 'Troppi codici sbagliati: riprova tra un\'ora' }, 429);
+  const cf = req.cf || {};
+  const country = [str(cf.country, 4), str(cf.city, 40)].filter(Boolean).join(' · ');
+  if (s.blocked.includes(did)) return json({ error: 'Questo store è bloccato: può sbloccarlo solo il titolare', blocked: true }, 403);
+  if (await actFailed(env, ['ip:' + ip], t)) return json({ error: 'Troppi codici sbagliati: riprova tra un\'ora' }, 429);
   const seller = code && typeof opts.sellerOf === 'function' ? await opts.sellerOf(code) : null;
-  if (!seller) { await actFail(env, keys, t); return json({ error: 'Codice venditore non valido: controllalo' }, 400); }
+  if (!seller) {
+    const n = await actFail(env, keys, t);
+    if (n >= ACT_BLOCK) { await actBlock(env, s, did, device, note, country, t, ip); return json({ error: `Terzo codice sbagliato: questo store è bloccato. Può sbloccarlo solo il titolare.`, blocked: true }, 403); }
+    return json({ error: `Codice venditore non valido: controllalo (${ACT_BLOCK - n === 1 ? 'ultimo tentativo' : (ACT_BLOCK - n) + ' tentativi rimasti'}, poi lo store si blocca)`, left: ACT_BLOCK - n }, 400);
+  }
   // tetto di store attivabili per agente (deciso dal titolare; il titolare non ha tetto)
   if (seller.id) {
     const cap = typeof opts.storeCap === 'function' ? await opts.storeCap(seller.id, s.storeMax) : s.storeMax;
     const cur = await env.DB.prepare('SELECT COUNT(*) AS n FROM store_devices WHERE seller = ? AND active = 1 AND did <> ?').bind(seller.id, did).first();
     if (((cur && cur.n) || 0) >= cap) return json({ error: `${seller.name} ha già attivato il numero massimo di store (${cap}): può alzarlo solo il titolare`, cap: true }, 409);
   }
-  const cf = req.cf || {};
-  const country = [str(cf.country, 4), str(cf.city, 40)].filter(Boolean).join(' · ');
   const prev = await env.DB.prepare('SELECT seller, active FROM store_devices WHERE did = ?').bind(did).first();
   await env.DB.prepare(`INSERT INTO store_devices (did, seller, device, note, country, activated, last, downloads, active) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 1)
     ON CONFLICT(did) DO UPDATE SET seller = excluded.seller, device = CASE WHEN excluded.device <> '' THEN excluded.device ELSE store_devices.device END,
@@ -385,7 +411,8 @@ export async function storeApi(req, env, ctx, url, ip, opts = {}) {
       const dev = await deviceOf(env, str(url.searchParams.get('did'), 64));
       const name = dev && typeof opts.sellerName === 'function' ? await opts.sellerName(dev.seller) : '';
       const live = !dev || (await sellerLive(dev, opts)); // venditore sospeso → lo store è fermo finché un altro venditore non lo riattiva
-      return json({ on: S.approval, activation: S.activation, activated: !!dev && live, suspended: !!dev && !live, ...(dev ? { seller: name, since: dev.activated } : {}), closed: cl, ...(cl ? { msg: closedMsg(S.closed) } : {}) });
+      const blocked = S.blocked.includes(str(url.searchParams.get('did'), 64));
+      return json({ on: S.approval, activation: S.activation, activated: !!dev && live, suspended: !!dev && !live, blocked, ...(dev ? { seller: name, since: dev.activated } : {}), closed: cl, ...(cl ? { msg: closedMsg(S.closed) } : {}) });
     }
     if (p === '/activate' && m === 'POST') return await activate(req, env, ctx, url, ip, opts);
     if (p === '/seller' && m === 'GET') {
@@ -615,9 +642,9 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
         env.DB.prepare('SELECT COUNT(*) AS n FROM store_requests WHERE mailed = 1 AND created > ?').bind(t - 86400e3).first(),
         env.DB.prepare('SELECT COALESCE(SUM(sms), 0) AS n FROM store_requests WHERE created > ?').bind(t - 86400e3).first(),
         typeof opts.smsAgentList === 'function' ? Promise.resolve().then(() => opts.smsAgentList()).catch(() => []) : [],
-        env.DB.prepare('SELECT did, seller, device, note, country, activated, last, downloads FROM store_devices WHERE active = 1 ORDER BY activated DESC LIMIT 2000').all(),
+        env.DB.prepare('SELECT did, seller, device, note, country, activated, last, downloads, active FROM store_devices ORDER BY active DESC, activated DESC LIMIT 2000').all(),
       ]);
-      const rows = (rowsR && rowsR.results) || [], stores = (devR && devR.results) || [];
+      const rows = (rowsR && rowsR.results) || [], devAll = (devR && devR.results) || [], stores = devAll.filter((d) => d.active);
       const requests = rows.map((r) => {
         const st = effStatus(r, t);
         return { id: r.id, app: r.app, appUrl: r.app_url, did: r.did, device: r.device, note: r.note, country: r.country, code: st === 'pending' ? r.code : '', status: st, via: r.via, tries: r.tries, uses: r.uses, created: r.created, decided: r.decided, by: +r.by_admin || 0, seller: +r.seller || 0 };
@@ -634,6 +661,8 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       }
       for (const did of settings.blocked) if (!byDid.has(did)) byDid.set(did, { did, device: '', note: '', country: '', last: 0, requests: 0, downloads: 0, pending: 0, blocked: true });
       for (const did of settings.trusted) if (!byDid.has(did)) byDid.set(did, { did, device: '', note: '', country: '', last: 0, requests: 0, downloads: 0, pending: 0, blocked: false, trusted: true });
+      // dispositivi bloccati senza richieste (es. dopo tre codici sbagliati): almeno il nome
+      for (const d of devAll) { if (d.active) continue; const x = byDid.get(d.did); if (x) { if (!x.device && d.device) x.device = d.device; if (!x.note && d.note) x.note = d.note; if (!x.country && d.country) x.country = d.country; } }
       // store intestati: compaiono anche se non hanno ancora scaricato nulla; seller 0 = titolare
       for (const d of stores) {
         let x = byDid.get(d.did);
@@ -732,6 +761,7 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
         s.trusted = s.trusted.filter((d) => d !== did); // bloccato e senza limiti insieme non ha senso
       }
       await putStoreSettings(env, s);
+      if (!blocked) await env.DB.prepare('DELETE FROM store_act_fail WHERE k = ?').bind('did:' + did).run().catch(() => {}); // sbloccato: i codici sbagliati ripartono da zero
       let revoked = 0;
       if (blocked) {
         // le richieste in corso di quel dispositivo decadono subito (quelle già scaricate restano nello storico)
