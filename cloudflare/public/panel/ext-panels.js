@@ -82,7 +82,7 @@
       V.innerHTML = `<div class="card glass" style="margin-bottom:14px">
         <div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start">
           <div><b style="font-size:16px">${st.connected ? `✅ ${esc(P.name)} collegato` : `${esc(P.name)} non collegato`}</b>
-            <p class="mut" style="margin:4px 0 0;font-size:13px">${st.connected ? 'Account ' + esc(st.user || '') + (isAg() ? ' (il tuo sub-reseller)' : '') : `Scrivi qui i dati con cui entri su ${esc(P.site)}: restano cifrati in KAIROS${isAg() ? '' : ' e li vedi solo tu'}.`}</p></div>
+            <p class="mut" style="margin:4px 0 0;font-size:13px">${st.connected ? 'Account ' + esc(st.user || '') + (isAg() ? ' (il tuo sub-reseller)' : '') : isAg() ? `Chi ti gestisce può assegnarti il tuo account ${esc(P.name)}; oppure scrivi qui utente e password del tuo sub-reseller su ${esc(P.site)}: restano cifrati.` : `Scrivi qui i dati con cui entri su ${esc(P.site)}: restano cifrati in KAIROS e li vedi solo tu.`}</p></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn sm" href="${esc(P.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Apri ${esc(P.name)}</a>${st.connected ? `<button class="btn sm" data-o="reload">Aggiorna</button><button class="btn sm" data-o="edit">${A.edit ? 'Chiudi' : 'Cambia dati'}</button><button class="btn sm" data-o="off">Scollega</button>` : ''}</div></div>
         ${form ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px">
           <label>Username<input class="inp" id="exU" autocomplete="off" value="${esc(st.user || '')}"></label>
