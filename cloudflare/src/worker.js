@@ -9,14 +9,14 @@ import { ADDON_ASSETS } from './addon-assets.js';
  *  Segreti:  ENC_KEY (base64, 32 byte), ADMIN_BOOTSTRAP_PASS, TURNSTILE_SECRET (opzionale)
  *  Variabili: ACCESS_TEAM_DOMAIN, ACCESS_AUD, TURNSTILE_SITEKEY (opzionali)
  */
-import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide, storeAgentAlerts } from './store.js'; // autorizzazione download dello Store (/api/store/*)
+import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide, storeAgentAlerts, storeDeviceSeller } from './store.js'; // autorizzazione download dello Store (/api/store/*)
 import { wolfRoutes, wolfCron, sockFetch } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
 import { atxRoutes } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz), solo titolare
 import { oraRoutes } from './orapanel.js';
 import { extRoutes } from './extpanels.js'; // Pannelli Realott, SLT (accesso diretto) e blkaccess (foto delle linee), solo titolare // Pannello ORA (panel.oraplayers.com), accesso passato dal titolare
 import { oxpRoutes } from './orbixpanel.js'; // playlist OrbixPlay gestite da KAIROS (sezione «Pannello OrbixPlay»)
 import { mxpRoutes } from './mxpanel.js'; // account MaxPlayer gestiti da KAIROS (sezione «Pannello MaxPlayer»)
-import { tgHook, notifyNew, notifyDecided, notifyAdmin } from './notify.js'; // avvisi su Telegram e notifiche del pannello
+import { tgHook, notifyNew, notifyDecided, notifyActivated, notifyAdmin } from './notify.js'; // avvisi su Telegram e notifiche del pannello
 
 const SESSION_TTL = 30 * 86400; // secondi: l'accesso resta valido 30 giorni dall'ultimo uso (si rinnova da solo)
 const COOKIE = '__Host-kx';
@@ -2840,7 +2840,7 @@ async function route(req, env, ctx) {
 
   /* ---------- autorizzazione dei download dello Store (pubblica, vedi store.js) ---------- */
   if (path === '/api/tg/hook' && req.method === 'POST') return tgHook(req, env, ctx, ip, notifyH(env)); // webhook del bot Telegram
-  if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { sellerOf: (c) => sellerOf(env, c), sellerChain: (r) => sellerChain(env, r), smsAgents: (app, ids) => storeSmsAgents(env, app, ids), waitMin: async () => cleanReqWait((await getSettings(env)).reqWait).store, waitTxt });
+  if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { sellerOf: (c) => sellerOf(env, c), sellerName: (id) => sellerNameOf(env, id), sellerActive: (id) => (id ? agentChainActive(env, +id) : true), storeCap: (id, def) => storeCapOf(env, id, def), sellerChain: (r) => sellerChain(env, r), smsAgents: (app, ids) => storeSmsAgents(env, app, ids), waitMin: async () => cleanReqWait((await getSettings(env)).reqWait).store, waitTxt });
 
   /* ---------- informativa privacy e condizioni (pubblica, la apre anche l'app) ---------- */
   if ((path === '/privacy' || path === '/privacy/') && (req.method === 'GET' || req.method === 'HEAD')) return privacyPage(env);
@@ -3145,7 +3145,7 @@ function agentPermsWithin(req, top) {
   return p;
 }
 /** tutti gli agenti (una lettura per richiesta; chi modifica gli agenti chiama memoDrop(env, 'ags')). Copia nuova a ogni chiamata */
-const agentsAll = async (env) => (await reqMemo(env, 'ags', async () => ((await env.DB.prepare("SELECT id, username, email, parent_id, max_clients, can_agents, perms, servers, active, disabled_by, notes, last_seen, created_at, totp_on, store_code, pw_seal FROM admins WHERE role = 'agent' ORDER BY id").all()).results) || [])).map((a) => ({ ...a }));
+const agentsAll = async (env) => (await reqMemo(env, 'ags', async () => ((await env.DB.prepare("SELECT id, username, email, parent_id, max_clients, can_agents, perms, servers, active, disabled_by, notes, last_seen, created_at, totp_on, store_code, store_max, pw_seal FROM admins WHERE role = 'agent' ORDER BY id").all()).results) || [])).map((a) => ({ ...a }));
 /** id dell'agente e di tutti i suoi sotto-agenti (a qualsiasi livello) */
 function agentTree(all, rootId) {
   const out = [rootId], seen = new Set(out);
@@ -3186,6 +3186,7 @@ async function sellerChain(env, r) {
 storeHooks({
   created: (env, r, origin, ip) => notifyNew(env, r, origin, ip, notifyH(env)),
   decided: (env, r, st, via, who) => notifyDecided(env, r, st, via, who),
+  activated: (env, d, origin, ip) => notifyActivated(env, d, ip, notifyH(env)),
 });
 /** elenco degli agenti per la scheda SMS del pannello del titolare */
 async function storeSmsAgentList(env) {
@@ -3215,6 +3216,17 @@ async function sellerAgentCode(env, A) {
   A.store_code = c;
   return c;
 }
+/** nome del venditore da id (0 = titolare, col nome dello store) */
+async function sellerNameOf(env, id) {
+  if (!id) return (await getSettings(env)).brand || 'Kairos';
+  const A = (await agentsAll(env)).find((a) => a.id === +id);
+  return A ? A.username : 'agente eliminato';
+}
+/** tetto di store attivabili di un agente: il suo (store_max) oppure quello di serie delle impostazioni dello Store */
+async function storeCapOf(env, id, def) {
+  const A = (await agentsAll(env)).find((a) => a.id === +id);
+  return A && A.store_max >= 0 ? A.store_max : def;
+}
 /** da codice venditore a {id, name}: 0 = titolare; null = codice sconosciuto */
 async function sellerOf(env, code) {
   const c = sellerNorm(code);
@@ -3239,6 +3251,12 @@ async function clientsCount(env, ids) {
   for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); n += ((await env.DB.prepare(`SELECT COUNT(*) AS n FROM devices WHERE parent = '' AND owner_id IN (${part.map(() => '?').join(',')})`).bind(...part).first()) || { n: 0 }).n; }
   return n;
 }
+/** store attivati per agente (una sola query, condivisa nella stessa richiesta) */
+const agentStoreCounts = (env) => reqMemo(env, 'agst', async () => {
+  const m = new Map();
+  try { for (const r of ((await env.DB.prepare('SELECT seller, COUNT(*) AS n FROM store_devices WHERE active = 1 AND seller > 0 GROUP BY seller').all()).results) || []) m.set(r.seller, r.n); } catch {}
+  return m;
+});
 /** clienti principali per agente (una sola query, condivisa nella stessa richiesta) */
 const agentCounts = (env) => reqMemo(env, 'agc', async () => {
   const counts = new Map();
@@ -3249,7 +3267,7 @@ const agentCounts = (env) => reqMemo(env, 'agc', async () => {
     che lui ha davvero (anche se a un sotto-agente ne era rimasto uno tolto più in alto), con i nomi «da agente» */
 async function agentsOut(env, all, onlyIds, forAgent) {
   const lim = Array.isArray(forAgent) ? new Set(forAgent) : null;
-  const [dns, counts, armSp] = await Promise.all([dnsList(env), agentCounts(env), armSpentRows(env)]);
+  const [dns, counts, armSp, storeCounts] = await Promise.all([dnsList(env), agentCounts(env), armSpentRows(env), agentStoreCounts(env)]);
   const dn = new Map(dns.map((x, i) => [x.id, forAgent ? { ...x, name: svName(x, i) } : x]));
   const svOk = (x) => dn.has(x) && (!lim || lim.has(x));
   const list = all.filter((a) => !onlyIds || onlyIds.includes(a.id));
@@ -3259,7 +3277,7 @@ async function agentsOut(env, all, onlyIds, forAgent) {
       servers: sv, serverNames: sv.map((x) => dn.get(x).name),
       active: !!a.active, notes: a.notes, lastSeen: a.last_seen, createdAt: a.created_at, totp: !!a.totp_on, password: a.pw_seal ? await unseal(env, a.pw_seal).catch(() => '') : '',
       clients: tree.reduce((n, id) => n + (counts.get(id) || 0), 0), ownClients: counts.get(a.id) || 0, subAgents: tree.length - 1,
-      armadaUsed: Math.round(armUsedBy(all, armSp, a.id) * 100) / 100, storeCode: await sellerAgentCode(env, a) };
+      armadaUsed: Math.round(armUsedBy(all, armSp, a.id) * 100) / 100, storeCode: await sellerAgentCode(env, a), storeMax: a.store_max >= 0 ? a.store_max : null, stores: storeCounts.get(a.id) || 0 };
   }));
 }
 /** crea / modifica / elimina agenti. top = agente che sta agendo (null = proprietario) */
@@ -3273,6 +3291,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
     const o = {};
     if (b.email !== undefined) { const e = str(b.email, 120); if (e && !/^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+$/.test(e)) throw new HttpErr(400, 'Email non valida'); o.email = e; }
     if (b.notes !== undefined) o.notes = str(b.notes, 300);
+    if (b.storeMax !== undefined) { const n = b.storeMax === null || b.storeMax === '' ? -1 : parseInt(b.storeMax, 10); if (!(n === -1 || (n >= 0 && n <= 100000))) throw new HttpErr(400, 'Tetto di store non valido (da 0 a 100000, vuoto = quello di serie)'); if (top) { if (n !== (cur ? cur.store_max : -1)) throw new HttpErr(403, 'Il tetto di store attivabili lo decide il titolare'); } else o.store_max = n; }
     if (b.maxClients !== undefined) { const n = parseInt(b.maxClients, 10); if (!(n >= 0 && n <= 100000)) throw new HttpErr(400, 'Limite clienti non valido'); if (top && n > top.max_clients) throw new HttpErr(400, `Il limite non può superare il tuo (${top.max_clients})`); o.max_clients = n; }
     if (b.canAgents !== undefined) { if (top && !top.can_agents) throw new HttpErr(403, 'Non puoi creare sotto-agenti'); o.can_agents = b.canAgents === true ? 1 : 0; }
     if (b.perms !== undefined) o.perms = JSON.stringify(agentPermsWithin(b.perms, top ? agentPerms(top.perms) : null));
@@ -3527,7 +3546,17 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const mineSet = new Set(ctree);
     // le richieste arrivano a chi ha dato il codice venditore (lui o i suoi sotto-agenti); quelle senza codice sono del titolare
     const reqs = (j.requests || []).filter((r) => storeAppOk(P.storeApps, r.app) && (P.storeAll || mineSet.has(+r.seller || 0) || (r.status !== 'pending' && mineSet.has(+r.by || 0))));
-    return json({ requests: reqs.map(({ by, seller, ...x }) => ({ ...x, byMe: by === A.id, mine: seller === A.id })), pending: reqs.filter((r) => r.status === 'pending').length, settings: { approval: !!(j.settings && j.settings.approval) }, mail: {}, agent: true, apps: P.storeApps, sellerCode: await sellerAgentCode(env, A) });
+    // store intestati a lui (o ai suoi sotto-agenti): li vede e li può scollegare; il tetto è quello deciso dal titolare
+    const stores = (j.devices || []).filter((d) => d.activated && mineSet.has(+d.seller || 0)).map((d) => ({ did: d.did, device: d.device, note: d.note, country: d.country, activated: d.activated, last: d.last, downloads: d.storeDownloads || 0, requests: d.requests, blocked: d.blocked, mine: +d.seller === A.id, sellerName: +d.seller === A.id ? '' : (all.find((x) => x.id === +d.seller) || {}).username || '' }));
+    const cap = await storeCapOf(env, A.id, (j.settings && j.settings.storeMax) || 0);
+    return json({ requests: reqs.map(({ by, seller, ...x }) => ({ ...x, byMe: by === A.id, mine: seller === A.id })), pending: reqs.filter((r) => r.status === 'pending').length, settings: { approval: !!(j.settings && j.settings.approval), activation: !!(j.settings && j.settings.activation) }, mail: {}, agent: true, apps: P.storeApps, sellerCode: await sellerAgentCode(env, A), stores, storeCap: cap, storesUsed: stores.filter((d) => d.mine).length });
+  }
+  if (path === '/store/device/unlink' && m === 'POST') {
+    need('store');
+    const b = await readJSON(req, 4096);
+    const sel = await storeDeviceSeller(env, String(b.did || ''));
+    if (sel === null || !ctree.includes(sel)) throw new HttpErr(404, 'Store non trovato tra i tuoi');
+    return storeAdmin(new Request(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify({ did: b.did }) }), env, path, who, ip, A.id);
   }
   const sdm = path.match(/^\/store\/([A-Za-z0-9_-]{12,40})\/(approve|deny|revoke)$/);
   if (sdm && m === 'POST') {
@@ -3799,7 +3828,24 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const j = await (await storeAdmin(req, env, path, who, ip, 0, { smsAgentList: () => storeSmsAgentList(env) })).json();
     const names = new Map((await agentsAll(env)).map((a) => [a.id, a.username]));
     for (const r of j.requests || []) { if (r.by) r.byName = names.get(r.by) || 'agente eliminato'; r.sellerName = r.seller ? names.get(r.seller) || 'agente eliminato' : ''; }
+    const allAg = await agentsAll(env);
+    for (const d of j.devices || []) if (d.activated) { d.sellerName = d.seller ? names.get(d.seller) || 'agente eliminato' : 'tu'; d.sellerOff = !!d.seller && !(await agentChainActive(env, +d.seller, allAg)); }
     j.sellerCode = await sellerOwnerCode(env);
+    return json(j);
+  }
+  if (path === '/store/summary' && m === 'GET') {
+    // riepilogo store per il titolare: ogni riga con nome, tetto e stato dell'agente
+    const j = await (await storeAdmin(req, env, path, who, ip, 0)).json();
+    const all = await agentsAll(env), def = (j.settings && j.settings.storeMax) || 0;
+    const seen = new Set((j.sellers || []).map((x) => x.id));
+    for (const a of all) if (!seen.has(a.id)) j.sellers.push({ id: a.id, stores: 0, storeDl: 0, last: 0, newest: 0, dl30: 0, dl7: 0, dl1: 0, devs30: 0 });
+    for (const x of j.sellers) {
+      const a = x.id ? all.find((y) => y.id === x.id) : null;
+      x.name = x.id ? (a ? a.username : 'agente eliminato') : 'tu (titolare)';
+      x.cap = x.id ? (a && a.store_max >= 0 ? a.store_max : def) : null;
+      x.active = x.id ? !!(a && a.active) : true; x.parentId = a ? a.parent_id : 0; x.storeCode = a ? a.store_code : '';
+    }
+    j.sellers.sort((p, q) => (q.dl30 - p.dl30) || (q.stores - p.stores) || String(p.name).localeCompare(String(q.name)));
     return json(j);
   }
   if (path === '/store' || path.startsWith('/store/')) return storeAdmin(req, env, path, who, ip, 0, { smsAgentList: () => storeSmsAgentList(env) }); // Download store

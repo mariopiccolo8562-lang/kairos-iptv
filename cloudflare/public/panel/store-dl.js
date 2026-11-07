@@ -47,6 +47,17 @@
 .sd-ag.off .nm b{color:var(--mut)}
 .sd-seller{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:12px 14px;margin:0 0 12px;border:1px dashed var(--line);border-radius:12px;background:var(--card2,rgba(255,255,255,.03))}.sd-seller b.mono{display:block;font-size:26px;letter-spacing:4px;line-height:1.1}
 @media (max-width:820px){.sd-act{width:100%}.sd-act .btn{flex:1}.sd-dev .tog{width:100%;justify-content:space-between}}`;
+  css.textContent += `
+.sd-mode{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;background:var(--glass)}
+.sd-mode.on{border-color:#4f8cff;background:rgba(79,140,255,.08)}.sd-mode input{margin:4px 0 0;accent-color:#4f8cff;flex:none}
+.sd-mode b{display:block;font-size:14px}.sd-mode small{display:block;color:var(--mut);font-size:12.5px;line-height:1.4;margin-top:2px}
+.sd-act{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(52,199,123,.14);color:#6ee3a6;margin-top:4px}
+.sd-act.no{background:rgba(255,255,255,.06);color:var(--mut)}
+.sd-unl{margin-left:auto}
+.ss-k{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+.ss-k .k{background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:14px 16px}.ss-k .k b{display:block;font-size:26px;font-weight:800;letter-spacing:-.02em}.ss-k .k small{display:block;color:var(--mut);font-size:12.5px;margin-top:2px}
+.ss-k .k i{display:block;font-style:normal;color:var(--mut);font-size:12px;margin-top:6px}
+.ss-t .mut{font-size:12px}.ss-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;min-width:70px}.ss-bar i{display:block;height:100%;background:linear-gradient(90deg,#4f8cff,#a78bfa)}`;
   document.head.appendChild(css);
 
   V.innerHTML = `<div class="g2">
@@ -59,6 +70,10 @@
     <button class="btn sm" id="sdClear" style="margin-top:12px">Svuota storico</button>
   </div>
   <div>
+    <div class="card glass" id="sdMineCard" style="margin-bottom:18px;display:none">
+      <div class="hd"><h3>I tuoi store<small id="sdMineSub">Gli store attivati con il tuo codice venditore</small></h3></div>
+      <div id="sdMine"></div>
+    </div>
     <div class="card glass" style="margin-bottom:18px">
       <div class="hd"><h3>Dispositivi<small>Chi ha chiesto di scaricare negli ultimi 30 giorni. Un dispositivo bloccato non può più inviare richieste</small></h3></div>
       <div id="sdDev"></div>
@@ -66,7 +81,15 @@
     <div class="card glass">
       <div class="hd"><h3>Approvazione<small>Decidi tu chi può scaricare</small></h3></div>
       <div class="sd-warn" id="sdWarn" style="display:none"></div>
-      <div class="tog" id="sdOn"><div><b>Chiedi la mia autorizzazione</b><small>Spento: i download partono subito, ma restano registrati qui</small></div><i></i></div>
+      <div id="sdMode">
+        <label class="sd-mode" data-m="ask"><input type="radio" name="sdMode" value="ask"><div><b>Chiedi la mia autorizzazione</b><small>Ogni download aspetta il sì tuo (o dell'agente del codice scritto dal cliente)</small></div></label>
+        <label class="sd-mode" data-m="act"><input type="radio" name="sdMode" value="act"><div><b>Solo store attivati, senza conferma</b><small>Lo store si attiva una volta sola, alla prima apertura, con il codice di un venditore: da lì scarica da solo e ogni download è intestato a quel venditore. Gli store non attivati non scaricano</small></div></label>
+        <label class="sd-mode" data-m="free"><input type="radio" name="sdMode" value="free"><div><b>Download liberi</b><small>Partono subito, restano registrati qui</small></div></label>
+      </div>
+      <div id="sdActBox" style="display:none;margin:4px 0 10px">
+        <label class="lbl">Store attivabili per agente (tetto di serie)</label>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input class="inp" id="sdMax" type="number" min="0" max="100000" step="1" style="margin:0;width:120px"><small class="mut" style="flex:1;min-width:200px">Lo cambi per il singolo agente nella sua scheda (Agenti). Tu non hai tetto. <span id="sdActInfo"></span></small></div>
+      </div>
       <div class="tog" id="sdAgAl"><div><b>Avvisami anche per le richieste degli agenti</b><small>Spento: la richiesta con il codice di un agente arriva solo a lui (email, SMS, Telegram, notifiche). Tu la vedi comunque qui, in «In carico agli agenti», e puoi sempre decidere al posto suo</small></div><i></i></div>
       <label class="lbl">La tua email per gli avvisi</label>
       <input class="inp" id="sdMail" type="email" autocomplete="email" placeholder="la stessa del tuo account Resend">
@@ -115,7 +138,7 @@
   const DM = (() => {
     const t = Date.now();
     return {
-      settings: { approval: true, ownerEmail: 'tuo@email.it', blocked: ['demo-did-mt-firetv-000000'], sms: { on: true, owner: '+393331234567', link: false, perDay: 50, agents: [{ id: 2, phone: '+393409876543', on: true }] } },
+      settings: { approval: true, activation: false, storeMax: 50, ownerEmail: 'tuo@email.it', blocked: ['demo-did-mt-firetv-000000'], sms: { on: true, owner: '+393331234567', link: false, perDay: 50, agents: [{ id: 2, phone: '+393409876543', on: true }] } },
       mail: { resend: true, envEmail: false, links: true, sentToday: 3, limit: 90 },
       sms: { ready: true, sentToday: 5, agents: [{ id: 2, username: 'luca', store: true, active: true }, { id: 3, username: 'sara', store: false, active: true }] },
       sellerCode: 'K7M4',
@@ -138,12 +161,24 @@
       d.requests++; if (r.uses) d.downloads++; if (r.status === 'pending') d.pending++;
     }
     for (const did of DM.settings.blocked) if (!by.has(did)) by.set(did, { did, device: '', note: '', country: '', last: 0, requests: 0, downloads: 0, pending: 0, blocked: true });
+    const x = by.get('demo-did-xiaomi-tv-000000'); if (x) { x.activated = Date.now() - 3 * 864e5; x.seller = 3; x.sellerName = 'luca'; x.storeDownloads = 2; }
     return [...by.values()].sort((a, b) => (+b.blocked - +a.blocked) || (b.last - a.last));
+  }
+  function demoSummary() {
+    const t = Date.now();
+    return { settings: DM.settings, totals: { stores: 14, devs30: 23, dl30: 61, dl7: 19, dl1: 3, pending: DM.requests.filter((r) => r.status === 'pending').length, users30: 21 },
+      sellers: [{ id: 0, name: 'tu (titolare)', cap: null, active: true, stores: 5, storeDl: 20, dl30: 24, dl7: 7, dl1: 1, devs30: 9, last: t - 2 * 3600e3, storeCode: 'K7M4' },
+        { id: 2, name: 'mario.rossi', cap: 50, active: true, stores: 6, storeDl: 31, dl30: 28, dl7: 9, dl1: 2, devs30: 10, last: t - 5 * 3600e3, storeCode: 'K7M4' },
+        { id: 3, name: 'luca.tv', cap: 20, active: true, stores: 3, storeDl: 9, dl30: 9, dl7: 3, dl1: 0, devs30: 4, last: t - 864e5, storeCode: 'P3XZ' },
+        { id: 5, name: 'bar.sport', cap: 50, active: false, stores: 0, storeDl: 0, dl30: 0, dl7: 0, dl1: 0, devs30: 0, last: 0, storeCode: 'T2NW' }],
+      apps: [{ app: 'Kairos Pro', n: 31, devs: 17, n7: 10 }, { app: 'IboPro', n: 18, devs: 12, n7: 6 }, { app: 'TiviMate', n: 12, devs: 9, n7: 3 }] };
   }
   async function demo(method, path, body) {
     await new Promise((r) => setTimeout(r, 120));
     if (path === '' && method === 'GET') return { ...DM, pending: DM.requests.filter((r) => r.status === 'pending' && (!r.seller || DM.settings.agentAlerts)).length, pendingAgents: DM.requests.filter((r) => r.status === 'pending' && r.seller).length, devices: demoDevices() };
-    if (path === '/settings') { Object.assign(DM.settings, body); return { settings: DM.settings }; }
+    if (path === '/settings') { Object.assign(DM.settings, body); if (body.approval === false && body.activation === undefined) DM.settings.activation = false; return { settings: DM.settings }; }
+    if (path === '/summary') return demoSummary();
+    if (path === '/device/unlink') { const d = demoDevices().find((x) => x.did === body.did); if (!d || !d.activated) throw new Error('Questo store non è attivato'); return { ok: true }; }
     if (path === '/sms/test') return { ok: true, to: '+39•••567' };
     if (path === '' && method === 'DELETE') { DM.requests = DM.requests.filter((r) => r.status === 'pending'); return { ok: true }; }
     if (path === '/device/trust') {
@@ -188,9 +223,13 @@
   const DEVI = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>';
   function devItem(d) {
     const meta = [d.note, d.country].filter(Boolean).map(esc).join(' · ');
-    const nums = [`${d.requests} ${d.requests === 1 ? 'richiesta' : 'richieste'}`, `${d.downloads} download`, d.pending ? `${d.pending} in attesa` : '', d.trusted ? 'senza limiti' : ''].filter(Boolean).join(' · ');
+    const dls = Math.max(d.downloads || 0, d.storeDownloads || 0);
+    const nums = [`${d.requests} ${d.requests === 1 ? 'richiesta' : 'richieste'}`, `${dls} download`, d.pending ? `${d.pending} in attesa` : '', d.trusted ? 'senza limiti' : ''].filter(Boolean).join(' · ');
+    const actOn = !!(S.data && S.data.settings && S.data.settings.activation);
+    const act = d.activated ? `<span class="sd-act${d.sellerOff ? ' no' : ''}" title="Store attivato con il codice di ${esc(d.sellerName || 'un venditore')} il ${esc(when(d.activated))}${d.sellerOff ? ' · agente sospeso: lo store è fermo finché un altro venditore non lo riattiva' : ''}">🏪 store di ${esc(d.sellerName || '…')}${d.sellerOff ? ' · sospeso' : ''} · ${esc(ago(d.activated))}</span>` : actOn ? '<span class="sd-act no">store da attivare</span>' : '';
     return `<div class="sd-dev${d.blocked ? ' blk' : ''}" data-did="${esc(d.did)}"><div class="ic" style="color:${d.blocked ? 'var(--bad)' : 'var(--mut)'}">${DEVI}</div>
-      <div class="tx"><b>${esc(d.device || 'Dispositivo sconosciuto')}</b>${meta ? `<small>${meta}</small>` : ''}<small>${nums}${d.last ? ' · ultima ' + esc(ago(d.last)) : ''}${d.blocked ? ' · <b style="color:var(--bad);display:inline;font-size:12px">bloccato</b>' : ''}</small></div>
+      <div class="tx"><b>${esc(d.device || 'Dispositivo sconosciuto')}</b>${meta ? `<small>${meta}</small>` : ''}<small>${nums}${d.last ? ' · ultima ' + esc(ago(d.last)) : ''}${d.blocked ? ' · <b style="color:var(--bad);display:inline;font-size:12px">bloccato</b>' : ''}</small>${act}</div>
+      ${d.activated ? '<button class="btn sm sd-unl" data-sdu="1" title="Lo store torna «da attivare»: con «Solo store attivati» non scarica più finché non viene riattivato con un codice">Scollega</button>' : ''}
       ${D.role !== 'agent' ? `<div class="tog${d.trusted ? ' on' : ''}" data-sdt="1" role="switch" aria-checked="${d.trusted ? 'true' : 'false'}" tabindex="0" title="Eccezione: niente tetto orario né tempo di attesa (per installatori e negozi che fanno tante richieste legittime)"><div><b>Senza limiti</b></div><i></i></div>` : ''}
       <div class="tog${d.blocked ? ' on' : ''}" data-sdb="1" role="switch" aria-checked="${d.blocked ? 'true' : 'false'}" tabindex="0"><div><b>Blocca dispositivo</b></div><i></i></div></div>`;
   }
@@ -205,7 +244,7 @@
     if (!c) { el.innerHTML = ''; return; }
     const ag = D.role === 'agent';
     el.innerHTML = `<div class="sd-seller"><div><small class="mut">Il tuo codice venditore</small><b class="mono" id="sdSellerCode">${esc(c)}</b></div>
-      <div class="mut" style="font-size:12.5px;line-height:1.45;flex:1;min-width:200px">Fallo scrivere ai tuoi clienti nella richiesta dello Store (campo «Codice del venditore», lo ricorda da sola): ${ag ? 'le loro richieste arrivano <b>solo a te</b>, non agli altri agenti (il titolare le vede nel suo pannello).' : 'le richieste con il codice di un agente arrivano <b>a lui</b> (tu le vedi qui, senza avvisi, salvo l\'opzione in Approvazione); quelle senza codice o con il tuo <b>solo a te</b>.'}</div>
+      <div class="mut" style="font-size:12.5px;line-height:1.45;flex:1;min-width:200px">${S.data && S.data.settings && S.data.settings.activation ? 'Scrivilo <b>una volta</b> nello store appena installato (schermata «Attiva lo store»): da lì ogni download è tuo e parte senza conferma. ' : ''}Fallo scrivere ai tuoi clienti nella richiesta dello Store (campo «Codice del venditore», lo ricorda da sola): ${ag ? 'le loro richieste arrivano <b>solo a te</b>, non agli altri agenti (il titolare le vede nel suo pannello).' : 'le richieste con il codice di un agente arrivano <b>a lui</b> (tu le vedi qui, senza avvisi, salvo l\'opzione in Approvazione); quelle senza codice o con il tuo <b>solo a te</b>.'}</div>
       <button class="btn sm" id="sdSellerCopy">Copia</button>${ag ? '' : '<button class="btn sm" id="sdSellerEdit">Cambia</button>'}</div>`;
     $('#sdSellerCopy').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(c).then(() => toast('Codice venditore copiato')).catch(() => toast(c)); };
     // titolare: i codici di tutti gli agenti in un posto solo (ognuno ha il suo, creato da solo la prima volta)
@@ -245,12 +284,28 @@
     $('#sdClear').style.display = hist.length ? '' : 'none';
     const devs = (S.data && S.data.devices) || [];
     $('#sdDev').innerHTML = devs.length ? devs.map(devItem).join('') : '<div class="emptyc">Nessun dispositivo ha ancora chiesto un download</div>';
+    // agente: i suoi store attivati (li può scollegare), con il tetto deciso dal titolare
+    const mc = $('#sdMineCard');
+    if (mc) {
+      const ag = D.role === 'agent', st = (S.data && S.data.stores) || [];
+      mc.style.display = ag && Array.isArray(st) ? '' : 'none';
+      if (ag && Array.isArray(st)) {
+        const cap = S.data.storeCap, used = S.data.storesUsed || 0;
+        $('#sdMineSub').textContent = `${used} attivat${used === 1 ? 'o' : 'i'} con il tuo codice${Number.isInteger(cap) ? ` · ne puoi attivare ${cap} (tetto deciso dal titolare)` : ''}`;
+        $('#sdMine').innerHTML = st.length ? st.map((d) => `<div class="sd-dev${d.blocked ? ' blk' : ''}" data-did="${esc(d.did)}"><div class="ic" style="color:var(--mut)">${DEVI}</div>
+          <div class="tx"><b>${esc(d.device || 'Dispositivo')}</b><small>${[d.note, d.country, d.mine ? '' : 'di ' + d.sellerName].filter(Boolean).map(esc).join(' · ')}</small><small>attivato ${esc(ago(d.activated))} · ${d.downloads || 0} download${d.last ? ' · ultimo ' + esc(ago(d.last)) : ''}${d.blocked ? ' · <b style="color:var(--bad);display:inline;font-size:12px">bloccato</b>' : ''}</small></div>
+          ${d.mine ? '<button class="btn sm sd-unl" data-sdu="1">Scollega</button>' : ''}</div>`).join('') : `<div class="emptyc">Nessuno store attivato con il tuo codice.${Number.isInteger(cap) && !cap ? ' Il titolare non ti ha ancora assegnato store attivabili.' : ' Alla prima apertura dello store scrivi il tuo codice venditore.'}</div>`;
+      }
+    }
   }
   const closedNow = (c) => { if (!c || !c.on || c.from === c.to) return false; const hm = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()); const m = (x) => +x.slice(0, 2) * 60 + +x.slice(3, 5), n = m(hm), a = m(c.from), b = m(c.to); return a < b ? n >= a && n < b : n >= a || n < b; };
   function renderSettings() {
     if (!S.data) return;
     const s = S.data.settings || {}, m = S.data.mail || {};
-    if (!S.apDirty) $('#sdOn').classList.toggle('on', s.approval !== false);
+    const mode = s.activation ? 'act' : s.approval === false ? 'free' : 'ask';
+    if (!S.apDirty) { $$('#sdMode .sd-mode').forEach((l) => { const on = l.dataset.m === mode; l.classList.toggle('on', on); l.querySelector('input').checked = on; }); if (document.activeElement !== $('#sdMax')) $('#sdMax').value = Number.isInteger(s.storeMax) ? s.storeMax : 50; }
+    modeBox();
+    const ai = $('#sdActInfo'); if (ai) ai.textContent = S.data.stores !== undefined ? `Store attivati finora: ${S.data.stores}.` : '';
     if (!S.agDirty && $('#sdAgAl')) $('#sdAgAl').classList.toggle('on', !!s.agentAlerts);
     const w = $('#sdWarn'); if (w) { w.style.display = s.approval === false ? '' : 'none'; w.innerHTML = '⚠️ <b>Approvazione SPENTA</b>: adesso i clienti scaricano dallo store <b>senza mandarti la richiesta</b> (i download restano registrati qui sotto come «automatico»). Accendi «Chiedi la mia autorizzazione» e premi Salva.'; }
     const c = s.closed || {}, cl = $('#sdCl');
@@ -316,6 +371,8 @@
     if (tg) { await blockDevice(tg); return; }
     const tt = e.target.closest('[data-sdt]');
     if (tt) { await trustDevice(tt); return; }
+    const un = e.target.closest('[data-sdu]');
+    if (un) { await unlinkDevice(un); return; }
     const b = e.target.closest('[data-sda]');
     if (!b) return;
     const row = b.closest('[data-id]'), id = row.dataset.id, act = b.dataset.sda;
@@ -332,6 +389,15 @@
   });
   V.addEventListener('keydown', (e) => { const tg = e.target.closest && e.target.closest('[data-sdb]'); if (tg && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); blockDevice(tg); } });
   V.addEventListener('keydown', (e) => { const tt = e.target.closest && e.target.closest('[data-sdt]'); if (tt && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); trustDevice(tt); } });
+  /** scollega uno store dal venditore a cui era intestato */
+  async function unlinkDevice(btn) {
+    const row = btn.closest('[data-did]'), did = row.dataset.did;
+    const name = row.querySelector('.tx b') ? row.querySelector('.tx b').textContent : 'questo store';
+    if (!(await ask('Scollegare lo store?', `<b>${esc(name)}</b> non sarà più intestato al venditore: con «Solo store attivati» non potrà scaricare finché qualcuno non lo riattiva con un codice venditore.`, 'Scollega'))) return;
+    btn.disabled = true;
+    try { await sApi('POST', '/device/unlink', { did }); toast('Store scollegato'); } catch (err) { toast(err.message, 1); }
+    await refresh(true);
+  }
   /** eccezione ai limiti dello Store per un dispositivo (solo titolare) */
   async function trustDevice(tg) {
     const row = tg.closest('[data-did]'), did = row.dataset.did, trusted = !tg.classList.contains('on');
@@ -377,17 +443,22 @@
     const b = $('#smsTest'); b.disabled = true;
     try { const r = await sApi('POST', '/sms/test', { phone }); toast('SMS di prova inviato a ' + r.to); } catch (err) { toast(err.message, 1); } finally { b.disabled = false; }
   };
-  $('#sdOn').onclick = () => { $('#sdOn').classList.toggle('on'); S.apDirty = true; };
+  const curMode = () => { const r = $('#sdMode input:checked'); return r ? r.value : 'ask'; };
+  const modeBox = () => { $$('#sdMode .sd-mode').forEach((l) => l.classList.toggle('on', l.querySelector('input').checked)); $('#sdActBox').style.display = curMode() === 'act' ? '' : 'none'; };
+  $('#sdMode').addEventListener('change', () => { S.apDirty = true; modeBox(); });
+  $('#sdMax').addEventListener('input', () => (S.apDirty = true));
   $('#sdAgAl').onclick = () => { $('#sdAgAl').classList.toggle('on'); S.agDirty = true; };
   $('#sdSave').onclick = async () => {
     // finché le impostazioni non sono caricate non si manda l'approvazione: prima un Salva troppo veloce la spegneva
     if (!S.data) { toast('Attendi il caricamento delle impostazioni', 1); return; }
     try {
-      const r = await sApi('PUT', '/settings', { approval: $('#sdOn').classList.contains('on'), agentAlerts: $('#sdAgAl').classList.contains('on'), ownerEmail: $('#sdMail').value.trim() });
+      const mode = curMode(), body = { approval: mode !== 'free', activation: mode === 'act', agentAlerts: $('#sdAgAl').classList.contains('on'), ownerEmail: $('#sdMail').value.trim() };
+      if (mode === 'act') { const n = parseInt($('#sdMax').value, 10); if (!(n >= 0)) { toast('Scrivi il tetto di store per agente (0 o più)', 1); return; } body.storeMax = n; }
+      const r = await sApi('PUT', '/settings', body);
       S.apDirty = false; S.agDirty = false;
       if (S.data) S.data.settings = r.settings;
       renderSettings(); renderList(); // la frase del gruppo «In carico agli agenti» dipende dall'interruttore
-      toast(r.settings.approval ? 'Salvato: ogni download chiede la tua autorizzazione' : 'Salvato: download liberi (restano registrati)');
+      toast(r.settings.activation ? `Salvato: si scarica solo dagli store attivati con un codice venditore (max ${r.settings.storeMax} per agente)` : r.settings.approval ? 'Salvato: ogni download chiede la tua autorizzazione' : 'Salvato: download liberi (restano registrati)');
     } catch (err) { toast(err.message, 1); }
   };
   $('#sdCl').onclick = () => { $('#sdCl').classList.toggle('on'); S.clDirty = true; };
@@ -504,6 +575,56 @@
   const goStore = () => { const n = document.querySelector('.nav[data-v="store"]'); if (n) n.click(); };
   if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.kairos === 'store') goStore(); });
 
+  /* ---------------- Riepilogo store (titolare): store attivati, dispositivi, download, per agente e per app ---------------- */
+  const SUM = { data: null, busy: false };
+  if (!$('.nav[data-v="storesum"]')) {
+    const b = document.createElement('button'); b.className = 'nav'; b.dataset.v = 'storesum';
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Riepilogo store';
+    b.onclick = () => { view('storesum'); renderSum(true); };
+    const after = $('.nav[data-v="store"]'); after ? after.after(b) : $('#side').appendChild(b);
+    const sec = document.createElement('section'); sec.className = 'view'; sec.id = 'v-storesum'; sec.innerHTML = `
+      <div class="card glass" style="margin-bottom:18px"><div class="hd"><h3>Riepilogo store<small>Quanti store sono attivati, chi scarica e quale agente: tutto in una pagina (download degli ultimi 30 giorni)</small></h3><button class="btn sm" id="ssReload">Aggiorna</button></div>
+        <div class="ss-k" id="ssK"></div>
+        <div class="sd-note" id="ssMode"></div>
+      </div>
+      <div class="g2">
+        <div class="card glass"><div class="hd"><h3>Per agente<small>Store intestati, tetto, download e dispositivi serviti. La prima riga sei tu</small></h3></div><div class="tbl-wrap"><table class="tbl ss-t" style="width:100%"><thead><tr><th>Venditore</th><th>Store attivati</th><th>Download 30 gg</th><th>Dispositivi 30 gg</th><th>Ultimo download</th></tr></thead><tbody id="ssAg"></tbody></table></div></div>
+        <div class="card glass"><div class="hd"><h3>Per app<small>Le app più scaricate dallo store negli ultimi 30 giorni</small></h3></div><div class="tbl-wrap"><table class="tbl ss-t" style="width:100%"><thead><tr><th>App</th><th>Download</th><th>Dispositivi</th><th>Ultimi 7 gg</th></tr></thead><tbody id="ssApp"></tbody></table></div></div>
+      </div>`;
+    $('#v-dash').after(sec);
+  }
+  if (typeof TITLES === 'object') TITLES.storesum = 'Riepilogo store';
+  async function renderSum(force) {
+    const sec = $('#v-storesum'); if (!sec || D.role === 'agent' || SUM.busy) return;
+    if (!force && SUM.data && Date.now() - SUM.t < 20000) return;
+    SUM.busy = true;
+    try {
+      const d = await sApi('GET', '/summary'); SUM.data = d; SUM.t = Date.now();
+      const T = d.totals || {}, st = d.settings || {}, sellers = d.sellers || [], apps = d.apps || [];
+      const withStores = sellers.filter((x) => x.id && x.stores > 0).length;
+      $('#ssK').innerHTML = [
+        [T.stores || 0, 'store attivati', `${withStores} agent${withStores === 1 ? 'e' : 'i'} con store`],
+        [T.dl30 || 0, 'download in 30 giorni', `ultimi 7 giorni: ${T.dl7 || 0} · oggi: ${T.dl1 || 0}`],
+        [T.users30 || 0, 'dispositivi che hanno scaricato', `in 30 giorni · ${T.devs30 || 0} hanno chiesto qualcosa`],
+        [T.pending || 0, 'richieste in attesa', st.activation ? 'con «solo store attivati» di solito zero' : 'aspettano te o gli agenti'],
+      ].map(([n, l, i]) => `<div class="k"><b>${esc(String(n))}</b><small>${l}</small><i>${esc(i)}</i></div>`).join('');
+      $('#ssMode').innerHTML = st.activation ? `🏪 <b>Solo store attivati</b>: si scarica solo dagli store intestati a un venditore, senza conferma. Tetto di serie: <b>${esc(String(st.storeMax))}</b> store per agente (cambialo per agente dalla pagina Agenti).`
+        : st.approval === false ? '⚠️ <b>Download liberi</b>: nessuna conferma e nessuna intestazione. Per sapere quale agente scarica, scegli «Solo store attivati» in App da approvare → Approvazione.'
+        : 'ℹ️ <b>Chiedi la mia autorizzazione</b>: ogni download aspetta un sì. Gli store attivati con un codice risultano comunque intestati a quel venditore.';
+      $('#ssAg').innerHTML = sellers.length ? sellers.map((x) => {
+        const pct = x.cap ? Math.min(100, Math.round((x.stores / x.cap) * 100)) : 0;
+        return `<tr><td><b>${esc(x.name)}</b>${x.active === false ? ' <span class="mut">(sospeso)</span>' : ''}<br><small class="mut">${x.id ? 'codice ' + esc(x.storeCode || '—') : 'senza codice o con il tuo'}</small></td>
+          <td><b>${x.stores}</b>${x.cap !== null && x.cap !== undefined ? ` <span class="mut">/ ${x.cap}</span><div class="ss-bar"><i style="width:${pct}%"></i></div>` : ''}</td>
+          <td><b>${x.dl30}</b> <span class="mut">· 7 gg: ${x.dl7} · oggi: ${x.dl1}</span></td>
+          <td>${x.devs30}</td><td>${x.last ? esc(ago(x.last)) : '—'}</td></tr>`; }).join('') : '<tr><td colspan="5" class="mut">Ancora nessun dato</td></tr>';
+      $('#ssApp').innerHTML = apps.length ? apps.map((a) => `<tr><td><b>${esc(a.app)}</b></td><td>${a.n}</td><td>${a.devs}</td><td>${a.n7 || 0}</td></tr>`).join('') : '<tr><td colspan="4" class="mut">Nessun download negli ultimi 30 giorni</td></tr>';
+    } catch (e) { if ($('#v-storesum').classList.contains('on')) toast(e.message, 1); }
+    finally { SUM.busy = false; }
+  }
+  const ssR = $('#ssReload'); if (ssR) ssR.onclick = () => renderSum(true);
+  // la pagina si riempie appena diventa visibile (qualunque cosa abbia cambiato vista: menu, scorciatoie, link)
+  { const sv = $('#v-storesum'); if (sv) new MutationObserver(() => { if (sv.classList.contains('on')) renderSum(true); }).observe(sv, { attributes: true, attributeFilter: ['class'] }); }
+
   /* aggiornamento: all'apertura della pagina e ogni 20 secondi mentre il pannello è aperto */
   const navB = document.querySelector('.nav[data-v="store"]');
   if (navB) navB.addEventListener('click', () => { refresh(true); renderNf(); });
@@ -512,5 +633,5 @@
     if (appEl.classList.contains('on')) { refresh(true); if (location.hash === '#store') { history.replaceState(null, '', location.pathname); setTimeout(goStore, 300); } }
     else { S.data = null; S.seen = null; badge(); }
   }).observe(appEl, { attributes: true, attributeFilter: ['class'] });
-  setInterval(() => { if (appEl && appEl.classList.contains('on') && !document.hidden) refresh(); }, 20000);
+  setInterval(() => { if (appEl && appEl.classList.contains('on') && !document.hidden) { refresh(); if ($('#v-storesum') && $('#v-storesum').classList.contains('on')) renderSum(); } }, 20000);
 })();
