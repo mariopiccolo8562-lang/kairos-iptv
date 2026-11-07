@@ -3,11 +3,11 @@
    nome negli altri pannelli (stesse liste del «Cerca ovunque», omni.js) e un clic apre la scheda giusta. Va dopo omni.js. */
 (() => {
   const css = document.createElement('style');
-  css.textContent = `.xs-bar{display:flex;flex-direction:column;gap:6px;margin:8px 0 2px;padding:10px 12px;border-radius:12px;background:linear-gradient(150deg,#4f8cff1f,#ffffff06);border:1px solid #4f8cff55;font-size:12.5px;width:100%}
-.xs-head{font-size:14px}.xs-head .xs-p{white-space:nowrap}.xs-head .xs-p em{font-style:normal;display:inline-block;min-width:18px;text-align:center;padding:0 5px;border-radius:9px;background:#4f8cff;color:#fff;font-weight:700;font-size:11.5px}.xs-head .xs-p.here em{background:#2dd4bf;color:#06201c}
+  css.textContent = `.xs-bar{display:flex;flex-direction:column;gap:6px;margin:8px 0 2px;padding:10px 12px;border-radius:12px;background:linear-gradient(150deg,#ff4d4d26,#ffffff06);border:1px solid #ff4d4d88;font-size:12.5px;width:100%}
+.xs-head{font-size:14px}.xs-head .xs-p{white-space:nowrap}.xs-head{color:#ff8f8f}.xs-head b{color:#ffb3b3}.xs-head .xs-p em{font-style:normal;display:inline-block;min-width:18px;text-align:center;padding:0 5px;border-radius:9px;background:#e53935;color:#fff;font-weight:700;font-size:11.5px}.xs-head .xs-p.here em{background:#2dd4bf;color:#06201c}
 .xs-grp{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.xs-it.here{cursor:default;border-style:dashed}
 .xs-bar>small{color:var(--mut);margin-right:2px}.xs-it{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:8px;background:#ffffff0d;border:1px solid var(--line);cursor:pointer;color:var(--fg)}
-.xs-it:hover{border-color:#4f8cff;background:#4f8cff1a}.xs-it b{font-family:ui-monospace,Menlo,monospace;font-size:12px}.xs-it .wf-tag{margin:0}.xs-it small{color:var(--mut);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xs-it:hover{border-color:#ff4d4d;background:#ff4d4d1a}.xs-it b{font-family:ui-monospace,Menlo,monospace;font-size:12px}.xs-it .wf-tag{margin:0}.xs-it small{color:var(--mut);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .xs-bar .xs-more{color:var(--mut);font-size:12px}`;
   document.head.appendChild(css);
   // casella di ricerca di ogni scheda → pannello (per exQ il pannello è quello della sezione aperta: Realott o SLT)
