@@ -28,7 +28,11 @@
 .rc-st{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600}.rc-st i{width:8px;height:8px;border-radius:50%;background:var(--mut)}.rc-st.ok i{background:var(--ok)}.rc-st.wait i{background:var(--warn)}
 .rc-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.rc-bar .inp{flex:1;min-width:200px;margin:0}
 .rc-note{font-size:12.5px;color:var(--mut);line-height:1.5}
-#rcM .glass{max-width:980px!important;width:min(980px,96vw)!important}
+/* finestra del singolo cliente: sopra la scheda cliente (#drawer, 21) e sotto le conferme (#modal, 40) */
+#rcM{position:fixed;inset:0;z-index:38;display:none;align-items:flex-start;justify-content:center;background:rgba(3,4,10,.62);backdrop-filter:blur(8px);padding:24px 16px;overflow:auto}
+#rcM.on{display:flex}
+#rcM .glass{max-width:980px!important;width:min(980px,96vw)!important;margin:auto 0;background:rgba(14,15,34,.94)}
+#rcM .hd{display:flex;flex-wrap:nowrap;align-items:flex-start;justify-content:space-between;gap:12px}#rcM .hd h3{flex:1 1 auto;min-width:0}
 .rc-hist{font-size:12.5px;color:var(--mut);display:grid;gap:4px;max-height:160px;overflow:auto}.rc-hist b{color:#eef1f8;font-weight:600}
 .rc-dr{margin-top:12px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.025);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .rc-dr .sp{flex:1}
