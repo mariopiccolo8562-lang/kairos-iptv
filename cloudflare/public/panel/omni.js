@@ -53,6 +53,7 @@
   }
 
   const fits = (hay, toks) => toks.every((t) => hay.includes(t));
+  const PK0 = ['wolf', 'armada', 'mxp', 'oxp', 'atx', 'ro', 'slt', 'orcp'], PN0 = ['WOLF', 'Armada', 'MaxPlayer', 'OrbixPlay', 'Atlantix', 'Realott', 'SLT', 'MirkoTeam'];
   let items = [], sel = 0, seq = 0;
   function pages(toks) {
     return $$('.nav[data-v]').filter((b) => b.style.display !== 'none' && (b.offsetParent !== null || !!b.closest('#side.m4'))).map((b) => ({ v: b.dataset.v, name: (b.textContent || '').replace(/\d+\s*$/, '').trim() }))
@@ -88,7 +89,7 @@
     const q = gq.value.trim(), toks = q.toLowerCase().split(/\s+/).filter(Boolean), my = ++seq;
     if (!q) { dd.classList.remove('on'); if (D.q) { D.q = ''; renderDevices(); } return; }
     const base = [['Clienti', clients(q, toks)], ['Agenti', agents(toks)], ['Pagine', pages(toks)]];
-    const PK = ['wolf', 'armada', 'mxp', 'oxp', 'atx', 'ro', 'slt', 'orcp'], PN = ['WOLF', 'Armada', 'MaxPlayer', 'OrbixPlay', 'Atlantix', 'Realott', 'SLT', 'MirkoTeam'];
+    const PK = PK0, PN = PN0;
     const ext = q.length >= 3 && (!isAg() || ['wolf', 'armada', 'mxp', 'oxp', 'ro', 'slt'].some(can));
     const extOf = (L) => { const r = L.filter((x) => fits(x.hay, toks)); return PN.map((n, i) => [n, r.filter((x) => x.p === PK[i]).slice(0, 6).map((x) => ({ ...x, k: 'ext' }))]); };
     if (!ext) return draw(base, false);
@@ -115,6 +116,8 @@
     }
     document.querySelectorAll('[data-ox-done]').forEach((t) => delete t.dataset.oxDone);
   }
+  /* per la ricerca incrociata nelle schede dei pannelli (xsearch.js): stesse liste, stessa apertura del risultato */
+  window.KXOmni = { find: async (q) => { const toks = String(q || '').toLowerCase().split(/\s+/).filter(Boolean); if (!toks.length) return []; const L = await loadExt(); return L.filter((x) => fits(x.hay, toks)); }, pick: (x) => pick({ ...x, k: 'ext' }), names: Object.fromEntries(PK0.map((k, i) => [k, PN0[i]])) };
   let tmr = 0;
   gq.addEventListener('input', () => { clearTimeout(tmr); sel = 0; tmr = setTimeout(search, 120); });
   gq.addEventListener('focus', () => { if (gq.value.trim()) search(); });
