@@ -9,7 +9,7 @@
   const HUBS = [
     ['dash', 'Panoramica', '#4f8cff', S('<rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/>'), ['dash', 'live', 'conn']],
     ['cli', 'Clienti', '#22c55e', S('<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>'), ['devices', 'lmap', 'lines', 'msgs', 'trash']],
-    ['pan', 'Pannelli IPTV', '#2dd4bf', S('<rect x="3" y="3" width="18" height="6" rx="2"/><rect x="3" y="15" width="18" height="6" rx="2"/><path d="M7 6h.01M7 18h.01M12 9v6"/>'), ['wolf', 'armada', 'atx', 'ora', 'ro', 'slt', 'orcp', 'mxp', 'oxp', 'dns']],
+    ['pan', 'Pannelli IPTV', '#2dd4bf', S('<rect x="3" y="3" width="18" height="6" rx="2"/><rect x="3" y="15" width="18" height="6" rx="2"/><path d="M7 6h.01M7 18h.01M12 9v6"/>'), ['wolf', 'armada', 'storm', 'atx', 'ora', 'ro', 'slt', 'orcp', 'mxp', 'oxp', 'dns']],
     ['ag', 'Agenti', '#38bdf8', S('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14a5 5 0 0 1 3 6"/>'), ['agents']],
     ['app', 'App e Store', '#a78bfa', S('<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M17.5 14v7M14 17.5h7"/>'), ['store', 'storesum', 'apps3', 'apps3op', 'agop', 'xlist', 'dlc', 'appk', 'agk', 'vod']],
     ['req', 'Richieste e controllo', '#fb923c', S('<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>'), ['reports', 'creq', 'areq', 'reqai', 'apperr', 'rctl', 'activity']],

@@ -65,7 +65,7 @@
   const isAg = () => D.role === 'agent';
   const perms = () => (D.me && D.me.perms) || {};
   const canP = (k) => !isAg() || !!perms()[k];
-  setInterval(() => { const b = $('.nav[data-v="conn"]'); if (b) b.style.display = !isAg() || ['wolf', 'armada', 'mxp', 'oxp'].some((k) => perms()[k]) ? '' : 'none'; }, 2000);
+  setInterval(() => { const b = $('.nav[data-v="conn"]'); if (b) b.style.display = !isAg() || ['wolf', 'armada', 'storm', 'mxp', 'oxp'].some((k) => perms()[k]) ? '' : 'none'; }, 2000);
 
   const S = { rows: null, busy: false, f: '', p: '', q: '', errs: [], t: 0, limit: 200 };
   async function loadAll() {
@@ -87,6 +87,8 @@
         for (const r of by.values()) rows.push(r); })().catch(err('MirkoTeam')),
       canP('armada') && (async () => { const st = await api('GET', '/admin/armada/state'); if (!st.connected) return; const d = await api('GET', '/admin/armada/lines');
         for (const x of d.lines || []) rows.push({ p: 'Armada', u: x.username, n: x.notes, h: st.dns, pw: x.password, mx: x.maxConn, en: x.enabled }); })().catch(err('Armada')),
+      canP('storm') && (async () => { const st = await api('GET', '/admin/storm/state'); if (!st.connected) return; const d = await api('GET', '/admin/storm/lines');
+        for (const x of d.lines || []) rows.push({ p: 'Storm', u: x.username, n: x.notes, h: st.dns, pw: x.password, mx: x.maxConn, en: x.enabled }); })().catch(err('Storm')),
       canP('mxp') && (async () => { const a = (await api('GET', '/admin/mxp/accounts')).accounts || [];
         for (const ac of a) { const us = (await api('GET', `/admin/mxp/a/${ac.id}/users`)).users || [];
           for (const u of us) for (const l of u.lists || []) rows.push({ p: 'MaxPlayer', u: l.user, n: u.username || u.email, h: (l.ssl ? 'https://' : 'http://') + l.fqdn + (l.port ? ':' + l.port : ''), pw: l.pass, en: true }); } })().catch(err('MaxPlayer')),
