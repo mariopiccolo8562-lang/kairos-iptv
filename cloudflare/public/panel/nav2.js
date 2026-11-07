@@ -187,6 +187,7 @@
     go.then((ok) => { if (!ok || !s.value) return; then(D.devices.find((d) => d.id === s.value)); });
   }
   const ACTS = [
+    ['⚡', 'Nuova attivazione', 'Linea sul pannello IPTV + app in un passaggio', () => window.KXQuick && KXQuick.open({})],
     ['➕', 'Nuovo cliente', 'Attiva un codice', () => $('#newDev').click()],
     ['🔁', 'Rinnova in scadenza', 'Clienti che scadono entro 14 giorni', () => { D.filter = 'soon'; view('devices'); renderDevices(); }],
     ['💬', 'Messaggio a tutti', 'Avviso nell\'app dei clienti', () => { view('msgs'); setTimeout(() => { const t = $('#mTo'); if (t) t.value = 'all'; const i = $('#mTitle') || $('#v-msgs input'); if (i) i.focus(); }, 50); }],
