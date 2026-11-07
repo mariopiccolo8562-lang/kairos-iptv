@@ -1,0 +1,43 @@
+/* KAIROS Control — ricerca incrociata nelle schede dei Pannelli IPTV: mentre cerchi un nome dentro WOLF, Armada, Atlantix,
+   Realott, SLT, MaxPlayer, OrbixPlay o MirkoTeam, sotto la casella compare «Trovato anche su…» con le linee con lo stesso
+   nome negli altri pannelli (stesse liste del «Cerca ovunque», omni.js) e un clic apre la scheda giusta. Va dopo omni.js. */
+(() => {
+  const css = document.createElement('style');
+  css.textContent = `.xs-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 2px;padding:8px 10px;border-radius:10px;background:#ffffff08;border:1px dashed var(--line);font-size:12.5px;width:100%}
+.xs-bar>small{color:var(--mut);margin-right:2px}.xs-it{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:8px;background:#ffffff0d;border:1px solid var(--line);cursor:pointer;color:var(--fg)}
+.xs-it:hover{border-color:#4f8cff;background:#4f8cff1a}.xs-it b{font-family:ui-monospace,Menlo,monospace;font-size:12px}.xs-it .wf-tag{margin:0}.xs-it small{color:var(--mut);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xs-bar .xs-more{color:var(--mut);font-size:12px}`;
+  document.head.appendChild(css);
+  // casella di ricerca di ogni scheda → pannello (per exQ il pannello è quello della sezione aperta: Realott o SLT)
+  const IN = [['#wfQ', 'wolf'], ['#arQ', 'armada'], ['#axQ', 'atx'], ['#exQ', null], ['#orQ', 'orcp'], ['#mxQ', 'mxp'], ['#oxQ', 'oxp']];
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const S = { q: '', items: null, seq: 0 };
+  function current() {
+    for (const [sel, p] of IN) { const e = document.querySelector(sel); if (!e || !e.offsetParent) continue; const v = e.closest('section.view'); if (!v || !v.classList.contains('on')) continue; return { e, p: p || (v.id === 'v-slt' ? 'slt' : 'ro') }; }
+    return null;
+  }
+  function bar(e) { let b = e.parentElement && e.parentElement.nextElementSibling; if (b && b.classList.contains('xs-bar')) return b; b = document.createElement('div'); b.className = 'xs-bar'; e.parentElement.after(b); return b; }
+  function render(cur) {
+    const q = cur.e.value.trim(), old = cur.e.parentElement && cur.e.parentElement.nextElementSibling;
+    if (q.length < 3) { if (old && old.classList.contains('xs-bar')) old.remove(); return; }
+    const L = (S.items || []).filter((x) => x.p !== cur.p);
+    const b = bar(cur.e);
+    if (S.q !== q) { b.innerHTML = `<small>Cerco «${esc(q)}» negli altri pannelli…</small>`; return; }
+    if (!L.length) { b.innerHTML = `<small>«${esc(q)}» non c'è su altri pannelli</small>`; return; }
+    const by = new Map(); for (const x of L) { if (!by.has(x.p)) by.set(x.p, []); by.get(x.p).push(x); }
+    const N = (window.KXOmni && KXOmni.names) || {};
+    let html = '<small>Trovato anche su:</small>', n = 0;
+    for (const [p, xs] of by) for (const x of xs.slice(0, 4)) { html += `<span class="xs-it" data-xs="${n}"><span class="wf-tag g">${esc(N[p] || x.tag)}</span><b>${esc(x.t)}</b>${x.s ? `<small title="${esc(x.s)}">${esc(x.s)}</small>` : ''}</span>`; b['_x' + n] = x; n++; }
+    const more = L.length - n; if (more > 0) html += `<span class="xs-more">e altre ${more}: usa «Cerca ovunque» in alto</span>`;
+    b.innerHTML = html;
+    b.querySelectorAll('[data-xs]').forEach((el) => (el.onclick = () => { const x = b['_x' + el.dataset.xs]; if (x && window.KXOmni) KXOmni.pick(x); }));
+  }
+  let tmr = 0;
+  async function tick() {
+    const cur = current(); if (!cur || !window.KXOmni) return;
+    const q = cur.e.value.trim();
+    if (q.length >= 3 && q !== S.q && !tmr) tmr = setTimeout(async () => { tmr = 0; const my = ++S.seq; let items = []; try { items = await KXOmni.find(q); } catch { items = []; } if (my !== S.seq) return; S.q = q; S.items = items; const c = current(); if (c) render(c); }, 350);
+    render(cur);
+  }
+  setInterval(tick, 400); // le schede si ridisegnano da sole a ogni lettera: la barra viene rimessa se sparisce
+})();
