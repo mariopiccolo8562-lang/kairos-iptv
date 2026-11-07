@@ -1,0 +1,81 @@
+name: App iPhone / iPad / Mac (iOS)
+
+on:
+  push:
+    branches: [main]
+    paths: ['ios/**', 'player/**', '.github/workflows/ios.yml']
+    tags: ['v*']
+  pull_request:
+    paths: ['ios/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    env:
+      # solo indicatori (sì/no): le chiavi vere sono visibili soltanto al passaggio che invia a TestFlight
+      HAS_ASC: ${{ secrets.ASC_KEY_P8 != '' && secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' && secrets.APPLE_TEAM_ID != '' }}
+      APP_ID: ${{ vars.IOS_APP_ID || 'com.kairos.player' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copia il player nell'app
+        env:
+          KAIROS_SERVER_URL: ${{ vars.KAIROS_SERVER_URL }}
+        run: |
+          mkdir -p ios/Kairos/www
+          cp player/index.html ios/Kairos/www/index.html
+          URL="${KAIROS_SERVER_URL%/}"
+          UIV=$(shasum -a 256 player/index.html | cut -c1-12)
+          printf 'window.KAIROS_SERVER = %s;\nwindow.KX_UI = "%s";\n' "$(jq -Rn --arg u "$URL" '$u')" "$UIV" > ios/Kairos/www/config.js
+          if [ -z "$URL" ]; then echo "::warning::Variabile KAIROS_SERVER_URL non impostata: l'app partirà in modalità demo"; fi
+
+      - name: Versione
+        run: |
+          if [[ "$GITHUB_REF" =~ ^refs/tags/v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then V="${BASH_REMATCH[1]}"; else V="1.0.0"; fi
+          echo "MARKETING_VERSION=$V" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
+      - name: Progetto Xcode
+        working-directory: ios
+        run: |
+          brew install xcodegen >/dev/null
+          sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER: .*/PRODUCT_BUNDLE_IDENTIFIER: $APP_ID/; s/MARKETING_VERSION: .*/MARKETING_VERSION: \"$MARKETING_VERSION\"/; s/CURRENT_PROJECT_VERSION: .*/CURRENT_PROJECT_VERSION: \"$BUILD_NUMBER\"/" project.yml
+          xcodegen generate
+          pod install --repo-update
+
+      - name: Compila (simulatore, senza firma)
+        run: |
+          set -o pipefail
+          xcodebuild -workspace ios/Kairos.xcworkspace -scheme Kairos -configuration Release -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build 2>&1 | grep -E "error:|warning: .*Swift|BUILD (SUCCEEDED|FAILED)" | head -80
+
+      - name: Archivia e invia a TestFlight
+        if: env.HAS_ASC == 'true' && github.event_name != 'pull_request'
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          KEY="$RUNNER_TEMP/AuthKey.p8"; printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          xcodebuild -workspace ios/Kairos.xcworkspace -scheme Kairos -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Kairos.xcarchive" DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic "${AUTH[@]}" archive 2>&1 | grep -E "error:|ARCHIVE (SUCCEEDED|FAILED)" | head -60
+          P="$RUNNER_TEMP/export.plist"
+          plutil -create xml1 "$P"
+          plutil -insert method -string app-store-connect "$P"
+          plutil -insert destination -string upload "$P"
+          plutil -insert teamID -string "$APPLE_TEAM_ID" "$P"
+          plutil -insert signingStyle -string automatic "$P"
+          plutil -insert manageAppVersionAndBuildNumber -bool NO "$P"
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Kairos.xcarchive" -exportOptionsPlist "$RUNNER_TEMP/export.plist" \
+            -exportPath "$RUNNER_TEMP/out" "${AUTH[@]}" 2>&1 | grep -E "error:|EXPORT (SUCCEEDED|FAILED)|Upload" | head -40
+          rm -f "$KEY"
+          echo "::notice::Build $MARKETING_VERSION ($BUILD_NUMBER) inviata a TestFlight"
+
+      - name: Nessuna chiave Apple
+        if: env.HAS_ASC != 'true'
+        run: |
+          echo "::warning::Mancano i segreti ASC_KEY_P8, ASC_KEY_ID, ASC_ISSUER_ID e APPLE_TEAM_ID: compilata solo la prova per simulatore, niente TestFlight."
