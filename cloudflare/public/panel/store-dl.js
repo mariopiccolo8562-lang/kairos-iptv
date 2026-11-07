@@ -97,6 +97,13 @@
         <label class="lbl">Store attivabili per agente (tetto di serie)</label>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input class="inp" id="sdMax" type="number" min="0" max="100000" step="1" style="margin:0;width:120px"><small class="mut" style="flex:1;min-width:200px">Lo cambi per il singolo agente nella sua scheda (Agenti). Tu non hai tetto. <span id="sdActInfo"></span></small></div>
       </div>
+      <div id="sdGateBox" style="margin:4px 0 10px">
+        <label class="lbl">Codice del venditore all'avvio dello store</label>
+        <div id="sdGate">
+          <label class="sd-mode" data-g="every"><input type="radio" name="sdGate" value="every"><div><b>A ogni avvio</b><small>Prima di vedere le app il cliente scrive il codice del suo venditore, ogni volta che apre lo store. Nella richiesta di download resta solo «Richiedi autorizzazione»</small></div></label>
+          <label class="sd-mode" data-g="once"><input type="radio" name="sdGate" value="once"><div><b>Solo la prima volta</b><small>Lo store chiede il codice finché non è intestato a un venditore, poi non più</small></div></label>
+        </div>
+      </div>
       <div class="tog" id="sdAgAl"><div><b>Avvisami anche per le richieste degli agenti</b><small>Spento: la richiesta con il codice di un agente arriva solo a lui (email, SMS, Telegram, notifiche). Tu la vedi comunque qui, in «In carico agli agenti», e puoi sempre decidere al posto suo</small></div><i></i></div>
       <label class="lbl">La tua email per gli avvisi</label>
       <input class="inp" id="sdMail" type="email" autocomplete="email" placeholder="la stessa del tuo account Resend">
@@ -145,7 +152,7 @@
   const DM = (() => {
     const t = Date.now();
     return {
-      settings: { approval: true, activation: false, storeMax: 50, ownerEmail: 'tuo@email.it', blocked: ['demo-did-mt-firetv-000000'], sms: { on: true, owner: '+393331234567', link: false, perDay: 50, agents: [{ id: 2, phone: '+393409876543', on: true }] } },
+      settings: { approval: true, activation: false, storeMax: 50, storeGate: 'every', ownerEmail: 'tuo@email.it', blocked: ['demo-did-mt-firetv-000000'], sms: { on: true, owner: '+393331234567', link: false, perDay: 50, agents: [{ id: 2, phone: '+393409876543', on: true }] } },
       mail: { resend: true, envEmail: false, links: true, sentToday: 3, limit: 90 },
       sms: { ready: true, sentToday: 5, agents: [{ id: 2, username: 'luca', store: true, active: true }, { id: 3, username: 'sara', store: false, active: true }] },
       sellerCode: 'K7M4',
@@ -317,6 +324,7 @@
     const s = S.data.settings || {}, m = S.data.mail || {};
     const mode = s.activation ? 'act' : s.approval === false ? 'free' : 'ask';
     if (!S.apDirty) { $$('#sdMode .sd-mode').forEach((l) => { const on = l.dataset.m === mode; l.classList.toggle('on', on); l.querySelector('input').checked = on; }); if (document.activeElement !== $('#sdMax')) $('#sdMax').value = Number.isInteger(s.storeMax) ? s.storeMax : 50; }
+    if (!S.apDirty) $$('#sdGate .sd-mode').forEach((l) => { const on = l.dataset.g === (s.storeGate === 'once' ? 'once' : 'every'); l.classList.toggle('on', on); l.querySelector('input').checked = on; });
     modeBox();
     const ai = $('#sdActInfo'); if (ai) ai.textContent = S.data.stores !== undefined ? `Store attivati finora: ${S.data.stores}.` : '';
     if (!S.agDirty && $('#sdAgAl')) $('#sdAgAl').classList.toggle('on', !!s.agentAlerts);
@@ -457,15 +465,16 @@
     try { const r = await sApi('POST', '/sms/test', { phone }); toast('SMS di prova inviato a ' + r.to); } catch (err) { toast(err.message, 1); } finally { b.disabled = false; }
   };
   const curMode = () => { const r = $('#sdMode input:checked'); return r ? r.value : 'ask'; };
-  const modeBox = () => { $$('#sdMode .sd-mode').forEach((l) => l.classList.toggle('on', l.querySelector('input').checked)); $('#sdActBox').style.display = curMode() === 'act' ? '' : 'none'; };
+  const modeBox = () => { $$('#sdMode .sd-mode, #sdGate .sd-mode').forEach((l) => l.classList.toggle('on', l.querySelector('input').checked)); $('#sdActBox').style.display = curMode() === 'act' ? '' : 'none'; $('#sdGateBox').style.display = curMode() === 'free' ? 'none' : ''; };
   $('#sdMode').addEventListener('change', () => { S.apDirty = true; modeBox(); });
+  $('#sdGate').addEventListener('change', () => { S.apDirty = true; modeBox(); });
   $('#sdMax').addEventListener('input', () => (S.apDirty = true));
   $('#sdAgAl').onclick = () => { $('#sdAgAl').classList.toggle('on'); S.agDirty = true; };
   $('#sdSave').onclick = async () => {
     // finché le impostazioni non sono caricate non si manda l'approvazione: prima un Salva troppo veloce la spegneva
     if (!S.data) { toast('Attendi il caricamento delle impostazioni', 1); return; }
     try {
-      const mode = curMode(), body = { approval: mode !== 'free', activation: mode === 'act', agentAlerts: $('#sdAgAl').classList.contains('on'), ownerEmail: $('#sdMail').value.trim() };
+      const g = $('#sdGate input:checked'), mode = curMode(), body = { approval: mode !== 'free', activation: mode === 'act', storeGate: g ? g.value : 'every', agentAlerts: $('#sdAgAl').classList.contains('on'), ownerEmail: $('#sdMail').value.trim() };
       if (mode === 'act') { const n = parseInt($('#sdMax').value, 10); if (!(n >= 0)) { toast('Scrivi il tetto di store per agente (0 o più)', 1); return; } body.storeMax = n; }
       const r = await sApi('PUT', '/settings', body);
       S.apDirty = false; S.agDirty = false;

@@ -117,7 +117,8 @@ async function getStoreSettings(env) {
   // agentAlerts: se vero il titolare riceve gli avvisi anche per le richieste con il codice di un agente (di serie le gestisce solo l'agente)
   // activation: «solo store attivati»: si scarica solo da store intestati a un venditore (codice scritto una volta), senza conferma
   const storeMax = Number.isInteger(s.storeMax) && s.storeMax >= 0 && s.storeMax <= STORE_MAX_CAP ? s.storeMax : STORE_MAX_DEF;
-  return { approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, trusted, sms: smsNorm(s.sms), closed: closedNorm(s.closed), agentAlerts: s.agentAlerts === true, activation: s.activation === true, storeMax };
+  // storeGate: codice del venditore all'avvio dello store — 'every' (a ogni avvio, di serie) oppure 'once' (solo finché lo store non è intestato)
+  return { approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, trusted, sms: smsNorm(s.sms), closed: closedNorm(s.closed), agentAlerts: s.agentAlerts === true, activation: s.activation === true, storeMax, storeGate: s.storeGate === 'once' ? 'once' : 'every' };
 }
 /** numero in formato internazionale (+39…); i numeri italiani scritti senza prefisso vengono completati */
 function phoneNorm(v) {
@@ -412,7 +413,9 @@ export async function storeApi(req, env, ctx, url, ip, opts = {}) {
       const name = dev && typeof opts.sellerName === 'function' ? await opts.sellerName(dev.seller) : '';
       const live = !dev || (await sellerLive(dev, opts)); // venditore sospeso → lo store è fermo finché un altro venditore non lo riattiva
       const blocked = S.blocked.includes(str(url.searchParams.get('did'), 64));
-      return json({ on: S.approval, activation: S.activation, activated: !!dev && live, suspended: !!dev && !live, blocked, ...(dev ? { seller: name, since: dev.activated } : {}), closed: cl, ...(cl ? { msg: closedMsg(S.closed) } : {}) });
+      // gate: 'every' = codice del venditore a ogni avvio; 'once' = solo finché lo store non è intestato; 'none' = download liberi
+      const gate = !S.approval && !S.activation ? 'none' : S.storeGate;
+      return json({ on: S.approval, activation: S.activation, gate, activated: !!dev && live, suspended: !!dev && !live, blocked, ...(dev ? { seller: name, since: dev.activated } : {}), closed: cl, ...(cl ? { msg: closedMsg(S.closed) } : {}) });
     }
     if (p === '/activate' && m === 'POST') return await activate(req, env, ctx, url, ip, opts);
     if (p === '/seller' && m === 'GET') {
@@ -710,6 +713,7 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       if (typeof b.approval === 'boolean') { s.approval = b.approval; if (!b.approval && b.activation === undefined) s.activation = false; } // «download liberi» spegne anche «solo store attivati»
       if (typeof b.agentAlerts === 'boolean') s.agentAlerts = b.agentAlerts;
       if (typeof b.activation === 'boolean') { s.activation = b.activation; if (b.activation) s.approval = true; }
+      if (b.storeGate === 'once' || b.storeGate === 'every') s.storeGate = b.storeGate;
       if (b.storeMax !== undefined) { const n = parseInt(b.storeMax, 10); if (!(n >= 0 && n <= STORE_MAX_CAP)) throw new StoreErr(400, `Tetto di store non valido (da 0 a ${STORE_MAX_CAP})`); s.storeMax = n; }
       if (b.closed && typeof b.closed === 'object') {
         const c = b.closed;
