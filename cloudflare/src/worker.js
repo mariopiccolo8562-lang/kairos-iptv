@@ -13,7 +13,7 @@ import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide, storeAgent
 import { wolfRoutes, wolfCron, sockFetch } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
 import { atxRoutes } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz), solo titolare
 import { oraRoutes } from './orapanel.js';
-import { orcpRoutes } from './orcp.js'; // Pannello ORCP (cp.ottrun.com): l'app brandizzata OTTRUN, accesso passato dal titolare
+import { orcpRoutes, ovpnFile } from './orcp.js'; // Pannello ORCP (cp.ottrun.com): l'app brandizzata OTTRUN, accesso passato dal titolare
 import { extRoutes } from './extpanels.js'; // Pannelli Realott e SLT (accesso diretto senza API), solo titolare // Pannello ORA (panel.oraplayers.com), accesso passato dal titolare
 import { oxpRoutes } from './orbixpanel.js'; // playlist OrbixPlay gestite da KAIROS (sezione «Pannello OrbixPlay»)
 import { mxpRoutes } from './mxpanel.js'; // account MaxPlayer gestiti da KAIROS (sezione «Pannello MaxPlayer»)
@@ -3078,6 +3078,9 @@ async function route(req, env, ctx) {
 
   /* ---------- informativa privacy e condizioni (pubblica, la apre anche l'app) ---------- */
   if ((path === '/privacy' || path === '/privacy/') && (req.method === 'GET' || req.method === 'HEAD')) return privacyPage(env);
+
+  /* ---------- file OpenVPN dell'app MirkoTeam ospitato da KAIROS (link segreto, vedi Pannello ORCP → VPN) ---------- */
+  if (path.startsWith('/ovpn/') && req.method === 'GET') { const r = await ovpnFile(env, path, WOLF_H); if (r) return r; }
 
   /* ---------- link puliti: APK delle app e pagina dello store serviti da qui (nessun nome nel link) ---------- */
   if (path.startsWith('/get/') || path === '/store' || path.startsWith('/store/')) return cleanLinks(req, url, path);

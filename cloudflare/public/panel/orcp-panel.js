@@ -12,7 +12,7 @@
   TITLES.orcp = 'Pannello App ORCP';
   const isAg = () => D.role === 'agent';
   const PANEL_NAME = { wolf: 'WOLF', armada: 'Armada', atx: 'Atlantix', ro: 'Realott', slt: 'SLT' };
-  const TABS = [['conns', 'Connessioni'], ['msgs', 'Messaggi'], ['ann', 'Annuncio'], ['maint', 'Manutenzione'], ['pin', 'PIN parentale'], ['portals', 'Portali e server'], ['link', 'Collega']];
+  const TABS = [['conns', 'Connessioni'], ['msgs', 'Messaggi'], ['ann', 'Annuncio'], ['maint', 'Manutenzione'], ['pin', 'PIN parentale'], ['vpn', 'VPN'], ['portals', 'Portali e server'], ['link', 'Collega']];
   const R = { st: null, tab: 'conns', q: '', onlyOn: false, data: {}, err: '', busy: false, edit: null, pin: null, ck: '' };
   const name = () => (R.st && R.st.cfg && R.st.cfg.name) || (R.st && R.st.app && R.st.app.name) || 'App ORCP';
   const mut = '<span class="mut">—</span>';
@@ -61,6 +61,26 @@
     const st = (x) => /^ACTIVE/i.test(x.status) ? badge('Acceso', '#2dd4bf') : badge('Spento', '#9aa4b2');
     if (mobile()) return form + d.list.map((x) => card(`${esc(x.user)} ${st(x)}`, [esc(x.text), `Scade ${when(x.expire)} · ${x.viewed ? 'letto' : 'non letto'}`], acts(x))).join('');
     return form + grid(['Utente', 'Messaggio', 'Stato', 'Letto', 'Scade', ''], d.list.map((x) => tr([`<b>${esc(x.user)}</b>`, esc(x.text), st(x), x.viewed ? 'sì' : 'no', when(x.expire), `<div style="display:flex;gap:5px">${acts(x)}</div>`])));
+  }
+  function vpn() {
+    const d = R.data.vpn; need('vpn'); if (!d) return loading('vpn', 'Carico le configurazioni VPN da ORCP…');
+    const e = { ...(R.vedit || {}), ...(R.vf || {}) }; const AUTH = { noup: 'Nessuna', up: 'Utente e password', kp: 'Password del file chiave' };
+    const cc = (d.countries || []).length ? d.countries : [{ v: 'IT', t: 'Italy' }, { v: 'US', t: 'United States' }, { v: 'GB', t: 'United Kingdom' }, { v: 'DE', t: 'Germany' }, { v: 'FR', t: 'France' }, { v: 'ES', t: 'Spain' }, { v: 'NL', t: 'Netherlands' }, { v: 'CH', t: 'Switzerland' }];
+    const sel = (id, label, opts, v) => `<label class="l">${label}<select class="inp" id="${id}">${opts.map(([k, t]) => `<option value="${esc(k)}"${k === v ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
+    const help = `<div class="card" style="padding:12px 14px;margin-bottom:12px;border-left:3px solid #4f8cff;font-size:13px;line-height:1.55"><b>Come funziona</b><br>L'app ${esc(name())} scarica il file OpenVPN da un link e lo usa per <b>tutti</b> i clienti dell'app (non per il singolo cliente). Qui carichi il file: KAIROS lo ospita con un link segreto e lo registra su ORCP.<br>
+      <b>Surfshark</b>: Il mio account → VPN → Configurazione manuale → <b>OpenVPN</b> → scarica il file <b>.ovpn (UDP)</b> della località che vuoi e copia le <b>credenziali di servizio</b> (utente e password OpenVPN, diverse da quelle dell'account). Poi qui: incolla il file, Autenticazione «Utente e password», scrivi le credenziali.</div>`;
+    const form = `<div class="card" style="padding:14px;margin-bottom:12px"><b>${e.id ? 'Modifica configurazione VPN' : 'Nuova configurazione VPN'}</b>
+      <div class="g2" style="margin-top:10px">${sel('orVC', 'Paese', cc.map((c) => [c.v, c.t]), e.country || 'IT')}${inp('orVS', 'Località / nome', e.state || '', 'placeholder="es. Milano"')}${sel('orVA', 'Autenticazione', Object.entries(AUTH), e.auth || 'noup')}${stSel('orVST', e.id ? e.status : 'ACTIVE')}
+      ${inp('orVU', 'Utente (se richiesto)', e.user || '', 'autocomplete="off" placeholder="credenziali di servizio Surfshark"')}${inp('orVP', e.id && e.hasPass ? 'Password (vuota = lascia quella attuale)' : 'Password (se richiesta)', e.pass || '', 'autocomplete="new-password"', 'password')}
+      <label class="l" style="grid-column:1/-1">File .ovpn <input type="file" id="orVF" accept=".ovpn,.conf,text/plain" style="margin-left:8px;font-size:12px"><textarea class="inp mono" id="orVT" rows="5" spellcheck="false" placeholder="Incolla qui il contenuto del file .ovpn (oppure scegli il file qui sopra)${e.id ? ' — vuoto = tieni il file attuale' : ''}">${esc(e.ovpn || '')}</textarea></label>
+      <label class="l" style="grid-column:1/-1">Oppure link diretto al file<input class="inp" id="orVL" value="${esc(e.lnk !== undefined ? e.lnk : (e.id && !e.hosted ? e.url || '' : ''))}" placeholder="https://… (se il file è già online da qualche parte)"></label></div>
+      ${e.id && e.hosted ? '<small class="mut" style="display:block;margin-top:6px">Il file attuale è ospitato da KAIROS.</small>' : ''}
+      <div style="display:flex;gap:6px;margin-top:10px"><button class="btn pri" data-or="vpnsave">${e.id ? 'Salva su ORCP' : 'Aggiungi su ORCP'}</button>${e.id ? '<button class="btn" data-or="vpncancel">Annulla</button>' : ''}</div></div>`;
+    const st = (x) => /^ACTIVE/i.test(x.status) ? badge('Accesa', '#2dd4bf') : badge('Spenta', '#9aa4b2');
+    const acts = (x) => `<button class="btn sm" data-orved="${esc(x.id)}">Modifica</button><button class="btn sm" data-orvdel="${esc(x.id)}" style="color:#ff8f8f">Elimina</button>`;
+    const L = d.list || [];
+    if (mobile()) return help + form + L.map((x) => card(`${esc(x.country)} · ${esc(x.state)} ${st(x)}`, [`Aggiunta ${when(x.date)}`], acts(x))).join('');
+    return help + form + grid(['Paese', 'Località', 'Stato', 'Aggiunta', ''], L.map((x) => tr([`<b>${esc(x.country)}</b>`, esc(x.state), st(x), when(x.date), `<div style="display:flex;gap:5px">${acts(x)}</div>`])));
   }
   function ann() {
     const d = R.data.ann; need('ann'); if (!d) return loading('ann', 'Carico l\'annuncio…');
@@ -111,12 +131,12 @@
     const head = `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><div class="mut" style="font-size:13px">${s.connected ? `App <b>${esc(name())}</b> su cp.ottrun.com${s.app && s.app.version ? ' · v' + esc(s.app.version) : ''}` : 'Collega il tuo account ORCP per gestire l\'app da qui.'}</div><div style="display:flex;gap:6px">${s.connected && window.KXQuickAct ? `<button class="btn sm" data-or="qa">Nuova attivazione</button>` : ''}</div></div>`;
     const warn = s.expired ? '<div class="card" style="padding:10px 14px;margin-bottom:10px;border-left:3px solid #ff6b6b">L\'accesso a ORCP è scaduto: vai in «Collega» e ripassa l\'accesso.</div>' : '';
     const tab = !s.connected || s.expired ? 'link' : R.tab;
-    const body = { conns, msgs, ann, maint, pin, portals, link }[tab]();
+    const body = { conns, msgs, ann, maint, pin, vpn, portals, link }[tab]();
     V.innerHTML = head + warn + tabs + (R.err ? `<div class="card" style="padding:10px 14px;margin-bottom:10px;border-left:3px solid #ff6b6b">${esc(R.err)}</div>` : '') + body;
     wire(V);
   }
   const val = (id) => ($('#' + id) ? $('#' + id).value : '');
-  async function act(fn, okMsg) { if (R.busy) return; R.busy = true; render(); try { await fn(); if (okMsg) toast(okMsg); R.err = ''; } catch (e) { R.err = e.message; toast(e.message, 1); } R.busy = false; render(); }
+  async function act(fn, okMsg) { if (R.busy) return; R.busy = true; try { await fn(); if (okMsg) toast(okMsg); R.err = ''; } catch (e) { R.err = e.message; toast(e.message, 1); } R.busy = false; render(); }
   function wire(V) {
     $$('[data-ortab]', V).forEach((b) => (b.onclick = () => { R.tab = b.dataset.ortab; R.err = ''; render(); }));
     const q = $('#orQ'); if (q) { q.oninput = () => { R.q = q.value; const st = q.selectionStart; render(); const n = $('#orQ'); if (n) { n.focus(); n.setSelectionRange(st, st); } }; }
@@ -126,12 +146,18 @@
     $$('[data-ormsg]', V).forEach((b) => (b.onclick = () => { R.edit = { user: b.dataset.ormsg }; R.tab = 'msgs'; render(); setTimeout(() => $('#orMT') && $('#orMT').focus(), 30); }));
     $$('[data-ormed]', V).forEach((b) => (b.onclick = () => { const x = (R.data.messages.list || []).find((m) => String(m.id) === b.dataset.ormed); if (x) { R.edit = { ...x }; render(); } }));
     $$('[data-ormdel]', V).forEach((b) => (b.onclick = async () => { if (!(await ask('Eliminare il messaggio?', 'Sparisce dall\'app del cliente.'))) return; act(async () => { R.data.messages = await api('DELETE', '/admin/orcp/messages/' + encodeURIComponent(b.dataset.ormdel)); }, 'Messaggio eliminato'); }));
+    const vf = $('#orVF', V); if (vf) vf.onchange = () => { const f = vf.files && vf.files[0]; if (!f) return; f.text().then((t) => { const ta = $('#orVT'); if (ta) ta.value = t; (R.vf = R.vf || {}).ovpn = t; }); };
+    for (const [id, k] of [['orVC', 'country'], ['orVS', 'state'], ['orVA', 'auth'], ['orVST', 'status'], ['orVU', 'user'], ['orVP', 'pass'], ['orVT', 'ovpn'], ['orVL', 'lnk']]) { const el = $('#' + id, V); if (el) el.oninput = el.onchange = () => { (R.vf = R.vf || {})[k] = el.value; }; }
+    $$('[data-orved]', V).forEach((b) => (b.onclick = () => act(async () => { const x = await api('GET', '/admin/orcp/vpn/' + encodeURIComponent(b.dataset.orved)); R.vedit = { ...x, id: b.dataset.orved }; R.vf = null; })));
+    $$('[data-orvdel]', V).forEach((b) => (b.onclick = async () => { if (!(await ask('Eliminare questa configurazione VPN?', 'L\'app non la userà più.'))) return; act(async () => { R.data.vpn = await api('DELETE', '/admin/orcp/vpn/' + encodeURIComponent(b.dataset.orvdel)); if (R.vedit && R.vedit.id === b.dataset.orvdel) R.vedit = null; }, 'Configurazione eliminata'); }));
     $$('[data-or]', V).forEach((b) => (b.onclick = () => {
       const a = b.dataset.or;
       if (a === 'reload') { R.data.conns = null; R.err = ''; LD.add('conns'); render(); api('GET', '/admin/orcp/data?w=conns&fresh=1').then((r) => { R.data.conns = r; }).catch((e) => { R.err = e.message; }).then(() => { LD.delete('conns'); render(); }); }
       if (a === 'qa') window.KXQuickAct && KXQuickAct({ app: 'orcp' });
       if (a === 'msgcancel') { R.edit = null; render(); }
       if (a === 'msgsave') act(async () => { const body = { user: val('orMU'), text: val('orMT'), expire: val('orMD'), status: val('orMS') }; R.data.messages = R.edit && R.edit.id ? await api('PUT', '/admin/orcp/messages/' + encodeURIComponent(R.edit.id), body) : await api('POST', '/admin/orcp/messages', body); R.edit = null; }, 'Messaggio salvato su ORCP');
+      if (a === 'vpncancel') { R.vedit = null; R.vf = null; render(); }
+      if (a === 'vpnsave') { const body = { country: val('orVC'), state: val('orVS'), auth: val('orVA'), status: val('orVST'), user: val('orVU'), pass: val('orVP'), ovpn: val('orVT'), url: val('orVL') }; act(async () => { R.data.vpn = R.vedit && R.vedit.id ? await api('PUT', '/admin/orcp/vpn/' + encodeURIComponent(R.vedit.id), body) : await api('POST', '/admin/orcp/vpn', body); R.vedit = null; R.vf = null; }, 'Salvato su ORCP'); }
       if (a === 'annsave') act(async () => { R.data.ann = await api('PUT', '/admin/orcp/ann', { text: val('orAT'), status: val('orAS'), expire: val('orAD'), interval: val('orAI'), disappear: val('orAX') }); }, 'Annuncio salvato');
       if (a === 'maintsave') act(async () => { R.data.maint = await api('PUT', '/admin/orcp/maint', { text: val('orMMT'), status: val('orMMS'), expire: val('orMMD') }); }, 'Avviso salvato');
       if (a === 'pin') act(async () => { R.pin = await api('POST', '/admin/orcp/parental', { code: val('orPC') }); if (!R.pin.pin && !R.pin.text) throw new Error('ORCP non ha restituito il PIN: controlla il codice'); });
