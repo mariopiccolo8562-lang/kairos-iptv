@@ -66,11 +66,11 @@ async function orcp(env, H, path, o = {}) {
   return r;
 }
 /** POST di un modulo Laravel: prende il _token dalla pagina del modulo; ORCP risponde con un redirect quando va bene */
-async function post(env, H, pagePath, action, form) {
+async function post(env, H, pagePath, action, form, hid = ['appid', 'customerid']) {
   const pg = await orcp(env, H, pagePath); const tok = csrf(pg.txt);
   if (!tok) throw new H.HttpErr(502, 'ORCP: pagina del modulo non riconosciuta');
   // appid/customerid: se la pagina del modulo li ha (anche cifrati), valgono quelli
-  for (const k of ['appid', 'customerid']) { if (k in form) { const v = inputVal((pg.txt.match(new RegExp('<form[^>]+action="[^"]*' + action.replace(/\//g, '\\/') + '"[\\s\\S]*?<\\/form>', 'i')) || [pg.txt])[0], k); if (v) form[k] = v; } }
+  for (const k of hid) { if (k in form) { const v = inputVal((pg.txt.match(new RegExp('<form[^>]+action="[^"]*' + action.replace(/\//g, '\\/') + '"[\\s\\S]*?<\\/form>', 'i')) || [pg.txt])[0], k); if (v) form[k] = v; } }
   const r = await orcp(env, H, action, { form: { _token: tok, ...form }, ref: pagePath });
   if (r.status === 419) throw new H.HttpErr(502, 'ORCP: sessione del modulo scaduta, riprova');
   if (r.status >= 400) throw new H.HttpErr(502, `ORCP ha risposto ${r.status}`);
@@ -146,6 +146,38 @@ async function maintenance(env, H) {
 const dateIn = (v, H) => { const s = String(v || '').trim(); if (!s) return ''; const m = s.match(/^(\d{4})-(\d\d)-(\d\d)(?:[ T](\d\d):(\d\d))?/); if (!m) throw new H.HttpErr(400, 'Data non valida (usa AAAA-MM-GG)'); return `${m[1]}-${m[2]}-${m[3]}`; }; // ORCP vuole solo la data (Year-Month-Day)
 const stIn = (v) => /^(active|on|1|true|sì|si)$/i.test(String(v || '')) ? 'ACTIVE' : 'INACTIVE';
 
+/* ---------- VPN (OpenVPN) dell'app: ORCP vuole un URL del file .ovpn; KAIROS può ospitare il file e dargli un link segreto ---------- */
+const KV = 'orcp:ovpn:';
+const ovpnTok = (url) => (String(url || '').match(/\/ovpn\/([A-Za-z0-9_-]{8,40})\.ovpn$/) || [])[1] || '';
+async function vpnList(env, H) {
+  const r = await orcp(env, H, '/vpn');
+  const addPath = (r.txt.match(/href="(?:https:\/\/cp\.ottrun\.com)?(\/addvpn\/[^"]+)"/i) || [])[1] || '';
+  const list = rows(r.txt).map((x) => ({ id: inputVal(x.html, 'id'), num: txtOf(x.cells[0]), app: txtOf(x.cells[1]), country: txtOf(x.cells[2]), state: txtOf(x.cells[3]), status: txtOf(x.cells[4]), date: txtOf(x.cells[5]).slice(0, 19) })).filter((x) => x.id && x.num && /^\d+$/.test(x.num));
+  let countries = [];
+  if (addPath) { const a = await orcp(env, H, addPath); countries = selectOpts(a.txt, 'vpn_country').filter((o) => o.v); }
+  return { list, countries, addPath };
+}
+async function vpnOne(env, H, id) {
+  const ed = await editForm(env, H, '/vpn', '/editvpn', 'id', id);
+  const plainId = inputVal(ed, 'id'); if (!plainId) throw new H.HttpErr(404, 'Configurazione VPN non trovata su ORCP');
+  return { form: ed, plainId, country: selectVal(ed, 'vpn_country'), state: inputVal(ed, 'vpn_state'), url: inputVal(ed, 'vpn_config'), auth: selectVal(ed, 'auth_type') || 'noup', user: inputVal(ed, 'username'), pass: inputVal(ed, 'password'), status: selectVal(ed, 'vpn_status') || 'ACTIVE', userid: inputVal(ed, 'userid') };
+}
+function ovpnCheck(t) {
+  t = String(t || '').replace(/\r\n?/g, '\n').trim();
+  if (!t) return '';
+  if (t.length > 65536) throw new Error('File .ovpn troppo grande (max 64 KB)');
+  if (!/^(client|remote\s|dev\s|proto\s)/m.test(t)) throw new Error('Non sembra un file OpenVPN (.ovpn): deve contenere «client», «remote», «dev»…');
+  return t;
+}
+/** Il file .ovpn ospitato da KAIROS: salvato cifrato, servito a chiunque abbia il link segreto (l'app MirkoTeam lo scarica da qui) */
+export async function ovpnFile(env, path, H) {
+  const tok = ovpnTok(path); if (!tok) return null;
+  const raw = await getRow(env, KV + tok); if (!raw) return new Response('Not found', { status: 404 });
+  let o = null; try { o = JSON.parse(await H.unseal(env, raw)); } catch { o = null; }
+  if (!o || !o.text) return new Response('Not found', { status: 404 });
+  return new Response(o.text, { headers: { 'Content-Type': 'application/x-openvpn-profile; charset=utf-8', 'Content-Disposition': `inline; filename="${(o.name || 'kairos').replace(/[^\w.-]+/g, '_').slice(0, 40)}.ovpn"`, 'Cache-Control': 'no-store' } });
+}
+
 export async function orcpRoutes(req, env, path, who, ip, H) {
   const m = req.method, { HttpErr, json, str } = H;
   const ids = async () => { const a = await appInfo(env, H); if (!a || !a.appid) throw new HttpErr(502, 'ORCP: app non riconosciuta'); return a; };
@@ -185,6 +217,7 @@ export async function orcpRoutes(req, env, path, who, ip, H) {
     if (w === 'ann') return json({ ann: await announcement(env, H) });
     if (w === 'maint') return json({ maint: await maintenance(env, H) });
     if (w === 'app') return json({ app: await appInfo(env, H, true) });
+    if (w === 'vpn') return json(await vpnList(env, H));
     throw new HttpErr(400, 'Sezione ORCP sconosciuta');
   }
   if (path === '/orcp/portals' && m === 'PUT') {
@@ -225,6 +258,44 @@ export async function orcpRoutes(req, env, path, who, ip, H) {
     await post(env, H, '/maintenance', '/updateman', { id: cur.id, appid: app.appid, customerid: app.customerid, select_app: app.appid, message: text, select_status: stIn(b.status), expire: dateIn(b.expire, H) || cur.expire });
     await H.log(env, 'edit', `${who}: ORCP, manutenzione ${stIn(b.status) === 'ACTIVE' ? 'accesa' : 'spenta'}`, ip).catch(() => {});
     return json({ maint: await maintenance(env, H) });
+  }
+  /* body: country, state, ovpn (testo del file) oppure url, auth (noup|up|kp), user, pass, status, name */
+  const vpnBody = async (cur) => {
+    const b = await H.readJSON(req, 90000), app = await ids();
+    const country = str(b.country, 4).toUpperCase().trim(), state = str(b.state, 60).trim(), auth = /^(noup|up|kp)$/.test(b.auth) ? b.auth : (cur && cur.auth) || 'noup';
+    if (!country) throw new HttpErr(400, 'Scegli il paese'); if (!state) throw new HttpErr(400, 'Scrivi il nome della località (es. Milano)');
+    let url = str(b.url, 400).trim(), tok = '';
+    const text = (() => { try { return ovpnCheck(b.ovpn); } catch (e) { throw new HttpErr(400, e.message); } })();
+    if (text) { tok = H.pid() + H.pid(); await setRow(env, KV + tok, await H.seal(env, JSON.stringify({ name: state, text, at: Date.now() }))); const U = new URL(req.url); url = (/^(localhost|127\.)/.test(U.hostname) ? U.origin : 'https://' + U.host) + '/ovpn/' + tok + '.ovpn'; }
+    else if (!url && cur) url = cur.url;
+    if (!url) throw new HttpErr(400, 'Incolla il file .ovpn oppure scrivi il link del file');
+    if (!/^https?:\/\/\S+$/i.test(url)) throw new HttpErr(400, 'Il link del file deve iniziare con http:// o https://');
+    const user = typeof b.user === 'string' ? str(b.user, 120).trim() : (cur && cur.user) || '', pass = typeof b.pass === 'string' && b.pass ? str(b.pass, 120) : (cur && cur.pass) || '';
+    if (auth === 'up' && (!user || !pass)) throw new HttpErr(400, 'Con «utente e password» servono entrambi (per Surfshark: le credenziali di servizio OpenVPN)');
+    if (auth === 'kp' && !pass) throw new HttpErr(400, 'Scrivi la password del file chiave');
+    return { form: { select_app: app.appid, vpn_country: country, vpn_state: state, vpn_config: url, auth_type: auth, username: auth === 'noup' ? '' : user, password: auth === 'noup' ? '' : pass, vpn_status: stIn(b.status === undefined ? 'ACTIVE' : b.status), userid: '' }, tok, state };
+  };
+  if (path === '/orcp/vpn' && m === 'POST') {
+    const { addPath } = await vpnList(env, H); if (!addPath) throw new HttpErr(502, 'ORCP: pagina «Add OpenVPN Config» non trovata');
+    const v = await vpnBody(null);
+    try { await post(env, H, addPath, '/addvpnsubmit', v.form, ['userid']); } catch (e) { if (v.tok) await delRow(env, KV + v.tok).catch(() => {}); throw e; }
+    await H.log(env, 'edit', `${who}: ORCP, aggiunta VPN «${v.state}»`, ip).catch(() => {});
+    return json(await vpnList(env, H));
+  }
+  const vm = path.match(/^\/orcp\/vpn\/([A-Za-z0-9%=._-]{1,400})$/);
+  if (vm && m === 'GET') { const cur = await vpnOne(env, H, decodeURIComponent(vm[1])); return json({ country: cur.country, state: cur.state, url: cur.url, hosted: !!ovpnTok(cur.url), auth: cur.auth, user: cur.user, hasPass: !!cur.pass, status: cur.status }); }
+  if (vm && m === 'PUT') {
+    const cur = await vpnOne(env, H, decodeURIComponent(vm[1])); const v = await vpnBody(cur);
+    try { await post(env, H, '/vpn', '/updatevpn', { ...v.form, userid: cur.userid, id: cur.plainId }, []); } catch (e) { if (v.tok) await delRow(env, KV + v.tok).catch(() => {}); throw e; }
+    const oldTok = ovpnTok(cur.url); if (v.tok && oldTok && oldTok !== v.tok) await delRow(env, KV + oldTok).catch(() => {});
+    await H.log(env, 'edit', `${who}: ORCP, VPN «${v.state}» modificata`, ip).catch(() => {});
+    return json(await vpnList(env, H));
+  }
+  if (vm && m === 'DELETE') {
+    const id = decodeURIComponent(vm[1]); let oldTok = ''; try { oldTok = ovpnTok((await vpnOne(env, H, id)).url); } catch { oldTok = ''; }
+    await post(env, H, '/vpn', '/delvpn', { id }, []); if (oldTok) await delRow(env, KV + oldTok).catch(() => {});
+    await H.log(env, 'edit', `${who}: ORCP, VPN eliminata`, ip).catch(() => {});
+    return json(await vpnList(env, H));
   }
   if (path === '/orcp/parental' && m === 'POST') {
     const b = await H.readJSON(req, 2048), code = str(b.code, 40).trim(); if (!code) throw new HttpErr(400, 'Scrivi il codice che compare nell\'app');
