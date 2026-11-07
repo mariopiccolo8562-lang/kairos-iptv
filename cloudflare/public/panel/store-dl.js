@@ -67,6 +67,7 @@
       <div class="hd"><h3>Approvazione<small>Decidi tu chi può scaricare</small></h3></div>
       <div class="sd-warn" id="sdWarn" style="display:none"></div>
       <div class="tog" id="sdOn"><div><b>Chiedi la mia autorizzazione</b><small>Spento: i download partono subito, ma restano registrati qui</small></div><i></i></div>
+      <div class="tog" id="sdAgAl"><div><b>Avvisami anche per le richieste degli agenti</b><small>Spento: la richiesta con il codice di un agente arriva solo a lui (email, SMS, Telegram, notifiche). Tu la vedi comunque qui, in «In carico agli agenti», e puoi sempre decidere al posto suo</small></div><i></i></div>
       <label class="lbl">La tua email per gli avvisi</label>
       <input class="inp" id="sdMail" type="email" autocomplete="email" placeholder="la stessa del tuo account Resend">
       <div class="sd-note" id="sdMailSt"></div>
@@ -120,7 +121,7 @@
       sellerCode: 'K7M4',
       requests: [
         { id: 'demo-req-0001', app: 'IboPro', did: 'demo-did-marco-firetv-0000', device: 'Amazon AFTKA (Fire TV)', note: 'Marco', country: 'IT · Milano', code: '482913', status: 'pending', tries: 0, uses: 0, created: t - 90e3 },
-        { id: 'demo-req-0002', app: 'TiviMate', did: 'demo-did-xiaomi-tv-000000', device: 'Xiaomi MiTV-AXSO0 (Android TV)', note: '', country: 'IT', code: '105377', status: 'pending', sellerName: 'luca', tries: 1, uses: 0, created: t - 11 * 60e3 },
+        { id: 'demo-req-0002', app: 'TiviMate', did: 'demo-did-xiaomi-tv-000000', device: 'Xiaomi MiTV-AXSO0 (Android TV)', note: '', country: 'IT', code: '105377', status: 'pending', seller: 3, sellerName: 'luca', tries: 1, uses: 0, created: t - 11 * 60e3 },
         { id: 'demo-req-0006', app: 'OraPlayer', did: 'demo-did-marco-firetv-0000', device: 'Amazon AFTKA (Fire TV)', note: 'Marco', country: 'IT · Milano', code: '', status: 'approved', via: 'panel', tries: 0, uses: 0, created: t - 6 * 60e3, decided: t - 4 * 60e3 },
         { id: 'demo-req-0003', app: 'OrbixPlay', did: 'demo-did-giulia-phone-0000', device: 'Samsung SM-A546B', note: 'Giulia', country: 'IT · Roma', code: '', status: 'used', via: 'email', tries: 0, uses: 1, created: t - 3 * 3600e3, decided: t - 3 * 3600e3 + 120e3 },
         { id: 'demo-req-0007', app: 'IboOne', did: 'demo-did-giulia-phone-0000', device: 'Samsung SM-A546B', note: 'Giulia', country: 'IT · Roma', code: '', status: 'revoked', via: 'code', tries: 0, uses: 0, created: t - 5 * 3600e3, decided: t - 5 * 3600e3 + 60e3 },
@@ -141,7 +142,7 @@
   }
   async function demo(method, path, body) {
     await new Promise((r) => setTimeout(r, 120));
-    if (path === '' && method === 'GET') return { ...DM, pending: DM.requests.filter((r) => r.status === 'pending').length, devices: demoDevices() };
+    if (path === '' && method === 'GET') return { ...DM, pending: DM.requests.filter((r) => r.status === 'pending' && (!r.seller || DM.settings.agentAlerts)).length, pendingAgents: DM.requests.filter((r) => r.status === 'pending' && r.seller).length, devices: demoDevices() };
     if (path === '/settings') { Object.assign(DM.settings, body); return { settings: DM.settings }; }
     if (path === '/sms/test') return { ok: true, to: '+39•••567' };
     if (path === '' && method === 'DELETE') { DM.requests = DM.requests.filter((r) => r.status === 'pending'); return { ok: true }; }
@@ -204,14 +205,14 @@
     if (!c) { el.innerHTML = ''; return; }
     const ag = D.role === 'agent';
     el.innerHTML = `<div class="sd-seller"><div><small class="mut">Il tuo codice venditore</small><b class="mono" id="sdSellerCode">${esc(c)}</b></div>
-      <div class="mut" style="font-size:12.5px;line-height:1.45;flex:1;min-width:200px">Fallo scrivere ai tuoi clienti nella richiesta dello Store (campo «Codice del venditore», lo ricorda da sola): ${ag ? 'le loro richieste arrivano <b>solo a te</b> (e al titolare), non agli altri agenti.' : 'le richieste con il codice di un agente arrivano a lui e a te; quelle senza codice o con il tuo <b>solo a te</b>.'}</div>
+      <div class="mut" style="font-size:12.5px;line-height:1.45;flex:1;min-width:200px">Fallo scrivere ai tuoi clienti nella richiesta dello Store (campo «Codice del venditore», lo ricorda da sola): ${ag ? 'le loro richieste arrivano <b>solo a te</b>, non agli altri agenti (il titolare le vede nel suo pannello).' : 'le richieste con il codice di un agente arrivano <b>a lui</b> (tu le vedi qui, senza avvisi, salvo l\'opzione in Approvazione); quelle senza codice o con il tuo <b>solo a te</b>.'}</div>
       <button class="btn sm" id="sdSellerCopy">Copia</button>${ag ? '' : '<button class="btn sm" id="sdSellerEdit">Cambia</button>'}</div>`;
     $('#sdSellerCopy').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(c).then(() => toast('Codice venditore copiato')).catch(() => toast(c)); };
     // titolare: i codici di tutti gli agenti in un posto solo (ognuno ha il suo, creato da solo la prima volta)
     const AG = !ag && Array.isArray(D.agents) ? D.agents.slice().sort((x, y) => String(x.username).localeCompare(String(y.username))) : [];
     if (AG.length) {
       el.insertAdjacentHTML('beforeend', `<details class="sd-agc" style="margin-top:10px"${AG.length <= 25 ? ' open' : ''}><summary style="cursor:pointer;font-weight:700">Codici venditore dei tuoi agenti (${AG.length})</summary>
-        <p class="mut" style="font-size:12.5px;margin:6px 0 8px">Ogni agente ha il suo codice: dallo a lui. Le richieste dei clienti che scrivono quel codice arrivano a lui (e le vedi anche tu); quelle senza codice o con il tuo arrivano solo a te. «Nuovo» cambia il codice: il vecchio smette subito di valere.</p>
+        <p class="mut" style="font-size:12.5px;margin:6px 0 8px">Ogni agente ha il suo codice: dallo a lui. Le richieste dei clienti che scrivono quel codice arrivano a lui (tu le vedi qui, in «In carico agli agenti»); quelle senza codice o con il tuo arrivano solo a te. «Nuovo» cambia il codice: il vecchio smette subito di valere.</p>
         <div class="tbl-wrap"><table class="tbl" style="width:100%"><thead><tr><th>Agente</th><th>Codice</th><th></th></tr></thead><tbody>${AG.map((a) => `<tr><td>${esc(a.username)}${a.active === false ? ' <span class="mut">(sospeso)</span>' : ''}${a.parentId ? ' <span class="mut">· sotto-agente</span>' : ''}</td>
           <td><b class="mono" style="letter-spacing:.12em">${esc(a.storeCode || '—')}</b></td><td style="text-align:right;white-space:nowrap">${a.storeCode ? `<button class="btn sm" data-agcp="${esc(a.storeCode)}">Copia</button> ` : ''}<button class="btn sm" data-agnew="${a.id}">Nuovo</button></td></tr>`).join('')}</tbody></table></div></details>`);
       $$('[data-agcp]', el).forEach((b) => (b.onclick = () => navigator.clipboard.writeText(b.dataset.agcp).then(() => toast('Codice copiato'), () => toast(b.dataset.agcp))));
@@ -234,7 +235,12 @@
     renderSeller();
     const list = (S.data && S.data.requests) || [];
     const pend = list.filter((r) => r.status === 'pending'), hist = list.filter((r) => r.status !== 'pending');
-    $('#sdPend').innerHTML = pend.length ? pend.map(item).join('') : '<div class="emptyc">Nessuna richiesta in attesa ✓</div>';
+    // titolare: le richieste con il codice di un agente le gestisce lui → gruppo a parte (restano visibili e decidibili anche da qui)
+    const owner = D.role !== 'agent', mine = owner ? pend.filter((r) => !r.seller) : pend, ofAg = owner ? pend.filter((r) => r.seller) : [];
+    const alerts = !!(S.data && S.data.settings && S.data.settings.agentAlerts);
+    $('#sdPend').innerHTML = (mine.length ? mine.map(item).join('') : `<div class="emptyc">${ofAg.length ? 'Nessuna richiesta che aspetta te ✓' : 'Nessuna richiesta in attesa ✓'}</div>`)
+      + (ofAg.length ? `<details class="sd-agp" open style="margin-top:10px"><summary style="cursor:pointer;font-weight:700">In carico agli agenti (${ofAg.length})</summary>
+        <p class="mut" style="font-size:12.5px;margin:6px 0 8px">${alerts ? 'Richieste con il codice di un agente: le ricevete tu e lui.' : 'Richieste con il codice di un agente: l\'avviso è arrivato solo a lui. Puoi comunque autorizzarle o rifiutarle tu.'}</p>${ofAg.map(item).join('')}</details>` : '');
     $('#sdHist').innerHTML = hist.length ? hist.map(item).join('') : '<div class="emptyc">Nessun download registrato</div>';
     $('#sdClear').style.display = hist.length ? '' : 'none';
     const devs = (S.data && S.data.devices) || [];
@@ -245,6 +251,7 @@
     if (!S.data) return;
     const s = S.data.settings || {}, m = S.data.mail || {};
     if (!S.apDirty) $('#sdOn').classList.toggle('on', s.approval !== false);
+    if (!S.agDirty && $('#sdAgAl')) $('#sdAgAl').classList.toggle('on', !!s.agentAlerts);
     const w = $('#sdWarn'); if (w) { w.style.display = s.approval === false ? '' : 'none'; w.innerHTML = '⚠️ <b>Approvazione SPENTA</b>: adesso i clienti scaricano dallo store <b>senza mandarti la richiesta</b> (i download restano registrati qui sotto come «automatico»). Accendi «Chiedi la mia autorizzazione» e premi Salva.'; }
     const c = s.closed || {}, cl = $('#sdCl');
     if (cl && !S.clDirty) { cl.classList.toggle('on', !!c.on); $('#sdClF').value = c.from || '23:00'; $('#sdClT').value = c.to || '07:00'; if (document.activeElement !== $('#sdClM')) $('#sdClM').value = c.msg || ''; }
@@ -371,14 +378,15 @@
     try { const r = await sApi('POST', '/sms/test', { phone }); toast('SMS di prova inviato a ' + r.to); } catch (err) { toast(err.message, 1); } finally { b.disabled = false; }
   };
   $('#sdOn').onclick = () => { $('#sdOn').classList.toggle('on'); S.apDirty = true; };
+  $('#sdAgAl').onclick = () => { $('#sdAgAl').classList.toggle('on'); S.agDirty = true; };
   $('#sdSave').onclick = async () => {
     // finché le impostazioni non sono caricate non si manda l'approvazione: prima un Salva troppo veloce la spegneva
     if (!S.data) { toast('Attendi il caricamento delle impostazioni', 1); return; }
     try {
-      const r = await sApi('PUT', '/settings', { approval: $('#sdOn').classList.contains('on'), ownerEmail: $('#sdMail').value.trim() });
-      S.apDirty = false;
+      const r = await sApi('PUT', '/settings', { approval: $('#sdOn').classList.contains('on'), agentAlerts: $('#sdAgAl').classList.contains('on'), ownerEmail: $('#sdMail').value.trim() });
+      S.apDirty = false; S.agDirty = false;
       if (S.data) S.data.settings = r.settings;
-      renderSettings();
+      renderSettings(); renderList(); // la frase del gruppo «In carico agli agenti» dipende dall'interruttore
       toast(r.settings.approval ? 'Salvato: ogni download chiede la tua autorizzazione' : 'Salvato: download liberi (restano registrati)');
     } catch (err) { toast(err.message, 1); }
   };

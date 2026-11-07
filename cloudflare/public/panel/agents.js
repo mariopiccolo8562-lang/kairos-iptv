@@ -342,7 +342,7 @@ body.agent .foot{display:none}
       ${list.map((a) => { const pct = a.maxClients ? Math.min(100, Math.round((a.clients / a.maxClients) * 100)) : 100; const up = a.parentId && byId.get(a.parentId);
         return `<tr data-ag="${a.id}"><td class="num">${a.id}</td>
         <td><b>${esc(a.username)}</b><small>${esc(a.email || '—')}${up ? ' · sotto ' + esc(up.username) : ''}</small></td>
-        <td><b class="mono" title="Il cliente lo scrive nella richiesta dello Store: arriva solo a questo agente (e a te)">${esc(a.storeCode || '—')}</b></td>
+        <td><b class="mono" title="Il cliente lo scrive nella richiesta dello Store: la richiesta arriva a questo agente (tu la vedi nel pannello, senza avvisi salvo l\'opzione in Approvazione)">${esc(a.storeCode || '—')}</b></td>
         <td><b>${a.clients}</b><small>Limite: ${a.maxClients}</small><div class="ag-bar2"><s style="width:${pct}%"></s></div></td>
         <td class="hm">${a.subAgents}</td>
         <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span>${(a.perms || {}).armada ? '<br><span class="chip" style="margin-top:4px">Armada</span>' : ''}${(a.perms || {}).wolf ? '<br><span class="chip" style="margin-top:4px">WOLF</span>' : ''}${(a.perms || {}).mxp ? '<br><span class="chip" style="margin-top:4px">MaxPlayer</span>' : ''}${(a.perms || {}).oxp ? '<br><span class="chip" style="margin-top:4px">OrbixPlay</span>' : ''}</td>

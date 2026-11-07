@@ -109,7 +109,8 @@ async function getStoreSettings(env) {
   const blocked = Array.isArray(s.blocked) ? s.blocked.filter((d) => typeof d === 'string' && DID_RE.test(d)).slice(0, MAX_BLOCKED) : [];
   // dispositivi «senza limiti»: eccezione del titolare (installatori, negozi): niente tetto orario né tempo di attesa
   const trusted = Array.isArray(s.trusted) ? s.trusted.filter((d) => typeof d === 'string' && DID_RE.test(d)).slice(0, MAX_BLOCKED) : [];
-  return { approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, trusted, sms: smsNorm(s.sms), closed: closedNorm(s.closed) };
+  // agentAlerts: se vero il titolare riceve gli avvisi anche per le richieste con il codice di un agente (di serie le gestisce solo l'agente)
+  return { approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, trusted, sms: smsNorm(s.sms), closed: closedNorm(s.closed), agentAlerts: s.agentAlerts === true };
 }
 /** numero in formato internazionale (+39…); i numeri italiani scritti senza prefisso vengono completati */
 function phoneNorm(v) {
@@ -193,6 +194,9 @@ async function revoke(env, r, who, ip = '') {
   return true;
 }
 
+/** il titolare vuole gli avvisi anche per le richieste con il codice di un agente? (per Telegram/notifiche in notify.js) */
+export async function storeAgentAlerts(env) { try { return (await getStoreSettings(env)).agentAlerts; } catch { return false; } }
+
 /* ---------------- firma dei link dell'email (chiave derivata da ENC_KEY) ---------------- */
 let linkKeyMem = null;
 async function linkKey(env) {
@@ -215,6 +219,7 @@ async function linkSig(env, id) {
 /* ---------------- email al venditore (Resend) ---------------- */
 const fmtTime = (t) => { try { return new Date(t).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' }); } catch { return new Date(t).toISOString(); } };
 async function notify(env, origin, r, s, ip) {
+  if (r.seller && !s.agentAlerts) return; // richiesta con il codice di un agente: la gestisce lui, al titolare resta visibile nel pannello
   const to = s.ownerEmail || str(env.OWNER_EMAIL, 200);
   if (!env.RESEND_KEY || !MAIL_RE.test(to)) return; // email non configurata: la richiesta resta visibile nel pannello
   const sent = await env.DB.prepare('SELECT COUNT(*) AS n FROM store_requests WHERE mailed = 1 AND created > ?').bind(now() - 86400e3).first();
@@ -273,7 +278,7 @@ const smsSafe = (v, max) => String(v || '').replace(/[^A-Za-z0-9 _()+-]/g, ' ').
 async function notifySms(env, origin, r, s, ip, opts) {
   const sms = s.sms;
   if (!sms || !sms.on || !smsReady(env)) return;
-  let to = sms.owner ? [sms.owner] : [];
+  let to = sms.owner && (!r.seller || s.agentAlerts) ? [sms.owner] : [];
   // agli agenti solo le richieste col loro codice venditore (o di un loro sotto-agente); senza codice avvisato solo il titolare
   let chain = [];
   if (r.seller && opts && typeof opts.sellerChain === 'function') { try { chain = await opts.sellerChain(r); } catch {} }
@@ -553,13 +558,16 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
         settings,
         mail: { resend: !!env.RESEND_KEY, envEmail: !!str(env.OWNER_EMAIL, 200), links: !!env.ENC_KEY, sentToday: (sent && sent.n) || 0, limit: MAIL_PER_DAY },
         sms: { ready: smsReady(env), sentToday: (smsSent && +smsSent.n) || 0, agents },
-        requests, pending: requests.filter((r) => r.status === 'pending').length, devices,
+        // pending = quelle che aspettano il titolare; pendingAgents = con il codice di un agente (le gestisce lui, salvo agentAlerts)
+        requests, pending: requests.filter((r) => r.status === 'pending' && (!r.seller || settings.agentAlerts)).length,
+        pendingAgents: requests.filter((r) => r.status === 'pending' && r.seller).length, devices,
       });
     }
     if (path === '/store/settings' && m === 'PUT') {
       const b = await readBody(req, 8192);
       const s = await getStoreSettings(env);
       if (typeof b.approval === 'boolean') s.approval = b.approval;
+      if (typeof b.agentAlerts === 'boolean') s.agentAlerts = b.agentAlerts;
       if (b.closed && typeof b.closed === 'object') {
         const c = b.closed;
         if ((c.from !== undefined && !HM_RE.test(c.from)) || (c.to !== undefined && !HM_RE.test(c.to))) throw new StoreErr(400, 'Orario non valido: scrivilo come 23:00');
@@ -584,7 +592,7 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
         smsTxt = ` · SMS ${next.on ? `attivi (${(next.owner ? 1 : 0) + next.agents.filter((a) => a.on).length} numeri, max ${next.perDay}/giorno)` : 'spenti'}`;
       }
       await putStoreSettings(env, s);
-      await log(env, 'settings', `${who}: download store — approvazione ${s.approval ? 'attiva' : 'spenta'}${smsTxt}`, ip);
+      await log(env, 'settings', `${who}: download store — approvazione ${s.approval ? 'attiva' : 'spenta'}${s.agentAlerts ? ' · avvisi anche per le richieste degli agenti' : ''}${smsTxt}`, ip);
       return json({ settings: s });
     }
     if (path === '/store/sms/test' && m === 'POST') {

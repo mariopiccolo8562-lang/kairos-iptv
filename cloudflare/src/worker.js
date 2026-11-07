@@ -9,7 +9,7 @@ import { ADDON_ASSETS } from './addon-assets.js';
  *  Segreti:  ENC_KEY (base64, 32 byte), ADMIN_BOOTSTRAP_PASS, TURNSTILE_SECRET (opzionale)
  *  Variabili: ACCESS_TEAM_DOMAIN, ACCESS_AUD, TURNSTILE_SITEKEY (opzionali)
  */
-import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide } from './store.js'; // autorizzazione download dello Store (/api/store/*)
+import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide, storeAgentAlerts } from './store.js'; // autorizzazione download dello Store (/api/store/*)
 import { wolfRoutes, wolfCron, sockFetch } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
 import { atxRoutes } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz), solo titolare
 import { oraRoutes } from './orapanel.js'; // Pannello ORA (panel.oraplayers.com), accesso passato dal titolare
@@ -3173,6 +3173,8 @@ const notifyH = (env) => ({
   decide: storeDecide,
   /** per una richiesta: quali agenti la riguardano (il venditore e chi sta sopra di lui); nessuno se è del titolare */
   sellerChain: (r) => sellerChain(env, r),
+  /** il titolare vuole gli avvisi anche per le richieste con il codice di un agente? */
+  agentAlerts: () => storeAgentAlerts(env),
 });
 async function sellerChain(env, r) {
   const id = +(r && r.seller) || 0; if (!id) return [];

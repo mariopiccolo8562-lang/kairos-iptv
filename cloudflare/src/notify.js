@@ -62,7 +62,9 @@ async function getCfg(env) { const c = await getJ(env, 'notify'); return { tgAge
 // r = richiesta: agli agenti arriva solo se porta il loro codice venditore (o di un sotto-agente); senza codice è del titolare
 async function recipients(env, app, kind, h, r) {
   const cfg = await getCfg(env);
-  const owners = (await h.owners()).map((o) => ({ id: o.id, name: o.username, owner: true }));
+  // con il codice di un agente il titolare non viene avvisato (la vede nel pannello), a meno che non lo chieda nelle impostazioni dello Store
+  const ownerToo = !(r && r.seller) || (typeof h.agentAlerts === 'function' && (await h.agentAlerts()));
+  const owners = ownerToo ? (await h.owners()).map((o) => ({ id: o.id, name: o.username, owner: true })) : [];
   let allow = kind === 'tg' ? cfg.tgAgents : cfg.pushAgents;
   if (r !== undefined) { const chain = r && r.seller && typeof h.sellerChain === 'function' ? await h.sellerChain(r) : []; allow = allow.filter((id) => chain.includes(id)); }
   let agents = [];
