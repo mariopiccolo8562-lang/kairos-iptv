@@ -46,12 +46,10 @@
     if (R.onlyOn) L = L.filter((x) => x.online); if (q) L = L.filter((x) => (x.user + ' ' + x.ip + ' ' + x.device + ' ' + x.version).toLowerCase().includes(q));
     const top = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><input class="inp" id="orQ" placeholder="Cerca utente, IP, dispositivo…" value="${esc(R.q)}" style="max-width:280px"><label class="btn sm${R.onlyOn ? ' pri' : ''}" style="cursor:pointer"><input type="checkbox" id="orOn"${R.onlyOn ? ' checked' : ''} style="display:none">Solo online</label><button class="btn sm" data-or="reload">Aggiorna</button><span class="mut" style="margin-left:auto;font-size:13px"><b>${d.online}</b> online · ${(d.list || []).length} nelle ultime 24 ore${d.at ? ' · alle ' + new Date(d.at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : ''}</span></div>` +
       ((d.versions || []).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${d.versions.map((v) => `<span class="mut" style="font-size:12px;border:1px solid var(--line,#333);border-radius:999px;padding:2px 9px">${esc(v.version)} · ${v.count}</span>`).join('')}</div>` : '');
-    const all = d.list || [], onN = all.filter((x) => x.online).length, DAY = 864e5, dayN = all.filter((x) => !x.online && KXStats.ts(x.last) >= Date.now() - DAY).length;
-    const stats = window.KXStats ? KXStats.strip([{ k: 'online', label: 'Online ora', v: onN, c: 'blue' }, { k: 'day', label: 'Offline, viste nelle 24 ore', v: dayN, c: 'teal' }, { k: 'all', label: 'Utenti totali', v: all.length, c: 'dark' }, { label: 'Versioni app', v: (d.versions || []).length, c: 'dark' }], { margin: '0 0 12px' }) : '';
     const st = (x) => x.online ? badge('Online', '#2dd4bf') : badge('Offline', '#9aa4b2');
     const acts = (x) => `<button class="btn sm" data-ormsg="${esc(x.user)}">Messaggio</button><button class="btn sm" data-orcp="${esc(x.user)}">Copia utente</button>`;
-    if (mobile()) return stats + top + L.slice(0, 300).map((x) => card(`${esc(x.user)} ${st(x)}`, [`Ultimo accesso: ${when(x.last)}`, esc(x.device), `${esc(x.version)} · ${esc(x.ip)}`], acts(x))).join('');
-    return stats + top + grid(['Utente', 'Stato', 'Ultimo accesso', 'Dispositivo', 'Versione', 'IP', ''], L.slice(0, 500).map((x) => tr([`<b>${esc(x.user)}</b>`, st(x), when(x.last), esc(x.device), esc(x.version), `<span class="mono" style="font-size:12px">${esc(x.ip)}</span>`, `<div style="display:flex;gap:5px">${acts(x)}</div>`])));
+    if (mobile()) return top + L.slice(0, 300).map((x) => card(`${esc(x.user)} ${st(x)}`, [`Ultimo accesso: ${when(x.last)}`, esc(x.device), `${esc(x.version)} · ${esc(x.ip)}`], acts(x))).join('');
+    return top + grid(['Utente', 'Stato', 'Ultimo accesso', 'Dispositivo', 'Versione', 'IP', ''], L.slice(0, 500).map((x) => tr([`<b>${esc(x.user)}</b>`, st(x), when(x.last), esc(x.device), esc(x.version), `<span class="mono" style="font-size:12px">${esc(x.ip)}</span>`, `<div style="display:flex;gap:5px">${acts(x)}</div>`])));
   }
   function msgs() {
     const d = R.data.msgs || (R.data.messages ? { list: R.data.messages.list } : null); if (!R.data.messages) need('messages'); if (!d) return loading('messages', 'Carico i messaggi…');
@@ -124,6 +122,7 @@
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn pri" data-or="linksave">${s.connected ? 'Aggiorna accesso' : 'Collega'}</button>${s.connected ? '<button class="btn" data-or="unlink">Scollega</button>' : ''}<a class="btn" href="https://cp.ottrun.com/login" target="_blank" rel="noopener">Apri ORCP</a></div></div>`;
   }
 
+  function statsHtml(d) { const all = d.list || [], onN = all.filter((x) => x.online).length, dayN = all.filter((x) => !x.online && KXStats.ts(x.last) >= Date.now() - 864e5).length; return KXStats.strip([{ k: 'online', label: 'Online ora', v: onN, c: 'blue' }, { k: 'day', label: 'Offline, viste nelle 24 ore', v: dayN, c: 'teal' }, { k: 'all', label: 'Utenti totali', v: all.length, c: 'dark' }, { label: 'Versioni app', v: (d.versions || []).length, c: 'dark' }], { margin: '0 0 12px' }); }
   function render() {
     const V = $('#v-orcp'); if (!V) return;
     if (isAg()) { V.innerHTML = '<p class="mut">Questo pannello è solo del titolare.</p>'; return; }
@@ -134,12 +133,15 @@
     const warn = s.expired ? '<div class="card" style="padding:10px 14px;margin-bottom:10px;border-left:3px solid #ff6b6b">L\'accesso a ORCP è scaduto: vai in «Collega» e ripassa l\'accesso.</div>' : '';
     const tab = !s.connected || s.expired ? 'link' : R.tab;
     const body = { conns, msgs, ann, maint, pin, vpn, portals, link }[tab]();
-    V.innerHTML = head + warn + tabs + (R.err ? `<div class="card" style="padding:10px 14px;margin-bottom:10px;border-left:3px solid #ff6b6b">${esc(R.err)}</div>` : '') + body;
+    const live = s.connected && !s.expired; if (live) need('conns');
+    const stats = live && R.data.conns && window.KXStats ? statsHtml(R.data.conns) : '';
+    V.innerHTML = head + warn + stats + tabs + (R.err ? `<div class="card" style="padding:10px 14px;margin-bottom:10px;border-left:3px solid #ff6b6b">${esc(R.err)}</div>` : '') + body;
     wire(V);
   }
   const val = (id) => ($('#' + id) ? $('#' + id).value : '');
   async function act(fn, okMsg) { if (R.busy) return; R.busy = true; try { await fn(); if (okMsg) toast(okMsg); R.err = ''; } catch (e) { R.err = e.message; toast(e.message, 1); } R.busy = false; render(); }
   function wire(V) {
+    if (window.KXStats) KXStats.bind(V, (k) => { R.tab = 'conns'; R.onlyOn = k === 'online'; R.q = ''; render(); });
     $$('[data-ortab]', V).forEach((b) => (b.onclick = () => { R.tab = b.dataset.ortab; R.err = ''; render(); }));
     const q = $('#orQ'); if (q) { q.oninput = () => { R.q = q.value; const st = q.selectionStart; render(); const n = $('#orQ'); if (n) { n.focus(); n.setSelectionRange(st, st); } }; }
     const on = $('#orOn'); if (on) on.onchange = () => { R.onlyOn = on.checked; render(); };

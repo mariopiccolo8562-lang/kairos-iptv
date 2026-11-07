@@ -44,12 +44,13 @@
   const fmtC = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString('it-IT');
 
   async function loadState() { try { A.st = await api('GET', '/admin/armada/state'); } catch (e) { A.st = { connected: false, error: e.message }; } render(); }
+  const loadLines = () => A.pL || (A.pL = api('GET', '/admin/armada/lines').then((r) => { A.lines = r.lines || []; }).catch((e) => { A.lines = ldErr(e); }).finally(() => { A.pL = null; }));
   async function loadTab(force) {
     if (!A.st || !A.st.connected) return;
     const t = A.tab;
     try {
       if (t === 'new' && (!A.pk || force)) A.pk = (await api('GET', '/admin/armada/packages')).packages || [];
-      if (t === 'lines' && (!A.lines || force)) A.lines = (await api('GET', '/admin/armada/lines')).lines || [];
+      if (t === 'lines' && (!A.lines || force)) await loadLines();
       if (t === 'mags' && (!A.mags || force)) A.mags = (await api('GET', '/admin/armada/mags')).mags || [];
       if (t === 'res' && (!A.res || force)) A.res = (await api('GET', '/admin/armada/resellers')).resellers || [];
     } catch (e) { if (t === 'new') A.pk = ldErr(e); if (t === 'lines') A.lines = ldErr(e); if (t === 'mags') A.mags = ldErr(e); if (t === 'res') A.res = ldErr(e); }
@@ -162,12 +163,13 @@
     if (isAg() && A.tab === 'res') A.tab = 'new';
     const body = !on ? '' : A.tab === 'new' ? newHtml() : `<div class="card glass"><div class="hd"><h3>${A.tab === 'lines' ? 'Linee' : A.tab === 'mags' ? 'MAG' : 'Sotto-reseller'}<small>${A.tab === 'res' ? 'I reseller sotto il tuo account Armada' : isAg() ? 'Solo quelle create da te: i rinnovi usano i crediti del tuo tetto mensile' : 'Dal tuo account Armada: rinnovi e attivazioni usano i tuoi crediti'}</small></h3><button class="btn sm" id="arReT">Aggiorna</button></div>${A.tab === 'res' ? resHtml() : listHtml(A.tab)}</div>`;
     const y = window.scrollY;
-    const LS = A.tab === 'lines' ? A.lines : A.tab === 'mags' ? A.mags : null;
+    if (on && !A.lines && !A.pL) loadLines().then(render);
+    const LS = A.tab === 'mags' && A.mags ? A.mags : A.lines;
     const stats = on && LS && !LS.err && window.KXStats ? KXStats.strip(KXStats.tiles(KXStats.calc(LS), { noun: A.tab === 'mags' ? { active: 'MAG attivi', total: 'MAG totali' } : null })) : '';
     V.innerHTML = stateHtml() + stats + (on ? `<div class="ar-tabs filters">${[['new', 'Nuova linea'], ['lines', 'Linee' + nL], ['mags', 'MAG' + nM], ...(isAg() ? [] : [['res', 'Sotto-reseller']])].map(([k, l]) => `<button class="fchip ${A.tab === k ? 'on' : ''}" data-artab="${k}">${l}</button>`).join('')}</div>` + body : '');
     window.scrollTo(0, y);
     bind(V); bindTools(V);
-    if (window.KXStats) KXStats.bind(V, (k) => { const F = { active: 'ok', soon: 'soon', expired: 'exp', trial: 'trial', off: 'off', total: '' }; if (k in F) { A.F.f = F[k]; A.limit = 100; render(); } });
+    if (window.KXStats) KXStats.bind(V, (k) => { const F = { active: 'ok', soon: 'soon', expired: 'exp', trial: 'trial', off: 'off', total: '' }; if (k in F) { if (A.tab !== 'lines' && A.tab !== 'mags') A.tab = 'lines'; A.F.f = F[k]; A.limit = 100; render(); } });
   }
 
   function readForm() {

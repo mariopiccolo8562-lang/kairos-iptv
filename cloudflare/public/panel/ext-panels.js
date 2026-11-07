@@ -59,7 +59,7 @@
   }
   const subsHtml = (k, rows) => narrow() ? subsCards(k, rows) : grid(['Utente', 'Superiore', 'Tipo', 'Crediti', 'Linee', 'Stato', ''], rows.map((r, i) => tr([`<b>${esc(r.username)}</b>`, esc(r.owner || '—'), esc(r.type || '—'), esc(String(r.credits ?? '—')), esc(String(r.lines ?? '—')), r.enabled ? badge(r.status || 'Attivo', '#2ecc71') : badge(r.status || 'Disattivato', '#9aa4b2'), k === 'ro' ? btn('stog', i, r.enabled ? 'Disattiva' : 'Riattiva') : ''])));
   const connsHtml = (rows) => narrow() ? connsCards(rows) : grid(['Utente', 'Canale', 'IP', 'Info'], rows.map((r) => tr([`<b>${esc(r.username)}</b>`, esc(r.stream || '—'), esc(r.ip || '—'), esc(r.info || '—')])));
-  const overviewHtml = (d) => { const T = [['Crediti', d.credits, 'green'], ['Linee totali', d.total, 'dark'], ['Attive', d.active, 'red'], ['Scadute', d.expired, 'dark'], ['Online ora', d.online, 'blue'], ['Connessioni aperte', d.conns, 'blue']].filter(([, v]) => v != null); return window.KXStats ? KXStats.strip(T.map(([l, v, c]) => ({ label: l, v: esc(String(v)), c })), { margin: '0' }) : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">${T.map(([l, v]) => `<div class="card" style="padding:14px"><div class="mut" style="font-size:12px">${l}</div><div style="font-size:24px;font-weight:700">${esc(String(v))}</div></div>`).join('')}</div>`; };
+  const overviewHtml = (d, m) => { const T = [['Crediti', d.credits, 'green'], ['Linee totali', d.total, 'dark'], ['Attive', d.active, 'red'], ['Scadute', d.expired, 'dark'], ['Online ora', d.online, 'blue'], ['Connessioni aperte', d.conns, 'blue']].filter(([, v]) => v != null); return window.KXStats ? KXStats.strip(T.map(([l, v, c]) => ({ label: l, v: esc(String(v)), c })), { margin: m || '0' }) : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">${T.map(([l, v]) => `<div class="card" style="padding:14px"><div class="mut" style="font-size:12px">${l}</div><div style="font-size:24px;font-weight:700">${esc(String(v))}</div></div>`).join('')}</div>`; };
 
   function body(k) {
     const A = ST[k], P = PANELS[k];
@@ -79,6 +79,7 @@
   function render(k) {
     const V = $('#v-' + k); if (!V) return; const A = ST[k], P = PANELS[k];
     const st = A.st || {};
+    if (st.connected && A.ov === undefined) { A.ov = null; api('GET', `/admin/${k}/overview`).then((d) => { A.ov = d; show(k); }).catch(() => { A.ov = false; }); }
     {
       const form = !st.connected || A.edit;
       V.innerHTML = `<div class="card glass" style="margin-bottom:14px">
@@ -90,6 +91,7 @@
           <label>Username<input class="inp" id="exU" autocomplete="off" value="${esc(st.user || '')}"></label>
           <label>Password<input class="inp" id="exP" type="password" autocomplete="new-password" placeholder="${st.connected ? 'lascia vuoto per non cambiarla' : ''}"></label></div>
           <button class="btn pri" data-o="save" style="margin-top:12px">Collega ${esc(P.name)}</button>` : ''}</div>
+        ${st.connected && A.tab !== 'overview' && A.ov ? overviewHtml(A.ov, '0 0 14px') : ''}
         ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.map(([t, n]) => `<button class="btn sm${A.tab === t ? ' pri' : ''}" data-t="${t}">${n}</button>`).join('')}${toolbar(k)}</div>${body(k)}</div>` : ''}`;
     }
     $$('[data-t]', V).forEach((b) => (b.onclick = () => { A.tab = b.dataset.t; A.q = ''; A.status = ''; A.days = 0; load(k); }));
@@ -121,13 +123,13 @@
     const A = ST[k], P = PANELS[k];
     try {
       if (o === 'new') return await newLine(k);
-      if (o === 'reload') { A.st = null; A.data = null; A.err = ''; A.pk = null; return open(k); }
+      if (o === 'reload') { A.st = null; A.data = null; A.ov = undefined; A.err = ''; A.pk = null; return open(k); }
       if (o === 'edit') { A.edit = !A.edit; return show(k); }
-      if (o === 'off') { if (!(await ask(`Scollegare ${P.name}?`, `KAIROS dimentica utente e password di ${esc(P.name)}. Su ${esc(P.name)} non cambia niente.`, 'Scollega'))) return; await api('DELETE', `/admin/${k}/config`); A.st = null; A.data = null; return open(k); }
+      if (o === 'off') { if (!(await ask(`Scollegare ${P.name}?`, `KAIROS dimentica utente e password di ${esc(P.name)}. Su ${esc(P.name)} non cambia niente.`, 'Scollega'))) return; await api('DELETE', `/admin/${k}/config`); A.st = null; A.data = null; A.ov = undefined; return open(k); }
       if (o === 'save') {
         const b = { user: $('#exU').value.trim(), pass: $('#exP').value };
         if (!b.user || (!b.pass && !(A.st || {}).connected)) return toast(`Scrivi utente e password di ${P.name}`, 1);
-        toast(`Entro su ${P.name}…`); await api('PUT', `/admin/${k}/config`, b); toast(`${P.name} collegato`); A.edit = false; A.st = null; A.data = null; A.err = ''; return open(k);
+        toast(`Entro su ${P.name}…`); await api('PUT', `/admin/${k}/config`, b); toast(`${P.name} collegato`); A.edit = false; A.st = null; A.data = null; A.ov = undefined; A.err = ''; return open(k);
       }
     } catch (e) { toast(e.message, 1); }
   }
@@ -162,7 +164,7 @@
   }
   async function load(k) {
     const A = ST[k]; A.busy = true; A.err = ''; show(k);
-    try { A.data = await api('GET', `/admin/${k}/${A.tab}`); } catch (e) { A.err = e.message; A.data = null; }
+    try { A.data = await api('GET', `/admin/${k}/${A.tab}`); if (A.tab === 'overview') A.ov = A.data; } catch (e) { A.err = e.message; A.data = null; }
     A.busy = false; show(k);
   }
   function show(k) { try { render(k); } catch (e) { const V = $('#v-' + k); if (V) V.innerHTML = `<div class="card glass"><p style="color:#ff8f8f">Errore nella sezione ${esc(PANELS[k].name)}: ${esc(e.message || String(e))}</p></div>`; } }
