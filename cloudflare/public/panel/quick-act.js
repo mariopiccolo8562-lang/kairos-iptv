@@ -45,8 +45,8 @@
     ['wolf', 'WOLF', 'Linea con utente e password', can('wolf')],
     ['armada', 'Armada', 'Linea M3U / Xtream', can('armada')],
     ['atx', 'Atlantix', 'Il modulo «Crea linea» di Atlantix', !isAg()],
-    ['ro', 'Realott', 'Pacchetto Realott (usa crediti)', !isAg()],
-    ['slt', 'SLT', 'Pacchetto SLT (usa crediti)', !isAg()],
+    ['ro', 'Realott', 'Pacchetto Realott (usa crediti)', can('ro')],
+    ['slt', 'SLT', 'Pacchetto SLT (usa crediti)', can('slt')],
   ];
 
   function overlay() {
