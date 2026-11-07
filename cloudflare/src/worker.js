@@ -41,6 +41,7 @@ export default {
   async scheduled(_ev, env0) {
     const env = reqEnv(env0);
     await cleanup(env);
+    try { await pendSweep(env, true); } catch {} // richieste «da attivare» non accettate entro il tempo scelto
     // app terzi: se l'hai chiesto, ogni notte si tolgono le liste inattive
     try { const c = (await getSettings(env)).playersCfg || {}; if (c.autoClean) await thirdCleanup(env, c.cleanDays || 60, 'Pulizia automatica', ''); } catch {}
     try { await wolfCron(env, WOLF_H); } catch {}
@@ -4085,6 +4086,20 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const r = await inactiveClients(env, { days: url.searchParams.get('days'), never: url.searchParams.get('never') === '1', onlyExp: url.searchParams.get('onlyExp') === '1' });
     return json({ days: r.days, count: r.list.length, sample: r.list.slice(0, 20) });
   }
+  // richieste «da attivare»: eliminarne una o più. Niente cestino: non hanno dati, e se l'app è aperta la richiesta ricompare da sola con lo stesso codice
+  if (path === '/devices/pending/delete' && m === 'POST' && !(ses && ses.agent)) {
+    const b = await readJSON(req, 32 * 1024);
+    const ids = [...new Set((Array.isArray(b.ids) ? b.ids : []).map((x) => str(x, 20)).filter((x) => /^[A-Za-z0-9_-]{6,20}$/.test(x)))].slice(0, 500);
+    if (!ids.length) throw new HttpErr(400, 'Nessuna richiesta scelta');
+    let n = 0;
+    for (let i = 0; i < ids.length; i += 90) {
+      const part = ids.slice(i, i + 90);
+      const r = await env.DB.prepare(`DELETE FROM devices WHERE ${PEND_WHERE} AND id IN (${part.map(() => '?').join(',')})`).bind(...part).run();
+      n += +((r && r.meta && r.meta.changes) || 0);
+    }
+    if (n) await log(env, 'del', `${who}: eliminate ${n === 1 ? '1 richiesta' : n + ' richieste'} da attivare`, ip);
+    return json({ deleted: n });
+  }
   if (path === '/devices/purge' && m === 'POST' && !(ses && ses.agent)) {
     const b = await readJSON(req, 512);
     const r = await inactiveClients(env, { days: b.days, never: b.never === true, onlyExp: b.onlyExp === true });
@@ -4161,6 +4176,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     // tutto in parallelo: le query al database, la decifratura delle playlist e i controlli delle versioni delle app
     if (ses) agentCounts(env).catch(() => {}); // clienti per agente: parte subito (la usa agentsOut alla fine)
     const settings = await getSettings(env);
+    if (+settings.pendTtl) await pendSweep(env, false, +settings.pendTtl).catch(() => {}); // al più ogni 5 minuti
     const [rowsR, activityR, messagesR, agentMsgsR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, plusF, sAppNames, nCounts, onl, agAll, presLast] = await Promise.all([
       env.DB.prepare('SELECT * FROM devices ORDER BY created_at DESC LIMIT 5000').all(),
       env.DB.prepare('SELECT t, type, text, ip FROM activity ORDER BY id DESC LIMIT 200').all(),
@@ -4629,6 +4645,13 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       s.storeOwnerCode = c;
     }
     if (b.appLinks !== undefined) s.appLinks = cleanAppLinks(b.appLinks);
+    let pendNow = 0;
+    if (b.pendTtl !== undefined) {
+      const h = parseInt(b.pendTtl, 10);
+      if (!PEND_TTL.includes(h)) throw new HttpErr(400, 'Tempo non valido per le richieste da attivare');
+      if (h !== (+s.pendTtl || 0)) { await log(env, 'settings', `${who}: richieste da attivare non accettate → ${h ? 'si annullano dopo ' + pendTtlTxt(h) : 'restano fino a 30 giorni senza contatti'}`, ip); pendNow = h; }
+      s.pendTtl = h;
+    }
     if (typeof b.agentHost === 'string') {
       // indirizzo separato da cui entrano gli agenti (così non vedono quello del titolare)
       let h = b.agentHost.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
@@ -4712,6 +4735,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('app', JSON.stringify(s)).run();
     cfgDirty(env);
     await log(env, 'settings', `${who}: impostazioni aggiornate`, ip);
+    // appena scelto il tempo: via subito anche le richieste di adesso che lo hanno già superato
+    if (pendNow) return json({ settings: s, pendDeleted: await pendSweep(env, true, pendNow).catch(() => 0) });
     return json({ settings: s });
   }
 
@@ -5341,6 +5366,23 @@ async function trashRestore(env, id, who, ip) {
   if (r.kind === 'msg') { let n = 0; for (const row of (Array.isArray(data) ? data : [data])) if (await trashRow(env, 'messages', row)) n++; return done(`${n} messaggi`); }
   if (r.kind === 'extlist') { if (!(await trashRow(env, 'ext_lists', { ...data, ext: '' }))) throw new HttpErr(409, 'La lista esiste già'); return done('Sull\'app terza la lista era stata cancellata: va reinviata (pulsante «Reinvia»)'); }
   throw new HttpErr(400, 'Elemento non ripristinabile');
+}
+/* ---------------- Richieste «da attivare» non accettate: si annullano da sole (Impostazioni → pendTtl, in ore) ----------------
+   Si conta dalla richiesta, ma mai mentre l'app mostra il codice (si ricollega ogni pochi secondi): se il cliente riapre l'app
+   la richiesta ricompare da sola, con lo stesso codice. 0 = come prima: via dopo 30 giorni senza contatti (pulizia notturna). */
+const PEND_TTL = [0, 1, 6, 24, 72, 168];
+const PEND_WHERE = "active = 0 AND playlists = '' AND parent = ''";
+const pendTtlTxt = (h) => (h % 24 ? (h === 1 ? '1 ora' : h + ' ore') : h === 24 ? '24 ore' : h / 24 + ' giorni');
+let pendSweepT = 0;
+async function pendSweep(env, force = false, h0 = null) {
+  const h = h0 !== null ? h0 : +(await getSettings(env)).pendTtl || 0, t = now();
+  if (!h || !PEND_TTL.includes(h) || (!force && t - pendSweepT < 5 * 60e3)) return 0;
+  pendSweepT = t;
+  // quelle con un nome o una nota date dal pannello restano (come nella pulizia dei 30 giorni)
+  const r = await env.DB.prepare(`DELETE FROM devices WHERE ${PEND_WHERE} AND name = '' AND notes = '' AND created_at < ? AND last_seen < ?`).bind(t - h * 3600e3, t - 10 * 60e3).run();
+  const n = +((r && r.meta && r.meta.changes) || 0);
+  if (n) await log(env, 'del', `Annullate da sole ${n === 1 ? '1 richiesta' : n + ' richieste'} da attivare non accettate entro ${pendTtlTxt(h)}`);
+  return n;
 }
 async function cleanup(env) {
   const t = now();

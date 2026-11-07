@@ -261,6 +261,12 @@
 .dv-pend{margin-bottom:18px}.dv-pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
 .dv-pc{display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:14px;border:1px solid rgba(255,194,61,.35);background:linear-gradient(135deg,rgba(255,194,61,.08),rgba(255,255,255,.02))}
 .dv-pc .code.big{font-size:17px;padding:5px 10px}.dv-pc small{display:block;color:var(--mut);font-size:12px;margin-top:6px}
+.dvp-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.dvp-tools label{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--mut);font-weight:600;cursor:help}
+.dvp-tools select{width:auto;margin:0;padding:6px 10px;font-size:12.5px}
+.dvp-bar{display:flex;gap:6px 14px;align-items:center;flex-wrap:wrap;margin:0 0 10px;padding:10px 14px;border-radius:12px;border:1px solid rgba(255,194,61,.35);background:linear-gradient(135deg,rgba(255,194,61,.08),rgba(255,255,255,.02));font-size:13.5px}
+.dvp-bar .dvp-tools{margin:0 0 0 auto}
+.dv-pc .dv-act .dvp-x{flex:0 0 auto!important;margin-left:auto;padding-left:12px;padding-right:12px}
 .dv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
 .dv-card{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:18px;border:1px solid var(--line);background:rgba(255,255,255,.03);cursor:pointer;transition:transform .15s,background .15s,border-color .15s}
 .dv-card:hover{background:rgba(255,255,255,.055);border-color:rgba(255,255,255,.18);transform:translateY(-2px)}
@@ -851,7 +857,37 @@
     }
     function pendCard(d) {
       return `<div class="dv-pc" data-id="${esc(d.id)}"><div><span class="code big">${esc(d.code)}</span><small>${esc(d.model || 'Dispositivo')} · si è collegato ${esc(ago(d.lastSeen || d.createdAt))}</small></div>
-        <div class="dv-act"><button class="btn sm pri" data-act="activate">Attiva</button><button class="btn sm" data-act="link">Collega a un cliente</button></div></div>`;
+        <div class="dv-act"><button class="btn sm pri" data-act="activate">Attiva</button><button class="btn sm" data-act="link">Collega a un cliente</button>${pendOwner() ? '<button class="btn sm dvp-x" data-act="delp" title="Elimina la richiesta">🗑</button>' : ''}</div></div>`;
+    }
+    /* richieste «da attivare»: eliminarle (una o tutte) e farle annullare da sole se non le accetti entro un tempo (solo titolare) */
+    const PTTL = [[0, '30 giorni (predefinito)'], [1, '1 ora'], [6, '6 ore'], [24, '24 ore'], [72, '3 giorni'], [168, '7 giorni']];
+    const pendOwner = () => D.role !== 'agent' && !window.__assist;
+    function pendTools(pend) {
+      if (!pendOwner()) return '';
+      const cur = +((D.settings || {}).pendTtl || 0);
+      return `<div class="dvp-tools"><label title="Si conta dalla richiesta. Mai mentre il cliente ha l'app aperta sul codice; se la riapre, la richiesta ricompare con lo stesso codice.">Se non le accetti si annullano dopo <select class="inp" data-pendttl>${PTTL.map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${pend.length ? `<button type="button" class="btn sm danger" data-pendall>🗑 ${pend.length === 1 ? 'Elimina la richiesta' : 'Elimina tutte (' + pend.length + ')'}</button>` : ''}</div>`;
+    }
+    async function delPend(list) {
+      list = (list || []).filter((d) => d && !d.parent && d.status === 'pending');
+      if (!list.length) return;
+      const one = list.length === 1;
+      const names = list.slice(0, 6).map((d) => `<b class="mono">${esc(d.code)}</b>${d.model ? ' · ' + esc(d.model) : ''}`).join('<br>') + (list.length > 6 ? `<br>e altre ${list.length - 6}` : '');
+      if (!(await ask(one ? 'Eliminare la richiesta?' : `Eliminare ${list.length} richieste da attivare?`, `${names}<p class="mut" style="margin:10px 0 0">Se l'app è ancora aperta su quel dispositivo, la richiesta ricompare da sola con lo stesso codice.</p>`, 'Elimina'))) return;
+      try {
+        const r = await api('POST', '/admin/devices/pending/delete', { ids: list.map((d) => d.id) });
+        list.forEach((d) => st.sel.delete(d.id)); await load();
+        toast(r.deleted ? (r.deleted === 1 ? 'Richiesta eliminata' : `Eliminate ${r.deleted} richieste`) : 'Niente da eliminare: erano già state attivate o tolte');
+      } catch (e) { toast(e.message, 1); }
+    }
+    async function setPendTtl(v) {
+      v = +v || 0;
+      try {
+        const r = await api('PUT', '/admin/settings', { pendTtl: v });
+        if (r && r.settings) D.settings = r.settings; else (D.settings || (D.settings = {})).pendTtl = v;
+        const n = (r && r.pendDeleted) || 0;
+        toast(v ? `Le richieste non accettate entro ${PTTL.find((x) => x[0] === v)[1]} si annullano da sole${n ? ` · tolte subito ${n === 1 ? '1 richiesta vecchia' : n + ' richieste vecchie'}` : ''}` : 'Le richieste da attivare restano fino a 30 giorni senza contatti');
+        await load();
+      } catch (e) { toast(e.message, 1); renderDevices(); }
     }
     const IC = {
       ext1: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
@@ -871,7 +907,7 @@
       const exp = base.expires ? `<b>${esc(fmtD(base.expires))}</b><small class="${dl !== null && dl < 0 ? 'bad' : dl !== null && dl <= 14 ? 'warn' : ''}">${dl === null ? '' : dl < 0 ? 'scaduto da ' + -dl + ' g' : dl === 0 ? 'scade oggi' : 'tra ' + dl + ' g'}</small>` : (d.status === 'pending' ? '<span class="mut">—</span>' : '<b>Senza scadenza</b>');
       const pls = sub && !d.own ? '<span class="mut">dal principale</span>' : (d.playlists || []).length ? `${(d.playlists || []).length} · <span class="mut">${esc(hostsOf(d).slice(0, 1).join(''))}</span>${sub ? ' <span class="kc-tag" title="Gestione indipendente: playlist e lettore di questa TV">propria</span>' : ''}` : '<span class="mut">nessuna</span>';
       const acts = d.status === 'pending' && !sub
-        ? '<button class="btn sm pri" data-act="activate">Attiva</button><button class="btn sm" data-act="link">Collega</button>'
+        ? '<button class="btn sm pri" data-act="activate">Attiva</button><button class="btn sm" data-act="link">Collega</button>' + (pendOwner() ? ib('del', 'r', 'Elimina la richiesta') : '')
         : sub ? ib('kick', 'k', 'Disconnetti') + ib('edit', 'e', 'Apri scheda')
         : ib('ext1', 'g', '+1 mese') + ib('ext12', 'b', '+12 mesi') + (d.status === 'active' ? ib('kick', 'k', 'Disconnetti: interrompe la visione in corso') : '') + (d.active ? ib('off', 'o', 'Disattiva') : ib('on', 'g', 'Riattiva')) + ib('edit', 'e', 'Apri scheda') + ib('del', 'r', 'Elimina');
       return `<tr data-id="${esc(d.id)}" class="${sub ? 'sub' : ''} ${st.sel.has(d.id) ? 'sel' : ''}">
@@ -888,8 +924,9 @@
     function renderTable(list, pend, q) {
       const rows = [];
       for (const d of [...pend, ...list.slice(0, st.limit)]) { rows.push(trow(d, false)); for (const k of kidsOf(d.id)) rows.push(trow(k, true)); }
-      $('#dvTbl').innerHTML = rows.length ? `<div class="card glass dvt-wrap"><table class="dvt"><thead><tr><th class="c"><input type="checkbox" id="dvtAll" title="Seleziona tutti quelli mostrati"></th><th>Cliente</th><th>Stato</th><th>Scadenza</th><th class="c">Conn.</th><th>Dispositivo</th><th>Playlist</th><th>Note</th><th>Azioni</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`
-        : `<div class="emptyc" style="display:block">${q ? 'Nessun cliente trovato per «' + esc(q) + '»' : 'Nessun cliente in questo elenco'}</div>`;
+      const pbar = pend.length && pendOwner() ? `<div class="dvp-bar"><span>🆕 <b>${pend.length}</b> ${pend.length === 1 ? 'richiesta' : 'richieste'} da attivare in cima all'elenco</span>${pendTools(pend)}</div>` : '';
+      $('#dvTbl').innerHTML = pbar + (rows.length ? `<div class="card glass dvt-wrap"><table class="dvt"><thead><tr><th class="c"><input type="checkbox" id="dvtAll" title="Seleziona tutti quelli mostrati"></th><th>Cliente</th><th>Stato</th><th>Scadenza</th><th class="c">Conn.</th><th>Dispositivo</th><th>Playlist</th><th>Note</th><th>Azioni</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`
+        : `<div class="emptyc" style="display:block">${q ? 'Nessun cliente trovato per «' + esc(q) + '»' : 'Nessun cliente in questo elenco'}</div>`);
       const all = $('#dvtAll'); if (all) { const ids = [...pend, ...list.slice(0, st.limit)].map((d) => d.id); all.checked = ids.length > 0 && ids.every((i) => st.sel.has(i)); all.onchange = () => { ids.forEach((i) => (all.checked ? st.sel.add(i) : st.sel.delete(i))); renderDevices(); }; }
       bulkBar();
     }
@@ -936,7 +973,8 @@
       if (st.view === 'list') { $('#dvPend').innerHTML = $('#dvCards').innerHTML = $('#dvMore').innerHTML = $('#dvTbl').innerHTML = ''; bulkBar(); return; }
       const hay = (d) => [d.code, d.name, d.notes, d.model].join(' ').toLowerCase();
       const pend = D.devices.filter((d) => d.status === 'pending' && !d.parent && (f === 'all' || f === 'pending') && (!q || hay(d).includes(q)));
-      $('#dvPend').innerHTML = pend.length ? `<div class="card glass dv-pend"><div class="hd"><h3>🆕 Da attivare <span class="cnt">${pend.length}</span><small>Il cliente apre l'app e ti legge il codice: premi <b>Attiva</b>, scegli durata e playlist. Se è una TV in più di un cliente che hai già, usa <b>Collega a un cliente</b>.</small></h3></div><div class="dv-pgrid">${pend.slice(0, 24).map(pendCard).join('')}</div></div>` : '';
+      st.pend = pend; // per «Elimina tutte»: quelle mostrate (sezione, app e ricerca)
+      $('#dvPend').innerHTML = pend.length ? `<div class="card glass dv-pend"><div class="hd"><h3>🆕 Da attivare <span class="cnt">${pend.length}</span><small>Il cliente apre l'app e ti legge il codice: premi <b>Attiva</b>, scegli durata e playlist. Se è una TV in più di un cliente che hai già, usa <b>Collega a un cliente</b>.</small></h3>${pendTools(pend)}</div><div class="dv-pgrid">${pend.slice(0, 24).map(pendCard).join('')}</div></div>` : '';
       let list = D.devices.filter((d) => !d.parent && d.status !== 'pending' && fit(d, f) && (!q || hay(d).includes(q) || kidsOf(d.id).some((k) => hay(k).includes(q))));
       // connessioni che corrispondono alla ricerca ma il cui cliente principale non c'è (o è eliminato)
       const orphans = D.devices.filter((d) => d.parent && !parentOf(d) && (!q || hay(d).includes(q)) && f === 'all');
@@ -961,6 +999,7 @@
       const v = e.target.closest('[data-dv]'); if (v) { st.view = v.dataset.dv; st.limit = st.view === 'table' ? 100 : 60; try { localStorage.setItem('kc_dv', st.view); } catch {} V.classList.toggle('dv-cardsview', st.view !== 'list'); return renderDevices(); }
       const o = e.target.closest('[data-open]'); if (o) { const k = D.devices.find((x) => x.id === o.dataset.open); if (k) openQuick(k); return; }
       const bk = e.target.closest('[data-bulk]'); if (bk) return bulk(bk.dataset.bulk);
+      if (e.target.closest('[data-pendall]')) return delPend(st.pend);
       if (e.target.closest('#dvMass')) { if (window.KXMass) KXMass.open(st.view === 'table' ? [...st.sel] : [], () => { st.sel.clear(); renderDevices(); }); return; }
       const cp = e.target.closest('[data-copy]'); if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); toast('Codice copiato: ' + cp.dataset.copy); } catch { toast(cp.dataset.copy); } return; }
       const sl = e.target.closest('[data-sel]'); if (sl) { sl.checked ? st.sel.add(sl.dataset.sel) : st.sel.delete(sl.dataset.sel); sl.closest('tr').classList.toggle('sel', sl.checked); const all = $('#dvtAll'); if (all && !sl.checked) all.checked = false; return bulkBar(); }
@@ -985,6 +1024,7 @@
         if (a === 'kick') return kickDev(d);
         if (a === 'off') { if (!(await ask('Disattivare il cliente?', `<b>${esc(d.name || d.code)}</b> non potrà più guardare finché non lo riattivi.`, 'Disattiva'))) return; await save(d, { active: false }); return toast('Disattivato'); }
         if (a === 'on') { await save(d, { active: true }); return toast('Riattivato'); }
+        if (a === 'del' && d.status === 'pending' && !d.parent) return delPend([d]);
         if (a === 'del') {
           const n = kidsOf(d.id).length;
           if (!(await askDanger('Eliminare il cliente?', `Il codice <b class="mono">${esc(d.code)}</b> verrà rimosso e il player tornerà alla schermata di attivazione.${n ? ` Le ${n} connessioni collegate torneranno “in attesa”.` : ''}`, d.code))) return;
@@ -1002,6 +1042,7 @@
       const act = (e.target.closest('[data-act]') || {}).dataset?.act;
       if (act === 'renew') { const box = c.querySelector('.dv-act'); box.innerHTML = [1, 3, 6, 12].map((m) => `<button class="btn sm" data-act="ext${m}">+${m} ${m === 1 ? 'mese' : 'mesi'}</button>`).join('') + '<button class="btn sm dv-x" data-act="renewx" title="Annulla">✕</button>'; return; }
       if (act === 'renewx') return renderDevices();
+      if (act === 'delp') return delPend([d]);
       const em = /^ext(\d+)$/.exec(act || ''); if (em) return extend(d, +em[1]);
       if (act === 'kick') return kickDev(d);
       if (act === 'tog') { if (d.active && !(await ask('Disattivare il cliente?', `<b>${esc(d.name || d.code)}</b> non potrà più guardare finché non lo riattivi.`, 'Disattiva'))) return; await save(d, { active: !d.active }); return toast(d.active ? 'Cliente disattivato' : 'Cliente riattivato'); }
@@ -1010,11 +1051,31 @@
       if (act === 'open') return openDrawer(d, d.status === 'pending');
       if (!e.target.closest('button')) openQuick(d);
     });
+    V.addEventListener('change', (e) => { const t = e.target.closest('[data-pendttl]'); if (t) setPendTtl(t.value); });
     $('#dvQ').addEventListener('input', () => { st.limit = st.view === 'table' ? 100 : 60; renderDevices(); });
     $('#dvSort').onchange = (e) => { st.sort = e.target.value; try { localStorage.setItem('kc_dvs', st.sort); } catch {} renderDevices(); };
     const orig = window.renderDevices;
     window.renderDevices = renderDevices = function () { orig(); render(); };
     KC.dvRender = render;
+    // demo: elimina richieste e annullamento automatico come sul server
+    if (typeof DEMO !== 'undefined') {
+      const dm0 = demoApi;
+      const isPend = (d) => !d.parent && !d.active && !(d.playlists || []).length;
+      window.demoApi = demoApi = async function (m, p, b) {
+        if (p === '/admin/devices/pending/delete' && m === 'POST') {
+          const ids = new Set((b && b.ids) || []), n0 = DEMO.devices.length;
+          DEMO.devices = DEMO.devices.filter((d) => !(ids.has(d.id) && isPend(d)));
+          return { deleted: n0 - DEMO.devices.length };
+        }
+        const r = await dm0(m, p, b);
+        if (p === '/admin/settings' && m === 'PUT' && b && +b.pendTtl) {
+          const t = Date.now(), h = +b.pendTtl, n0 = DEMO.devices.length;
+          DEMO.devices = DEMO.devices.filter((d) => !(isPend(d) && !d.name && !d.notes && (d.createdAt || 0) < t - h * 3600e3 && (d.lastSeen || 0) < t - 10 * 60e3));
+          return { ...r, pendDeleted: n0 - DEMO.devices.length };
+        }
+        return r;
+      };
+    }
   })();
   /* ---------- Dashboard: i riquadri aprono la pagina giusta ---------- */
   const origDash = window.renderDash;

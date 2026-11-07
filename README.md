@@ -442,6 +442,11 @@ Kairos TV è l'app **nativa** stile Netflix per chiavette datate (veloce come la
 - **Modifica in massa** da una sezione: di base vale per *quella sezione* (attivi o tutti); restano le scelte «tutti i clienti (tuoi e degli agenti)».
 - L'agente con sotto-agenti vede allo stesso modo «I miei clienti» / «Dei sotto-agenti».
 
+## 28. Richieste «da attivare» (i «— senza nome —»)
+
+- Cestino su ogni richiesta (tabella e schede) ed **«Elimina tutte (N)»** nella barra delle richieste: tolgono solo dispositivi mai attivati (`POST /api/admin/devices/pending/delete { ids }`, solo titolare, senza cestino). Se l'app è ancora aperta su quel dispositivo, la richiesta ricompare da sola con lo stesso codice.
+- **«Se non le accetti si annullano dopo…»**: 1 ora, 6 ore, 24 ore, 3 giorni, 7 giorni o 30 giorni (predefinito, come prima). Impostazione `pendTtl` (ore). Si conta dalla richiesta, mai mentre l'app mostra il codice (vista negli ultimi 10 minuti); restano quelle a cui hai dato un nome o una nota. Controllo all'apertura del pannello (al più ogni 5 minuti), nella pulizia notturna e subito quando scegli il tempo.
+
 ## Struttura
 
 ```
