@@ -167,6 +167,15 @@
 .kc-post div{position:relative;padding:28px 10px 10px;background:linear-gradient(transparent,rgba(0,0,0,.9));font-size:13px;font-weight:600;line-height:1.25}
 .kc-post div small{display:block;color:var(--mut);font-weight:400;font-size:11px;margin-top:3px}
 .kc-post.kc-ch{aspect-ratio:1/1;background:rgba(255,255,255,.06)}.kc-post.kc-ch img{object-fit:contain;padding:14px 14px 44px;box-sizing:border-box}.kc-post.kc-ch .rt{left:8px;right:auto;color:#fff}.kc-post.kc-ch .rt.ar{left:auto;right:8px;color:var(--warn)}
+.kc-post[data-vid]{cursor:pointer;transition:transform .15s}.kc-post[data-vid]:hover{transform:translateY(-3px)}
+.kc-det{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1200;display:none;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}.kc-det.on{display:flex}
+.kc-det-box{position:relative;width:100%;max-width:880px;background:var(--card,#141821);border:1px solid var(--line,#2a2f3a);border-radius:16px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.kc-det-head{display:flex;gap:18px;align-items:flex-end;padding:26px;background-size:cover;background-position:center;min-height:120px}.kc-det-head img{width:120px;aspect-ratio:2/3;object-fit:cover;border-radius:10px;flex:none;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.kc-det-body{padding:18px 26px 8px}.kc-plot{font-size:14px;line-height:1.55;margin:0 0 14px}.kc-det-row{display:flex;gap:12px;font-size:13px;margin-bottom:9px;align-items:flex-start}.kc-det-row .k{color:var(--mut);min-width:64px;flex:none;padding-top:2px}
+.kc-chip{display:inline-block;padding:2px 9px;border-radius:999px;background:rgba(255,255,255,.07);font-size:12px;margin:0 5px 5px 0}.kc-chip.live{background:rgba(45,212,191,.18);color:#2dd4bf;margin-left:8px}
+.kc-seasons{display:flex;gap:6px;flex-wrap:wrap;padding:6px 26px 12px}.kc-eps{padding:0 26px 22px;display:grid;gap:10px}.kc-ep{display:flex;gap:12px;align-items:flex-start;font-size:13.5px}.kc-ep img{width:150px;aspect-ratio:16/9;object-fit:cover;border-radius:8px;flex:none}.kc-ep-n{width:150px;aspect-ratio:16/9;flex:none;border-radius:8px;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--mut)}.kc-ep small{display:block;margin-top:2px}.kc-ep p{margin:6px 0 0;color:var(--mut);font-size:12.5px;line-height:1.45}
+.kc-epg{padding:10px 26px 24px;display:grid;gap:8px}.kc-epg-i{display:flex;gap:14px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.03);font-size:13.5px}.kc-epg-i.on{background:rgba(45,212,191,.08);border:1px solid rgba(45,212,191,.3)}.kc-epg-i .t{min-width:58px;font-weight:700;flex:none}.kc-epg-i .t small{display:block;font-weight:400;color:var(--mut);font-size:11px}.kc-epg-i p{margin:5px 0 0;color:var(--mut);font-size:12.5px;line-height:1.45}
+@media(max-width:640px){.kc-det-head{flex-direction:column;align-items:flex-start}.kc-det-head img{width:90px}.kc-ep img,.kc-ep-n{width:100px}}
 .kc-post .rt{position:absolute;top:8px;right:8px;font-size:11px;font-weight:700;padding:3px 7px;border-radius:7px;background:rgba(0,0,0,.6);color:var(--warn)}
 .kc-vc{display:grid;grid-template-columns:220px 1fr;gap:18px}
 .kc-cats{display:flex;flex-direction:column;gap:2px;max-height:70vh;overflow:auto}
@@ -591,10 +600,45 @@
     $$('#vCats [data-c]').forEach((b) => (b.onclick = () => { C.cat = b.dataset.c; C.page = 1; vodLoad(); }));
     $('#vInfo').textContent = `${r.total.toLocaleString('it-IT')} ${C.kind === 'series' ? 'serie' : C.kind === 'live' ? 'canali' : 'film'}${C.q ? ' per «' + C.q + '»' : ''} · pagina ${r.page} di ${r.pages}`;
     const live = C.kind === 'live';
-    $('#vGrid').innerHTML = r.items.map((x) => `<div class="kc-post${live ? ' kc-ch' : ''}">${x.poster ? `<img loading="lazy" src="${esc(x.poster)}" referrerpolicy="no-referrer">` : ''}${live ? (x.num ? `<span class="rt">${x.num}</span>` : '') + (x.archive ? `<span class="rt ar">⏪ ${x.archive}g</span>` : '') : x.rating ? `<span class="rt">★ ${(+x.rating).toFixed(1)}</span>` : ''}<div>${esc(x.name)}<small>${esc([x.year, x.catName].filter(Boolean).join(' · '))}</small></div></div>`).join('') || `<p class="mut">${live ? 'Nessun canale.' : 'Nessun titolo.'}</p>`;
+    $('#vGrid').innerHTML = r.items.map((x) => `<div class="kc-post${live ? ' kc-ch' : ''}" data-vid="${esc(x.id)}" title="Apri la scheda">${x.poster ? `<img loading="lazy" src="${esc(x.poster)}" referrerpolicy="no-referrer">` : ''}${live ? (x.num ? `<span class="rt">${x.num}</span>` : '') + (x.archive ? `<span class="rt ar">⏪ ${x.archive}g</span>` : '') : x.rating ? `<span class="rt">★ ${(+x.rating).toFixed(1)}</span>` : ''}<div>${esc(x.name)}<small>${esc([x.year, x.catName].filter(Boolean).join(' · '))}</small></div></div>`).join('') || `<p class="mut">${live ? 'Nessun canale.' : 'Nessun titolo.'}</p>`;
     document.querySelectorAll('#vGrid img').forEach((im) => im.addEventListener('error', () => im.remove(), { once: true }));
+    $$('#vGrid [data-vid]').forEach((el) => (el.onclick = () => vodInfo(el.dataset.vid, r.items.find((x) => String(x.id) === el.dataset.vid))));
     $('#vPg').innerHTML = r.pages > 1 ? `<button class="btn sm" data-p="${r.page - 1}" ${r.page <= 1 ? 'disabled' : ''}>‹ Indietro</button><button class="btn sm" data-p="${r.page + 1}" ${r.page >= r.pages ? 'disabled' : ''}>Avanti ›</button>` : '';
     $$('#vPg [data-p]').forEach((b) => (b.onclick = () => { C.page = +b.dataset.p; vodLoad(); $('#v-vod').scrollIntoView({ behavior: 'smooth' }); }));
+  }
+
+  /* ---------- Videoteca: scheda del titolo (trama/cast, stagioni ed episodi, EPG) ---------- */
+  const vTime = (t) => (t ? new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '');
+  const vDay = (t) => (t ? new Date(t).toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: '2-digit' }) : '');
+  async function vodInfo(id, item) {
+    const C = KC.cat, kind = C.kind, name = (item && item.name) || '';
+    let ov = $('#kcDet'); if (!ov) { ov = document.createElement('div'); ov.id = 'kcDet'; ov.className = 'kc-det'; document.body.appendChild(ov); ov.onclick = (e) => { if (e.target === ov || e.target.closest('[data-close]')) ov.classList.remove('on'); }; }
+    const shell = (body) => `<div class="kc-det-box"><button class="btn sm" data-close style="position:absolute;top:10px;right:10px;z-index:2">✕</button>${body}</div>`;
+    ov.innerHTML = shell(`<div style="padding:26px"><b style="font-size:17px">${esc(name)}</b><p class="mut" style="margin-top:8px">Carico la scheda dal server…</p></div>`); ov.classList.add('on');
+    let d;
+    try { d = await kapi('GET', `/admin/catalog/info?src=${encodeURIComponent(C.src)}&kind=${kind}&id=${encodeURIComponent(id)}`); } catch (e) { ov.innerHTML = shell(`<div style="padding:26px"><b>${esc(name)}</b><p style="color:#ff8f8f;margin-top:8px">${esc(e.message)}</p></div>`); return; }
+    if (d.error) { ov.innerHTML = shell(`<div style="padding:26px"><b>${esc(name)}</b><p style="color:#ff8f8f;margin-top:8px">${esc(d.error)}</p></div>`); return; }
+    const chips = (arr, lbl) => (arr && arr.length ? `<div class="kc-det-row"><span class="k">${lbl}</span><span>${arr.map((x) => `<span class="kc-chip">${esc(x)}</span>`).join('')}</span></div>` : '');
+    const row = (lbl, v) => (v ? `<div class="kc-det-row"><span class="k">${lbl}</span><span>${esc(v)}</span></div>` : '');
+    const poster = d.poster || (item && item.poster) || '';
+    const head = (sub) => `<div class="kc-det-head"${d.backdrop ? ` style="background-image:linear-gradient(rgba(12,14,20,.55),rgba(12,14,20,.97)),url('${esc(d.backdrop)}')"` : ''}>${poster ? `<img src="${esc(poster)}" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}<div><b style="font-size:19px;line-height:1.2">${esc(d.title || name)}</b><div class="mut" style="font-size:13px;margin-top:6px">${esc(sub)}</div></div></div>`;
+    if (kind === 'live') {
+      const now = Date.now(), L = d.epg || [];
+      ov.innerHTML = shell(head(`${item && item.catName ? item.catName + ' · ' : ''}${L.length ? 'Guida programmi (EPG)' : 'Il server non dà l\'EPG per questo canale'}`) + `<div class="kc-epg">${L.map((e) => { const on = e.start <= now && e.end > now, pct = on ? Math.round(((now - e.start) / Math.max(1, e.end - e.start)) * 100) : 0; return `<div class="kc-epg-i${on ? ' on' : ''}"><div class="t">${vTime(e.start)}<small>${vDay(e.start)}</small></div><div><b>${esc(e.title)}</b>${on ? `<span class="kc-chip live">In onda · ${pct}%</span>` : ''}${e.desc ? `<p>${esc(e.desc)}</p>` : ''}</div></div>`; }).join('') || '<p class="mut" style="padding:16px 26px">Nessun programma in guida.</p>'}</div>`);
+      return;
+    }
+    const meta = [d.date ? d.date.slice(0, 4) : '', d.genre, d.duration, d.rating ? '★ ' + (+d.rating).toFixed(1) : '', d.country].filter(Boolean).join(' · ');
+    const common = `<div class="kc-det-body">${d.plot ? `<p class="kc-plot">${esc(d.plot)}</p>` : '<p class="mut">Il server non ha la trama di questo titolo.</p>'}${chips(d.cast, 'Cast')}${chips(d.director, 'Regia')}${row('Genere', d.genre)}${row('Uscita', d.date)}${d.trailer ? `<div class="kc-det-row"><span class="k">Trailer</span><a href="https://www.youtube.com/watch?v=${esc(d.trailer)}" target="_blank" rel="noopener">YouTube ↗</a></div>` : ''}</div>`;
+    if (kind === 'movies') { ov.innerHTML = shell(head(meta) + common); return; }
+    const S = d.seasons || []; let cur = S.length ? S[0].num : 0;
+    const draw = () => {
+      const sea = S.find((x) => x.num === cur) || S[0];
+      ov.innerHTML = shell(head(`${meta}${S.length ? (meta ? ' · ' : '') + S.length + (S.length === 1 ? ' stagione' : ' stagioni') + ' · ' + S.reduce((a, x) => a + x.episodes.length, 0) + ' episodi' : ''}`) + common +
+        (S.length ? `<div class="kc-seasons">${S.map((x) => `<button class="btn sm${x.num === cur ? ' pri' : ''}" data-sea="${x.num}">${esc(x.name)}<small> ${x.episodes.length}</small></button>`).join('')}</div>
+        <div class="kc-eps">${(sea ? sea.episodes : []).map((e) => `<div class="kc-ep">${e.image ? `<img loading="lazy" src="${esc(e.image)}" referrerpolicy="no-referrer" onerror="this.remove()">` : '<span class="kc-ep-n">' + e.num + '</span>'}<div><b>${e.num ? e.num + '. ' : ''}${esc(e.title || 'Episodio ' + e.num)}</b><small class="mut">${[e.date, e.duration, e.rating ? '★ ' + (+e.rating).toFixed(1) : ''].filter(Boolean).join(' · ')}</small>${e.plot ? `<p>${esc(e.plot)}</p>` : ''}</div></div>`).join('') || '<p class="mut">Nessun episodio in questa stagione.</p>'}</div>` : '<p class="mut" style="padding:0 26px 20px">Il server non elenca gli episodi di questa serie.</p>'));
+      $$('#kcDet [data-sea]').forEach((b) => (b.onclick = () => { cur = +b.dataset.sea; draw(); }));
+    };
+    draw();
   }
 
   /* ---------- Server DNS e VPN ---------- */
