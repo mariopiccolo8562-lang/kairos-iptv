@@ -11,7 +11,7 @@
 .xs-bar .xs-more{color:var(--mut);font-size:12px}`;
   document.head.appendChild(css);
   // casella di ricerca di ogni scheda → pannello (per exQ il pannello è quello della sezione aperta: Realott o SLT)
-  const IN = [['#wfQ', 'wolf'], ['#arQ', 'armada'], ['#axQ', 'atx'], ['#exQ', null], ['#orQ', 'orcp'], ['#mxQ', 'mxp'], ['#oxQ', 'oxp']];
+  const IN = [['#wfQ', 'wolf'], ['#v-armada #arQ', 'armada'], ['#v-storm #arQ', 'storm'], ['#axQ', 'atx'], ['#exQ', null], ['#orQ', 'orcp'], ['#mxQ', 'mxp'], ['#oxQ', 'oxp']];
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const S = { q: '', items: null, seq: 0, pre: 0 };
   function current() {

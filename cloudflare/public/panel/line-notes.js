@@ -18,6 +18,7 @@
   /* dove sta la linea in ogni pannello: selettore delle righe e come leggere utente/etichetta */
   const SRC = {
     armada: { view: 'v-armada', rows: '.ar-row', ref: (r) => { const m = r.querySelector('.ar-v .mono'); return m ? m.textContent.trim() : ''; }, slot: (r) => r.querySelector('.ar-v') && r.querySelector('.ar-v').parentElement },
+    storm: { view: 'v-storm', rows: '.ar-row', ref: (r) => { const m = r.querySelector('.ar-v .mono'); return m ? m.textContent.trim() : ''; }, slot: (r) => r.querySelector('.ar-v') && r.querySelector('.ar-v').parentElement },
     orcp: { view: 'v-orcp', rows: '[data-ormsg]', ref: (b) => b.dataset.ormsg || '', slot: (b) => { const tr = b.closest('tr'); return tr ? tr.firstElementChild : b.closest('.card'); } },
     mxp: { view: 'v-mxp', rows: '.mx-row', ref: (r) => r.dataset.id || '', label: (r) => { const m = r.querySelector('.mono'); return m ? m.textContent.trim() : ''; }, slot: (r) => r.firstElementChild },
     oxp: { view: 'v-oxp', rows: '#v-oxp b.mono', ref: (m) => m.textContent.trim(), slot: (m) => m.parentElement },

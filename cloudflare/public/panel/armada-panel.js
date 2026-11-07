@@ -1,10 +1,17 @@
-/* KAIROS Control — «Pannello Armada»: il pannello IPTV Armada collegato con la sua API reseller ufficiale.
+/* KAIROS Control — «Pannello Armada» e «Pannello Storm»: pannelli IPTV con la stessa API reseller (api.php?action=…).
+   Lo stesso modulo si istanzia due volte (mkArmadaLike), cambiano solo nome, chiave e indirizzi.
    Crei linee e MAG (prova o 1/3/6/12 mesi), vedi crediti, linee, MAG e sotto-reseller, rinnovi, attivi/disattivi.
    La linea creata si aggiunge a un cliente Kairos o si registra in «Appunti App» con un clic.
    Titolare; agenti solo con il suo permesso (suoi crediti, tetto mensile, solo le linee create da loro, niente
-   sotto-reseller né saldo). La chiave ARMADA_KEY resta sul server. Usa le funzioni di app.js. */
+   sotto-reseller né saldo). Le chiavi ARMADA_KEY e STORM_KEY restano sul server. Usa le funzioni di app.js. */
 (() => {
-  const css = document.createElement('style');
+const Q = $, QQ = $$;
+const mkArmadaLike = (cfg) => {
+  const CFG = cfg, K = cfg.k, N = cfg.name, VIEW = 'v-' + K, API = '/admin/' + K, PRE = cfg.pre;
+  // le due schede hanno gli stessi id: le ricerche restano dentro la propria sezione
+  const $ = (q, r) => Q(q, r || document.getElementById(VIEW) || document), $$ = (q, r) => QQ(q, r || document.getElementById(VIEW) || document);
+  if (!document.getElementById('ar-css')) {
+  const css = document.createElement('style'); css.id = 'ar-css';
   css.textContent = `
 .ar-st{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.ar-st .cr{font-size:26px;font-weight:800}.ar-st small{display:block;color:var(--mut);font-size:12px}
 .ar-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:16px 0 12px}
@@ -23,14 +30,15 @@
 @media (max-width:1000px){.ar-f{grid-template-columns:1fr 1fr}.ar-row{grid-template-columns:1fr 1fr}.ar-act{grid-column:1/-1;justify-content:flex-start}}
 @media (max-width:560px){.ar-f{grid-template-columns:1fr}.ar-kv{grid-template-columns:80px minmax(0,1fr) auto}}`;
   document.head.appendChild(css);
+  }
 
   const IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h18l-2 3H5z"/><path d="M12 3v12M12 4l6 9h-6M12 6l-5 7h5"/></svg>';
-  if (!$('.nav[data-v="armada"]')) {
-    const b = document.createElement('button'); b.className = 'nav'; b.dataset.v = 'armada'; b.innerHTML = IC + 'Pannello Armada'; b.onclick = () => view('armada');
-    const anchor = $('.nav[data-v="agents"]') || $('.nav[data-v="devices"]'); anchor ? anchor.after(b) : $('#side').appendChild(b);
-    const sec = document.createElement('section'); sec.className = 'view'; sec.id = 'v-armada'; $('#v-dash').after(sec);
+  if (!$('.nav[data-v="' + K + '"]')) {
+    const b = document.createElement('button'); b.className = 'nav'; b.dataset.v = K; b.innerHTML = IC + 'Pannello ' + N; b.onclick = () => view(K);
+    const anchor = (cfg.after && $('.nav[data-v="' + cfg.after + '"]')) || $('.nav[data-v="agents"]') || $('.nav[data-v="devices"]'); anchor ? anchor.after(b) : $('#side').appendChild(b);
+    const sec = document.createElement('section'); sec.className = 'view'; sec.id = VIEW; $('#v-dash').after(sec);
   }
-  TITLES.armada = 'Pannello Armada';
+  TITLES[K] = 'Pannello ' + N;
 
   const A = { st: null, tab: 'new', pk: null, lines: null, mags: null, res: null, F: { q: '', f: '', sort: '', days: 0 }, show: new Set(), last: null, sel: new Set(), vis: [], stOn: false, limit: 100,
     form: { type: 'm3u', sub: 12, htime: 24, pack: '', mac: '', country: '', adult: false, notes: '' } };
@@ -43,16 +51,16 @@
   const isAg = () => D.role === 'agent';
   const fmtC = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString('it-IT');
 
-  async function loadState() { try { A.st = await api('GET', '/admin/armada/state'); } catch (e) { A.st = { connected: false, error: e.message }; } render(); }
-  const loadLines = () => A.pL || (A.pL = api('GET', '/admin/armada/lines').then((r) => { A.lines = r.lines || []; }).catch((e) => { A.lines = ldErr(e); }).finally(() => { A.pL = null; }));
+  async function loadState() { try { A.st = await api('GET', API + '/state'); } catch (e) { A.st = { connected: false, error: e.message }; } render(); }
+  const loadLines = () => A.pL || (A.pL = api('GET', API + '/lines').then((r) => { A.lines = r.lines || []; }).catch((e) => { A.lines = ldErr(e); }).finally(() => { A.pL = null; }));
   async function loadTab(force) {
     if (!A.st || !A.st.connected) return;
     const t = A.tab;
     try {
-      if (t === 'new' && (!A.pk || force)) A.pk = (await api('GET', '/admin/armada/packages')).packages || [];
+      if (t === 'new' && (!A.pk || force)) A.pk = (await api('GET', API + '/packages')).packages || [];
       if (t === 'lines' && (!A.lines || force)) await loadLines();
-      if (t === 'mags' && (!A.mags || force)) A.mags = (await api('GET', '/admin/armada/mags')).mags || [];
-      if (t === 'res' && (!A.res || force)) A.res = (await api('GET', '/admin/armada/resellers')).resellers || [];
+      if (t === 'mags' && (!A.mags || force)) A.mags = (await api('GET', API + '/mags')).mags || [];
+      if (t === 'res' && (!A.res || force)) A.res = (await api('GET', API + '/resellers')).resellers || [];
     } catch (e) { if (t === 'new') A.pk = ldErr(e); if (t === 'lines') A.lines = ldErr(e); if (t === 'mags') A.mags = ldErr(e); if (t === 'res') A.res = ldErr(e); }
     render();
   }
@@ -62,23 +70,23 @@
     if (!s) return '<div class="card glass"><p class="mut">Caricamento…</p></div>';
     if (s.agent) {
       const bd = s.budget || {}, pct = bd.limit ? Math.min(100, Math.round((bd.used / bd.limit) * 100)) : 100;
-      if (!s.connected) return `<div class="card glass"><p class="mut">Armada non è collegato: chiedi a chi ti gestisce.</p></div>`;
-      return `<div class="card glass"><div class="ar-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">✅ Pannello Armada</b><small>Usi i crediti di chi ti gestisce, entro il tuo tetto del mese. Vedi solo le linee create da te.</small></div>
+      if (!s.connected) return `<div class="card glass"><p class="mut">${N} non è collegato: chiedi a chi ti gestisce.</p></div>`;
+      return `<div class="card glass"><div class="ar-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">✅ Pannello ${N}</b><small>Usi i crediti di chi ti gestisce, entro il tuo tetto del mese. Vedi solo le linee create da te.</small></div>
         <div><small>Crediti usati questo mese</small><span class="cr">${fmtC(bd.used)}</span><small>su ${fmtC(bd.limit)} · ne restano <b>${fmtC(bd.left)}</b></small><div class="ag-bar2" style="margin-top:6px;width:160px"><s style="width:${pct}%"></s></div></div>
         ${bd.trial ? `<div><small>Prove di oggi</small><span class="cr" style="font-size:20px">${bd.trials}/${bd.trialMax}</span></div>` : ''}<button class="btn sm" id="arRe">Aggiorna</button></div></div>`;
     }
     const cfg = `<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:13px">Indirizzi</summary>
-      <div class="ar-f" style="margin-top:10px;grid-template-columns:1fr 1fr auto"><label>Indirizzo API<input class="inp mono" id="arUrl" value="${esc(s.url || '')}" placeholder="https://ts-spain.xyz/api.php"></label>
+      <div class="ar-f" style="margin-top:10px;grid-template-columns:1fr 1fr auto"><label>Indirizzo API<input class="inp mono" id="arUrl" value="${esc(s.url || '')}" placeholder="${esc(CFG.url)}"></label>
       <label>DNS delle linee (per i link M3U)<input class="inp mono" id="arDns" value="${esc(s.dns || '')}" placeholder="si imposta da solo alla prima linea"></label><div style="display:flex;align-items:flex-end"><button class="btn sm" id="arCfg">Salva</button></div></div></details>`;
-    if (!s.connected) return `<div class="card glass"><div class="hd"><h3>Collega Armada<small>Con la chiave API ufficiale del tuo account Armada crei e rinnovi le linee da qui</small></h3></div>
+    if (!s.connected) return `<div class="card glass"><div class="hd"><h3>Collega ${N}<small>Con la chiave API ufficiale del tuo account ${N} crei e rinnovi le linee da qui</small></h3></div>
       <ol style="margin:4px 0 0 18px;line-height:1.75;font-size:13.5px">
-        <li>Nel pannello Armada apri il <b>profilo</b> → menu <b>strumenti</b> → genera la <b>chiave API</b> e copiala.</li>
+        <li>Nel pannello ${N} apri il <b>profilo</b> → menu <b>strumenti</b> → genera la <b>chiave API</b> e copiala.</li>
         <li>Su GitHub apri il repository <b>kairos-iptv</b> → <b>Settings</b> → <b>Secrets and variables</b> → <b>Actions</b> → <b>New repository secret</b>.</li>
-        <li>Nome: <code>ARMADA_KEY</code>, valore: la chiave. Salva.</li>
+        <li>Nome: <code>${esc(CFG.secret)}</code>, valore: la chiave. Salva.</li>
         <li>Vai su <b>Actions</b> → <b>Pannello Cloudflare</b> → <b>Run workflow</b>: dopo un minuto qui comparirà «Collegato».</li></ol>
       <p class="mut" style="font-size:12.5px;margin-top:8px">Non scrivere mai la chiave in chat o nel pannello.</p>${s.error ? `<p class="mut">${esc(s.error)}</p>` : ''}${cfg}</div>`;
     const r = s.reseller;
-    return `<div class="card glass"><div class="ar-st"><div style="flex:1;min-width:200px"><b style="font-size:15px">✅ Armada collegato</b><small>${r ? `Account reseller <b>${esc(r.username)}</b>${r.enabled ? '' : ' · <span style="color:var(--bad)">disattivato</span>'}` : esc(s.error || '')}</small></div>
+    return `<div class="card glass"><div class="ar-st"><div style="flex:1;min-width:200px"><b style="font-size:15px">✅ ${N} collegato</b><small>${r ? `Account reseller <b>${esc(r.username)}</b>${r.enabled ? '' : ' · <span style="color:var(--bad)">disattivato</span>'}` : esc(s.error || '')}</small></div>
       ${r ? `<div><small>Crediti</small><span class="cr">${esc(r.credits)}</span></div>` : ''}<button class="btn sm" id="arRe">Aggiorna</button></div>${cfg}</div>`;
   }
 
@@ -88,8 +96,8 @@
     const res = A.last ? resultHtml(A.last) : '';
     const bd = (A.st && A.st.budget) || null, subs = bd && !bd.trial ? SUBS.filter(([v]) => v) : SUBS;
     if (bd && !bd.trial && f.sub === 0) f.sub = 1;
-    const noCr = bd && !bd.left && !bd.trial ? '<p class="mut" style="margin:0 0 12px">⚠️ Questo mese non hai più crediti Armada: chiedi a chi ti gestisce di aumentarli.</p>' : '';
-    return `<div class="card glass"><div class="hd"><h3>Nuova linea<small>${bd ? 'Si crea su Armada con i crediti di chi ti gestisce (entro il tuo tetto del mese).' : 'Si crea su Armada con i tuoi crediti.'} Poi la aggiungi a un cliente${bd ? '' : ' o la registri in «Appunti App»'}.</small></h3>${window.KXQuick ? KXQuick.button('armada') : ''}</div>${noCr}
+    const noCr = bd && !bd.left && !bd.trial ? `<p class="mut" style="margin:0 0 12px">⚠️ Questo mese non hai più crediti ${N}: chiedi a chi ti gestisce di aumentarli.</p>` : '';
+    return `<div class="card glass"><div class="hd"><h3>Nuova linea<small>${bd ? `Si crea su ${N} con i crediti di chi ti gestisce (entro il tuo tetto del mese).` : `Si crea su ${N} con i tuoi crediti.`} Poi la aggiungi a un cliente${bd ? '' : ' o la registri in «Appunti App»'}.</small></h3>${window.KXQuick ? KXQuick.button(K) : ''}</div>${noCr}
       <div class="ar-f">
         <label>Tipo<div class="ar-ch" id="arType"><button type="button" data-t="m3u" class="${f.type === 'm3u' ? 'on' : ''}">Linea M3U / Xtream</button><button type="button" data-t="mag" class="${f.type === 'mag' ? 'on' : ''}">MAG</button></div></label>
         <label style="grid-column:span 2">Durata<div class="ar-ch" id="arSub">${subs.map(([v, l]) => `<button type="button" data-s="${v}" class="${+f.sub === v ? 'on' : ''}">${l}</button>`).join('')}${+f.sub === 0 ? `<select class="inp" id="arH" style="width:auto;padding:5px 8px">${Array.from({ length: 24 }, (_, i) => i + 1).map((h) => `<option value="${h}" ${+f.htime === h ? 'selected' : ''}>${h} ${h === 1 ? 'ora' : 'ore'}</option>`).join('')}</select>` : ''}</div></label>
@@ -128,7 +136,7 @@
     const row = (x) => {
       const t = TAG[st(x)], id = kind === 'lines' ? 'l' + x.id : 'm' + x.id, vis = A.show.has(id), link = kind === 'lines' ? m3u(x.username, x.password) : '';
       return `<div class="ar-row">
-        <div>${window.KXTools ? KXTools.ck('ar', id, A.sel.has(id)) : ''}${kind === 'lines' ? `<span class="k">Utente</span><div class="ar-v"><span class="mono">${esc(x.username)}</span><button data-arc="u" data-ari="${x.id}" title="Copia">⧉</button></div><span class="k" style="margin-top:4px">Password</span><div class="ar-v"><span class="mono">${vis ? esc(x.password) : '••••••••'}</span><button data-areye="${id}" title="Mostra / nascondi">👁</button><button data-arc="p" data-ari="${x.id}" title="Copia">⧉</button></div>`
+        <div>${window.KXTools ? KXTools.ck(PRE, id, A.sel.has(id)) : ''}${kind === 'lines' ? `<span class="k">Utente</span><div class="ar-v"><span class="mono">${esc(x.username)}</span><button data-arc="u" data-ari="${x.id}" title="Copia">⧉</button></div><span class="k" style="margin-top:4px">Password</span><div class="ar-v"><span class="mono">${vis ? esc(x.password) : '••••••••'}</span><button data-areye="${id}" title="Mostra / nascondi">👁</button><button data-arc="p" data-ari="${x.id}" title="Copia">⧉</button></div>`
           : `<span class="k">MAC</span><div class="ar-v"><span class="mono">${esc(x.mac)}</span><button data-arc="m" data-ari="${x.id}" title="Copia">⧉</button></div>`}</div>
         <div><span class="k">Scadenza</span>${esc(fmtD(x.exp))}<br><span class="mut" style="font-size:12px">${esc(left(x.exp))}</span></div>
         <div><span class="ar-tag ${t[1]}">${t[0]}</span>${x.trial && st(x) !== 'trial' ? '<span class="ar-tag w">prova</span>' : ''}<br><span class="mut" style="font-size:12px">${x.maxConn ? x.maxConn + ' conn.' : ''}${x.country ? ' · ' + esc(x.country) : ''}</span></div>
@@ -136,9 +144,9 @@
         <div class="ar-act">${link ? `<button class="btn sm" data-arlink="${x.id}">Copia link</button>` : ''}${kind === 'lines' && window.KXMxpNew ? `<button class="btn sm" data-armxp="${x.id}" title="Crea il cliente su MaxPlayer con questa linea">MaxPlayer</button>` : ''}${kind === 'lines' && window.KXOxpNew ? `<button class="btn sm" data-aroxp="${x.id}" title="Aggiungi questa linea a un dispositivo OrbixPlay">OrbixPlay</button>` : ''}${kind === 'lines' && window.KXOrcpNew ? `<button class="btn sm" data-arorcp="${x.id}" title="Segna la linea per l'app e prepara il messaggio al cliente">${esc(KXOrcpName())}</button>` : ''}<select class="inp" data-arsub="${id}">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select><button class="btn sm pri" data-arren="${id}">Rinnova</button><button class="btn sm ${x.enabled ? 'danger' : ''}" data-artog="${id}">${x.enabled ? 'Disattiva' : 'Attiva'}</button></div></div>`;
     };
     const cnt = (k) => L.filter((x) => !k || st(x) === k).length;
-    return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><input class="inp" id="arQ" placeholder="Cerca ${kind === 'lines' ? 'utente' : 'MAC'}, note${isAg() ? '' : ', reseller, agente'}…" value="${esc(F.q)}" style="flex:1;min-width:220px;margin:0">${window.KXSort ? KXSort.ui(F, 'ar') : ''}${K ? K.sel('arOn', F.on || '') : ''}</div>
+    return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><input class="inp" id="arQ" placeholder="Cerca ${kind === 'lines' ? 'utente' : 'MAC'}, note${isAg() ? '' : ', reseller, agente'}…" value="${esc(F.q)}" style="flex:1;min-width:220px;margin:0">${window.KXSort ? KXSort.ui(F, PRE) : ''}${K ? K.sel('arOn', F.on || '') : ''}</div>
       <div class="filters" style="margin:0 0 6px">${FL.map(([k, l]) => `<button class="fchip ${F.f === k ? 'on' : ''}" data-arf="${k}">${l}<span>${cnt(k)}</span></button>`).join('')}</div>
-      ${window.KXTools ? KXTools.bar('ar', A.vis.filter((k) => A.sel.has(k)).length, list.length, [['ren', 'Rinnova', 'pri'], ['on', 'Attiva'], ['off', 'Disattiva'], ...(kind === 'lines' ? [['msg', 'Messaggio ai clienti']] : [])]) + (A.stOn ? statsHtml(L, st) : '') : ''}
+      ${window.KXTools ? KXTools.bar(PRE, A.vis.filter((k) => A.sel.has(k)).length, list.length, [['ren', 'Rinnova', 'pri'], ['on', 'Attiva'], ['off', 'Disattiva'], ...(kind === 'lines' ? [['msg', 'Messaggio ai clienti']] : [])]) + (A.stOn ? statsHtml(L, st) : '') : ''}
       ${list.length ? list.slice(0, A.limit).map(row).join('') : `<p class="mut" style="padding:12px 0">${L.length ? 'Nessuna con questi filtri.' : 'Ancora niente.'}</p>`}
       ${list.length > A.limit ? `<button class="btn sm" id="arMore" style="margin-top:10px">Mostra altre ${Math.min(100, list.length - A.limit)} (${A.limit} su ${list.length})</button>` : ''}`;
   }
@@ -156,12 +164,12 @@
   }
 
   function render() {
-    const V = $('#v-armada'); if (!V) return;
-    if (isAg() && !(((D.me || {}).perms) || {}).armada) { V.innerHTML = '<div class="emptyc">Il pannello Armada non ti è stato concesso: chiedilo a chi ti gestisce.</div>'; return; }
+    const V = document.getElementById(VIEW); if (!V) return;
+    if (isAg() && !(((D.me || {}).perms) || {})[K]) { V.innerHTML = `<div class="emptyc">Il pannello ${N} non ti è stato concesso: chiedilo a chi ti gestisce.</div>`; return; }
     const s = A.st, on = s && s.connected;
     const nL = A.lines && !A.lines.err ? ` <span>${A.lines.length}</span>` : '', nM = A.mags && !A.mags.err ? ` <span>${A.mags.length}</span>` : '';
     if (isAg() && A.tab === 'res') A.tab = 'new';
-    const body = !on ? '' : A.tab === 'new' ? newHtml() : `<div class="card glass"><div class="hd"><h3>${A.tab === 'lines' ? 'Linee' : A.tab === 'mags' ? 'MAG' : 'Sotto-reseller'}<small>${A.tab === 'res' ? 'I reseller sotto il tuo account Armada' : isAg() ? 'Solo quelle create da te: i rinnovi usano i crediti del tuo tetto mensile' : 'Dal tuo account Armada: rinnovi e attivazioni usano i tuoi crediti'}</small></h3><button class="btn sm" id="arReT">Aggiorna</button></div>${A.tab === 'res' ? resHtml() : listHtml(A.tab)}</div>`;
+    const body = !on ? '' : A.tab === 'new' ? newHtml() : `<div class="card glass"><div class="hd"><h3>${A.tab === 'lines' ? 'Linee' : A.tab === 'mags' ? 'MAG' : 'Sotto-reseller'}<small>${A.tab === 'res' ? `I reseller sotto il tuo account ${N}` : isAg() ? 'Solo quelle create da te: i rinnovi usano i crediti del tuo tetto mensile' : `Dal tuo account ${N}: rinnovi e attivazioni usano i tuoi crediti`}</small></h3><button class="btn sm" id="arReT">Aggiorna</button></div>${A.tab === 'res' ? resHtml() : listHtml(A.tab)}</div>`;
     const y = window.scrollY;
     if (on && !A.lines && !A.pL) loadLines().then(render);
     const LS = A.tab === 'mags' && A.mags ? A.mags : A.lines;
@@ -197,10 +205,10 @@
       if (f.type === 'mag' && !f.mac) return toast('Scrivi il MAC del MAG', 1);
       const pn = ((A.pk || []).find((x) => x.id === String(f.pack)) || {}).name || '', dur = f.sub ? (SUBS.find((x) => x[0] === f.sub) || [])[1] : `prova di ${f.htime} ${f.htime === 1 ? 'ora' : 'ore'}`;
       const bd = A.st && A.st.budget, cr = bd ? ` Crediti del tuo tetto ancora disponibili questo mese: <b>${fmtC(bd.left)}</b>.` : A.st && A.st.reseller ? ` Crediti disponibili: <b>${esc(A.st.reseller.credits)}</b>.` : '';
-      if (!(await ask(`Creare ${f.type === 'mag' ? 'il MAG' : 'la linea'} su Armada?`, `<b>${esc(dur)}</b> · pacchetto <b>${esc(pn)}</b>${f.type === 'mag' ? ` · MAC <span class="mono">${esc(f.mac)}</span>` : ''}.${f.sub ? (bd ? ' Usa i crediti di chi ti gestisce.' : ' Usa i tuoi crediti Armada.') : ''}${cr}`, 'Crea'))) return;
+      if (!(await ask(`Creare ${f.type === 'mag' ? 'il MAG' : 'la linea'} su ${N}?`, `<b>${esc(dur)}</b> · pacchetto <b>${esc(pn)}</b>${f.type === 'mag' ? ` · MAC <span class="mono">${esc(f.mac)}</span>` : ''}.${f.sub ? (bd ? ' Usa i crediti di chi ti gestisce.' : ` Usa i tuoi crediti ${N}.`) : ''}${cr}`, 'Crea'))) return;
       const btn = $('#arGo'); btn.disabled = true; btn.textContent = 'Creo…';
       try {
-        A.last = await api('POST', '/admin/armada/new', { type: f.type, sub: f.sub, htime: f.sub ? undefined : f.htime, pack: f.pack, mac: f.type === 'mag' ? f.mac : undefined, country: f.country, adult: f.adult, notes: f.notes });
+        A.last = await api('POST', API + '/new', { type: f.type, sub: f.sub, htime: f.sub ? undefined : f.htime, pack: f.pack, mac: f.type === 'mag' ? f.mac : undefined, country: f.country, adult: f.adult, notes: f.notes });
         toast(f.type === 'mag' ? 'MAG creato' : 'Linea creata'); A.form.mac = ''; A.form.notes = ''; A.lines = A.mags = null; loadState();
       } catch (e) { toast(e.message, 1); }
       render();
@@ -211,7 +219,7 @@
       const t = ($('#arCl').value || '').trim().toLowerCase(); const d = (D.devices || []).find((x) => !x.parent && (((x.name || 'Senza nome') + ' · ' + x.code).toLowerCase() === t || String(x.code).toLowerCase() === t));
       if (!d) return toast('Cliente non trovato: sceglilo dall\'elenco', 1);
       openDrawer(d, false);
-      setTimeout(() => { try { edit.playlists.push({ id: 'p' + Date.now(), name: 'Armada', type: 'xtream', url: '', host: L.host, username: L.username, password: L.password }); renderDrawer(); toast('Linea aggiunta alle playlist: controlla e premi Salva'); } catch (e) { toast('Aggiungila a mano con «Incolla linea»', 1); } }, 60);
+      setTimeout(() => { try { edit.playlists.push({ id: 'p' + Date.now(), name: `${N}`, type: 'xtream', url: '', host: L.host, username: L.username, password: L.password }); renderDrawer(); toast('Linea aggiunta alle playlist: controlla e premi Salva'); } catch (e) { toast('Aggiungila a mano con «Incolla linea»', 1); } }, 60);
     });
     $$('[data-arapp]', V).forEach((b) => (b.onclick = async () => {
       try { await api('POST', '/admin/linked-lines', { app: b.dataset.arapp, username: L.username, password: L.password, dns: L.host, note: A.form.notes || '' }); toast('Registrata in Appunti App su ' + b.dataset.arapp); } catch (e) { toast(e.message, 1); }
@@ -220,24 +228,24 @@
     if ($('#arOn')) $('#arOn').onchange = (e) => { A.F.on = e.target.value; A.limit = 100; render(); };
     const qi = $('#arQ'); if (qi) qi.oninput = () => { A.F.q = qi.value; A.limit = 100; const p = qi.selectionStart; render(); const n = $('#arQ'); n.focus(); n.setSelectionRange(p, p); };
     $$('[data-arf]', V).forEach((b) => (b.onclick = () => { A.F.f = b.dataset.arf; A.limit = 100; render(); }));
-    if (window.KXSort) KXSort.bind(V, A.F, 'ar', () => { A.limit = 100; render(); });
+    if (window.KXSort) KXSort.bind(V, A.F, PRE, () => { A.limit = 100; render(); });
     const more = V.querySelector('#arMore'); if (more) more.onclick = () => { A.limit += 100; render(); };
     const find = (k) => (k[0] === 'l' ? A.lines : A.mags).find((x) => 'lm'[k[0] === 'l' ? 0 : 1] + x.id === k) || {};
     $$('[data-arc]', V).forEach((b) => (b.onclick = () => { const k = (A.tab === 'lines' ? 'l' : 'm') + b.dataset.ari, x = find(k); copy(b.dataset.arc === 'u' ? x.username : b.dataset.arc === 'p' ? x.password : x.mac, b.dataset.arc === 'u' ? 'Utente' : b.dataset.arc === 'p' ? 'Password' : 'MAC'); }));
     $$('[data-areye]', V).forEach((b) => (b.onclick = () => { const k = b.dataset.areye; A.show.has(k) ? A.show.delete(k) : A.show.add(k); render(); }));
     $$('[data-arlink]', V).forEach((b) => (b.onclick = () => { const x = find('l' + b.dataset.arlink); copy(m3u(x.username, x.password), 'Link M3U'); }));
-    $$('[data-arorcp]', V).forEach((b) => (b.onclick = () => { const x = find('l' + b.dataset.arorcp); KXOrcpNew({ user: x.username, pass: x.password, name: x.username, note: 'Armada #' + b.dataset.arorcp, panel: 'armada' }); }));
-    $$('[data-armxp],[data-aroxp]', V).forEach((b) => (b.onclick = () => { const id = b.dataset.armxp || b.dataset.aroxp, x = find('l' + id), pre = { user: x.username, pass: x.password, name: x.username, note: 'Armada #' + id }; b.dataset.armxp ? KXMxpNew(pre) : KXOxpNew(pre); }));
+    $$('[data-arorcp]', V).forEach((b) => (b.onclick = () => { const x = find('l' + b.dataset.arorcp); KXOrcpNew({ user: x.username, pass: x.password, name: x.username, note: `${N} #` + b.dataset.arorcp, panel: K }); }));
+    $$('[data-armxp],[data-aroxp]', V).forEach((b) => (b.onclick = () => { const id = b.dataset.armxp || b.dataset.aroxp, x = find('l' + id), pre = { user: x.username, pass: x.password, name: x.username, note: `${N} #` + id }; b.dataset.armxp ? KXMxpNew(pre) : KXOxpNew(pre); }));
     $$('[data-arren]', V).forEach((b) => (b.onclick = async () => {
       const k = b.dataset.arren, x = find(k), sub = +$(`[data-arsub="${k}"]`).value, who = k[0] === 'l' ? x.username : x.mac;
       const bd = A.st && A.st.budget;
-      if (!(await ask('Rinnovare su Armada?', `<b>${esc(who)}</b> di <b>${sub} ${sub === 1 ? 'mese' : 'mesi'}</b>. ${bd ? `Usa i crediti del tuo tetto (ne restano ${fmtC(bd.left)} questo mese).` : 'Usa i tuoi crediti Armada.'}`, 'Rinnova'))) return;
-      try { const r = await api('POST', '/admin/armada/renew', k[0] === 'l' ? { type: 'm3u', username: x.username, password: x.password, sub } : { type: 'mag', mac: x.mac, sub }); if (r.exp) x.exp = r.exp; toast('Rinnovata' + (r.exp ? ' fino al ' + fmtD(r.exp) : '')); loadState(); loadTab(true); } catch (e) { toast(e.message, 1); }
+      if (!(await ask(`Rinnovare su ${N}?`, `<b>${esc(who)}</b> di <b>${sub} ${sub === 1 ? 'mese' : 'mesi'}</b>. ${bd ? `Usa i crediti del tuo tetto (ne restano ${fmtC(bd.left)} questo mese).` : `Usa i tuoi crediti ${N}.`}`, 'Rinnova'))) return;
+      try { const r = await api('POST', API + '/renew', k[0] === 'l' ? { type: 'm3u', username: x.username, password: x.password, sub } : { type: 'mag', mac: x.mac, sub }); if (r.exp) x.exp = r.exp; toast('Rinnovata' + (r.exp ? ' fino al ' + fmtD(r.exp) : '')); loadState(); loadTab(true); } catch (e) { toast(e.message, 1); }
     }));
     $$('[data-artog]', V).forEach((b) => (b.onclick = async () => {
       const x = find(b.dataset.artog), on = !x.enabled;
-      if (!on && !(await ask('Disattivare su Armada?', `<b>${esc(x.username || x.mac)}</b> smette di funzionare finché non la riattivi.`, 'Disattiva'))) return;
-      try { await api('POST', '/admin/armada/toggle', { id: x.id, enabled: on }); x.enabled = on; toast(on ? 'Attivata' : 'Disattivata'); render(); } catch (e) { toast(e.message, 1); }
+      if (!on && !(await ask(`Disattivare su ${N}?`, `<b>${esc(x.username || x.mac)}</b> smette di funzionare finché non la riattivi.`, 'Disattiva'))) return;
+      try { await api('POST', API + '/toggle', { id: x.id, enabled: on }); x.enabled = on; toast(on ? 'Attivata' : 'Disattivata'); render(); } catch (e) { toast(e.message, 1); }
     }));
   }
 
@@ -254,7 +262,7 @@
   function exportCsv() {
     const S = selX(), V = new Set(A.vis), p = A.tab === 'lines' ? 'l' : 'm', L = S.length ? S : ((A.tab === 'lines' ? A.lines : A.mags) || []).filter((x) => V.has(p + x.id));
     const ln = A.tab === 'lines';
-    KXTools.csv(ln ? 'armada-linee' : 'armada-mag', [['ID', (x) => x.id], ...(ln ? [['Utente', (x) => x.username], ['Password', (x) => x.password]] : [['MAC', (x) => x.mac]]),
+    KXTools.csv(K + (ln ? '-linee' : '-mag'), [['ID', (x) => x.id], ...(ln ? [['Utente', (x) => x.username], ['Password', (x) => x.password]] : [['MAC', (x) => x.mac]]),
       ['Scadenza', (x) => KXTools.day(x.exp)], ['Stato', (x) => (!x.enabled ? 'Disattivata' : x.exp && x.exp < Date.now() ? 'Scaduta' : 'Attiva')], ['Prova', (x) => (x.trial ? 'sì' : '')],
       ['Connessioni', (x) => x.maxConn || ''], ['Paese', (x) => x.country], ['Ultima attività', (x) => x.lastActivity], ['Note', (x) => x.notes], ['Reseller', (x) => x.by || x.owner],
       ...(ln ? [['Link M3U', (x) => m3u(x.username, x.password)]] : [])], L);
@@ -262,30 +270,30 @@
   async function bulkRen() {
     const S = selX(); if (!S.length) return;
     const bd = A.st && A.st.budget;
-    const ok = await ask(`Rinnovare ${S.length} ${A.tab === 'lines' ? (S.length === 1 ? 'linea' : 'linee') : 'MAG'} su Armada?`, `<label class="lbl">Durata per tutte</label><select class="inp" id="abS">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select>
+    const ok = await ask(`Rinnovare ${S.length} ${A.tab === 'lines' ? (S.length === 1 ? 'linea' : 'linee') : 'MAG'} su ${N}?`, `<label class="lbl">Durata per tutte</label><select class="inp" id="abS">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select>
       <p style="margin:12px 0 0;font-size:13.5px">Costa come <b>${S.length === 1 ? '1 rinnovo singolo' : S.length + ' rinnovi singoli'}</b>. ${bd ? `Usa i crediti del tuo tetto (ne restano ${fmtC(bd.left)} questo mese).` : A.st && A.st.reseller ? `Crediti disponibili: <b>${esc(A.st.reseller.credits)}</b>.` : ''}</p>
       <p class="mut" style="font-size:12.5px;margin:6px 0 0">${S.slice(0, 12).map((x) => esc(who(x))).join(', ')}${S.length > 12 ? ` e altre ${S.length - 12}` : ''}</p>`, 'Rinnova tutte');
     if (!ok) return;
-    const sub = +$('#abS').value;
-    await KXTools.run(S, async (x) => { const r = await api('POST', '/admin/armada/renew', x.mac && !x.username ? { type: 'mag', mac: x.mac, sub } : { type: 'm3u', username: x.username, password: x.password, sub }); if (r.exp) x.exp = r.exp; }, 'Rinnovo');
+    const sub = +Q('#abS').value;
+    await KXTools.run(S, async (x) => { const r = await api('POST', API + '/renew', x.mac && !x.username ? { type: 'mag', mac: x.mac, sub } : { type: 'm3u', username: x.username, password: x.password, sub }); if (r.exp) x.exp = r.exp; }, 'Rinnovo');
     A.sel.clear(); loadState(); render();
   }
   async function bulkTgl(on) {
     const S = selX().filter((x) => !!x.enabled !== on);
     if (!S.length) return toast(on ? 'Sono già tutte attive' : 'Sono già tutte disattivate');
-    if (!(await ask(`${on ? 'Attivare' : 'Disattivare'} ${S.length} su Armada?`, on ? 'Tornano a funzionare.' : 'Smettono di funzionare finché non le riattivi.', on ? 'Attiva' : 'Disattiva'))) return;
-    await KXTools.run(S, async (x) => { await api('POST', '/admin/armada/toggle', { id: x.id, enabled: on }); x.enabled = on; }, on ? 'Attivazione' : 'Disattivazione');
+    if (!(await ask(`${on ? 'Attivare' : 'Disattivare'} ${S.length} su ${N}?`, on ? 'Tornano a funzionare.' : 'Smettono di funzionare finché non le riattivi.', on ? 'Attiva' : 'Disattiva'))) return;
+    await KXTools.run(S, async (x) => { await api('POST', API + '/toggle', { id: x.id, enabled: on }); x.enabled = on; }, on ? 'Attivazione' : 'Disattivazione');
     A.sel.clear(); render();
   }
-  const bindTools = (V) => window.KXTools && (A.tab === 'lines' || A.tab === 'mags') && KXTools.bind(V, 'ar', A.sel, () => A.vis, { ren: bulkRen, on: () => bulkTgl(true), off: () => bulkTgl(false), csv: exportCsv,
+  const bindTools = (V) => window.KXTools && (A.tab === 'lines' || A.tab === 'mags') && KXTools.bind(V, PRE, A.sel, () => A.vis, { ren: bulkRen, on: () => bulkTgl(true), off: () => bulkTgl(false), csv: exportCsv,
     msg: () => { const S = selX(); KXTools.msg(KXTools.devsFor(S.map((x) => x.username)), S.length); }, stats: () => { A.stOn = !A.stOn; render(); } }, render);
 
-  setTimeout(() => window.KXOnline && KXOnline.watch('v-armada', () => !!(A.F && A.F.on), render), 0);
+  setTimeout(() => window.KXOnline && KXOnline.watch(VIEW, () => !!(A.F && A.F.on), render), 0);
   const v0 = view;
-  window.view = view = function (v) { v0(v); if (v === 'armada') { render(); loadState().then(() => loadTab()); } };
+  window.view = view = function (v) { v0(v); if (v === K) { render(); loadState().then(() => loadTab()); } };
 
   // demo
-  if (typeof DEMO !== 'undefined') {
+  if (K === 'armada' && typeof DEMO !== 'undefined') {
     const dm = demoApi, t = Date.now(), r6 = () => Math.random().toString(36).slice(2, 8);
     const DA = { credits: 42.5, lines: [
       { id: 456, username: 'rossi_m', password: 'Rx8-2210', enabled: true, exp: t + 120 * 864e5, created: t - 240 * 864e5, owner: 'kairos_res', notes: 'Marco Rossi', trial: false, maxConn: 1, country: 'IT', isp: 'TIM', lastActivity: '2026-11-04 20:12:00', lastIp: '' },
@@ -318,4 +326,7 @@
       return dm(m, p, b);
     };
   }
+};
+mkArmadaLike({ k: 'armada', name: 'Armada', pre: 'ar', secret: 'ARMADA_KEY', url: 'https://ts-spain.xyz/api.php' });
+mkArmadaLike({ k: 'storm', name: 'Storm', pre: 'st', secret: 'STORM_KEY', url: 'https://storm-panel.pro/api.php', after: 'armada' });
 })();

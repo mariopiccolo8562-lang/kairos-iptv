@@ -183,7 +183,7 @@ body.agent .foot{display:none}
     ['reports', 'Segnalazioni', 'Dei suoi clienti', 'reports'], ['contentReq', 'Richieste contenuti', 'Dei suoi clienti', 'creq'], ['addonReq', 'Richieste temi', 'Assegna solo gli add-on che gli concedi', 'areq'],
     ['messages', 'Messaggi', 'Solo ai suoi clienti, mai a tutti', 'msgs'], ['store', 'Download store: accettare le richieste', 'Solo per le app che scegli qui sotto (le impostazioni restano tue)', 'store'],
     ['storeAll', 'Download store: vedere anche i download degli altri', 'Se spento nello storico vede solo quelli approvati da lui', ''],
-    ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['dlcodes', 'Codici downloader', 'Le app da far installare ai clienti (solo da copiare)', 'dlc'], ['appstore', 'APP Store', 'Le app per caricare le liste: solo quelle che scegli qui sotto, in sola lettura', 'apps3'], ['appsOp', 'OrbixPlay e MaxPlayer', 'Codici cliente e liste create dei suoi clienti', 'agop'], ['appk', 'App Kairos', 'Link e codici Downloader delle app Kairos che scegli', 'agk'], ['lines', 'Linee collegate', 'Il registro delle linee collegate alle app: solo le sue', 'lines'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', ''], ['armada', 'Pannello Armada', 'Con i tuoi crediti, entro il tetto mensile', 'armada']];
+    ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['dlcodes', 'Codici downloader', 'Le app da far installare ai clienti (solo da copiare)', 'dlc'], ['appstore', 'APP Store', 'Le app per caricare le liste: solo quelle che scegli qui sotto, in sola lettura', 'apps3'], ['appsOp', 'OrbixPlay e MaxPlayer', 'Codici cliente e liste create dei suoi clienti', 'agop'], ['appk', 'App Kairos', 'Link e codici Downloader delle app Kairos che scegli', 'agk'], ['lines', 'Linee collegate', 'Il registro delle linee collegate alle app: solo le sue', 'lines'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', ''], ['armada', 'Pannello Armada', 'Con i tuoi crediti, entro il tetto mensile', 'armada'], ['storm', 'Pannello Storm', 'Con i tuoi crediti Storm, entro il tetto che decidi', 'storm']];
   FP.push(['wolf', 'Pannello WOLF', 'Con il suo account reseller WOLF: sue linee e suoi crediti', 'wolf'], ['mxp', 'Pannello MaxPlayer', 'Solo i clienti del suo agente MaxPlayer', 'mxp'], ['oxp', 'Pannello OrbixPlay', 'Solo le playlist dei suoi clienti', 'oxp'], ['ro', 'Pannello Realott', 'Con il suo account sub-reseller Realott: sue linee e suoi crediti', 'ro'], ['slt', 'Pannello SLT', 'Con il suo account sub-reseller SLT: sue linee e suoi crediti', 'slt']);
   const PERM_VIEW = Object.fromEntries(FP.map(([k, , , v]) => [v, k]));
   const isAgent = () => D.role === 'agent';
@@ -206,7 +206,7 @@ body.agent .foot{display:none}
   // Le voci che un agente non può usare restano nascoste; una sezione senza voci non compare.
   const GROUPS = [
     ['', ['dash', 'devices', 'live', 'agents', 'msgs']],
-    ['Linee e pannelli', ['conn', 'lmap', 'lines', 'dns', 'armada', 'wolf', 'ro', 'slt', 'orcp', 'mxp', 'oxp', 'ora', 'atx']],
+    ['Linee e pannelli', ['conn', 'lmap', 'lines', 'dns', 'armada', 'storm', 'wolf', 'ro', 'slt', 'orcp', 'mxp', 'oxp', 'ora', 'atx']],
     ['App e Store', ['store', 'apps3', 'apps3op', 'agop', 'xlist', 'dlc', 'appk', 'agk']],
     ['Richieste e controllo', ['reports', 'creq', 'areq', 'reqai', 'rctl', 'apperr', 'activity', 'trash', 'vod']],
     ['Impostazioni', ['set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'sec']],
@@ -259,7 +259,7 @@ body.agent .foot{display:none}
   // agente: le pagine senza permesso non chiamano nemmeno il server (prima ogni 20-30 s partivano richieste destinate al «non consentito»)
   const AG_NEED = [[/^\/admin\/requests.*[?&]kind=content/, 'contentReq'], [/^\/admin\/requests.*[?&]kind=addon/, 'addonReq'], [/^\/admin\/requests.*[?&]kind=ai/, 'ai'],
     [/^\/admin\/requests(\?(?!.*kind=)|\?.*kind=report|$)/, 'reports'], [/^\/admin\/app-errors/, 'errors'], [/^\/admin\/presence/, 'online'], [/^\/admin\/catalog/, 'vod'], [/^\/admin\/apps3\/lists/, 'appsOp'],
-    [/^\/admin\/ext-lists/, 'players'], [/^\/admin\/linked-lines/, 'lines'], [/^\/admin\/agent-maint/, 'maint'], [/^\/admin\/armada\//, 'armada'], [/^\/admin\/wolf\//, 'wolf'], [/^\/admin\/mxp\//, 'mxp'], [/^\/admin\/oxp\//, 'oxp'], [/^\/admin\/ro\//, 'ro'], [/^\/admin\/slt\//, 'slt']];
+    [/^\/admin\/ext-lists/, 'players'], [/^\/admin\/linked-lines/, 'lines'], [/^\/admin\/agent-maint/, 'maint'], [/^\/admin\/armada\//, 'armada'], [/^\/admin\/storm\//, 'storm'], [/^\/admin\/wolf\//, 'wolf'], [/^\/admin\/mxp\//, 'mxp'], [/^\/admin\/oxp\//, 'oxp'], [/^\/admin\/ro\//, 'ro'], [/^\/admin\/slt\//, 'slt']];
   const agDenied = (m, p) => { if (!isAgent() || !D.me || !D.me.perms || m !== 'GET') return false; const x = AG_NEED.find(([re]) => re.test(p)); return !!x && !D.me.perms[x[1]]; };
   const origApi = api;
   window.api = api = async function (m, p, b) {
@@ -281,7 +281,7 @@ body.agent .foot{display:none}
   // «Online ora» è solo del titolare: mostra tutti i clienti del pannello. «Download store» è di tutti gli agenti: lì hanno
   // il loro codice venditore, i loro store e le richieste che arrivano da quegli store (prima serviva un permesso, spento di serie)
   const agentCan = (v) => v !== 'live' && (v === 'store' || (!!PERM_VIEW[v] && can(PERM_VIEW[v])));
-  const OWNER_ONLY = ['dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'storesum', 'dns', 'apps3', 'lines', 'armada', 'wolf', 'mxp', 'oxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity', 'ora', 'atx', 'ro', 'slt', 'orcp']; // ora/atx/ro/slt/orcp: solo titolare (il server risponde 403 agli agenti)
+  const OWNER_ONLY = ['dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'storesum', 'dns', 'apps3', 'lines', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity', 'ora', 'atx', 'ro', 'slt', 'orcp']; // ora/atx/ro/slt/orcp: solo titolare (il server risponde 403 agli agenti)
   let modeSet = '';
   function applyMode() {
     const ag = isAgent();
@@ -490,7 +490,7 @@ body.agent .foot{display:none}
         <td><b class="mono" title="Il cliente lo scrive nella richiesta dello Store: la richiesta arriva a questo agente (tu la vedi nel pannello, senza avvisi salvo l\'opzione in Approvazione)">${esc(a.storeCode || '—')}</b>${a.stores !== undefined ? `<small title="Store attivati con il suo codice (tetto deciso da te)">${a.stores} store${a.storeMax !== null && a.storeMax !== undefined ? ' / ' + a.storeMax : ''}</small>` : ''}</td>
         <td><b>${a.clients}</b><small>Limite: ${a.maxClients}</small><div class="ag-bar2"><s style="width:${pct}%"></s></div><button type="button" class="btn sm ag-cl" data-agcl="${a.id}" title="Apre Clienti con solo i clienti di ${esc(a.username)}">👥 Vedi i suoi clienti</button></td>
         <td class="hm">${a.subAgents}</td>
-        <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span>${(a.perms || {}).armada ? '<br><span class="chip" style="margin-top:4px">Armada</span>' : ''}${(a.perms || {}).wolf ? '<br><span class="chip" style="margin-top:4px">WOLF</span>' : ''}${(a.perms || {}).mxp ? '<br><span class="chip" style="margin-top:4px">MaxPlayer</span>' : ''}${(a.perms || {}).oxp ? '<br><span class="chip" style="margin-top:4px">OrbixPlay</span>' : ''}</td>
+        <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span>${(a.perms || {}).armada ? '<br><span class="chip" style="margin-top:4px">Armada</span>' : ''}${(a.perms || {}).storm ? '<br><span class="chip" style="margin-top:4px">Storm</span>' : ''}${(a.perms || {}).wolf ? '<br><span class="chip" style="margin-top:4px">WOLF</span>' : ''}${(a.perms || {}).mxp ? '<br><span class="chip" style="margin-top:4px">MaxPlayer</span>' : ''}${(a.perms || {}).oxp ? '<br><span class="chip" style="margin-top:4px">OrbixPlay</span>' : ''}</td>
         <td><button type="button" class="btn sm" data-aglink="${a.id}" title="Link personale e codice di accesso">🔗 Link accesso</button></td>
         <td class="dn">${dnsSum(a)}</td>
         <td class="hm">${a.lastSeen ? esc(ago(a.lastSeen)) : '<span class="mut">mai</span>'}</td>
@@ -555,7 +555,7 @@ body.agent .foot{display:none}
     }));
     const pr = ask('Link accesso · ' + a.username, html(), 'Chiudi'); bind(); await pr;
   }
-  const APP_KEYS = ['appstore', 'players', 'appsOp', 'dlcodes', 'appk', 'armada', 'wolf', 'mxp', 'oxp', 'ro', 'slt']; // hanno la loro sezione nell'editor
+  const APP_KEYS = ['appstore', 'players', 'appsOp', 'dlcodes', 'appk', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'ro', 'slt']; // hanno la loro sezione nell'editor
   const KAPPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['prem', 'Kairos Premium'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova'], ['store', 'Kairos Store']];
   const dlcNames = () => (Array.isArray(D.dlCodes) ? D.dlCodes : []).map((x) => [x.name, x.name]);
   // elenco «tutti» + voci singole (['*'] = tutte, anche future); un sotto-agente mai oltre chi lo crea
@@ -644,6 +644,14 @@ body.agent .foot{display:none}
             ${a ? `<p class="ag-armu">Usati questo mese: <b>${armF(a.armadaUsed || 0)}</b>${+P.armadaCredits ? ` su ${armF(P.armadaCredits)}` : ''}</p>` : ''}</div>
         </div>
       </div>
+      <div class="ag-c ag-arm" id="agSt" style="grid-column:1/-1"><h4>⛈️ Pannello Storm</h4><small>Spento di base. Se lo accendi l'agente crea e rinnova linee e MAG su Storm <b>con i tuoi crediti</b>, fino al tetto che decidi qui. Vede e gestisce solo le linee create da lui (e dai suoi sotto-agenti); non vede il tuo saldo né i sotto-reseller. Ogni operazione resta nel registro attività.</small>
+        <div class="ag-armg">
+          <div class="ag-chk">${chk('perm', 'storm', '<b>Può usare il pannello Storm</b>', !!P.armada, topP && !topP.armada, 'Crea, rinnova, attiva e disattiva le sue linee')}${chk('perm', 'stormTrial', '<b>Può creare prove gratuite</b>', !!P.stormTrial, topP && !topP.stormTrial, 'Al massimo 10 al giorno')}</div>
+          <div><label class="lbl" style="margin-top:0">Crediti al mese (tuoi)</label><input class="inp" id="agStC" type="number" min="0" step="0.5" max="${topP ? topP.stormCredits || 0 : 100000}" value="${+P.stormCredits || 0}" ${topP && !topP.armada ? 'disabled' : ''}>
+            <small class="mut" style="display:block;margin-top:6px">0 = nessun credito (solo prove, se concesse). Vale per lui e per i suoi sotto-agenti${topP ? `; tu ne hai ${armF(topP.stormCredits || 0)} al mese` : ''}.</small>
+            ${a ? `<p class="ag-armu">Usati questo mese: <b>${armF(a.stormUsed || 0)}</b>${+P.stormCredits ? ` su ${armF(P.stormCredits)}` : ''}</p>` : ''}</div>
+        </div>
+      </div>
       ${[['ro', 'Realott', '📡'], ['slt', 'SLT', '📡']].map(([k, n, ic]) => `<div class="ag-c ag-arm" id="agEx_${k}" style="grid-column:1/-1"><h4>${ic} Pannello ${n}</h4><small>Spento di base. Se lo accendi l'agente usa ${n} da KAIROS <b>con il suo account sub-reseller ${n}</b>: vede solo le sue linee e i suoi crediti, crea e rinnova scalando <b>i suoi</b> crediti. Non vede il tuo account né il DNS.</small>
         <div class="ag-armg">
           <div class="ag-chk">${chk('perm', k, `<b>Può usare il pannello ${n}</b>`, !!P[k], topP && !topP[k], `Linee, rinnovi e crediti del suo account ${n}`)}</div>
@@ -728,7 +736,7 @@ body.agent .foot{display:none}
       ...($('#agSm') ? { storeMax: $('#agSm').value.trim() === '' ? null : +$('#agSm').value } : {}),
       canAgents: $('#agR input:checked') ? $('#agR input:checked').value === '1' : false,
       servers: $$('#agS [data-srv]').filter((i) => i.checked).map((i) => i.dataset.srv),
-      perms: { ...Object.fromEntries([...FL, ...FP, ['armadaTrial'], ['oxpNew']].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"], .ag-apps [data-perm="${k}"], #agAr [data-perm="${k}"], #agWf [data-perm="${k}"], #agMx [data-perm="${k}"], #agOx [data-perm="${k}"]`) || {}).checked])), armadaCredits: Math.max(0, +(($('#agArC') || {}).value || 0) || 0), dlcAllow: listRead('agDc', 'dlca'), kAllow: listRead('agKa', 'kapp'), orbDns: listRead('agOd', 'odns'), mxDns: listRead('agMd', 'mdns'), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad),
+      perms: { ...Object.fromEntries([...FL, ...FP, ['armadaTrial'], ['stormTrial'], ['oxpNew']].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"], .ag-apps [data-perm="${k}"], #agAr [data-perm="${k}"], #agSt [data-perm="${k}"], #agWf [data-perm="${k}"], #agMx [data-perm="${k}"], #agOx [data-perm="${k}"]`) || {}).checked])), armadaCredits: Math.max(0, +(($('#agArC') || {}).value || 0) || 0), stormCredits: Math.max(0, +(($('#agStC') || {}).value || 0) || 0), dlcAllow: listRead('agDc', 'dlca'), kAllow: listRead('agKa', 'kapp'), orbDns: listRead('agOd', 'odns'), mxDns: listRead('agMd', 'mdns'), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad),
         storeApps: $('#agSa [data-sapp="*"]') && $('#agSa [data-sapp="*"]').checked ? ['*'] : $$('#agSa [data-sapp]').filter((i) => i.checked && i.dataset.sapp !== '*').map((i) => i.dataset.sapp),
         appsAllow: $('#agAa [data-aapp="*"]') && $('#agAa [data-aapp="*"]').checked ? ['*'] : $$('#agAa [data-aapp]').filter((i) => i.checked && i.dataset.aapp !== '*').map((i) => i.dataset.aapp) },
     });

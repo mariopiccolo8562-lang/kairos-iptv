@@ -32,6 +32,10 @@
         T.push(api('GET', '/admin/armada/lines').then((r) => (r.lines || []).forEach((x) => add({ p: 'armada', tab: 'lines', tag: 'ARM', t: x.username, s: [x.notes, x.by || x.owner].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.by, x.owner] }))).catch(() => {}));
         T.push(api('GET', '/admin/armada/mags').then((r) => (r.mags || []).forEach((x) => add({ p: 'armada', tab: 'mags', tag: 'MAG', t: x.mac, s: [x.notes, x.by || x.owner].filter(Boolean).join(' · '), q: x.mac, hay: [x.mac, x.notes, x.by, x.owner] }))).catch(() => {}));
       }
+      if (can('storm')) {
+        T.push(api('GET', '/admin/storm/lines').then((r) => (r.lines || []).forEach((x) => add({ p: 'storm', tab: 'lines', tag: 'STORM', t: x.username, s: [x.notes, x.by || x.owner].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.by, x.owner] }))).catch(() => {}));
+        T.push(api('GET', '/admin/storm/mags').then((r) => (r.mags || []).forEach((x) => add({ p: 'storm', tab: 'mags', tag: 'ST-MAG', t: x.mac, s: [x.notes, x.by || x.owner].filter(Boolean).join(' · '), q: x.mac, hay: [x.mac, x.notes, x.by, x.owner] }))).catch(() => {}));
+      }
       if (can('mxp')) T.push(api('GET', '/admin/mxp/accounts').then(async (r) => {
         for (const a of (r.accounts || []).slice(0, 5)) {
           const u = await api('GET', `/admin/mxp/a/${encodeURIComponent(a.id)}/users`).catch(() => ({ users: [] }));
@@ -53,7 +57,7 @@
   }
 
   const fits = (hay, toks) => toks.every((t) => hay.includes(t));
-  const PK0 = ['wolf', 'armada', 'mxp', 'oxp', 'atx', 'ro', 'slt', 'orcp'], PN0 = ['WOLF', 'Armada', 'MaxPlayer', 'OrbixPlay', 'Atlantix', 'Realott', 'SLT', 'MirkoTeam'];
+  const PK0 = ['wolf', 'armada', 'storm', 'mxp', 'oxp', 'atx', 'ro', 'slt', 'orcp'], PN0 = ['WOLF', 'Armada', 'Storm', 'MaxPlayer', 'OrbixPlay', 'Atlantix', 'Realott', 'SLT', 'MirkoTeam'];
   let items = [], sel = 0, seq = 0;
   function pages(toks) {
     return $$('.nav[data-v]').filter((b) => b.style.display !== 'none' && (b.offsetParent !== null || !!b.closest('#side.m4'))).map((b) => ({ v: b.dataset.v, name: (b.textContent || '').replace(/\d+\s*$/, '').trim() }))
@@ -90,7 +94,7 @@
     if (!q) { dd.classList.remove('on'); if (D.q) { D.q = ''; renderDevices(); } return; }
     const base = [['Clienti', clients(q, toks)], ['Agenti', agents(toks)], ['Pagine', pages(toks)]];
     const PK = PK0, PN = PN0;
-    const ext = q.length >= 3 && (!isAg() || ['wolf', 'armada', 'mxp', 'oxp', 'ro', 'slt'].some(can));
+    const ext = q.length >= 3 && (!isAg() || ['wolf', 'armada', 'storm', 'mxp', 'oxp', 'ro', 'slt'].some(can));
     const extOf = (L) => { const r = L.filter((x) => fits(x.hay, toks)); return PN.map((n, i) => [n, r.filter((x) => x.p === PK[i]).slice(0, 6).map((x) => ({ ...x, k: 'ext' }))]); };
     if (!ext) return draw(base, false);
     const fresh = EXT.t && Date.now() - EXT.t < 180e3;
@@ -99,7 +103,7 @@
     const L = await loadExt(); if (my !== seq) return;
     draw([...base, ...extOf(L)], false);
   }
-  const IN = { wolf: '#wfQ', armada: '#arQ', mxp: '#mxQ', oxp: '#oxQ', atx: '#axQ', ro: '#exQ', slt: '#exQ', orcp: '#orQ' };
+  const IN = { wolf: '#wfQ', armada: '#v-armada #arQ', storm: '#v-storm #arQ', mxp: '#mxQ', oxp: '#oxQ', atx: '#axQ', ro: '#exQ', slt: '#exQ', orcp: '#orQ' };
   async function pick(x) {
     if (!x) return;
     dd.classList.remove('on'); gq.blur();
@@ -109,9 +113,9 @@
     if (x.k === 'agent') return view('agents');
     view(x.p);
     for (let i = 0; i < 60; i++) { // la pagina del pannello si disegna dopo aver scaricato i dati
-      if (x.tab) { const t = document.querySelector(`[data-artab="${x.tab}"]`); if (t && !t.classList.contains('on') && !t.dataset.oxDone) { t.dataset.oxDone = '1'; t.click(); } }
+      if (x.tab) { const t = document.querySelector(`#v-${x.p} [data-artab="${x.tab}"]`); if (t && !t.classList.contains('on') && !t.dataset.oxDone) { t.dataset.oxDone = '1'; t.click(); } }
       const e = document.querySelector(IN[x.p]);
-      if (e && (!x.tab || document.querySelector(`[data-artab="${x.tab}"].on`) || i > 30)) { e.value = x.q; e.dispatchEvent(new Event('input', { bubbles: true })); if (x.p === 'atx') e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); break; } // Atlantix cerca sul server: parte con Invio
+      if (e && (!x.tab || document.querySelector(`#v-${x.p} [data-artab="${x.tab}"].on`) || i > 30)) { e.value = x.q; e.dispatchEvent(new Event('input', { bubbles: true })); if (x.p === 'atx') e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); break; } // Atlantix cerca sul server: parte con Invio
       await new Promise((r) => setTimeout(r, 150));
     }
     document.querySelectorAll('[data-ox-done]').forEach((t) => delete t.dataset.oxDone);

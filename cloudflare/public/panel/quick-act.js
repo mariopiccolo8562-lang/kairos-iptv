@@ -41,10 +41,11 @@
   const appLinks = () => { const a = isAg() ? D.appLinks : D.settings && D.settings.appLinks; return (Array.isArray(a) ? a : []).map((x) => x && x.name).filter((n) => n && !/maxplayer|orbix/i.test(n)); };
 
   const S = { tok: 0, step: 1, panel: '', name: '', wolf: null, arm: null, atx: null, apps: new Set(remembered()), o: {}, line: null, res: null, busy: false };
-  const FX = { atx: 'Atlantix', ro: 'Realott', slt: 'SLT' };
+  const FX = { atx: 'Atlantix', ro: 'Realott', slt: 'SLT' }, ARM = { armada: 'Armada', storm: 'Storm' }; // Armada e Storm: stessa API
   const panels = () => [
     ['wolf', 'WOLF', 'Linea con utente e password', can('wolf')],
     ['armada', 'Armada', 'Linea M3U / Xtream', can('armada')],
+    ['storm', 'Storm', 'Linea M3U / Xtream', can('storm')],
     ['atx', 'Atlantix', 'Il modulo «Crea linea» di Atlantix', !isAg()],
     ['ro', 'Realott', 'Pacchetto Realott (usa crediti)', can('ro')],
     ['slt', 'SLT', 'Pacchetto SLT (usa crediti)', can('slt')],
@@ -74,9 +75,9 @@
     const stale = () => tok !== S.tok;
     try {
       if (p === 'wolf' && !S.wolf) { const cfg = await api('GET', '/admin/wolf/config'); const pk = cfg.set ? await api('GET', '/admin/wolf/packages') : { packages: [] }; if (stale()) return; S.wolf = { cfg, pk: pk.packages || [], credits: pk.credits }; if (!S.o.host && cfg.dns) S.o.host = cfg.dns; }
-      if (p === 'armada' && !S.arm) { const st = await api('GET', '/admin/armada/state'); const pk = st.connected ? (await api('GET', '/admin/armada/packages')).packages || [] : []; if (stale()) return; S.arm = { st, pk }; if (!S.o.host && st.dns) S.o.host = st.dns; }
+      if (ARM[p] && !(S.arm && S.arm.p === p)) { const st = await api('GET', '/admin/' + p + '/state'); const pk = st.connected ? (await api('GET', '/admin/' + p + '/packages')).packages || [] : []; if (stale()) return; S.arm = { p, st, pk }; if (!S.o.host && st.dns) S.o.host = st.dns; }
       if (FX[p] && !S.atx) { const r = await api('GET', '/admin/' + p + '/createform'); if (stale()) return; S.atx = { fields: r.fields || [] }; }
-    } catch (e) { if (!stale()) S[p === 'armada' ? 'arm' : FX[p] ? 'atx' : p] = { err: e.message }; }
+    } catch (e) { if (!stale()) S[ARM[p] ? 'arm' : FX[p] ? 'atx' : p] = { err: e.message }; }
     if (!stale()) draw();
   }
   async function loadApps() {
@@ -93,7 +94,7 @@
       <label>Utente<input class="inp mono" id="qaU" value="${esc(S.o.u || gen(10))}"></label><label>Password<input class="inp mono" id="qaP" value="${esc(S.o.p || gen(10))}"></label>
       <label class="w">Pacchetto (usa crediti WOLF)<select class="inp" id="qaK">${W.pk.map((x) => `<option value="${esc(x.id)}"${String(S.o.pk) === String(x.id) ? ' selected' : ''}>${esc(x.name)} · ${x.credits} credit${x.credits === 1 ? 'o' : 'i'}</option>`).join('')}</select></label></div>
       <p class="mut" style="font-size:12.5px;margin:8px 0 0">Crediti WOLF: <b>${W.credits ?? '—'}</b></p>`;
-    if (p === 'armada' && A) f = A.err ? `<p class="mut">${esc(A.err)}</p>` : !A.st.connected ? `<p class="mut">Armada non è collegato${isAg() ? ': chiedi a chi ti gestisce' : ''}.</p>` : `<div class="qa-f">
+    if (ARM[p] && A) f = A.err ? `<p class="mut">${esc(A.err)}</p>` : !A.st.connected ? `<p class="mut">${ARM[p]} non è collegato${isAg() ? ': chiedi a chi ti gestisce' : ''}.</p>` : `<div class="qa-f">
       <label class="w">Durata<div style="display:flex;gap:6px;flex-wrap:wrap">${SUBS.filter(([s]) => s || !(A.st.budget && !A.st.budget.trial)).map(([s, l]) => `<button type="button" class="btn sm${(S.o.sub ?? 12) === s ? ' pri' : ''}" data-qasub="${s}">${l}</button>`).join('')}</div></label>
       <label>Pacchetto di canali<select class="inp" id="qaK"><option value="">Scegli…</option>${A.pk.map((x) => `<option value="${esc(x.id)}"${String(S.o.pk) === String(x.id) ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
       <label>Paese (facoltativo)<input class="inp" id="qaCo" maxlength="3" value="${esc(S.o.co || '')}" placeholder="IT, oppure ALL"></label>
@@ -114,12 +115,12 @@
   function read1() {
     S.name = v('qaN').trim();
     if (S.panel === 'wolf') Object.assign(S.o, { u: v('qaU').trim(), p: v('qaP'), pk: v('qaK') });
-    if (S.panel === 'armada') Object.assign(S.o, { pk: v('qaK'), co: v('qaCo').trim(), adult: !!v('qaAd') });
+    if (ARM[S.panel]) Object.assign(S.o, { pk: v('qaK'), co: v('qaCo').trim(), adult: !!v('qaAd') });
     if (FX[S.panel] && S.atx && S.atx.fields) { S.o.atx = {}; S.atx.fields.forEach((x, i) => { S.o.atx[x.name] = v('qaX' + i); }); }
   }
   function check1() {
     if (S.panel === 'wolf') { if (!S.wolf || !S.wolf.cfg || !S.wolf.cfg.set) return 'WOLF non è collegato'; if (!S.o.u || !S.o.p) return 'Scrivi utente e password'; if (!S.o.pk) return 'Scegli il pacchetto'; }
-    if (S.panel === 'armada') { if (!S.arm || !S.arm.st || !S.arm.st.connected) return 'Armada non è collegato'; if (!S.o.pk) return 'Scegli il pacchetto di canali'; }
+    if (ARM[S.panel]) { if (!S.arm || S.arm.p !== S.panel || !S.arm.st || !S.arm.st.connected) return ARM[S.panel] + ' non è collegato'; if (!S.o.pk) return 'Scegli il pacchetto di canali'; }
     if (FX[S.panel]) { if (!S.atx || S.atx.err) return FX[S.panel] + ' non è collegato'; const miss = S.atx.fields.find((x) => x.required && x.type !== 'checkbox' && !String(S.o.atx[x.name] || '').trim()); if (miss) return 'Compila «' + miss.label + '»'; }
     return '';
   }
@@ -139,7 +140,7 @@
     const orc = S.orcp ? card('orcp', 'ot', orcpName(), "Il cliente apre l'app, sceglie il server e scrive utente e password della linea", `<label class="l" style="grid-column:1/-1">Server che il cliente sceglie nell'app<select class="inp" id="qaOrS">${(S.orcp.servers || []).map((x) => `<option${(S.o.orcpSrv || S.orcp.map[S.panel] || S.orcp.servers[0]) === x ? ' selected' : ''}>${esc(x)}</option>`).join('') || `<option value="">(nessun server: impostali nel Pannello ${esc(orcpName())})</option>`}</select></label>`, true, '') : '';
     const hostField = () => isAg()
       ? `<label class="l">Server della linea${srvList().length ? `<select class="inp" id="qaH">${srvList().map((x) => `<option value="${esc(x.id)}"${x.id === S.o.srv ? ' selected' : ''}>${esc(x.name || 'Server')}</option>`).join('')}</select>` : '<small class="mut">Nessun server assegnato: chiedi a chi ti gestisce</small>'}</label>`
-      : `<label class="l">DNS della linea<input class="inp mono" id="qaH" list="qaHL" value="${esc(S.o.host)}" placeholder="${S.panel === 'armada' ? 'lo dà Armada alla creazione' : 'http://dns.esempio.com:8080'}"><datalist id="qaHL">${(S.dns || []).map((x) => `<option value="${esc(x.host)}">${esc(x.name || '')}</option>`).join('')}</datalist></label>`;
+      : `<label class="l">DNS della linea<input class="inp mono" id="qaH" list="qaHL" value="${esc(S.o.host)}" placeholder="${ARM[S.panel] ? 'lo dà ' + ARM[S.panel] + ' alla creazione' : 'http://dns.esempio.com:8080'}"><datalist id="qaHL">${(S.dns || []).map((x) => `<option value="${esc(x.host)}">${esc(x.name || '')}</option>`).join('')}</datalist></label>`;
     const kx = card('kairos', 'kx', 'Cliente Kairos', 'App Kairos Pro, TV, Lite, XC…: cliente nuovo o linea aggiunta a uno esistente', `<label class="l">Cliente<select class="inp" id="qaMode"><option value="new"${S.o.mode === 'new' ? ' selected' : ''}>Nuovo cliente</option><option value="ex"${S.o.mode === 'ex' ? ' selected' : ''}>Cliente esistente</option></select></label>
       ${S.o.mode === 'new' ? `<label class="l">Codice sulla TV${isAg() ? '' : ' (vuoto = lo genera KAIROS)'}<input class="inp mono" id="qaCode" maxlength="9" value="${esc(S.o.code)}" placeholder="KXAB-12CD"></label><label class="l">Durata<select class="inp" id="qaMo">${[1, 3, 6, 12].map((m) => `<option value="${m}"${!S.o.date && +S.o.months === m ? ' selected' : ''}>${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}<option value="date"${S.o.date ? ' selected' : ''}>Data precisa…</option></select></label>${S.o.date ? `<label class="l" style="grid-column:1/-1">Scade il<input class="inp" id="qaDate" type="date" value="${esc(S.o.date)}" min="${new Date().toISOString().slice(0, 10)}"></label>` : ''}`
         : `<label class="l">Quale cliente<input class="inp" id="qaDev" list="qaDevL" value="${esc(S.o.dev)}" placeholder="nome o codice"><datalist id="qaDevL">${devList().slice(0, 3000).map((d) => `<option value="${esc((d.name || 'Senza nome') + ' · ' + d.code)}">`).join('')}</datalist></label><div></div>`}
@@ -148,7 +149,7 @@
     const ot = others.length ? `<div class="qa-app${others.some((n) => on('app:' + n)) ? ' on' : ''}"><div class="h" style="cursor:default"><span class="qa-ic ot">APP</span><b>Altre app</b><small>${can('lines') ? 'Si segnano in «Appunti App» con i dati della linea' : 'Serve il permesso «Appunti App»'}</small></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${others.map((n) => `<label class="btn sm${on('app:' + n) ? ' pri' : ''}" style="cursor:pointer"><input type="checkbox" data-qaapp="app:${esc(n)}"${on('app:' + n) ? ' checked' : ''}${can('lines') ? '' : ' disabled'} style="display:none">${esc(n)}</label>`).join('')}</div>
       ${others.some((n) => on('app:' + n)) && !S.apps.has('kairos') ? `<div class="b">${hostField()}</div>` : ''}</div>` : '';
-    return `<p class="mut" style="margin:0 0 12px;font-size:13px">La linea <b>${esc(S.panel === 'wolf' ? 'WOLF' : S.panel === 'armada' ? 'Armada' : FX[S.panel] || S.panel)}</b>${S.name ? ' per <b>' + esc(S.name) + '</b>' : ''} va su: (puoi sceglierne più di una)</p>${mx}${ox}${orc}${kx}${ot}
+    return `<p class="mut" style="margin:0 0 12px;font-size:13px">La linea <b>${esc(S.panel === 'wolf' ? 'WOLF' : ARM[S.panel] || FX[S.panel] || S.panel)}</b>${S.name ? ' per <b>' + esc(S.name) + '</b>' : ''} va su: (puoi sceglierne più di una)</p>${mx}${ox}${orc}${kx}${ot}
       <div class="qa-ft"><button class="btn" id="qaBack">← Indietro</button><span class="sp"></span><button class="btn qa-red" id="qaGo">⚡ Crea e attiva${S.apps.size ? ' (' + S.apps.size + ')' : ''}</button></div>`;
   }
   function read2() {
@@ -180,7 +181,7 @@
   async function createLine() {
     const note = S.name;
     if (S.panel === 'wolf') { const r = await api('POST', '/admin/wolf/lines', { username: S.o.u, password: S.o.p, package: S.o.pk, note }); return { username: S.o.u, password: S.o.p, host: S.o.host || '', ref: r.id ? 'WOLF #' + r.id : 'WOLF' }; }
-    if (S.panel === 'armada') { const sub = S.o.sub ?? 12; const r = await api('POST', '/admin/armada/new', { type: 'm3u', sub, htime: sub ? undefined : 24, pack: S.o.pk, country: S.o.co || '', adult: !!S.o.adult, notes: note }); if (!r.username) throw new Error('Armada non ha restituito utente e password'); if (r.host) S.o.host = r.host; return { username: r.username, password: r.password, host: r.host || S.o.host || '', ref: 'Armada' + (r.userId ? ' #' + r.userId : ''), url: r.url }; }
+    if (ARM[S.panel]) { const sub = S.o.sub ?? 12; const r = await api('POST', '/admin/' + S.panel + '/new', { type: 'm3u', sub, htime: sub ? undefined : 24, pack: S.o.pk, country: S.o.co || '', adult: !!S.o.adult, notes: note }); if (!r.username) throw new Error(ARM[S.panel] + ' non ha restituito utente e password'); if (r.host) S.o.host = r.host; return { username: r.username, password: r.password, host: r.host || S.o.host || '', ref: ARM[S.panel] + (r.userId ? ' #' + r.userId : ''), url: r.url }; }
     const r = await api('POST', '/admin/' + S.panel + '/lines/create', { fields: S.o.atx }); if (!r.username) throw new Error(FX[S.panel] + ' non ha restituito utente e password'); return { username: r.username, password: r.password, host: S.o.host || '', ref: FX[S.panel] };
   }
   async function runApp(k) {

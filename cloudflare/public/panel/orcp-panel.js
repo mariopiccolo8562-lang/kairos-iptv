@@ -11,7 +11,7 @@
   }
   TITLES.orcp = 'Pannello App ORCP';
   const isAg = () => D.role === 'agent';
-  const PANEL_NAME = { wolf: 'WOLF', armada: 'Armada', atx: 'Atlantix', ro: 'Realott', slt: 'SLT' };
+  const PANEL_NAME = { wolf: 'WOLF', armada: 'Armada', storm: 'Storm', atx: 'Atlantix', ro: 'Realott', slt: 'SLT' };
   const TABS = [['conns', 'Connessioni'], ['msgs', 'Messaggi'], ['ann', 'Annuncio'], ['maint', 'Manutenzione'], ['pin', 'PIN parentale'], ['vpn', 'VPN'], ['portals', 'Portali e server'], ['link', 'Collega']];
   const R = { st: null, tab: 'conns', q: '', onlyOn: false, data: {}, err: '', busy: false, edit: null, pin: null, ck: '' };
   const name = () => (R.st && R.st.cfg && R.st.cfg.name) || (R.st && R.st.app && R.st.app.name) || 'App ORCP';
