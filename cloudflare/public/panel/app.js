@@ -1,3 +1,6 @@
+/* Assistenza (il titolare dentro il pannello di un agente): l'agente scelto resta in sessionStorage e la pagina si ricarica,
+   così ogni modulo parte già come agente e non restano dati del titolare (riquadri, cache, ricerche). */
+try { const _as = JSON.parse(sessionStorage.getItem('kxAssist') || 'null'); if (_as && +_as.id) window.__assist = +_as.id; } catch {}
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

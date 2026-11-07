@@ -43,9 +43,10 @@
     const shareTxt = { all: 'la vedono tutti gli agenti', some: `la vedono ${(g.agents || []).length} agenti`, none: 'la vedi solo tu' }[g.share || 'none'];
     if (!G.edit) {
       el.innerHTML = `<div class="gd-h"><div><b style="font-size:16px">📘 ${esc(g.title || 'Guida')}</b>${isAg() ? '' : `<div class="mut" style="font-size:12.5px;margin-top:2px">Guida per te e per i venditori · ${shareTxt}</div>`}</div>
-        ${isAg() ? '' : `<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-g="edit">✏️ Modifica</button></div>`}</div>
+        ${isAg() ? '' : `<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm pri" data-g="share">👥 Mostra ai venditori</button><button class="btn sm" data-g="edit">✏️ Modifica</button></div>`}</div>
         <div class="gd-b">${md(g.text)}</div>`;
       const b = el.querySelector('[data-g="edit"]'); if (b) b.onclick = () => { G.edit = true; render(); };
+      const sh = el.querySelector('[data-g="share"]'); if (sh) sh.onclick = shareDlg;
       return;
     }
     const ags = (D.agents || []).slice().sort((a, b) => String(a.username || '').localeCompare(String(b.username || '')));
@@ -63,6 +64,26 @@
     el.querySelector('[data-g="cancel"]').onclick = () => { G.edit = false; render(); };
     el.querySelector('[data-g="reset"]').onclick = () => { if (!confirm('Rimettere il testo iniziale della guida? Il tuo testo attuale va perso.')) return; $('#gdText').value = g.defText || ''; $('#gdTitle').value = g.defTitle || ''; };
     el.querySelector('[data-g="save"]').onclick = save;
+  }
+
+  /* «Mostra ai venditori»: scegli a chi mostrare la guida senza aprire l'editor (Tutti / solo alcuni, con le spunte) */
+  async function shareDlg() {
+    const g = G.data; if (!g || G.busy) return;
+    if (!(D.agents || []).length) { try { const r = await api('GET', '/admin/agents'); D.agents = r.agents || r.items || r || []; } catch { D.agents = []; } }
+    const ags = (D.agents || []).slice().sort((a, b) => String(a.username || '').localeCompare(String(b.username || ''))), sel = new Set((g.agents || []).map(String));
+    const ck = (v, on) => `<input type="checkbox" value="${esc(String(v))}" ${on ? 'checked' : ''}>`;
+    const html = `<div style="display:grid;gap:8px">
+      <label><input type="radio" name="gsM" value="none" ${!g.share || g.share === 'none' ? 'checked' : ''}> Solo io</label>
+      <label><input type="radio" name="gsM" value="all" ${g.share === 'all' ? 'checked' : ''}> <b>Tutti i venditori</b> (anche quelli che aggiungerai)</label>
+      <label><input type="radio" name="gsM" value="some" ${g.share === 'some' ? 'checked' : ''}> Solo questi venditori:</label>
+      <div id="gsAg" style="display:grid;gap:5px;max-height:240px;overflow:auto;padding-left:22px">${ags.length ? ags.map((a) => `<label style="display:flex;gap:8px;align-items:center">${ck(a.id, sel.has(String(a.id)))}<span class="mono">${esc(a.username || a.name || a.id)}</span>${a.name && a.username ? `<small class="mut">${esc(a.name)}</small>` : ''}</label>`).join('') : '<small class="mut">Non hai ancora venditori: creali in Agenti.</small>'}</div>
+      <p class="mut" style="font-size:12px;margin:0">I venditori vedono la guida nella loro Panoramica, senza il pulsante Modifica.</p></div>`;
+    if (!(await ask('Chi vede la guida', html, 'Salva'))) return;
+    const share = (document.querySelector('[name="gsM"]:checked') || {}).value || 'none', agents = [...document.querySelectorAll('#gsAg input:checked')].map((x) => x.value);
+    G.busy = true;
+    try { const r = await api('PUT', '/admin/guide', { title: g.title, text: g.text, share: share === 'some' && !agents.length ? 'none' : share, agents }); G.data = r.guide; toast(share === 'none' ? 'Guida visibile solo a te' : share === 'all' ? 'Guida mostrata a tutti i venditori' : `Guida mostrata a ${agents.length} venditori`); }
+    catch (e) { toast(e.message, 1); }
+    G.busy = false; render();
   }
 
   async function save() {

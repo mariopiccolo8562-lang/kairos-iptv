@@ -816,16 +816,18 @@ body.agent .foot{display:none}
   }
   const KXAssist = (window.KXAssist = {
     on: () => !!window.__assist,
-    enter(id, name) { window.__assist = id; closePage(); assistBanner(name); toast('Entrato nel pannello di ' + name); load().catch(() => { toast('Assistenza non riuscita', 1); KXAssist.exit(); }); },
-    exit() { if (!window.__assist) return; window.__assist = null; const b = document.getElementById('assistBar'); if (b) b.remove(); document.body.style.paddingTop = ''; load(); toast('Uscito dall\'assistenza'); },
+    // entra/esci ricaricando la pagina: così tutti i moduli ripartono come l'agente (o come titolare) senza residui dell'altro pannello
+    enter(id, name) { try { sessionStorage.setItem('kxAssist', JSON.stringify({ id, name })); } catch {} window.__assist = id; toast('Entro nel pannello di ' + name + '…'); setTimeout(() => location.reload(), 300); },
+    exit() { if (!window.__assist) return; try { sessionStorage.removeItem('kxAssist'); } catch {} window.__assist = null; toast('Torno al tuo pannello…'); setTimeout(() => location.reload(), 300); },
   });
+  try { const _as = JSON.parse(sessionStorage.getItem('kxAssist') || 'null'); if (_as && window.__assist === +_as.id) assistBanner(_as.name || ('#' + _as.id)); } catch {}
 
   // sessione scaduta o uscita durante l'assistenza: si torna sempre al proprio pannello al prossimo accesso
   const origLogout = logout;
   window.logout = logout = function () { if (window.__assist) return KXAssist.exit(); return origLogout.apply(this, arguments); };
   if ($('#logout')) $('#logout').onclick = logout;
   const origShowLogin = showLogin;
-  window.showLogin = showLogin = function () { if (window.__assist) { window.__assist = null; const b = document.getElementById('assistBar'); if (b) b.remove(); document.body.style.paddingTop = ''; } return origShowLogin.apply(this, arguments); };
+  window.showLogin = showLogin = function () { if (window.__assist) { window.__assist = null; try { sessionStorage.removeItem('kxAssist'); } catch {} const b = document.getElementById('assistBar'); if (b) b.remove(); document.body.style.paddingTop = ''; } return origShowLogin.apply(this, arguments); };
 
   layoutMenu();
   if ($('#app').classList.contains('on')) renderAll();
