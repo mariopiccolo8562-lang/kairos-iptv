@@ -2843,14 +2843,17 @@ async function xtreamGet(src, action) {
 /** catalogo normalizzato e già in cache: {cats:[{id,name}], items:[{id,name,year,cat,poster,rating,added}]} */
 async function xtreamCatalog(src, kind) {
   return cachedJson(`catalog/${src.key}/${kind}`, async () => {
-    const [cats, items] = await Promise.all([xtreamGet(src, kind === 'series' ? 'get_series_categories' : 'get_vod_categories'), xtreamGet(src, kind === 'series' ? 'get_series' : 'get_vod_streams')]);
+    const ACT = { series: ['get_series_categories', 'get_series'], live: ['get_live_categories', 'get_live_streams'], movies: ['get_vod_categories', 'get_vod_streams'] }[kind] || ['get_vod_categories', 'get_vod_streams'];
+    const [cats, items] = await Promise.all([xtreamGet(src, ACT[0]), xtreamGet(src, ACT[1])]);
     const okUrl = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u.slice(0, 500) : '');
     const s = (v, n) => (v === undefined || v === null ? '' : String(v).slice(0, n));
     return {
       cats: cats.map((c) => ({ id: s(c.category_id, 20), name: nameClean(c.category_name, 60) || 'Altro' })).filter((c) => c.id),
       items: items.map((x) => (kind === 'series'
         ? { id: s(x.series_id, 20), name: nameClean(x.name, 160), year: (s(x.releaseDate || x.release_date, 10).match(/^\d{4}/) || [yearOf(x.name)])[0] || '', cat: s(x.category_id, 20), poster: okUrl(x.cover), rating: num(x.rating_5based ? x.rating_5based * 2 : x.rating, 0, 10), added: +x.last_modified || 0 }
-        : { id: s(x.stream_id, 20), name: nameClean(x.name, 160), year: yearOf(x.name) || '', cat: s(x.category_id, 20), poster: okUrl(x.stream_icon), rating: num(x.rating_5based ? x.rating_5based * 2 : x.rating, 0, 10), added: +x.added || 0 })).filter((x) => x.id && x.name),
+        : kind === 'live'
+          ? { id: s(x.stream_id, 20), name: nameClean(x.name, 160), year: '', cat: s(x.category_id, 20), poster: okUrl(x.stream_icon), rating: 0, added: +x.added || 0, num: +x.num || 0, epg: s(x.epg_channel_id, 60), archive: +x.tv_archive ? +x.tv_archive_duration || 1 : 0 }
+          : { id: s(x.stream_id, 20), name: nameClean(x.name, 160), year: yearOf(x.name) || '', cat: s(x.category_id, 20), poster: okUrl(x.stream_icon), rating: num(x.rating_5based ? x.rating_5based * 2 : x.rating, 0, 10), added: +x.added || 0 })).filter((x) => x.id && x.name),
     };
   });
 }
@@ -2858,7 +2861,7 @@ async function adminCatalog(env, url) {
   const srcs = await catalogSources(env);
   const key = str(url.searchParams.get('src'), 16), src = /^[A-Za-z0-9_-]{16}$/.test(key) ? srcs.get(key) : null;
   if (!src) throw new HttpErr(400, 'Scegli una sorgente');
-  const kind = url.searchParams.get('kind') === 'series' ? 'series' : 'movies';
+  const kind = ['series', 'live'].includes(url.searchParams.get('kind')) ? url.searchParams.get('kind') : 'movies';
   const q = nameClean(url.searchParams.get('q') || '', 80).toLowerCase(), cat = str(url.searchParams.get('cat'), 20);
   const page = Math.max(1, Math.min(10000, parseInt(url.searchParams.get('page') || '1', 10) || 1));
   const data = await xtreamCatalog(src, kind);
