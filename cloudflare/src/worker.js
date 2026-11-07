@@ -1802,7 +1802,8 @@ function dayIT(t = now()) {
   try { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t)); }
   catch { return new Date(t).toISOString().slice(0, 10); }
 }
-const PRESENCE_COLS = ['t', 'hb_t', 'ip', 'ip2', 'ip2_t', 'country', 'city', 'home_country', 'ver', 'ui', 'model', 'state', 'title', 'ch', 'ch_id', 'grp', 'pl', 'prof', 'screen', 'net', 'rssi', 'speed_dl', 'speed_ul', 'speed_ping', 'speed_jit', 'speed_t', 'res', 'fps', 'bitrate', 'buffers', 'dropped', 'engine', 'vpn', 'codec', 'dec', 'stalls_h', 'rec', 'reduced', 'app_cfg', 'rcv', 'bw', 'line', 'dev_class', 'fill', 'ttff', 'stall_ms', 'var', 'fmt'];
+const FG_MS = 3 * 60e3;          // app dichiarata in primo piano: per 3 minuti i battiti di sfondo di un'altra app non contano
+const PRESENCE_COLS = ['fg_app', 'fg_t', 't', 'hb_t', 'ip', 'ip2', 'ip2_t', 'country', 'city', 'home_country', 'ver', 'ui', 'model', 'state', 'title', 'ch', 'ch_id', 'grp', 'pl', 'prof', 'screen', 'net', 'rssi', 'speed_dl', 'speed_ul', 'speed_ping', 'speed_jit', 'speed_t', 'res', 'fps', 'bitrate', 'buffers', 'dropped', 'engine', 'vpn', 'codec', 'dec', 'stalls_h', 'rec', 'reduced', 'app_cfg', 'rcv', 'bw', 'line', 'dev_class', 'fill', 'ttff', 'stall_ms', 'var', 'fmt'];
 /** scrive/aggiorna la riga di presenza con i campi indicati (gli altri restano) */
 async function upsertPresence(env, id, fields) {
   const cols = Object.keys(fields).filter((k) => PRESENCE_COLS.includes(k));
@@ -1914,17 +1915,28 @@ async function playerHeartbeat(req, env, ip, ctx) {
   const accP = activeAccount(env, d), setP = getSettings(env), unP = unseenCount(env, d, d.parent), cmdP = rcPending(env, ctx, d.id);
   for (const x of [accP, setP, unP, cmdP]) x.catch(() => {});
   const old = await env.DB.prepare('SELECT * FROM presence WHERE device_id = ?').bind(d.id).first();
-  // il limite conta solo i battiti (register e inizio visione aggiornano la presenza ma non contano)
-  if (old && t - (+old.hb_t || 0) < HB_MIN_MS) return json({ error: 'Troppi battiti: attendi qualche secondo', wait: Math.ceil((HB_MIN_MS - (t - old.hb_t)) / 1000) }, 429);
+  // vis: l'app dice se è in primo piano (Pro dalla 2.6: true in uso o in visione, false quando va in sfondo); le app vecchie non lo mandano
+  const vis = b.vis === true ? true : b.vis === false ? false : null;
+  // il limite conta solo i battiti (register e inizio visione aggiornano la presenza ma non contano); il «vado in sfondo» passa sempre
+  if (vis !== false && old && t - (+old.hb_t || 0) < HB_MIN_MS) return json({ error: 'Troppi battiti: attendi qualche secondo', wait: Math.ceil((HB_MIN_MS - (t - old.hb_t)) / 1000) }, 429);
   const cf = cfOf(req);
-  { const app = appFrom(req, b); if (app && d.app !== app) ctx.waitUntil(env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(app, d.id).run()); }
-  const state = STATES.includes(b.state) ? b.state : 'idle';
+  const app = appFrom(req, b);
+  const state0 = STATES.includes(b.state) ? b.state : 'idle';
+  // due app Kairos con lo stesso codice (es. Premium lasciata aperta mentre si usa la Pro): il battito di sfondo
+  // dell'altra app non tocca la presenza, che resta dell'app in primo piano; il resto del battito (impostazioni, comandi) vale lo stesso
+  const fgFresh = !!(old && +old.fg_t && t - +old.fg_t < FG_MS && old.fg_app);
+  const bgOther = !!(app && fgFresh && old.fg_app !== app && (vis === false || (vis === null && state0 === 'idle')));
+  if (app && d.app !== app && !bgOther && vis !== false) ctx.waitUntil(env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(app, d.id).run());
+  const state = vis === false ? 'idle' : state0;
   const net = b.net && typeof b.net === 'object' ? b.net : {};
   const sp = b.speed && typeof b.speed === 'object' ? b.speed : null;
   const st = b.stats && typeof b.stats === 'object' ? b.stats : null;
   const f = {
     t, hb_t: t, ...whereFields(old, ip, cf),
     ver: str(b.ver, 20), ui: str(b.ui, 20), model: str(b.model, 80) || (old && old.model) || d.model || '',
+    // primo piano: chi lo dichiara lo prende; chi va in sfondo lo lascia e risulta subito non in linea (t spostato indietro)
+    ...(vis === true ? { fg_app: app, fg_t: t } : {}),
+    ...(vis === false ? { fg_t: 0, t: t - ONLINE_MS - 1000 } : {}),
     state, title: state === 'idle' ? '' : nameClean(b.title, 120), ch: nameClean(b.ch, 80), ch_id: str(b.chId, 60), grp: nameClean(b.group, 60),
     pl: str(b.pl, 40), prof: nameClean(b.prof, 24), screen: str(b.screen, 20),
     net: NETS.includes(net.type) ? net.type : '', rssi: Math.round(num(net.rssi, -120, 0)),
@@ -1941,8 +1953,9 @@ async function playerHeartbeat(req, env, ip, ctx) {
   else if (state === 'idle') Object.assign(f, { res: '', fps: 0, bitrate: 0, buffers: 0, dropped: 0, engine: '', codec: '', dec: '', rec: '', reduced: '', fill: 0, ttff: 0, stall_ms: 0, var: '', fmt: '' });
   // durante la visione l'app batte ogni 20 s (per «Disconnetti»): se non è cambiato niente di importante la riga
   // si riscrive al massimo una volta al minuto, così le scritture su D1 restano quelle di prima
-  const same = old && t - (+old.t || 0) < 55e3 && old.state === state && (old.title || '') === f.title && (old.ch_id || '') === f.ch_id
-    && (old.vpn || '') === f.vpn && (old.screen || '') === f.screen && (old.rcv || '') === (f.rcv || '') && (f.app_cfg === undefined || (old.app_cfg || '') === f.app_cfg) && (old.rec || '') === (f.rec ?? old.rec ?? '') && (old.reduced || '') === (f.reduced ?? old.reduced ?? '') && (+old.stalls_h || 0) === (f.stalls_h ?? +old.stalls_h ?? 0) && (!sp || +old.speed_t === f.speed_t) && (old.ip || '') === (f.ip ?? old.ip ?? '');
+  // bgOther: non si scrive (la presenza resta dell'app in primo piano); «vado in sfondo» (vis false) e cambio di app in primo piano si scrivono sempre
+  const same = bgOther || (old && vis !== false && !(vis === true && old.fg_app !== app) && t - (+old.t || 0) < 55e3 && old.state === state && (old.title || '') === f.title && (old.ch_id || '') === f.ch_id
+    && (old.vpn || '') === f.vpn && (old.screen || '') === f.screen && (old.rcv || '') === (f.rcv || '') && (f.app_cfg === undefined || (old.app_cfg || '') === f.app_cfg) && (old.rec || '') === (f.rec ?? old.rec ?? '') && (old.reduced || '') === (f.reduced ?? old.reduced ?? '') && (+old.stalls_h || 0) === (f.stalls_h ?? +old.stalls_h ?? 0) && (!sp || +old.speed_t === f.speed_t) && (old.ip || '') === (f.ip ?? old.ip ?? ''));
   // la presenza è la cosa che conta: si scrive per prima e un errore qui non fa fallire il battito
   if (!same) { try { await upsertPresence(env, d.id, f); } catch (e) { console.error('presenza non scritta', e && e.message); } }
   // il resto (statistiche) va in sottofondo: non rallenta la risposta e non può bloccarla

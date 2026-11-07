@@ -944,6 +944,7 @@ class MainActivity : ComponentActivity() {
             val p = PlayerActivity.current
             val shown = (p != null && p.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) || MultiActivity.open
             if (shown) js("window.kxHbTick && kxHbTick()")
+            else if (p != null) js("window.kxHbBye && kxHbBye()") // lettore aperto ma non visibile (Home durante la visione): il pannello lo sa subito
             if (p != null || MultiActivity.open) ui.postDelayed(this, 20_000)
         }
     }

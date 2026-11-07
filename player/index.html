@@ -1840,7 +1840,20 @@ function whenIdle(fn, delay = 0, quiet = 2500, maxWait = 90e3) {
 }
 /* lettore o anteprima chiusi: i lavori rimandati ripartono (quando il telecomando è fermo) */
 function jobsResume() { S.viewEndT = Date.now(); for (const j of [...heldJobs]) { clearTimeout(j.t); heldJobs.delete(j); setTimeout(j.tick, 300); } }
-document.addEventListener('visibilitychange', () => { okDown = 0; });
+/* app in sfondo (Home, altra app): niente battiti periodici e un «vado in sfondo» subito, così il pannello non la vede in linea
+   mentre si usa un'altra app Kairos con lo stesso codice; al rientro un battito immediato. Durante la visione i battiti li chiede il nativo. */
+let hbHidden = false;
+function hbBye() {
+  if (S.demo || !baseServer() || S.status !== 'active' || hbHidden) return;
+  hbHidden = true; hbLast = ''; hbT = Date.now();
+  const body = { vis: false, state: 'idle', ver: (NATIVE && NATIVE.version && NATIVE.version()) || 'web', ui: (NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || '' };
+  try {
+    if (hasNativeHttp()) apiPost('/api/player/heartbeat', body).catch(() => {});
+    else fetch(baseServer() + '/api/player/heartbeat', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: S.code, secret: S.secret, ...body }) }).catch(() => {});
+  } catch {}
+}
+window.kxHbBye = () => { if (!document.hidden) return; hbBye(); }; // dal nativo: lettore aperto ma non più visibile (Home durante la visione)
+document.addEventListener('visibilitychange', () => { okDown = 0; if (document.hidden) { if (!S.inPlayer) hbBye(); } else if (hbHidden) { hbHidden = false; hbT = 0; heartbeat(true); } });
 /* frecce: se arrivano più pressioni prima del prossimo frame (tasto tenuto premuto) si fa un solo spostamento multiplo,
    così su Fire TV lo scorrimento resta fluido invece di accumulare ritardo */
 let mvDir = '', mvN = 0, mvRaf = 0;
@@ -6327,6 +6340,8 @@ async function sendPlayEvents() {
 }
 async function heartbeat(force) {
   if (S.demo || !baseServer() || S.status !== 'active' || $('#activate').classList.contains('on')) return;
+  if (document.hidden && !S.inPlayer && !force) return; // in sfondo: niente battiti (il pannello l'ha già vista andare in sfondo)
+  if (!document.hidden || S.inPlayer) hbHidden = false;
   const [state, it] = hbState();
   const sig = state + '|' + (it ? it.id : '');
   const now = Date.now();
@@ -6347,7 +6362,7 @@ async function heartbeat(force) {
   const sp = speedLast && isFinite(speedLast.mbps) ? { dl: +(+speedLast.mbps).toFixed(1), ul: speedLast.ul != null && speedLast.ul >= 0 ? +speedLast.ul.toFixed(1) : null, ping: Math.round(speedLast.ping || 0), jitter: Math.round(speedLast.jitter || 0), t: speedLast.t } : null;
   const body = { state, title: it ? (it.k === 'l' ? (n ? n.title : '') : it.name) : '', ch: it && it.k === 'l' ? it.name : '', chId: it ? it.id : '', group: it ? it.group || '' : '', pl: it ? it.pl || '' : '', prof: S.prof ? S.prof.name : '',
     ver: (NATIVE && NATIVE.version && NATIVE.version()) || 'web', ui: (NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || '', model: (NATIVE && NATIVE.model && NATIVE.model()) || 'browser', screen: ($('.screen.on') || {}).id || '',
-    net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off', cfg: rcSnapshot(), rcv: S.rcv || '', ...(S.kickAck ? { kickAck: S.kickAck } : {}) };
+    net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off', cfg: rcSnapshot(), rcv: S.rcv || '', vis: !document.hidden || !!S.inPlayer, ...(S.kickAck ? { kickAck: S.kickAck } : {}) };
   try {
     const j = await apiPost('/api/player/heartbeat', body); if (!j) return;
     sendPlayEvents();
