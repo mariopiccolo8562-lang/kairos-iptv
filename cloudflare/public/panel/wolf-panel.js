@@ -297,9 +297,13 @@
       if (a === 'ext') {
         await loadPk();
         const ok = await ask('Rinnova ' + l.username, `<label class="lbl">Pacchetto (usa crediti WOLF)</label><select class="inp" id="wxK">${pkOpts()}</select>
+          <label class="lbl" style="margin-top:10px">Nota (nome del cliente, telefono…)</label><input class="inp" id="wxN" maxlength="300" value="${esc(l.note || '')}" placeholder="es. Mario Rossi · 333 1234567">
           <p class="mut" style="font-size:12.5px;margin:10px 0 0">Scadenza attuale: <b>${fmtD(l.exp)}</b>. Crediti disponibili: <b>${(W.data && W.data.credits) ?? '—'}</b>.</p>`, 'Rinnova');
         if (!ok) return;
-        await api('POST', `/admin/wolf/lines/${id}/extend`, { package: $('#wxK').value }); toast('Linea rinnovata su WOLF'); return loadLines(true);
+        const pkg = $('#wxK').value, note = $('#wxN').value.trim();
+        await api('POST', `/admin/wolf/lines/${id}/extend`, { package: pkg });
+        if (note !== String(l.note || '').trim()) await api('PUT', '/admin/wolf/lines/' + id, { note }).catch((e) => toast('Rinnovata, ma la nota non è stata salvata: ' + e.message, 1));
+        toast('Linea rinnovata su WOLF'); return loadLines(true);
       }
       if (a === 'link') {
         const k = linkOf(id);

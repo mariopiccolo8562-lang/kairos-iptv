@@ -127,6 +127,19 @@ const RO = {
     if (b.action === 'toggle') { const j = await this.post(env, H, `/lines/${id}/toggle`); return { what: j.enabled ? 'attivata' : 'sospesa' }; }
     if (b.action === 'kill') { const j = await this.post(env, H, `/lines/${id}/kill`); return { what: `${j.killed || 0} connessioni chiuse` }; }
     if (b.action === 'delete') { await this.post(env, H, `/lines/${id}/delete`); return { what: 'eliminata' }; }
+    if (b.action === 'notes') {
+      /* stesso salvataggio della pagina «Modifica linea» di Realott (line_edit.js): rimandiamo i valori attuali e cambiamo solo le note */
+      const h = await call(this, env, H, `/lines/${id}/edit`, { html: true });
+      const tag = (i) => (h.match(new RegExp('<(?:input|select|textarea)\\b[^>]*\\bid="' + i + '"[^>]*>', 'i')) || [''])[0];
+      const chk = (i) => /\schecked\b/i.test(tag(i)), val = (i) => attr(tag(i), 'value');
+      if (!tag('reseller_notes') || !tag('username')) throw new H.HttpErr(502, 'Realott: pagina della linea non riconosciuta');
+      const member = ((h.match(/<select[^>]*id="member_id"[\s\S]*?<\/select>/i) || [''])[0].match(/<option\b[^>]*\bselected\b[^>]*>/i) || [''])[0];
+      const bq = [...h.matchAll(/<input\b[^>]*\bclass="[^"]*\bbq\b[^"]*"[^>]*>/gi)].map((m) => m[0]);
+      const form = { enabled: chk('enabled') ? 'true' : 'false', reseller_notes: String(b.notes || '').slice(0, 300), username: val('username'), password: val('password'), is_mag: chk('is_mag') ? 'true' : 'false', no_expire: chk('no_expire') ? 'true' : 'false' };
+      if (member) form.member_id = attr(member, 'value'); if (tag('exp_date')) form.exp_date = val('exp_date');
+      if (bq.length) { form.manage_lists = 'true'; form.bouquets = bq.filter((t) => /\schecked\b/i.test(t)).map((t) => attr(t, 'value')); } else form.manage_lists = 'false';
+      await this.post(env, H, `/lines/${id}`, form); return { what: 'note aggiornate' };
+    }
     throw new H.HttpErr(400, 'Operazione sconosciuta');
   },
   async subs(env, H) {
@@ -197,6 +210,19 @@ const SLT = {
     if (b.action === 'toggle') { const en = !!b.enabled; await this.post(env, H, `/lines/${en ? 'enable' : 'disable'}/${id}`, {}); return { what: en ? 'attivata' : 'disattivata' }; }
     if (b.action === 'kill') { await this.post(env, H, `/api/live-connections/kill/${id}`, { type: 'line' }); return { what: 'connessioni chiuse' }; }
     if (b.action === 'delete') { await this.post(env, H, `/lines/${id}`, {}, 'DELETE'); return { what: 'eliminata' }; }
+    if (b.action === 'notes') {
+      /* il modulo «Modifica» di SLT fa PUT /lines/{id} con tutti i campi: rimandiamo quelli attuali e cambiamo solo le note */
+      const h = await call(this, env, H, `/lines/${id}/edit`, { html: true });
+      const i0 = h.indexOf('js-lines-form-resellers'); if (i0 < 0) throw new H.HttpErr(502, 'SLT: pagina della linea non riconosciuta');
+      const f = h.slice(i0, h.indexOf('</form>', i0));
+      const inp = (n) => attr((f.match(new RegExp('<input\\b[^>]*\\bname="' + n.replace(/[[\]]/g, '\\$&') + '"[^>]*>', 'i')) || [''])[0], 'value');
+      const radio = (n) => attr(([...f.matchAll(new RegExp('<input\\b[^>]*\\bname="' + n + '"[^>]*>', 'gi'))].map((m) => m[0]).find((t) => /\schecked\b/i.test(t)) || ''), 'value');
+      const multi = (n) => [...((f.match(new RegExp('<select\\b[^>]*\\bname="' + n.replace(/[[\]]/g, '\\$&') + '"[\\s\\S]*?<\\/select>', 'i')) || [''])[0]).matchAll(/<option\b([^>]*\bselected\b[^>]*)>/gi)].map((m) => attr(m[1], 'value'));
+      const form = { _method: 'PUT', username: inp('username'), password: inp('password'), reseller_notes: String(b.notes || '').slice(0, 300), enabled: radio('enabled') || '1', can_watch_adult: radio('can_watch_adult') || '0', 'bouquet_ids[]': multi('bouquet_ids[]') };
+      for (const n of ['countries', 'allowed_ips', 'allowed_ua', 'allowed_outputs', 'line_lock_types']) { form[n] = inp(n) || ''; const v = multi(n + '[]'); if (v.length) form[n + '[]'] = v; }
+      if (!form.username) throw new H.HttpErr(502, 'SLT: pagina della linea non riconosciuta');
+      await this.post(env, H, `/lines/${id}`, form); return { what: 'note aggiornate' };
+    }
     throw new H.HttpErr(400, 'Operazione sconosciuta');
   },
   async subs(env, H) { const j = await call(this, env, H, '/api/subresellers/list?index=0&size=200&start=0&filters=%5B%5D&sorting=%5B%5D', { ajax: true }); return { rows: (Array.isArray(j.data) ? j.data : []).map((r) => ({ id: r.id, username: r.username || r.name || '', owner: r.owner_name || r.parent_name || '', type: r.role_name || r.type || '', credits: r.credits != null ? r.credits : '', lines: r.lines_count != null ? r.lines_count : r.users_count != null ? r.users_count : '', status: r.enabled === false || r.is_banned ? 'Disattivato' : 'Attivo', enabled: r.enabled !== false && !r.is_banned })) }; },
