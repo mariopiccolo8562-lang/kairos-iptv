@@ -5,7 +5,7 @@
    stesse richieste del pannello web: connessioni, messaggi agli utenti, annuncio, manutenzione, PIN parentale, portali.
    Solo il titolare (Master). 'orcp:cfg' (non segreto): nome app e quale server dell'app corrisponde a ogni pannello KAIROS. */
 const BASE = 'https://cp.ottrun.com';
-const K = 'orcp:ses', KC = 'orcp:cfg';
+const K = 'orcp:ses', KC = 'orcp:cfg', KCONNS = 'orcp:conns';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const PANELS = ['wolf', 'armada', 'atx', 'ro', 'slt'];
 const mem = {};
@@ -178,7 +178,7 @@ export async function ovpnFile(env, path, H) {
   return new Response(o.text, { headers: { 'Content-Type': 'application/x-openvpn-profile; charset=utf-8', 'Content-Disposition': `inline; filename="${(o.name || 'kairos').replace(/[^\w.-]+/g, '_').slice(0, 40)}.ovpn"`, 'Cache-Control': 'no-store' } });
 }
 
-export async function orcpRoutes(req, env, path, who, ip, H) {
+export async function orcpRoutes(req, env, path, who, ip, H, ctx) {
   const m = req.method, { HttpErr, json, str } = H;
   const ids = async () => { const a = await appInfo(env, H); if (!a || !a.appid) throw new HttpErr(502, 'ORCP: app non riconosciuta'); return a; };
   if (path === '/orcp/state' && m === 'GET') {
@@ -198,7 +198,7 @@ export async function orcpRoutes(req, env, path, who, ip, H) {
     else await H.log(env, 'edit', `${who}: pannello ORCP collegato (${app.name || 'app'})`, ip).catch(() => {});
     return json({ ok: true, remember: !!remOf(jar), app: { name: app.name, version: app.version, expires: app.expires } });
   }
-  if (path === '/orcp/session' && m === 'DELETE') { mem.ses = null; mem.conns = null; await delRow(env, K); await H.log(env, 'edit', `${who}: pannello ORCP scollegato`, ip).catch(() => {}); return json({ ok: true }); }
+  if (path === '/orcp/session' && m === 'DELETE') { mem.ses = null; mem.conns = null; await delRow(env, K); await delRow(env, KCONNS).catch(() => {}); await H.log(env, 'edit', `${who}: pannello ORCP scollegato`, ip).catch(() => {}); return json({ ok: true }); }
   if (path === '/orcp/cfg' && m === 'GET') { const cfg = await cfgOf(env); const s = await loadSes(env, H); return json({ cfg: { ...cfg, name: cfg.name || (s && s.app && s.app.name) || '' }, servers: s && s.servers ? s.servers : [] }); }
   if (path === '/orcp/cfg' && m === 'PUT') {
     const b = await H.readJSON(req, 8192), cfg = cfgNorm({ name: b.name, map: b.map });
@@ -209,8 +209,15 @@ export async function orcpRoutes(req, env, path, who, ip, H) {
   if (path === '/orcp/data' && m === 'GET') {
     const w = new URL(req.url).searchParams.get('w') || '';
     if (w === 'conns') {
-      if (!mem.conns || Date.now() - mem.conns.at > 60e3 || new URL(req.url).searchParams.get('fresh')) { const [list, vers] = await Promise.all([connections(env, H), versions(env, H).catch(() => [])]); mem.conns = { at: Date.now(), list, vers }; }
-      const c = mem.conns; return json({ list: c.list, online: c.list.filter((x) => x.online).length, versions: c.vers, at: c.at });
+      /* ORCP ci mette 15-20 s a rispondere: l'ultima lista resta salvata (memoria + D1) e si risponde subito con quella,
+         aggiornandola in sottofondo quando ha più di 60 s. Solo «fresh=1» (pulsante Aggiorna) o la primissima volta aspettano ORCP. */
+      const fresh = !!new URL(req.url).searchParams.get('fresh');
+      const pull = async () => { const [list, vers] = await Promise.all([connections(env, H), versions(env, H).catch(() => [])]); mem.conns = { at: Date.now(), list, vers }; await setRow(env, KCONNS, JSON.stringify(mem.conns)).catch(() => {}); return mem.conns; };
+      if (!mem.conns) { try { const r = await getRow(env, KCONNS); const o = r ? JSON.parse(r) : null; if (o && Array.isArray(o.list) && Date.now() - o.at < 864e5) mem.conns = o; } catch { /* snapshot illeggibile: si rilegge da ORCP */ } }
+      let c = mem.conns;
+      if (!c || fresh) c = await pull();
+      else if (Date.now() - c.at > 60e3 && !mem.pulling) { mem.pulling = pull().catch(() => {}).then(() => { mem.pulling = null; }); if (ctx && ctx.waitUntil) ctx.waitUntil(mem.pulling); }
+      return json({ list: c.list, online: c.list.filter((x) => x.online).length, versions: c.vers, at: c.at, stale: Date.now() - c.at > 60e3 });
     }
     if (w === 'portals') { const p = await portals(env, H); const s = await loadSes(env, H); if (s) { s.servers = p.list.filter((x) => x.name || x.url).map((x) => x.name || x.url); await saveSes(env, H, s).catch(() => {}); } return json(p); }
     if (w === 'messages') return json({ list: await messages(env, H) });

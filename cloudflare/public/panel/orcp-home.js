@@ -52,7 +52,7 @@
     S.busy = false; draw();
   }
   const visible = () => { const v = $('#v-dash'); return v && v.classList.contains('on') && !document.hidden; };
-  /* parte quando il ruolo è noto; poi si aggiorna ogni 60 s finché la Panoramica è aperta */
-  const tick = setInterval(() => { if (typeof D === 'undefined' || !D.role) return; clearInterval(tick); if (!isMaster()) return; draw(); load(); S.timer = setInterval(() => { if (visible() && !S.busy && Date.now() - S.at > 55000) load(); }, 10000); }, 800);
+  /* parte quando il ruolo è noto; poi si aggiorna ogni 2 minuti finché la Panoramica è aperta (il server risponde subito con l'ultima lista e la rinnova in sottofondo) */
+  const tick = setInterval(() => { if (typeof D === 'undefined' || !D.role) return; clearInterval(tick); if (!isMaster()) return; draw(); load(); S.timer = setInterval(() => { if (visible() && !S.busy && Date.now() - S.at > 115000) load(); }, 10000); }, 800);
   window.KXOrcpHome = { reload: () => load(true) };
 })();
