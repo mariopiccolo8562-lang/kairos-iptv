@@ -1251,6 +1251,12 @@ function cleanPlaylists(list) {
   }));
 }
 const CODE_RE = /^KX[A-Z0-9]{2}-[A-Z0-9]{4}$/;
+/** codice della TV scritto a mano: maiuscole, trattino al posto giusto, «KX» aggiunto se manca (AB12CD → KXAB-12CD) */
+function codeNorm(v) {
+  let c = String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+  if (c.length === 6 && !c.startsWith('KX')) c = 'KX' + c;
+  return c.length === 8 ? c.slice(0, 4) + '-' + c.slice(4) : c;
+}
 // '' (illimitata) oppure una data AAAA-MM-GG esistente (una data impossibile non scadrebbe mai)
 const DATE_RE = { test: (s) => { if (s === '') return true; if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false; const t = new Date(s + 'T00:00:00Z'); return !isNaN(t) && t.toISOString().slice(0, 10) === s; } };
 
@@ -3898,10 +3904,24 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
       // messaggi del titolare per questo agente (a tutti gli agenti, a lui o al suo gruppo)
       inbox });
   }
+  // «Attiva un cliente»: controlla il codice della TV prima di attivarla (trovata? app e modello; libera, già tua o di altri)
+  if (path === '/devices/lookup' && m === 'GET') {
+    if (!P.create) throw new HttpErr(403, 'Non puoi attivare clienti');
+    const code = codeNorm(url.searchParams.get('code'));
+    if (!CODE_RE.test(code)) return json({ ok: false, error: 'Il codice è come KXAB-12CD: KX e altre 6 lettere o cifre' });
+    const d = await env.DB.prepare('SELECT id, owner_id, parent, active, playlists, name, notes, expires, app, model, created_at FROM devices WHERE code = ?').bind(code).first();
+    if (!d) return json({ ok: true, code, found: false });
+    const p = await env.DB.prepare('SELECT ver, t FROM presence WHERE device_id = ?').bind(d.id).first().catch(() => null);
+    const app = appOfVer(p && p.ver, d.app);
+    const info = { app, appName: APP_NAME[app] || 'Kairos', model: str(d.model, 60), seen: +(p && p.t) || +d.created_at || 0 };
+    if (ctree.includes(+d.owner_id)) return json({ ok: true, code, found: true, mine: true, id: d.id, name: d.name, ...info });
+    const free = !+d.owner_id && !d.parent && !+d.active && !d.playlists && !d.name && !d.notes && !d.expires;
+    return json(free ? { ok: true, code, found: true, free: true, ...info } : { ok: true, code, found: true, taken: true });
+  }
   if (path === '/devices' && m === 'POST') {
     if (!P.create) throw new HttpErr(403, 'Non puoi attivare clienti');
     const b = await readJSON(req, 65536);
-    const code = str(b.code, 20).toUpperCase();
+    const code = codeNorm(str(b.code, 20));
     if (!CODE_RE.test(code)) throw new HttpErr(400, 'Scrivi il codice che il cliente vede sulla TV (es. KXAB-12CD)');
     await limitCheck();
     const expires = okDate(str(b.expires, 10));

@@ -101,6 +101,26 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 #agPage .ah h3{flex:1;font-size:18px;font-weight:600}
 #agPage .ab{flex:1;overflow:auto;padding:22px 28px}
 #agPage .af{display:flex;gap:10px;padding:14px 28px;border-top:1px solid var(--line);background:var(--pane)}
+/* «Attiva un cliente Kairos»: tre passi in fila, ognuno si accende di verde quando è a posto */
+.wz{max-width:780px;margin:0 auto;display:grid;gap:14px}
+.wz-s{background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:grid;grid-template-columns:40px minmax(0,1fr);column-gap:14px}
+.wz-s .n{grid-row:1/span 9;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:15px;background:rgba(255,255,255,.06);border:1px solid var(--line)}
+.wz-s.ok{border-color:color-mix(in srgb,var(--ok) 45%,transparent)}.wz-s.ok .n{background:var(--ok);color:#06120b;border-color:transparent}
+.wz-s h4{margin:5px 0 2px;font-size:16px}.wz-s .hint{color:var(--mut);font-size:13px;margin:0 0 12px;line-height:1.45}
+.wz-code{font:700 26px/1.1 ui-monospace,SFMono-Regular,Menlo,monospace!important;letter-spacing:.14em;text-transform:uppercase;padding:14px 16px!important;width:100%;max-width:330px;margin:0!important}
+.wz-st{margin-top:10px;font-size:13.5px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);line-height:1.45}
+.wz-st.good{border-color:color-mix(in srgb,var(--ok) 55%,transparent);background:color-mix(in srgb,var(--ok) 10%,transparent)}
+.wz-st.warn{border-color:rgba(245,176,65,.55);background:rgba(245,176,65,.08)}
+.wz-st.bad{border-color:color-mix(in srgb,var(--bad) 55%,transparent);background:color-mix(in srgb,var(--bad) 10%,transparent)}
+.wz-pl{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px;margin-top:10px}.wz-pl .inp,.wz textarea.inp{margin:0}
+.wz-dur{display:flex;gap:8px;flex-wrap:wrap}.wz-dur button{min-width:100px;padding:12px 14px;font-size:15px;font-weight:700}
+.wz-dur button.on{background:var(--a1);border-color:var(--a1);color:#fff}
+.wz-exp{margin-top:10px;font-size:13.5px;color:var(--mut)}.wz-exp b{color:var(--txt,#eef1f8)}#wzExpOther{color:var(--a1);text-decoration:underline}
+.wz-more{margin-top:12px}.wz-more summary{cursor:pointer;color:var(--mut);font-size:13px}.wz-more .row{margin-top:8px}
+.wz-miss{font-size:12.5px;color:var(--mut);align-self:center}
+.wz-done{text-align:center;padding:34px 20px}.wz-done .big{font-size:46px;line-height:1}.wz-done h3{font-size:22px;margin:12px 0 6px}
+.wz-done p{color:var(--mut);font-size:14px;margin:4px 0}.wz-done .acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:18px}
+@media (max-width:700px){.wz-pl{grid-template-columns:1fr}}
 .ag-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px;align-items:start}
 .ag-c{background:var(--glass);border:1px solid var(--line);border-radius:10px;padding:18px}
 .ag-c h4{font-size:14px;font-weight:600;margin-bottom:2px}.ag-c>small{display:block;color:var(--mut);font-size:12.5px;margin-bottom:12px}
@@ -738,8 +758,129 @@ body.agent .foot{display:none}
     };
     page.classList.add('on'); $('#agB').scrollTop = 0;
   }
+  /* «Attiva un cliente Kairos» per gli agenti: tre passi chiari al posto del modulo completo.
+     1) codice della TV (controllato subito: TV trovata, app e modello), 2) linea (incolla o scrivi),
+     3) durata; le altre opzioni restano chiuse in fondo. Alla fine dice cosa succede sulla TV. */
+  function openWizard() {
+    const m = me(), P = m.perms || {}, maxC = Math.max(1, P.maxConn || 1);
+    const st = { code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1), pl: { serverId: (D.servers[0] || {}).id || '', username: '', password: '' }, name: '', notes: '', maxConn: 1, busy: false };
+    let lkT = 0, lkN = 0;
+    const fmtCode = (v) => { let c = String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); return c.length > 4 ? c.slice(0, 4) + '-' + c.slice(4) : c; };
+    const okCode = () => /^KX[A-Z0-9]{2}-[A-Z0-9]{4}$/.test(st.code);
+    const codeOk = () => okCode() && st.look && !st.look.taken && !st.look.mine && st.look.ok !== false;
+    const lineOk = () => !!(st.pl.serverId && st.pl.username.trim() && st.pl.password);
+    const ago = (t) => { if (!t) return ''; const s = Math.max(0, (Date.now() - t) / 1000); return s < 90 ? 'adesso' : s < 3600 ? Math.round(s / 60) + ' min fa' : s < 86400 ? Math.round(s / 3600) + ' ore fa' : Math.round(s / 86400) + ' giorni fa'; };
+    const dateIt = (iso) => { try { return new Date(iso + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return iso; } };
+    const APPS_W = [['tv', 'Kairos Pro'], ['prem', 'Kairos Premium'], ['ktv', 'Kairos TV'], ['plus', 'Kairos Plus'], ['xc', 'Kairos XC'], ['lite', 'Kairos Lite'], ['nova', 'Kairos Nova']];
+    const codeStatus = () => {
+      const L = st.look;
+      if (!st.code) return '';
+      if (!okCode()) return st.code.replace('-', '').length >= 8 ? '<div class="wz-st bad">Il codice è come <b>KXAB-12CD</b>: comincia con KX, poi 6 lettere o cifre.</div>' : '';
+      if (!L) return '<div class="wz-st">Controllo il codice…</div>';
+      if (L.ok === false) return `<div class="wz-st bad">${esc(L.error || 'Codice non valido')}</div>`;
+      if (L.taken) return '<div class="wz-st bad">Questo codice è già usato da un altro venditore. Controlla di averlo scritto bene: lo leggi sulla TV.</div>';
+      if (L.mine) return `<div class="wz-st warn">Questa TV è già un tuo cliente${L.name ? ` (<b>${esc(L.name)}</b>)` : ''}. Per cambiarla aprila dall'elenco Clienti. <button class="btn sm" data-wzopen="${esc(L.id)}" style="margin-left:6px">Apri il cliente</button></div>`;
+      if (L.free) return `<div class="wz-st good">✓ TV trovata: <b>${esc(L.appName)}</b>${L.model ? ` su <b>${esc(L.model)}</b>` : ''}${L.seen ? ` · aperta ${esc(ago(L.seen))}` : ''}. Ora la linea.</div>`;
+      return '<div class="wz-st warn">Non trovo questa TV. Controlla il codice sulla schermata di attivazione dell\'app Kairos (l\'app deve essere aperta). Se sei sicuro del codice puoi attivarla lo stesso: si sblocca quando l\'app si collega.</div>';
+    };
+    const body = () => `<div class="wz">
+      <div class="wz-s ${codeOk() ? 'ok' : ''}" id="wzS1"><span class="n">${codeOk() ? '✓' : '1'}</span><h4>Codice della TV</h4>
+        <p class="hint">Lo vedi sulla TV quando il cliente apre l'app Kairos appena installata (schermata di attivazione). Basta scriverlo: maiuscole e trattino li metto io.</p>
+        <input class="inp wz-code" id="wzCode" placeholder="KXAB-12CD" maxlength="9" autocomplete="off" spellcheck="false" value="${esc(st.code)}">
+        <div id="wzCodeSt">${codeStatus()}</div></div>
+      <div class="wz-s ${lineOk() ? 'ok' : ''}" id="wzS2"><span class="n">${lineOk() ? '✓' : '2'}</span><h4>Linea del cliente</h4>
+        <p class="hint">La linea del tuo pannello IPTV. Il modo più veloce: incolla il link M3U o il messaggio con server, utente e password, il resto lo compilo io.</p>
+        ${D.servers.length ? `${window.KXPaste ? '<textarea class="inp mono" id="wzPaste" rows="2" style="font-size:12.5px" placeholder="📋 Incolla qui la linea (link M3U o messaggio con server, utente e password)"></textarea><div id="wzPasteSt"></div>' : ''}
+        <div class="wz-pl"><select class="inp" id="wzSrv" title="Server">${D.servers.map((x) => `<option value="${esc(x.id)}" ${st.pl.serverId === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
+          <input class="inp" id="wzUser" placeholder="Utente" autocomplete="off" value="${esc(st.pl.username)}"><input class="inp" id="wzPass" placeholder="Password" autocomplete="off" value="${esc(st.pl.password)}"></div>`
+        : '<div class="wz-st bad">Non hai server assegnati: chiedili a chi ti ha creato.</div>'}</div>
+      <div class="wz-s ok" id="wzS3"><span class="n">✓</span><h4>Durata</h4>
+        <p class="hint">Per quanto tempo il cliente può guardare.</p>
+        <div class="wz-dur">${[1, 3, 6, 12].map((n) => `<button class="btn ${st.months === n ? 'on' : ''}" data-wzm="${n}">${n} ${n === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>
+        <div class="wz-exp">Scade il <b id="wzExpT">${esc(dateIt(st.expires))}</b> · <a href="#" id="wzExpOther">scegli un'altra data</a><input class="inp" type="date" id="wzExp" value="${esc(st.expires)}" style="display:none;max-width:200px;margin:8px 0 0"></div>
+        <label class="lbl" style="margin-top:14px">Nome del cliente <span class="mut">(facoltativo)</span></label><input class="inp" id="wzName" maxlength="60" placeholder="es. Mario Rossi" value="${esc(st.name)}" style="margin:0">
+        <details class="wz-more"><summary>Altre opzioni (connessioni, note, app)</summary>
+          <div class="row"><div><label class="lbl">Connessioni (massimo ${maxC})</label><input class="inp" type="number" id="wzConn" min="1" max="${maxC}" value="${st.maxConn}"></div>
+            <div><label class="lbl">App del cliente</label><select class="inp" id="wzApp">${APPS_W.map(([k, n]) => `<option value="${k}" ${st.app === k ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>
+          <label class="lbl">Note</label><textarea class="inp" id="wzNotes" maxlength="500" placeholder="Pagamento, contatto…">${esc(st.notes)}</textarea>
+        </details></div>
+    </div>`;
+    const missing = () => [!codeOk() ? 'il codice della TV' : '', !lineOk() ? 'la linea' : ''].filter(Boolean);
+    const foot = () => { const mi = missing(), go = $('#wzGo'); if (!go) return; go.disabled = !!mi.length || st.busy; $('#wzMiss').textContent = mi.length ? 'Manca ' + mi.join(' e ') : 'Tutto pronto'; ['wzS1', 'wzS2'].forEach((id, k) => { const el = $('#' + id); const ok = k ? lineOk() : codeOk(); if (el) { el.classList.toggle('ok', ok); el.querySelector('.n').textContent = ok ? '✓' : String(k + 1); } }); };
+    const lookup = () => {
+      clearTimeout(lkT); st.look = null; $('#wzCodeSt').innerHTML = codeStatus(); foot();
+      if (!okCode()) return;
+      const n = ++lkN;
+      lkT = setTimeout(async () => {
+        let r; try { r = await api('GET', '/admin/devices/lookup?code=' + encodeURIComponent(st.code)); } catch (e) { r = { ok: false, error: e.message }; }
+        if (n !== lkN) return;
+        st.look = r; if (r && r.free && r.app) { st.app = r.app; const sa = $('#wzApp'); if (sa) sa.value = r.app; }
+        $('#wzCodeSt').innerHTML = codeStatus(); bindOpen(); foot();
+      }, 300);
+    };
+    const bindOpen = () => $$('[data-wzopen]').forEach((b) => (b.onclick = () => { const x = (D.devices || []).find((y) => y.id === b.dataset.wzopen); if (x) openClient(x); }));
+    const pasteGo = async (quiet) => {
+      const r = window.KXPaste && window.KXPaste.parse($('#wzPaste').value);
+      if (!r || !r.username) { if (!quiet) toast('Incolla il link M3U, o utente e password della linea', 1); return; }
+      let sv = null;
+      if (r.host) { try { const mm = await api('POST', '/admin/match-server', { host: r.host }); if (mm && mm.server) sv = D.servers.find((x) => x.id === mm.server.id) || null; } catch {} }
+      if (!sv) { const host = (r.host || '').replace(/^https?:\/\//, '').toLowerCase(); sv = D.servers.find((x) => host && String(x.name).length >= 2 && host.includes(String(x.name).toLowerCase())) || null; }
+      st.pl.username = r.username; st.pl.password = r.password || st.pl.password; if (sv) st.pl.serverId = sv.id;
+      $('#wzUser').value = st.pl.username; $('#wzPass').value = st.pl.password; $('#wzSrv').value = st.pl.serverId;
+      $('#wzPasteSt').innerHTML = sv ? `<div class="wz-st good">✓ Linea riconosciuta · server <b>${esc(sv.name)}</b> · utente <b>${esc(r.username)}</b></div>` : `<div class="wz-st warn">✓ Utente <b>${esc(r.username)}</b> inserito · scegli tu il server qui sotto</div>`;
+      foot();
+    };
+    const draw = () => {
+      $('#agB').innerHTML = body();
+      const c = $('#wzCode');
+      // maiuscole e trattino da soli; se scrive solo le 6 lettere dopo «KX», il KX lo aggiungo io
+      c.oninput = () => { let raw = String(c.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); if (raw.length === 6 && !raw.startsWith('KX')) raw = 'KX' + raw; const v = fmtCode(raw); if (v !== c.value) c.value = v; st.code = v; lookup(); };
+      $('#wzPaste') && $('#wzPaste').addEventListener('paste', () => setTimeout(() => pasteGo(true), 0));
+      $('#wzPaste') && ($('#wzPaste').oninput = () => { if (/\S{6,}/.test($('#wzPaste').value)) pasteGo(true); });
+      $('#wzSrv') && ($('#wzSrv').onchange = () => { st.pl.serverId = $('#wzSrv').value; foot(); });
+      $('#wzUser') && ($('#wzUser').oninput = () => { st.pl.username = $('#wzUser').value; foot(); });
+      $('#wzPass') && ($('#wzPass').oninput = () => { st.pl.password = $('#wzPass').value; foot(); });
+      $$('[data-wzm]').forEach((b) => (b.onclick = () => { st.months = +b.dataset.wzm; st.expires = addMonths('', st.months); $$('[data-wzm]').forEach((x) => x.classList.toggle('on', x === b)); $('#wzExpT').textContent = dateIt(st.expires); $('#wzExp').value = st.expires; }));
+      $('#wzExpOther').onclick = (e) => { e.preventDefault(); const x = $('#wzExp'); x.style.display = x.style.display === 'none' ? '' : 'none'; };
+      $('#wzExp').onchange = () => { if ($('#wzExp').value) { st.expires = $('#wzExp').value; st.months = 0; $$('[data-wzm]').forEach((x) => x.classList.remove('on')); $('#wzExpT').textContent = dateIt(st.expires); } };
+      $('#wzName').oninput = () => { st.name = $('#wzName').value; };
+      $('#wzConn').oninput = () => { st.maxConn = Math.max(1, Math.min(maxC, +$('#wzConn').value || 1)); };
+      $('#wzApp').onchange = () => { st.app = $('#wzApp').value; };
+      $('#wzNotes').oninput = () => { st.notes = $('#wzNotes').value; };
+      bindOpen(); foot(); setTimeout(() => c.focus(), 50);
+    };
+    const doneView = (code, exp, appName) => {
+      $('#agB').innerHTML = `<div class="wz"><div class="wz-s wz-done" style="display:block"><div class="big">✅</div><h3>Cliente attivato</h3>
+        <p><b class="mono">${esc(code)}</b> · ${esc(appName)} · fino al <b>${esc(dateIt(exp))}</b></p>
+        <p>Sulla TV l'app si sblocca da sola entro pochi secondi. Se resta ferma, chiudila e riaprila.</p>
+        <div class="acts"><button class="btn pri" id="wzAgain">+ Attiva un altro cliente</button><button class="btn" id="wzOpen">Apri la scheda del cliente</button><button class="btn" id="wzClose">Chiudi</button></div></div></div>`;
+      $('#agFt').innerHTML = '';
+      $('#wzAgain').onclick = () => openWizard();
+      $('#wzClose').onclick = closePage;
+      $('#wzOpen').onclick = () => { const x = (D.devices || []).find((y) => y.code === code && !y.parent); if (x) openClient(x); else closePage(); };
+    };
+    $('#agT').innerHTML = 'Attiva un cliente Kairos';
+    $('#agFt').innerHTML = '<span class="wz-miss" id="wzMiss"></span><div style="flex:1"></div><button class="btn" id="wzNo">Annulla</button><button class="btn pri" id="wzGo" style="padding:12px 22px;font-size:15px">✓ Attiva il cliente</button>';
+    $('#wzNo').onclick = closePage;
+    $('#wzGo').onclick = async () => {
+      if (st.busy || missing().length) return;
+      st.busy = true; const go = $('#wzGo'); go.disabled = true; go.textContent = 'Attivo…';
+      try {
+        await api('POST', '/admin/devices', { code: st.code, name: st.name.trim(), notes: st.notes.trim(), expires: st.expires, playlists: [{ serverId: st.pl.serverId, username: st.pl.username.trim(), password: st.pl.password }], maxConn: st.maxConn, addons: [], app: st.app });
+        const appName = (APPS_W.find((x) => x[0] === st.app) || [0, 'Kairos'])[1];
+        doneView(st.code, st.expires, appName);
+        load().catch(() => {});
+      } catch (e) {
+        toast(e.message, 1); st.busy = false; go.textContent = '✓ Attiva il cliente'; foot();
+        if (/codice/i.test(e.message)) { st.look = null; lookup(); }
+      }
+    };
+    draw();
+    page.classList.add('on'); $('#agB').scrollTop = 0;
+  }
   const origOpen = openDrawer, origQuick = openQuick;
-  window.openDrawer = openDrawer = function (d, act) { if (isAgent()) return openClient(d); return origOpen(d, act); };
+  // agente: «+ Nuovo cliente» apre la procedura guidata; le schede dei clienti restano quelle complete
+  window.openDrawer = openDrawer = function (d, act) { if (isAgent()) return !d && can('create') ? openWizard() : openClient(d); return origOpen(d, act); };
   window.openQuick = openQuick = function (d) { if (isAgent()) return openClient(d); return origQuick(d); };
   $('#newDev').onclick = () => openDrawer(null);
 
@@ -765,6 +906,14 @@ body.agent .foot{display:none}
         if (am && am.on && p !== '/admin/logout' && (p === '/admin/login' ? /^agente/i.test((b && b.user) || '') : demoAgent)) { const msg = am.msg || 'Pannello in manutenzione: torniamo operativi a breve. Riprova tra poco.'; agMaintScreen(msg); throw new Error(msg); } }
       if (p === '/admin/login') { demoAgent = /^agente/i.test((b && b.user) || ''); return { ok: true, user: demoAgent ? 'mario.rossi' : b.user || 'admin', role: demoAgent ? 'agent' : 'owner' }; }
       if (p === '/admin/dns' && m === 'GET') return { saved: DEMO.srv, hosts: [], byDev: {} };
+      if (p.startsWith('/admin/devices/lookup')) { // demo: controllo del codice della TV
+        const code = decodeURIComponent((p.split('code=')[1] || '')).toUpperCase(), d = DEMO.devices.find((x) => x.code === code && !x.parent);
+        if (!/^KX[A-Z0-9]{2}-[A-Z0-9]{4}$/.test(code)) return { ok: false, error: 'Il codice è come KXAB-12CD' };
+        if (!d) return { ok: true, code, found: false };
+        const pend = !(d.playlists && d.playlists.length) && !d.expires;
+        if (pend) return { ok: true, code, found: true, free: true, app: 'tv', appName: 'Kairos Pro', model: d.model || 'Fire TV Stick 4K', seen: Date.now() - 120e3 };
+        return [2, 4].includes(d.ownerId) ? { ok: true, code, found: true, mine: true, id: d.id, name: d.name, app: 'tv', appName: 'Kairos Pro' } : { ok: true, code, found: true, taken: true };
+      }
       if (p === '/admin/match-server') { const h = (b.host || '').replace(/^https?:\/\//, '').replace(/[:/].*$/, '').toLowerCase(); const sv = DEMO.srv.find((s) => s.host && h === s.host.replace(/^https?:\/\//, '').replace(/[:/].*$/, '').toLowerCase()); return { server: sv ? { id: sv.id, name: sv.name } : null }; }
       if (p === '/admin/state') {
         const r = await origDemo(m, p, b);
