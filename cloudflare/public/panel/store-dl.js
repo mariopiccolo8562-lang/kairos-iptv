@@ -86,6 +86,17 @@
       <div id="sdDev"></div>
     </div>
     <div class="card glass">
+      <div class="hd"><h3>App consigliata<small>Lo Store sceglie l'app adatta al dispositivo del cliente</small></h3></div>
+      <div class="mut" style="font-size:12.5px;line-height:1.45;margin-bottom:10px">Nello Store il cliente ha il pulsante «App consigliata per questo dispositivo»: lo Store legge memoria, modello e versione Android e propone l'app giusta con Installa già pronto, con una frase cortese. Scrivi i nomi delle app esattamente come compaiono nello Store.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">
+        <label class="mut" style="font-size:12.5px">Fire TV Stick, o chiavetta/box con meno di <input id="rcMb" type="number" min="256" max="8192" style="width:72px"> MB<input id="rcWeak" placeholder="Kairos Tv" style="margin-top:4px"></label>
+        <label class="mut" style="font-size:12.5px">Android vecchio (prima di Android <input id="rcSdk" type="number" min="5" max="14" style="width:52px">)<input id="rcOld" placeholder="Kairos-Lite" style="margin-top:4px"></label>
+        <label class="mut" style="font-size:12.5px">Telefono, tablet o box potente<input id="rcStrong" placeholder="Kairos Pro" style="margin-top:4px"></label>
+        <label class="mut" style="font-size:12.5px">Frase al cliente ({app} = nome dell'app)<input id="rcText" style="margin-top:4px"></label>
+      </div>
+      <div style="margin-top:10px"><button class="btn" id="rcSave">Salva</button></div>
+    </div>
+    <div class="card glass">
       <div class="hd"><h3>Approvazione<small>Decidi tu chi può scaricare</small></h3></div>
       <div class="sd-warn" id="sdWarn" style="display:none"></div>
       <div id="sdMode">
@@ -320,6 +331,19 @@
   }
   const closedNow = (c) => { if (!c || !c.on || c.from === c.to) return false; const hm = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()); const m = (x) => +x.slice(0, 2) * 60 + +x.slice(3, 5), n = m(hm), a = m(c.from), b = m(c.to); return a < b ? n >= a && n < b : n >= a || n < b; };
   function renderSettings() {
+    const rc = (S.data && S.data.settings && S.data.settings.recommend) || {};
+    if ($('#rcSave')) {
+      [['rcMb', 'weakMb'], ['rcWeak', 'weakApp'], ['rcSdk', 'oldSdk'], ['rcOld', 'oldApp'], ['rcStrong', 'strongApp'], ['rcText', 'text']].forEach(([id, k]) => { const el = $('#' + id); if (el && document.activeElement !== el) el.value = rc[k] ?? ''; });
+      $('#rcSave').onclick = async () => {
+        const v = (id) => ($('#' + id).value || '').trim();
+        if (!v('rcWeak') || !v('rcOld') || !v('rcStrong')) { toast('Scrivi il nome delle tre app', 1); return; }
+        try {
+          const r = await sApi('PUT', '/settings', { recommend: { weakMb: parseInt(v('rcMb'), 10), weakApp: v('rcWeak'), oldSdk: parseInt(v('rcSdk'), 10), oldApp: v('rcOld'), strongApp: v('rcStrong'), text: v('rcText') } });
+          if (S.data) S.data.settings = r.settings;
+          renderSettings(); toast('Salvato: lo Store consiglia ' + r.settings.recommend.weakApp + ' sulle chiavette deboli');
+        } catch (e) { toast(e.message || 'Errore', 1); }
+      };
+    }
     if (!S.data) return;
     const s = S.data.settings || {}, m = S.data.mail || {};
     const mode = s.activation ? 'act' : s.approval === false ? 'free' : 'ask';
