@@ -2870,6 +2870,39 @@ async function xtreamCatalog(src, kind) {
     };
   });
 }
+/** scheda di un titolo: film → trama/cast, serie → stagioni ed episodi, canale live → EPG (ora e prossimi). In cache 1 ora */
+const b64txt = (v) => { const t = String(v || ''); if (!t) return ''; try { return decodeURIComponent(escape(atob(t))); } catch { try { return atob(t); } catch { return t; } } };
+async function xtreamInfo(src, kind, id) {
+  return cachedJson(`catalog/${src.key}/info/${kind}/${id}`, async () => {
+    const s = (v, n) => (v === undefined || v === null ? '' : String(v).slice(0, n)), okUrl = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u.slice(0, 500) : '');
+    const people = (v) => s(v, 600).split(/\s*,\s*/).map((x) => x.trim()).filter(Boolean).slice(0, 30);
+    const get = async (action, extra) => { const u = `${src.host}/player_api.php?username=${encodeURIComponent(src.user)}&password=${encodeURIComponent(src.pass)}&action=${action}&${extra}`; const r = await fetch(u, { headers: { 'User-Agent': CAT_UA, Accept: 'application/json' }, signal: tmo(20000), redirect: 'follow' }); if (!r.ok) throw new HttpErr(502, `Il server ha risposto ${r.status}`); const j = await r.json().catch(() => null); if (!j || typeof j !== 'object') throw new HttpErr(502, 'Il server non ha restituito la scheda'); return j; };
+    if (kind === 'live') {
+      const j = await get('get_short_epg', `stream_id=${encodeURIComponent(id)}&limit=14`);
+      const L = Array.isArray(j.epg_listings) ? j.epg_listings : [];
+      return { kind, epg: L.map((e) => ({ title: nameClean(b64txt(e.title), 160), desc: b64txt(e.description).slice(0, 1200), start: (+e.start_timestamp || Math.floor(Date.parse(e.start) / 1000) || 0) * 1000, end: (+e.stop_timestamp || Math.floor(Date.parse(e.end) / 1000) || 0) * 1000 })).filter((e) => e.title) };
+    }
+    if (kind === 'series') {
+      const j = await get('get_series_info', `series_id=${encodeURIComponent(id)}`), I = j.info || {};
+      const eps = j.episodes && typeof j.episodes === 'object' ? (Array.isArray(j.episodes) ? j.episodes.flat() : Object.values(j.episodes).flat()) : [];
+      const seasons = new Map();
+      for (const e of eps) { if (!e || typeof e !== 'object') continue; const sn = +e.season || 0, inf = e.info || {}; if (!seasons.has(sn)) seasons.set(sn, []); seasons.get(sn).push({ id: s(e.id, 20), num: +e.episode_num || 0, title: nameClean(e.title, 160), plot: s(inf.plot, 800), duration: s(inf.duration, 12), date: s(inf.releasedate || inf.release_date, 10), image: okUrl(inf.movie_image), rating: num(inf.rating, 0, 10) }); }
+      const meta = Array.isArray(j.seasons) ? j.seasons : [];
+      return { kind, title: nameClean(I.name, 160), plot: s(I.plot, 2000), cast: people(I.cast), director: people(I.director), genre: s(I.genre, 120), date: s(I.releaseDate || I.release_date, 10), rating: num(I.rating_5based ? I.rating_5based * 2 : I.rating, 0, 10), poster: okUrl(I.cover), backdrop: okUrl(Array.isArray(I.backdrop_path) ? I.backdrop_path[0] : I.backdrop_path), trailer: s(I.youtube_trailer, 40),
+        seasons: [...seasons.entries()].sort((a, b) => a[0] - b[0]).map(([n, list]) => { const m = meta.find((x) => +x.season_number === n) || {}; return { num: n, name: nameClean(m.name, 80) || (n ? 'Stagione ' + n : 'Speciali'), date: s(m.air_date, 10), cover: okUrl(m.cover), episodes: list.sort((a, b) => a.num - b.num).slice(0, 400) }; }) };
+    }
+    const j = await get('get_vod_info', `vod_id=${encodeURIComponent(id)}`), I = j.info || {}, M = j.movie_data || {};
+    return { kind: 'movies', title: nameClean(M.name || I.name, 160), plot: s(I.plot || I.description, 2000), cast: people(I.cast || I.actors), director: people(I.director), genre: s(I.genre, 120), date: s(I.releasedate || I.release_date, 10), duration: s(I.duration, 12), rating: num(I.rating_5based ? I.rating_5based * 2 : I.rating, 0, 10), poster: okUrl(I.movie_image || I.cover_big), backdrop: okUrl(Array.isArray(I.backdrop_path) ? I.backdrop_path[0] : I.backdrop_path), trailer: s(I.youtube_trailer, 40), country: s(I.country, 60) };
+  });
+}
+async function adminCatalogInfo(env, url) {
+  const srcs = await catalogSources(env);
+  const key = str(url.searchParams.get('src'), 16), src = /^[A-Za-z0-9_-]{16}$/.test(key) ? srcs.get(key) : null;
+  if (!src) throw new HttpErr(400, 'Scegli una sorgente');
+  const kind = ['series', 'live'].includes(url.searchParams.get('kind')) ? url.searchParams.get('kind') : 'movies', id = str(url.searchParams.get('id'), 20);
+  if (!/^[A-Za-z0-9_-]{1,20}$/.test(id)) throw new HttpErr(400, 'Titolo non valido');
+  return xtreamInfo(src, kind, id);
+}
 async function adminCatalog(env, url) {
   const srcs = await catalogSources(env);
   const key = str(url.searchParams.get('src'), 16), src = /^[A-Za-z0-9_-]{16}$/.test(key) ? srcs.get(key) : null;
@@ -3698,7 +3731,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     return json(maintAg[A.id] || { on: false, msg: '', allow: [] });
   }
   // Videoteca: solo le linee dei suoi clienti, senza indirizzi
-  if (path === '/catalog/sources' || path === '/catalog') {
+  if (path === '/catalog/sources' || path === '/catalog' || path === '/catalog/info') {
     need('vod');
     const sc = await scope(), all2 = await catalogSources(env), keys = new Set(), dn = dnA;
     const ids = [...sc];
@@ -4333,6 +4366,10 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path === '/catalog/sources' && m === 'GET') {
     const srcs = await catalogSources(env);
     return json([...srcs.values()].map((s) => ({ key: s.key, label: `${s.host.replace(/^https?:\/\//, '')} · ${s.user}`, host: s.host, devices: s.devices })).sort((a, b) => b.devices - a.devices || a.label.localeCompare(b.label)));
+  }
+  if (path === '/catalog/info' && m === 'GET') {
+    try { return json(await adminCatalogInfo(env, url)); }
+    catch (e) { if (e instanceof HttpErr) throw e; return json({ error: e && e.name === 'TimeoutError' ? 'Il server non ha risposto entro 20 secondi' : 'Server non raggiungibile' }, 502); }
   }
   if (path === '/catalog' && m === 'GET') {
     try { return json(await adminCatalog(env, url)); }
