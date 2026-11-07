@@ -58,7 +58,7 @@
     if (!ok.length) return toast('Nessun pannello IPTV disponibile per te', 1);
     S.panel = ok.some((p) => p[0] === pre.panel) ? pre.panel : ok[0][0];
     const allowed = (k) => k === 'max' ? !!PL().max && can('players') : k === 'orbix' ? !!PL().orbix && can('players') : k === 'kairos' ? can('create') : k.startsWith('app:') ? can('lines') && appLinks().includes(k.slice(4)) : false;
-    S.apps = new Set([...S.apps].filter(allowed));
+    S.apps = new Set(remembered().filter(allowed));
     overlay().classList.add('on');
     draw(); loadPanel();
   }
@@ -132,7 +132,7 @@
       ? `<label class="l">Server della linea${(D.servers || []).length ? `<select class="inp" id="qaH">${(D.servers || []).map((h, i) => `<option value="${esc(h)}"${h === S.o.host ? ' selected' : ''}>${esc((D.serverNames || [])[i] || 'Server ' + (i + 1))}</option>`).join('')}</select>` : '<small class="mut">Nessun server assegnato: chiedi a chi ti gestisce</small>'}</label>`
       : `<label class="l">DNS della linea<input class="inp mono" id="qaH" list="qaHL" value="${esc(S.o.host)}" placeholder="${S.panel === 'armada' ? 'lo dà Armada alla creazione' : 'http://dns.esempio.com:8080'}"><datalist id="qaHL">${(S.dns || []).map((x) => `<option value="${esc(x.host)}">${esc(x.name || '')}</option>`).join('')}</datalist></label>`;
     const kx = card('kairos', 'kx', 'Cliente Kairos', 'App Kairos Pro, TV, Lite, XC…: cliente nuovo o linea aggiunta a uno esistente', `<label class="l">Cliente<select class="inp" id="qaMode"><option value="new"${S.o.mode === 'new' ? ' selected' : ''}>Nuovo cliente</option><option value="ex"${S.o.mode === 'ex' ? ' selected' : ''}>Cliente esistente</option></select></label>
-      ${S.o.mode === 'new' ? `<label class="l">Codice sulla TV${isAg() ? '' : ' (vuoto = lo genera KAIROS)'}<input class="inp mono" id="qaCode" maxlength="9" value="${esc(S.o.code)}" placeholder="KXAB-12CD"></label><label class="l">Durata<select class="inp" id="qaMo">${[1, 3, 6, 12].map((m) => `<option value="${m}"${+S.o.months === m ? ' selected' : ''}>${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select></label>`
+      ${S.o.mode === 'new' ? `<label class="l">Codice sulla TV${isAg() ? '' : ' (vuoto = lo genera KAIROS)'}<input class="inp mono" id="qaCode" maxlength="9" value="${esc(S.o.code)}" placeholder="KXAB-12CD"></label><label class="l">Durata<select class="inp" id="qaMo">${[1, 3, 6, 12].map((m) => `<option value="${m}"${!S.o.date && +S.o.months === m ? ' selected' : ''}>${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}<option value="date"${S.o.date ? ' selected' : ''}>Data precisa…</option></select></label>${S.o.date ? `<label class="l" style="grid-column:1/-1">Scade il<input class="inp" id="qaDate" type="date" value="${esc(S.o.date)}" min="${new Date().toISOString().slice(0, 10)}"></label>` : ''}`
         : `<label class="l">Quale cliente<input class="inp" id="qaDev" list="qaDevL" value="${esc(S.o.dev)}" placeholder="nome o codice"><datalist id="qaDevL">${devList().slice(0, 3000).map((d) => `<option value="${esc((d.name || 'Senza nome') + ' · ' + d.code)}">`).join('')}</datalist></label><div></div>`}
       ${hostField()}`, can('create'), 'Serve il permesso «Attivare clienti»');
     const others = appLinks();
@@ -149,7 +149,8 @@
     if (g('qaOxD') !== undefined) S.o.oxDns = g('qaOxD');
     if (g('qaMode') !== undefined) S.o.mode = g('qaMode');
     if (g('qaCode') !== undefined) S.o.code = g('qaCode').trim().toUpperCase();
-    if (g('qaMo') !== undefined) S.o.months = +g('qaMo');
+    if (g('qaMo') !== undefined) { if (g('qaMo') === 'date') { if (!S.o.date) S.o.date = addMonths('', 12); } else { S.o.months = +g('qaMo'); S.o.date = ''; } }
+    if (g('qaDate') !== undefined) S.o.date = g('qaDate');
     if (g('qaDev') !== undefined) S.o.dev = g('qaDev').trim();
     if (g('qaH') !== undefined) S.o.host = g('qaH').trim();
   }
@@ -158,6 +159,7 @@
     if (S.apps.has('kairos')) {
       if (S.o.mode === 'new' && isAg() && !/^KX[A-Z0-9]{2}-[A-Z0-9]{4}$/.test(S.o.code)) return 'Scrivi il codice che il cliente vede sulla TV (es. KXAB-12CD)';
       if (S.o.mode === 'ex' && !findDev()) return 'Scegli il cliente esistente dall\'elenco';
+      if (S.o.mode === 'new' && S.o.date && !(/^\d{4}-\d{2}-\d{2}$/.test(S.o.date) && new Date(S.o.date) > new Date())) return 'Scegli una data di scadenza futura';
     }
     return '';
   }
@@ -177,8 +179,8 @@
     if (k === 'kairos') {
       if (S.o.mode === 'ex') { const d = findDev(); if (!d) throw new Error('Cliente non trovato'); S.o.exDev = d; return `Linea pronta per ${d.name || d.code}: premi «Apri la scheda» e salva`; }
       if (!L.host) throw new Error(isAg() ? 'Scegli il server della linea' : 'Scrivi il DNS della linea (es. http://dns.esempio.com:8080)');
-      const r = await api('POST', '/admin/devices', { code: S.o.code, name, notes: L.ref, expires: addMonths('', +S.o.months || 12), active: true, playlists: [{ id: 'p' + Date.now(), name: 'Principale', type: 'xtream', url: '', host: L.host, username: L.username, password: L.password }] });
-      S.o.newCode = (r && r.code) || S.o.code; return `Cliente creato${S.o.newCode ? ' · codice ' + S.o.newCode : ''} · scade tra ${S.o.months} mesi`;
+      const r = await api('POST', '/admin/devices', { code: S.o.code, name, notes: L.ref, expires: S.o.date || addMonths('', +S.o.months || 12), active: true, playlists: [{ id: 'p' + Date.now(), name: 'Principale', type: 'xtream', url: '', host: L.host, username: L.username, password: L.password }] });
+      S.o.newCode = (r && r.code) || S.o.code; return `Cliente creato${S.o.newCode ? ' · codice ' + S.o.newCode : ''} · scade ${S.o.date ? 'il ' + S.o.date.split('-').reverse().join('/') : 'tra ' + S.o.months + ' mesi'}`;
     }
     if (k.startsWith('app:')) { await api('POST', '/admin/linked-lines', { app: k.slice(4), username: L.username, password: L.password, dns: L.host || '', note: [name, L.ref].filter(Boolean).join(' · ') }); return 'Segnata in Appunti App'; }
     throw new Error('App sconosciuta');
@@ -237,7 +239,7 @@
     $$('[data-qapn]', B).forEach((b) => (b.onclick = () => { read1(); S.panel = b.dataset.qapn; S.o.pk = ''; S.o.host = ''; draw(); loadPanel(); }));
     $$('[data-qasub]', B).forEach((b) => (b.onclick = () => { read1(); S.o.sub = +b.dataset.qasub; draw(); }));
     $$('[data-qaapp]', B).forEach((c) => (c.onchange = () => { read2(); c.checked ? S.apps.add(c.dataset.qaapp) : S.apps.delete(c.dataset.qaapp); draw(); }));
-    const md = $('#qaMode'); if (md) md.onchange = () => { read2(); draw(); };
+    ['qaMode', 'qaMo'].forEach((id) => { const el = $('#' + id); if (el) el.onchange = () => { read2(); draw(); }; });
     $$('[data-qacp]', B).forEach((b) => (b.onclick = () => copy(b.dataset.qacp, 'Testo')));
     $$('[data-qare]', B).forEach((b) => (b.onclick = () => retry(+b.dataset.qare)));
     $('#qaX0') && ($('#qaX0').onclick = close);
