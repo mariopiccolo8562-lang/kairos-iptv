@@ -991,11 +991,15 @@ Premi **Crea e attiva**: nel riepilogo hai utente e password da copiare, **Ripro
 function guideNorm(g) {
   const o = g && typeof g === 'object' ? g : {};
   const share = ['all', 'some', 'none'].includes(o.share) ? o.share : 'none';
-  return { title: typeof o.title === 'string' && o.title.trim() ? o.title.trim().slice(0, 120) : GUIDE_DEF_TITLE, text: typeof o.text === 'string' && o.text.trim() ? o.text.slice(0, 20000) : GUIDE_DEF_TEXT, share, agents: Array.isArray(o.agents) ? o.agents.map(String).slice(0, 500) : [] };
+  return { title: typeof o.title === 'string' && o.title.trim() ? o.title.trim().slice(0, 120) : GUIDE_DEF_TITLE, text: typeof o.text === 'string' && o.text.trim() ? o.text.slice(0, 20000) : GUIDE_DEF_TEXT, share, agents: Array.isArray(o.agents) ? o.agents.map(String).slice(0, 500) : [], noticeAt: Number.isFinite(+o.noticeAt) && +o.noticeAt > 0 ? +o.noticeAt : 0 };
 }
 function guideForAgent(s, agentId) {
-  const g = guideNorm(s.guide); if (g.share === 'all' || (g.share === 'some' && g.agents.includes(String(agentId)))) return { title: g.title, text: g.text };
+  const g = guideNorm(s.guide); if (g.share === 'all' || (g.share === 'some' && g.agents.includes(String(agentId)))) return { title: g.title, text: g.text, noticeAt: g.noticeAt };
   return null;
+}
+/* avviso «Nuova guida da leggere»: l'agente lo vede finché non apre la guida (agent_reads k='guide') */
+async function guideReads(env) {
+  try { return (await env.DB.prepare("SELECT agent_id, at FROM agent_reads WHERE k = 'guide'").all()).results || []; } catch { return []; }
 }
 
 async function settingsPatch(env, patch) {
@@ -3975,7 +3979,15 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     }
     if (m === 'GET') return json(dview(await deviceOut(env, d)));
   }
-  if (path === '/guide' && m === 'GET') return json({ guide: guideForAgent(await getSettings(env), A.id) });
+  if (path === '/guide' && m === 'GET') {
+    const g = guideForAgent(await getSettings(env), A.id);
+    if (g && g.noticeAt) { const r = (await guideReads(env)).find((x) => x.agent_id === A.id); g.notice = !r || +r.at < g.noticeAt; }
+    return json({ guide: g });
+  }
+  if (path === '/guide/read' && m === 'POST') { // l'agente ha aperto la guida: l'avviso non si ripresenta (in assistenza il titolare non la segna come letta per lui)
+    if (!ses.assist) await env.DB.prepare("INSERT INTO agent_reads (agent_id, k, at) VALUES (?, 'guide', ?) ON CONFLICT(agent_id, k) DO UPDATE SET at = excluded.at").bind(A.id, Date.now()).run();
+    return json({ ok: true });
+  }
   throw new HttpErr(403, 'Funzione non disponibile per gli agenti');
 }
 
@@ -4296,12 +4308,14 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   const ins = path.match(/^\/insight\/([A-Za-z0-9_-]{6,20})$/);
   if (ins && m === 'GET') { const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(ins[1]).first(); if (!d) throw new HttpErr(404, 'Cliente non trovato'); return json(await insightFor(env, d, await getSettings(env))); }
   if (path === '/health' && m === 'GET') return json(await healthList(env, await getSettings(env), null));
-  if (path === '/guide' && m === 'GET') { const g = guideNorm((await getSettings(env)).guide); return json({ guide: { ...g, defTitle: GUIDE_DEF_TITLE, defText: GUIDE_DEF_TEXT } }); }
+  if (path === '/guide' && m === 'GET') { const g = guideNorm((await getSettings(env)).guide); return json({ guide: { ...g, readBy: g.noticeAt ? (await guideReads(env)).filter((x) => +x.at >= g.noticeAt).map((x) => String(x.agent_id)) : [], defTitle: GUIDE_DEF_TITLE, defText: GUIDE_DEF_TEXT } }); }
   if (path === '/guide' && m === 'PUT') {
-    const b = await readJSON(req, 64 * 1024), g = guideNorm(b);
+    const b = await readJSON(req, 64 * 1024), cur = guideNorm((await getSettings(env)).guide), g = guideNorm({ ...b, noticeAt: cur.noticeAt });
+    if (b.notify === true && g.share !== 'none') g.noticeAt = Date.now(); // «Avvisali all'apertura»: gli agenti scelti vedono «Nuova guida da leggere» finché non la aprono
+    if (g.share === 'none') g.noticeAt = 0;
     await settingsPatch(env, { guide: g });
     await log(env, 'settings', `${who}: guida della Panoramica aggiornata (${g.share === 'all' ? 'tutti gli agenti' : g.share === 'some' ? g.agents.length + ' agenti' : 'solo titolare'})`, ip);
-    return json({ guide: { ...g, defTitle: GUIDE_DEF_TITLE, defText: GUIDE_DEF_TEXT } });
+    return json({ guide: { ...g, readBy: [], defTitle: GUIDE_DEF_TITLE, defText: GUIDE_DEF_TEXT } });
   }
   if (path === '/health/settings' && m === 'PUT' && !(ses && ses.agent)) {
     const b = await readJSON(req, 1024), s0 = await getSettings(env), h = { on: !!(s0.health && s0.health.on), autoUpd: !!(s0.health && s0.health.autoUpd), autoFix: !!(s0.health && s0.health.autoFix) };
