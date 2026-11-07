@@ -76,14 +76,13 @@
   }
   function render(k) {
     const V = $('#v-' + k); if (!V) return; const A = ST[k], P = PANELS[k];
-    if (isAg()) { V.innerHTML = `<div class="card glass"><p>Il Pannello ${esc(P.name)} lo usa solo il Master.</p></div>`; return; }
     const st = A.st || {};
     {
       const form = !st.connected || A.edit;
       V.innerHTML = `<div class="card glass" style="margin-bottom:14px">
         <div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start">
           <div><b style="font-size:16px">${st.connected ? `✅ ${esc(P.name)} collegato` : `${esc(P.name)} non collegato`}</b>
-            <p class="mut" style="margin:4px 0 0;font-size:13px">${st.connected ? 'Account ' + esc(st.user || '') : `Scrivi qui i dati con cui entri su ${esc(P.site)}: restano cifrati in KAIROS e li vedi solo tu.`}</p></div>
+            <p class="mut" style="margin:4px 0 0;font-size:13px">${st.connected ? 'Account ' + esc(st.user || '') + (isAg() ? ' (il tuo sub-reseller)' : '') : `Scrivi qui i dati con cui entri su ${esc(P.site)}: restano cifrati in KAIROS${isAg() ? '' : ' e li vedi solo tu'}.`}</p></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn sm" href="${esc(P.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Apri ${esc(P.name)}</a>${st.connected ? `<button class="btn sm" data-o="reload">Aggiorna</button><button class="btn sm" data-o="edit">${A.edit ? 'Chiudi' : 'Cambia dati'}</button><button class="btn sm" data-o="off">Scollega</button>` : ''}</div></div>
         ${form ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px">
           <label>Username<input class="inp" id="exU" autocomplete="off" value="${esc(st.user || '')}"></label>
@@ -154,7 +153,7 @@
   }
   function show(k) { try { render(k); } catch (e) { const V = $('#v-' + k); if (V) V.innerHTML = `<div class="card glass"><p style="color:#ff8f8f">Errore nella sezione ${esc(PANELS[k].name)}: ${esc(e.message || String(e))}</p></div>`; } }
   async function open(k) {
-    const A = ST[k]; if (isAg()) return show(k);
+    const A = ST[k];
     if (!A.st) { try { A.st = await api('GET', `/admin/${k}/state`); } catch (e) { A.st = { connected: false }; A.err = e.message; } }
     show(k); if (A.st.connected && A.data == null && !A.busy && !A.err) load(k);
   }

@@ -3078,10 +3078,10 @@ async function adminInner(req, env, url, ip, ctx) {
    e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
    ====================================================================== */
 const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'account', 'ai',
-  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'wolf', 'mxp', 'oxp', 'oxpNew'];
+  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt'];
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, wolf: false, mxp: false, oxp: false, oxpNew: false, addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, wolf: false, ro: false, slt: false, mxp: false, oxp: false, oxpNew: false, addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
@@ -3359,7 +3359,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
       env.DB.prepare("UPDATE admins SET parent_id = ? WHERE parent_id = ? AND role = 'agent'").bind(up, id),
       env.DB.prepare('DELETE FROM sessions WHERE admin_id = ?').bind(id),
       env.DB.prepare("DELETE FROM admins WHERE id = ? AND role = 'agent'").bind(id),
-      env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?, ?)').bind('wolf:ag:' + id, 'wolf:ag:' + id + ':ses', 'mxp:ag:' + id),
+      env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?, ?, ?, ?, ?, ?)').bind('wolf:ag:' + id, 'wolf:ag:' + id + ':ses', 'mxp:ag:' + id, 'ro:ag:' + id, 'ro:ag:' + id + ':ses', 'slt:ag:' + id, 'slt:ag:' + id + ':ses'),
     ]);
     memoDrop(env, 'ags', 'agc');
     await log(env, 'off', `${who}: eliminato l'agente ${A.username} (clienti e sotto-agenti passati a ${up ? 'chi stava sopra' : 'te'})`, ip);
@@ -3465,8 +3465,9 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   // Pannello MaxPlayer: con il permesso del titolare, solo i clienti dell'agente MaxPlayer che gli ha assegnato
   if (path.startsWith('/mxp/')) { need('mxp', 'Non puoi usare il Pannello MaxPlayer: chiedilo a chi ti gestisce'); const r = await mxpRoutes(req, env, path, who, ip, WOLF_H, { id: A.id }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
   // Pannello WOLF: con il permesso del titolare, sul proprio account reseller WOLF (sue linee e suoi crediti)
-  if (path === '/online' && m === 'POST') { if (!['wolf', 'armada', 'mxp', 'oxp'].some((k) => P[k])) throw new HttpErr(403, 'Non hai pannelli esterni collegati'); return onlineRoute(req); }
+  if (path === '/online' && m === 'POST') { if (!['wolf', 'armada', 'mxp', 'oxp', 'ro', 'slt'].some((k) => P[k])) throw new HttpErr(403, 'Non hai pannelli esterni collegati'); return onlineRoute(req); }
   if (path.startsWith('/wolf/')) { need('wolf', 'Non puoi usare il pannello WOLF: chiedilo a chi ti gestisce'); const r = await wolfRoutes(req, env, path, who, ip, WOLF_H, { id: A.id }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
+  if (/^\/(ro|slt)\//.test(path)) { need(path.split('/')[1], 'Non puoi usare questo pannello IPTV: chiedilo a chi ti gestisce'); const r = await extRoutes(req, env, path, who, ip, WOLF_H, { id: A.id }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
   // «Crea lista» su OrbixPlay/MaxPlayer senza cliente Kairos: con il permesso di attivarle dal pannello
   if (path === '/ext-lists' || path.startsWith('/ext-lists/')) { need('players', 'Non puoi creare liste su OrbixPlay e MaxPlayer'); const r = await extListsRoutes(req, env, path, who, ip, { id: A.id, tree: ctree, orbDns: P.orbDns, mxDns: P.mxDns }); if (r) return r; }
   // App → OrbixPlay e MaxPlayer: le liste create sulle app terzi, solo dei suoi clienti

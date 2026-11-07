@@ -21,6 +21,7 @@ const randPass = (n = 10) => { const A = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQ
 const durIt = (desc, hours) => { const m = String(desc || '').match(/Duration:\s*(\d+)\s*(month|day|hour|week|year)/i); if (m) { const n = +m[1], u = m[2].toLowerCase(); const w = { month: ['mese', 'mesi'], day: ['giorno', 'giorni'], hour: ['ora', 'ore'], week: ['settimana', 'settimane'], year: ['anno', 'anni'] }[u]; return n + ' ' + w[n === 1 ? 0 : 1]; } hours = +hours || 0; return !hours ? '' : hours % 720 === 0 ? hours / 720 + (hours === 720 ? ' mese' : ' mesi') : hours % 24 === 0 ? hours / 24 + ' giorni' : hours + ' ore'; };
 const num = (s) => parseFloat(String(s || '').replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.')) || 0;
 
+const keyOf = (k, ag) => (ag ? `${k}:ag:${ag.id}` : k);
 async function cfgOf(env, H, k) { const v = await getRow(env, k); if (!v) return null; try { const c = await H.unseal(env, v); return c && c.user ? c : null; } catch { return null; } }
 async function loadJar(env, H, k) {
   if (mem[k + ':jar']) return mem[k + ':jar'];
@@ -70,7 +71,7 @@ const RO = {
     }
   },
   gone: (r) => r.status === 401 || (r.status >= 300 && r.status < 400 && /\/login/.test(r.loc)),
-  async csrf(env, H, k) { if (mem['ro:csrf']) return mem['ro:csrf']; const h = await call(this, env, H, '/lines', { html: true }); mem['ro:csrf'] = meta(h, 'csrf-token'); return mem['ro:csrf']; },
+  async csrf(env, H, k) { if (mem[(this.key || 'ro') + ':csrf']) return mem[(this.key || 'ro') + ':csrf']; const h = await call(this, env, H, '/lines', { html: true }); mem[(this.key || 'ro') + ':csrf'] = meta(h, 'csrf-token'); return mem[(this.key || 'ro') + ':csrf']; },
   async post(env, H, path, body) { const tok = await this.csrf(env, H); const r = await call(this, env, H, path, { form: body || {}, ajax: true, headers: { 'X-CSRF-Token': tok }, rawRes: true }); const j = r.j || {}; if (r.status >= 400 || j.ok === false) throw new H.HttpErr(400, 'Realott: ' + String(j.error || j.message || (Array.isArray(j.detail) ? 'campi non validi: ' + j.detail.map((d) => (d.loc || []).slice(-1)[0] + ' (' + d.msg + ')').join(', ') : '') || (j.errors && Object.values(j.errors).flat().join(' ')) || txtOf(r.txt).slice(0, 120) || `risposta ${r.status}`).slice(0, 200)); return j; },
   async overview(env, H) {
     const h = await call(this, env, H, '/', { html: true }), t = txtOf(h);
@@ -79,7 +80,7 @@ const RO = {
   },
   async lines(env, H) {
     const h = await call(this, env, H, '/lines', { html: true });
-    mem['ro:csrf'] = meta(h, 'csrf-token') || mem['ro:csrf'];
+    mem[(this.key || 'ro') + ':csrf'] = meta(h, 'csrf-token') || mem[(this.key || 'ro') + ':csrf'];
     const dns = attr((h.match(/<[a-z]+[^>]+id="dl-modal"[^>]*>/i) || [''])[0], 'data-reseller-dns');
     const rows = [];
     for (const tr of rowsOfTable((h.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/i) || ['', h])[1])) {
@@ -157,12 +158,12 @@ const SLT = {
       const msg = txtOf((r.txt.match(/<(?:div|span|p)[^>]*(?:invalid-feedback|alert|error)[^>]*>([\s\S]*?)<\//i) || [])[1] || '');
       throw new H.HttpErr(400, 'SLT: ' + (msg || `accesso non riuscito (${r.status}${r.txt.length < 1200 ? ', pagina di controllo' : ''}). Controlla utente e password`).slice(0, 200));
     }
-    mem['slt:csrf'] = '';
+    mem[(this.key || 'slt') + ':csrf'] = '';
   },
   gone: (r) => r.status === 401 || r.status === 419 || (r.status >= 300 && r.status < 400 && /\/login/.test(r.loc)),
-  async csrf(env, H) { if (mem['slt:csrf']) return mem['slt:csrf']; const h = await call(this, env, H, '/lines', { html: true }); mem['slt:csrf'] = meta(h, 'csrf-token'); return mem['slt:csrf']; },
+  async csrf(env, H) { if (mem[(this.key || 'slt') + ':csrf']) return mem[(this.key || 'slt') + ':csrf']; const h = await call(this, env, H, '/lines', { html: true }); mem[(this.key || 'slt') + ':csrf'] = meta(h, 'csrf-token'); return mem[(this.key || 'slt') + ':csrf']; },
   async post(env, H, path, body, method) { const tok = await this.csrf(env, H); const r = await call(this, env, H, path, { form: { _token: tok, ...(body || {}) }, method: method || 'POST', ajax: true, headers: { 'X-CSRF-TOKEN': tok }, rawRes: true }); if (r.status >= 400) throw new H.HttpErr(400, 'SLT: ' + String((r.j && (r.j.error || r.j.message)) || txtOf(r.txt).slice(0, 120) || `errore ${r.status}`).slice(0, 200)); return r.j || {}; },
-  async dns(env, H) { if (mem['slt:dns'] !== undefined) return mem['slt:dns']; const h = await call(this, env, H, '/lines/index-legacy', { html: true }); mem['slt:dns'] = (h.match(/ROOT_LINK\s*=\s*['"]([^'"]+)['"]/) || [])[1] || ''; return mem['slt:dns']; },
+  async dns(env, H) { if (mem[(this.key || 'slt') + ':dns'] !== undefined) return mem[(this.key || 'slt') + ':dns']; const h = await call(this, env, H, '/lines/index-legacy', { html: true }); mem[(this.key || 'slt') + ':dns'] = (h.match(/ROOT_LINK\s*=\s*['"]([^'"]+)['"]/) || [])[1] || ''; return mem[(this.key || 'slt') + ':dns']; },
   async overview(env, H) { const j = await call(this, env, H, '/api/dashboard-stats', { ajax: true }); const u = j.users || {}, cn = j.connections || {}, cr = j.credits || {}; return { credits: cr.available != null ? +cr.available : null, used_today: cr.used_today, total: u.total, active: u.enabled, expired: u.expired, online: u.online, conns: cn.total }; },
   async lines(env, H) {
     const j = await call(this, env, H, '/api/line/list?show_internal=hide_internal&index=0&size=500&start=0&filters=%5B%5D&sorting=%5B%5D', { ajax: true });
@@ -205,13 +206,14 @@ const SLT = {
 
 /** richiesta con la sessione salvata; se è scaduta rientra una volta da sola */
 async function call(P, env, H, path, o = {}) {
-  const c = await cfgOf(env, H, P.k); if (!c) throw new H.HttpErr(400, `${P.name} non è collegato: scrivi utente e password nella sua sezione`);
+  const KK = P.key || P.k;
+  const c = await cfgOf(env, H, KK); if (!c) throw new H.HttpErr(400, P.key ? `Collega prima il tuo account ${P.name} (utente e password)` : `${P.name} non è collegato: scrivi utente e password nella sua sezione`);
   for (let i = 0; i < 2; i++) {
-    let jar = await loadJar(env, H, P.k);
-    if (!Object.keys(jar).filter((k) => k !== 'VPZ').length) { await P.login(H, jar, c); await saveJar(env, H, P.k, jar); }
+    let jar = await loadJar(env, H, KK);
+    if (!Object.keys(jar).filter((k) => k !== 'VPZ').length) { await P.login(H, jar, c); await saveJar(env, H, KK, jar); }
     const r = await rawV(P, H, jar, path, o);
-    if (P.gone(r)) { mem[P.k + ':jar'] = null; await saveJar(env, H, P.k, {}); if (i === 0) continue; throw new H.HttpErr(502, `${P.name} ha chiuso la sessione: riprova`); }
-    await saveJar(env, H, P.k, jar);
+    if (P.gone(r)) { mem[KK + ':jar'] = null; await saveJar(env, H, KK, {}); if (i === 0) continue; throw new H.HttpErr(502, `${P.name} ha chiuso la sessione: riprova`); }
+    await saveJar(env, H, KK, jar);
     if (o.rawRes) return r;
     if (o.html) return r.txt;
     if (r.status >= 400) throw new H.HttpErr(502, `${P.name}: risposta ${r.status}`);
@@ -221,30 +223,43 @@ async function call(P, env, H, path, o = {}) {
 }
 
 const PANELS = { ro: RO, slt: SLT };
-export async function extRoutes(req, env, path, who, ip, H) {
+export async function extRoutes(req, env, path, who, ip, H, ag) {
   const m = req.method, { HttpErr, json, str } = H;
   const mm = path.match(/^\/(ro|slt)\/(.+)$/); if (!mm) return null;
-  const k = mm[1], sub = mm[2], P = PANELS[k];
-  if (sub === 'state' && m === 'GET') { const c = await cfgOf(env, H, k); return json(c ? { connected: true, user: c.user } : { connected: false }); }
+  const k = mm[1], sub = mm[2], KK = keyOf(k, ag), P = Object.assign(Object.create(PANELS[k]), { key: KK });
+  /* ---- solo titolare: account dei venditori (ognuno con il suo sub-reseller) ---- */
+  if (!ag && sub === 'agents' && m === 'GET') { const rows = ((await env.DB.prepare('SELECT k, v FROM settings WHERE k LIKE ? AND k NOT LIKE ?').bind(k + ':ag:%', '%:ses').all()).results) || []; const out = []; for (const r of rows) { try { const c = await H.unseal(env, r.v); out.push({ id: +r.k.split(':')[2], user: c.user }); } catch {} } return json({ agents: out }); }
+  const am = !ag && sub.match(/^agents\/(\d+)$/);
+  if (am && (m === 'PUT' || m === 'DELETE')) {
+    const id = +am[1], AK = keyOf(k, { id });
+    if (m === 'DELETE') { mem[AK + ':jar'] = null; await env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?)').bind(AK, AK + ':ses').run(); return json({ ok: true }); }
+    const b = await H.readJSON(req, 4096), old = (await cfgOf(env, H, AK)) || {};
+    const c = { user: str(b.user, 120).trim(), pass: str(b.pass, 200) || (b.user === old.user ? old.pass || '' : '') };
+    if (!c.user || !c.pass) throw new HttpErr(400, `Scrivi utente e password ${P.name} del venditore`);
+    const jar = {}; await P.login(H, jar, c); mem[AK + ':jar'] = null; await saveJar(env, H, AK, jar); await setRow(env, AK, await H.seal(env, c));
+    await H.log(env, 'edit', `${who}: account ${P.name} del venditore #${id} collegato (${c.user})`, ip).catch(() => {});
+    return json({ ok: true });
+  }
+  if (sub === 'state' && m === 'GET') { const c = await cfgOf(env, H, KK); return json(c ? { connected: true, user: c.user, agent: !!ag } : { connected: false, agent: !!ag }); }
   if (sub === 'config' && m === 'PUT') {
-    const b = await H.readJSON(req, 4096), old = (await cfgOf(env, H, k)) || {};
+    const b = await H.readJSON(req, 4096), old = (await cfgOf(env, H, KK)) || {};
     const c = { user: str(b.user, 120).trim(), pass: str(b.pass, 200) || old.pass || '' };
     if (!c.user || !c.pass) throw new HttpErr(400, `Scrivi utente e password di ${P.name}`);
-    const jar = {}; await P.login(H, jar, c); await saveJar(env, H, k, jar);
-    await setRow(env, k, await H.seal(env, c)); mem[k + ':csrf'] = ''; mem[k + ':dns'] = undefined;
+    const jar = {}; await P.login(H, jar, c); await saveJar(env, H, KK, jar);
+    await setRow(env, KK, await H.seal(env, c)); mem[KK + ':csrf'] = ''; mem[KK + ':dns'] = undefined;
     await H.log(env, 'edit', `${who}: pannello ${P.name} collegato (account ${c.user})`, ip).catch(() => {});
     return json({ ok: true });
   }
-  if (sub === 'config' && m === 'DELETE') { mem[k + ':jar'] = null; await env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?)').bind(k, k + ':ses').run(); return json({ ok: true }); }
+  if (sub === 'config' && m === 'DELETE') { mem[KK + ':jar'] = null; await env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?)').bind(KK, KK + ':ses').run(); return json({ ok: true }); }
   if (sub === 'overview' && m === 'GET') return json(await P.overview(env, H));
-  if (sub === 'lines' && m === 'GET') return json(await P.lines(env, H));
+  if (sub === 'lines' && m === 'GET') { const L = await P.lines(env, H); if (ag) L.dns = ''; return json(L); }
   if (sub === 'packages' && m === 'GET') return json(await P.packages(env, H));
   if (sub === 'subs' && m === 'GET') return json(await P.subs(env, H));
   if (sub === 'conns' && m === 'GET') return json(await P.conns(env, H));
   if (sub === 'createform' && m === 'GET') return json({ fields: await P.createForm(env, H) });
   if (sub === 'lines/create' && m === 'POST') {
     const b = await H.readJSON(req, 16384), v = (b && b.fields) || {}, out = await P.create(env, H, v);
-    await H.note(env, { src: k, app: P.name, owner: 0, username: out.username, password: out.password, note: str(v.reseller_notes || '', 200) });
+    await H.note(env, { src: k, app: P.name, owner: ag ? ag.id : 0, username: out.username, password: out.password, note: str(v.reseller_notes || '', 200) });
     await H.log(env, 'edit', `${who}: ${P.name} — linea ${str(out.username, 60)} creata`, ip).catch(() => {});
     return json({ ok: true, username: out.username, password: out.password, id: out.id || '' });
   }
