@@ -133,6 +133,14 @@ Salva (Commit): lo store si aggiorna da solo in un minuto. Con `"server": ""` op
 - Il link **Autorizza** dell'email apre una pagina di conferma con il pulsante: così i programmi antivirus della posta che "aprono" i link da soli non possono autorizzare nulla al posto tuo.
 - I link degli APK e i codici Downloader in `apps.json` restano pubblici su GitHub: chi li copia può scaricare fuori dallo store. L'autorizzazione controlla i download **dallo store**; la tua app Kairos resta comunque protetta dall'attivazione nel pannello.
 
+**Store intestati ai venditori (senza conferma a ogni download)** — in alternativa all'autorizzazione a ogni download, il pannello può chiedere che **ogni installazione dello store venga attivata una volta** con il codice di un venditore (il tuo o quello di un agente):
+- Pannello → **App da approvare → Approvazione** → scegli **Solo store attivati, senza conferma** e imposta il **tetto di store attivabili per agente** (di serie 50; lo cambi per il singolo agente in *Agenti → scheda → Store attivabili*; tu non hai tetto). Premi **Salva**.
+- Alla prima apertura dello store compare **«Attiva lo store»**: chi lo installa (di solito l'agente, a casa del cliente) scrive il suo **codice venditore** una volta sola. Da quel momento lo store scarica **senza finestre** e ogni download è **intestato a quel venditore**; nello header dello store si legge *«Store di <nome>»* (toccandolo si può cambiare venditore con un altro codice).
+- Uno store **non attivato non scarica nulla** (vede *«Store da attivare»*). Il link `?v=CODICE` continua solo a precompilare il codice nelle richieste: **non attiva** lo store.
+- Dopo 8 codici sbagliati (per dispositivo o per IP) l'attivazione si ferma per un'ora. Il pulsante **Nuovo** (nuovo codice venditore) impedisce altre attivazioni con il vecchio codice, senza scollegare gli store già attivati.
+- Chi vede cosa: tu vedi ogni store in **Dispositivi** (*«store di …»*, con **Scollega**) e tutto insieme in **Riepilogo store** (store attivati, download, dispositivi e utenti, per agente e per app, ultimi 30 giorni); l'agente vede i suoi in **I tuoi store** e li può scollegare; a ogni attivazione gli arriva un messaggio Telegram (se collegato). Uno store scollegato torna «da attivare».
+- Con **Chiedi la mia autorizzazione** gli store attivati contano lo stesso: la richiesta va al venditore dello store senza che il cliente scriva nessun codice; con **Download liberi** l'intestazione si spegne.
+
 **Avvisi gratis su Telegram e sul telefono** — ogni richiesta arriva con i pulsanti **Autorizza** e **Rifiuta**; quando qualcuno decide, il messaggio si aggiorna per tutti con l'esito e il nome di chi ha deciso.
 
 *Telegram*

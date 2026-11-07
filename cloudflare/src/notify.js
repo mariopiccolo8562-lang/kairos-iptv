@@ -282,6 +282,18 @@ async function pushNew(env, r, h, origin) {
 export async function notifyNew(env, r, origin, ip, h) {
   await Promise.all([tgNew(env, r, h, ip).catch(() => 0), pushNew(env, r, h, origin).catch(() => 0)]);
 }
+/** store attivato con il codice di un venditore: un messaggio Telegram a lui (e a chi sta sopra); al titolare solo se è suo o se vuole tutto */
+export async function notifyActivated(env, d, ip, h) {
+  if (!tgReady(env)) return 0;
+  const who = await recipients(env, null, 'tg', h, { seller: d.seller });
+  if (!who.length) return 0;
+  const rows = ((await env.DB.prepare(`SELECT admin_id, tg_chat FROM notify_links WHERE tg_chat <> '' AND admin_id IN (${who.map(() => '?').join(',')})`).bind(...who.map((w) => w.id)).all()).results) || [];
+  const chats = [...new Set(rows.map((x) => x.tg_chat))];
+  const text = `🏪 <b>Store ${d.again ? 'intestato di nuovo' : 'attivato'}</b>\n${htmlEsc(d.device || 'Dispositivo')}${d.note ? ' · ' + htmlEsc(d.note) : ''}${d.country ? ' · ' + htmlEsc(d.country) : ''}\nVenditore: <b>${htmlEsc(d.sellerName)}</b>`;
+  let n = 0;
+  for (const chat of chats) { try { await tg(env, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true }); n++; } catch (e) { await log(env, 'off', 'Telegram: avviso di attivazione non inviato (' + str(e.message, 120) + ')', ip); } }
+  return n;
+}
 export async function notifyDecided(env, r, st, via, who) {
   const w = [who, VIA_TXT[via] || ''].filter(Boolean).join(' ');
   await tgDecided(env, r, st, w ? w + ' · ' + fmtTime(now()).split(', ').pop() : '').catch(() => {});

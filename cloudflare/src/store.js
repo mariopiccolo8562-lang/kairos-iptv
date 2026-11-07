@@ -48,6 +48,10 @@ const PHONE_RE = /^\+[1-9]\d{7,14}$/;
 const SMS_DEF_DAY = 50;          // SMS al giorno se il titolare non sceglie un altro tetto
 const SMS_MAX_DAY = 500;
 const MAIL_RE = /^[^\s@<>"',;:()[\]\\]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,}$/;
+const STORE_MAX_DEF = 50;        // store attivabili per agente se il titolare non sceglie altro
+const STORE_MAX_CAP = 100000;
+const ACT_FAILS = 8;             // codici venditore sbagliati all'attivazione (per IP e per dispositivo) prima della pausa
+const ACT_FAIL_WIN = 3600e3;
 
 const enc = new TextEncoder();
 const now = () => Date.now();
@@ -110,7 +114,9 @@ async function getStoreSettings(env) {
   // dispositivi «senza limiti»: eccezione del titolare (installatori, negozi): niente tetto orario né tempo di attesa
   const trusted = Array.isArray(s.trusted) ? s.trusted.filter((d) => typeof d === 'string' && DID_RE.test(d)).slice(0, MAX_BLOCKED) : [];
   // agentAlerts: se vero il titolare riceve gli avvisi anche per le richieste con il codice di un agente (di serie le gestisce solo l'agente)
-  return { approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, trusted, sms: smsNorm(s.sms), closed: closedNorm(s.closed), agentAlerts: s.agentAlerts === true };
+  // activation: «solo store attivati»: si scarica solo da store intestati a un venditore (codice scritto una volta), senza conferma
+  const storeMax = Number.isInteger(s.storeMax) && s.storeMax >= 0 && s.storeMax <= STORE_MAX_CAP ? s.storeMax : STORE_MAX_DEF;
+  return { approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, trusted, sms: smsNorm(s.sms), closed: closedNorm(s.closed), agentAlerts: s.agentAlerts === true, activation: s.activation === true, storeMax };
 }
 /** numero in formato internazionale (+39…); i numeri italiani scritti senza prefisso vengono completati */
 function phoneNorm(v) {
@@ -150,7 +156,7 @@ async function findOwn(env, id, did) {
 }
 
 const ENDED = { denied: 'Richiesta rifiutata', expired: 'Richiesta scaduta', used: 'Autorizzazione già usata', revoked: 'Autorizzazione revocata dal venditore' };
-const VIA = { email: "dall'email", panel: 'dal pannello', code: 'con il codice', auto: 'automatica', tries: 'troppi codici errati', telegram: 'da Telegram', push: 'dalla notifica' };
+const VIA = { email: "dall'email", panel: 'dal pannello', code: 'con il codice', auto: 'automatica', store: 'store attivato', tries: 'troppi codici errati', telegram: 'da Telegram', push: 'dalla notifica' };
 
 /* avvisi esterni (Telegram, notifiche): worker.js li collega con storeHooks() */
 let HOOKS = {};
@@ -193,6 +199,62 @@ async function revoke(env, r, who, ip = '') {
   await log(env, 'off', `${who}: Store — ${st === 'approved' ? 'autorizzazione revocata' : 'richiesta rifiutata'} · ${r.app} su ${r.device || 'dispositivo'}${r.note ? ' (' + r.note + ')' : ''}`, ip);
   return true;
 }
+
+/* ---------------- store intestati: un'installazione dello store attivata con il codice di un venditore ---------------- */
+/** riga dello store attivato (null se mai attivato o scollegato) */
+async function deviceOf(env, did) {
+  if (!DID_RE.test(did)) return null;
+  const d = await env.DB.prepare('SELECT did, seller, device, note, country, activated, last, downloads, active FROM store_devices WHERE did = ?').bind(did).first();
+  return d && d.active ? d : null;
+}
+/** tentativi sbagliati di attivazione: pochi all'ora per IP e per dispositivo (il codice è corto) */
+async function actFailed(env, keys, t) {
+  for (const k of keys) {
+    const row = await env.DB.prepare('SELECT n, t FROM store_act_fail WHERE k = ?').bind(k).first();
+    if (row && t - row.t < ACT_FAIL_WIN && row.n >= ACT_FAILS) return true;
+  }
+  return false;
+}
+async function actFail(env, keys, t) {
+  for (const k of keys) await env.DB.prepare('INSERT INTO store_act_fail (k, n, t) VALUES (?, 1, ?) ON CONFLICT(k) DO UPDATE SET n = CASE WHEN ? - store_act_fail.t < ? THEN store_act_fail.n + 1 ELSE 1 END, t = ?').bind(k, t, t, ACT_FAIL_WIN, t).run();
+}
+async function actOk(env, keys) { for (const k of keys) await env.DB.prepare('DELETE FROM store_act_fail WHERE k = ?').bind(k).run(); }
+
+/** POST /api/store/activate { did, device, note, seller }: lo store si intesta al venditore di quel codice */
+async function activate(req, env, ctx, url, ip, opts) {
+  if (await limited(env.RL_DEVICE, 'sact:' + ip)) return json({ error: 'Troppe richieste, riprova tra poco' }, 429);
+  const b = await readBody(req);
+  const did = str(b.did, 64), device = str(b.device, 80), note = str(b.note, 40), code = str(b.seller, 8);
+  if (!DID_RE.test(did)) return json({ error: 'Dispositivo non valido' }, 400);
+  const s = await getStoreSettings(env), t = now(), keys = ['ip:' + ip, 'did:' + did];
+  if (s.blocked.includes(did)) return json({ error: 'Dispositivo bloccato dal venditore' }, 403);
+  if (await actFailed(env, keys, t)) return json({ error: 'Troppi codici sbagliati: riprova tra un\'ora' }, 429);
+  const seller = code && typeof opts.sellerOf === 'function' ? await opts.sellerOf(code) : null;
+  if (!seller) { await actFail(env, keys, t); return json({ error: 'Codice venditore non valido: controllalo' }, 400); }
+  // tetto di store attivabili per agente (deciso dal titolare; il titolare non ha tetto)
+  if (seller.id) {
+    const cap = typeof opts.storeCap === 'function' ? await opts.storeCap(seller.id, s.storeMax) : s.storeMax;
+    const cur = await env.DB.prepare('SELECT COUNT(*) AS n FROM store_devices WHERE seller = ? AND active = 1 AND did <> ?').bind(seller.id, did).first();
+    if (((cur && cur.n) || 0) >= cap) return json({ error: `${seller.name} ha già attivato il numero massimo di store (${cap}): può alzarlo solo il titolare`, cap: true }, 409);
+  }
+  const cf = req.cf || {};
+  const country = [str(cf.country, 4), str(cf.city, 40)].filter(Boolean).join(' · ');
+  const prev = await env.DB.prepare('SELECT seller, active FROM store_devices WHERE did = ?').bind(did).first();
+  await env.DB.prepare(`INSERT INTO store_devices (did, seller, device, note, country, activated, last, downloads, active) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 1)
+    ON CONFLICT(did) DO UPDATE SET seller = excluded.seller, device = CASE WHEN excluded.device <> '' THEN excluded.device ELSE store_devices.device END,
+    note = CASE WHEN excluded.note <> '' THEN excluded.note ELSE store_devices.note END, country = excluded.country, activated = excluded.activated, active = 1`)
+    .bind(did, seller.id, device, note, country, t).run();
+  await actOk(env, keys);
+  const again = !!(prev && prev.active);
+  const d = { did, seller: seller.id, sellerName: seller.name, device, note, country, activated: t, again, prevSeller: prev ? prev.seller : null };
+  const bg = [log(env, 'on', `Store: ${again ? 'store intestato di nuovo' : 'store attivato'} · ${device || 'dispositivo'}${note ? ' (' + note + ')' : ''} · venditore ${seller.name}`, ip)];
+  if (typeof HOOKS.activated === 'function') bg.push(Promise.resolve().then(() => HOOKS.activated(env, d, url.origin, ip)).catch(() => {}));
+  ctx.waitUntil(Promise.all(bg));
+  return json({ ok: true, seller: seller.name, since: t });
+}
+
+/** venditore (id) a cui è intestato uno store attivo; null se non attivato */
+export async function storeDeviceSeller(env, did) { const d = await deviceOf(env, str(did, 64)); return d ? +d.seller || 0 : null; }
 
 /** il titolare vuole gli avvisi anche per le richieste con il codice di un agente? (per Telegram/notifiche in notify.js) */
 export async function storeAgentAlerts(env) { try { return (await getStoreSettings(env)).agentAlerts; } catch { return false; } }
@@ -314,8 +376,12 @@ export async function storeApi(req, env, ctx, url, ip, opts = {}) {
     if (p === '/config' && m === 'GET') {
       if (await limited(env.RL_DEVICE, 'scfg:' + ip)) return json({ error: 'Troppe richieste' }, 429);
       const S = await getStoreSettings(env), cl = storeClosedNow(S.closed);
-      return json({ on: S.approval, closed: cl, ...(cl ? { msg: closedMsg(S.closed) } : {}) });
+      // con ?did= lo store sa se è già intestato a un venditore (e a chi)
+      const dev = await deviceOf(env, str(url.searchParams.get('did'), 64));
+      const name = dev && typeof opts.sellerName === 'function' ? await opts.sellerName(dev.seller) : '';
+      return json({ on: S.approval, activation: S.activation, activated: !!dev, ...(dev ? { seller: name, since: dev.activated } : {}), closed: cl, ...(cl ? { msg: closedMsg(S.closed) } : {}) });
     }
+    if (p === '/activate' && m === 'POST') return await activate(req, env, ctx, url, ip, opts);
     if (p === '/seller' && m === 'GET') {
       // il cliente scrive il codice del suo venditore nello Store: si conferma solo che esiste (nome del venditore), niente altro
       if (await limited(env.RL_DEVICE, 'ssel:' + ip)) return json({ error: 'Troppe richieste' }, 429);
@@ -357,14 +423,20 @@ async function create(req, env, ctx, url, ip, opts) {
   let appUrl = str(b.appUrl, 1000);
   // venditore: il codice scritto dal cliente (o arrivato col link dello store); sconosciuto o assente = titolare
   const sellerRaw = str(b.seller, 8);
-  const seller = sellerRaw && typeof opts.sellerOf === 'function' ? await opts.sellerOf(sellerRaw) : null;
+  let seller = sellerRaw && typeof opts.sellerOf === 'function' ? await opts.sellerOf(sellerRaw) : null;
   if (sellerRaw && !seller) return json({ error: 'Codice venditore non valido: controllalo o lascialo vuoto' }, 400);
   if (!app) return json({ error: 'App mancante' }, 400);
   if (!DID_RE.test(did)) return json({ error: 'Dispositivo non valido' }, 400);
   if (appUrl && !/^https?:\/\/[^\s]+$/i.test(appUrl)) return json({ error: 'Link non valido' }, 400);
-  const s = await getStoreSettings(env), t = now();
+  let s = await getStoreSettings(env); const t = now();
   if (s.blocked.includes(did)) return json({ error: 'Dispositivo bloccato dal venditore' }, 403);
-  const trusted = s.trusted.includes(did); // eccezione del titolare: salta tempo di attesa e tetto orario
+  // store intestato a un venditore (attivato con il suo codice): la richiesta è sua, qualunque codice sia scritto
+  const dev = await deviceOf(env, did);
+  if (dev) { seller = { id: dev.seller, name: typeof opts.sellerName === 'function' ? await opts.sellerName(dev.seller) : '' }; }
+  if (s.activation && !dev) return json({ error: 'Store da attivare: chiedi al tuo venditore di attivarlo con il suo codice', needActivation: true }, 403);
+  const free = s.activation && !!dev; // «solo store attivati»: da uno store intestato il download parte senza conferma
+  if (free) s = { ...s, approval: false };
+  const trusted = s.trusted.includes(did) || free; // eccezione del titolare (o store intestato): salta tempo di attesa e tetto orario
   if (storeClosedNow(s.closed)) return json({ error: closedMsg(s.closed), closed: true }, 403); // fascia oraria di chiusura decisa dal titolare
 
   // stessa app dallo stesso dispositivo già in attesa: nessuna nuova email (una richiesta = una app = un download)
@@ -392,12 +464,12 @@ async function create(req, env, ctx, url, ip, opts) {
   const auto = !s.approval;
   const token = auto ? b64url(rand(24)) : '';
   await env.DB.prepare('INSERT INTO store_requests (id, app, app_url, did, device, note, ip, country, code, status, token, via, created, decided, seller) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(r.id, app, appUrl, did, device, note, ip, country, r.code, auto ? 'approved' : 'pending', token, auto ? 'auto' : '', t, auto ? t : 0, r.seller).run();
+    .bind(r.id, app, appUrl, did, device, note, ip, country, r.code, auto ? 'approved' : 'pending', token, free ? 'store' : auto ? 'auto' : '', t, auto ? t : 0, r.seller).run();
   const bg = [env.DB.prepare('DELETE FROM store_requests WHERE created < ?').bind(t - KEEP).run().catch(() => {})];
   if (auto) {
-    bg.push(log(env, 'on', `Store: download ${app} su ${device || 'dispositivo'}${note ? ' (' + note + ')' : ''} · approvazione spenta`, ip));
+    bg.push(log(env, 'on', `Store: download ${app} su ${device || 'dispositivo'}${note ? ' (' + note + ')' : ''} · ${free ? 'store di ' + r.sellerName : 'approvazione spenta'}`, ip));
     ctx.waitUntil(Promise.all(bg));
-    return json({ id: r.id, status: 'approved', token, auto: true });
+    return json({ id: r.id, status: 'approved', token, auto: true, ...(free ? { seller: r.sellerName } : {}) });
   }
   bg.push(log(env, 'new', `Store: richiesta download ${app} da ${device || 'dispositivo'}${note ? ' (' + note + ')' : ''}${country ? ' · ' + country : ''}${r.seller ? ' · venditore ' + r.sellerName : ''}`, ip));
   bg.push(notify(env, url.origin, r, s, ip));
@@ -464,7 +536,8 @@ async function consume(req, env, ctx, ip) {
   // un solo download per autorizzazione: la riga passa a "used" e non vale più
   const u = await env.DB.prepare("UPDATE store_requests SET uses = uses + 1, used = ? WHERE id = ? AND status = 'approved' AND uses < ?").bind(now(), r.id, MAX_USES).run();
   if (!changed(u)) return bad('Autorizzazione già usata. Richiedila di nuovo.', 'used');
-  if (!r.uses) ctx.waitUntil(log(env, 'edit', `Store: download avviato · ${r.app} su ${r.device || 'dispositivo'}${r.note ? ' (' + r.note + ')' : ''}`, ip));
+  if (!r.uses) ctx.waitUntil(Promise.all([log(env, 'edit', `Store: download avviato · ${r.app} su ${r.device || 'dispositivo'}${r.note ? ' (' + r.note + ')' : ''}`, ip),
+    env.DB.prepare('UPDATE store_devices SET downloads = downloads + 1, last = ? WHERE did = ? AND active = 1').bind(now(), r.did).run().catch(() => {})]));
   return json({ ok: true, app: r.app, appUrl: r.app_url });
 }
 
@@ -529,14 +602,15 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
     if (path === '/store' && m === 'GET') {
       const t = now();
       // tutte le letture insieme (il database è lontano: prima erano quattro attese una dopo l'altra, più gli agenti)
-      const [settings, rowsR, sent, smsSent, agents] = await Promise.all([
+      const [settings, rowsR, sent, smsSent, agents, devR] = await Promise.all([
         getStoreSettings(env),
         env.DB.prepare('SELECT id, app, app_url, did, device, note, country, code, status, via, tries, uses, created, decided, by_admin, seller FROM store_requests WHERE created > ? ORDER BY created DESC LIMIT 300').bind(t - KEEP).all(),
         env.DB.prepare('SELECT COUNT(*) AS n FROM store_requests WHERE mailed = 1 AND created > ?').bind(t - 86400e3).first(),
         env.DB.prepare('SELECT COALESCE(SUM(sms), 0) AS n FROM store_requests WHERE created > ?').bind(t - 86400e3).first(),
         typeof opts.smsAgentList === 'function' ? Promise.resolve().then(() => opts.smsAgentList()).catch(() => []) : [],
+        env.DB.prepare('SELECT did, seller, device, note, country, activated, last, downloads FROM store_devices WHERE active = 1 ORDER BY activated DESC LIMIT 2000').all(),
       ]);
-      const rows = (rowsR && rowsR.results) || [];
+      const rows = (rowsR && rowsR.results) || [], stores = (devR && devR.results) || [];
       const requests = rows.map((r) => {
         const st = effStatus(r, t);
         return { id: r.id, app: r.app, appUrl: r.app_url, did: r.did, device: r.device, note: r.note, country: r.country, code: st === 'pending' ? r.code : '', status: st, via: r.via, tries: r.tries, uses: r.uses, created: r.created, decided: r.decided, by: +r.by_admin || 0, seller: +r.seller || 0 };
@@ -553,6 +627,14 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       }
       for (const did of settings.blocked) if (!byDid.has(did)) byDid.set(did, { did, device: '', note: '', country: '', last: 0, requests: 0, downloads: 0, pending: 0, blocked: true });
       for (const did of settings.trusted) if (!byDid.has(did)) byDid.set(did, { did, device: '', note: '', country: '', last: 0, requests: 0, downloads: 0, pending: 0, blocked: false, trusted: true });
+      // store intestati: compaiono anche se non hanno ancora scaricato nulla; seller 0 = titolare
+      for (const d of stores) {
+        let x = byDid.get(d.did);
+        if (!x) { x = { did: d.did, device: d.device, note: d.note, country: d.country, last: d.last, requests: 0, downloads: 0, pending: 0, blocked: settings.blocked.includes(d.did), trusted: settings.trusted.includes(d.did) }; byDid.set(d.did, x); }
+        if (!x.device && d.device) x.device = d.device;
+        if (!x.note && d.note) x.note = d.note;
+        x.seller = d.seller; x.activated = d.activated; x.storeDownloads = d.downloads; if (d.last > x.last) x.last = d.last;
+      }
       const devices = [...byDid.values()].sort((a, b) => (+b.blocked - +a.blocked) || (b.last - a.last));
       return json({
         settings,
@@ -560,14 +642,32 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
         sms: { ready: smsReady(env), sentToday: (smsSent && +smsSent.n) || 0, agents },
         // pending = quelle che aspettano il titolare; pendingAgents = con il codice di un agente (le gestisce lui, salvo agentAlerts)
         requests, pending: requests.filter((r) => r.status === 'pending' && (!r.seller || settings.agentAlerts)).length,
-        pendingAgents: requests.filter((r) => r.status === 'pending' && r.seller).length, devices,
+        pendingAgents: requests.filter((r) => r.status === 'pending' && r.seller).length, devices, stores: stores.length,
       });
+    }
+    if (path === '/store/summary' && m === 'GET') {
+      // riepilogo per il titolare: quanti store attivati, quanti dispositivi e download, per agente e per app (ultimi 30 giorni)
+      if (by) throw new StoreErr(403, 'Il riepilogo dello store lo vede solo il titolare');
+      const t = now(), d7 = t - 7 * 86400e3, d1 = t - 86400e3, d30 = t - KEEP;
+      const [st, dl, apps, tot] = await Promise.all([
+        env.DB.prepare('SELECT seller, COUNT(*) AS n, SUM(downloads) AS dl, MAX(last) AS last, MAX(activated) AS newest FROM store_devices WHERE active = 1 GROUP BY seller').all(),
+        env.DB.prepare('SELECT seller, COUNT(*) AS n, COUNT(DISTINCT did) AS devs, SUM(CASE WHEN created > ? THEN 1 ELSE 0 END) AS n7, SUM(CASE WHEN created > ? THEN 1 ELSE 0 END) AS n1 FROM store_requests WHERE uses > 0 AND created > ? GROUP BY seller').bind(d7, d1, d30).all(),
+        env.DB.prepare('SELECT app, COUNT(*) AS n, COUNT(DISTINCT did) AS devs, SUM(CASE WHEN created > ? THEN 1 ELSE 0 END) AS n7 FROM store_requests WHERE uses > 0 AND created > ? GROUP BY app ORDER BY n DESC LIMIT 60').bind(d7, d30).all(),
+        env.DB.prepare("SELECT (SELECT COUNT(*) FROM store_devices WHERE active = 1) AS stores, (SELECT COUNT(DISTINCT did) FROM store_requests WHERE created > ?) AS devs30, (SELECT COUNT(*) FROM store_requests WHERE uses > 0 AND created > ?) AS dl30, (SELECT COUNT(*) FROM store_requests WHERE uses > 0 AND created > ?) AS dl7, (SELECT COUNT(*) FROM store_requests WHERE uses > 0 AND created > ?) AS dl1, (SELECT COUNT(*) FROM store_requests WHERE status = 'pending' AND created > ?) AS pending, (SELECT COUNT(DISTINCT did) FROM store_requests WHERE uses > 0 AND created > ?) AS users30").bind(d30, d30, d7, d1, t - REQ_TTL, d30).first(),
+      ]);
+      const perSeller = new Map();
+      const row = (id) => { let x = perSeller.get(id); if (!x) { x = { id, stores: 0, storeDl: 0, last: 0, newest: 0, dl30: 0, dl7: 0, dl1: 0, devs30: 0 }; perSeller.set(id, x); } return x; };
+      for (const r of (st && st.results) || []) { const x = row(+r.seller || 0); x.stores = r.n; x.storeDl = +r.dl || 0; x.last = +r.last || 0; x.newest = +r.newest || 0; }
+      for (const r of (dl && dl.results) || []) { const x = row(+r.seller || 0); x.dl30 = r.n; x.dl7 = +r.n7 || 0; x.dl1 = +r.n1 || 0; x.devs30 = r.devs; }
+      return json({ settings: await getStoreSettings(env), totals: tot || {}, sellers: [...perSeller.values()], apps: (apps && apps.results) || [] });
     }
     if (path === '/store/settings' && m === 'PUT') {
       const b = await readBody(req, 8192);
       const s = await getStoreSettings(env);
-      if (typeof b.approval === 'boolean') s.approval = b.approval;
+      if (typeof b.approval === 'boolean') { s.approval = b.approval; if (!b.approval && b.activation === undefined) s.activation = false; } // «download liberi» spegne anche «solo store attivati»
       if (typeof b.agentAlerts === 'boolean') s.agentAlerts = b.agentAlerts;
+      if (typeof b.activation === 'boolean') { s.activation = b.activation; if (b.activation) s.approval = true; }
+      if (b.storeMax !== undefined) { const n = parseInt(b.storeMax, 10); if (!(n >= 0 && n <= STORE_MAX_CAP)) throw new StoreErr(400, `Tetto di store non valido (da 0 a ${STORE_MAX_CAP})`); s.storeMax = n; }
       if (b.closed && typeof b.closed === 'object') {
         const c = b.closed;
         if ((c.from !== undefined && !HM_RE.test(c.from)) || (c.to !== undefined && !HM_RE.test(c.to))) throw new StoreErr(400, 'Orario non valido: scrivilo come 23:00');
@@ -592,7 +692,7 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
         smsTxt = ` · SMS ${next.on ? `attivi (${(next.owner ? 1 : 0) + next.agents.filter((a) => a.on).length} numeri, max ${next.perDay}/giorno)` : 'spenti'}`;
       }
       await putStoreSettings(env, s);
-      await log(env, 'settings', `${who}: download store — approvazione ${s.approval ? 'attiva' : 'spenta'}${s.agentAlerts ? ' · avvisi anche per le richieste degli agenti' : ''}${smsTxt}`, ip);
+      await log(env, 'settings', `${who}: download store — ${s.activation ? `solo store attivati, senza conferma (max ${s.storeMax} store per agente)` : `approvazione ${s.approval ? 'attiva' : 'spenta'}`}${s.agentAlerts ? ' · avvisi anche per le richieste degli agenti' : ''}${smsTxt}`, ip);
       return json({ settings: s });
     }
     if (path === '/store/sms/test' && m === 'POST') {
@@ -627,6 +727,17 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       const name = await env.DB.prepare('SELECT device, note FROM store_requests WHERE did = ? ORDER BY created DESC LIMIT 1').bind(did).first();
       await log(env, blocked ? 'off' : 'on', `${who}: Store — dispositivo ${blocked ? 'bloccato' : 'sbloccato'} · ${(name && name.device) || 'dispositivo'}${name && name.note ? ' (' + name.note + ')' : ''}`, ip);
       return json({ ok: true, did, blocked, revoked, settings: s });
+    }
+    if (path === '/store/device/unlink' && m === 'POST') {
+      // scollega lo store dal venditore: torna «da attivare» (con «solo store attivati» non scarica più finché non viene riattivato)
+      const b = await readBody(req);
+      const did = str(b.did, 64);
+      if (!DID_RE.test(did)) throw new StoreErr(400, 'Dispositivo non valido');
+      const d = await env.DB.prepare('SELECT device, note, seller FROM store_devices WHERE did = ? AND active = 1').bind(did).first();
+      if (!d) throw new StoreErr(404, 'Questo store non è attivato');
+      await env.DB.prepare('UPDATE store_devices SET active = 0 WHERE did = ?').bind(did).run();
+      await log(env, 'off', `${who}: Store — store scollegato · ${d.device || 'dispositivo'}${d.note ? ' (' + d.note + ')' : ''}`, ip);
+      return json({ ok: true, did, seller: +d.seller || 0 });
     }
     if (path === '/store/device/trust' && m === 'POST') {
       // «Senza limiti»: eccezione del titolare per un dispositivo che fa tante richieste legittime (installatore, negozio)
