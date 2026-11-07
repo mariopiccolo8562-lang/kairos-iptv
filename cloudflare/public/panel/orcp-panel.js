@@ -13,7 +13,7 @@
   const isAg = () => D.role === 'agent';
   const PANEL_NAME = { wolf: 'WOLF', armada: 'Armada', atx: 'Atlantix', ro: 'Realott', slt: 'SLT' };
   const TABS = [['conns', 'Connessioni'], ['msgs', 'Messaggi'], ['ann', 'Annuncio'], ['maint', 'Manutenzione'], ['pin', 'PIN parentale'], ['portals', 'Portali e server'], ['link', 'Collega']];
-  const R = { st: null, tab: 'conns', q: '', onlyOn: false, data: {}, err: '', busy: false, edit: null, pin: null };
+  const R = { st: null, tab: 'conns', q: '', onlyOn: false, data: {}, err: '', busy: false, edit: null, pin: null, ck: '' };
   const name = () => (R.st && R.st.cfg && R.st.cfg.name) || (R.st && R.st.app && R.st.app.name) || 'App ORCP';
   const mut = '<span class="mut">—</span>';
   const badge = (t, c) => `<span style="display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;background:${c}22;color:${c}">${esc(t)}</span>`;
@@ -98,7 +98,7 @@
     return `<div class="card" style="padding:14px;max-width:720px"><div style="display:flex;gap:10px;align-items:center"><b>Accesso a cp.ottrun.com</b>${stTxt}</div>${info}
       <p class="mut" style="font-size:13px;line-height:1.6;margin:8px 0">ORCP ha la verifica «sono umano» al login, quindi KAIROS non può entrare da solo. Entri tu una volta e gli passi l'accesso:</p>
       <ol class="mut" style="font-size:13px;line-height:1.7;margin:0 0 10px 18px;padding:0"><li>Dal computer entra su <b>cp.ottrun.com</b> spuntando <b>«Remember me»</b>.</li><li>Apri gli strumenti del browser (F12 o ⌘⌥I) → <b>Application</b> → <b>Cookies</b> → cp.ottrun.com.</li><li>Copia la riga <b>remember_web_…</b> (nome e valore) e incollala qui sotto. Va bene anche la tabella intera copiata.</li></ol>
-      <textarea class="inp" id="orCK" rows="3" placeholder="remember_web_…=valore; orcp_ottrun_control_panel_session=valore" style="font-family:monospace;font-size:12px"></textarea>
+      <textarea class="inp" id="orCK" rows="3" placeholder="remember_web_…=valore; orcp_ottrun_control_panel_session=valore" style="font-family:monospace;font-size:12px">${esc(R.ck || '')}</textarea>
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn pri" data-or="linksave">${s.connected ? 'Aggiorna accesso' : 'Collega'}</button>${s.connected ? '<button class="btn" data-or="unlink">Scollega</button>' : ''}<a class="btn" href="https://cp.ottrun.com/login" target="_blank" rel="noopener">Apri ORCP</a></div></div>`;
   }
 
@@ -121,6 +121,7 @@
     $$('[data-ortab]', V).forEach((b) => (b.onclick = () => { R.tab = b.dataset.ortab; R.err = ''; render(); }));
     const q = $('#orQ'); if (q) { q.oninput = () => { R.q = q.value; const st = q.selectionStart; render(); const n = $('#orQ'); if (n) { n.focus(); n.setSelectionRange(st, st); } }; }
     const on = $('#orOn'); if (on) on.onchange = () => { R.onlyOn = on.checked; render(); };
+    const ck = $('#orCK', V); if (ck) ck.oninput = () => { R.ck = ck.value; }; // resta anche se il pannello si ridisegna (aggiornamento automatico)
     $$('[data-orcp]', V).forEach((b) => (b.onclick = () => copy(b.dataset.orcp, 'Testo')));
     $$('[data-ormsg]', V).forEach((b) => (b.onclick = () => { R.edit = { user: b.dataset.ormsg }; R.tab = 'msgs'; render(); setTimeout(() => $('#orMT') && $('#orMT').focus(), 30); }));
     $$('[data-ormed]', V).forEach((b) => (b.onclick = () => { const x = (R.data.messages.list || []).find((m) => String(m.id) === b.dataset.ormed); if (x) { R.edit = { ...x }; render(); } }));
@@ -136,7 +137,7 @@
       if (a === 'pin') act(async () => { R.pin = await api('POST', '/admin/orcp/parental', { code: val('orPC') }); if (!R.pin.pin && !R.pin.text) throw new Error('ORCP non ha restituito il PIN: controlla il codice'); });
       if (a === 'portsave') act(async () => { const list = $$('[data-orpn]', V).map((i) => ({ k: i.dataset.orpn, name: i.value, url: ($('[data-orpu="' + i.dataset.orpn + '"]', V) || {}).value || '' })); R.data.portals = await api('PUT', '/admin/orcp/portals', { list }); }, 'Portali aggiornati su ORCP');
       if (a === 'cfgsave') act(async () => { const map = {}; $$('[data-ormap]', V).forEach((s) => (map[s.dataset.ormap] = s.value)); const r = await api('PUT', '/admin/orcp/cfg', { name: val('orCN'), map }); R.st.cfg = r.cfg; await state(true); }, 'Abbinamento salvato');
-      if (a === 'linksave') act(async () => { const ck = val('orCK').trim(); if (!ck) throw new Error('Incolla i cookie di cp.ottrun.com'); await api('PUT', '/admin/orcp/session', { cookies: ck }); R.data = {}; R.tab = 'conns'; await state(true); }, 'ORCP collegato');
+      if (a === 'linksave') act(async () => { const ck = (val('orCK') || R.ck || '').trim(); if (!ck) throw new Error('Incolla i cookie di cp.ottrun.com'); await api('PUT', '/admin/orcp/session', { cookies: ck }); R.ck = ''; R.data = {}; R.tab = 'conns'; await state(true); }, 'ORCP collegato');
       if (a === 'unlink') ask('Scollegare ORCP?', 'KAIROS dimentica l\'accesso. Su ORCP non cambia niente.').then((ok) => ok && act(async () => { await api('DELETE', '/admin/orcp/session'); R.data = {}; await state(true); }, 'ORCP scollegato'));
     }));
   }
