@@ -1410,6 +1410,11 @@ const MAX_CONN = 20, MAX_PROFILES = 12;
 const intIn = (v, lo, hi, label) => { const n = Number(v); if (!Number.isInteger(n) || n < lo || n > hi) throw new HttpErr(400, `${label}: scegli un numero da ${lo} a ${hi}`); return n; };
 const nameClean = (v, max) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max).trim() : '');
 function newProfileId(taken) { const A = 'abcdefghijklmnopqrstuvwxyz0123456789'; let id; do id = [...rand(8)].map((x) => A[x % 36]).join(''); while (taken.has(id)); return id; }
+/* PIN del profilo (impronta calcolata dall'app, mai il PIN in chiaro) ed età massima dei contenuti con il controllo genitori acceso */
+const PROF_PIN_RE = /^[a-z0-9]{1,24}$/;
+const PROF_AGES = [7, 12, 14, 16];
+const profPin = (v) => (typeof v === 'string' && PROF_PIN_RE.test(v) ? v : '');
+const profAge = (v) => { if (v === null || v === undefined || v === '') return null; const n = +v; return PROF_AGES.includes(n) ? n : null; };
 /** valida la lista profili (dall'app o dal pannello). plIds = id delle playlist dell'account */
 function cleanProfiles(list, max, plIds) {
   if (!Array.isArray(list)) throw new HttpErr(400, 'Profili non validi');
@@ -1429,7 +1434,7 @@ function cleanProfiles(list, max, plIds) {
     if (!AVATAR_RE.test(avatar)) throw new HttpErr(400, 'Avatar non valido');
     // una playlist rimossa nel frattempo non blocca il salvataggio: il profilo torna su "tutte"
     const pl = typeof p.pl === 'string' && p.pl.length <= 40 && plIds.includes(p.pl) ? p.pl : 'all';
-    return { id, name, avatar, kids: p.kids === true, pl };
+    return { id, name, avatar, kids: p.kids === true, pl, pinH: profPin(p.pinH), age: p.kids === true ? profAge(p.age) : null };
   });
 }
 /** profili salvati, già pronti per l'app (mai oltre il limite, playlist inesistenti → "all") */
@@ -1437,7 +1442,7 @@ function readProfiles(d, plIds) {
   let a = []; try { a = JSON.parse(d.profiles || '[]'); } catch {}
   if (!Array.isArray(a)) return [];
   return a.filter((p) => p && PROFILE_ID_RE.test(p.id)).slice(0, d.max_profiles ?? 3)
-    .map((p) => ({ id: p.id, name: nameClean(p.name, 24) || 'Profilo', avatar: AVATAR_RE.test(p.avatar) ? p.avatar : 'a1', kids: p.kids === true, pl: plIds.includes(p.pl) ? p.pl : 'all' }));
+    .map((p) => ({ id: p.id, name: nameClean(p.name, 24) || 'Profilo', avatar: AVATAR_RE.test(p.avatar) ? p.avatar : 'a1', kids: p.kids === true, pl: plIds.includes(p.pl) ? p.pl : 'all', pinH: profPin(p.pinH), age: p.kids === true ? profAge(p.age) : null }));
 }
 /** dispositivo principale dell'account (se stesso, oppure quello a cui è collegato); null se il principale non esiste più */
 async function primaryOf(env, d) {

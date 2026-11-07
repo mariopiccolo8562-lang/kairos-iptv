@@ -444,7 +444,9 @@ function profRow(p, i) {
     <div class="ph">${avDot(p.avatar)}<input class="inp" data-pk="name" maxlength="24" value="${esc(p.name)}" placeholder="Nome del profilo"><button class="icb" data-prm title="Elimina profilo">${ICO_BIN}</button></div>
     <div class="row3"><select class="inp" data-pk="avatar" title="Avatar">${avOptions(p.avatar)}</select>
     <select class="inp" data-pk="pl" title="Playlist del profilo"><option value="all">Tutte le playlist</option>${edit.playlists.map((x) => `<option value="${esc(x.id)}" ${p.pl === x.id ? 'selected' : ''}>${esc(x.name || 'Playlist')}</option>`).join('')}</select>
-    <button class="btn sm kid ${p.kids ? 'on' : ''}" data-pkids title="Profilo per bambini">${p.kids ? '✓ ' : ''}Bambini</button></div></div>`;
+    <button class="btn sm kid ${p.kids ? 'on' : ''}" data-pkids title="Controllo genitori per questo profilo: niente contenuti per adulti">${p.kids ? '✓ ' : ''}Bambini</button></div>
+    ${p.kids || p.pinH ? `<div class="row3" style="margin-top:6px;align-items:center">${p.kids ? `<select class="inp" data-pk="age" title="Età massima dei contenuti (film e serie con la classificazione)"><option value="">Nessun limite di età</option>${[16, 14, 12, 7].map((a) => `<option value="${a}" ${+p.age === a ? 'selected' : ''}>Fino a ${a}+${a === 7 ? ' (bambini)' : ''}</option>`).join('')}</select>` : '<span></span>'}
+    ${p.pinH ? '<span class="mut" style="font-size:12px">🔒 PIN del profilo impostato dal cliente</span><button class="btn sm" data-ppin title="Il cliente non ricorda il PIN del profilo: lo togli da qui">Togli PIN</button>' : ''}</div>` : ''}</div>`;
 }
 const PERM_L = [
   ['report', 'Segnalare problemi', 'Pulsante «Segnala un problema» nell\'app'],
@@ -581,7 +583,8 @@ function renderDrawer() {
   $$('#profs .prof').forEach((el) => {
     const i = +el.dataset.pi;
     $('[data-prm]', el).onclick = () => { sync(); edit.profiles.splice(i, 1); renderDrawer(); };
-    $('[data-pkids]', el).onclick = () => { sync(); edit.profiles[i].kids = !edit.profiles[i].kids; renderDrawer(); };
+    $('[data-pkids]', el).onclick = () => { sync(); edit.profiles[i].kids = !edit.profiles[i].kids; if (!edit.profiles[i].kids) edit.profiles[i].age = null; renderDrawer(); };
+    const pp = $('[data-ppin]', el); if (pp) pp.onclick = () => { sync(); edit.profiles[i].pinH = ''; toast('PIN del profilo tolto: salva per confermare'); renderDrawer(); };
     $('[data-pk="avatar"]', el).onchange = (e) => { $('[data-avd]', el).outerHTML = avDot(e.target.value); };
   });
   /* VPN */

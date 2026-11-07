@@ -3721,6 +3721,7 @@ window.kxNowPlaying = (id) => {
 };
 function openFs(item, kind, fromSec, extra, gated) {
   if (!gated && (streamGateNeeded() || lineGateNeeded(item))) { streamGate(kind, item && item.name, item).then((ok) => ok && openFs(item, kind, fromSec, extra, true)); return; }
+  { const t = extra && extra.parent ? extra.parent : item; if (certNeeded(t)) { t._certTried = true; ensureCert(t).then(() => openFs(item, kind, fromSec, extra, gated)); return; } }
   if (isLocked(item) || (extra && extra.parent && isLocked(extra.parent))) { gate(extra && extra.parent && isLocked(extra.parent) ? extra.parent : item).then((ok) => ok && openFs(item, kind, fromSec, extra)); return; }
   if (nativePlay(item, kind, fromSec, extra)) return;
   fsItem = item; fsKind = kind;
@@ -3838,7 +3839,10 @@ function detailMeta(x) {
     $$('#dIn [data-xi]').forEach((b) => (b.onclick = () => { const v = ex[+b.dataset.xi]; if (!v) return; if (NATIVE && NATIVE.playYoutube) NATIVE.playYoutube(v.yt, v.name); else ytOverlay(v.yt, v.name); }));
   }
 }
+/** con un limite di età nel profilo, prima di aprire si legge la classificazione (se manca) */
+const certNeeded = (x) => profAgeLimit() != null && !!x && x.k !== 'l' && !x.cert && !(x._ageOk && x._ageOk === (S.prof && S.prof.id)) && !x._certTried;
 async function openDetail(x) {
+  if (certNeeded(x)) { x._certTried = true; await ensureCert(x); }
   if (isLocked(x) && !(await gate(x))) return;
   lastFocusBeforeDetail = cur;
   { const sc = cur && cur.closest('.screen'); lastKeyBeforeDetail = sc && sc._rows ? { scr: sc, key: browseKey(sc, cur) } : null; }
@@ -4650,9 +4654,31 @@ const PIN_DEFAULT = '0000';
 const pinIsDefault = () => !store.get('pinH', '');
 const pinHash = () => store.get('pinH', '') || hashStr('pin:' + PIN_DEFAULT);
 const parentalOn = () => store.get('parental', true) !== false;
+/* ---- controllo genitori del profilo: età massima dei contenuti (vale sui film e le serie) ---- */
+const AGE_OPTS = [[null, 'Nessun limite di età'], [16, 'Fino a 16+'], [14, 'Fino a 14+'], [12, 'Fino a 12+'], [7, 'Fino a 7+ (bambini)']];
+const profAgeLimit = () => (S.prof && S.prof.kids && S.prof.age != null && [7, 12, 14, 16].includes(+S.prof.age) ? +S.prof.age : null);
+const certAge = (c) => (!c ? null : c === 'T' ? 0 : parseInt(c, 10) || null);
+const RX_KIDS = /(kids|bambin|cartoon|cartoni|animaz|animation|famil|famiglia|ragazz|junior|disney|nick|boing|cartoonito|frisbee|baby|rai yoyo|super!|k2\b)/i;
+const looksKids = (x) => !!x && (RX_KIDS.test(x.group || '') || RX_KIDS.test(x.name || ''));
+/** oltre l'età del profilo: classificazione nota sopra il limite; nel profilo bambini (7+) anche i contenuti senza classificazione che non sembrano per bambini */
+function ageBlocked(x) {
+  const lim = profAgeLimit(); if (lim == null || !x || x.k === 'l' || (x._ageOk && x._ageOk === (S.prof && S.prof.id))) return false; // sbloccato con il PIN: vale per questo profilo
+  const a = certAge(x.cert);
+  if (a != null) return a > lim;
+  return lim <= 7 && !looksKids(x);
+}
+/** prima di aprire: se manca la classificazione prova a leggerla (scheda Xtream, poi TMDB), poi decide */
+async function ensureCert(x) {
+  if (!x || x.cert || x.k === 'l') return;
+  try {
+    if (x.k === 'm' && x.vid && xtOf(x)) { const j = await Promise.race([getJSON(`${xtBase(xtOf(x))}&action=get_vod_info&vod_id=${x.vid}`), new Promise((r) => setTimeout(() => r(null), 2500))]); const i = (j && j.info) || {}; if (!x.cert) x.cert = certNorm(i.mpaa_rating || i.age || i.rating_mpaa || i.certification || i.mpaa); }
+    else if (x.k === 's' && x.seriesId && xtOf(x)) { const j = await Promise.race([getJSON(`${xtBase(xtOf(x))}&action=get_series_info&series_id=${x.seriesId}`), new Promise((r) => setTimeout(() => r(null), 2500))]); const i = (j && j.info) || {}; if (!x.cert) x.cert = certNorm(i.mpaa_rating || i.age || i.rating_mpaa || i.certification); }
+  } catch {}
+  if (!x.cert) { try { await Promise.race([metaOf(x), new Promise((r) => setTimeout(() => r(null), 2500))]); } catch {} }
+}
 function isLocked(x) {
   if (!x || !parentalOn() || S.unlocked) return false;
-  return S.locked.has(x.id) || S.locked.has('g:' + (x.k || '') + '|' + x.group) || (opt('lockAdult') && isAdult(x));
+  return S.locked.has(x.id) || S.locked.has('g:' + (x.k || '') + '|' + x.group) || (opt('lockAdult') && isAdult(x)) || ageBlocked(x);
 }
 function askPin(title, sub) {
   return new Promise((res) => {
@@ -4682,6 +4708,12 @@ async function checkPin(title) {
 /* contenuto bloccato: chiede il PIN una volta per sessione */
 async function gate(x) {
   if (!isLocked(x)) return true;
+  if (ageBlocked(x) && !(S.locked.has(x.id) || (opt('lockAdult') && isAdult(x)))) {
+    if (!x.cert) { await ensureCert(x); if (!ageBlocked(x)) return true; }
+    const lim = profAgeLimit();
+    if (await checkPin(`Oltre l'età del profilo${x.cert ? ' (' + x.cert + ')' : ''} · limite ${lim}+`)) { x._ageOk = S.prof ? S.prof.id : true; return true; }
+    return false;
+  }
   if (await checkPin('Contenuto protetto')) { S.unlocked = true; $$('.lk').forEach((e) => e.classList.remove('lk')); return true; }
   return false;
 }
@@ -5212,7 +5244,8 @@ function applyProfile(p, silent) {
 function profFilter(lib) {
   const p = S.prof; if (!p) return lib;
   const plOk = (x) => !p.pl || p.pl === 'all' || x.pl === p.pl || String(x.id).endsWith(p.pl);
-  const kidsOk = (x) => !p.kids || !isAdult(x);
+  const lim = p.kids && p.age != null && [7, 12, 14, 16].includes(+p.age) ? +p.age : null;
+  const kidsOk = (x) => !p.kids || (!isAdult(x) && (lim == null || x.k === 'l' || (certAge(x.cert) != null ? certAge(x.cert) <= lim : lim > 7 || looksKids(x))));
   if ((!p.pl || p.pl === 'all') && !p.kids) return lib;
   const f = (a) => a.filter((x) => plOk(x) && kidsOk(x));
   const out = { ...lib, live: f(lib.live), movies: f(lib.movies), series: f(lib.series) };
@@ -5223,10 +5256,20 @@ function needProfilePick() {
   const l = profList();
   // dopo l'attivazione serve almeno un profilo: si crea subito (oppure lo crea il fornitore dal pannello)
   if (!l.length && S.account && Array.isArray(S.account.profiles) && (+S.account.maxProfiles || 0) > 0) return 'create';
-  if (l.length < 2) { if (l.length === 1 && (!S.prof || S.prof.id !== l[0].id)) applyProfile(l[0], true); else if (!l.length && (profNs || S.prof)) applyProfile(null, true); return false; }
+  if (l.length < 2) { if (l.length === 1 && l[0].pinH && (!S.prof || S.prof.id !== l[0].id)) return true; if (l.length === 1 && (!S.prof || S.prof.id !== l[0].id)) applyProfile(l[0], true); else if (!l.length && (profNs || S.prof)) applyProfile(null, true); return false; }
   const last = store.get('profId', '');
-  if (store.get('askProf', true) === false && last) { const p = l.find((x) => x.id === last); if (p) { applyProfile(p, true); return false; } }
+  if (store.get('askProf', true) === false && last) { const p = l.find((x) => x.id === last); if (p && !p.pinH) { applyProfile(p, true); return false; } }
   return true;
+}
+/** etichetta sotto il nome del profilo: controllo genitori (con l'età), PIN */
+const profTag = (p) => { const t = []; if (p.kids) t.push(p.age != null && [7, 12, 14, 16].includes(+p.age) ? `FINO A ${p.age}+` : 'BAMBINI'); if (p.pinH) t.push('🔒'); return t.length ? `<small>${t.join(' · ')}</small>` : ''; };
+/* PIN del profilo: per entrare in un profilo che ce l'ha (es. quello dei genitori) */
+const profPinHash = (pin) => hashStr('ppin:' + pin);
+async function profilePinOk(p) {
+  if (!p || !p.pinH) return true;
+  const v = await askPin(`PIN del profilo ${p.name}`); if (v == null) return false;
+  if (profPinHash(v) === p.pinH) return true;
+  fx('err'); toast('PIN errato'); return false;
 }
 /* dal profilo bambini si esce (o si modificano i profili) solo con il PIN del controllo genitori, se impostato */
 async function kidsGate() {
@@ -5241,7 +5284,7 @@ function showProfiles(after) {
   scr._must = !l.length;
   const head = !l.length ? (canAdd ? '<h1>Crea il tuo profilo</h1><p class="mut prsub">Per iniziare serve almeno un profilo: scegli nome e avatar.</p>' : '<h1>Profilo in preparazione</h1><p class="mut prsub">Il tuo fornitore sta creando il tuo profilo. Riprova tra poco.</p>') : '<h1>Chi sta guardando?</h1>';
   scr.innerHTML = `<div class="prw"><div class="prbrand"><b class="brandName" data-b="${esc((S.settings.brand || 'KAIROS').toUpperCase())}">${kxWord((S.settings.brand || 'KAIROS').toUpperCase(), '')}</b><span>${kxWord('PRO', 'tvw', 2.4)}</span></div>${head}
-    <div class="prlist">${l.map((p, i) => `<div class="prof" data-f data-pi="${i}" style="animation-delay:${i * 70}ms"><div class="pav">${avatarSVG(p.avatar, p.name)}</div><b>${esc(p.name)}</b>${p.kids ? '<small>BAMBINI</small>' : ''}</div>`).join('')}${canAdd ? `<div class="prof add" data-f data-pi="add" style="animation-delay:${l.length * 70}ms"><div class="pav"><span>+</span></div><b>Aggiungi profilo</b></div>` : ''}</div>
+    <div class="prlist">${l.map((p, i) => `<div class="prof" data-f data-pi="${i}" style="animation-delay:${i * 70}ms"><div class="pav">${avatarSVG(p.avatar, p.name)}</div><b>${esc(p.name)}</b>${profTag(p)}</div>`).join('')}${canAdd ? `<div class="prof add" data-f data-pi="add" style="animation-delay:${l.length * 70}ms"><div class="pav"><span>+</span></div><b>Aggiungi profilo</b></div>` : ''}</div>
     ${!l.length ? (canAdd ? '' : '<button class="btn pri" data-f id="prRetry">↻ Riprova</button>') : profCanEdit() ? `<button class="btn" data-f id="prManage">${scr.classList.contains('manage') ? '✓ Fine' : '✎ Gestisci profili'}</button>` : ''}</div>`;
   const rt = scr.querySelector('#prRetry');
   if (rt) rt.onclick = async () => { try { await register(); } catch {} if (profList().length) { const a = scr._after; scr._after = null; applyProfile(profList()[0]); if (a) a(); else go('home', true); } else toast('Il profilo non è ancora pronto'); };
@@ -5257,7 +5300,7 @@ function showProfiles(after) {
     };
     scr._poll = setTimeout(tick, 20e3);
   }
-  const pick = async (p) => { if (!p.kids && !(await kidsGate())) return; applyProfile(p); const a = scr._after; scr._after = null; if (a) a(); else go('home', true); };
+  const pick = async (p) => { if (!p.kids && !(await kidsGate())) return; if (!(await profilePinOk(p))) return; applyProfile(p); const a = scr._after; scr._after = null; if (a) a(); else go('home', true); };
   $$('#profiles .prof').forEach((el) => (el.onclick = () => {
     if (scr.classList.contains('manage')) { const i = el.dataset.pi; return profileEditor(i === 'add' ? null : l[+i]); }
     if (el.dataset.pi === 'add') return profileEditor(null);
@@ -5287,7 +5330,8 @@ function profileEditorOpen(p) {
   const isNew = !p, l = profList();
   if (isNew && l.length >= profMax()) return toast(`Hai già ${profMax()} profili: è il massimo del tuo abbonamento`);
   const pls = activePlaylists();
-  const d = { id: p ? p.id : '', name: p ? p.name : '', avatar: p ? p.avatar : 'a' + (1 + (l.length * 5) % 12), kids: !!(p && p.kids), pl: (p && p.pl) || 'all' };
+  const d = { id: p ? p.id : '', name: p ? p.name : '', avatar: p ? p.avatar : 'a' + (1 + (l.length * 5) % 12), kids: !!(p && p.kids), pl: (p && p.pl) || 'all', age: p && p.age != null && [7, 12, 14, 16].includes(+p.age) ? +p.age : null, pinH: (p && p.pinH) || '' };
+  const ageLabel = () => (AGE_OPTS.find((o) => o[0] === d.age) || AGE_OPTS[0])[1];
   const plLabel = () => (d.pl === 'all' ? 'Tutte' : (pls.find((x) => x.id === d.pl) || {}).name || 'Tutte');
   const avPk = avPacks();
   const m = kxModal('profM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">${isNew ? 'NUOVO PROFILO' : 'MODIFICA PROFILO'}</div>
@@ -5295,7 +5339,9 @@ function profileEditorOpen(p) {
     <input class="inp" data-f id="peName" maxlength="24" placeholder="Nome del profilo" value="${esc(d.name)}"></div>
     <div class="avtabs">${avPk.map(([n], k) => `<button class="chip${k === avPack(d.avatar, avPk) ? ' sel' : ''}" data-f data-avp="${k}">${esc(n)}</button>`).join('')}</div>
     <div class="avgrid" id="avGrid"></div>
-    <div class="sr" data-f id="peKids"><span>${ICX.kids} Profilo bambini (niente contenuti per adulti)</span><b>${d.kids ? 'Sì' : 'No'}</b></div>
+    <div class="sr" data-f id="peKids"><span>${ICX.kids} Controllo genitori per questo profilo (niente contenuti per adulti)</span><b>${d.kids ? 'Sì' : 'No'}</b></div>
+    <div class="sr" data-f id="peAge" style="${d.kids ? '' : 'display:none'}"><span>Età massima dei contenuti</span><b>${esc(ageLabel())}</b></div>
+    <div class="sr" data-f id="pePin"><span>PIN del profilo (serve per entrarci)</span><b>${d.pinH ? 'Impostato' : 'Nessuno'}</b></div>
     ${pls.length > 1 ? `<div class="sr" data-f id="pePl"><span>Playlist del profilo</span><b>${esc(plLabel())}</b></div>` : ''}
     <div class="sbtn"><button class="btn pri" data-f id="peSave">Salva</button>${!isNew && l.length > 1 ? '<button class="btn" data-f id="peDel">Elimina</button>' : ''}<button class="btn" data-f id="peNo">Annulla</button></div>`, null, 'profm');
   setTimeout(() => focus($('#peName'), true), 60);
@@ -5306,7 +5352,15 @@ function profileEditorOpen(p) {
   };
   avGrid(avPack(d.avatar, avPk));
   $$('#profM [data-avp]').forEach((b) => (b.onclick = () => { $$('#profM [data-avp]').forEach((x) => x.classList.toggle('sel', x === b)); avGrid(+b.dataset.avp); focus($('#profM [data-av]'), true); }));
-  $('#peKids').onclick = () => { d.kids = !d.kids; $('#peKids b').textContent = d.kids ? 'Sì' : 'No'; };
+  $('#peKids').onclick = () => { d.kids = !d.kids; $('#peKids b').textContent = d.kids ? 'Sì' : 'No'; $('#peAge').style.display = d.kids ? '' : 'none'; };
+  $('#peAge').onclick = () => { const i = AGE_OPTS.findIndex((o) => o[0] === d.age); d.age = AGE_OPTS[(i + 1) % AGE_OPTS.length][0]; $('#peAge b').textContent = ageLabel(); };
+  $('#pePin').onclick = async () => {
+    if (d.pinH) { d.pinH = ''; $('#pePin b').textContent = 'Nessuno'; toast('PIN del profilo tolto (salva per confermare)'); return; }
+    const a = await askPin('PIN del profilo: 4 cifre'); if (a == null) return;
+    const b2 = await askPin('Ripeti il PIN del profilo'); if (b2 == null) return;
+    if (a !== b2) { fx('err'); toast('I due PIN non coincidono'); return; }
+    d.pinH = profPinHash(a); $('#pePin b').textContent = 'Impostato'; fx('ok');
+  };
   if ($('#pePl')) $('#pePl').onclick = () => { const ids = ['all', ...pls.map((x) => x.id)]; d.pl = ids[(ids.indexOf(d.pl) + 1) % ids.length]; $('#pePl b').textContent = plLabel(); };
   $('#peNo').onclick = () => kxClose('profM');
   const done = (list) => {
@@ -5322,7 +5376,7 @@ function profileEditorOpen(p) {
     d.name = $('#peName').value.trim().slice(0, 24);
     if (!d.name) { toast('Scrivi un nome'); return focus($('#peName'), true); }
     // id di 8 caratteri [a-z0-9] (il server accetta 4-12): Math.random().toString(36) a volte ne dà meno
-    const obj = { id: d.id || Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join(''), name: d.name, avatar: d.avatar, kids: d.kids, pl: d.pl };
+    const obj = { id: d.id || Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join(''), name: d.name, avatar: d.avatar, kids: d.kids, pl: d.pl, age: d.kids ? d.age : null, pinH: d.pinH || '' };
     const list = isNew ? [...l, obj] : l.map((x) => (x.id === obj.id ? obj : x));
     try { const saved = await saveProfiles(list); fx('ok'); toast(isNew ? 'Profilo creato' : 'Profilo salvato'); if (S.prof && S.prof.id === obj.id) applyProfile(saved.find((x) => x.id === obj.id) || obj, true); done(saved); } catch (e) { fx('err'); toast('Non salvato: ' + e.message, 5000); }
   };
@@ -5822,7 +5876,7 @@ Object.assign(SET_IC, { org: '<svg viewBox="0 0 24 24" fill="none" stroke="curre
 const kv2 = (k, v) => `<div class="sr static"><span>${k}</span><b>${v}</b></div>`;
 function acctCard() {
   const a = S.account, l = profList(), canAdd = profCanEdit() && l.length < profMax(), conns = (a && a.conns) || [];
-  return `<h3>Profili</h3><div class="sprofs">${l.map((p) => `<div class="sprof" data-f data-pe="${esc(p.id)}"><div class="pav">${avatarSVG(p.avatar, p.name)}</div><b>${esc(p.name)}</b>${S.prof && S.prof.id === p.id ? '<small>IN USO</small>' : p.kids ? '<small>BAMBINI</small>' : ''}</div>`).join('')}${canAdd ? '<div class="sprof add" data-f data-pe="add"><div class="pav"><span>+</span></div><b>Nuovo</b></div>' : ''}</div>
+  return `<h3>Profili</h3><div class="sprofs">${l.map((p) => `<div class="sprof" data-f data-pe="${esc(p.id)}"><div class="pav">${avatarSVG(p.avatar, p.name)}</div><b>${esc(p.name)}</b>${S.prof && S.prof.id === p.id ? '<small>IN USO</small>' : profTag(p)}</div>`).join('')}${canAdd ? '<div class="sprof add" data-f data-pe="add"><div class="pav"><span>+</span></div><b>Nuovo</b></div>' : ''}</div>
     <div class="snote">Profili: ${l.length} di ${profMax()}. Ogni profilo ha preferiti, cronologia e blocchi propri. ${profCanEdit() ? 'Premi OK su un profilo per modificarlo.' : 'I profili sono gestiti dal fornitore.'}</div>
     ${l.length > 1 ? `<div class="sr" data-f id="aSw"><span>Cambia profilo</span><b>${S.prof ? esc(S.prof.name) : '›'}</b></div><div class="sr" data-f id="aAsk"><span>Chiedi il profilo all'avvio</span><b>${store.get('askProf', true) === false ? 'No' : 'Sì'}</b></div>` : ''}
     <h3 style="margin-top:24px">Dispositivi collegati</h3>
@@ -5842,7 +5896,7 @@ function wireSettingsExtra() {
   $$('[data-pe]').forEach((b) => (b.onclick = () => {
     const id = b.dataset.pe; if (id === 'add') return profileEditor(null);
     const p = profList().find((x) => x.id === id); if (!p) return;
-    if (profCanEdit()) profileEditor(p); else { (p.kids ? Promise.resolve(true) : kidsGate()).then((okp) => { if (!okp) return; applyProfile(p); renderSettings('acct'); focus($('.sm.sel'), true); }); }
+    if (profCanEdit()) profileEditor(p); else { (p.kids ? Promise.resolve(true) : kidsGate()).then(async (okp) => { if (!okp || !(await profilePinOk(p))) return; applyProfile(p); renderSettings('acct'); focus($('.sm.sel'), true); }); }
   }));
   const on = (id, f) => { const e = $('#' + id); if (e) e.onclick = f; };
   $$('[data-plpin]').forEach((b) => (b.onclick = () => plPinToggle(b.dataset.plpin)));
