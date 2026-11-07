@@ -1238,7 +1238,7 @@ const DATE_RE = { test: (s) => { if (s === '') return true; if (!/^\d{4}-\d{2}-\
 
 /* ---------------- permessi per dispositivo ---------------- */
 // tutte le funzioni sono consentite se non vengono spente: nel DB restano solo le chiavi a false
-const PERM_KEYS = ['report', 'request', 'profiles', 'link', 'rec', 'speed', 'vpn', 'epgUrl', 'localPl', 'plSwitch', 'multi', 'ai'];
+const PERM_KEYS = ['report', 'request', 'profiles', 'link', 'rec', 'speed', 'vpn', 'epgUrl', 'localPl', 'plSwitch', 'multi', 'ai', 'lite', 'resInd'];
 const PERM_MSG = 'Funzione disattivata dal fornitore';
 /** oggetto completo {chiave: bool} a partire dal JSON salvato (o da un oggetto parziale) */
 function permsParse(src) {
@@ -1305,6 +1305,90 @@ function playerInput(v) {
   const out = {};
   for (const k of ['live', 'movie', 'series']) { const x = v[k]; if (x === '' || x == null) continue; if (!PLAYER_ENG.includes(x)) throw new HttpErr(400, 'Lettore non valido: usa auto, exo o vlc'); out[k] = x; }
   return Object.keys(out).length ? JSON.stringify(out) : '';
+}
+/* ---------------- modifica in massa ----------------
+   scope: 'ids' (i clienti scelti) | 'active' (tutti gli attivi) | 'all' (tutti, esclusi quelli ancora da attivare).
+   Ogni campo assente resta com'è; lettore: '' = lo sceglie il cliente nell'app. Il lettore vale anche per le connessioni
+   collegate «indipendenti» (hanno il loro); permessi, VPN e visioni stanno sul cliente principale. L'app si riallinea al battito. */
+const MASS_MAX = 5000;
+function massInput(b) {
+  if (!b || typeof b !== 'object') throw new HttpErr(400, 'Richiesta non valida');
+  const o = {};
+  if (b.player !== undefined) {
+    if (!b.player || typeof b.player !== 'object') throw new HttpErr(400, 'Lettore non valido');
+    const p = {};
+    for (const k of ['live', 'movie', 'series']) { const v = b.player[k]; if (v === undefined || v === null) continue; if (v !== '' && !PLAYER_ENG.includes(v)) throw new HttpErr(400, 'Lettore non valido: usa auto, exo o vlc'); p[k] = v; }
+    if (Object.keys(p).length) o.player = p;
+  }
+  if (b.perms !== undefined) {
+    if (!b.perms || typeof b.perms !== 'object' || Array.isArray(b.perms)) throw new HttpErr(400, 'Permessi non validi');
+    const p = {};
+    for (const [k, v] of Object.entries(b.perms)) { if (!PERM_KEYS.includes(k)) throw new HttpErr(400, `Permesso sconosciuto: ${String(k).slice(0, 20)}`); if (typeof v !== 'boolean') throw new HttpErr(400, 'Permessi non validi'); p[k] = v; }
+    if (Object.keys(p).length) o.perms = p;
+  }
+  if (b.vpn !== undefined && b.vpn !== null && b.vpn !== '') { const v = Number(b.vpn); if (![0, 1, 2].includes(v)) throw new HttpErr(400, 'Modalità VPN non valida'); o.vpn = v; }
+  if (b.maxStreams !== undefined && b.maxStreams !== null && b.maxStreams !== '') o.maxStreams = intIn(b.maxStreams, 0, MAX_CONN, 'Visioni contemporanee');
+  if (b.rcClear === true) o.rcClear = true;
+  if (!Object.keys(o).length) throw new HttpErr(400, 'Non hai scelto niente da cambiare');
+  return o;
+}
+async function massEdit(env, b, who, ip) {
+  const ch = massInput(b), scope = ['ids', 'active', 'all'].includes(b.scope) ? b.scope : 'ids';
+  const cols = "id, name, code, parent, active, expires, (playlists <> '') AS has_pl, perms, player, vpn, max_streams, rc";
+  let list;
+  if (scope === 'ids') {
+    if (!Array.isArray(b.ids) || !b.ids.length) throw new HttpErr(400, 'Scegli almeno un cliente');
+    const ids = [...new Set(b.ids.map((x) => str(x, 20)).filter((x) => /^[A-Za-z0-9_-]{6,20}$/.test(x)))].slice(0, MASS_MAX);
+    list = (await devicesByIds(env, ids, cols)).filter((d) => !d.parent);
+  } else {
+    list = ((await env.DB.prepare(`SELECT ${cols} FROM devices WHERE parent = '' LIMIT ${MASS_MAX + 1}`).all()).results) || [];
+    if (list.length > MASS_MAX) throw new HttpErr(400, `Più di ${MASS_MAX} clienti: usa la selezione`);
+    // «da attivare» (mai attivati, senza playlist) restano fuori; «attivi» = abbonamento in corso
+    list = list.filter((d) => { const s = statusOf(d, d.has_pl ? [1] : []); return scope === 'active' ? s === 'active' : s !== 'pending'; });
+  }
+  if (!list.length) return { changed: 0, total: 0 };
+  // connessioni collegate indipendenti: hanno il loro lettore
+  let kids = [];
+  if (ch.player || ch.rcClear) {
+    const ids = list.map((d) => d.id);
+    for (let i = 0; i < ids.length; i += 90) {
+      const part = ids.slice(i, i + 90);
+      kids.push(...((((await env.DB.prepare(`SELECT id, parent, own, player, rc FROM devices WHERE parent IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || [])));
+    }
+  }
+  const nextPlayer = (cur) => { const p = playerParse(cur); for (const [k, v] of Object.entries(ch.player || {})) { if (v === '') delete p[k]; else p[k] = v; } return Object.keys(p).length ? JSON.stringify(p) : ''; };
+  const stmts = [];
+  let changed = 0;
+  for (const d of list) {
+    const set = {};
+    if (ch.player) { const v = nextPlayer(d.player); if (v !== (d.player || '')) set.player = v; }
+    if (ch.perms) { const v = permsJson({ ...permsParse(d.perms), ...ch.perms }); if (v !== (d.perms || '')) set.perms = v; }
+    if (ch.vpn !== undefined && ch.vpn !== (+d.vpn || 0)) set.vpn = ch.vpn;
+    if (ch.maxStreams !== undefined && ch.maxStreams !== (+d.max_streams || 0)) set.max_streams = ch.maxStreams;
+    if (ch.rcClear && (d.rc || '')) set.rc = '';
+    const k = Object.keys(set);
+    if (!k.length) continue;
+    changed++;
+    stmts.push(env.DB.prepare(`UPDATE devices SET ${k.map((c) => c + ' = ?').join(', ')} WHERE id = ?`).bind(...k.map((c) => set[c]), d.id));
+  }
+  for (const x of kids) {
+    const set = {};
+    if (ch.player && +x.own) { const v = nextPlayer(x.player); if (v !== (x.player || '')) set.player = v; }
+    if (ch.rcClear && (x.rc || '')) set.rc = '';
+    const k = Object.keys(set);
+    if (k.length) stmts.push(env.DB.prepare(`UPDATE devices SET ${k.map((c) => c + ' = ?').join(', ')} WHERE id = ?`).bind(...k.map((c) => set[c]), x.id));
+  }
+  for (let i = 0; i < stmts.length; i += 50) await env.DB.batch(stmts.slice(i, i + 50));
+  const ENG_N = { auto: 'automatico', exo: 'ExoPlayer', vlc: 'VLC', '': 'scelto dal cliente' };
+  const what = [
+    ch.player ? 'lettore ' + Object.entries(ch.player).map(([k, v]) => `${{ live: 'diretta', movie: 'film', series: 'serie' }[k]} ${ENG_N[v]}`).join(', ') : '',
+    ch.perms ? 'permessi ' + Object.entries(ch.perms).map(([k, v]) => `${k} ${v ? 'sì' : 'no'}`).join(', ') : '',
+    ch.vpn !== undefined ? 'VPN ' + ['spenta', 'a scelta del cliente', 'sempre attiva'][ch.vpn] : '',
+    ch.maxStreams !== undefined ? 'visioni ' + (ch.maxStreams || 'illimitate') : '',
+    ch.rcClear ? 'tolte le voci imposte solo a loro' : '',
+  ].filter(Boolean).join(' · ');
+  await log(env, 'edit', `${who}: modifica in massa (${scope === 'ids' ? 'selezionati' : scope === 'active' ? 'tutti gli attivi' : 'tutti'}) — ${what} — ${changed} su ${list.length} clienti`, ip);
+  return { changed, total: list.length, kids: kids.length };
 }
 /* DNS salvati dal pannello (elenco indipendente dai clienti) */
 async function dnsList(env) {
@@ -1936,7 +2020,8 @@ async function playerHeartbeat(req, env, ip, ctx) {
     ver: str(b.ver, 20), ui: str(b.ui, 20), model: str(b.model, 80) || (old && old.model) || d.model || '',
     // primo piano: chi lo dichiara lo prende; chi va in sfondo lo lascia e risulta subito non in linea (t spostato indietro)
     ...(vis === true ? { fg_app: app, fg_t: t } : {}),
-    ...(vis === false ? { fg_t: 0, t: t - ONLINE_MS - 1000 } : {}),
+    // il «vado in sfondo» non conta come battito: chi riapre subito l'app non trova il limite dei 15 secondi
+    ...(vis === false ? { fg_t: 0, t: t - ONLINE_MS - 1000, hb_t: old ? +old.hb_t || 0 : 0 } : {}),
     state, title: state === 'idle' ? '' : nameClean(b.title, 120), ch: nameClean(b.ch, 80), ch_id: str(b.chId, 60), grp: nameClean(b.group, 60),
     pl: str(b.pl, 40), prof: nameClean(b.prof, 24), screen: str(b.screen, 20),
     net: NETS.includes(net.type) ? net.type : '', rssi: Math.round(num(net.rssi, -120, 0)),
@@ -4360,6 +4445,11 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const nm = (l) => l.map((id) => (ADDONS.find((a) => a[0] === id) || [id, id])[1]).join(', ');
     await log(env, 'edit', `${who}: add-on${add.length ? ' dati: ' + nm(add) : ''}${del.size ? ' tolti: ' + nm([...del]) : ''} (${stmts.length} clienti)`, ip);
     return json({ changed: stmts.length });
+  }
+  /* ---------- modifica in massa (solo titolare): lettore, permessi, VPN, visioni, voci imposte solo al cliente ---------- */
+  if (path === '/devices/mass' && m === 'POST') {
+    if (!ses || ses.agent) throw new HttpErr(403, 'La modifica in massa è riservata al titolare');
+    return json(await massEdit(env, await readJSON(req, 65536), who, ip));
   }
 
   /* ---------- videoteca ---------- */

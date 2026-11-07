@@ -464,6 +464,8 @@ const PERM_L = [
   ['plSwitch', 'Cambiare playlist', 'Pulsante rapido vicino a «Guida TV» per passare da una playlist all\'altra'],
   ['multi', 'Multi-schermo', '2 o 4 canali insieme sullo stesso schermo (usa più connessioni)'],
   ['ai', 'Assistente IA', 'Domande sul film, la serie o il programma che sta guardando'],
+  ['lite', 'Cambiare la modalità leggera', 'Se spento la decidi tu (Controllo remoto) oppure resta automatica: nell\'app la voce risulta «scelta dal fornitore»'],
+  ['resInd', 'Vedere risoluzione e FPS', 'In alto a destra quando apre un canale: risoluzione e fotogrammi al secondo, aggiornati quando la qualità si adatta'],
 ];
 function renderDrawer() {
   const linked = !!edit.parent, P = linked ? parentOf(edit) : null;

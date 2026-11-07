@@ -816,7 +816,7 @@
     V.insertAdjacentHTML('afterbegin', `<div class="dv-tiles" id="dvTiles"></div>
       <div class="dv-bar"><div class="dv-q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input class="inp" id="dvQ" placeholder="Cerca per nome, codice, note o modello"></div>
         <select class="inp" id="dvSort"><option value="exp">Scadenza più vicina</option><option value="name">Nome A–Z</option><option value="seen">Ultimo accesso</option><option value="new">Aggiunti di recente</option></select>
-        <div class="seg" id="dvView"><button data-dv="cards" title="Schede grandi: comode con pochi clienti">Schede</button><button data-dv="table" title="Tabella compatta con azioni rapide e selezione multipla: comoda con tanti clienti">Tabella</button><button data-dv="list" title="Elenco semplice di prima">Elenco</button></div></div>
+        <button class="btn" id="dvMass" type="button" title="Cambia lettore, permessi, VPN… a tanti clienti insieme" style="display:none">⚙ Modifica in massa</button><div class="seg" id="dvView"><button data-dv="cards" title="Schede grandi: comode con pochi clienti">Schede</button><button data-dv="table" title="Tabella compatta con azioni rapide e selezione multipla: comoda con tanti clienti">Tabella</button><button data-dv="list" title="Elenco semplice di prima">Elenco</button></div></div>
       <div id="dvPend"></div><div class="dv-grid" id="dvCards"></div><div id="dvBulk" class="dvt-bulk"></div><div id="dvTbl"></div><div id="dvMore"></div>`);
     const st = { view: 'cards', sort: 'exp', limit: 60, sel: new Set() };
     try { st.view = localStorage.getItem('kc_dv') || 'cards'; st.sort = localStorage.getItem('kc_dvs') || 'exp'; } catch {}
@@ -896,11 +896,12 @@
     function bulkBar() {
       for (const i of [...st.sel]) if (!D.devices.some((d) => d.id === i)) st.sel.delete(i);
       const n = st.sel.size;
-      $('#dvBulk').innerHTML = n && st.view === 'table' ? `<b>${n} selezionat${n === 1 ? 'o' : 'i'}</b><button class="btn sm" data-bulk="ext1">+1 mese</button><button class="btn sm" data-bulk="addon">🧩 Add-on</button><button class="btn sm" data-bulk="ext12">+12 mesi</button><button class="btn sm danger" data-bulk="kick">⛔ Disconnetti</button><button class="btn sm" data-bulk="off">Disattiva</button><button class="btn sm" data-bulk="on">Riattiva</button><span style="flex:1"></span><button class="btn sm" data-bulk="clear">Deseleziona</button>` : '';
+      $('#dvBulk').innerHTML = n && st.view === 'table' ? `<b>${n} selezionat${n === 1 ? 'o' : 'i'}</b>${window.KXMass && KXMass.ok() ? '<button class="btn sm pri" data-bulk="mass">⚙ Modifica in massa</button>' : ''}<button class="btn sm" data-bulk="ext1">+1 mese</button><button class="btn sm" data-bulk="addon">🧩 Add-on</button><button class="btn sm" data-bulk="ext12">+12 mesi</button><button class="btn sm danger" data-bulk="kick">⛔ Disconnetti</button><button class="btn sm" data-bulk="off">Disattiva</button><button class="btn sm" data-bulk="on">Riattiva</button><span style="flex:1"></span><button class="btn sm" data-bulk="clear">Deseleziona</button>` : '';
       $('#dvBulk').classList.toggle('on', !!n && st.view === 'table');
     }
     async function bulk(act) {
       if (act === 'clear') { st.sel.clear(); return render(); }
+      if (act === 'mass') { if (window.KXMass) KXMass.open([...st.sel], () => { st.sel.clear(); render(); }); return; }
       const ds = [...st.sel].map((i) => D.devices.find((d) => d.id === i)).filter((d) => d && !d.parent && d.status !== 'pending');
       if (!ds.length) return toast('Nessun cliente attivabile tra quelli selezionati', 1);
       if (act === 'addon') {
@@ -960,6 +961,7 @@
       const v = e.target.closest('[data-dv]'); if (v) { st.view = v.dataset.dv; st.limit = st.view === 'table' ? 100 : 60; try { localStorage.setItem('kc_dv', st.view); } catch {} V.classList.toggle('dv-cardsview', st.view !== 'list'); return renderDevices(); }
       const o = e.target.closest('[data-open]'); if (o) { const k = D.devices.find((x) => x.id === o.dataset.open); if (k) openQuick(k); return; }
       const bk = e.target.closest('[data-bulk]'); if (bk) return bulk(bk.dataset.bulk);
+      if (e.target.closest('#dvMass')) { if (window.KXMass) KXMass.open(st.view === 'table' ? [...st.sel] : [], () => { st.sel.clear(); render(); }); return; }
       const cp = e.target.closest('[data-copy]'); if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); toast('Codice copiato: ' + cp.dataset.copy); } catch { toast(cp.dataset.copy); } return; }
       const sl = e.target.closest('[data-sel]'); if (sl) { sl.checked ? st.sel.add(sl.dataset.sel) : st.sel.delete(sl.dataset.sel); sl.closest('tr').classList.toggle('sel', sl.checked); const all = $('#dvtAll'); if (all && !sl.checked) all.checked = false; return bulkBar(); }
       const nt = e.target.closest('[data-note]');
