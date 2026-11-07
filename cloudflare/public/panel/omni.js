@@ -1,5 +1,5 @@
 /* KAIROS Control — ricerca unica in alto (tasto «/» o Ctrl+K): clienti (anche per utente della linea), agenti,
-   pagine del menu e linee dei pannelli esterni WOLF, Armada, MaxPlayer e OrbixPlay in un solo elenco.
+   pagine del menu e linee dei pannelli esterni WOLF, Armada, MaxPlayer, OrbixPlay, Atlantix, Realott, SLT e MirkoTeam in un solo elenco.
    Le linee esterne si scaricano solo alla prima ricerca (poi restano 3 minuti) e solo per i pannelli che puoi usare:
    un agente trova solo le sue, perché sono le stesse risposte filtrate del server. Va caricato dopo i pannelli. */
 (() => {
@@ -38,6 +38,11 @@
           (u.users || []).forEach((x) => add({ p: 'mxp', tag: 'MAX', t: x.username || 'ID ' + x.id, s: (x.lists || []).map((l) => l.user).join(', '), q: x.username || String(x.id), hay: [x.id, x.username, x.email, ...(x.lists || []).map((l) => l.user + ' ' + l.fqdn)] }));
         }
       }).catch(() => {}));
+      // Atlantix, Realott, SLT e MirkoTeam (ORCP): stesse risposte delle loro schede (Atlantix e MirkoTeam solo titolare; Realott/SLT con il permesso)
+      const arr = (d) => (Array.isArray(d) ? d : d && typeof d === 'object' ? (['rows', 'items', 'lines', 'users', 'list', 'data'].map((k) => d[k]).find(Array.isArray) || []) : []);
+      if (!isAg()) T.push(api('GET', '/admin/atx/lines?all=1&page=1&q=&status=&reseller=').then((r) => arr(r).forEach((x) => add({ p: 'atx', tag: 'ATX', t: x.username, s: [x.notes, x.reseller || x.owner || x.reseller_username, Number(x.enabled) === 0 ? 'disattivata' : ''].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.id, x.reseller, x.owner, x.reseller_username] }))).catch(() => {}));
+      for (const [k, tag] of [['ro', 'REALOTT'], ['slt', 'SLT']]) if (can(k)) T.push(api('GET', `/admin/${k}/lines`).then((r) => (r.rows || []).forEach((x) => add({ p: k, tag, t: x.username, s: [x.notes, x.owner, x.status].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.owner, x.id] }))).catch(() => {}));
+      if (!isAg()) T.push(api('GET', '/admin/orcp/state').then((st) => st.connected ? api('GET', '/admin/orcp/data?w=conns') : { list: [] }).then((r) => { const seen = new Set(); (r.list || []).forEach((x) => { const k = String(x.user || '').toLowerCase(); if (!k || seen.has(k)) return; seen.add(k); add({ p: 'orcp', tag: 'MIRKO', t: x.user, s: [x.online ? 'online ora' : 'ultimo accesso ' + (x.last || ''), x.device].filter(Boolean).join(' · '), q: x.user, hay: [x.user, x.device, x.ip] }); }); }).catch(() => {}));
       if (can('oxp')) T.push(api('GET', '/admin/oxp/playlists').then((r) => (r.playlists || []).forEach((x) => add({ p: 'oxp', tag: 'ORB', t: x.user || x.name, s: 'dispositivo ' + x.device + (x.name ? ' · ' + x.name : ''), q: x.device, hay: [x.user, x.device, x.name, x.host] }))).catch(() => {}));
       await Promise.all(T);
       out.forEach((x) => (x.hay = x.hay.filter(Boolean).join(' ').toLowerCase()));
@@ -83,8 +88,9 @@
     const q = gq.value.trim(), toks = q.toLowerCase().split(/\s+/).filter(Boolean), my = ++seq;
     if (!q) { dd.classList.remove('on'); if (D.q) { D.q = ''; renderDevices(); } return; }
     const base = [['Clienti', clients(q, toks)], ['Agenti', agents(toks)], ['Pagine', pages(toks)]];
-    const ext = q.length >= 3 && ['wolf', 'armada', 'mxp', 'oxp'].some(can);
-    const extOf = (L) => { const r = L.filter((x) => fits(x.hay, toks)); return ['WOLF', 'Armada', 'MaxPlayer', 'OrbixPlay'].map((n, i) => [n, r.filter((x) => x.p === ['wolf', 'armada', 'mxp', 'oxp'][i]).slice(0, 6).map((x) => ({ ...x, k: 'ext' }))]); };
+    const PK = ['wolf', 'armada', 'mxp', 'oxp', 'atx', 'ro', 'slt', 'orcp'], PN = ['WOLF', 'Armada', 'MaxPlayer', 'OrbixPlay', 'Atlantix', 'Realott', 'SLT', 'MirkoTeam'];
+    const ext = q.length >= 3 && (!isAg() || ['wolf', 'armada', 'mxp', 'oxp', 'ro', 'slt'].some(can));
+    const extOf = (L) => { const r = L.filter((x) => fits(x.hay, toks)); return PN.map((n, i) => [n, r.filter((x) => x.p === PK[i]).slice(0, 6).map((x) => ({ ...x, k: 'ext' }))]); };
     if (!ext) return draw(base, false);
     const fresh = EXT.t && Date.now() - EXT.t < 180e3;
     draw(fresh ? [...base, ...extOf(EXT.items)] : base, !fresh);
@@ -92,7 +98,7 @@
     const L = await loadExt(); if (my !== seq) return;
     draw([...base, ...extOf(L)], false);
   }
-  const IN = { wolf: '#wfQ', armada: '#arQ', mxp: '#mxQ', oxp: '#oxQ' };
+  const IN = { wolf: '#wfQ', armada: '#arQ', mxp: '#mxQ', oxp: '#oxQ', atx: '#axQ', ro: '#exQ', slt: '#exQ', orcp: '#orQ' };
   async function pick(x) {
     if (!x) return;
     dd.classList.remove('on'); gq.blur();
@@ -104,7 +110,7 @@
     for (let i = 0; i < 60; i++) { // la pagina del pannello si disegna dopo aver scaricato i dati
       if (x.tab) { const t = document.querySelector(`[data-artab="${x.tab}"]`); if (t && !t.classList.contains('on') && !t.dataset.oxDone) { t.dataset.oxDone = '1'; t.click(); } }
       const e = document.querySelector(IN[x.p]);
-      if (e && (!x.tab || document.querySelector(`[data-artab="${x.tab}"].on`) || i > 30)) { e.value = x.q; e.dispatchEvent(new Event('input', { bubbles: true })); break; }
+      if (e && (!x.tab || document.querySelector(`[data-artab="${x.tab}"].on`) || i > 30)) { e.value = x.q; e.dispatchEvent(new Event('input', { bubbles: true })); if (x.p === 'atx') e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); break; } // Atlantix cerca sul server: parte con Invio
       await new Promise((r) => setTimeout(r, 150));
     }
     document.querySelectorAll('[data-ox-done]').forEach((t) => delete t.dataset.oxDone);
