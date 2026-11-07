@@ -14,9 +14,21 @@
     return c;
   };
   const dot = (on) => `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${on ? '#2dd4bf' : '#5b6372'};box-shadow:${on ? '0 0 8px #2dd4bf' : 'none'};margin-right:7px;vertical-align:1px"></span>`;
+  /* ORCP tiene una scheda per ogni installazione dell'app e lascia «online» anche quelle vecchie: lo stesso dispositivo
+     di un utente (stesso ID, oppure stesso modello sulla stessa rete) compare una volta sola, con la scheda più recente */
+  function uniqDev(list) {
+    const seen = new Set(), out = [];
+    for (const x of [...list].sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0) || String(b.last || '').localeCompare(String(a.last || '')))) {
+      const u = String(x.user || '').toLowerCase(), hw = String(x.device || '').toLowerCase().trim(), ip = String(x.ip || '').trim();
+      const ids = [x.did ? 'id:' + x.did : '', hw && ip ? 'hw:' + hw + '|' + ip : ''].filter(Boolean).map((i) => u + '|' + i);
+      if (ids.length && ids.some((i) => seen.has(i))) continue;
+      ids.forEach((i) => seen.add(i)); out.push(x);
+    }
+    return out;
+  }
   function draw() {
     const c = box(); if (!c) return;
-    const L = S.list || [], on = L.filter((x) => x.online), off = L.filter((x) => !x.online);
+    const L = uniqDev(S.list || []), on = L.filter((x) => x.online), off = L.filter((x) => !x.online);
     const q = S.q.trim().toLowerCase();
     let rows = [...on.sort((a, b) => (b.last || '').localeCompare(a.last || '')), ...(S.off ? off.sort((a, b) => (b.last || '').localeCompare(a.last || '')) : [])];
     if (q) rows = rows.filter((x) => (x.user + ' ' + x.device + ' ' + x.ip).toLowerCase().includes(q));

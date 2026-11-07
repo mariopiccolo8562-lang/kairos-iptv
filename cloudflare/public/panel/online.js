@@ -77,10 +77,13 @@
         const d = await api('GET', '/admin/wolf/lines').catch(() => new Promise((ok, no) => setTimeout(() => api('GET', '/admin/wolf/lines').then(ok, no), 4000)));
         for (const l of d.lines || []) rows.push({ p: 'WOLF', id: l.id, u: l.username, n: l.note, w: l.watching, v: { on: l.conns > 0, conns: l.conns, max: l.max }, mx: l.max, en: l.enabled }); })().catch(err('WOLF')),
       !isAg() && (async () => { const st = await api('GET', '/admin/orcp/state'); if (!st.connected) return; const d = await api('GET', '/admin/orcp/data?w=conns');
-        // MirkoTeam (ORCP): un rigo per utente; «connessioni» = dispositivi online adesso con quell'utente
-        const by = new Map();
+        // MirkoTeam (ORCP): un rigo per utente; «connessioni» = dispositivi online adesso con quell'utente.
+        // ORCP tiene una scheda per ogni installazione dell'app (reinstallata, aggiornata, dati cancellati) e lascia «online» anche
+        // quelle vecchie: lo stesso dispositivo (stesso ID, oppure stesso modello sulla stessa rete) si conta una volta sola.
+        const by = new Map(), seen = new Map();
         for (const x of d.list || []) { const k = String(x.user || '').toLowerCase(); if (!k) continue; const r = by.get(k) || { p: 'MirkoTeam', u: x.user, n: '', v: { on: false, conns: 0 }, en: true, last: '' };
-          if (x.online) { r.v.on = true; r.v.conns++; } const tag = [x.device, x.version && 'v' + x.version].filter(Boolean).join(' · '); if (x.online || !r.n) r.n = tag; if (x.last > r.last) r.last = x.last; by.set(k, r); }
+          if (x.online) { r.v.on = true; const sn = seen.get(k) || new Set(), ids = orcpIds(x); if (!ids.length || !ids.some((i) => sn.has(i))) r.v.conns++; ids.forEach((i) => sn.add(i)); seen.set(k, sn); }
+          const tag = [x.device, x.version && 'v' + x.version].filter(Boolean).join(' · '); if (x.online || !r.n) r.n = tag; if (x.last > r.last) r.last = x.last; by.set(k, r); }
         for (const r of by.values()) rows.push(r); })().catch(err('MirkoTeam')),
       canP('armada') && (async () => { const st = await api('GET', '/admin/armada/state'); if (!st.connected) return; const d = await api('GET', '/admin/armada/lines');
         for (const x of d.lines || []) rows.push({ p: 'Armada', u: x.username, n: x.notes, h: st.dns, pw: x.password, mx: x.maxConn, en: x.enabled }); })().catch(err('Armada')),
@@ -98,6 +101,8 @@
     S.rows = rows; S.busy = false; S.t = Date.now(); draw();
   }
   const vOf = (r) => r.v || (r.k ? window.KXOnline.get(r.k) : null);
+  /** come riconosco lo stesso dispositivo tra le schede ORCP: il suo ID, e il modello con la rete da cui si collega */
+  function orcpIds(x) { const hw = String(x.device || '').toLowerCase().trim(), ip = String(x.ip || '').trim(); return [x.did ? 'id:' + x.did : '', hw && ip ? 'hw:' + hw + '|' + ip : ''].filter(Boolean); }
   const stOf = (r) => { const v = vOf(r); return v === undefined ? 'wait' : v === null ? 'na' : v.on ? 'on' : 'off'; };
   const multi = (r) => { const v = vOf(r); return !!(v && v.conns > 1); };
   const KICKED = new Map(); // id WOLF → quando è stata disconnessa (il pannello la mostra «Disconnessa» finché non si ricarica)
