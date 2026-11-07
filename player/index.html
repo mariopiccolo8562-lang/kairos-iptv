@@ -1553,6 +1553,7 @@ if (!S.secret) {
 const NATIVE = window.KairosNative || null;
 const HAS_PLAYER = !!(NATIVE && NATIVE.play);
 if (NATIVE) document.body.classList.add('lite'); // poi decide il pannello (rcLiteApply)
+try { if (NATIVE && devClass() === 'D') document.body.classList.add('xlite', 'lowmem'); } catch {} // chiavetta con poca memoria: leggerissima già dall'avvio (niente animazioni)
 const playPrefs = () => { const o = { engine: 'exo', quality: 'auto', buffer: 'balanced', aspect: 'fit', ...store.get('play', {}) }; for (const k of ['quality', 'buffer', 'aspect']) { const v = rcGet('p.' + k); if (v !== undefined) o[k] = String(v); } return o; };
 
 /* ---------------- audio FX (WebAudio, nessun file) ---------------- */
@@ -3715,6 +3716,7 @@ window.kxNowPlaying = (id) => {
   const x = S.byId && S.byId.get(String(id || '')); if (!x) return;
   if (x.k === 'l') { S.playingLive = x; S.playingVod = null; store.set('lastCh', x.id); } else { S.playingVod = x; S.playingLive = null; }
   S.inPlayer = true; S.lastStallsH = -1;
+  if (lowMem()) setTimeout(() => { try { if (S.inPlayer) window.kxTrim(5); } catch {} }, 1500); // poca memoria: cache dell'interfaccia liberate mentre si guarda
   heartbeat(true);
 };
 function openFs(item, kind, fromSec, extra, gated) {
@@ -4985,11 +4987,16 @@ const dayTime = (t) => { const d = new Date(t), td = new Date(); const day = d.t
 
 /* ---------- controllo remoto dal pannello: impostazioni imposte (rc) e comandi (cmds) ---------- */
 const RC_CFG_KEYS = ['startScr', 'hw', 'adaptQ', 'liveFmt', 'autoNext', 'introAuto', 'resInd', 'subSize', 'textSize', 'sfx', 'epgShift', 'sortCats', 'sortCh', 'sortVod', 'lockAdult', 'engLive', 'engMovie', 'engSeries', 'showHidden', 'orient'];
+/** chiavetta con poca memoria (classe D: ~1 GB, Fire TV Stick/Lite): profilo «poca memoria» da solo */
+const lowMem = () => !!NATIVE && devClass() === 'D';
 function rcLiteApply() {
   const v = rcGet('lite'), b = document.body;
   const lite = v === 'on' || v === 'max' ? true : v === 'off' ? false : !!NATIVE;
-  // memGuard: il dispositivo ha riavviato il motore web per poca memoria → leggerissima da sola (salvo «Spenta» imposta dal pannello)
-  b.classList.toggle('lite', lite); b.classList.toggle('xlite', v === 'max' || (v !== 'off' && !!store.get('memGuard', 0)));
+  // leggerissima da sola sulle chiavette con poca memoria (classe D) e dopo un riavvio per memoria (memGuard), salvo «Spenta» imposta dal pannello
+  const autoX = v !== 'off' && (lowMem() || !!store.get('memGuard', 0));
+  b.classList.toggle('lite', lite); b.classList.toggle('xlite', v === 'max' || autoX);
+  b.classList.toggle('lowmem', lowMem());
+  if (lowMem() && autoX && !store.get('lowMemSeen', 0)) { store.set('lowMemSeen', Date.now()); setTimeout(() => toast('Dispositivo con poca memoria: interfaccia leggerissima attiva da sola'), 4000); }
 }
 /** riavvii forzati dal sistema (poca memoria, tipico Fire Stick): segnalati al pannello e, dal secondo in mezz'ora, modalità leggerissima */
 /** Android chiede memoria: si liberano le cache dell'interfaccia prima che il sistema chiuda l'app */
@@ -5046,7 +5053,7 @@ function rcApply(rc, rcv) {
   try { S.sound = opt('sfx') !== 'off'; applyTextSize(opt('textSize')); if (opt('orient') !== 'auto') applyOrient(opt('orient')); } catch {}
   try { if ($('#settings') && $('#settings').classList.contains('on')) renderSettings(); } catch {}
   try { if (S.lib && S.lib.live && S.lib.live.length && !S.inPlayer) plRerender(); } catch {}
-  try { if (autoLogoOn() && S.lib && S.lib.live && S.lib.live.length) whenIdle(() => autoLogos(), 3000); } catch {}
+  try { if (autoLogoOn() && (!lowMem() || rcGet('logos') === 'on') && S.lib && S.lib.live && S.lib.live.length) whenIdle(() => autoLogos(), 3000); } catch {}
 }
 /** impostazioni attuali dell'app, come le vede il pannello (stesse chiavi del suo catalogo) */
 /** aggiornamento in background: imposto dal fornitore (bgupd) o scelto dal cliente (default sì) */
@@ -5531,6 +5538,7 @@ function normT(s) {
 let trendLoading = false;
 async function loadTrending(force) {
   if (S.demo || !baseServer()) return;
+  if (lowMem()) return; // poca memoria: niente riga delle tendenze (locandine in più da tenere in memoria)
   const t = S.trend;
   if (!force && t && Date.now() - t.t < 6 * 3600e3) return buildTrendIdx();
   if (inView()) return whenIdle(() => loadTrending(force), 2000, 2000, 120e3); // non in visione (§7)

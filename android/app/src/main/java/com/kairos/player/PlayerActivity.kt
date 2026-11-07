@@ -165,6 +165,9 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private var lastQueued = -1L
     private var lastPos = -1L
     private var freezeSec = 0
+    /** video mai partito: l'audio va (la posizione avanza) ma nessun fotogramma dopo 10 s dall'avvio */
+    private var nvPos = -1L
+    private var nvSec = 0
     /** primo fotogramma arrivato dall'ultimo avvio / cambio di superficie (prima non si controlla l'immagine ferma) */
     private var frameSeen = false
     private var stallCounted = false
@@ -185,6 +188,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         override fun onEnded() = evEnded(g, playTok)
         override fun onFirstFrame() = evFirstFrame(g, playTok)
         override fun onAudioDisabled() = evAudioOff(g)
+        override fun onAudioFail(code: String): Boolean = evAudioFail(g, playTok, code)
     }
     private fun live(g: Int, t: Int) = g == engineGen && t == playTok && !closing
     private fun cancelRetry() { retryRun?.let { ui.removeCallbacks(it) }; retryRun = null }
@@ -240,7 +244,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         closeEvt("chiuso")
         recDone.clear(); recCooldownUntil = 0L; varIdx = -1; stayDown = false; upAt = 0L
         readyOnce = false; isBuffering = false; bufferingSince = 0L; stallTimes.clear(); stallCounted = false
-        lastFrames = -1L; lastQueued = -1L; lastPos = -1L; freezeSec = 0; okSince = 0L; frameSeen = false
+        lastFrames = -1L; lastQueued = -1L; lastPos = -1L; freezeSec = 0; nvPos = -1L; nvSec = 0; okSince = 0L; frameSeen = false
         cancelRetry()
         cancelCushion(); cushionN = 0
         deferredErr?.let { ui.removeCallbacks(it) }; deferredErr = null
@@ -329,6 +333,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             "long" -> listOf("reload", "alt", "lite", "engine")
             "fill" -> listOf("lite")
             else -> when {
+                // decoder audio mancante (AC-3, E-AC-3, MP2): l'altro motore li decodifica via software; poi il formato alternativo
+                err.startsWith("AUDIO_") -> listOf("engine", "alt")
                 // decoder video (avvio o decodifica): prima la decodifica software, poi l'altro motore
                 err.contains("DECOD", true) || err.contains("CODEC", true) -> listOf("sw", "engine", "alt", "retry")
                 // contenitore/manifest illeggibili o non supportati: l'altro motore subito
@@ -444,6 +450,13 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             lastFrames = fr; lastQueued = q; lastPos = pos
             if (freezeSec >= 4) { freezeSec = 0; if (!recover("freeze", PlayStats.lastCodecError)) closeEvt("non risolto") }
         } else { freezeSec = 0; lastFrames = -1L; lastQueued = -1L; lastPos = -1L }
+        // nero con l'audio: dopo 10 s dall'avvio il tempo avanza (si sente) ma non è mai arrivato un fotogramma → stessa scala dell'immagine ferma
+        if (e is ExoEngine && !frameSeen && readyOnce && !isBuffering && now - startAt > 10_000L && e.playingVideo() && seekTarget < 0) {
+            val pos = e.rawPosition()
+            if (nvPos >= 0 && pos != nvPos) nvSec++ else nvSec = 0
+            nvPos = pos
+            if (nvSec >= 4) { nvSec = 0; nvPos = -1L; if (!recover("freeze", "NO_VIDEO")) closeEvt("non risolto") }
+        } else { nvSec = 0; nvPos = -1L }
         // blocco vero: caricamento di almeno 1 s durante la visione (non all'avvio né dopo un salto)
         if (isBuffering && !stallCounted && readyOnce && bufferingSince > 0 && now - bufferingSince >= 1000L && bufferingSince - startAt >= 4000L && seekTarget < 0) {
             stallCounted = true
@@ -1088,6 +1101,13 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             if (!frameSeen && startAt > 0 && PlayStats.ttff == 0) PlayStats.ttff = (System.currentTimeMillis() - startAt).toInt().coerceAtLeast(1)
             frameSeen = true; veil.animate().alpha(0f).setDuration(260).start()
         }
+    }
+    /** decoder audio mancante: prova l'altro motore (e poi il formato alternativo); false = nessuna strada, resta il video senza audio */
+    private fun evAudioFail(g: Int, t: Int, code: String): Boolean {
+        if (!live(g, t) || android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) return false
+        val now = System.currentTimeMillis()
+        if (now < recCooldownUntil) return false
+        return recover("error", "AUDIO_$code")
     }
     private fun evAudioOff(g: Int) {
         ui.post {

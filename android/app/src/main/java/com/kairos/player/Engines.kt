@@ -53,6 +53,9 @@ interface EngineListener {
     fun onFirstFrame() {}
     /** decoder audio mancante: la traccia audio è stata disattivata, il video continua */
     fun onAudioDisabled() {}
+    /** decoder audio mancante: prima di spegnere l'audio si prova l'altro motore (VLC decodifica AC-3/MP2 via software).
+     *  true = il lettore ha preso in carico il problema (cambia motore), il player non deve toccare la traccia */
+    fun onAudioFail(code: String): Boolean = false
 }
 
 /** Passaggio del video tra anteprima e schermo intero senza interruzioni (stesso player, nessun nuovo caricamento). */
@@ -328,6 +331,7 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
                 val audioCodes = intArrayOf(PlaybackException.ERROR_CODE_DECODER_INIT_FAILED, PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
                     PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES, PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED, PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED)
                 if (!audioOff && f?.sampleMimeType?.startsWith("audio/") == true && audioCodes.contains(error.errorCode)) {
+                    if (l.onAudioFail(error.errorCodeName)) return // l'altro motore riprova con l'audio
                     audioOff = true
                     player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true).build()
                     player.prepare(); player.playWhenReady = true
