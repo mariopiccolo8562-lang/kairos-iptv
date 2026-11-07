@@ -218,7 +218,7 @@ body.agent .foot{display:none}
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
   const AG_OK = /^\/admin\/(line-notes(\?.*)?|online|insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/(upd|fix)|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|armada\/(state|packages|lines|mags|new|renew|toggle)|oxp\/(state|playlists(\/[A-Za-z0-9_-]+)?)|mxp\/(accounts|a\/[a-z0-9]{2,20}\/(overview|domains|agents(\/\d+\/(enable|disable))?|users(\/\d+(\/password|\/devices|\/lists(\/[A-Za-z0-9%-]+)?)?)?(\?fresh=1)?))|guide|(ro|slt)\/[A-Za-z0-9_\/%.-]+(\?.*)?|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
   // agente: le pagine senza permesso non chiamano nemmeno il server (prima ogni 20-30 s partivano richieste destinate al «non consentito»)
-  const AG_NEED = [[/^\/admin\/store(\/|$)/, 'store'], [/^\/admin\/requests.*[?&]kind=content/, 'contentReq'], [/^\/admin\/requests.*[?&]kind=addon/, 'addonReq'], [/^\/admin\/requests.*[?&]kind=ai/, 'ai'],
+  const AG_NEED = [[/^\/admin\/requests.*[?&]kind=content/, 'contentReq'], [/^\/admin\/requests.*[?&]kind=addon/, 'addonReq'], [/^\/admin\/requests.*[?&]kind=ai/, 'ai'],
     [/^\/admin\/requests(\?(?!.*kind=)|\?.*kind=report|$)/, 'reports'], [/^\/admin\/app-errors/, 'errors'], [/^\/admin\/presence/, 'online'], [/^\/admin\/catalog/, 'vod'], [/^\/admin\/apps3\/lists/, 'appsOp'],
     [/^\/admin\/ext-lists/, 'players'], [/^\/admin\/linked-lines/, 'lines'], [/^\/admin\/agent-maint/, 'maint'], [/^\/admin\/armada\//, 'armada'], [/^\/admin\/wolf\//, 'wolf'], [/^\/admin\/mxp\//, 'mxp'], [/^\/admin\/oxp\//, 'oxp'], [/^\/admin\/ro\//, 'ro'], [/^\/admin\/slt\//, 'slt']];
   const agDenied = (m, p) => { if (!isAgent() || !D.me || !D.me.perms || m !== 'GET') return false; const x = AG_NEED.find(([re]) => re.test(p)); return !!x && !D.me.perms[x[1]]; };
@@ -239,7 +239,9 @@ body.agent .foot{display:none}
   };
 
   /* ---------- modalità agente ---------- */
-  const agentCan = (v) => v !== 'live' && !!PERM_VIEW[v] && can(PERM_VIEW[v]); // «Online ora» è solo del titolare: mostra tutti i clienti del pannello
+  // «Online ora» è solo del titolare: mostra tutti i clienti del pannello. «Download store» è di tutti gli agenti: lì hanno
+  // il loro codice venditore, i loro store e le richieste che arrivano da quegli store (prima serviva un permesso, spento di serie)
+  const agentCan = (v) => v !== 'live' && (v === 'store' || (!!PERM_VIEW[v] && can(PERM_VIEW[v])));
   const OWNER_ONLY = ['dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'storesum', 'dns', 'apps3', 'lines', 'armada', 'wolf', 'mxp', 'oxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity', 'ora', 'atx', 'ro', 'slt', 'orcp']; // ora/atx/ro/slt/orcp: solo titolare (il server risponde 403 agli agenti)
   let modeSet = '';
   function applyMode() {
@@ -471,9 +473,9 @@ body.agent .foot{display:none}
         <div class="ag-chk" id="agPm">${FL.filter(([k]) => !APP_KEYS.includes(k)).map(([k, l, sm]) => chk('perm', k, l, !!P[k], topP && !topP[k], sm)).join('')}</div>
       </div>
       <div class="ag-c"><h4>Pagine del pannello</h4><small>Cosa vede nel suo pannello: sempre e solo i dati dei suoi clienti. Impostazioni, Server DNS, API, la manutenzione generale e le impostazioni dell'assistente restano solo tue (valgono per tutti i clienti). I tuoi clienti e quelli degli altri agenti non li vede mai.</small>
-        <div class="ag-chk" id="agPg">${FP.filter(([k]) => !APP_KEYS.includes(k)).map(([k, l, sm]) => chk('perm', k, l, !!P[k], topP && !topP[k], sm)).join('')}</div>
+        <div class="ag-chk" id="agPg">${FP.filter(([k]) => !APP_KEYS.includes(k) && k !== 'store').map(([k, l, sm]) => chk('perm', k, l, !!P[k], topP && !topP[k], sm)).join('')}</div>
       </div>
-      <div class="ag-c"><h4>App dello store che può approvare</h4><small>Vale se ha «Download store: accettare le richieste». Vede solo le richieste di queste app.</small>
+      <div class="ag-c"><h4>App dello store che può approvare</h4><small>Le richieste degli store attivati con il suo codice gli arrivano sempre, con l'avviso nel pannello. Qui scegli le app che può approvare: per le altre l'avviso arriva a te.</small>
         <div class="ag-chk" id="agSa" style="max-height:300px;overflow:auto">${storeAppsBox(P, topP)}</div>
         <div style="display:flex;gap:8px;margin-top:10px"><input class="inp" id="agSaN" maxlength="80" placeholder="Aggiungi un'app (nome come nello store)" style="margin:0;flex:1"><button class="btn sm" id="agSaAdd">Aggiungi</button></div>
       </div>

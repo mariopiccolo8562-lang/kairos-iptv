@@ -63,10 +63,13 @@ async function getCfg(env) { const c = await getJ(env, 'notify'); return { tgAge
 async function recipients(env, app, kind, h, r) {
   const cfg = await getCfg(env);
   // con il codice di un agente il titolare non viene avvisato (la vede nel pannello), a meno che non lo chieda nelle impostazioni dello Store
-  const ownerToo = !(r && r.seller) || (typeof h.agentAlerts === 'function' && (await h.agentAlerts()));
+  const chain = r && r.seller && typeof h.sellerChain === 'function' ? await h.sellerChain(r) : [];
+  // …ma se nessuno nella catena dell'agente può decidere quell'app (sospeso, app non concessa) la richiesta torna a te
+  const orphan = !!(r && r.seller) && !(chain.length && (await h.eligible(app, chain)).length);
+  const ownerToo = !(r && r.seller) || orphan || (typeof h.agentAlerts === 'function' && (await h.agentAlerts()));
   const owners = ownerToo ? (await h.owners()).map((o) => ({ id: o.id, name: o.username, owner: true })) : [];
   let allow = kind === 'tg' ? cfg.tgAgents : cfg.pushAgents;
-  if (r !== undefined) { const chain = r && r.seller && typeof h.sellerChain === 'function' ? await h.sellerChain(r) : []; allow = allow.filter((id) => chain.includes(id)); }
+  if (r !== undefined) allow = allow.filter((id) => chain.includes(id));
   let agents = [];
   if (allow.length) {
     const ok = new Set(await h.eligible(app, allow));

@@ -3408,8 +3408,10 @@ function agentTree(all, rootId) {
   for (let i = 0; i < out.length; i++) for (const a of all) if (a.parent_id === out[i] && !seen.has(a.id)) { seen.add(a.id); out.push(a.id); }
   return out;
 }
-/** agenti che possono ricevere gli SMS dello store per quell'app (app null = per almeno un'app):
- *  attivi con tutta la catena sopra di loro e con il permesso «Download store» effettivo */
+/** agenti che gestiscono le richieste dei loro store per quell'app (app null = per almeno un'app) e ricevono gli avvisi:
+ *  attivi con tutta la catena sopra di loro; l'elenco «App dello store che può approvare» limita le app.
+ *  Le richieste degli store attivati con il loro codice gli arrivano sempre (prima serviva anche il permesso
+ *  «Download store», spento di serie: senza, la richiesta restava ferma e nessuno veniva avvisato) */
 async function storeSmsAgents(env, app, ids, all) {
   all = all || (await agentsAll(env));
   const by = new Map(all.map((a) => [a.id, a])), out = [];
@@ -3418,7 +3420,7 @@ async function storeSmsAgents(env, app, ids, all) {
     if (!A || !(await agentChainActive(env, id, all))) continue;
     let P = agentPerms(A.perms);
     for (let x = by.get(A.parent_id), n = 0; x && n < 20; x = by.get(x.parent_id), n++) P = agentPermsWithin(P, agentPerms(x.perms));
-    if (P.store && (app === null || storeAppOk(P.storeApps, app))) out.push(id);
+    if (app === null || storeAppOk(P.storeApps, app)) out.push(id);
   }
   return out;
 }
@@ -3800,7 +3802,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   // Download store: vedere e decidere le richieste (le impostazioni restano tue)
   // (solo le app che gli concedi; nello storico solo i download decisi da lui o dai suoi sotto-agenti, salvo «vedere tutto»)
   if (path === '/store' && m === 'GET') {
-    need('store'); const j = await viaOwner(await storeAdmin(req, env, path, who, ip));
+    const j = await viaOwner(await storeAdmin(req, env, path, who, ip)); // niente permesso a parte: gli store attivati con il suo codice sono suoi
     const mineSet = new Set(ctree);
     // le richieste arrivano a chi ha dato il codice venditore (lui o i suoi sotto-agenti); quelle senza codice sono del titolare
     const reqs = (j.requests || []).filter((r) => storeAppOk(P.storeApps, r.app) && (P.storeAll || mineSet.has(+r.seller || 0) || (r.status !== 'pending' && mineSet.has(+r.by || 0))));
@@ -3810,7 +3812,6 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     return json({ requests: reqs.map(({ by, seller, ...x }) => ({ ...x, byMe: by === A.id, mine: seller === A.id })), pending: reqs.filter((r) => r.status === 'pending').length, settings: { approval: !!(j.settings && j.settings.approval), activation: !!(j.settings && j.settings.activation) }, mail: {}, agent: true, apps: P.storeApps, sellerCode: await sellerAgentCode(env, A), stores, storeCap: cap, storesUsed: stores.filter((d) => d.mine).length });
   }
   if (path === '/store/device/unlink' && m === 'POST') {
-    need('store');
     const b = await readJSON(req, 4096);
     const sel = await storeDeviceSeller(env, String(b.did || ''));
     if (sel === null || !ctree.includes(sel)) throw new HttpErr(404, 'Store non trovato tra i tuoi');
@@ -3818,7 +3819,6 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   }
   const sdm = path.match(/^\/store\/([A-Za-z0-9_-]{12,40})\/(approve|deny|revoke)$/);
   if (sdm && m === 'POST') {
-    need('store');
     const r = await env.DB.prepare('SELECT app, by_admin, seller FROM store_requests WHERE id = ?').bind(sdm[1]).first();
     if (!r || !storeAppOk(P.storeApps, r.app)) throw new HttpErr(404, 'Richiesta non trovata');
     if (!P.storeAll && !ctree.includes(+r.seller || 0)) throw new HttpErr(404, 'Richiesta non trovata'); // non è di un suo cliente
@@ -3861,7 +3861,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   if (path === '/state' && m === 'GET') {
     // tutto ciò che non dipende dall'elenco dei clienti parte subito, in parallelo (prima erano una decina di attese una dopo l'altra)
     const chunks = (arr, k = 90) => { const o = []; for (let i = 0; i < arr.length; i += k) o.push(arr.slice(i, i + k)); return o; };
-    const sP = getSettings(env), meP = agentsOut(env, all, [A.id], mine), snP = canAg && P.store ? storeAppNames(env) : Promise.resolve([]), pmP = presenceMap(env);
+    const sP = getSettings(env), meP = agentsOut(env, all, [A.id], mine), snP = canAg ? storeAppNames(env) : Promise.resolve([]), pmP = presenceMap(env);
     // DNS di MaxPlayer limitati: servono i domini per mostrargli solo i codici cliente dei fornitori concessi (al massimo 2,5 s di attesa)
     const mxP = P.players && env.MAXPLAYER_KEY && !P.mxDns.includes('*') ? Promise.race([mxDomains(env).catch(() => null), new Promise((r) => setTimeout(() => r(null), 2500))]) : Promise.resolve(null);
     const agP = canAg ? agentsOut(env, all, tree.filter((x) => x !== A.id), mine) : Promise.resolve([]);
@@ -3879,7 +3879,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const [s, meArr, sAll, agList, actR, msgR, inbox] = await Promise.all([sP, meP, snP, agP, actP, msgP, inboxP]);
     const meOut = meArr[0];
     const { password: _pw, ...meSafe } = meOut;
-    const sNames = canAg && P.store ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
+    const sNames = canAg ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
     return stateJson(req, { role: 'agent', user: A.username, me: { ...meSafe, storeCode: await sellerAgentCode(env, A), perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: agList,
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { name: x.name, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)

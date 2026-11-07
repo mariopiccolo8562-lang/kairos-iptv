@@ -378,6 +378,15 @@
       const newPend = (d.requests || []).filter((r) => r.status === 'pending');
       if (S.seen) { const fresh = newPend.filter((r) => !S.seen.has(r.id)); if (fresh.length) toast(`Nuova richiesta di download: ${fresh[0].app}${fresh.length > 1 ? ` (+${fresh.length - 1})` : ''}`); }
       S.seen = new Set(newPend.map((r) => r.id));
+      // agente: avviso quando dai suoi store parte un download senza approvazione (store attivati, senza conferma)
+      if (D.role === 'agent') {
+        const dl = (d.requests || []).filter((r) => r.status !== 'pending' && (r.via === 'store' || r.via === 'auto'));
+        if (S.seenDl) {
+          const fresh = dl.filter((r) => !S.seenDl.has(r.id));
+          if (fresh.length) { const r = fresh[0], k = /kairos/i.test(r.app || ''); toast(`📲 ${r.app} scaricata${r.device ? ' su ' + r.device : ''} da un tuo store${fresh.length > 1 ? ` (+${fresh.length - 1})` : ''}${k ? ' · per attivarla: «+ Nuovo» e il codice sulla TV' : ''}`); }
+        }
+        S.seenDl = new Set(dl.map((r) => r.id));
+      }
       const first = !S.data;
       S.data = d; badge(); renderList();
       if (full || first) renderSettings();
@@ -541,7 +550,7 @@
     if (owner) {
       const list = d.agents || [];
       agHtml = `<div class="sd-sub">Agenti che possono ricevere gli avvisi</div>${list.length ? list.map((a) => {
-        const why = !a.active ? 'account disattivato' : !a.store ? 'senza il permesso «Download store»: non riceve' : [a.tg ? (a.tgLinked ? 'Telegram collegato' : 'Telegram da collegare') : '', a.push ? (a.pushDevices ? a.pushDevices + ' dispositivi con notifiche' : 'notifiche da attivare') : ''].filter(Boolean).join(' · ') || 'nessun avviso';
+        const why = !a.active ? 'account disattivato' : !a.store ? 'sospeso chi l\'ha creato: non riceve' : [a.tg ? (a.tgLinked ? 'Telegram collegato' : 'Telegram da collegare') : '', a.push ? (a.pushDevices ? a.pushDevices + ' dispositivi con notifiche' : 'notifiche da attivare') : ''].filter(Boolean).join(' · ') || 'nessun avviso';
         return `<div class="sd-ag${a.store && a.active ? '' : ' off'}" data-nfa="${+a.id}"><div class="nm"><b>${esc(a.username)}</b><small>${esc(why)}</small></div>
           <div class="tog${a.tg ? ' on' : ''}" data-nfk="tg" role="switch" tabindex="0"><div><b>Telegram</b></div><i></i></div>
           <div class="tog${a.push ? ' on' : ''}" data-nfk="push" role="switch" tabindex="0"><div><b>Notifiche</b></div><i></i></div></div>`;
@@ -685,7 +694,7 @@
   const appEl = $('#app');
   if (appEl) new MutationObserver(() => {
     if (appEl.classList.contains('on')) { refresh(true); if (location.hash === '#store') { history.replaceState(null, '', location.pathname); setTimeout(goStore, 300); } }
-    else { S.data = null; S.seen = null; badge(); }
+    else { S.data = null; S.seen = null; S.seenDl = null; badge(); }
   }).observe(appEl, { attributes: true, attributeFilter: ['class'] });
   setInterval(() => { if (appEl && appEl.classList.contains('on') && !document.hidden) { refresh(); if ($('#v-storesum') && $('#v-storesum').classList.contains('on')) renderSum(); } }, 20000);
 })();

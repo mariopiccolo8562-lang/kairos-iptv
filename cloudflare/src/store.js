@@ -313,7 +313,7 @@ async function linkSig(env, id) {
 /* ---------------- email al venditore (Resend) ---------------- */
 const fmtTime = (t) => { try { return new Date(t).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' }); } catch { return new Date(t).toISOString(); } };
 async function notify(env, origin, r, s, ip) {
-  if (r.seller && !s.agentAlerts) return; // richiesta con il codice di un agente: la gestisce lui, al titolare resta visibile nel pannello
+  if (r.seller && !s.agentAlerts && !r.orphan) return; // richiesta con il codice di un agente: la gestisce lui, al titolare resta visibile nel pannello
   const to = s.ownerEmail || str(env.OWNER_EMAIL, 200);
   if (!env.RESEND_KEY || !MAIL_RE.test(to)) return; // email non configurata: la richiesta resta visibile nel pannello
   const sent = await env.DB.prepare('SELECT COUNT(*) AS n FROM store_requests WHERE mailed = 1 AND created > ?').bind(now() - 86400e3).first();
@@ -372,7 +372,7 @@ const smsSafe = (v, max) => String(v || '').replace(/[^A-Za-z0-9 _()+-]/g, ' ').
 async function notifySms(env, origin, r, s, ip, opts) {
   const sms = s.sms;
   if (!sms || !sms.on || !smsReady(env)) return;
-  let to = sms.owner && (!r.seller || s.agentAlerts) ? [sms.owner] : [];
+  let to = sms.owner && (!r.seller || s.agentAlerts || r.orphan) ? [sms.owner] : [];
   // agli agenti solo le richieste col loro codice venditore (o di un loro sotto-agente); senza codice avvisato solo il titolare
   let chain = [];
   if (r.seller && opts && typeof opts.sellerChain === 'function') { try { chain = await opts.sellerChain(r); } catch {} }
@@ -509,6 +509,10 @@ async function create(req, env, ctx, url, ip, opts) {
     return json({ id: r.id, status: 'approved', token, auto: true, ...(free ? { seller: r.sellerName } : {}) });
   }
   bg.push(log(env, 'new', `Store: richiesta download ${app} da ${device || 'dispositivo'}${note ? ' (' + note + ')' : ''}${country ? ' · ' + country : ''}${r.seller ? ' · venditore ' + r.sellerName : ''}`, ip));
+  // richiesta di un agente che non può deciderla (app non concessa, catena sospesa): la avvisi tu, così non resta ferma
+  if (r.seller && opts && typeof opts.sellerChain === 'function' && typeof opts.smsAgents === 'function') {
+    try { r.orphan = !(await opts.smsAgents(app, await opts.sellerChain(r))).length; } catch {}
+  }
   bg.push(notify(env, url.origin, r, s, ip));
   bg.push(notifySms(env, url.origin, r, s, ip, opts).catch(() => {}));
   if (typeof HOOKS.created === 'function') bg.push(Promise.resolve().then(() => HOOKS.created(env, r, url.origin, ip)).catch(() => {}));
