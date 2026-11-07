@@ -49,7 +49,7 @@
     const st = (x) => x.online ? badge('Online', '#2dd4bf') : badge('Offline', '#9aa4b2');
     const acts = (x) => `<button class="btn sm" data-ormsg="${esc(x.user)}">Messaggio</button><button class="btn sm" data-orcp="${esc(x.user)}">Copia utente</button>`;
     if (mobile()) return top + L.slice(0, 300).map((x) => card(`${esc(x.user)} ${st(x)}`, [`Ultimo accesso: ${when(x.last)}`, esc(x.device), `${esc(x.version)} · ${esc(x.ip)}`], acts(x))).join('');
-    return top + grid(['Utente', 'Stato', 'Ultimo accesso', 'Dispositivo', 'Versione', 'IP', ''], L.slice(0, 500).map((x) => tr([`<b>${esc(x.user)}</b>`, st(x), when(x.last), esc(x.device), esc(x.version), `<span class="mono" style="font-size:12px">${esc(x.ip)}</span>`, `<div style="display:flex;gap:5px">${acts(x)}</div>`])));
+    return top + grid(['Utente', 'Stato', 'Ultimo accesso', 'Dispositivo', 'Versione', 'IP', ''], L.slice(0, 500).map((x) => tr([`<b>${esc(x.user)}</b>${window.KXWatch ? KXWatch.slot('orcp', x.user) : ''}`, st(x), when(x.last), esc(x.device), esc(x.version), `<span class="mono" style="font-size:12px">${esc(x.ip)}</span>`, `<div style="display:flex;gap:5px">${acts(x)}</div>`])));
   }
   function msgs() {
     const d = R.data.msgs || (R.data.messages ? { list: R.data.messages.list } : null); if (!R.data.messages) need('messages'); if (!d) return loading('messages', 'Carico i messaggi…');
