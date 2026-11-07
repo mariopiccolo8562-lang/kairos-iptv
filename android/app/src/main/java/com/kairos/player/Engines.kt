@@ -764,6 +764,8 @@ class VlcEngine(ctx: Context, private val l: EngineListener, ua: String, private
     }
 
     override fun videoHeight(): Int = try { mp.currentVideoTrack?.height ?: 0 } catch (_: Exception) { 0 }
+    /** fotogrammi al secondo dichiarati dalla traccia video (0 = sconosciuti) */
+    fun frameRate(): Float = try { val t = mp.currentVideoTrack; if (t != null && t.frameRateDen > 0) t.frameRateNum.toFloat() / t.frameRateDen else 0f } catch (_: Exception) { 0f }
 
     @Volatile private var released = false
     override fun release() {

@@ -2852,7 +2852,7 @@ function chanList(c) {
 const catLabel = (c) => (c === 'all' ? 'Tutti i canali' : c === 'fav' ? '★ Preferiti' : c === 'recent' ? '⟲ Continua a guardare' : String(c).startsWith('tag:') ? '🏷 ' + c.slice(4) : c);
 function liveCatList() {
   const tags = Object.keys(S.tags || {}).sort((a, b) => a.localeCompare(b, 'it')).map((t) => ({ name: 'tag:' + t, label: '🏷 ' + t, count: tagItems(t).filter((x) => x.k === 'l').length })).filter((t) => t.count);
-  return [{ name: 'all', label: 'Tutti i canali', count: visLive(S.lib.live).length }, { name: 'fav', label: '★ Preferiti', count: favItems('l').length }, ...tags, ...sortCats(S.lib.liveCats, 'l').map((c) => ({ ...c, label: c.name }))];
+  return [{ name: 'all', label: 'Tutti i canali', count: visLive(S.lib.live).length }, { name: 'fav', label: '★ Preferiti', count: favItems('l').length }, ...tags, ...homeOrder(sortCats(S.lib.liveCats, 'l')).map((c) => ({ ...c, label: c.name }))];
 }
 function renderLive() {
   renderChannels();
@@ -3542,7 +3542,7 @@ function nativePlay(item, kind, fromSec, extra) {
   try {
     NATIVE.play(JSON.stringify({ kind: pk, items, index, start: Math.floor(start * 1000), engine: engineFor(kind, item), engineKey: kind === 'live' ? 'engLive' : kind === 'series' ? 'engSeries' : 'engMovie',
       quality: P.quality, buffer: P.buffer, aspect: P.aspect, brand: S.settings.brand || 'KAIROS',
-      hw: opt('hw'), sub: opt('subSize'), res: !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list), adapt: !!opt('adaptQ'), pip: false,
+      hw: opt('hw'), sub: opt('subSize'), res: perm('resInd') && !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list), adapt: !!opt('adaptQ'), pip: false,
       line: lc, ...(bw != null ? { bw } : {}), // Kairos Adaptive: "weak" | "normal" | "good" e banda nota in Mbps (assente se sconosciuta)
       ...(extra && extra.parent ? { introKey: String(extra.parent.id), intro: store.get('intro', {})[extra.parent.id] || [], introAuto: !!opt('introAuto') } : {}) }));
   } catch (e) { return false; }
@@ -3798,7 +3798,7 @@ function openVod(kind, cat) {
   $('#vodTitle').innerHTML = kind === 'movies' ? 'FILM' : kind === 'series' ? 'SERIE <span class="grad">TV</span>' : '★ <span class="grad">PREFERITI</span>';
   const cats = kind === 'movies' ? S.lib.movieCats : kind === 'series' ? S.lib.seriesCats : [];
   $('#vodCats').style.display = kind === 'favs' ? 'none' : 'flex';
-  $('#vodCats').innerHTML = [{ name: 'all', label: 'Tutti' }, ...(kind === 'favs' ? [] : [{ name: 'recent', label: 'Visti di recente' }]), ...cats.map((c) => ({ name: c.name, label: c.name }))].map((c) => `<button class="chip ${c.name === vodCat ? 'sel' : ''}" data-f data-c="${esc(c.name)}">${esc(c.label)}</button>`).join('');
+  $('#vodCats').innerHTML = [{ name: 'all', label: 'Tutti' }, ...(kind === 'favs' ? [] : [{ name: 'recent', label: 'Visti di recente' }]), ...homeOrder(cats).map((c) => ({ name: c.name, label: c.name }))].map((c) => `<button class="chip ${c.name === vodCat ? 'sel' : ''}" data-f data-c="${esc(c.name)}">${esc(c.label)}</button>`).join('');
   $$('#vodCats .chip').forEach((b) => b.addEventListener('click', () => { vodCat = b.dataset.c; $$('#vodCats .chip').forEach((x) => x.classList.toggle('sel', x === b)); renderVod(); }));
   renderVod();
   show('vod');
@@ -3973,6 +3973,37 @@ const showAdult = () => { const v = rcGet('adult'); return v !== undefined ? v =
 const autoLogoOn = () => { const v = rcGet('logos'); return v !== undefined ? v === 'on' : store.get('autoLogo', true) !== false; };
 const safe = (arr) => (showAdult() ? arr : arr.filter((x) => !isAdult(x)));
 const safeCats = (cats) => (showAdult() ? cats : cats.filter((c) => !RX_ADULT_G.test(c.name)));
+/* Home decisa dal fornitore (Controllo remoto): categorie in primo piano (home.top) e nascoste dalla Home (home.hide).
+   Basta una parte del nome; maiuscole e accenti non contano. Nascosta vince su primo piano */
+const normCat = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+let homePatMemo = null;
+function homePats() {
+  const t = String(rcGet('home.top') || ''), h = String(rcGet('home.hide') || ''), key = t + '|' + h;
+  if (homePatMemo && homePatMemo.key === key) return homePatMemo;
+  const split = (v) => v.split(/[,;\n]+/).map(normCat).filter(Boolean);
+  return (homePatMemo = { key, top: split(t), hide: split(h), on: !!(t || h), cache: new Map() });
+}
+/** [posizione dello schema in primo piano (-1 = nessuno), nascosta?] per il nome di una categoria; null = niente configurato */
+function catHome(name) {
+  const P = homePats(); if (!P.on) return null;
+  let r = P.cache.get(name); if (r) return r;
+  const n = normCat(name);
+  r = [P.top.findIndex((p) => n.includes(p)), P.hide.some((p) => n.includes(p))];
+  if (P.cache.size > 5000) P.cache.clear();
+  P.cache.set(name, r); return r;
+}
+const catHidden = (name) => { const r = catHome(name); return !!(r && r[1]); };
+const catTop = (name) => { const r = catHome(name); return r && !r[1] ? r[0] : -1; };
+/** contenuto adatto alle righe automatiche della Home (non di una categoria nascosta) */
+const homeOk = (x) => !x || !catHidden(x.group);
+/** elenchi di categorie: prima quelle in primo piano (nell'ordine degli schemi), poi le altre come prima, in fondo le nascoste */
+function homeOrder(cats) {
+  if (!homePats().on) return cats;
+  const top = [], mid = [], low = [];
+  for (const c of cats) { const r = catHome(c.name); if (r[1]) low.push(c); else if (r[0] >= 0) top.push([r[0], c]); else mid.push(c); }
+  top.sort((a, b) => a[0] - b[0]); // sort stabile: a parità resta l'ordine di prima
+  return [...top.map((x) => x[1]), ...mid, ...low];
+}
 function upcomingEvents() {
   const t = Date.now();
   return (S.events || []).filter((e) => e.live || +new Date(e.start) > t - 150 * 60e3).sort((a, b) => (+!!b.live - +!!a.live) || (+new Date(a.start) - +new Date(b.start)));
@@ -4132,35 +4163,55 @@ function makeRows(kind) {
     if (S.demo && !rec.length) rec = [L.movies[2], L.series[0], L.movies[5], L.movies[9], L.series[3]].filter((x) => x && inKind(x));
     if (rec.length) R.push({ title: 'Continua a guardare', type: 'cont', items: rec });
   }
+  // Home decisa dal fornitore: le categorie nascoste spariscono anche dalle righe automatiche (tendenze, novità, consigliati)
+  const HP = homePats(), hk = (a) => (HP.hide.length ? a.filter(homeOk) : a);
+  const catItems = (arr, c, k) => sortVod((S.byGroup && S.byGroup.get((k === 'movies' ? 'm' : 's') + c.name)) || arr.filter((x) => x.group === c.name));
+  // categorie in primo piano: subito dopo eventi e «Continua a guardare», prima di tutto il resto (al massimo 10)
+  const featCats = new Set();
+  if (HP.top.length) {
+    const F = [], add = (cats, k, lbl) => { for (const c of safeCats(cats)) { const i = catTop(c.name); if (i >= 0) F.push([i, F.length, c, k, lbl]); } };
+    if (kind !== 'series') add(L.movieCats, 'movies', kind === 'all' ? 'Film' : '');
+    if (kind !== 'movies') add(L.seriesCats, 'series', kind === 'all' ? 'Serie' : '');
+    if (kind === 'all') add(L.liveCats, 'live', 'In diretta');
+    F.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    for (const [, , c, k, lbl] of F.slice(0, 10)) {
+      featCats.add(k + '|' + c.name);
+      const title = (lbl ? lbl + ' · ' : '') + c.name;
+      if (k === 'live') R.push({ title, type: 'live', items: sortChannels(visLive((S.byGroup && S.byGroup.get('l' + c.name)) || L.live.filter((x) => x.group === c.name))), more: { fold: { kind: 'live', name: c.name } } });
+      else R.push({ title, type: 'poster', items: catItems(k === 'movies' ? L.movies : L.series, c, k), more: { kind: k, cat: c.name } });
+    }
+  }
   const TR = trendLists();
   if (kind !== 'series') {
-    const m = TR.movies;
-    if (m.top.length >= 5) R.push({ title: m.chart ? 'Top 10 film oggi in Italia' : 'Top 10 film', type: 'top', items: m.top });
-    if (m.hot.length >= 4) R.push({ title: 'Film di tendenza', type: 'poster', items: m.hot });
+    const m = TR.movies, top = hk(m.top), hot = hk(m.hot);
+    if (top.length >= 5) R.push({ title: m.chart ? 'Top 10 film oggi in Italia' : 'Top 10 film', type: 'top', items: top });
+    if (hot.length >= 4) R.push({ title: 'Film di tendenza', type: 'poster', items: hot });
   }
   if (kind !== 'movies') {
-    const t = TR.series;
-    if (t.top.length >= 5) R.push({ title: t.chart ? 'Top 10 serie TV oggi in Italia' : 'Top 10 serie TV', type: 'top', items: t.top });
-    if (t.hot.length >= 4) R.push({ title: 'Serie TV di tendenza', type: 'poster', items: t.hot });
+    const t = TR.series, top = hk(t.top), hot = hk(t.hot);
+    if (top.length >= 5) R.push({ title: t.chart ? 'Top 10 serie TV oggi in Italia' : 'Top 10 serie TV', type: 'top', items: top });
+    if (hot.length >= 4) R.push({ title: 'Serie TV di tendenza', type: 'poster', items: hot });
   }
   if (kind === 'all') { const rc = recItems(); if (rc.length) R.push({ title: 'Le tue registrazioni', type: 'rec', items: rc.slice(0, 30) }); }
   const inK = (x) => kind === 'all' ? x.k === 'm' || x.k === 's' : kind === 'movies' ? x.k === 'm' : x.k === 's';
   { const q = queueItems().filter(inK); if (q.length) R.push({ title: 'La tua coda', sub: 'riproduzione una dopo l\'altra', type: 'poster', items: q, queue: true }); }
   if (kind === 'all') { const f = favItems().filter((x) => x.k === 'm' || x.k === 's'); if (f.length) R.push({ title: 'La mia lista', type: 'poster', items: f }); }
-  { const rc = recommended(kind); if (rc.length >= 4) R.push({ title: 'Consigliati per te', sub: 'in base a cosa guardi', type: 'poster', items: rc }); }
+  { const rc = hk(recommended(kind)); if (rc.length >= 4) R.push({ title: 'Consigliati per te', sub: 'in base a cosa guardi', type: 'poster', items: rc }); }
   for (const t of Object.keys(S.tags || {}).sort((a, b) => a.localeCompare(b, 'it')).slice(0, 8)) { const it = safe(tagItems(t).filter(inK)); if (it.length) R.push({ title: '🏷 ' + t, type: 'poster', items: it }); }
-  const catRows = (arr, cats, label, k) => cats.forEach((c) => R.push({ title: (label ? label + ' · ' : '') + c.name, type: 'poster', items: sortVod((S.byGroup && S.byGroup.get((k === 'movies' ? 'm' : 's') + c.name)) || arr.filter((x) => x.group === c.name)), more: { kind: k, cat: c.name } }));
-  const recent = (arr) => { arr = safe(arr); return (arr.some((x) => x.added) ? [...arr].sort((a, b) => (b.added || 0) - (a.added || 0)) : arr.slice().reverse()).slice(0, 40); };
+  const catRows = (arr, cats, label, k) => cats.filter((c) => !featCats.has(k + '|' + c.name)).forEach((c) => R.push({ title: (label ? label + ' · ' : '') + c.name, type: 'poster', items: catItems(arr, c, k), more: { kind: k, cat: c.name } }));
+  const recent = (arr) => { arr = hk(safe(arr)); return (arr.some((x) => x.added) ? [...arr].sort((a, b) => (b.added || 0) - (a.added || 0)) : arr.slice().reverse()).slice(0, 40); };
   if (kind === 'all') {
     if (L.movies.length) R.push({ title: 'Film aggiunti di recente', type: 'poster', items: recent(L.movies), more: { kind: 'movies', cat: 'all' } });
     if (L.series.length) R.push({ title: 'Serie aggiunte di recente', type: 'poster', items: recent(L.series), more: { kind: 'series', cat: 'all' } });
-    catRows(L.movies, safeCats(sortCats(L.movieCats, 'm')).slice(0, 8), 'Film', 'movies');
-    catRows(L.series, safeCats(sortCats(L.seriesCats, 's')).slice(0, 6), 'Serie', 'series');
+    // nella Home: niente categorie nascoste, niente doppioni di quelle in primo piano
+    const homeCats = (cats, k) => safeCats(sortCats(cats, k)).filter((c) => !catHidden(c.name) && !featCats.has((k === 'm' ? 'movies' : 'series') + '|' + c.name));
+    catRows(L.movies, homeCats(L.movieCats, 'm').slice(0, 8), 'Film', 'movies');
+    catRows(L.series, homeCats(L.seriesCats, 's').slice(0, 6), 'Serie', 'series');
   } else {
     const arr = kind === 'movies' ? L.movies : L.series, cats = kind === 'movies' ? L.movieCats : L.seriesCats;
     if (arr.length > 20) R.splice(R.findIndex((r) => r.type === 'top') >= 0 ? R.findIndex((r) => r.type === 'top') : R.length, 0, { title: 'Aggiunti di recente', type: 'poster', items: recent(arr), more: { kind, cat: 'all' } });
-    // le categorie per adulti restano raggiungibili, ma in fondo
-    const sc = sortCats(cats, kind === 'movies' ? 'm' : 's');
+    // le categorie per adulti e quelle nascoste dal fornitore restano raggiungibili, ma in fondo
+    const sc = homeOrder(sortCats(cats, kind === 'movies' ? 'm' : 's'));
     catRows(arr, [...safeCats(sc), ...(showAdult() ? [] : sc.filter((c) => RX_ADULT_G.test(c.name)))].filter((c, i, a) => a.indexOf(c) === i), '', kind);
   }
   return R.filter((r) => r.items.length);
@@ -4169,17 +4220,17 @@ let featMemo = null;
 function featured(kind) {
   const L = S.lib;
   if (kind === 'all') { const ev = upcomingEvents(); if (ev.length) return ev.slice(0, 6); }
-  const key = kind + '|' + showAdult();
+  const key = kind + '|' + showAdult() + '|' + homePats().key;
   if (featMemo && featMemo.lib === L.movies && featMemo.lib2 === L.series && featMemo.key === key) return featMemo.out;
   // solo i primi 8 con immagine: una passata, senza ordinare tutta la libreria
   const best = [], sc = (x) => (x.backdrop ? 100 : 0) + (+x.rating || 0);
   for (const arr of kind === 'movies' ? [L.movies] : kind === 'series' ? [L.series] : [L.movies, L.series]) for (const x of arr) {
-    if (!(x.backdrop || x.poster)) continue;
+    if (!(x.backdrop || x.poster) || !homeOk(x)) continue;
     const s0 = sc(x); if (best.length >= 8 && s0 <= best[7].s) continue;
     best.push({ x, s: s0 }); best.sort((a, b) => b.s - a.s); if (best.length > 8) best.length = 8;
   }
   let out = safe(best.map((b) => b.x));
-  if (!out.length) out = safe(L.live).slice(0, 6);
+  if (!out.length) out = safe(L.live).filter(homeOk).slice(0, 6);
   featMemo = { lib: L.movies, lib2: L.series, key, out };
   return out;
 }
@@ -4273,7 +4324,7 @@ function buildBrowse(scr, kind) {
   const item = (k) => { const [ri, ii] = k.split(':'); return ii === 'more' ? null : scr._rows[+ri].items[+ii]; };
   scr.addEventListener('click', (e) => {
     const c = e.target.closest('[data-k]');
-    if (c) { const [ri, ii] = c.dataset.k.split(':'); const r = scr._rows[+ri]; if (ii === 'more') return r.more.go ? go(r.more.go) : openVod(r.more.kind, r.more.cat); if (r.queue) return playQueue(r.items[+ii]); return openItem(r.items[+ii]); }
+    if (c) { const [ri, ii] = c.dataset.k.split(':'); const r = scr._rows[+ri]; if (ii === 'more') return r.more.go ? go(r.more.go) : r.more.fold ? openFolder(r.more.fold) : openVod(r.more.kind, r.more.cat); if (r.queue) return playQueue(r.items[+ii]); return openItem(r.items[+ii]); }
     if (e.target.closest('[data-hplay]')) return heroPlay(scr);
     if (e.target.closest('[data-hinfo]')) { const x = scr._hero; if (x) x.folder ? openFolder(x) : x.home ? openEvent(x) : isLiveItem(x) ? openItem(x) : openDetail(x); }
   });
@@ -4568,6 +4619,7 @@ const OPT = {
   introAuto: ['Salta l\'intro delle serie da solo', YN, false],
   subSize: ['Dimensione sottotitoli', [['small', 'Piccola'], ['medium', 'Media'], ['large', 'Grande'], ['xl', 'Molto grande']], 'medium'],
   resInd: ['Indicatore risoluzione', YN, true],
+  liteUi: ['Modalità leggera', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['max', 'Leggerissima'], ['off', 'Spenta']], 'auto', () => { try { rcLiteApply(); } catch {} }],
   liveFmt: ['Formato TV in diretta', [['ts', 'Veloce (TS)'], ['hls', 'HLS']], 'ts'],
   epgShift: ['Spostamento orario guida', [[0, 'Nessuno'], [1, '+1 ora'], [2, '+2 ore'], [-1, '−1 ora'], [-2, '−2 ore']], 0, () => { S.xepgVer++; S.epg.clear(); }],
   showHidden: ['Mostra canali nascosti', [[false, 'No'], [true, 'Sì']], false, () => { if (S.lib.live.length) renderChannels(); }],
@@ -4586,9 +4638,12 @@ const panelEng = (k) => { const p = S.account && S.account.player, m = ENG_KIND[
 /* controllo remoto: impostazioni imposte dal pannello (profilo dell'app o questo cliente). Vincono su quelle scelte qui */
 const rcGet = (k) => { const v = S.rc && S.rc[k]; return v === undefined || v === null || v === '' ? undefined : v; };
 const rcOpt = (k) => { const v = rcGet('o.' + k); if (v === undefined) return undefined; const o = OPT[k]; return o && o[1].some((x) => x[0] === v || String(x[0]) === String(v)) ? (o[1].find((x) => x[0] === v || String(x[0]) === String(v)))[0] : undefined; };
-const opt = (k) => { const pe = panelEng(k); if (pe) return pe; const rv = rcOpt(k); if (rv !== undefined) return rv; const v = store.get('o_' + k, null); return v === null ? (k === 'startScr' ? store.get('startScr', OPT[k][2]) : k === 'sfx' && store.get('sound', true) === false ? 'off' : OPT[k][2]) : v; };
+/* modalità leggera: quella imposta dal pannello (voce «lite»); con il permesso «lite» spento resta «Automatica»; altrimenti la sceglie il cliente */
+const LITE_V = ['auto', 'on', 'max', 'off'];
+const liteLocked = () => LITE_V.includes(rcGet('lite')) || !perm('lite');
+const opt = (k) => { if (k === 'liteUi') { const rl = rcGet('lite'); if (LITE_V.includes(rl)) return rl; if (!perm('lite')) return 'auto'; } const pe = panelEng(k); if (pe) return pe; const rv = rcOpt(k); if (rv !== undefined) return rv; const v = store.get('o_' + k, null); return v === null ? (k === 'startScr' ? store.get('startScr', OPT[k][2]) : k === 'sfx' && store.get('sound', true) === false ? 'off' : OPT[k][2]) : v; };
 const optLabel = (k) => { const [, o] = OPT[k], v = opt(k); return (o.find((x) => x[0] === v) || o[0])[1]; };
-const optRow = (k) => panelEng(k) || rcOpt(k) !== undefined ? `<div class="sr static"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))} <small class="mut">· scelto dal fornitore</small></b></div>` : `<div class="sr" data-f data-opt="${k}"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))}</b></div>`;
+const optRow = (k) => panelEng(k) || rcOpt(k) !== undefined || (k === 'liteUi' && liteLocked()) ? `<div class="sr static"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))} <small class="mut">· scelto dal fornitore</small></b></div>` : `<div class="sr" data-f data-opt="${k}"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))}</b></div>`;
 function cycleOpt(k, el) {
   const [, o, , after] = OPT[k], v = opt(k), i = o.findIndex((x) => x[0] === v), nx = o[(i + 1) % o.length];
   store.set('o_' + k, nx[0]);
@@ -4852,7 +4907,7 @@ function renderSettings(sec) {
     play: `<h3>Lettore</h3>${HAS_PLAYER ? '' : '<div class="snote">Queste opzioni valgono nell\'app (Fire TV, Android TV, telefoni).</div>'}
       ${optRow('engLive')}${optRow('engMovie')}${optRow('engSeries')}
       ${PLAY_OPTS.filter((o) => o[0] !== 'engine').map(([k, lbl, opts]) => rcGet('p.' + k) !== undefined ? `<div class="sr static"><span>${lbl}</span><b>${(opts.find((o) => o[0] === P[k]) || opts[0])[1]} <small class="mut">· scelto dal fornitore</small></b></div>` : `<div class="sr" data-f data-pk="${k}"><span>${lbl}</span><b>${(opts.find((o) => o[0] === P[k]) || opts[0])[1]}</b></div>`).join('')}
-      ${optRow('hw')}${optRow('adaptQ')}<div class="snote" style="margin:-4px 0 10px">Se la connessione non regge, il canale passa da solo a una sua versione più leggera (es. da FHD a HD) e torna alla qualità piena quando la linea migliora. Se il video si blocca, l'app prova da sola a ripartire, la decodifica software o l'altro lettore.</div>${optRow('autoNext')}${optRow('introAuto')}${optRow('subSize')}${optRow('resInd')}
+      ${optRow('hw')}${optRow('adaptQ')}<div class="snote" style="margin:-4px 0 10px">Se la connessione non regge, il canale passa da solo a una sua versione più leggera (es. da FHD a HD) e torna alla qualità piena quando la linea migliora. Se il video si blocca, l'app prova da sola a ripartire, la decodifica software o l'altro lettore.</div>${optRow('autoNext')}${optRow('introAuto')}${optRow('subSize')}${perm('resInd') ? optRow('resInd') : ''}
       <div class="snote"><b>Automatico avanzato</b> sceglie da solo il lettore migliore per ogni contenuto (ExoPlayer, oppure VLC per i formati che ExoPlayer non legge) e cambia lettore da solo se qualcosa non parte. Disattiva l'accelerazione hardware solo se vedi immagini verdi o a scatti. Durante la visione premi OK per audio, qualità e sottotitoli.</div>`,
     shop: '<div id="shopCard"></div>',
     org: `<h3>Organizza</h3>
@@ -4886,7 +4941,7 @@ function renderSettings(sec) {
     net: `<h3>Rete e speed test</h3>${kv('Ultimo speed test', `<span id="sLast">${speedLastTxt()}</span>`)}
       <div class="sbtns">${perm('speed') ? '<button class="btn pri" data-f id="sSpeed">⚡ Avvia speed test</button>' : ''}<button class="btn" data-f id="sTest">Test connessione al server</button></div>
       <div class="snote">Lo speed test misura la velocità reale della tua linea e ti consiglia le impostazioni migliori per il lettore.</div>`,
-    look: `<h3>Generali</h3>${optRow('startScr')}${optRow('sfx')}${optRow('textSize')}
+    look: `<h3>Generali</h3>${optRow('startScr')}${optRow('sfx')}${optRow('textSize')}${optRow('liteUi')}
       ${rcGet('theme') ? `<div class="sr static"><span>Colore</span><b><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(theme) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(theme))} <small class="mut">· scelto dal fornitore</small></b></div>` : `<div class="sr" data-f id="sTheme"><span>Colore</span><b><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${(themePal(theme) || THEMES.cinema)[0]};margin-right:8px"></span>${esc(themeLabel(theme))}</b></div>`}
       ${optRow('orient')}
       <div class="sr${rcGet('adult') !== undefined ? ' static' : ''}" ${rcGet('adult') !== undefined ? '' : 'data-f'} id="sAdult"><span>Contenuti per adulti nella Home e nei consigliati</span><b>${showAdult() ? 'Sì' : 'No'}${rcGet('adult') !== undefined ? ' <small class="mut">· scelto dal fornitore</small>' : ''}</b></div>
@@ -5035,7 +5090,7 @@ const RC_CFG_KEYS = ['startScr', 'hw', 'adaptQ', 'liveFmt', 'autoNext', 'introAu
 /** chiavetta con poca memoria (classe D: ~1 GB, Fire TV Stick/Lite): profilo «poca memoria» da solo */
 const lowMem = () => !!NATIVE && devClass() === 'D';
 function rcLiteApply() {
-  const v = rcGet('lite'), b = document.body;
+  const v = opt('liteUi'), b = document.body; // pannello («lite»), permesso del cliente o scelta nell'app
   const lite = v === 'on' || v === 'max' ? true : v === 'off' ? false : !!NATIVE;
   // leggerissima da sola sulle chiavette con poca memoria (classe D) e dopo un riavvio per memoria (memGuard), salvo «Spenta» imposta dal pannello
   const autoX = v !== 'off' && (lowMem() || !!store.get('memGuard', 0));

@@ -842,20 +842,79 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         if (osd.visibility != View.VISIBLE) return
         osd.animate().alpha(0f).translationY(dp(30).toFloat()).setDuration(180).withEndAction { osd.visibility = View.GONE; osd.alpha = 1f; osd.translationY = 0f }.start()
         brandView.animate().alpha(0f).setDuration(180).withEndAction { brandView.visibility = View.GONE; brandView.alpha = 1f }.start()
-        resView.visibility = View.GONE
+        // durante i secondi del riquadro all'apertura o al cambio di risoluzione resta visibile (testo corto al prossimo giro)
+        if (System.currentTimeMillis() >= resFlashUntil) resView.visibility = View.GONE
     }
 
     private fun engineLabel(n: String) = if (n == "vlc") "VLC" else "ExoPlayer"
 
+    /* riquadro in alto a destra con risoluzione e FPS (permesso «Vedere risoluzione e FPS» del pannello → showRes):
+       sui canali in diretta si vede ~6 s all'apertura e ~4 s a ogni cambio di risoluzione (qualità adattiva);
+       con la barra informazioni aperta resta visibile (anche per film e serie) con bitrate e codec */
+    private var resFlashUntil = 0L
+    private var resLastH = 0
+    private var fpsN = -1L
+    private var fpsT = 0L
+    private var fpsMeas = 0f
+    private val resRunnable = object : Runnable {
+        override fun run() {
+            if (closing || stopped) return
+            measureFps()
+            val h = engine?.videoHeight() ?: 0
+            if (h > 0 && resLastH > 0 && h != resLastH && isLive) flashRes(4000)
+            if (h > 0) resLastH = h
+            updateRes()
+            ui.postDelayed(this, 1000)
+        }
+    }
+    private fun flashRes(ms: Long) {
+        if (!showRes) return
+        resFlashUntil = maxOf(resFlashUntil, System.currentTimeMillis() + ms)
+        updateRes()
+    }
+    /** canale nuovo: misura da capo e riquadro per qualche secondo */
+    private fun resOnFirstFrame() {
+        ui.removeCallbacks(resRunnable)
+        resLastH = 0; fpsN = -1L; fpsMeas = 0f; resFlashUntil = 0L
+        if (!showRes || !isLive) return
+        flashRes(6000)
+        ui.postDelayed(resRunnable, 1000)
+    }
+    /** fotogrammi al secondo misurati dal decoder (molti canali TS non li dichiarano nel formato) */
+    private fun measureFps() {
+        val e = engine as? ExoEngine ?: run { fpsN = -1L; return }
+        val n = e.renderedFrames(); val t = SystemClock.elapsedRealtime()
+        if (n < 0) { fpsN = -1L; return }
+        if (fpsN >= 0 && n >= fpsN && t > fpsT) {
+            val f = (n - fpsN) * 1000f / (t - fpsT)
+            if (f in 5f..130f) fpsMeas = if (fpsMeas <= 0f) f else fpsMeas * 0.6f + f * 0.4f
+        }
+        fpsN = n; fpsT = t
+    }
+    private fun fpsLabel(e: Engine?): String {
+        val d = when (e) { is ExoEngine -> e.frameRate(); is VlcEngine -> e.frameRate(); else -> 0f }
+        val v = if (d > 0f) d else fpsMeas
+        if (v <= 0f) return ""
+        val std = floatArrayOf(24f, 25f, 30f, 48f, 50f, 60f, 100f, 120f)
+        val near = std.minByOrNull { kotlin.math.abs(it - v) } ?: v
+        return (if (kotlin.math.abs(near - v) < 1.5f) near.toInt() else Math.round(v)).toString() + " fps"
+    }
     private fun updateRes() {
         if (!showRes) { resView.visibility = View.GONE; return }
+        val osdOn = osd.visibility == View.VISIBLE
+        if (!osdOn && System.currentTimeMillis() >= resFlashUntil) { resView.visibility = View.GONE; return }
         val e = engine
-        val info = when (e) { is ExoEngine -> e.videoInfo(); null -> ""; else -> e.videoHeight().let { if (it > 0) "${it}p" else "" } }
         val h = e?.videoHeight() ?: 0
         val tag = when { h >= 2000 -> "4K"; h >= 1000 -> "FHD"; h >= 700 -> "HD"; h > 0 -> "SD"; else -> "" }
-        if (info.isBlank()) { resView.visibility = View.GONE; return }
-        resView.text = if (tag.isNotEmpty()) "$tag  ·  $info" else info
-        resView.visibility = if (osd.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+        val fps = fpsLabel(e)
+        val text = if (osdOn && e is ExoEngine && e.videoInfo().isNotBlank()) {
+            val parts = e.videoInfo().split(" · ").toMutableList()
+            if (fps.isNotEmpty() && parts.none { it.endsWith("fps") }) parts.add(minOf(1, parts.size), fps)
+            (if (tag.isNotEmpty()) "$tag  ·  " else "") + parts.joinToString(" · ")
+        } else listOf(tag, if (h > 0) "${h}p" else "", fps).filter { it.isNotEmpty() }.joinToString("  ·  ")
+        if (text.isBlank()) { resView.visibility = View.GONE; return }
+        resView.text = text
+        resView.visibility = View.VISIBLE
     }
 
     private fun updateInfo() {
@@ -1100,6 +1159,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             if (g != engineGen || closing) return@post
             if (!frameSeen && startAt > 0 && PlayStats.ttff == 0) PlayStats.ttff = (System.currentTimeMillis() - startAt).toInt().coerceAtLeast(1)
             frameSeen = true; veil.animate().alpha(0f).setDuration(260).start()
+            resOnFirstFrame()
         }
     }
     /** decoder audio mancante: prova l'altro motore (e poi il formato alternativo); false = nessuna strada, resta il video senza audio */
@@ -1700,7 +1760,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         ui.removeCallbacks(watchRunnable); cancelRetry()
         cancelCushion(); deferredErr?.let { ui.removeCallbacks(it) }; deferredErr = null
         // in secondo piano niente lavoro inutile ogni secondo (statistiche, orologio dell'OSD)
-        ui.removeCallbacks(statsRunnable); ui.removeCallbacks(tickRunnable)
+        ui.removeCallbacks(statsRunnable); ui.removeCallbacks(tickRunnable); ui.removeCallbacks(resRunnable)
         PlayStats.stop()
         isBuffering = false; bufferingSince = 0L; freezeSec = 0; lastFrames = -1L; okSince = 0L
         if (zapPending) { ui.removeCallbacks(zapPlay); zapPending = false; markPlaying(); resetRecovery(); currentUrl = item.url }
