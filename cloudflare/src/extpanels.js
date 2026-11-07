@@ -56,7 +56,7 @@ const sleep = (ms) => new Promise((s) => setTimeout(s, ms));
 /** come raw(), ma supera la pagina di controllo «VPZ» di SLT (il cookie vale dopo circa un secondo) */
 async function rawV(P, H, jar, path, o = {}) {
   let r = await raw(P, H, jar, path, o);
-  for (let i = 0; i < 4 && P.vpz && P.vpz(jar, r); i++) { await sleep(1000); r = await raw(P, H, jar, path, o); }
+  for (let i = 0; i < 6 && P.vpz && P.vpz(jar, r); i++) { if (i === 2) delete jar.VPZ; if (i >= 2) P.vpz(jar, r); await sleep(1000 + i * 300); r = await raw(P, H, jar, path, o); }
   if (P.vpz && P.vpz(jar, r)) throw new H.HttpErr(502, `${P.name}: pagina di controllo anti-bot, riprova tra qualche secondo`);
   return r;
 }
