@@ -40,10 +40,13 @@
   const appLinks = () => { const a = isAg() ? D.appLinks : D.settings && D.settings.appLinks; return (Array.isArray(a) ? a : []).map((x) => x && x.name).filter((n) => n && !/maxplayer|orbix/i.test(n)); };
 
   const S = { tok: 0, step: 1, panel: '', name: '', wolf: null, arm: null, atx: null, apps: new Set(remembered()), o: {}, line: null, res: null, busy: false };
+  const FX = { atx: 'Atlantix', ro: 'Realott', slt: 'SLT' };
   const panels = () => [
     ['wolf', 'WOLF', 'Linea con utente e password', can('wolf')],
     ['armada', 'Armada', 'Linea M3U / Xtream', can('armada')],
     ['atx', 'Atlantix', 'Il modulo «Crea linea» di Atlantix', !isAg()],
+    ['ro', 'Realott', 'Pacchetto Realott (usa crediti)', !isAg()],
+    ['slt', 'SLT', 'Pacchetto SLT (usa crediti)', !isAg()],
   ];
 
   function overlay() {
@@ -71,8 +74,8 @@
     try {
       if (p === 'wolf' && !S.wolf) { const cfg = await api('GET', '/admin/wolf/config'); const pk = cfg.set ? await api('GET', '/admin/wolf/packages') : { packages: [] }; if (stale()) return; S.wolf = { cfg, pk: pk.packages || [], credits: pk.credits }; if (!S.o.host && cfg.dns) S.o.host = cfg.dns; }
       if (p === 'armada' && !S.arm) { const st = await api('GET', '/admin/armada/state'); const pk = st.connected ? (await api('GET', '/admin/armada/packages')).packages || [] : []; if (stale()) return; S.arm = { st, pk }; if (!S.o.host && st.dns) S.o.host = st.dns; }
-      if (p === 'atx' && !S.atx) { const r = await api('GET', '/admin/atx/createform'); if (stale()) return; S.atx = { fields: r.fields || [] }; }
-    } catch (e) { if (!stale()) S[p === 'armada' ? 'arm' : p] = { err: e.message }; }
+      if (FX[p] && !S.atx) { const r = await api('GET', '/admin/' + p + '/createform'); if (stale()) return; S.atx = { fields: r.fields || [] }; }
+    } catch (e) { if (!stale()) S[p === 'armada' ? 'arm' : FX[p] ? 'atx' : p] = { err: e.message }; }
     if (!stale()) draw();
   }
   async function loadApps() {
@@ -94,13 +97,13 @@
       <label>Paese (facoltativo)<input class="inp" id="qaCo" maxlength="3" value="${esc(S.o.co || '')}" placeholder="IT, oppure ALL"></label>
       <label class="w" style="flex-direction:row;align-items:center;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="qaAd"${S.o.adult ? ' checked' : ''}> Contenuti per adulti</label></div>
       <p class="mut" style="font-size:12.5px;margin:8px 0 0">${A.st.budget ? `Crediti del tuo tetto ancora disponibili: <b>${A.st.budget.left}</b>` : A.st.reseller ? `Crediti Armada: <b>${esc(A.st.reseller.credits)}</b>` : ''}</p>`;
-    if (p === 'atx' && X) {
+    if (FX[p] && X) {
       const inp = (x, i) => { const id = 'qaX' + i, req = x.required ? ' *' : '', val = S.o.atx && S.o.atx[x.name] != null ? S.o.atx[x.name] : x.value;
         if (x.type === 'select') return `<label>${esc(x.label)}${req}<select class="inp" id="${id}">${x.options.map((o) => `<option value="${esc(o.v)}"${(S.o.atx ? val === o.v : o.sel) ? ' selected' : ''}>${esc(o.t)}</option>`).join('')}</select></label>`;
         if (x.type === 'checkbox' || x.type === 'radio') return `<label style="flex-direction:row;align-items:center;text-transform:none;letter-spacing:0;font-size:13px"><input type="checkbox" id="${id}"${(S.o.atx ? val : x.checked) ? ' checked' : ''}> ${esc(x.label)}</label>`;
         if (x.type === 'textarea') return `<label class="w">${esc(x.label)}${req}<textarea class="inp" id="${id}" rows="2">${esc(val || '')}</textarea></label>`;
         return `<label>${esc(x.label)}${req}<input class="inp" id="${id}" type="${x.type === 'number' ? 'number' : 'text'}" value="${esc(val || '')}" placeholder="${esc(x.ph || '')}"></label>`; };
-      f = X.err ? `<p class="mut">${esc(X.err)}</p>` : `<p class="mut" style="font-size:12.5px;margin:0 0 10px">Le stesse opzioni del modulo «Crea linea» di Atlantix (usa i tuoi crediti Atlantix).</p><div class="qa-f">${X.fields.map(inp).join('')}</div>`;
+      f = X.err ? `<p class="mut">${esc(X.err)}</p>` : `<p class="mut" style="font-size:12.5px;margin:0 0 10px">Le stesse opzioni del modulo «Crea linea» di ${FX[p]} (usa i tuoi crediti ${FX[p]}).</p><div class="qa-f">${X.fields.map(inp).join('')}</div>`;
     }
     return `<div class="qa-pn">${panels().map(([k, n, s, ok]) => `<button type="button" data-qapn="${k}" class="${S.panel === k ? 'on' : ''}" ${ok ? '' : 'disabled'}>${n}<small>${ok ? s : 'Non disponibile per te'}</small></button>`).join('')}</div>
       <div class="qa-f" style="margin-bottom:12px"><label class="w">Nome del cliente<input class="inp" id="qaN" maxlength="60" value="${esc(S.name)}" placeholder="es. Mario Rossi — va nella nota della linea e sulle app"></label></div>${f}
@@ -110,12 +113,12 @@
     S.name = v('qaN').trim();
     if (S.panel === 'wolf') Object.assign(S.o, { u: v('qaU').trim(), p: v('qaP'), pk: v('qaK') });
     if (S.panel === 'armada') Object.assign(S.o, { pk: v('qaK'), co: v('qaCo').trim(), adult: !!v('qaAd') });
-    if (S.panel === 'atx' && S.atx && S.atx.fields) { S.o.atx = {}; S.atx.fields.forEach((x, i) => { S.o.atx[x.name] = v('qaX' + i); }); }
+    if (FX[S.panel] && S.atx && S.atx.fields) { S.o.atx = {}; S.atx.fields.forEach((x, i) => { S.o.atx[x.name] = v('qaX' + i); }); }
   }
   function check1() {
     if (S.panel === 'wolf') { if (!S.wolf || !S.wolf.cfg || !S.wolf.cfg.set) return 'WOLF non è collegato'; if (!S.o.u || !S.o.p) return 'Scrivi utente e password'; if (!S.o.pk) return 'Scegli il pacchetto'; }
     if (S.panel === 'armada') { if (!S.arm || !S.arm.st || !S.arm.st.connected) return 'Armada non è collegato'; if (!S.o.pk) return 'Scegli il pacchetto di canali'; }
-    if (S.panel === 'atx') { if (!S.atx || S.atx.err) return 'Atlantix non è collegato'; const miss = S.atx.fields.find((x) => x.required && x.type !== 'checkbox' && !String(S.o.atx[x.name] || '').trim()); if (miss) return 'Compila «' + miss.label + '»'; }
+    if (FX[S.panel]) { if (!S.atx || S.atx.err) return FX[S.panel] + ' non è collegato'; const miss = S.atx.fields.find((x) => x.required && x.type !== 'checkbox' && !String(S.o.atx[x.name] || '').trim()); if (miss) return 'Compila «' + miss.label + '»'; }
     return '';
   }
 
@@ -142,7 +145,7 @@
     const ot = others.length ? `<div class="qa-app${others.some((n) => on('app:' + n)) ? ' on' : ''}"><div class="h" style="cursor:default"><span class="qa-ic ot">APP</span><b>Altre app</b><small>${can('lines') ? 'Si segnano in «Appunti App» con i dati della linea' : 'Serve il permesso «Appunti App»'}</small></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${others.map((n) => `<label class="btn sm${on('app:' + n) ? ' pri' : ''}" style="cursor:pointer"><input type="checkbox" data-qaapp="app:${esc(n)}"${on('app:' + n) ? ' checked' : ''}${can('lines') ? '' : ' disabled'} style="display:none">${esc(n)}</label>`).join('')}</div>
       ${others.some((n) => on('app:' + n)) && !S.apps.has('kairos') ? `<div class="b">${hostField()}</div>` : ''}</div>` : '';
-    return `<p class="mut" style="margin:0 0 12px;font-size:13px">La linea <b>${esc(S.panel === 'wolf' ? 'WOLF' : S.panel === 'armada' ? 'Armada' : 'Atlantix')}</b>${S.name ? ' per <b>' + esc(S.name) + '</b>' : ''} va su: (puoi sceglierne più di una)</p>${mx}${ox}${kx}${ot}
+    return `<p class="mut" style="margin:0 0 12px;font-size:13px">La linea <b>${esc(S.panel === 'wolf' ? 'WOLF' : S.panel === 'armada' ? 'Armada' : FX[S.panel] || S.panel)}</b>${S.name ? ' per <b>' + esc(S.name) + '</b>' : ''} va su: (puoi sceglierne più di una)</p>${mx}${ox}${kx}${ot}
       <div class="qa-ft"><button class="btn" id="qaBack">← Indietro</button><span class="sp"></span><button class="btn qa-red" id="qaGo">⚡ Crea e attiva${S.apps.size ? ' (' + S.apps.size + ')' : ''}</button></div>`;
   }
   function read2() {
@@ -174,7 +177,7 @@
     const note = S.name;
     if (S.panel === 'wolf') { const r = await api('POST', '/admin/wolf/lines', { username: S.o.u, password: S.o.p, package: S.o.pk, note }); return { username: S.o.u, password: S.o.p, host: S.o.host || '', ref: r.id ? 'WOLF #' + r.id : 'WOLF' }; }
     if (S.panel === 'armada') { const sub = S.o.sub ?? 12; const r = await api('POST', '/admin/armada/new', { type: 'm3u', sub, htime: sub ? undefined : 24, pack: S.o.pk, country: S.o.co || '', adult: !!S.o.adult, notes: note }); if (!r.username) throw new Error('Armada non ha restituito utente e password'); if (r.host) S.o.host = r.host; return { username: r.username, password: r.password, host: r.host || S.o.host || '', ref: 'Armada' + (r.userId ? ' #' + r.userId : ''), url: r.url }; }
-    const r = await api('POST', '/admin/atx/lines/create', { fields: S.o.atx }); if (!r.username) throw new Error('Atlantix non ha restituito utente e password'); return { username: r.username, password: r.password, host: S.o.host || '', ref: 'Atlantix' };
+    const r = await api('POST', '/admin/' + S.panel + '/lines/create', { fields: S.o.atx }); if (!r.username) throw new Error(FX[S.panel] + ' non ha restituito utente e password'); return { username: r.username, password: r.password, host: S.o.host || '', ref: FX[S.panel] };
   }
   async function runApp(k) {
     const L = S.line, name = S.name || L.username;
@@ -249,7 +252,7 @@
     bind(B);
   }
   function bind(B) {
-    $$('[data-qapn]', B).forEach((b) => (b.onclick = () => { read1(); S.panel = b.dataset.qapn; S.o.pk = ''; S.o.host = ''; draw(); loadPanel(); }));
+    $$('[data-qapn]', B).forEach((b) => (b.onclick = () => { read1(); S.panel = b.dataset.qapn; S.atx = null; S.o.atx = null; S.o.pk = ''; S.o.host = ''; draw(); loadPanel(); }));
     $$('[data-qasub]', B).forEach((b) => (b.onclick = () => { read1(); S.o.sub = +b.dataset.qasub; draw(); }));
     $$('[data-qaapp]', B).forEach((c) => (c.onchange = () => { read2(); c.checked ? S.apps.add(c.dataset.qaapp) : S.apps.delete(c.dataset.qaapp); draw(); }));
     ['qaMode', 'qaMo'].forEach((id) => { const el = $('#' + id); if (el) el.onchange = () => { read2(); draw(); }; });
