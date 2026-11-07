@@ -47,9 +47,11 @@
   /* ---------- App Kairos (agente) ---------- */
   function drawK() {
     const V = $('#v-agk'); if (!V) return;
-    const A = Array.isArray(D.kairosApps) ? D.kairosApps : [];
-    V.innerHTML = `<div class="card glass"><div class="hd"><h3>App Kairos<small>Le app da far installare ai clienti: codice Downloader e link per scaricarle.</small></h3></div>
-      ${A.length ? `<div class="ak-g">${A.map((x) => `<div class="ak-c"><b class="n">${esc(x.name)}</b><small class="mut">Codice Downloader</small><span class="cd">${esc(x.code || '—')}</span><div class="row2">${x.code ? `<button class="btn sm pri" data-akc="${esc(x.code)}">Copia codice</button>` : ''}${x.apk ? `<button class="btn sm" data-akl="${esc(x.apk)}">Copia link APK</button><a class="btn sm" href="${esc(x.apk)}" target="_blank" rel="noopener noreferrer">Scarica ↗</a>` : ''}</div></div>`).join('')}</div>` : '<p class="mut">Nessuna app Kairos concessa dal titolare.</p>'}</div>`;
+    // prima Kairos Store: dallo store il cliente scarica tutte le altre
+    const A = (Array.isArray(D.kairosApps) ? D.kairosApps : []).slice().sort((a, b) => (b.key === 'store') - (a.key === 'store'));
+    const short = (u) => String(u || '').replace(/^https?:\/\//, '');
+    V.innerHTML = `<div class="card glass"><div class="hd"><h3>App Kairos<small>Le app da far installare ai clienti: in Downloader scrivi il codice oppure l'indirizzo. Si parte da Kairos Store, poi le app si scaricano dallo store con il tuo codice venditore.</small></h3></div>
+      ${A.length ? `<div class="ak-g">${A.map((x) => `<div class="ak-c"><b class="n">${esc(x.name)}</b>${x.code ? `<small class="mut">Codice Downloader</small><span class="cd">${esc(x.code)}</span>` : x.apk ? `<small class="mut">Indirizzo da scrivere in Downloader</small><span class="cd" style="font-size:15px;letter-spacing:0;word-break:break-all">${esc(short(x.apk))}</span>` : '<small class="mut">Link non disponibile</small>'}<div class="row2">${x.code ? `<button class="btn sm pri" data-akc="${esc(x.code)}">Copia codice</button>` : ''}${x.apk ? `<button class="btn sm" data-akl="${esc(x.apk)}">Copia link APK</button><a class="btn sm" href="${esc(x.apk)}" target="_blank" rel="noopener noreferrer">Scarica ↗</a>` : ''}</div></div>`).join('')}</div>` : '<p class="mut">Nessuna app Kairos concessa dal titolare.</p>'}</div>`;
     $$('[data-akc]', V).forEach((b) => (b.onclick = () => copy(b.dataset.akc, 'Codice')));
     $$('[data-akl]', V).forEach((b) => (b.onclick = () => copy(b.dataset.akl, 'Link')));
   }
@@ -57,7 +59,7 @@
   function navs() {
     const ag = isAg(), a = $('.nav[data-v="agop"]'), k = $('.nav[data-v="agk"]');
     const on = (el, ok) => { if (el && el.style.display !== (ok ? '' : 'none')) el.style.display = ok ? '' : 'none'; };
-    on(a, ag && perm('appsOp')); on(k, ag && perm('appk'));
+    on(a, ag && perm('appsOp')); on(k, ag && (D.kairosApps || []).length > 0); // «App Kairos»: tutti gli agenti, le app le sceglie il titolare
     if ($('#v-agop.on')) drawOp(); if ($('#v-agk.on')) drawK();
   }
   const ra = renderAll;

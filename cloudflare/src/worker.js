@@ -3886,7 +3886,9 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
       // codici Downloader e link delle app Kairos: solo quelli che il titolare gli concede (kAllow)
       settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', plusDownloaderCode: ok('plus') ? s.plusDownloaderCode || '' : '', premDownloaderCode: ok('prem') ? s.premDownloaderCode || '' : '', novaDownloaderCode: ok('nova') ? s.novaDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),
-      kairosApps: P.appk ? kairosAppsOf(s).filter((x) => storeAppOk(P.kAllow, x.key)) : [], permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on) }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
+      // app Kairos per gli agenti: sempre visibili (quali le decide il titolare in kAllow), con il link pulito del pannello
+      // (/get/<app>.apk: niente nome del titolare nei link) e il codice Downloader se c'è
+      kairosApps: kairosAppsOf(s).filter((x) => storeAppOk(P.kAllow, x.key)).map((x) => { const g = { prem: 'premium' }[x.key] || x.key; return { ...x, apk: GET_APK[g] ? `${url.origin}/get/${g}.apk` : x.apk }; }), permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on) }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
       activity: actR ? actR.results || [] : [],
       messages: msgR ? msgGroups((msgR.results || []).filter((x) => byId.has(x.target))).slice(0, 150) : [],
       // messaggi del titolare per questo agente (a tutti gli agenti, a lui o al suo gruppo)
