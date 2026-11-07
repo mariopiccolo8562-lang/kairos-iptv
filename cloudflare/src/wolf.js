@@ -234,7 +234,9 @@ async function fetchLines(env, H, cfg, fresh, lim) {
   if (!fresh && !lim && mem.lines && Date.now() - mem.t < 15e3) return mem.lines;
   const f = { draw: '1', start: '0', length: lim ? String(lim) : '-1', id: 'users', filter: '', reseller: '', 'search[value]': '', 'search[regex]': 'false', 'order[0][column]': '0', 'order[0][dir]': 'desc' };
   COLS.forEach((c, i) => { f[`columns[${i}][data]`] = c; f[`columns[${i}][name]`] = c === 'expired' ? 'username' : c; f[`columns[${i}][searchable]`] = 'true'; f[`columns[${i}][orderable]`] = 'true'; });
-  const j = await wfJson(env, H, cfg, '/lines/data', f);
+  let j;
+  try { j = await wfJson(env, H, cfg, '/lines/data', f); }
+  catch (e) { if (!lim && !fresh && mem.lines && Date.now() - mem.t < 600e3) return mem.lines; throw e; } // WOLF non risponde: meglio la lista di poco fa (max 10 min) che un errore
   const out = (j.data || []).map(rowOut);
   if (lim) return out;
   mem.lines = out; mem.t = Date.now();
