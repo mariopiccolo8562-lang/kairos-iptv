@@ -2,7 +2,7 @@
    Usa le funzioni di app.js ($, $$, esc, api, toast, ask, ago, D, TITLES, view, openDrawer, load). In demo usa dati di esempio. */
 (() => {
   const KC = (window.KC = { vpnLocs: [], live: null, req: { report: null, content: null }, dns: null, cat: { src: '', kind: 'movies', cat: '', q: '', page: 1 } });
-  Object.assign(TITLES, { live: 'Online ora', reports: 'Segnalazioni', creq: 'Richieste contenuti', vod: 'Videoteca', dns: 'Server DNS e VPN', api: 'API e integrazioni' });
+  Object.assign(TITLES, { live: 'Online ora Kairos', reports: 'Segnalazioni', creq: 'Richieste contenuti', vod: 'Videoteca', dns: 'Server DNS e VPN', api: 'API e integrazioni' });
 
   /* ---------- dati di esempio per la demo ---------- */
   const now = () => Date.now();
@@ -359,7 +359,7 @@
     apperr: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4M12 8v4M12 14.5h.01"/></svg>',
   };
   const dash = $('.nav[data-v="dash"]');
-  const navs = [['live', 'Online ora'], ['apperr', 'Errori applicazione'], ['reports', 'Segnalazioni'], ['creq', 'Richieste contenuti'], ['vod', 'Videoteca'], ['dns', 'Server DNS e VPN'], ['api', 'API e integrazioni']];
+  const navs = [['live', 'Online ora Kairos'], ['apperr', 'Errori applicazione'], ['reports', 'Segnalazioni'], ['creq', 'Richieste contenuti'], ['vod', 'Videoteca'], ['dns', 'Server DNS e VPN'], ['api', 'API e integrazioni']];
   let after = dash;
   for (const [v, l] of navs) {
     const b = document.createElement('button'); b.className = 'nav'; b.dataset.v = v;
