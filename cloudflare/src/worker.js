@@ -3838,11 +3838,13 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const j = await (await storeAdmin(req, env, path, who, ip, 0)).json();
     const all = await agentsAll(env), def = (j.settings && j.settings.storeMax) || 0;
     const seen = new Set((j.sellers || []).map((x) => x.id));
-    for (const a of all) if (!seen.has(a.id)) j.sellers.push({ id: a.id, stores: 0, storeDl: 0, last: 0, newest: 0, dl30: 0, dl7: 0, dl1: 0, devs30: 0 });
+    for (const a of all) if (!seen.has(a.id)) j.sellers.push({ id: a.id, stores: 0, storeDl: 0, last: 0, newest: 0, dl30: 0, dl7: 0, dl1: 0, devs30: 0, pending: 0, apps: [], storeList: [] });
+    if (!seen.has(0)) j.sellers.push({ id: 0, stores: 0, storeDl: 0, last: 0, newest: 0, dl30: 0, dl7: 0, dl1: 0, devs30: 0, pending: 0, apps: [], storeList: [] });
     for (const x of j.sellers) {
       const a = x.id ? all.find((y) => y.id === x.id) : null;
       x.name = x.id ? (a ? a.username : 'agente eliminato') : 'tu (titolare)';
-      x.cap = x.id ? (a && a.store_max >= 0 ? a.store_max : def) : null;
+      x.capOwn = a && a.store_max >= 0 ? a.store_max : null; // tetto suo (null = quello di serie)
+      x.cap = x.id ? (x.capOwn !== null ? x.capOwn : def) : null;
       x.active = x.id ? !!(a && a.active) : true; x.parentId = a ? a.parent_id : 0; x.storeCode = a ? a.store_code : '';
     }
     j.sellers.sort((p, q) => (q.dl30 - p.dl30) || (q.stores - p.stores) || String(p.name).localeCompare(String(q.name)));

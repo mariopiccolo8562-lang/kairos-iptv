@@ -656,16 +656,23 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       // riepilogo per il titolare: quanti store attivati, quanti dispositivi e download, per agente e per app (ultimi 30 giorni)
       if (by) throw new StoreErr(403, 'Il riepilogo dello store lo vede solo il titolare');
       const t = now(), d7 = t - 7 * 86400e3, d1 = t - 86400e3, d30 = t - KEEP;
-      const [st, dl, apps, tot] = await Promise.all([
+      const [st, dl, apps, tot, perApp, devs, pend] = await Promise.all([
         env.DB.prepare('SELECT seller, COUNT(*) AS n, SUM(downloads) AS dl, MAX(last) AS last, MAX(activated) AS newest FROM store_devices WHERE active = 1 GROUP BY seller').all(),
         env.DB.prepare('SELECT seller, COUNT(*) AS n, COUNT(DISTINCT did) AS devs, SUM(CASE WHEN created > ? THEN 1 ELSE 0 END) AS n7, SUM(CASE WHEN created > ? THEN 1 ELSE 0 END) AS n1 FROM store_requests WHERE uses > 0 AND created > ? GROUP BY seller').bind(d7, d1, d30).all(),
         env.DB.prepare('SELECT app, COUNT(*) AS n, COUNT(DISTINCT did) AS devs, SUM(CASE WHEN created > ? THEN 1 ELSE 0 END) AS n7 FROM store_requests WHERE uses > 0 AND created > ? GROUP BY app ORDER BY n DESC LIMIT 60').bind(d7, d30).all(),
         env.DB.prepare("SELECT (SELECT COUNT(*) FROM store_devices WHERE active = 1) AS stores, (SELECT COUNT(DISTINCT did) FROM store_requests WHERE created > ?) AS devs30, (SELECT COUNT(*) FROM store_requests WHERE uses > 0 AND created > ?) AS dl30, (SELECT COUNT(*) FROM store_requests WHERE uses > 0 AND created > ?) AS dl7, (SELECT COUNT(*) FROM store_requests WHERE uses > 0 AND created > ?) AS dl1, (SELECT COUNT(*) FROM store_requests WHERE status = 'pending' AND created > ?) AS pending, (SELECT COUNT(DISTINCT did) FROM store_requests WHERE uses > 0 AND created > ?) AS users30").bind(d30, d30, d7, d1, t - REQ_TTL, d30).first(),
+        // per venditore: quali app ha scaricato (30 gg), quali store ha attivato, quante richieste aspettano
+        env.DB.prepare('SELECT seller, app, COUNT(*) AS n, COUNT(DISTINCT did) AS devs, MAX(created) AS last FROM store_requests WHERE uses > 0 AND created > ? GROUP BY seller, app ORDER BY n DESC').bind(d30).all(),
+        env.DB.prepare('SELECT did, seller, device, note, country, activated, last, downloads FROM store_devices WHERE active = 1 ORDER BY activated DESC LIMIT 2000').all(),
+        env.DB.prepare("SELECT seller, COUNT(*) AS n FROM store_requests WHERE status = 'pending' AND created > ? GROUP BY seller").bind(t - REQ_TTL).all(),
       ]);
       const perSeller = new Map();
-      const row = (id) => { let x = perSeller.get(id); if (!x) { x = { id, stores: 0, storeDl: 0, last: 0, newest: 0, dl30: 0, dl7: 0, dl1: 0, devs30: 0 }; perSeller.set(id, x); } return x; };
+      const row = (id) => { let x = perSeller.get(id); if (!x) { x = { id, stores: 0, storeDl: 0, last: 0, newest: 0, dl30: 0, dl7: 0, dl1: 0, devs30: 0, pending: 0, apps: [], storeList: [] }; perSeller.set(id, x); } return x; };
       for (const r of (st && st.results) || []) { const x = row(+r.seller || 0); x.stores = r.n; x.storeDl = +r.dl || 0; x.last = +r.last || 0; x.newest = +r.newest || 0; }
       for (const r of (dl && dl.results) || []) { const x = row(+r.seller || 0); x.dl30 = r.n; x.dl7 = +r.n7 || 0; x.dl1 = +r.n1 || 0; x.devs30 = r.devs; }
+      for (const r of (perApp && perApp.results) || []) row(+r.seller || 0).apps.push({ app: r.app, n: r.n, devs: r.devs, last: +r.last || 0 });
+      for (const r of (devs && devs.results) || []) { const x = row(+r.seller || 0); if (x.storeList.length < 200) x.storeList.push({ did: r.did, device: r.device, note: r.note, country: r.country, activated: r.activated, last: r.last, downloads: r.downloads }); }
+      for (const r of (pend && pend.results) || []) row(+r.seller || 0).pending = r.n;
       return json({ settings: await getStoreSettings(env), totals: tot || {}, sellers: [...perSeller.values()], apps: (apps && apps.results) || [] });
     }
     if (path === '/store/settings' && m === 'PUT') {

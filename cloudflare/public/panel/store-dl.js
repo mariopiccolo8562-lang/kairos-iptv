@@ -57,7 +57,14 @@
 .ss-k{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
 .ss-k .k{background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:14px 16px}.ss-k .k b{display:block;font-size:26px;font-weight:800;letter-spacing:-.02em}.ss-k .k small{display:block;color:var(--mut);font-size:12.5px;margin-top:2px}
 .ss-k .k i{display:block;font-style:normal;color:var(--mut);font-size:12px;margin-top:6px}
-.ss-t .mut{font-size:12px}.ss-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;min-width:70px}.ss-bar i{display:block;height:100%;background:linear-gradient(90deg,#4f8cff,#a78bfa)}`;
+.ss-t .mut{font-size:12px}.ss-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;min-width:70px}.ss-bar i{display:block;height:100%;background:linear-gradient(90deg,#4f8cff,#a78bfa)}
+.ss-t tr.ss-r{cursor:pointer}.ss-t tr.ss-r:hover td{background:rgba(255,255,255,.03)}.ss-t tr.ss-r.open td{background:rgba(79,140,255,.07)}
+.ss-cap{display:inline-flex;align-items:center;gap:6px}.ss-cap .inp{width:84px;margin:0;padding:5px 8px}.ss-pen{border:0;background:transparent;color:var(--mut);cursor:pointer;font-size:13px;padding:0 3px}.ss-pen:hover{color:#fff}
+.ss-d td{padding:12px 14px 16px}.ss-dg{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media (max-width:900px){.ss-dg{grid-template-columns:1fr}}
+.ss-dg h4{margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.ss-app{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:13px}.ss-app:first-of-type{border-top:0}.ss-app b{font-weight:700}
+.ss-st{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:13px}.ss-st:first-of-type{border-top:0}.ss-st small{color:var(--mut);display:block;font-size:11.5px}
+.ss-def{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:13px}`;
   document.head.appendChild(css);
 
   V.innerHTML = `<div class="g2">
@@ -167,17 +174,23 @@
   function demoSummary() {
     const t = Date.now();
     return { settings: DM.settings, totals: { stores: 14, devs30: 23, dl30: 61, dl7: 19, dl1: 3, pending: DM.requests.filter((r) => r.status === 'pending').length, users30: 21 },
-      sellers: [{ id: 0, name: 'tu (titolare)', cap: null, active: true, stores: 5, storeDl: 20, dl30: 24, dl7: 7, dl1: 1, devs30: 9, last: t - 2 * 3600e3, storeCode: 'K7M4' },
-        { id: 2, name: 'mario.rossi', cap: 50, active: true, stores: 6, storeDl: 31, dl30: 28, dl7: 9, dl1: 2, devs30: 10, last: t - 5 * 3600e3, storeCode: 'K7M4' },
-        { id: 3, name: 'luca.tv', cap: 20, active: true, stores: 3, storeDl: 9, dl30: 9, dl7: 3, dl1: 0, devs30: 4, last: t - 864e5, storeCode: 'P3XZ' },
-        { id: 5, name: 'bar.sport', cap: 50, active: false, stores: 0, storeDl: 0, dl30: 0, dl7: 0, dl1: 0, devs30: 0, last: 0, storeCode: 'T2NW' }],
+      sellers: [{ id: 0, name: 'tu (titolare)', cap: null, capOwn: null, active: true, stores: 5, storeDl: 20, dl30: 24, dl7: 7, dl1: 1, devs30: 9, pending: 1, last: t - 2 * 3600e3, storeCode: 'K7M4', apps: [{ app: 'Kairos Pro', n: 14, devs: 8, last: t - 2 * 3600e3 }, { app: 'IboPro', n: 10, devs: 5, last: t - 864e5 }], storeList: [{ did: 'd1', device: 'Amazon AFTKA (Fire TV)', note: 'Negozio', country: 'IT', activated: t - 20 * 864e5, last: t - 2 * 3600e3, downloads: 9 }] },
+        { id: 2, name: 'mario.rossi', cap: 50, capOwn: null, active: true, stores: 6, storeDl: 31, dl30: 28, dl7: 9, dl1: 2, devs30: 10, pending: 0, last: t - 5 * 3600e3, storeCode: 'K7M4', apps: [{ app: 'Kairos Pro', n: 17, devs: 9, last: t - 5 * 3600e3 }, { app: 'TiviMate', n: 11, devs: 6, last: t - 3 * 864e5 }], storeList: [{ did: 'd2', device: 'Xiaomi MiTV (Android TV)', note: 'Marco', country: 'IT · Milano', activated: t - 10 * 864e5, last: t - 5 * 3600e3, downloads: 4 }, { did: 'd3', device: 'Amazon AFTMM (Fire TV)', note: 'Anna', country: 'IT', activated: t - 6 * 864e5, last: t - 864e5, downloads: 2 }] },
+        { id: 3, name: 'luca.tv', cap: 20, capOwn: 20, active: true, stores: 3, storeDl: 9, dl30: 9, dl7: 3, dl1: 0, devs30: 4, pending: 1, last: t - 864e5, storeCode: 'P3XZ', apps: [{ app: 'IboPro', n: 9, devs: 4, last: t - 864e5 }], storeList: [{ did: 'd4', device: 'Xiaomi MiTV-AXSO0 (Android TV)', note: '', country: 'IT', activated: t - 3 * 864e5, last: t - 864e5, downloads: 2 }] },
+        { id: 5, name: 'bar.sport', cap: 50, capOwn: null, active: false, stores: 0, storeDl: 0, dl30: 0, dl7: 0, dl1: 0, devs30: 0, pending: 0, last: 0, storeCode: 'T2NW', apps: [], storeList: [] }],
       apps: [{ app: 'Kairos Pro', n: 31, devs: 17, n7: 10 }, { app: 'IboPro', n: 18, devs: 12, n7: 6 }, { app: 'TiviMate', n: 12, devs: 9, n7: 3 }] };
+  }
+  // demo: il tetto personale segue quello salvato nella scheda agente (DEMO.agents di agents.js)
+  function demoSummaryLive() {
+    const d = demoSummary(), ags = (typeof DEMO !== 'undefined' && DEMO && DEMO.agents) || [];
+    for (const x of d.sellers) { if (!x.id) continue; const a = ags.find((y) => y.id === x.id); if (a && a.storeMax !== undefined) x.capOwn = a.storeMax === null ? null : a.storeMax; x.cap = x.capOwn !== null ? x.capOwn : (DM.settings.storeMax || 50); }
+    return d;
   }
   async function demo(method, path, body) {
     await new Promise((r) => setTimeout(r, 120));
     if (path === '' && method === 'GET') return { ...DM, pending: DM.requests.filter((r) => r.status === 'pending' && (!r.seller || DM.settings.agentAlerts)).length, pendingAgents: DM.requests.filter((r) => r.status === 'pending' && r.seller).length, devices: demoDevices() };
     if (path === '/settings') { Object.assign(DM.settings, body); if (body.approval === false && body.activation === undefined) DM.settings.activation = false; return { settings: DM.settings }; }
-    if (path === '/summary') return demoSummary();
+    if (path === '/summary') return demoSummaryLive();
     if (path === '/device/unlink') { const d = demoDevices().find((x) => x.did === body.did); if (!d || !d.activated) throw new Error('Questo store non è attivato'); return { ok: true }; }
     if (path === '/sms/test') return { ok: true, to: '+39•••567' };
     if (path === '' && method === 'DELETE') { DM.requests = DM.requests.filter((r) => r.status === 'pending'); return { ok: true }; }
@@ -586,20 +599,21 @@
       <div class="card glass" style="margin-bottom:18px"><div class="hd"><h3>Riepilogo store<small>Quanti store sono attivati, chi scarica e quale agente: tutto in una pagina (download degli ultimi 30 giorni)</small></h3><button class="btn sm" id="ssReload">Aggiorna</button></div>
         <div class="ss-k" id="ssK"></div>
         <div class="sd-note" id="ssMode"></div>
+        <div class="ss-def" id="ssDef"></div>
       </div>
       <div class="g2">
-        <div class="card glass"><div class="hd"><h3>Per agente<small>Store intestati, tetto, download e dispositivi serviti. La prima riga sei tu</small></h3></div><div class="tbl-wrap"><table class="tbl ss-t" style="width:100%"><thead><tr><th>Venditore</th><th>Store attivati</th><th>Download 30 gg</th><th>Dispositivi 30 gg</th><th>Ultimo download</th></tr></thead><tbody id="ssAg"></tbody></table></div></div>
+        <div class="card glass"><div class="hd"><h3>Per agente<small>Store intestati, tetto, download e dispositivi serviti. Clicca una riga per vedere quali app ha scaricato e i suoi store; la matita cambia il tetto</small></h3></div><div class="tbl-wrap"><table class="tbl ss-t" style="width:100%"><thead><tr><th>Venditore</th><th>Store attivati / tetto</th><th>Download 30 gg</th><th>Dispositivi 30 gg</th><th>Ultimo download</th></tr></thead><tbody id="ssAg"></tbody></table></div></div>
         <div class="card glass"><div class="hd"><h3>Per app<small>Le app più scaricate dallo store negli ultimi 30 giorni</small></h3></div><div class="tbl-wrap"><table class="tbl ss-t" style="width:100%"><thead><tr><th>App</th><th>Download</th><th>Dispositivi</th><th>Ultimi 7 gg</th></tr></thead><tbody id="ssApp"></tbody></table></div></div>
       </div>`;
     $('#v-dash').after(sec);
   }
   if (typeof TITLES === 'object') TITLES.storesum = 'Riepilogo store';
-  async function renderSum(force) {
+  async function renderSum(force, local) {
     const sec = $('#v-storesum'); if (!sec || D.role === 'agent' || SUM.busy) return;
     if (!force && SUM.data && Date.now() - SUM.t < 20000) return;
     SUM.busy = true;
     try {
-      const d = await sApi('GET', '/summary'); SUM.data = d; SUM.t = Date.now();
+      const d = local && SUM.data ? SUM.data : await sApi('GET', '/summary'); SUM.data = d; if (!local) SUM.t = Date.now();
       const T = d.totals || {}, st = d.settings || {}, sellers = d.sellers || [], apps = d.apps || [];
       const withStores = sellers.filter((x) => x.id && x.stores > 0).length;
       $('#ssK').innerHTML = [
@@ -611,16 +625,47 @@
       $('#ssMode').innerHTML = st.activation ? `🏪 <b>Solo store attivati</b>: si scarica solo dagli store intestati a un venditore, senza conferma. Tetto di serie: <b>${esc(String(st.storeMax))}</b> store per agente (cambialo per agente dalla pagina Agenti).`
         : st.approval === false ? '⚠️ <b>Download liberi</b>: nessuna conferma e nessuna intestazione. Per sapere quale agente scarica, scegli «Solo store attivati» in App da approvare → Approvazione.'
         : 'ℹ️ <b>Chiedi la mia autorizzazione</b>: ogni download aspetta un sì. Gli store attivati con un codice risultano comunque intestati a quel venditore.';
+      const defCap = Number.isInteger(st.storeMax) ? st.storeMax : 50;
+      $('#ssDef').innerHTML = `Tetto di serie per agente: <b id="ssDefV">${defCap}</b> store <button class="ss-pen" data-ssdef="1" title="Cambia il tetto di serie (vale per gli agenti senza un tetto proprio)">✎</button><span class="mut">· lo sostituisci per il singolo agente con la matita sulla sua riga; tu non hai tetto</span>`;
       $('#ssAg').innerHTML = sellers.length ? sellers.map((x) => {
-        const pct = x.cap ? Math.min(100, Math.round((x.stores / x.cap) * 100)) : 0;
-        return `<tr><td><b>${esc(x.name)}</b>${x.active === false ? ' <span class="mut">(sospeso)</span>' : ''}<br><small class="mut">${x.id ? 'codice ' + esc(x.storeCode || '—') : 'senza codice o con il tuo'}</small></td>
-          <td><b>${x.stores}</b>${x.cap !== null && x.cap !== undefined ? ` <span class="mut">/ ${x.cap}</span><div class="ss-bar"><i style="width:${pct}%"></i></div>` : ''}</td>
-          <td><b>${x.dl30}</b> <span class="mut">· 7 gg: ${x.dl7} · oggi: ${x.dl1}</span></td>
-          <td>${x.devs30}</td><td>${x.last ? esc(ago(x.last)) : '—'}</td></tr>`; }).join('') : '<tr><td colspan="5" class="mut">Ancora nessun dato</td></tr>';
+        const own = x.id && Number.isInteger(x.capOwn) ? x.capOwn : null, cap = x.id ? (own !== null ? own : defCap) : null;
+        const pct = cap ? Math.min(100, Math.round((x.stores / cap) * 100)) : 0;
+        const apps = (x.apps || []).length, open = SUM.open === x.id;
+        return `<tr class="ss-r${open ? ' open' : ''}" data-ssr="${x.id}"><td><b>${esc(x.name)}</b>${x.active === false ? ' <span class="mut">(sospeso)</span>' : ''}<br><small class="mut">${x.id ? 'codice ' + esc(x.storeCode || '—') : 'senza codice o con il tuo'}${x.pending ? ` · <span style="color:#ffd37a">${x.pending} in attesa</span>` : ''}</small></td>
+          <td><span class="ss-cap"><b>${x.stores}</b>${x.id ? ` <span class="mut">/ ${cap}${own === null ? '' : ' <i title="tetto suo, diverso da quello di serie">★</i>'}</span><button class="ss-pen" data-sscap="${x.id}" title="Cambia il tetto di ${esc(x.name)}">✎</button>` : ' <span class="mut">· senza tetto</span>'}</span>${x.id ? `<div class="ss-bar"><i style="width:${pct}%"></i></div>` : ''}</td>
+          <td><b>${x.dl30}</b> <span class="mut">· 7 gg: ${x.dl7} · oggi: ${x.dl1}${apps ? ` · ${apps} app` : ''}</span></td>
+          <td>${x.devs30}</td><td>${x.last ? esc(ago(x.last)) : '—'}</td></tr>${open ? ssDetail(x) : ''}`; }).join('') : '<tr><td colspan="5" class="mut">Ancora nessun dato</td></tr>';
       $('#ssApp').innerHTML = apps.length ? apps.map((a) => `<tr><td><b>${esc(a.app)}</b></td><td>${a.n}</td><td>${a.devs}</td><td>${a.n7 || 0}</td></tr>`).join('') : '<tr><td colspan="4" class="mut">Nessun download negli ultimi 30 giorni</td></tr>';
     } catch (e) { if ($('#v-storesum').classList.contains('on')) toast(e.message, 1); }
     finally { SUM.busy = false; }
   }
+  /** dettaglio di un venditore: quali app ha scaricato (30 gg) e i suoi store attivati */
+  function ssDetail(x) {
+    const apps = x.apps || [], st = x.storeList || [];
+    return `<tr class="ss-d"><td colspan="5"><div class="ss-dg">
+      <div><h4>App scaricate negli ultimi 30 giorni${apps.length ? ` (${apps.reduce((n, a) => n + a.n, 0)})` : ''}</h4>${apps.length ? apps.map((a) => `<div class="ss-app"><span><b>${esc(a.app)}</b> <span class="mut">· ${a.devs} dispositiv${a.devs === 1 ? 'o' : 'i'}</span></span><span><b>${a.n}</b> <span class="mut">download · ultimo ${esc(ago(a.last))}</span></span></div>`).join('') : '<div class="mut" style="font-size:13px">Nessun download</div>'}</div>
+      <div><h4>Store attivati${st.length ? ` (${x.stores})` : ''}</h4>${st.length ? st.map((d) => `<div class="ss-st"><span><b>${esc(d.device || 'Dispositivo')}</b><small>${[d.note, d.country].filter(Boolean).map(esc).join(' · ')}${d.note || d.country ? ' · ' : ''}attivato ${esc(ago(d.activated))}</small></span><span style="text-align:right"><b>${d.downloads || 0}</b> <span class="mut">download</span><small>${d.last ? 'ultimo ' + esc(ago(d.last)) : 'mai'}</small></span></div>`).join('') + (x.stores > st.length ? `<div class="mut" style="font-size:12px;margin-top:6px">… e altri ${x.stores - st.length}</div>` : '') : '<div class="mut" style="font-size:13px">Nessuno store attivato con il suo codice</div>'}</div>
+    </div></td></tr>`;
+  }
+  /** modifica del tetto (di serie o del singolo agente) direttamente nel riepilogo */
+  function ssEditCap(el, cur, onSave, hint) {
+    el.innerHTML = `<span class="ss-cap"><input class="inp" type="number" min="0" max="100000" step="1" value="${cur === null || cur === undefined ? '' : esc(String(cur))}" placeholder="${hint || ''}"> <button class="btn sm pri" data-ssok="1">Salva</button> <button class="btn sm" data-ssno="1">Annulla</button></span>`;
+    const inp = el.querySelector('input'); inp.focus(); inp.select();
+    const done = async () => { const v = inp.value.trim(); const n = v === '' ? null : parseInt(v, 10); if (n !== null && !(n >= 0 && n <= 100000)) { toast('Scrivi un numero da 0 a 100000', 1); return; } try { await onSave(n); } catch (e) { toast(e.message, 1); } renderSum(true); };
+    el.querySelector('[data-ssok]').onclick = (e) => { e.stopPropagation(); done(); };
+    el.querySelector('[data-ssno]').onclick = (e) => { e.stopPropagation(); renderSum(true); };
+    inp.onkeydown = (e) => { if (e.key === 'Enter') done(); if (e.key === 'Escape') renderSum(true); };
+    inp.onclick = (e) => e.stopPropagation();
+  }
+  const ssSec = $('#v-storesum');
+  if (ssSec) ssSec.addEventListener('click', (e) => {
+    const pen = e.target.closest('[data-sscap]');
+    if (pen) { e.stopPropagation(); const id = +pen.dataset.sscap, x = (SUM.data.sellers || []).find((y) => y.id === id); ssEditCap(pen.closest('.ss-cap'), Number.isInteger(x && x.capOwn) ? x.capOwn : null, async (n) => { await api('PUT', `/admin/agents/${id}`, { storeMax: n }); toast(n === null ? 'Tetto di serie ripristinato per ' + x.name : `Tetto di ${x.name}: ${n} store`); }, 'di serie'); return; }
+    const def = e.target.closest('[data-ssdef]');
+    if (def) { const st = (SUM.data && SUM.data.settings) || {}; ssEditCap(def.parentNode, Number.isInteger(st.storeMax) ? st.storeMax : 50, async (n) => { if (n === null) { toast('Scrivi un numero', 1); return; } await sApi('PUT', '/settings', { storeMax: n }); toast('Tetto di serie: ' + n + ' store per agente'); }); return; }
+    const row = e.target.closest('tr.ss-r');
+    if (row && !e.target.closest('input,button')) { const id = +row.dataset.ssr; SUM.open = SUM.open === id ? null : id; renderSum(true, true); }
+  });
   const ssR = $('#ssReload'); if (ssR) ssR.onclick = () => renderSum(true);
   // la pagina si riempie appena diventa visibile (qualunque cosa abbia cambiato vista: menu, scorciatoie, link)
   { const sv = $('#v-storesum'); if (sv) new MutationObserver(() => { if (sv.classList.contains('on')) renderSum(true); }).observe(sv, { attributes: true, attributeFilter: ['class'] }); }
