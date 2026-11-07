@@ -162,9 +162,12 @@
     if (isAg() && A.tab === 'res') A.tab = 'new';
     const body = !on ? '' : A.tab === 'new' ? newHtml() : `<div class="card glass"><div class="hd"><h3>${A.tab === 'lines' ? 'Linee' : A.tab === 'mags' ? 'MAG' : 'Sotto-reseller'}<small>${A.tab === 'res' ? 'I reseller sotto il tuo account Armada' : isAg() ? 'Solo quelle create da te: i rinnovi usano i crediti del tuo tetto mensile' : 'Dal tuo account Armada: rinnovi e attivazioni usano i tuoi crediti'}</small></h3><button class="btn sm" id="arReT">Aggiorna</button></div>${A.tab === 'res' ? resHtml() : listHtml(A.tab)}</div>`;
     const y = window.scrollY;
-    V.innerHTML = stateHtml() + (on ? `<div class="ar-tabs filters">${[['new', 'Nuova linea'], ['lines', 'Linee' + nL], ['mags', 'MAG' + nM], ...(isAg() ? [] : [['res', 'Sotto-reseller']])].map(([k, l]) => `<button class="fchip ${A.tab === k ? 'on' : ''}" data-artab="${k}">${l}</button>`).join('')}</div>` + body : '');
+    const LS = A.tab === 'lines' ? A.lines : A.tab === 'mags' ? A.mags : null;
+    const stats = on && LS && !LS.err && window.KXStats ? KXStats.strip(KXStats.tiles(KXStats.calc(LS), { noun: A.tab === 'mags' ? { active: 'MAG attivi', total: 'MAG totali' } : null })) : '';
+    V.innerHTML = stateHtml() + stats + (on ? `<div class="ar-tabs filters">${[['new', 'Nuova linea'], ['lines', 'Linee' + nL], ['mags', 'MAG' + nM], ...(isAg() ? [] : [['res', 'Sotto-reseller']])].map(([k, l]) => `<button class="fchip ${A.tab === k ? 'on' : ''}" data-artab="${k}">${l}</button>`).join('')}</div>` + body : '');
     window.scrollTo(0, y);
     bind(V); bindTools(V);
+    if (window.KXStats) KXStats.bind(V, (k) => { const F = { active: 'ok', soon: 'soon', expired: 'exp', trial: 'trial', off: 'off', total: '' }; if (k in F) { A.F.f = F[k]; A.limit = 100; render(); } });
   }
 
   function readForm() {
