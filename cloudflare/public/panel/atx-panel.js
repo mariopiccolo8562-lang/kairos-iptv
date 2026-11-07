@@ -39,7 +39,7 @@
       r.channel || r.ip ? `${r.channel ? `<b>${esc(r.channel)}</b>` : ''}<div class="mut" style="font-size:11.5px">${esc([r.country, r.ip].filter(Boolean).join(' · '))}</div>` : mut,
       r.reseller ? esc(r.reseller) : mut,
       `<button class="btn sm" data-a="note" data-i="${i}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.notes ? esc(r.notes) : '+ nota'}</button>`,
-      `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('renew', i, 'Rinnova')}${Number(r.enabled) === 0 ? btn('on', i, 'Attiva') : btn('off', i, 'Disattiva')}${m3u(r) ? btn('m3u', i, 'M3U') : ''}${window.KXMxpNew ? btn('mxp', i, 'MaxPlayer') : ''}${window.KXOxpNew ? btn('oxp', i, 'OrbixPlay') : ''}${btn('del', i, 'Elimina', 'style="color:#ff8f8f"')}</div>`
+      `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('renew', i, 'Rinnova')}${Number(r.enabled) === 0 ? btn('on', i, 'Attiva') : btn('off', i, 'Disattiva')}${m3u(r) ? btn('m3u', i, 'M3U') : ''}${window.KXMxpNew ? btn('mxp', i, 'MaxPlayer') : ''}${window.KXOxpNew ? btn('oxp', i, 'OrbixPlay') : ''}${window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : ''}${btn('del', i, 'Elimina', 'style="color:#ff8f8f"')}</div>`
     ])));
   }
   function subsHtml(rows) {
@@ -152,6 +152,7 @@
       if (a === 'cu') return copy(r.username, 'Utente');
       if (a === 'cp') return copy(r.password, 'Password');
       if (a === 'm3u') return copy(m3u(r), 'Link M3U');
+      if (a === 'orcp') return KXOrcpNew({ user: r.username, pass: r.password, name: r.username, note: 'Atlantix #' + r.id, panel: 'atx' });
       if (a === 'mxp' || a === 'oxp') { const pre = { user: r.username, pass: r.password, name: r.username, note: 'Atlantix #' + r.id }; return a === 'mxp' ? KXMxpNew(pre) : KXOxpNew(pre); }
       if (a === 'lc') { const d = await api('GET', '/admin/atx/line/conns?id=' + r.id); const c = rowsOf(d); return ask('Connessi su ' + u, c.length ? c.map((x) => `<p style="margin:6px 0"><b>${esc(x.channel || 'canale ?')}</b><br><span class="mut" style="font-size:12.5px">${esc([x.user_ip || x.ip, x.city, x.geoip_country_code, x.isp].filter(Boolean).join(' · '))}</span></p>`).join('') : '<p class="mut">Nessuna connessione adesso.</p>', 'OK'); }
       if (a === 'renew') {
