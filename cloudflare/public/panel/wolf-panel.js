@@ -31,7 +31,7 @@
   }
   TITLES.wolf = 'Pannello WOLF';
 
-  const W = { cfg: null, data: null, pk: null, err: '', q: '', f: '', own: '', limit: 100, show: new Set(), busy: false, tab: 'lines', rs: null, rsBusy: false, rsErr: '', sel: new Set(), st: false };
+  const W = { cfg: null, data: null, pk: null, err: '', q: '', f: '', sort: '', days: 0, own: '', limit: 100, show: new Set(), busy: false, tab: 'lines', rs: null, rsBusy: false, rsErr: '', sel: new Set(), st: false };
   const isAg = () => D.role === 'agent';
   const DAY = 864e5, fmtD = (t) => (t ? new Date(t).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Illimitata');
   const left = (t) => { if (!t) return ''; const d = Math.ceil((t - Date.now()) / DAY); return d < 0 ? `scaduta da ${-d} g` : d === 0 ? 'scade oggi' : `tra ${d} g`; };
@@ -85,6 +85,8 @@
       return true;
     });
   }
+  const filtered0 = filtered;
+  filtered = () => (window.KXSort ? KXSort.apply(filtered0(), W, { exp: (l) => +l.exp || 0, name: (l) => l.username, enabled: (l) => !!l.enabled, conns: (l) => l.conns, owner: (l) => l.owner, created: (l) => +l.created || 0 }) : filtered0());
   const linkOf = (id) => ((W.data && W.data.links) || []).find((k) => k.line === id);
 
   function render() {
@@ -107,7 +109,7 @@
         <div class="wf-tabs"><button data-t="lines" class="${W.tab === 'lines' ? 'on' : ''}">Linee${d.lines ? ' · ' + d.lines.length : ''}</button><button data-t="rs" class="${W.tab === 'rs' ? 'on' : ''}">Reseller${W.rs ? ' · ' + W.rs.resellers.length : ''}</button></div></div>
       ${W.tab === 'rs' ? rsHtml() : `<div class="card glass" style="margin-top:14px">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="inp" id="wfQ" placeholder="Cerca utente, ID o nota" value="${esc(W.q)}" style="max-width:280px;margin:0">
-          <select class="inp" id="wfF" style="width:auto;margin:0">${FL.map(([k, t]) => `<option value="${k}"${W.f === k ? ' selected' : ''}>${t}</option>`).join('')}</select>
+          <select class="inp" id="wfF" style="width:auto;margin:0">${FL.map(([k, t]) => `<option value="${k}"${W.f === k ? ' selected' : ''}>${t}</option>`).join('')}</select>${window.KXSort ? KXSort.ui(W, 'wf') : ''}
           <select class="inp" id="wfO" style="width:auto;margin:0"><option value="">Tutti i reseller</option>${owners().map(([o, n]) => `<option value="${esc(o)}"${W.own === o ? ' selected' : ''}>${esc(o)} · ${n}</option>`).join('')}</select>
           <span class="mut" style="font-size:12.5px">${list.length} linee</span></div>
         ${d.lines && window.KXTools ? KXTools.bar('wf', selOf(list).length, list.length, [['ext', 'Rinnova', 'pri'], ['on', 'Attiva'], ['off', 'Disattiva'], ['msg', 'Messaggio ai clienti']]) + (W.st ? statsHtml() : '') : ''}
@@ -130,6 +132,7 @@
     $('#wfO').onchange = (e) => { W.own = e.target.value; W.limit = 100; render(); };
     const q = $('#wfQ'); q.oninput = () => { W.q = q.value; W.limit = 100; const p = q.selectionStart; render(); const n = $('#wfQ'); n.focus(); n.setSelectionRange(p, p); };
     $('#wfF').onchange = (e) => { W.f = e.target.value; W.limit = 100; render(); };
+    if (window.KXSort) KXSort.bind(V, W, 'wf', () => { W.limit = 100; render(); });
     if ($('#wfMore')) $('#wfMore').onclick = () => { W.limit += 100; render(); };
     V.querySelectorAll('.wf-row [data-a]').forEach((b) => { b.onclick = () => act(b.dataset.a, +b.closest('.wf-row').dataset.id); });
     if (window.KXTools && d.lines) KXTools.bind(V, 'wf', W.sel, () => filtered().map((l) => l.id), { ext: bulkExt, on: () => bulkTgl(true), off: () => bulkTgl(false), msg: bulkMsg, csv: exportCsv, stats: () => { W.st = !W.st; render(); } }, render);

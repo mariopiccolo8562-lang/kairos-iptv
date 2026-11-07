@@ -16,7 +16,7 @@
     TITLES[k] = 'Pannello ' + P.name;
   }
   const TABS = [['lines', 'Linee'], ['subs', 'Sub-reseller'], ['conns', 'Connessioni'], ['overview', 'Panoramica']];
-  const ST = {}; for (const k of Object.keys(PANELS)) ST[k] = { st: null, tab: 'lines', q: '', status: '', data: null, err: '', busy: false, edit: false, pk: null };
+  const ST = {}; for (const k of Object.keys(PANELS)) ST[k] = { st: null, tab: 'lines', q: '', status: '', sort: '', days: 0, data: null, err: '', busy: false, edit: false, pk: null };
   const now = () => Math.floor(Date.now() / 1000);
   const day = (t, txt) => { const n = Number(t); if (!n) return txt ? esc(txt) : 'Illimitato'; const d = new Date(n * 1000); return isNaN(d) ? esc(txt || '') : d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
   const badge = (t, c) => `<span style="display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;background:${c}22;color:${c}">${esc(t)}</span>`;
@@ -30,6 +30,7 @@
   const tr = (cells) => `<tr>${cells.map((c) => `<td style="${TD}">${c}</td>`).join('')}</tr>`;
   const btn = (a, i, t, extra = '') => `<button class="btn sm" data-a="${a}" data-i="${i}" ${extra}>${t}</button>`;
   const filt = (k, rows) => { const A = ST[k], q = A.q.toLowerCase(); return rows.filter((r) => (!q || [r.username, r.notes, r.owner, r.type].some((x) => String(x || '').toLowerCase().includes(q))) && (!A.status || (A.status === 'active' ? r.enabled && !r.expired : A.status === 'expired' ? r.expired : A.status === 'disabled' ? !r.enabled : A.status === 'online' ? r.conns > 0 : A.status === 'expiring' ? r.exp && r.exp > now() && r.exp - now() < 7 * 86400 : true))); };
+  const sorted = (k, rows) => (window.KXSort ? KXSort.apply(rows, ST[k], { exp: (r) => (+r.exp || 0) * 1000, name: (r) => r.username, enabled: (r) => !!r.enabled, conns: (r) => r.conns, owner: (r) => r.owner, created: (r) => (+r.created || 0) * 1000 }) : rows);
 
   const narrow = () => innerWidth <= 760;
   const KV = (l, v) => `<div><span class="mut" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">${l}</span><div style="font-size:13.5px">${v}</div></div>`;
@@ -49,7 +50,8 @@
   function linesHtml(k, rows, dns) {
     if (narrow()) return linesCards(k, rows, dns);
     const all = ST[k].data.rows;
-    return grid(['Utente', 'Password', 'Stato', 'Scadenza', 'Conn.', 'Pacchetto', 'Reseller', 'Note', ''], rows.map((r) => {
+    const H = window.KXSort ? (key, t) => KXSort.th(ST[k], key, t) : (key, t) => t; // intestazioni cliccabili: ordinano la lista
+    return grid([H('name', 'Utente'), 'Password', H('status', 'Stato'), H('exp', 'Scadenza'), H('conns', 'Conn.'), 'Pacchetto', H('owner', 'Reseller'), 'Note', ''], rows.map((r) => {
       const i = all.indexOf(r);
       const acts = [btn('renew', i, 'Rinnova'), btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', btn('mxp', i, 'MaxPlayer'), btn('oxp', i, 'OrbixPlay'), btn('del', i, 'Elimina', 'style="color:#ff8f8f"')].filter(Boolean).join(' ');
       return tr([`<b>${esc(r.username)}</b> ${btn('cu', i, 'Copia')}${r.ip ? `<br><span class="mut" style="font-size:11.5px">${esc(r.stream || '')}${r.last ? ' · ' + esc(r.last) : ''}</span>` : ''}`, r.password ? `<span class="mono">${esc(r.password)}</span> ${btn('cp', i, 'Copia')}` : mut, lineState(r), day(r.exp, r.expTxt), r.max ? `${r.conns}/${r.max}` : String(r.conns ?? '—'), esc(r.type || '—'), esc(r.owner || '—'), r.notes ? esc(r.notes) : mut, `<div style="display:flex;gap:4px;flex-wrap:wrap">${acts}</div>`]);
@@ -65,14 +67,14 @@
     if (A.err) return `<p style="color:#ff8f8f;margin:14px 0">${esc(A.err)}</p>`;
     if (A.data == null) return '';
     if (A.tab === 'overview') return overviewHtml(A.data);
-    const rows = Array.isArray(A.data.rows) ? A.data.rows : [], vis = A.tab === 'lines' ? filt(k, rows) : rows;
+    const rows = Array.isArray(A.data.rows) ? A.data.rows : [], vis = A.tab === 'lines' ? sorted(k, filt(k, rows)) : rows;
     const sum = A.tab === 'lines' ? ` · attive: <b>${rows.filter((r) => r.enabled && !r.expired).length}</b> · scadute: <b>${rows.filter((r) => r.expired).length}</b> · disattivate: <b>${rows.filter((r) => !r.enabled).length}</b>${A.data.dns ? ` · DNS: <b>${esc(A.data.dns)}</b>` : ''}` : '';
     return `<p style="font-size:12.5px;margin:10px 0">${vis.length}${vis.length !== rows.length ? ' di ' + rows.length : ''} ${A.tab === 'lines' ? 'linee' : A.tab === 'subs' ? 'sub-reseller' : 'collegati'}${sum}</p>${A.tab === 'lines' ? linesHtml(k, vis, A.data.dns) : A.tab === 'subs' ? subsHtml(k, vis) : connsHtml(vis)}`;
   }
   function toolbar(k) {
     const A = ST[k]; if (A.tab !== 'lines') return '';
     const st = `<select class="inp" id="exS" style="max-width:160px">${[['', 'Tutti gli stati'], ['active', 'Attive'], ['expiring', 'In scadenza'], ['expired', 'Scadute'], ['disabled', 'Disattivate'], ['online', 'Online']].map(([v, t]) => `<option value="${v}"${A.status === v ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
-    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;${narrow() ? 'width:100%' : 'margin-left:auto'}">${st}<input class="inp" id="exQ" placeholder="Cerca utente…" value="${esc(A.q)}" style="${narrow() ? 'flex:1;min-width:140px' : 'max-width:200px'}"><button class="btn pri sm" data-o="new">+ Nuova linea</button>${window.KXQuick ? KXQuick.button(k) : ''}</div>`;
+    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;${narrow() ? 'width:100%' : 'margin-left:auto'}">${st}${window.KXSort && A.tab === 'lines' ? KXSort.ui(A, 'ex' + k) : ''}<input class="inp" id="exQ" placeholder="Cerca utente…" value="${esc(A.q)}" style="${narrow() ? 'flex:1;min-width:140px' : 'max-width:200px'}"><button class="btn pri sm" data-o="new">+ Nuova linea</button>${window.KXQuick ? KXQuick.button(k) : ''}</div>`;
   }
   function render(k) {
     const V = $('#v-' + k); if (!V) return; const A = ST[k], P = PANELS[k];
@@ -90,11 +92,13 @@
           <button class="btn pri" data-o="save" style="margin-top:12px">Collega ${esc(P.name)}</button>` : ''}</div>
         ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.map(([t, n]) => `<button class="btn sm${A.tab === t ? ' pri' : ''}" data-t="${t}">${n}</button>`).join('')}${toolbar(k)}</div>${body(k)}</div>` : ''}`;
     }
-    $$('[data-t]', V).forEach((b) => (b.onclick = () => { A.tab = b.dataset.t; A.q = ''; A.status = ''; load(k); }));
+    $$('[data-t]', V).forEach((b) => (b.onclick = () => { A.tab = b.dataset.t; A.q = ''; A.status = ''; A.days = 0; load(k); }));
     $$('[data-o]', V).forEach((b) => (b.onclick = () => op(k, b.dataset.o)));
     $$('[data-a]', V).forEach((b) => (b.onclick = () => act(k, b.dataset.a, (A.data && A.data.rows || [])[+b.dataset.i])));
     const q = $('#exQ', V); if (q) q.oninput = () => { A.q = q.value.trim(); const x = $('#exQ', V); show(k); const y = $('#exQ', V); if (y && x !== y) { y.focus(); y.setSelectionRange(y.value.length, y.value.length); } };
     const s = $('#exS', V); if (s) s.onchange = () => { A.status = s.value; show(k); };
+    if (window.KXSort) KXSort.bind(V, A, 'ex' + k, () => show(k));
+    if (window.KXSort) KXSort.bindTh(V, A, () => show(k));
   }
   const fieldHtml = (f, i) => {
     const id = 'exF' + i, req = f.required ? ' *' : '';

@@ -123,7 +123,15 @@ export async function atxRoutes(req, env, path, who, ip, H) {
   if (path === '/atx/config' && m === 'DELETE') { mem.jar = null; await env.DB.prepare("DELETE FROM settings WHERE k IN ('atx', 'atx:ses')").run(); return json({ ok: true }); }
   if (path === '/atx/overview' && m === 'GET') return json((await ax(env, H, '/api/dashboard/overview.php?' + qs({}))).data || {});
   const n = (k) => parseInt(u.searchParams.get(k), 10) || 0;
-  if (path === '/atx/lines' && m === 'GET') return json((await ax(env, H, '/api/lines/list.php?' + qs({ page, per_page: 50, q, status: str(u.searchParams.get('status') || '', 20), reseller_id: n('reseller') || '', sort: '' }))).data || {});
+  if (path === '/atx/lines' && m === 'GET') {
+    const P = (pg) => ax(env, H, '/api/lines/list.php?' + qs({ page: pg, per_page: 50, q, status: str(u.searchParams.get('status') || '', 20), reseller_id: n('reseller') || '', sort: '' })).then((r) => r.data || {});
+    if (!u.searchParams.get('all')) return json(await P(page));
+    // all=1: fino a 12 pagine insieme (600 linee), così KAIROS può ordinare e filtrare per scadenza su tutte
+    const first = await P(1), rows = [...(first.rows || first.items || first.lines || first.users || first.list || first.data || [])];
+    const pages = Math.min(12, +first.pages || 1);
+    for (let pg = 2; pg <= pages; pg++) { const d = await P(pg); rows.push(...(d.rows || d.items || d.lines || d.users || d.list || d.data || [])); }
+    return json({ ...first, rows, items: undefined, lines: undefined, users: undefined, list: undefined, data: undefined, pages: 1, page: 1, partial: +first.pages > 12 });
+  }
   if (path === '/atx/line/conns' && m === 'GET') return json((await ax(env, H, '/api/lines/connections.php?' + qs({ user_id: n('id') }))).data || {});
   if (path === '/atx/subs' && m === 'GET') return json((await ax(env, H, '/api/subresellers/list.php?' + qs({ page, per_page: 50, q, owner: '', status: '' }))).data || {});
   if (path === '/atx/conns' && m === 'GET') return json((await ax(env, H, '/api/connections/list.php?' + qs({ reseller_id: '' }))).data || {});

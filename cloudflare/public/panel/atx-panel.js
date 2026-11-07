@@ -11,7 +11,7 @@
   TITLES.atx = 'Pannello Atlantix';
   const isAg = () => D.role === 'agent';
   const TABS = [['lines', 'Linee'], ['subs', 'Sub-reseller'], ['conns', 'Connessioni'], ['overview', 'Panoramica']];
-  const A = { st: null, tab: 'lines', page: 1, q: '', status: '', reseller: '', resellers: [], data: null, err: '', busy: false, edit: false };
+  const A = { st: null, tab: 'lines', page: 1, q: '', status: '', reseller: '', sort: '', days: 0, resellers: [], data: null, err: '', busy: false, edit: false };
   const now = () => Math.floor(Date.now() / 1000);
   const day = (t) => { const n = Number(t); if (!n) return 'Illimitato'; const d = new Date(n > 1e11 ? n : n * 1000); return isNaN(d) ? esc(String(t)) : d.toLocaleDateString('it-IT'); };
   const dur = (s) => { s = Number(s) || 0; const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h ? `${h} h ${m} min` : `${m} min`; };
@@ -84,7 +84,7 @@
     if (A.tab === 'overview' || A.tab === 'conns') return '';
     const st = A.tab === 'lines' ? `<select class="inp" id="axS" style="max-width:160px">${[['', 'Tutti gli stati'], ['active', 'Attive'], ['expiring', 'In scadenza'], ['expired', 'Scadute'], ['disabled', 'Disattivate'], ['trial', 'Prove'], ['online', 'Online']].map(([v, t]) => `<option value="${v}"${A.status === v ? ' selected' : ''}>${t}</option>`).join('')}</select>` : '';
     const rs = A.tab === 'lines' && A.resellers.length ? `<select class="inp" id="axR" style="max-width:180px"><option value="">Tutti i reseller</option>${A.resellers.map((r) => `<option value="${esc(String(r.id))}"${String(A.reseller) === String(r.id) ? ' selected' : ''}>${esc(r.username || '#' + r.id)}</option>`).join('')}</select>` : '';
-    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto">${st}${rs}<input class="inp" id="axQ" placeholder="Cerca utente…" value="${esc(A.q)}" style="max-width:200px">${A.tab === 'lines' ? '<button class="btn pri sm" data-o="new">+ Nuova linea</button>' + (window.KXQuick ? KXQuick.button('atx') : '') : ''}</div>`;
+    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto">${st}${rs}${A.tab === 'lines' && window.KXSort ? KXSort.ui(A, 'ax') : ''}<input class="inp" id="axQ" placeholder="Cerca utente…" value="${esc(A.q)}" style="max-width:200px">${A.tab === 'lines' ? '<button class="btn pri sm" data-o="new">+ Nuova linea</button>' + (window.KXQuick ? KXQuick.button('atx') : '') : ''}</div>`;
   }
   function render() {
     const V = $('#v-atx'); if (!V) return;
@@ -103,12 +103,13 @@
         <label>Codice 2FA (solo se Atlantix lo chiede)<input class="inp" id="axO" inputmode="numeric" maxlength="6" placeholder="000000"></label></div>
         <button class="btn pri" data-o="save" style="margin-top:12px">Collega Atlantix</button>` : ''}</div>
       ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.map(([k, n]) => `<button class="btn sm${A.tab === k ? ' pri' : ''}" data-t="${k}">${n}</button>`).join('')}${toolbar()}</div>${body()}</div>` : ''}`;
-    $$('[data-t]', V).forEach((b) => (b.onclick = () => { A.tab = b.dataset.t; A.page = 1; A.q = ''; A.status = ''; A.reseller = ''; load(); }));
+    $$('[data-t]', V).forEach((b) => (b.onclick = () => { A.tab = b.dataset.t; A.page = 1; A.q = ''; A.status = ''; A.reseller = ''; A.days = 0; load(); }));
     $$('[data-o]', V).forEach((b) => (b.onclick = () => op(b.dataset.o)));
     $$('[data-a]', V).forEach((b) => (b.onclick = () => act(b.dataset.a, rowsOf(A.data)[+b.dataset.i])));
     const q = $('#axQ'); if (q) q.onkeydown = (e) => { if (e.key === 'Enter') { A.q = q.value.trim(); A.page = 1; load(); } };
     const s = $('#axS'); if (s) s.onchange = () => { A.status = s.value; A.page = 1; load(); };
     const r = $('#axR'); if (r) r.onchange = () => { A.reseller = r.value; A.page = 1; load(); };
+    if (window.KXSort) KXSort.bind(V, A, 'ax', () => { A.page = 1; load(); });
   }
   async function newLine() {
     toast('Carico il modulo di Atlantix…');
@@ -174,8 +175,13 @@
   async function load() {
     A.busy = true; A.err = ''; show();
     try {
-      const p = new URLSearchParams({ page: A.page, q: A.q, status: A.status, reseller: A.reseller });
+      const sorting = A.tab === 'lines' && window.KXSort && (A.sort || +A.days > 0);
+      const p = new URLSearchParams({ page: sorting ? 1 : A.page, q: A.q, status: A.status, reseller: A.reseller, ...(sorting ? { all: 1 } : {}) });
       A.data = await api('GET', `/admin/atx/${A.tab}?${p}`);
+      if (sorting && A.data) { // ordino/filtro dentro i dati, così gli indici dei pulsanti restano quelli giusti
+        const key = ['rows', 'items', 'lines', 'users', 'list', 'data'].find((k) => Array.isArray(A.data[k]));
+        if (key) { A.data[key] = KXSort.apply(A.data[key], A, { exp: (r) => { const v = r.exp_date ?? r.exp; if (v == null || v === '') return 0; const n = Number(v); if (!isNaN(n)) return n > 1e12 ? n : n * 1000; const t = Date.parse(String(v).replace(' ', 'T')); return isNaN(t) ? 0 : t; }, name: (r) => r.username, enabled: (r) => !!+r.enabled, conns: (r) => +r.online || 0, owner: (r) => r.reseller, created: (r) => Date.parse(String(r.created_at || r.created || '').replace(' ', 'T')) || 0 }); A.data.total = A.data[key].length; }
+      }
       if (A.tab === 'lines' && Array.isArray(A.data.resellers) && A.data.resellers.length) A.resellers = A.data.resellers;
     } catch (e) { A.err = e.message; A.data = null; }
     A.busy = false; show();
