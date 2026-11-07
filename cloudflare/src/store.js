@@ -108,6 +108,14 @@ export function storeClosedNow(c, t = Date.now()) {
 const closedMsg = (c) => c.msg || `Lo store è chiuso dalle ${c.from} alle ${c.to}: riprova più tardi.`;
 
 /* ---------------- impostazioni (tabella settings, chiave "store") ---------------- */
+// «App consigliata»: regole con cui lo Store sceglie l'app adatta al dispositivo del cliente (memoria, modello, versione Android)
+const REC_DEF = { weakApp: 'Kairos Tv', weakMb: 1536, oldApp: 'Kairos-Lite', oldSdk: 7, strongApp: 'Kairos Pro', text: 'Per questo dispositivo è consigliata {app}: stesso abbonamento e stesse liste, con la migliore fluidità su questo apparecchio.' };
+function recNorm(r) {
+  r = r && typeof r === 'object' ? r : {};
+  const s = (k, max = 60) => (typeof r[k] === 'string' && r[k].trim() ? r[k].trim().slice(0, max) : REC_DEF[k]);
+  const n = (k, lo, hi) => { const v = parseInt(r[k], 10); return v >= lo && v <= hi ? v : REC_DEF[k]; };
+  return { weakApp: s('weakApp'), weakMb: n('weakMb', 256, 8192), oldApp: s('oldApp'), oldSdk: n('oldSdk', 5, 14), strongApp: s('strongApp'), text: s('text', 300) };
+}
 async function getStoreSettings(env) {
   const row = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('store').first();
   let s = {}; try { s = row ? JSON.parse(row.v) : {}; } catch {}
@@ -118,7 +126,7 @@ async function getStoreSettings(env) {
   // activation: «solo store attivati»: si scarica solo da store intestati a un venditore (codice scritto una volta), senza conferma
   const storeMax = Number.isInteger(s.storeMax) && s.storeMax >= 0 && s.storeMax <= STORE_MAX_CAP ? s.storeMax : STORE_MAX_DEF;
   // storeGate: codice del venditore all'avvio dello store — 'every' (a ogni avvio, di serie) oppure 'once' (solo finché lo store non è intestato)
-  return { approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, trusted, sms: smsNorm(s.sms), closed: closedNorm(s.closed), agentAlerts: s.agentAlerts === true, activation: s.activation === true, storeMax, storeGate: s.storeGate === 'once' ? 'once' : 'every' };
+  return { recommend: recNorm(s.recommend), approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, trusted, sms: smsNorm(s.sms), closed: closedNorm(s.closed), agentAlerts: s.agentAlerts === true, activation: s.activation === true, storeMax, storeGate: s.storeGate === 'once' ? 'once' : 'every' };
 }
 /** numero in formato internazionale (+39…); i numeri italiani scritti senza prefisso vengono completati */
 function phoneNorm(v) {
@@ -415,7 +423,7 @@ export async function storeApi(req, env, ctx, url, ip, opts = {}) {
       const blocked = S.blocked.includes(str(url.searchParams.get('did'), 64));
       // gate: 'every' = codice del venditore a ogni avvio; 'once' = solo finché lo store non è intestato; 'none' = download liberi
       const gate = !S.approval && !S.activation ? 'none' : S.storeGate;
-      return json({ on: S.approval, activation: S.activation, gate, activated: !!dev && live, suspended: !!dev && !live, blocked, ...(dev ? { seller: name, since: dev.activated } : {}), closed: cl, ...(cl ? { msg: closedMsg(S.closed) } : {}) });
+      return json({ recommend: S.recommend, on: S.approval, activation: S.activation, gate, activated: !!dev && live, suspended: !!dev && !live, blocked, ...(dev ? { seller: name, since: dev.activated } : {}), closed: cl, ...(cl ? { msg: closedMsg(S.closed) } : {}) });
     }
     if (p === '/activate' && m === 'POST') return await activate(req, env, ctx, url, ip, opts);
     if (p === '/seller' && m === 'GET') {
@@ -718,6 +726,7 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       if (typeof b.agentAlerts === 'boolean') s.agentAlerts = b.agentAlerts;
       if (typeof b.activation === 'boolean') { s.activation = b.activation; if (b.activation) s.approval = true; }
       if (b.storeGate === 'once' || b.storeGate === 'every') s.storeGate = b.storeGate;
+      if (b.recommend && typeof b.recommend === 'object') s.recommend = recNorm({ ...(s.recommend || {}), ...b.recommend });
       if (b.storeMax !== undefined) { const n = parseInt(b.storeMax, 10); if (!(n >= 0 && n <= STORE_MAX_CAP)) throw new StoreErr(400, `Tetto di store non valido (da 0 a ${STORE_MAX_CAP})`); s.storeMax = n; }
       if (b.closed && typeof b.closed === 'object') {
         const c = b.closed;
