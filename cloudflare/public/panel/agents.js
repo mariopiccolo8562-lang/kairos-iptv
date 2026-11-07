@@ -279,6 +279,9 @@ body.agent .foot{display:none}
     if (h) h.innerHTML = ag ? 'Il tuo account<small>Nome utente e password per entrare nel pannello</small>' : 'Account amministratore<small>Nome utente e password per entrare nel pannello</small>';
     if (ag && $('#aUser') && !$('#aUser').value) $('#aUser').value = D.user || '';
     $('#newDev').style.display = !ag || can('create') ? '' : 'none';
+    // per l'agente il pulsante dice cosa fa: apre «Attiva un cliente Kairos»
+    const nb = $('#newDev').lastChild;
+    if (nb && nb.nodeType === 3) nb.textContent = ag ? 'Attiva cliente' : 'Nuovo';
     if (modeSet !== (ag ? 'a' : 'o')) { modeSet = ag ? 'a' : 'o'; if (ag) view('devices'); }
     if (ag && OWNER_ONLY.some((v) => !agentCan(v) && $('#v-' + v) && $('#v-' + v).classList.contains('on'))) view('devices');
     let lim = $('#agLim');
@@ -879,7 +882,7 @@ body.agent .foot{display:none}
     page.classList.add('on'); $('#agB').scrollTop = 0;
   }
   const origOpen = openDrawer, origQuick = openQuick;
-  // agente: «+ Nuovo cliente» apre la procedura guidata; le schede dei clienti restano quelle complete
+  // agente: «+ Attiva cliente» apre la procedura guidata; le schede dei clienti restano quelle complete
   window.openDrawer = openDrawer = function (d, act) { if (isAgent()) return !d && can('create') ? openWizard() : openClient(d); return origOpen(d, act); };
   window.openQuick = openQuick = function (d) { if (isAgent()) return openClient(d); return origQuick(d); };
   $('#newDev').onclick = () => openDrawer(null);

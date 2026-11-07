@@ -137,6 +137,7 @@ body{overscroll-behavior-y:none}
     const ag = D.role === 'agent', on = (document.querySelector('.view.on') || {}).id || '';
     $('[data-t="dash"]', tab).style.display = ag && $('.nav[data-v="dash"]') && $('.nav[data-v="dash"]').style.display === 'none' ? 'none' : '';
     $('[data-t="new"]', tab).style.display = $('#newDev').style.display === 'none' ? 'none' : '';
+    { const t = $('[data-t="new"]', tab).lastChild; if (t && t.nodeType === 3) t.textContent = ag ? 'Attiva' : 'Nuovo'; }
     tab.style.gridTemplateColumns = `repeat(${$$('[data-t]', tab).filter((b) => b.style.display !== 'none').length},1fr)`;
     { const p = $('[data-t="hub:pan"]', tab); if (p) p.style.display = window.KXHub && KXHub.has('pan') ? '' : 'none'; }
     tab.style.gridTemplateColumns = `repeat(${$$('[data-t]', tab).filter((b) => b.style.display !== 'none').length},1fr)`;
