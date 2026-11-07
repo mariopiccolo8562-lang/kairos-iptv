@@ -207,6 +207,11 @@ async function deviceOf(env, did) {
   const d = await env.DB.prepare('SELECT did, seller, device, note, country, activated, last, downloads, active FROM store_devices WHERE did = ?').bind(did).first();
   return d && d.active ? d : null;
 }
+/** il venditore dello store è ancora attivo? (0 = titolare, sempre; un agente sospeso, o con un superiore sospeso, ferma i suoi store) */
+async function sellerLive(dev, opts) {
+  if (!dev || !dev.seller || typeof opts.sellerActive !== 'function') return true;
+  try { return !!(await opts.sellerActive(dev.seller)); } catch { return false; }
+}
 /** tentativi sbagliati di attivazione: pochi all'ora per IP e per dispositivo (il codice è corto) */
 async function actFailed(env, keys, t) {
   for (const k of keys) {
@@ -379,7 +384,8 @@ export async function storeApi(req, env, ctx, url, ip, opts = {}) {
       // con ?did= lo store sa se è già intestato a un venditore (e a chi)
       const dev = await deviceOf(env, str(url.searchParams.get('did'), 64));
       const name = dev && typeof opts.sellerName === 'function' ? await opts.sellerName(dev.seller) : '';
-      return json({ on: S.approval, activation: S.activation, activated: !!dev, ...(dev ? { seller: name, since: dev.activated } : {}), closed: cl, ...(cl ? { msg: closedMsg(S.closed) } : {}) });
+      const live = !dev || (await sellerLive(dev, opts)); // venditore sospeso → lo store è fermo finché un altro venditore non lo riattiva
+      return json({ on: S.approval, activation: S.activation, activated: !!dev && live, suspended: !!dev && !live, ...(dev ? { seller: name, since: dev.activated } : {}), closed: cl, ...(cl ? { msg: closedMsg(S.closed) } : {}) });
     }
     if (p === '/activate' && m === 'POST') return await activate(req, env, ctx, url, ip, opts);
     if (p === '/seller' && m === 'GET') {
@@ -433,6 +439,7 @@ async function create(req, env, ctx, url, ip, opts) {
   // store intestato a un venditore (attivato con il suo codice): la richiesta è sua, qualunque codice sia scritto
   const dev = await deviceOf(env, did);
   if (dev) { seller = { id: dev.seller, name: typeof opts.sellerName === 'function' ? await opts.sellerName(dev.seller) : '' }; }
+  if (dev && s.approval && !(await sellerLive(dev, opts))) return json({ error: `Il venditore di questo store${seller.name ? ' (' + seller.name + ')' : ''} è sospeso: per scaricare serve il codice di un altro venditore`, needActivation: true, suspended: true }, 403);
   if (s.activation && !dev) return json({ error: 'Store da attivare: chiedi al tuo venditore di attivarlo con il suo codice', needActivation: true }, 403);
   const free = s.activation && !!dev; // «solo store attivati»: da uno store intestato il download parte senza conferma
   if (free) s = { ...s, approval: false };

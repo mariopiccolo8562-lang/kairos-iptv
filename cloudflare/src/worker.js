@@ -2839,7 +2839,7 @@ async function route(req, env, ctx) {
 
   /* ---------- autorizzazione dei download dello Store (pubblica, vedi store.js) ---------- */
   if (path === '/api/tg/hook' && req.method === 'POST') return tgHook(req, env, ctx, ip, notifyH(env)); // webhook del bot Telegram
-  if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { sellerOf: (c) => sellerOf(env, c), sellerName: (id) => sellerNameOf(env, id), storeCap: (id, def) => storeCapOf(env, id, def), sellerChain: (r) => sellerChain(env, r), smsAgents: (app, ids) => storeSmsAgents(env, app, ids), waitMin: async () => cleanReqWait((await getSettings(env)).reqWait).store, waitTxt });
+  if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { sellerOf: (c) => sellerOf(env, c), sellerName: (id) => sellerNameOf(env, id), sellerActive: (id) => (id ? agentChainActive(env, +id) : true), storeCap: (id, def) => storeCapOf(env, id, def), sellerChain: (r) => sellerChain(env, r), smsAgents: (app, ids) => storeSmsAgents(env, app, ids), waitMin: async () => cleanReqWait((await getSettings(env)).reqWait).store, waitTxt });
 
   /* ---------- informativa privacy e condizioni (pubblica, la apre anche l'app) ---------- */
   if ((path === '/privacy' || path === '/privacy/') && (req.method === 'GET' || req.method === 'HEAD')) return privacyPage(env);
@@ -3826,7 +3826,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const j = await (await storeAdmin(req, env, path, who, ip, 0, { smsAgentList: () => storeSmsAgentList(env) })).json();
     const names = new Map((await agentsAll(env)).map((a) => [a.id, a.username]));
     for (const r of j.requests || []) { if (r.by) r.byName = names.get(r.by) || 'agente eliminato'; r.sellerName = r.seller ? names.get(r.seller) || 'agente eliminato' : ''; }
-    for (const d of j.devices || []) if (d.activated) d.sellerName = d.seller ? names.get(d.seller) || 'agente eliminato' : 'tu';
+    const allAg = await agentsAll(env);
+    for (const d of j.devices || []) if (d.activated) { d.sellerName = d.seller ? names.get(d.seller) || 'agente eliminato' : 'tu'; d.sellerOff = !!d.seller && !(await agentChainActive(env, +d.seller, allAg)); }
     j.sellerCode = await sellerOwnerCode(env);
     return json(j);
   }
