@@ -951,7 +951,7 @@ const armP = (pv) => ARM_PROV[pv] || ARM_PROV.armada;
 const armKeyOf = (env, pv) => env[armP(pv).key] || '';
 const armadaUrlOf = (s, pv) => (s && s[armP(pv).sUrl]) || armP(pv).url;
 const armOk = (x) => x === true || x === 'true' || x === 1 || x === '1';
-async function call(params, pv = 'armada') {
+async function armadaCall(env, s, params, pv = 'armada') {
   const P = armP(pv), N = P.name, key = armKeyOf(env, pv);
   if (!key) throw new HttpErr(400, `${N} non è collegato: aggiungi il segreto ${P.key} su GitHub (guida nella pagina ${N})`);
   const u = new URL(armadaUrlOf(s, pv));
@@ -1030,7 +1030,7 @@ const armByOf = (map, type, x) => { const a = map.get('i:' + type + ':' + x.id);
 const monthIT = (t = now()) => dayIT(t).slice(0, 7);
 const armSpentRows = (env, pv) => reqMemo(env, 'armsp:' + pv, async () => { const m = new Map(); try { for (const r of ((await env.DB.prepare('SELECT agent_id, SUM(credits) AS c FROM armada_spend WHERE month = ? AND prov = ? GROUP BY agent_id').bind(monthIT(), pv).all()).results) || []) m.set(+r.agent_id, +r.c || 0); } catch {} return m; });
 async function armadaRoutes(req, env, url, path, who, ip, agentId = 0, pv = 'armada') {
-  const m = req.method, s = await getSettings(env), P = armP(pv), N = P.name, R = '/' + pv, call = (params) => call(params, pv);
+  const m = req.method, s = await getSettings(env), P = armP(pv), N = P.name, R = '/' + pv, call = (params) => armadaCall(env, s, params, pv);
   if (path === R + '/state' && m === 'GET') {
     const out = { connected: !!armKeyOf(env, pv), url: armadaUrlOf(s, pv), dns: s[P.sDns] || '' };
     if (armKeyOf(env, pv)) { try { const x = armList(await call({ action: 'reseller' }))[0] || {}; out.reseller = { username: str(x.username, 80), credits: str(String(x.credits ?? ''), 20), enabled: armOk(x.enabled) }; } catch (e) { out.error = e.message; } }
@@ -1115,7 +1115,7 @@ const armTrialsToday = async (env, id, pv) => { try { return ((await env.DB.prep
 /** costo vero: crediti del titolare prima e dopo (se Armada li indica); altrimenti 1 credito al mese */
 const armCost = (sub, before, after) => (!sub ? 0 : before !== null && after !== null && before - after >= 0 && before - after <= sub * 3 ? Math.round((before - after) * 100) / 100 : sub);
 async function agentArmada(req, env, url, path, who, ip, ctx, X, pv = 'armada') {
-  const { A, P, all, tree } = X, m = req.method, s = await getSettings(env), mine = new Set(tree), N = armP(pv).name, R = '/' + pv, call = (params) => call(params, pv);
+  const { A, P, all, tree } = X, m = req.method, s = await getSettings(env), mine = new Set(tree), N = armP(pv).name, R = '/' + pv, call = (params) => armadaCall(env, s, params, pv);
   const cr = P[pv + 'Credits'] || 0;
   const sub2 = (body) => new Request(url.href, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const ownFn = async () => { const own = await armOwnerMap(env, pv); return (type, x) => { const by = armByOf(own, type, x); return by !== undefined && mine.has(by); }; };
