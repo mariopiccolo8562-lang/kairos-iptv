@@ -300,7 +300,7 @@ body.agent .foot{display:none}
     $('#newDev').style.display = !ag || can('create') ? '' : 'none';
     // per l'agente il pulsante dice cosa fa: apre «Attiva un cliente Kairos»
     const nb = $('#newDev').lastChild;
-    if (nb && nb.nodeType === 3) nb.textContent = ag ? 'Attiva cliente' : 'Nuovo';
+    if (nb && nb.nodeType === 3) nb.textContent = ag ? 'Attiva cliente' : 'Nuovo cliente'; // titolare: come lo scrive nav2.js
     if (modeSet !== (ag ? 'a' : 'o')) { modeSet = ag ? 'a' : 'o'; if (ag) view('devices'); }
     if (ag && OWNER_ONLY.some((v) => !agentCan(v) && $('#v-' + v) && $('#v-' + v).classList.contains('on'))) view('devices');
     let lim = $('#agLim');
