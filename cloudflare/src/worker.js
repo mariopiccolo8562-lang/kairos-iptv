@@ -902,6 +902,41 @@ const armTs = (v) => { const n = +v; return Number.isFinite(n) && n > 0 ? (n < 1
 const armCommon = (x) => ({ id: +x.id || 0, enabled: armOk(x.enabled) && !(x.admin_enabled !== undefined && !armOk(x.admin_enabled)), adminOff: x.admin_enabled !== undefined && !armOk(x.admin_enabled), exp: armTs(x.exp_date), created: armTs(x.created_at), owner: str(x.owner_username, 80), notes: str(x.notes, 300), trial: armOk(x.is_trial), maxConn: +x.max_connections || 0, country: str(x.forced_country, 8), isp: str(x.isp_desc, 80), lastActivity: str(x.last_activity, 30), lastIp: str(x.last_ip, 60) });
 const armMac = (v) => { const h = String(v || '').toUpperCase().replace(/[^0-9A-F]/g, ''); return h.length === 12 ? h.match(/.{2}/g).join(':') : ''; };
 /** cambia solo alcune chiavi delle impostazioni salvate (senza scrivere i valori predefiniti) */
+/* ---------- Guida «Attivare una linea IPTV e metterla sulle app» (in fondo alla Panoramica) ---------- */
+const GUIDE_DEF_TITLE = 'Come attivare una linea IPTV e metterla sulle app';
+const GUIDE_DEF_TEXT = `# 1. Crea la linea sul pannello IPTV
+1. Da Panoramica premi il pulsante rosso **Nuova attivazione: App e Linea IPTV** (lo trovi anche dentro WOLF, Armada, Atlantix, Realott e SLT).
+2. Scegli il **pannello** (WOLF, Armada, Atlantix, Realott o SLT), il **pacchetto o i mesi** e scrivi il **nome del cliente**.
+3. Se vuoi solo la linea, puoi anche usare «+ Nuova linea» nella pagina del pannello: la linea compare subito nella sua lista e negli **Appunti App**.
+
+# 2. Mettila sulle app
+Nel passo «App» spunta dove deve andare la linea (anche più di una):
+- **MaxPlayer**: scegli il server; KAIROS crea l'account MaxPlayer con utente e password della linea.
+- **OrbixPlay**: scrivi l'ID o il MAC che il cliente vede nell'app OrbixPlay.
+- **Cliente Kairos** (Kairos Pro, TV, Lite, XC, Plus, Premium): crea il cliente con il suo **codice KX** e la durata (mesi o data precisa), oppure aggiungi la linea a un cliente che hai già.
+- **Altre app** (IBO, Smarters, ecc.): la linea finisce negli Appunti App e si apre la pagina di attivazione di quell'app.
+Premi **Crea e attiva**: nel riepilogo hai utente e password da copiare, **Riprova** su quello che non è riuscito e **Copia messaggio** pronto per WhatsApp.
+
+# 3. Installazione sul dispositivo del cliente e Store
+1. Fai installare al cliente **Kairos Store** (o l'app Kairos scelta) con il **codice Downloader** che trovi in App e Store → Codici downloader.
+2. Nello Store il cliente scrive il **tuo codice venditore** (lo trovi in App e Store, pulsante «Copia»): così le sue richieste arrivano a te.
+3. Quando il cliente chiede un'app, approvala in **App e Store → Richieste** (se l'approvazione è accesa). Da lì scarica e installa l'app.
+4. Nell'app Kairos il cliente inserisce il **codice KX** del cliente creato al passo 2; su MaxPlayer e OrbixPlay la lista è già dentro, basta aprire l'app.
+
+# 4. Controlli finali
+- In **Clienti → Appunti App** vedi su quali app è attiva ogni linea.
+- In **Clienti → Collegati ora** vedi se il cliente sta guardando e con quante connessioni.
+- Se qualcosa non riesce, dal riepilogo di «Nuova attivazione» usa **Riprova** senza ricreare la linea.`;
+function guideNorm(g) {
+  const o = g && typeof g === 'object' ? g : {};
+  const share = ['all', 'some', 'none'].includes(o.share) ? o.share : 'none';
+  return { title: typeof o.title === 'string' && o.title.trim() ? o.title.trim().slice(0, 120) : GUIDE_DEF_TITLE, text: typeof o.text === 'string' && o.text.trim() ? o.text.slice(0, 20000) : GUIDE_DEF_TEXT, share, agents: Array.isArray(o.agents) ? o.agents.map(String).slice(0, 500) : [] };
+}
+function guideForAgent(s, agentId) {
+  const g = guideNorm(s.guide); if (g.share === 'all' || (g.share === 'some' && g.agents.includes(String(agentId)))) return { title: g.title, text: g.text };
+  return null;
+}
+
 async function settingsPatch(env, patch) {
   const row = await env.DB.prepare("SELECT v FROM settings WHERE k = 'app'").first();
   let raw = {}; try { raw = row ? JSON.parse(row.v) : {}; } catch {}
@@ -3716,6 +3751,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     }
     if (m === 'GET') return json(dview(await deviceOut(env, d)));
   }
+  if (path === '/guide' && m === 'GET') return json({ guide: guideForAgent(await getSettings(env), A.id) });
   throw new HttpErr(403, 'Funzione non disponibile per gli agenti');
 }
 
@@ -4020,6 +4056,13 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   const ins = path.match(/^\/insight\/([A-Za-z0-9_-]{6,20})$/);
   if (ins && m === 'GET') { const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(ins[1]).first(); if (!d) throw new HttpErr(404, 'Cliente non trovato'); return json(await insightFor(env, d, await getSettings(env))); }
   if (path === '/health' && m === 'GET') return json(await healthList(env, await getSettings(env), null));
+  if (path === '/guide' && m === 'GET') { const g = guideNorm((await getSettings(env)).guide); return json({ guide: { ...g, defTitle: GUIDE_DEF_TITLE, defText: GUIDE_DEF_TEXT } }); }
+  if (path === '/guide' && m === 'PUT') {
+    const b = await readJSON(req, 64 * 1024), g = guideNorm(b);
+    await settingsPatch(env, { guide: g });
+    await log(env, 'settings', `${who}: guida della Panoramica aggiornata (${g.share === 'all' ? 'tutti gli agenti' : g.share === 'some' ? g.agents.length + ' agenti' : 'solo titolare'})`, ip);
+    return json({ guide: { ...g, defTitle: GUIDE_DEF_TITLE, defText: GUIDE_DEF_TEXT } });
+  }
   if (path === '/health/settings' && m === 'PUT' && !(ses && ses.agent)) {
     const b = await readJSON(req, 1024), s0 = await getSettings(env), h = { on: !!(s0.health && s0.health.on), autoUpd: !!(s0.health && s0.health.autoUpd), autoFix: !!(s0.health && s0.health.autoFix) };
     if (typeof b.on === 'boolean') h.on = b.on; if (typeof b.autoUpd === 'boolean') h.autoUpd = b.autoUpd; if (typeof b.autoFix === 'boolean') h.autoFix = b.autoFix;
