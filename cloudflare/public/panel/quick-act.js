@@ -57,6 +57,8 @@
     const ok = panels().filter((p) => p[3]);
     if (!ok.length) return toast('Nessun pannello IPTV disponibile per te', 1);
     S.panel = ok.some((p) => p[0] === pre.panel) ? pre.panel : ok[0][0];
+    const allowed = (k) => k === 'max' ? !!PL().max && can('players') : k === 'orbix' ? !!PL().orbix && can('players') : k === 'kairos' ? can('create') : k.startsWith('app:') ? can('lines') && appLinks().includes(k.slice(4)) : false;
+    S.apps = new Set([...S.apps].filter(allowed));
     overlay().classList.add('on');
     draw(); loadPanel();
   }
