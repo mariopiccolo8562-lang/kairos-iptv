@@ -107,6 +107,7 @@
         ${W.err ? `<p style="color:#ff8f8f;margin:10px 0 0">${esc(W.err)}</p>` : ''}
         <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:13px">Impostazioni WOLF</summary>${cfgForm(W.cfg)}</details>
         <div class="wf-tabs"><button data-t="lines" class="${W.tab === 'lines' ? 'on' : ''}">Linee${d.lines ? ' · ' + d.lines.length : ''}</button><button data-t="rs" class="${W.tab === 'rs' ? 'on' : ''}">Reseller${W.rs ? ' · ' + W.rs.resellers.length : ''}</button></div></div>
+      ${W.tab !== 'rs' && d.lines && window.KXStats ? KXStats.strip(KXStats.tiles(KXStats.calc(d.lines))) : ''}
       ${W.tab === 'rs' ? rsHtml() : `<div class="card glass" style="margin-top:14px">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="inp" id="wfQ" placeholder="Cerca utente, ID o nota" value="${esc(W.q)}" style="max-width:280px;margin:0">
           <select class="inp" id="wfF" style="width:auto;margin:0">${FL.map(([k, t]) => `<option value="${k}"${W.f === k ? ' selected' : ''}>${t}</option>`).join('')}</select>${window.KXSort ? KXSort.ui(W, 'wf') : ''}
@@ -135,6 +136,7 @@
     if (window.KXSort) KXSort.bind(V, W, 'wf', () => { W.limit = 100; render(); });
     if ($('#wfMore')) $('#wfMore').onclick = () => { W.limit += 100; render(); };
     V.querySelectorAll('.wf-row [data-a]').forEach((b) => { b.onclick = () => act(b.dataset.a, +b.closest('.wf-row').dataset.id); });
+    if (window.KXStats) KXStats.bind(V, (k) => { const F = { online: 'conn', active: 'on', expired: 'exp', soon: 'exp', off: 'off', total: '' }; if (k in F) { W.f = F[k]; W.q = ''; render(); } });
     if (window.KXTools && d.lines) KXTools.bind(V, 'wf', W.sel, () => filtered().map((l) => l.id), { ext: bulkExt, on: () => bulkTgl(true), off: () => bulkTgl(false), msg: bulkMsg, csv: exportCsv, stats: () => { W.st = !W.st; render(); } }, render);
   }
   /* azioni su più linee: solo quelle selezionate e visibili con i filtri attuali */

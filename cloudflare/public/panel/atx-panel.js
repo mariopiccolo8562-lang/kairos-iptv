@@ -68,7 +68,9 @@
     const mem = d.member || {}, st = d.stats || {};
     const LBL = { total: 'Linee totali', active: 'Attive', expired: 'Scadute', expiring: 'In scadenza', online: 'Collegati ora', trial: 'Prove', disabled: 'Disattivate', subresellers: 'Sub-reseller' };
     const card = (n, v) => `<div class="card glass" style="padding:14px 16px;min-width:150px"><div class="mut" style="font-size:12px">${esc(n)}</div><div style="font-size:24px;font-weight:700;margin-top:4px">${esc(String(v))}</div></div>`;
-    return `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px">${card('Crediti disponibili', mem.unlimited ? '∞' : Math.trunc(Number(mem.credits || 0)))}${Object.entries(st).filter(([, v]) => typeof v !== 'object').map(([k, v]) => card(LBL[k] || k.replace(/_/g, ' '), v)).join('')}</div>`;
+    const CL = { total: 'dark', active: 'red', expired: 'dark', expiring: 'dark', online: 'blue', trial: 'dark', disabled: 'dark', subresellers: 'dark' };
+    const T = [{ label: 'Crediti disponibili', v: mem.unlimited ? '∞' : Math.trunc(Number(mem.credits || 0)), c: 'green' }, ...Object.entries(st).filter(([, v]) => typeof v !== 'object').map(([k, v]) => ({ label: LBL[k] || k.replace(/_/g, ' '), v: esc(String(v)), c: CL[k] || 'dark' }))];
+    return window.KXStats ? KXStats.strip(T, { margin: '10px 0 0' }) : `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px">${T.map((t) => card(t.label, t.v)).join('')}</div>`;
   }
   function body() {
     if (A.busy) return '<p class="mut" style="margin:14px 0">Carico da Atlantix…</p>';
