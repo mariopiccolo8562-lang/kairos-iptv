@@ -34,7 +34,23 @@
   const btn = (a, i, t, extra = '') => `<button class="btn sm" data-a="${a}" data-i="${i}" ${extra}>${t}</button>`;
   const filt = (k, rows) => { const A = ST[k], q = A.q.toLowerCase(); return rows.filter((r) => (!q || [r.username, r.notes, r.owner, r.type].some((x) => String(x || '').toLowerCase().includes(q))) && (!A.status || (A.status === 'active' ? r.enabled && !r.expired : A.status === 'expired' ? r.expired : A.status === 'disabled' ? !r.enabled : A.status === 'online' ? r.conns > 0 : A.status === 'expiring' ? r.exp && r.exp > now() && r.exp - now() < 7 * 86400 : true))); };
 
+  const narrow = () => innerWidth <= 760;
+  const KV = (l, v) => `<div><span class="mut" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">${l}</span><div style="font-size:13.5px">${v}</div></div>`;
+  const card = (head, kv, acts) => `<div class="card" style="padding:12px 14px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">${head}</div>${kv.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px 12px;margin-top:10px">${kv.join('')}</div>` : ''}${acts ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${acts}</div>` : ''}</div>`;
+  function linesCards(k, rows, dns) {
+    const all = ST[k].data.rows, snap = k === 'blk';
+    return rows.map((r) => {
+      const i = all.indexOf(r);
+      const head = `<div><b style="font-size:15px">${esc(r.username)}</b> ${snap ? '' : btn('cu', i, 'Copia')}<div class="mono" style="font-size:13px;margin-top:4px">${r.password ? esc(r.password) + ' ' + btn('cp', i, 'Copia') : mut}</div></div><div>${snap ? (r.status ? badge(r.status, '#4f8cff') : '') : lineState(r)}</div>`;
+      const kv = [KV('Scadenza', snap ? esc(r.exp || '—') : day(r.exp, r.expTxt)), KV('Conn.', snap ? esc(r.conns || '—') : r.max ? `${r.conns}/${r.max}` : String(r.conns ?? '—')), r.type ? KV('Pacchetto', esc(r.type)) : '', r.owner ? KV('Reseller', esc(r.owner)) : '', r.notes ? KV('Note', esc(r.notes)) : '', r.stream ? KV('Ultima visione', esc(r.stream) + (r.last ? ' · ' + esc(r.last) : '')) : ''].filter(Boolean);
+      const acts = snap ? '' : [btn('renew', i, 'Rinnova'), btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', btn('mxp', i, 'MaxPlayer'), btn('oxp', i, 'OrbixPlay'), btn('del', i, 'Elimina', 'style="color:#ff8f8f"')].filter(Boolean).join('');
+      return card(head, kv, acts);
+    }).join('') || '<p class="mut" style="margin:14px 0">Niente da mostrare.</p>';
+  }
+  const subsCards = (k, rows) => rows.map((r, i) => card(`<div><b style="font-size:15px">${esc(r.username)}</b>${r.owner ? `<div class="mut" style="font-size:12.5px">sotto ${esc(r.owner)}</div>` : ''}</div><div>${r.enabled ? badge(r.status || 'Attivo', '#2ecc71') : badge(r.status || 'Disattivato', '#9aa4b2')}</div>`, [r.type ? KV('Tipo', esc(r.type)) : '', KV('Crediti', esc(String(r.credits ?? '—'))), KV('Linee', esc(String(r.lines ?? '—')))].filter(Boolean), k === 'ro' ? btn('stog', i, r.enabled ? 'Disattiva' : 'Riattiva') : '')).join('') || '<p class="mut" style="margin:14px 0">Niente da mostrare.</p>';
+  const connsCards = (rows) => rows.map((r) => card(`<div><b style="font-size:15px">${esc(r.username)}</b><div style="font-size:13px;margin-top:2px">${esc(r.stream || '—')}</div></div>`, [KV('IP', esc(r.ip || '—')), r.info ? KV('Info', esc(r.info)) : ''].filter(Boolean), '')).join('') || '<p class="mut" style="margin:14px 0">Nessuno collegato adesso.</p>';
   function linesHtml(k, rows, dns) {
+    if (narrow()) return linesCards(k, rows, dns);
     const all = ST[k].data.rows, snap = k === 'blk';
     return grid(snap ? ['Utente', 'Password', 'Scadenza', 'Stato', 'Conn.', 'Reseller', 'Note'] : ['Utente', 'Password', 'Stato', 'Scadenza', 'Conn.', 'Pacchetto', 'Reseller', 'Note', ''], rows.map((r) => {
       const i = all.indexOf(r);
@@ -43,8 +59,8 @@
       return tr([`<b>${esc(r.username)}</b> ${btn('cu', i, 'Copia')}${r.ip ? `<br><span class="mut" style="font-size:11.5px">${esc(r.stream || '')}${r.last ? ' · ' + esc(r.last) : ''}</span>` : ''}`, r.password ? `<span class="mono">${esc(r.password)}</span> ${btn('cp', i, 'Copia')}` : mut, lineState(r), day(r.exp, r.expTxt), r.max ? `${r.conns}/${r.max}` : String(r.conns ?? '—'), esc(r.type || '—'), esc(r.owner || '—'), r.notes ? esc(r.notes) : mut, `<div style="display:flex;gap:4px;flex-wrap:wrap">${acts}</div>`]);
     }));
   }
-  const subsHtml = (k, rows) => grid(['Utente', 'Superiore', 'Tipo', 'Crediti', 'Linee', 'Stato', ''], rows.map((r, i) => tr([`<b>${esc(r.username)}</b>`, esc(r.owner || '—'), esc(r.type || '—'), esc(String(r.credits ?? '—')), esc(String(r.lines ?? '—')), r.enabled ? badge(r.status || 'Attivo', '#2ecc71') : badge(r.status || 'Disattivato', '#9aa4b2'), k === 'ro' ? btn('stog', i, r.enabled ? 'Disattiva' : 'Riattiva') : ''])));
-  const connsHtml = (rows) => grid(['Utente', 'Canale', 'IP', 'Info'], rows.map((r) => tr([`<b>${esc(r.username)}</b>`, esc(r.stream || '—'), esc(r.ip || '—'), esc(r.info || '—')])));
+  const subsHtml = (k, rows) => narrow() ? subsCards(k, rows) : grid(['Utente', 'Superiore', 'Tipo', 'Crediti', 'Linee', 'Stato', ''], rows.map((r, i) => tr([`<b>${esc(r.username)}</b>`, esc(r.owner || '—'), esc(r.type || '—'), esc(String(r.credits ?? '—')), esc(String(r.lines ?? '—')), r.enabled ? badge(r.status || 'Attivo', '#2ecc71') : badge(r.status || 'Disattivato', '#9aa4b2'), k === 'ro' ? btn('stog', i, r.enabled ? 'Disattiva' : 'Riattiva') : ''])));
+  const connsHtml = (rows) => narrow() ? connsCards(rows) : grid(['Utente', 'Canale', 'IP', 'Info'], rows.map((r) => tr([`<b>${esc(r.username)}</b>`, esc(r.stream || '—'), esc(r.ip || '—'), esc(r.info || '—')])));
   const overviewHtml = (d) => `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">${[['Crediti', d.credits], ['Linee totali', d.total], ['Attive', d.active], ['Scadute', d.expired], ['Online', d.online], ['Connessioni', d.conns]].filter(([, v]) => v != null).map(([l, v]) => `<div class="card" style="padding:14px"><div class="mut" style="font-size:12px">${l}</div><div style="font-size:24px;font-weight:700">${esc(String(v))}</div></div>`).join('')}</div>`;
 
   function body(k) {
@@ -60,10 +76,33 @@
   function toolbar(k) {
     const A = ST[k]; if (A.tab !== 'lines') return '';
     const st = `<select class="inp" id="exS" style="max-width:160px">${[['', 'Tutti gli stati'], ['active', 'Attive'], ['expiring', 'In scadenza'], ['expired', 'Scadute'], ['disabled', 'Disattivate'], ['online', 'Online']].map(([v, t]) => `<option value="${v}"${A.status === v ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
-    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto">${k === 'blk' ? '' : st}<input class="inp" id="exQ" placeholder="Cerca utente…" value="${esc(A.q)}" style="max-width:200px">${k === 'blk' ? '' : '<button class="btn pri sm" data-o="new">+ Nuova linea</button>' + (window.KXQuick ? KXQuick.button(k) : '')}</div>`;
+    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;${narrow() ? 'width:100%' : 'margin-left:auto'}">${k === 'blk' ? '' : st}<input class="inp" id="exQ" placeholder="Cerca utente…" value="${esc(A.q)}" style="${narrow() ? 'flex:1;min-width:140px' : 'max-width:200px'}">${k === 'blk' ? '' : '<button class="btn pri sm" data-o="new">+ Nuova linea</button>' + (window.KXQuick ? KXQuick.button(k) : '')}</div>`;
   }
   const kx = () => location.origin + location.pathname;
   const BM = `javascript:(()=>{const H=(t)=>(t.innerText||t.textContent||'').trim();const tabs=[...document.querySelectorAll('table')].filter(t=>t.querySelectorAll('tr').length>1);let best=null,bm=-1;for(const t of tabs){const hs=[...(t.querySelector('thead')||t.querySelector('tr')).querySelectorAll('th,td')].map(H);const i={};hs.forEach((h,x)=>{h=h.toLowerCase();if(/^user|username|utente|login/.test(h))i.u=i.u??x;else if(/pass/.test(h))i.p=i.p??x;else if(/exp|scad/.test(h))i.e=i.e??x;else if(/status|stato|enabled|attiv|online/.test(h))i.s=i.s??x;else if(/conn|max/.test(h))i.c=i.c??x;else if(/owner|member|reseller|propr/.test(h))i.o=i.o??x;else if(/note|desc|comment/.test(h))i.n=i.n??x;});const sc=(i.u!=null)+(i.p!=null)+(i.e!=null);if(i.u!=null&&sc>bm){bm=sc;best={t,i};}}if(!best){alert('Apri la pagina con la lista delle linee e ripremi il pulsante');return;}const {t,i}=best;const rows=[];t.querySelectorAll('tr').forEach(r=>{if(r.querySelector('th'))return;const c=[...r.children].map(H);const g=k=>i[k]!=null?(c[i[k]]||''):'';const u=g('u');if(!u)return;rows.push({username:u,password:g('p'),exp:g('e'),status:g('s'),conns:g('c'),owner:g('o'),notes:g('n')});});if(!rows.length){alert('Nessuna linea in questa pagina');return;}window.open('${kx()}#blk='+encodeURIComponent(JSON.stringify({rows,from:location.host})),'_blank');})()`;
+  /** legge la lista linee incollata o un CSV: riga di intestazione se c'è, altrimenti riconosce utente, password, data, stato e connessioni dai valori */
+  function parseLines(text) {
+    const lines = String(text || '').split(/\r?\n/).map((l) => l.replace(/\u00a0/g, ' ').trim()).filter(Boolean); if (!lines.length) return [];
+    const sep = (l) => (l.includes('\t') ? l.split('\t') : l.includes(';') && l.split(';').length > 2 ? l.split(';') : l.includes(',') && l.split(',').length > 2 ? l.split(',').map((x) => x.replace(/^"|"$/g, '')) : l.split(/\s{2,}|\s\|\s/)).map((x) => x.trim());
+    const head = sep(lines[0]).map((h) => h.toLowerCase()); const col = {};
+    head.forEach((h, x) => { if (/^user|username|utente|login/.test(h)) col.u ??= x; else if (/pass/.test(h)) col.p ??= x; else if (/exp|scad/.test(h)) col.e ??= x; else if (/status|stato|enabled|attiv|online/.test(h)) col.s ??= x; else if (/conn|max/.test(h)) col.c ??= x; else if (/owner|member|reseller|propr/.test(h)) col.o ??= x; else if (/note|desc|comment/.test(h)) col.n ??= x; });
+    const DATE = /^\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}(\s+\d{1,2}:\d{2})?$|^\d{4}-\d{2}-\d{2}(\s+\d{1,2}:\d{2})?$|^(unlimited|illimitat|never|mai)/i, STAT = /^(enabled|disabled|active|inactive|expired|banned|online|offline|attiv[ao]|disattiv|scadut|sospes|trial|prova)/i, CONN = /^\d+\s*\/\s*\d+$/, TOK = /^[A-Za-z0-9_.@-]{3,}$/;
+    const out = [];
+    for (const l of (col.u != null ? lines.slice(1) : lines)) {
+      const c = sep(l); if (c.length < 2) continue;
+      if (col.u != null) { const g = (k) => (col[k] != null ? c[col[k]] || '' : ''); if (g('u')) out.push({ username: g('u'), password: g('p'), exp: g('e'), status: g('s'), conns: g('c'), owner: g('o'), notes: g('n') }); continue; }
+      const r = { username: '', password: '', exp: '', status: '', conns: '', owner: '', notes: '' };
+      for (const t of c) { if (!t) continue; if (!r.exp && DATE.test(t)) r.exp = t; else if (!r.conns && CONN.test(t)) r.conns = t; else if (!r.status && STAT.test(t)) r.status = t; else if (!r.username && TOK.test(t) && !/^\d+$/.test(t)) r.username = t; else if (r.username && !r.password && TOK.test(t) && !/^\d+$/.test(t) && t !== r.username) r.password = t; }
+      if (r.username && (r.password || r.exp)) out.push(r);
+    }
+    return out;
+  }
+  async function importText(text, from) {
+    const rows = parseLines(text); const msg = $('#exPasteMsg');
+    if (!rows.length) { if (msg) msg.textContent = 'Non ho trovato linee: copia la tabella con utente e password.'; return toast('Nessuna linea riconosciuta nel testo', 1); }
+    if (!(await ask(`Trovate ${rows.length} linee`, `<p style="font-size:13px">Le prime: <b>${rows.slice(0, 3).map((r) => esc(r.username)).join('</b>, <b>')}</b>${rows.length > 3 ? '…' : ''}.</p><p class="mut" style="font-size:12.5px">Sostituiscono la fotografia precedente di blkaccess.</p>`, 'Salva'))) return;
+    const r = await api('POST', '/admin/blk/snapshot', { rows, from: from || 'incolla' }); toast(`blkaccess: ${r.count} linee salvate`); ST.blk.st = null; ST.blk.data = null; ST.blk.err = ''; return open('blk');
+  }
   const pendBlk = () => { try { return sessionStorage.getItem('kxBlkSnap') || ''; } catch { return ''; } };
   const grab = () => {
     const h = /^#blk=(.+)$/.exec(location.hash); if (!h) return;
@@ -92,13 +131,17 @@
           <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn sm" href="${esc(url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Apri blkaccess</a><button class="btn sm" data-o="edit">${A.edit ? 'Chiudi' : 'Indirizzo'}</button>${st.connected ? '<button class="btn sm" data-o="off">Cancella linee</button>' : ''}</div></div>
         ${A.edit ? `<div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:14px;align-items:end"><label>Indirizzo del pannello (il link con cui entri)<input class="inp" id="exUrl" value="${esc(st.url || '')}" placeholder="https://reseller.blkaccess.com/…/login.php?acto=…"></label><button class="btn pri" data-o="saveurl">Salva</button></div>` : ''}
         <div style="margin-top:14px;padding:12px;border:1px dashed var(--line,#444);border-radius:10px">
-          <b>Come portare le linee qui</b>
+          <b>Porta qui le linee (anche dal telefono)</b>
           <ol style="margin:8px 0 0 18px;padding:0;font-size:13px;line-height:1.7">
-            <li>Trascina questo pulsante nella barra dei Preferiti: <a id="exBm" class="btn sm pri" href="#" style="text-decoration:none">KAIROS ← blkaccess</a> <button class="btn sm" data-o="copybm">Copia il pulsante</button></li>
-            <li>Entra su blkaccess e apri la lista delle linee (scegli «mostra tutte»).</li>
-            <li>Premi il pulsante nei Preferiti: si apre KAIROS e le linee compaiono qui sotto.</li></ol>
-          <p class="mut" style="font-size:12px;margin:8px 0 0">È una fotografia: rinnovi e nuove linee si fanno su blkaccess, poi ripremi il pulsante per aggiornare. Per segnare un'attivazione usa «+ Aggiungi a mano» in Appunti App.</p></div></div>
+            <li>Apri blkaccess e vai alla lista delle linee (scegli «mostra tutte»).</li>
+            <li>Seleziona la tabella e copiala (sul telefono: tieni premuto → Seleziona tutto → Copia), oppure scarica l'export CSV/Excel se c'è.</li>
+            <li>Incolla qui sotto e premi «Leggi le linee», oppure carica il file.</li></ol>
+          <textarea class="inp" id="exPaste" rows="4" placeholder="Incolla qui la lista linee copiata da blkaccess…" style="margin-top:10px;width:100%;font-size:12.5px"></textarea>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px"><button class="btn pri sm" data-o="paste">Leggi le linee</button><label class="btn sm" style="cursor:pointer">Carica file (CSV / TXT)<input type="file" id="exFile" accept=".csv,.txt,.tsv,text/*" style="display:none"></label><span class="mut" id="exPasteMsg" style="font-size:12.5px"></span></div>
+          <details style="margin-top:10px"><summary class="mut" style="cursor:pointer;font-size:12.5px">Da computer: pulsante nei Preferiti</summary><p style="font-size:13px;margin:8px 0 0">Trascina <a id="exBm" class="btn sm pri" href="#" style="text-decoration:none">KAIROS ← blkaccess</a> nella barra dei Preferiti (<button class="btn sm" data-o="copybm">Copia il pulsante</button>), poi premilo quando sei sulla lista linee di blkaccess: si apre KAIROS con le linee.</p></details>
+          <p class="mut" style="font-size:12px;margin:8px 0 0">È una fotografia: rinnovi e nuove linee si fanno su blkaccess, poi la riporti qui per aggiornare. Per segnare un'attivazione usa «+ Aggiungi a mano» in Appunti App.</p></div></div>
         ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><b>Linee</b>${toolbar(k)}</div>${body(k)}</div>` : ''}`;
+      const fi = $('#exFile'); if (fi) fi.onchange = () => { const f = fi.files && fi.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => importText(String(rd.result || ''), f.name); rd.readAsText(f); };
       const bm = $('#exBm'); if (bm) { bm.setAttribute('href', BM); bm.onclick = (e) => { e.preventDefault(); toast('Non cliccarlo qui: trascinalo nella barra dei Preferiti oppure usa «Copia il pulsante»', 1); }; }
     } else {
       const form = !st.connected || A.edit;
@@ -143,6 +186,7 @@
       if (o === 'reload') { A.st = null; A.data = null; A.err = ''; A.pk = null; return open(k); }
       if (o === 'edit') { A.edit = !A.edit; return show(k); }
       if (o === 'copybm') return copy(BM, 'Pulsante');
+      if (o === 'paste') return await importText($('#exPaste').value, 'incolla');
       if (o === 'saveurl') { await api('PUT', '/admin/blk/config', { url: $('#exUrl').value.trim() }); toast('Indirizzo salvato'); A.edit = false; A.st = null; return open(k); }
       if (o === 'off') { if (!(await ask(k === 'blk' ? 'Cancellare le linee salvate?' : `Scollegare ${P.name}?`, k === 'blk' ? 'KAIROS cancella la fotografia delle linee di blkaccess. Su blkaccess non cambia niente.' : `KAIROS dimentica utente e password di ${esc(P.name)}. Su ${esc(P.name)} non cambia niente.`, k === 'blk' ? 'Cancella' : 'Scollega'))) return; await api('DELETE', `/admin/${k}/config`); A.st = null; A.data = null; return open(k); }
       if (o === 'save') {
@@ -182,6 +226,7 @@
     if (!A.st) { try { A.st = await api('GET', `/admin/${k}/state`); } catch (e) { A.st = { connected: false }; A.err = e.message; } }
     show(k); if (A.st.connected && A.data == null && !A.busy && !A.err) load(k);
   }
+  let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { for (const k of Object.keys(PANELS)) { const V = $('#v-' + k); if (V && V.offsetParent !== null && ST[k].data) show(k); } }, 150); });
   const v0 = view;
   window.view = view = function (v) { const r = v0.apply(this, arguments); if (PANELS[v]) open(v); return r; };
 })();
