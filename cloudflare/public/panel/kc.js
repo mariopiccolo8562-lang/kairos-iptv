@@ -166,6 +166,7 @@
 .kc-post img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover}
 .kc-post div{position:relative;padding:28px 10px 10px;background:linear-gradient(transparent,rgba(0,0,0,.9));font-size:13px;font-weight:600;line-height:1.25}
 .kc-post div small{display:block;color:var(--mut);font-weight:400;font-size:11px;margin-top:3px}
+.kc-post.kc-ch{aspect-ratio:1/1;background:rgba(255,255,255,.06)}.kc-post.kc-ch img{object-fit:contain;padding:14px 14px 44px;box-sizing:border-box}.kc-post.kc-ch .rt{left:8px;right:auto;color:#fff}.kc-post.kc-ch .rt.ar{left:auto;right:8px;color:var(--warn)}
 .kc-post .rt{position:absolute;top:8px;right:8px;font-size:11px;font-weight:700;padding:3px 7px;border-radius:7px;background:rgba(0,0,0,.6);color:var(--warn)}
 .kc-vc{display:grid;grid-template-columns:220px 1fr;gap:18px}
 .kc-cats{display:flex;flex-direction:column;gap:2px;max-height:70vh;overflow:auto}
@@ -570,9 +571,9 @@
       if (!C.src && KC.srcs.length) C.src = KC.srcs[0].key;
     }
     if (!KC.srcs.length) { V.innerHTML = '<div class="card glass"><p class="mut">La videoteca legge film e serie dai server Xtream assegnati ai tuoi clienti: assegna almeno una playlist Xtream per vederla qui.</p></div>'; return; }
-    V.innerHTML = `<div class="card glass"><div class="hd" style="flex-wrap:wrap;gap:10px"><h3>Videoteca<small>Film e serie disponibili sul server scelto</small></h3>
+    V.innerHTML = `<div class="card glass"><div class="hd" style="flex-wrap:wrap;gap:10px"><h3>Videoteca<small>Canali live, film e serie disponibili sul server scelto</small></h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select class="inp" id="vSrc" style="width:auto;margin:0">${KC.srcs.map((s) => `<option value="${esc(s.key)}" ${s.key === C.src ? 'selected' : ''}>${esc(s.label)} (${s.devices})</option>`).join('')}</select>
-      <div class="seg" id="vKind"><button data-k="movies" class="${C.kind === 'movies' ? 'on' : ''}">Film</button><button data-k="series" class="${C.kind === 'series' ? 'on' : ''}">Serie TV</button></div>
+      <div class="seg" id="vKind"><button data-k="live" class="${C.kind === 'live' ? 'on' : ''}">Canali live</button><button data-k="movies" class="${C.kind === 'movies' ? 'on' : ''}">Film</button><button data-k="series" class="${C.kind === 'series' ? 'on' : ''}">Serie TV</button></div>
       <input class="inp" id="vQ" placeholder="Cerca un titolo…" style="width:220px;margin:0" value="${esc(C.q)}"></div></div>
       <div class="kc-vc"><div class="kc-cats" id="vCats"></div><div><div class="mut" id="vInfo" style="font-size:13px;margin-bottom:10px"></div><div class="kc-vgrid" id="vGrid"></div><div style="display:flex;gap:8px;justify-content:center;margin-top:16px" id="vPg"></div></div></div></div>`;
     $('#vSrc').onchange = (e) => { C.src = e.target.value; C.cat = ''; C.page = 1; vodLoad(); };
@@ -588,8 +589,9 @@
     if (r.error) { $('#vInfo').textContent = r.error; return; }
     $('#vCats').innerHTML = `<button class="${!C.cat ? 'on' : ''}" data-c="">Tutte<small>${r.cats.reduce((a, c) => a + c.n, 0)}</small></button>` + r.cats.map((c) => `<button class="${C.cat === c.id ? 'on' : ''}" data-c="${esc(c.id)}">${esc(c.name)}<small>${c.n}</small></button>`).join('');
     $$('#vCats [data-c]').forEach((b) => (b.onclick = () => { C.cat = b.dataset.c; C.page = 1; vodLoad(); }));
-    $('#vInfo').textContent = `${r.total.toLocaleString('it-IT')} ${C.kind === 'series' ? 'serie' : 'film'}${C.q ? ' per «' + C.q + '»' : ''} · pagina ${r.page} di ${r.pages}`;
-    $('#vGrid').innerHTML = r.items.map((x) => `<div class="kc-post">${x.poster ? `<img loading="lazy" src="${esc(x.poster)}" referrerpolicy="no-referrer">` : ''}${x.rating ? `<span class="rt">★ ${(+x.rating).toFixed(1)}</span>` : ''}<div>${esc(x.name)}<small>${esc([x.year, x.catName].filter(Boolean).join(' · '))}</small></div></div>`).join('') || '<p class="mut">Nessun titolo.</p>';
+    $('#vInfo').textContent = `${r.total.toLocaleString('it-IT')} ${C.kind === 'series' ? 'serie' : C.kind === 'live' ? 'canali' : 'film'}${C.q ? ' per «' + C.q + '»' : ''} · pagina ${r.page} di ${r.pages}`;
+    const live = C.kind === 'live';
+    $('#vGrid').innerHTML = r.items.map((x) => `<div class="kc-post${live ? ' kc-ch' : ''}">${x.poster ? `<img loading="lazy" src="${esc(x.poster)}" referrerpolicy="no-referrer">` : ''}${live ? (x.num ? `<span class="rt">${x.num}</span>` : '') + (x.archive ? `<span class="rt ar">⏪ ${x.archive}g</span>` : '') : x.rating ? `<span class="rt">★ ${(+x.rating).toFixed(1)}</span>` : ''}<div>${esc(x.name)}<small>${esc([x.year, x.catName].filter(Boolean).join(' · '))}</small></div></div>`).join('') || `<p class="mut">${live ? 'Nessun canale.' : 'Nessun titolo.'}</p>`;
     document.querySelectorAll('#vGrid img').forEach((im) => im.addEventListener('error', () => im.remove(), { once: true }));
     $('#vPg').innerHTML = r.pages > 1 ? `<button class="btn sm" data-p="${r.page - 1}" ${r.page <= 1 ? 'disabled' : ''}>‹ Indietro</button><button class="btn sm" data-p="${r.page + 1}" ${r.page >= r.pages ? 'disabled' : ''}>Avanti ›</button>` : '';
     $$('#vPg [data-p]').forEach((b) => (b.onclick = () => { C.page = +b.dataset.p; vodLoad(); $('#v-vod').scrollIntoView({ behavior: 'smooth' }); }));
