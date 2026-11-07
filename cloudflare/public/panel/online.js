@@ -54,6 +54,33 @@
   function watch(secId, active, redraw) { let t = 0; document.addEventListener('kx-online', () => { const s = document.getElementById(secId); if (!active() || !s || !s.classList.contains('on') || t) return; t = setTimeout(() => { t = 0; const a = document.activeElement; if (a && a.tagName === 'INPUT' && s.contains(a)) return; redraw(); }, 600); }); }
   window.KXOnline = { slot, dot, key, want, state, match, sel, watch, get: (k) => (C.get(k) || {}).v, refresh: () => { C.clear(); } };
 
+  /* ---------- «Sta guardando» nelle liste dei pannelli ----------
+     Il canale in onda lo dicono WOLF (lista linee), Realott e SLT (connessioni) e Atlantix (connessioni, solo titolare).
+     Armada, Storm, MaxPlayer, OrbixPlay e MirkoTeam non lo dicono: per le loro linee vale il canale di WOLF se la stessa
+     username è anche una linea WOLF. Cache 60 s; il riquadro si riempie da solo quando arrivano i dati. */
+  const WS = { t: 0, busy: null, m: new Map() };
+  const wAny = (d) => (Array.isArray(d) ? d : d && typeof d === 'object' ? (['rows', 'items', 'connections', 'list', 'data'].map((k) => d[k]).find(Array.isArray) || []) : []);
+  const wOf = (p, u) => { u = String(u || '').toLowerCase(); return WS.m.get(p + '|' + u) || (p !== 'wolf' ? WS.m.get('wolf|' + u) : '') || ''; };
+  function paintW() { document.querySelectorAll('.kx-w[data-wp]').forEach((e) => { const w = wOf(e.dataset.wp, e.dataset.wu), h = w ? '▶ ' + esc(w) : ''; if (e.innerHTML !== h) e.innerHTML = h; }); }
+  function loadWatch() {
+    if (WS.busy) return WS.busy; if (Date.now() - WS.t < 60e3) return Promise.resolve(WS.m);
+    const isAgent = () => D.role === 'agent', ok = (k) => !isAgent() || !!((D.me && D.me.perms) || {})[k];
+    WS.busy = (async () => {
+      const m = new Map(), set = (p, u, w) => { u = String(u || '').toLowerCase(); w = String(w || '').trim(); if (u && w) m.set(p + '|' + u, w); };
+      await Promise.all([
+        ok('wolf') && api('GET', '/admin/wolf/config').then((c) => (c.set ? api('GET', '/admin/wolf/lines') : { lines: [] })).then((d) => (d.lines || []).forEach((l) => l.conns > 0 && set('wolf', l.username, l.watching))).catch(() => {}),
+        ...['ro', 'slt'].map((k) => ok(k) && api('GET', `/admin/${k}/conns`).then((d) => (d.rows || []).forEach((r) => set(k, r.username, r.stream))).catch(() => {})),
+        !isAgent() && api('GET', '/admin/atx/conns').then((d) => wAny(d).forEach((c) => set('atx', c.username, c.channel || c.stream_display_name))).catch(() => {}),
+      ].filter(Boolean));
+      WS.m = m; WS.t = Date.now(); WS.busy = null; paintW(); return m;
+    })();
+    return WS.busy;
+  }
+  /** riquadro «▶ canale» da mettere accanto al pallino di una linea (vuoto finché non c'è un canale) */
+  function wslot(p, u) { if (!u) return ''; loadWatch(); const w = wOf(p, u); return `<span class="kx-w" data-wp="${esc(p)}" data-wu="${esc(String(u).toLowerCase())}" title="Canale in onda adesso">${w ? '▶ ' + esc(w) : ''}</span>`; }
+  css.textContent += '.kx-w{display:inline-block;font-size:12px;font-weight:600;color:#fbbf24;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;margin-left:6px}.kx-w:empty{display:none}';
+  window.KXWatch = { slot: wslot, get: wOf, load: loadWatch, refresh: () => { WS.t = 0; return loadWatch(); } };
+
   /* ---------- sezione «Online ora terzi» (ex «Collegati ora») ---------- */
   const IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M6.3 6.3a8 8 0 0 0 0 11.4M17.7 6.3a8 8 0 0 1 0 11.4M3.5 3.5a12 12 0 0 0 0 17M20.5 3.5a12 12 0 0 1 0 17"/></svg>';
   if (!$('.nav[data-v="conn"]')) {
