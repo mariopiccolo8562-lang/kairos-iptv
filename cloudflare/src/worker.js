@@ -1032,7 +1032,7 @@ async function agentArmada(req, env, url, path, who, ip, ctx, X) {
     const out = await r.json(), cost = armCost(sub, before, sub ? await armCreditsNow(env, s) : null);
     await armSpend(env, A, cost, sub ? 'new' : 'trial', type === 'mag' ? out.mac : out.username || out.userId);
     if (sub) ctx.waitUntil(log(env, 'edit', `${who}: Armada — ${armFmt(cost)} crediti del titolare (${type === 'mag' ? 'MAG ' + out.mac : 'linea ' + (out.username || out.userId)})`, ip));
-    return json({ ...out, cost });
+    return json({ ...out, host: '', url: '', cost }); // all'agente mai il DNS né il link M3U
   }
   if (path === '/armada/renew' && m === 'POST') {
     const b = await readJSON(req, 1024), sub = parseInt(b.sub, 10), type = b.type === 'mag' ? 'mag' : 'm3u';

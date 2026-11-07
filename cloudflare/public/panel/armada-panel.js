@@ -105,7 +105,7 @@
     const kv = (k, v, w) => `<span class="mut">${k}</span><span class="mono" title="${esc(v)}">${esc(v)}</span>${v ? `<button class="btn sm" data-arcp="${esc(w)}">Copia</button>` : '<span></span>'}`;
     const apps = [...new Set((((D.settings && D.settings.appLinks) || []).map((y) => y.name)))];
     return `<div class="ar-res"><b>✅ ${x.type === 'mag' ? 'MAG creato' : 'Linea creata'}</b>${x.userId ? ` <span class="mut">· ID ${esc(x.userId)}</span>` : ''}
-      <div class="ar-kv" style="margin-top:10px">${x.type === 'mag' ? kv('MAC', x.mac, 'mac') + kv('Portale', x.url, 'url') : kv('Utente', x.username, 'username') + kv('Password', x.password, 'password') + kv('DNS', x.host, 'host') + kv('Link M3U', x.url, 'url')}</div>
+      <div class="ar-kv" style="margin-top:10px">${x.type === 'mag' ? kv('MAC', x.mac, 'mac') + (isAg() ? '' : kv('Portale', x.url, 'url')) : kv('Utente', x.username, 'username') + kv('Password', x.password, 'password') + (isAg() ? '' : kv('DNS', x.host, 'host') + kv('Link M3U', x.url, 'url'))}</div>
       ${x.type === 'm3u' && x.username ? `<div style="margin-top:14px;display:grid;gap:10px">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b style="font-size:13px">Aggiungila a un cliente:</b><input class="inp" id="arCl" list="arClL" placeholder="nome o codice del cliente" style="margin:0;max-width:280px"><button class="btn sm" id="arToCl">Apri la scheda</button></div>
         <datalist id="arClL">${(D.devices || []).filter((d) => !d.parent).slice(0, 3000).map((d) => `<option value="${esc((d.name || 'Senza nome') + ' · ' + d.code)}">`).join('')}</datalist>

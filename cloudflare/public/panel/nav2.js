@@ -187,7 +187,7 @@
     go.then((ok) => { if (!ok || !s.value) return; then(D.devices.find((d) => d.id === s.value)); });
   }
   const ACTS = [
-    ['⚡', 'Nuova attivazione', 'Linea sul pannello IPTV + app in un passaggio', () => window.KXQuick && KXQuick.open({})],
+    ['⚡', 'Nuova attivazione: App e Linea IPTV', 'Crea la linea sul pannello IPTV e la metti sulle app', () => window.KXQuick && KXQuick.open({})],
     ['➕', 'Nuovo cliente', 'Attiva un codice', () => $('#newDev').click()],
     ['🔁', 'Rinnova in scadenza', 'Clienti che scadono entro 14 giorni', () => { D.filter = 'soon'; view('devices'); renderDevices(); }],
     ['💬', 'Messaggio a tutti', 'Avviso nell\'app dei clienti', () => { view('msgs'); setTimeout(() => { const t = $('#mTo'); if (t) t.value = 'all'; const i = $('#mTitle') || $('#v-msgs input'); if (i) i.focus(); }, 50); }],
@@ -199,7 +199,7 @@
     const V = $('#v-dash'); if (!V || $('#qaG')) return;
     V.insertAdjacentHTML('afterbegin', `<div class="qa-g" id="qaG"><div class="card glass"><div class="hd"><h3>Azioni rapide<small>Le cose che fai più spesso</small></h3></div><div class="qa-acts" id="qaA"></div></div>
       <div class="card glass"><div class="hd"><h3>Interruttori rapidi<small>Si accendono e spengono con un clic</small></h3></div><div class="qa-sw" id="qaSw"></div></div></div>`);
-    $('#qaA').innerHTML = ACTS.map(([i, l, sm], k) => `<button class="qa-a" data-qa="${k}"><i>${i}</i><b>${l}</b><small>${sm}</small></button>`).join('');
+    $('#qaA').innerHTML = ACTS.map(([i, l, sm], k) => `<button class="qa-a${/attivazione/i.test(l) ? ' qa-red-c' : ''}" data-qa="${k}"><i>${i}</i><b>${l}</b><small>${sm}</small></button>`).join('');
     $$('[data-qa]', V).forEach((b) => (b.onclick = () => ACTS[+b.dataset.qa][3]()));
   })();
 
