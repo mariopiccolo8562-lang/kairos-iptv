@@ -64,13 +64,13 @@
       `<span class="mut" style="font-size:11.5px">${esc(String(c.user_agent || '').slice(0, 40))}</span>`, c.activity_id ? btn('kill', i, 'Disconnetti') : ''
     ])));
   }
-  function overviewHtml(d) {
+  function overviewHtml(d, m) {
     const mem = d.member || {}, st = d.stats || {};
     const LBL = { total: 'Linee totali', active: 'Attive', expired: 'Scadute', expiring: 'In scadenza', online: 'Collegati ora', trial: 'Prove', disabled: 'Disattivate', subresellers: 'Sub-reseller' };
     const card = (n, v) => `<div class="card glass" style="padding:14px 16px;min-width:150px"><div class="mut" style="font-size:12px">${esc(n)}</div><div style="font-size:24px;font-weight:700;margin-top:4px">${esc(String(v))}</div></div>`;
     const CL = { total: 'dark', active: 'red', expired: 'dark', expiring: 'dark', online: 'blue', trial: 'dark', disabled: 'dark', subresellers: 'dark' };
     const T = [{ label: 'Crediti disponibili', v: mem.unlimited ? '∞' : Math.trunc(Number(mem.credits || 0)), c: 'green' }, ...Object.entries(st).filter(([, v]) => typeof v !== 'object').map(([k, v]) => ({ label: LBL[k] || k.replace(/_/g, ' '), v: esc(String(v)), c: CL[k] || 'dark' }))];
-    return window.KXStats ? KXStats.strip(T, { margin: '10px 0 0' }) : `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px">${T.map((t) => card(t.label, t.v)).join('')}</div>`;
+    return window.KXStats ? KXStats.strip(T, { margin: m || '10px 0 0' }) : `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px">${T.map((t) => card(t.label, t.v)).join('')}</div>`;
   }
   function body() {
     if (A.busy) return '<p class="mut" style="margin:14px 0">Carico da Atlantix…</p>';
@@ -92,6 +92,7 @@
     const V = $('#v-atx'); if (!V) return;
     if (isAg()) { V.innerHTML = '<div class="card glass"><p>Il Pannello Atlantix lo usa solo il Master.</p></div>'; return; }
     const st = A.st || {}, form = !st.connected || A.edit;
+    if (st.connected && A.ov === undefined) { A.ov = null; api('GET', '/admin/atx/overview').then((d) => { A.ov = d; render(); }).catch(() => { A.ov = false; }); }
     V.innerHTML = `<div class="card glass" style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start">
         <div><b style="font-size:16px">${st.connected ? '✅ Atlantix collegato' : 'Atlantix non collegato'}</b>
@@ -104,6 +105,7 @@
         <label>Codice di accesso<input class="inp" id="axC" type="password" autocomplete="new-password" placeholder="${st.connected ? 'lascia vuoto per non cambiarlo' : ''}"></label>
         <label>Codice 2FA (solo se Atlantix lo chiede)<input class="inp" id="axO" inputmode="numeric" maxlength="6" placeholder="000000"></label></div>
         <button class="btn pri" data-o="save" style="margin-top:12px">Collega Atlantix</button>` : ''}</div>
+      ${st.connected && A.tab !== 'overview' && A.ov ? overviewHtml(A.ov, '0 0 14px') : ''}
       ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.map(([k, n]) => `<button class="btn sm${A.tab === k ? ' pri' : ''}" data-t="${k}">${n}</button>`).join('')}${toolbar()}</div>${body()}</div>` : ''}`;
     $$('[data-t]', V).forEach((b) => (b.onclick = () => { A.tab = b.dataset.t; A.page = 1; A.q = ''; A.status = ''; A.reseller = ''; A.days = 0; load(); }));
     $$('[data-o]', V).forEach((b) => (b.onclick = () => op(b.dataset.o)));
@@ -136,13 +138,13 @@
     try {
       if (o === 'prev') { A.page--; return load(); } if (o === 'next') { A.page++; return load(); }
       if (o === 'new') return await newLine();
-      if (o === 'reload') { A.st = null; A.data = null; A.err = ''; return open(); }
+      if (o === 'reload') { A.st = null; A.data = null; A.ov = undefined; A.err = ''; return open(); }
       if (o === 'edit') { A.edit = !A.edit; return show(); }
-      if (o === 'off') { if (!(await ask('Scollegare Atlantix?', 'KAIROS dimentica utente, password e codice di Atlantix. Su Atlantix non cambia niente.', 'Scollega'))) return; await api('DELETE', '/admin/atx/config'); A.st = null; A.data = null; return open(); }
+      if (o === 'off') { if (!(await ask('Scollegare Atlantix?', 'KAIROS dimentica utente, password e codice di Atlantix. Su Atlantix non cambia niente.', 'Scollega'))) return; await api('DELETE', '/admin/atx/config'); A.st = null; A.data = null; A.ov = undefined; return open(); }
       if (o === 'save') {
         const b = { user: $('#axU').value.trim(), pass: $('#axP').value, code: $('#axC').value.trim(), otp: $('#axO').value.trim() };
         if (!b.user || (!b.pass && !(A.st || {}).connected)) return toast('Scrivi utente e password di Atlantix', 1);
-        toast('Entro su Atlantix…'); await api('PUT', '/admin/atx/config', b); toast('Atlantix collegato'); A.edit = false; A.st = null; A.data = null; A.err = ''; return open();
+        toast('Entro su Atlantix…'); await api('PUT', '/admin/atx/config', b); toast('Atlantix collegato'); A.edit = false; A.st = null; A.data = null; A.ov = undefined; A.err = ''; return open();
       }
     } catch (e) { toast(e.message, 1); }
   }
@@ -187,7 +189,7 @@
     try {
       const sorting = A.tab === 'lines' && window.KXSort && (A.sort || +A.days > 0);
       const p = new URLSearchParams({ page: sorting ? 1 : A.page, q: A.q, status: A.status, reseller: A.reseller, ...(sorting ? { all: 1 } : {}) });
-      A.data = await api('GET', `/admin/atx/${A.tab}?${p}`);
+      A.data = await api('GET', `/admin/atx/${A.tab}?${p}`); if (A.tab === 'overview') A.ov = A.data;
       if (sorting && A.data) { // ordino/filtro dentro i dati, così gli indici dei pulsanti restano quelli giusti
         const key = ['rows', 'items', 'lines', 'users', 'list', 'data'].find((k) => Array.isArray(A.data[k]));
         if (key) { A.data[key] = KXSort.apply(A.data[key], A, { exp: (r) => { const v = r.exp_date ?? r.exp; if (v == null || v === '') return 0; const n = Number(v); if (!isNaN(n)) return n > 1e12 ? n : n * 1000; const t = Date.parse(String(v).replace(' ', 'T')); return isNaN(t) ? 0 : t; }, name: (r) => r.username, enabled: (r) => !!+r.enabled, conns: (r) => +r.online || 0, owner: (r) => r.reseller, created: (r) => Date.parse(String(r.created_at || r.created || '').replace(' ', 'T')) || 0 }); A.data.total = A.data[key].length; }
