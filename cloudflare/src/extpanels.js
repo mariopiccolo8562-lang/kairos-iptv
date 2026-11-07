@@ -1,9 +1,7 @@
 import { sockFetch } from './wolf.js';
 /* ---------------- Pannelli IPTV esterni senza API: Realott (my.realott.com) e SLT (p.slt.st) ----------------
    KAIROS entra con utente e password del titolare (salvati cifrati in settings '<k>' e cookie in '<k>:ses') e usa le stesse
-   richieste del loro pannello web. Niente copie: legge e scrive direttamente sul pannello. Solo il titolare (Master).
-   Terzo pannello: blkaccess (XUI dietro Cloudflare «sono umano»): qui KAIROS non entra da solo, riceve una «foto» delle linee
-   passata dal titolare con il pulsante nei Preferiti (settings 'blk:lines'). */
+   richieste del loro pannello web. Niente copie: legge e scrive direttamente sul pannello. Solo il titolare (Master). */
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const mem = {};
 const setRow = (env, k, v) => env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(k, v).run();
@@ -225,25 +223,8 @@ async function call(P, env, H, path, o = {}) {
 const PANELS = { ro: RO, slt: SLT };
 export async function extRoutes(req, env, path, who, ip, H) {
   const m = req.method, { HttpErr, json, str } = H;
-  const mm = path.match(/^\/(ro|slt|blk)\/(.+)$/); if (!mm) return null;
+  const mm = path.match(/^\/(ro|slt)\/(.+)$/); if (!mm) return null;
   const k = mm[1], sub = mm[2], P = PANELS[k];
-  /* ---- blkaccess: «foto» delle linee passata dal titolare ---- */
-  if (k === 'blk') {
-    const K = 'blk:lines';
-    const load = async () => { try { const v = await getRow(env, K); return v ? await H.unseal(env, v) : null; } catch { return null; } };
-    if (sub === 'state' && m === 'GET') { const d = await load(); return json({ connected: !!d, url: await getRow(env, 'blk:url'), updated: d ? d.t : 0, count: d ? d.rows.length : 0, from: d ? d.from || '' : '' }); }
-    if (sub === 'config' && m === 'PUT') { const b = await H.readJSON(req, 2048); const u = str(b.url, 300).trim(); if (u && !/^https:\/\/[\w.-]+\//.test(u)) throw new HttpErr(400, 'Indirizzo non valido (deve iniziare con https://)'); await setRow(env, 'blk:url', u); return json({ ok: true }); }
-    if (sub === 'config' && m === 'DELETE') { await env.DB.prepare("DELETE FROM settings WHERE k IN ('blk:lines', 'blk:url')").run(); return json({ ok: true }); }
-    if (sub === 'lines' && m === 'GET') { const d = await load(); return json(d || { rows: [], t: 0 }); }
-    if (sub === 'snapshot' && m === 'POST') {
-      const b = await H.readJSON(req, 1024 * 1024), rows = (Array.isArray(b.rows) ? b.rows : []).slice(0, 3000).map((r) => ({ username: str(r.username, 80), password: str(r.password, 80), exp: str(r.exp, 40), status: str(r.status, 40), conns: str(r.conns, 20), owner: str(r.owner, 80), notes: str(r.notes, 200), extra: str(r.extra, 200) })).filter((r) => r.username);
-      if (!rows.length) throw new HttpErr(400, 'Nessuna linea trovata nella pagina: apri la lista linee del pannello e ripremi il pulsante');
-      await setRow(env, K, await H.seal(env, { rows, t: Math.floor(Date.now() / 1000), from: str(b.from, 200) }));
-      await H.log(env, 'edit', `${who}: blkaccess — foto di ${rows.length} linee salvata`, ip).catch(() => {});
-      return json({ ok: true, count: rows.length });
-    }
-    return null;
-  }
   if (sub === 'state' && m === 'GET') { const c = await cfgOf(env, H, k); return json(c ? { connected: true, user: c.user } : { connected: false }); }
   if (sub === 'config' && m === 'PUT') {
     const b = await H.readJSON(req, 4096), old = (await cfgOf(env, H, k)) || {};
