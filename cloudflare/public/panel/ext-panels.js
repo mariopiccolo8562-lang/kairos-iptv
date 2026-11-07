@@ -91,10 +91,17 @@
     for (const l of (col.u != null ? lines.slice(1) : lines)) {
       const c = sep(l); if (c.length < 2) continue;
       if (col.u != null) { const g = (k) => (col[k] != null ? c[col[k]] || '' : ''); if (g('u')) out.push({ username: g('u'), password: g('p'), exp: g('e'), status: g('s'), conns: g('c'), owner: g('o'), notes: g('n') }); continue; }
-      const r = { username: '', password: '', exp: '', status: '', conns: '', owner: '', notes: '' };
-      for (const t of c) { if (!t) continue; if (!r.exp && DATE.test(t)) r.exp = t; else if (!r.conns && CONN.test(t)) r.conns = t; else if (!r.status && STAT.test(t)) r.status = t; else if (!r.username && TOK.test(t) && !/^\d+$/.test(t)) r.username = t; else if (r.username && !r.password && TOK.test(t) && !/^\d+$/.test(t) && t !== r.username) r.password = t; }
+      const r = { username: '', password: '', exp: '', status: '', conns: '', owner: '', notes: '', _cand: [] }, dates = [], ints = [];
+      c.forEach((t, x) => { if (!t) return; if (DATE.test(t)) dates.push(t); else if (CONN.test(t)) r.conns ||= t; else if (/^\d{1,3}$/.test(t)) ints.push([x, +t]); else if (STAT.test(t)) r.status ||= t; else if (TOK.test(t) && !/^\d+$/.test(t) && !/^(nothing|none|null|n\/a|-+)$/i.test(t)) { if (!r.username) r.username = t; else if (!r.password) r.password = t; else r._cand.push(t); } });
+      /* più date (creazione, scadenza): la scadenza è la più lontana; due numeri vicini = connessioni attive / massime */
+      const when = (d) => { const m = d.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/) || d.match(/(\d{4})-(\d{2})-(\d{2})/); if (!m) return 0; return d.startsWith(m[1]) && m[1].length === 4 ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : Date.UTC(+(m[3].length === 2 ? '20' + m[3] : m[3]), +m[2] - 1, +m[1]); };
+      const real = dates.filter((d) => when(d)); r.exp = real.sort((x, y) => when(y) - when(x))[0] || dates.find((d) => /unlimited|illimitat|never|mai/i.test(d)) || '';
+      if (!r.conns) { const k = ints.findIndex((v, q) => q && ints[q - 1][0] === v[0] - 1); if (k > 0) r.conns = `${ints[k - 1][1]} / ${ints[k][1]}`; }
       if (r.username && (r.password || r.exp)) out.push(r);
     }
+    /* nome che si ripete su molte righe (il reseller) → proprietario */
+    const freq = {}; out.forEach((r) => new Set(r._cand || []).forEach((t) => (freq[t] = (freq[t] || 0) + 1)));
+    out.forEach((r) => { if (!r._cand) return; r.owner = r._cand.find((t) => freq[t] >= 2 && freq[t] >= out.length * 0.15) || ''; delete r._cand; });
     return out;
   }
   async function importText(text, from) {
