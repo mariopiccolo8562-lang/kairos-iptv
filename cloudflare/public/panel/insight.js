@@ -20,6 +20,9 @@
 .hl-card{border:1px solid rgba(239,68,68,.45)!important;background:linear-gradient(135deg,rgba(239,68,68,.12),rgba(245,176,65,.07) 60%,transparent)!important;margin-bottom:16px}
 .hl-card.ok{border-color:rgba(34,197,94,.45)!important;background:linear-gradient(135deg,rgba(34,197,94,.12),transparent 70%)!important}
 .hl-card .hd h3{font-size:16px}.hl-pri{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.08em;padding:3px 8px;border-radius:999px;background:#ef4444;color:#fff;margin-left:8px;vertical-align:2px}
+.hl-card .hd .hl-act{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.hl-sum{margin:6px 0 12px;padding-left:18px;font-size:13.5px}.hl-sum li{margin:3px 0}.hl-sum b{font-weight:700}
+.hl-ck{display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);cursor:pointer;font-size:13.5px;text-align:left}.hl-ck input{margin:3px 0 0;accent-color:var(--a1)}.hl-ck small{display:block;color:var(--mut);font-size:12px;margin-top:2px}
 .hl-tg{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-bottom:12px}.hl-tg .tog{margin:0}
 .hl-it{display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:rgba(0,0,0,.18);margin-bottom:8px}.hl-it .tx{flex:1;min-width:0}.hl-it b{display:block}.hl-it small{display:block;color:var(--mut);font-size:12.5px}
 #hlPill{display:none;align-items:center;gap:6px;height:38px;padding:0 12px;border-radius:12px;border:1px solid rgba(239,68,68,.6);background:rgba(239,68,68,.16);color:#fecaca;font:inherit;font-size:13px;font-weight:800;cursor:pointer}
@@ -87,7 +90,42 @@
       return true;
     } catch (e) { toast(e.message, 1); if (btn) btn.textContent = t0; return false; } finally { if (btn) btn.disabled = false; }
   }
-  window.KXInsight = { open, sendUpd, fixDev };
+  /* «Risolvi tutti»: lo stesso «Risolvi» per ogni cliente dell'elenco della salute (tre alla volta, una richiesta per
+     cliente). Di serie senza riavvii: aggiornamento, modalità leggera, qualità adattiva, decodifica e controllo della
+     linea; svuota cache e riavvio solo se il titolare lo sceglie (la visione in corso si ferma per qualche secondo) */
+  let fixAllBusy = false;
+  async function fixAll(btn) {
+    const L = (H && H.list) || []; if (!L.length || fixAllBusy) return;
+    const nUpd = L.filter((x) => (x.issues || []).some((i) => i.key === 'upd' || i.act === 'upd')).length, nBad = L.filter((x) => x.bad).length;
+    if (!(await ask(`Risolvere tutti i ${L.length} clienti?`, `<p class="mut" style="margin:0;font-size:13.5px">Il pannello applica a ognuno le correzioni sull'app${nUpd ? ` (aggiornamento a <b>${nUpd}</b> con l'app vecchia)` : ''}: modalità leggera, qualità adattiva e decodifica dove servono, e controlla le loro linee sul server.${nBad ? ` <b>${nBad}</b> ${nBad === 1 ? 'ha' : 'hanno'} problemi gravi.` : ''}</p>
+      <label class="hl-ck"><input type="checkbox" id="hlAllHard"><span><b>Anche svuota cache e riavvia l'app dove serve</b><small>Più efficace sugli errori ripetuti, ma chi sta guardando si ferma per qualche secondo</small></span></label>`, 'Risolvi tutti'))) return;
+    const hard = !!($('#hlAllHard') && $('#hlAllHard').checked);
+    fixAllBusy = true;
+    const btns = $$('[data-hlall]'); btns.forEach((b) => { b.disabled = true; });
+    const out = []; let next = 0, n = 0;
+    const step = () => btns.forEach((b) => { b.textContent = `Risolvo ${n} di ${L.length}…`; });
+    step();
+    const run = async () => { while (next < L.length) { const x = L[next++]; try { out.push({ x, r: await api('POST', '/admin/devices/' + x.id + '/fix' + (hard ? '' : '?soft=1')) }); } catch (e) { out.push({ x, err: e.message }); } n++; step(); } };
+    try { await Promise.all([run(), run(), run()]); } finally { fixAllBusy = false; }
+    // riepilogo: cosa è stato fatto (contato per tipo) e cosa resta da fare fuori dall'app, cliente per cliente
+    const kind = (t) => t.replace(/\b\d+(\.\d+)*\b/g, 'N').replace(/«[^»]*»/g, '…').split(':')[0];
+    const cnt = new Map(), todo = [], errs = [];
+    let fixed = 0;
+    for (const { x, r, err } of out) {
+      if (err) { errs.push(`${x.name || x.code}: ${err}`); continue; }
+      if (r.done.length) fixed++;
+      for (const d of r.done) { const k = kind(d); const c = cnt.get(k) || { t: d, n: 0 }; c.n++; cnt.set(k, c); }
+      for (const t of r.todo) todo.push(`<b>${esc(x.name || x.code)}</b>: ${esc(t)}`);
+    }
+    // senza riavvii, chi ha solo errori ripetuti resta com'è: lo si dice, con la strada per sistemarli
+    const onlyErr = hard ? [] : out.filter(({ x, r }) => r && !r.done.length && (x.issues || []).some((i) => ['err', 'restart', 'killed', 'crash'].includes(i.key)));
+    const li = (a) => a.map((v) => `<li>${v}</li>`).join('');
+    await ask(fixed ? `🛠 Fatto su ${fixed} client${fixed === 1 ? 'e' : 'i'}` : 'Niente da correggere sulle app',
+      `${cnt.size ? `<b style="font-size:13px">Cosa ho fatto</b><ul class="hl-sum">${li([...cnt.values()].map((c) => `${esc(c.n > 1 ? c.t.replace(/^Aggiornamento alla versione \S+/, 'Aggiornamento alla versione nuova') : c.t)}${c.n > 1 ? ` <b>× ${c.n}</b>` : ''}`))}</ul>` : `<p class="mut" style="font-size:13.5px">Le app non avevano problemi da correggere da qui.</p>`}${todo.length ? `<b style="font-size:13px;color:#f5b041">Da fare fuori dall'app (${todo.length})</b><ul class="hl-sum">${li(todo.slice(0, 25))}</ul>${todo.length > 25 ? `<small class="mut">…e altri ${todo.length - 25}</small>` : ''}` : ''}${errs.length ? `<b style="font-size:13px;color:#ef4444">Non riusciti (${errs.length})</b><ul class="hl-sum">${li(errs.slice(0, 10).map(esc))}</ul>` : ''}${onlyErr.length ? `<p class="mut" style="font-size:13px;margin:8px 0 0">${onlyErr.length} client${onlyErr.length === 1 ? 'e ha' : 'i hanno'} solo errori ripetuti (${esc(onlyErr.slice(0, 4).map(({ x }) => x.name || x.code).join(', '))}${onlyErr.length > 4 ? '…' : ''}): per loro serve svuotare la cache e riavviare l'app. Rifai «Risolvi tutti» con la spunta, oppure «Risolvi» sul singolo cliente quando non sta guardando.</p>` : ''}`, 'Ok');
+    btns.forEach((b) => { b.disabled = false; });
+    loadH(true);
+  }
+  window.KXInsight = { open, sendUpd, fixDev, fixAll };
 
   /* ---------- 🩺 Salute delle app ---------- */
   let H = null, hT = 0, lastBad = -1;
@@ -98,7 +136,7 @@
     const tg = isAg() ? '' : `<div class="hl-tg"><div class="tog ${on ? 'on' : ''}" data-hlt="on"><div><b>Controllo salute delle app</b><small>Il pannello controlla di continuo versioni, errori e blocchi e te li segnala qui (consigliato)</small></div><i></i></div><div class="tog ${H.settings && H.settings.autoFix ? 'on' : ''}" data-hlt="autoFix"><div><b>Risolvi da solo</b><small>Quando un'app ha errori il pannello applica da solo le correzioni che non interrompono la visione (modalità leggera, qualità adattiva, decodifica)</small></div><i></i></div><div class="tog ${H.settings && H.settings.autoUpd ? 'on' : ''}" data-hlt="autoUpd"><div><b>Aggiorna da solo le app vecchie</b><small>Chi ha una versione vecchia riceve subito l'aggiornamento, senza che tu lo mandi (Kairos Pro)</small></div><i></i></div></div>`;
     const lat = H.latest ? Object.entries(H.latest).filter(([, v]) => v).map(([k, v]) => `${{ tv: 'Pro', ktv: 'TV', prem: 'Premium', lite: 'Lite', xc: 'XC', plus: 'Plus' }[k]} ${esc(v)}`).join(' · ') : '';
     const items = L.slice(0, full ? 30 : 5).map((x) => `<div class="hl-it"><span>${x.bad ? '🔴' : '🟠'}</span><div class="tx"><b>${esc(x.name || x.code)} <span class="mono mut" style="font-weight:400;font-size:12px">${esc(x.code)}</span></b><small>${x.issues.map((i) => esc(i.what)).join(' · ')}</small><small>💡 ${esc(x.issues[0].fix)}</small></div>${x.issues.some((i) => i.act === 'upd') ? `<button class="btn sm pri" data-hlupd="${esc(x.id)}">${x.updSent ? '⬆ Reinvia' : '⬆ Invia aggiornamento'}</button>` : ''}<button class="btn sm pri" data-hlfix="${esc(x.id)}">🛠 Risolvi</button><button class="btn sm" data-hldati="${esc(x.id)}">📊 Dati</button></div>`).join('');
-    return `<div class="card glass hl-card ${on && !L.length ? 'ok' : ''}" data-hlcard><div class="hd"><h3>🩺 Salute delle app<span class="hl-pri">PRIORITÀ ASSOLUTA</span><small>Le app dei clienti devono essere sempre fluide e senza errori${lat ? ' · ultime versioni: ' + lat : ''}</small></h3>${!on ? '<b style="color:#f5b041;font-size:14px">Controllo spento</b>' : L.length ? `<b style="color:${bad ? '#ef4444' : '#f5b041'};font-size:14px">${L.length} ${L.length === 1 ? 'cliente' : 'clienti'} da controllare</b>` : '<b style="color:#22c55e">Tutto a posto ✓</b>'}</div>
+    return `<div class="card glass hl-card ${on && !L.length ? 'ok' : ''}" data-hlcard><div class="hd"><h3>🩺 Salute delle app<span class="hl-pri">PRIORITÀ ASSOLUTA</span><small>Le app dei clienti devono essere sempre fluide e senza errori${lat ? ' · ultime versioni: ' + lat : ''}</small></h3>${!on ? '<b style="color:#f5b041;font-size:14px">Controllo spento</b>' : L.length ? `<div class="hl-act"><b style="color:${bad ? '#ef4444' : '#f5b041'};font-size:14px">${L.length} ${L.length === 1 ? 'cliente' : 'clienti'} da controllare</b>${isAg() ? '' : `<button class="btn sm pri" data-hlall title="Applica «Risolvi» a tutti i clienti dell'elenco">🛠 Risolvi tutti (${L.length})</button>`}</div>` : '<b style="color:#22c55e">Tutto a posto ✓</b>'}</div>
       ${tg}${!on ? `<p style="margin:0;font-size:13.5px;color:#fde68a">${isAg() ? 'Il controllo della salute delle app lo attiva il titolare.' : '⚠️ Accendi «Controllo salute delle app»: il pannello ti segnala qui e in alto ogni cliente con app vecchia, errori o blocchi, con la soluzione.'}</p>` : L.length ? items + (L.length > (full ? 30 : 5) ? `<small class="mut">…e altri ${L.length - (full ? 30 : 5)}</small>` : '') : '<p class="mut" style="margin:0;font-size:13px">Nessun cliente con app vecchia, errori o blocchi negli ultimi giorni.</p>'}</div>`;
   }
   function drawH() {
@@ -119,6 +157,7 @@
       $$('[data-hlupd]', c).forEach((b) => (b.onclick = async () => { await sendUpd(b.dataset.hlupd, b); loadH(true); }));
       $$('[data-hldati]', c).forEach((b) => (b.onclick = () => open(b.dataset.hldati)));
       $$('[data-hlfix]', c).forEach((b) => (b.onclick = async () => { if (await fixDev(b.dataset.hlfix, b)) loadH(true); }));
+      $$('[data-hlall]', c).forEach((b) => (b.onclick = () => fixAll(b)));
       $$('[data-hlt]', c).forEach((t) => (t.onclick = async () => { const k = t.dataset.hlt, v = !t.classList.contains('on'); try { const r = await api('PUT', '/admin/health/settings', { [k]: v }); H.settings = r.health; toast(k === 'on' ? (v ? 'Controllo salute attivo' : 'Controllo salute spento') : k === 'autoFix' ? (v ? 'Il pannello risolve da solo i problemi delle app' : 'Risoluzione automatica spenta') : v ? 'Le app vecchie si aggiornano da sole' : 'Aggiornamento automatico spento'); delete c.dataset.h; drawH(); } catch (e) { toast(e.message, 1); } }));
     }
   }
@@ -139,6 +178,7 @@
       if (p === '/admin/health' && m === 'GET') { const L = oldIds().map((id) => DEMO.devices.find((d) => d.id === id)).map((d, k) => ({ id: d.id, name: d.name, code: d.code, app: 'tv', ver: '2.4.2', online: true, lastSeen: Date.now(), updSent: UPD[d.id] || 0, bad: k === 0 ? 1 : 0, issues: [{ sev: 'warn', key: 'upd', what: 'App vecchia: 2.4.2 (ultima 2.5.2)', fix: 'Invia l\'aggiornamento: l\'app lo propone subito al cliente', act: 'upd' }, ...(k === 0 ? [{ sev: 'bad', key: 'err', what: '3 errori non risolti nelle ultime 24 ore', fix: 'Canali HEVC: usa la versione H.264 del canale' }] : [])] })); return { list: L, latest: { tv: '2.5.2', ktv: '1.0.0', lite: '1.2.0', xc: '1.0.0' }, settings: { ...HS } }; }
       if (p === '/admin/health/settings') { Object.assign(HS, b); return { ok: true, health: { ...HS } }; }
       const up = p.match(/^\/admin\/devices\/(.+)\/upd$/); if (up) { UPD[up[1]] = Date.now(); return { ok: true, t: UPD[up[1]] }; }
+      const fx = p.match(/^\/admin\/devices\/([^/?]+)\/fix/); if (fx && m === 'POST') { await new Promise((r) => setTimeout(r, 200)); UPD[fx[1]] = Date.now(); const soft = /soft=1/.test(p); return { ok: true, done: ['Aggiornamento alla versione 2.5.2 inviato', 'Qualità adattiva attivata: con la rete lenta passa da sola alla versione più leggera del canale', ...(soft ? [] : ['Cache svuotata e app riavviata (appena l\'app si collega: entro 1 minuto se è aperta)'])], todo: ['Wi-Fi debole: il cliente deve avvicinare il router, usare un ripetitore o il cavo'], issues: 2 }; }
       return dm(m, p, b);
     };
   }

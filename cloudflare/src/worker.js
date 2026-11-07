@@ -2268,7 +2268,9 @@ async function lineProblem(pl) {
   if (mx && a >= mx) return `connessioni piene (${a}/${mx}): qualcun altro usa la stessa linea`;
   return '';
 }
-async function fixDevice(env, s, d, who, auto = false) {
+/* soft = «Risolvi tutti» senza riavvii: aggiornamento, impostazioni e controllo linea sì, svuota cache e riavvio no
+   (la visione in corso dei clienti non si interrompe) */
+async function fixDevice(env, s, d, who, auto = false, soft = false) {
   const t = now();
   const p = await env.DB.prepare('SELECT * FROM presence WHERE device_id = ?').bind(d.id).first();
   const app = appOfVer(p && p.ver, d.app);
@@ -2295,7 +2297,7 @@ async function fixDevice(env, s, d, who, auto = false) {
   if (!auto) for (const pl of (await unseal(env, d.playlists).catch(() => [])).filter((x) => x && x.type === 'xtream' && x.host && x.username && x.password).slice(0, 3)) {
     const why = await lineProblem(pl); if (why) todo.push(`Linea «${pl.name || pl.username}»: ${why}`);
   }
-  if (auto) cmds.clear();
+  if (auto || soft) cmds.clear();
   const stmts = [];
   if (JSON.stringify(rc) !== rc0) stmts.push(env.DB.prepare('UPDATE devices SET rc = ? WHERE id = ?').bind(JSON.stringify(rc), d.id));
   if (upd) stmts.push(env.DB.prepare('UPDATE devices SET upd_req = ? WHERE id = ? OR parent = ?').bind(t, d.id, d.id));
@@ -2306,7 +2308,7 @@ async function fixDevice(env, s, d, who, auto = false) {
   if (cmds.has('cache')) done.push('Cache svuotata e app riavviata (appena l\'app si collega: entro 1 minuto se è aperta)');
   if (done.length) stmts.push(env.DB.prepare('UPDATE devices SET fix_t = ? WHERE id = ?').bind(t, d.id));
   if (stmts.length) await env.DB.batch(stmts);
-  if (done.length) await log(env, 'edit', `${who}: «Risolvi»${auto ? ' automatico' : ''} su ${d.name || d.code} — ${done.join('; ')}`, '');
+  if (done.length) await log(env, 'edit', `${who}: «Risolvi»${auto ? ' automatico' : soft ? ' (tutti, senza riavvii)' : ''} su ${d.name || d.code} — ${done.join('; ')}`, '');
   return { ok: true, done, todo, issues: iss.length };
 }
 function healthIssues(p, errs, latest, app) {
@@ -4292,7 +4294,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     return json({ ok: true, health: h });
   }
   const fxm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})\/fix$/);
-  if (fxm && m === 'POST') { const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(fxm[1]).first(); if (!d) throw new HttpErr(404, 'Cliente non trovato'); return json(await fixDevice(env, await getSettings(env), d, who)); }
+  if (fxm && m === 'POST') { const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(fxm[1]).first(); if (!d) throw new HttpErr(404, 'Cliente non trovato'); return json(await fixDevice(env, await getSettings(env), d, who, false, url.searchParams.get('soft') === '1')); }
   const upm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})\/upd$/);
   if (upm && m === 'POST') {
     const d = await env.DB.prepare('SELECT d.id, d.name, d.code, d.app, p.ver FROM devices d LEFT JOIN presence p ON p.device_id = d.id WHERE d.id = ?').bind(upm[1]).first(); if (!d) throw new HttpErr(404, 'Cliente non trovato');
