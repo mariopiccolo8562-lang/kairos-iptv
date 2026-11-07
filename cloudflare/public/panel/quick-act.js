@@ -18,7 +18,7 @@
 .qa-app .b{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}.qa-app .b .inp{margin:0}@media (max-width:560px){.qa-app .b{grid-template-columns:1fr}}
 .qa-ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-size:10.5px;font-weight:800;background:rgba(79,140,255,.2);color:#8fb3ff;flex:none}.qa-ic.mx{background:rgba(251,113,133,.2);color:#fda4af}.qa-ic.kx{background:rgba(34,211,238,.18);color:#67e8f9}.qa-ic.ot{background:#ffffff14;color:var(--mut)}
 .qa-res{display:grid;gap:8px}.qa-res .r{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--line)}.qa-res .r.ok{border-color:rgba(34,197,94,.4)}.qa-res .r.ko{border-color:rgba(255,107,107,.45)}
-.qa-res .r i{font-style:normal;font-size:18px;flex:none}.qa-res .r div{flex:1;min-width:0}.qa-res .r small{display:block;color:var(--mut);word-break:break-word}
+.qa-res .r i{font-style:normal;flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:14px;background:#ffffff14;color:var(--mut)}.qa-res .r.ok i{background:rgba(34,197,94,.2);color:#6ee3a6}.qa-res .r.ko i{background:rgba(255,107,107,.2);color:#ff8b8b}.qa-res .r div{flex:1;min-width:0}.qa-res .r small{display:block;color:var(--mut);word-break:break-word}
 .qa-kv{display:grid;grid-template-columns:auto 1fr auto;gap:6px 12px;align-items:center;font-size:13.5px;margin:10px 0}.qa-kv .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .qa-ft{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px}.qa-ft .sp{flex:1}
 .qa-msg{white-space:pre-wrap;font-size:13px;background:#0b0c1c;border:1px solid var(--line);border-radius:12px;padding:12px;line-height:1.5;max-height:220px;overflow:auto}`;
@@ -37,7 +37,7 @@
   const remembered = () => { try { return JSON.parse(localStorage.getItem(LS) || '[]'); } catch { return []; } };
   const appLinks = () => { const a = isAg() ? D.appLinks : D.settings && D.settings.appLinks; return (Array.isArray(a) ? a : []).map((x) => x && x.name).filter((n) => n && !/maxplayer|orbix/i.test(n)); };
 
-  const S = { step: 1, panel: '', name: '', wolf: null, arm: null, atx: null, apps: new Set(remembered()), o: {}, line: null, res: null, busy: false };
+  const S = { tok: 0, step: 1, panel: '', name: '', wolf: null, arm: null, atx: null, apps: new Set(remembered()), o: {}, line: null, res: null, busy: false };
   const panels = () => [
     ['wolf', 'WOLF', 'Linea con utente e password', can('wolf')],
     ['armada', 'Armada', 'Linea M3U / Xtream', can('armada')],
@@ -53,7 +53,7 @@
 
   async function open(pre) {
     pre = pre || {};
-    Object.assign(S, { step: 1, panel: '', name: '', line: null, res: null, busy: false, o: { months: 12, mode: 'new', code: '', dev: '', orbixId: '', host: '', mxDom: '', oxDns: '0', note: '' } });
+    Object.assign(S, { step: 1, panel: '', name: '', line: null, res: null, busy: false, wolf: null, arm: null, atx: null, mxDoms: null, dns: null, o: { months: 12, mode: 'new', code: '', dev: '', orbixId: '', host: '', mxDom: '', oxDns: '0', note: '' } });
     const ok = panels().filter((p) => p[3]);
     if (!ok.length) return toast('Nessun pannello IPTV disponibile per te', 1);
     S.panel = ok.some((p) => p[0] === pre.panel) ? pre.panel : ok[0][0];
@@ -62,13 +62,14 @@
   }
 
   async function loadPanel() {
-    const p = S.panel;
+    const p = S.panel, tok = ++S.tok;
+    const stale = () => tok !== S.tok;
     try {
-      if (p === 'wolf' && !S.wolf) { const cfg = await api('GET', '/admin/wolf/config'); const pk = cfg.set ? await api('GET', '/admin/wolf/packages') : { packages: [] }; S.wolf = { cfg, pk: pk.packages || [], credits: pk.credits }; if (!S.o.host && cfg.dns) S.o.host = cfg.dns; }
-      if (p === 'armada' && !S.arm) { const st = await api('GET', '/admin/armada/state'); const pk = st.connected ? (await api('GET', '/admin/armada/packages')).packages || [] : []; S.arm = { st, pk }; if (!S.o.host && st.dns) S.o.host = st.dns; }
-      if (p === 'atx' && !S.atx) { const r = await api('GET', '/admin/atx/createform'); S.atx = { fields: r.fields || [] }; }
-    } catch (e) { S[p === 'armada' ? 'arm' : p] = { err: e.message }; }
-    draw();
+      if (p === 'wolf' && !S.wolf) { const cfg = await api('GET', '/admin/wolf/config'); const pk = cfg.set ? await api('GET', '/admin/wolf/packages') : { packages: [] }; if (stale()) return; S.wolf = { cfg, pk: pk.packages || [], credits: pk.credits }; if (!S.o.host && cfg.dns) S.o.host = cfg.dns; }
+      if (p === 'armada' && !S.arm) { const st = await api('GET', '/admin/armada/state'); const pk = st.connected ? (await api('GET', '/admin/armada/packages')).packages || [] : []; if (stale()) return; S.arm = { st, pk }; if (!S.o.host && st.dns) S.o.host = st.dns; }
+      if (p === 'atx' && !S.atx) { const r = await api('GET', '/admin/atx/createform'); if (stale()) return; S.atx = { fields: r.fields || [] }; }
+    } catch (e) { if (!stale()) S[p === 'armada' ? 'arm' : p] = { err: e.message }; }
+    if (!stale()) draw();
   }
   async function loadApps() {
     if (PL().max && can('players') && !S.mxDoms) { try { S.mxDoms = (await api('GET', '/admin/maxplayer/domains')).domains || []; } catch (e) { S.mxDoms = []; S.mxDoms.err = e.message; } draw(); }
@@ -213,10 +214,10 @@
   function step3() {
     const R = S.res, L = S.line, lbl = (k) => APP_NAME[k] || k.replace(/^app:/, '');
     const kv = (k, val) => val ? `<span class="mut">${k}</span><span class="mono" title="${esc(val)}">${esc(val)}</span><button class="btn sm" data-qacp="${esc(val)}">Copia</button>` : '';
-    const lineRow = !R.line ? '<div class="r"><i>⏳</i><div><b>Creo la linea…</b></div></div>'
-      : R.line.ok ? `<div class="r ok"><i>✅</i><div><b>Linea creata su ${esc(L.ref)}</b><div class="qa-kv">${kv('Utente', L.username)}${kv('Password', L.password)}${isAg() ? '' : kv('DNS', L.host)}</div></div></div>`
-      : `<div class="r ko"><i>❌</i><div><b>Linea non creata</b><small>${esc(R.line.msg)}</small></div><button class="btn sm" id="qaBack">Correggi</button></div>`;
-    const apps = R.apps.map((x, i) => `<div class="r ${x.ok === null ? '' : x.ok ? 'ok' : 'ko'}"><i>${x.ok === null ? '⏳' : x.ok ? '✅' : '❌'}</i><div><b>${esc(lbl(x.k))}</b><small>${esc(x.msg || (x.ok === null ? 'In corso…' : ''))}</small></div>${x.ok === false ? `<button class="btn sm" data-qare="${i}">Riprova</button>` : x.ok && x.k === 'kairos' && S.o.mode === 'ex' ? '<button class="btn sm pri" id="qaOpenDev">Apri la scheda</button>' : ''}</div>`).join('');
+    const lineRow = !R.line ? '<div class="r"><i>…</i><div><b>Creo la linea…</b></div></div>'
+      : R.line.ok ? `<div class="r ok"><i>✓</i><div><b>Linea creata su ${esc(L.ref)}</b><div class="qa-kv">${kv('Utente', L.username)}${kv('Password', L.password)}${isAg() ? '' : kv('DNS', L.host)}</div></div></div>`
+      : `<div class="r ko"><i>✕</i><div><b>Linea non creata</b><small>${esc(R.line.msg)}</small></div><button class="btn sm" id="qaBack">Correggi</button></div>`;
+    const apps = R.apps.map((x, i) => `<div class="r ${x.ok === null ? '' : x.ok ? 'ok' : 'ko'}"><i>${x.ok === null ? '…' : x.ok ? '✓' : '✕'}</i><div><b>${esc(lbl(x.k))}</b><small>${esc(x.msg || (x.ok === null ? 'In corso…' : ''))}</small></div>${x.ok === false ? `<button class="btn sm" data-qare="${i}">Riprova</button>` : x.ok && x.k === 'kairos' && S.o.mode === 'ex' ? '<button class="btn sm pri" id="qaOpenDev">Apri la scheda</button>' : ''}</div>`).join('');
     const done = R.line && R.line.ok && R.apps.every((x) => x.ok !== null) && !S.busy;
     return `<div class="qa-res">${lineRow}${apps}</div>
       ${done ? `<details style="margin-top:14px"><summary style="cursor:pointer;font-weight:700;font-size:13.5px">Messaggio per il cliente (WhatsApp)</summary><div class="qa-msg" style="margin-top:8px">${esc(waText())}</div></details>` : ''}
