@@ -117,7 +117,7 @@
     document.querySelectorAll('[data-ox-done]').forEach((t) => delete t.dataset.oxDone);
   }
   /* per la ricerca incrociata nelle schede dei pannelli (xsearch.js): stesse liste, stessa apertura del risultato */
-  window.KXOmni = { find: async (q) => { const toks = String(q || '').toLowerCase().split(/\s+/).filter(Boolean); if (!toks.length) return []; const L = await loadExt(); return L.filter((x) => fits(x.hay, toks)); }, pick: (x) => pick({ ...x, k: 'ext' }), names: Object.fromEntries(PK0.map((k, i) => [k, PN0[i]])) };
+  window.KXOmni = { preload: () => loadExt().catch(() => []), find: async (q) => { const toks = String(q || '').toLowerCase().split(/\s+/).filter(Boolean); if (!toks.length) return []; const L = await loadExt(); return L.filter((x) => fits(x.hay, toks)); }, pick: (x) => pick({ ...x, k: 'ext' }), names: Object.fromEntries(PK0.map((k, i) => [k, PN0[i]])) };
   let tmr = 0;
   gq.addEventListener('input', () => { clearTimeout(tmr); sel = 0; tmr = setTimeout(search, 120); });
   gq.addEventListener('focus', () => { if (gq.value.trim()) search(); });
