@@ -427,6 +427,13 @@ Kairos TV è l'app **nativa** stile Netflix per chiavette datate (veloce come la
 - **Impostazioni → App e aggiornamenti → Kairos TV**: link dell'APK (vuoto = ultima release di `kairos-tv`), codice Downloader e versione pubblicata. Il codice Downloader compare anche in alto.
 - **Aggiornamenti**: Kairos TV riceve solo il proprio APK e non scarica l'interfaccia della Pro (la sua è dentro l'APK).
 
+## 26. Modifica in massa, Home dal pannello, permessi «modalità leggera» e «risoluzione e FPS»
+
+- **Clienti → «⚙ Modifica in massa»** (solo titolare): in alto vale per *tutti i clienti attivi* o *tutti* (esclusi quelli da attivare); in vista **Tabella**, dalla barra della selezione, solo per i clienti scelti. Si cambiano insieme: lettore di diretta, film e serie (ExoPlayer, VLC, automatico o «lo sceglie il cliente»), permessi, VPN, visioni contemporanee, e si tolgono le impostazioni del Controllo remoto imposte solo a loro. Le voci su «Non cambiare» restano come sono; le app si riallineano al battito successivo. Endpoint: `POST /api/admin/devices/mass` `{ scope: 'ids'|'active'|'all', ids?, player?, perms?, vpn?, maxStreams?, rcClear? }`.
+- **Controllo remoto → «Home dei clienti · tutte le app»**: *categorie in primo piano* (`home.top`) e *categorie nascoste dalla Home* (`home.hide`), nomi o parti di nome separati da virgola (maiuscole e accenti non contano; pulsante «＋ categorie per adulti»). Si salvano per tutte le app insieme (`PUT /api/admin/rctl/all`) e si possono poi cambiare per una sola app (profilo) o per un singolo cliente. Nelle app: quelle in primo piano compaiono per prime nella Home e in cima agli elenchi; quelle nascoste spariscono dalla Home (anche dalle righe automatiche) e negli elenchi restano in fondo.
+- **Permessi per cliente** nuovi: *Cambiare la modalità leggera* (`lite`: se spento la decide il pannello o resta automatica) e *Vedere risoluzione e FPS* (`resInd`: riquadro in alto a destra all'apertura di un canale e a ogni cambio di risoluzione).
+- **Presenza**: le app mandano `vis:false` quando vanno in sfondo e risultano subito non in linea (prima restavano «online» fino a 4 minuti); quel battito non conta per il limite dei 15 secondi.
+
 ## Struttura
 
 ```
