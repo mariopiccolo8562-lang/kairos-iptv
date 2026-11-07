@@ -40,7 +40,7 @@
       const i = all.indexOf(r);
       const head = `<div><b style="font-size:15px">${esc(r.username)}</b> ${btn('cu', i, 'Copia')}<div class="mono" style="font-size:13px;margin-top:4px">${r.password ? esc(r.password) + ' ' + btn('cp', i, 'Copia') : mut}</div></div><div>${lineState(r)}</div>`;
       const kv = [KV('Scadenza', day(r.exp, r.expTxt)), KV('Conn.', r.max ? `${r.conns}/${r.max}` : String(r.conns ?? '—')), r.type ? KV('Pacchetto', esc(r.type)) : '', r.owner ? KV('Reseller', esc(r.owner)) : '', r.notes ? KV('Note', esc(r.notes)) : '', r.stream ? KV('Ultima visione', esc(r.stream) + (r.last ? ' · ' + esc(r.last) : '')) : ''].filter(Boolean);
-      const acts = [btn('renew', i, 'Rinnova'), btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', btn('mxp', i, 'MaxPlayer'), btn('oxp', i, 'OrbixPlay'), btn('del', i, 'Elimina', 'style="color:#ff8f8f"')].filter(Boolean).join('');
+      const acts = [btn('renew', i, 'Rinnova'), btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', btn('mxp', i, 'MaxPlayer'), btn('oxp', i, 'OrbixPlay'), window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : '', btn('del', i, 'Elimina', 'style="color:#ff8f8f"')].filter(Boolean).join('');
       return card(head, kv, acts);
     }).join('') || '<p class="mut" style="margin:14px 0">Niente da mostrare.</p>';
   }
@@ -51,7 +51,7 @@
     const all = ST[k].data.rows;
     return grid(['Utente', 'Password', 'Stato', 'Scadenza', 'Conn.', 'Pacchetto', 'Reseller', 'Note', ''], rows.map((r) => {
       const i = all.indexOf(r);
-      const acts = [btn('renew', i, 'Rinnova'), btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', btn('mxp', i, 'MaxPlayer'), btn('oxp', i, 'OrbixPlay'), btn('del', i, 'Elimina', 'style="color:#ff8f8f"')].filter(Boolean).join(' ');
+      const acts = [btn('renew', i, 'Rinnova'), btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', btn('mxp', i, 'MaxPlayer'), btn('oxp', i, 'OrbixPlay'), window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : '', btn('del', i, 'Elimina', 'style="color:#ff8f8f"')].filter(Boolean).join(' ');
       return tr([`<b>${esc(r.username)}</b> ${btn('cu', i, 'Copia')}${r.ip ? `<br><span class="mut" style="font-size:11.5px">${esc(r.stream || '')}${r.last ? ' · ' + esc(r.last) : ''}</span>` : ''}`, r.password ? `<span class="mono">${esc(r.password)}</span> ${btn('cp', i, 'Copia')}` : mut, lineState(r), day(r.exp, r.expTxt), r.max ? `${r.conns}/${r.max}` : String(r.conns ?? '—'), esc(r.type || '—'), esc(r.owner || '—'), r.notes ? esc(r.notes) : mut, `<div style="display:flex;gap:4px;flex-wrap:wrap">${acts}</div>`]);
     }));
   }
@@ -134,6 +134,7 @@
       if (a === 'cu') return copy(r.username, 'Utente');
       if (a === 'cp') return copy(r.password, 'Password');
       if (a === 'm3u') return copy(m3u(A.data.dns, r), 'Link M3U');
+      if (a === 'orcp') return KXOrcpNew({ user: r.username, pass: r.password, name: r.username, note: P.name + (r.id ? ' #' + r.id : ''), panel: k });
       if (a === 'mxp' || a === 'oxp') { const pre = { user: r.username, pass: r.password, name: r.username, note: P.name + (r.id ? ' #' + r.id : '') }; return a === 'mxp' ? KXMxpNew(pre) : KXOxpNew(pre); }
       if (a === 'renew') {
         if (!A.pk) A.pk = (await api('GET', `/admin/${k}/packages`)).packages || [];

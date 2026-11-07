@@ -34,7 +34,8 @@
   const v = (id) => { const e = $('#' + id); return e ? (e.type === 'checkbox' ? e.checked : e.value) : ''; };
   const copy = (t, w) => navigator.clipboard.writeText(t).then(() => toast(w + ' copiato'), () => toast('Copia non consentita dal browser', 1));
   const SUBS = [[1, '1 mese'], [3, '3 mesi'], [6, '6 mesi'], [12, '12 mesi'], [0, 'Prova']];
-  const APP_NAME = { max: 'MaxPlayer', orbix: 'OrbixPlay', kairos: 'Cliente Kairos' };
+  const APP_NAME = { max: 'MaxPlayer', orbix: 'OrbixPlay', kairos: 'Cliente Kairos', orcp: 'App ORCP' };
+  const orcpName = () => (S.orcp && S.orcp.name) || (window.KXOrcpName ? KXOrcpName() : APP_NAME.orcp);
   const LS = 'kx.qa.apps';
   const remembered = () => { try { return JSON.parse(localStorage.getItem(LS) || '[]'); } catch { return []; } };
   const appLinks = () => { const a = isAg() ? D.appLinks : D.settings && D.settings.appLinks; return (Array.isArray(a) ? a : []).map((x) => x && x.name).filter((n) => n && !/maxplayer|orbix/i.test(n)); };
@@ -62,7 +63,7 @@
     const ok = panels().filter((p) => p[3]);
     if (!ok.length) return toast('Nessun pannello IPTV disponibile per te', 1);
     S.panel = ok.some((p) => p[0] === pre.panel) ? pre.panel : ok[0][0];
-    const allowed = (k) => k === 'max' ? !!PL().max && can('players') : k === 'orbix' ? !!PL().orbix && can('players') : k === 'kairos' ? can('create') : k.startsWith('app:') ? can('lines') && appLinks().includes(k.slice(4)) : false;
+    const allowed = (k) => k === 'max' ? !!PL().max && can('players') : k === 'orbix' ? !!PL().orbix && can('players') : k === 'kairos' ? can('create') : k === 'orcp' ? !isAg() && !!S.orcp : k.startsWith('app:') ? can('lines') && appLinks().includes(k.slice(4)) : false;
     S.apps = new Set(remembered().filter(allowed));
     overlay().classList.add('on');
     draw(); loadPanel();
@@ -81,6 +82,7 @@
   async function loadApps() {
     if (PL().max && can('players') && !S.mxDoms) { try { S.mxDoms = (await api('GET', '/admin/maxplayer/domains')).domains || []; } catch (e) { S.mxDoms = []; S.mxDoms.err = e.message; } draw(); }
     if (!isAg() && !S.dns) { try { S.dns = (await api('GET', '/admin/dns')).saved || []; } catch { S.dns = []; } draw(); }
+    if (!isAg() && S.orcp === undefined && window.KXOrcpCfg) { S.orcp = null; try { S.orcp = await KXOrcpCfg(); } catch { S.orcp = null; } if (S.orcp && S.apps.has('orcp') === false && remembered().includes('orcp')) S.apps.add('orcp'); draw(); }
   }
 
   /* ---------- passo 1: pannello e linea ---------- */
@@ -134,6 +136,7 @@
     const oxd = (PL().dns || {}).orbix || [];
     const ox = card('orbix', 'op', 'OrbixPlay', 'Carica la lista sul dispositivo del cliente', `<label class="l">ID del dispositivo (dall\'app OrbixPlay)<input class="inp mono" id="qaOxI" data-mac maxlength="64" autocomplete="off" value="${esc(S.o.orbixId)}" placeholder="es. 00:1A:79:AA:BB:CC"></label>
       <label class="l">DNS di OrbixPlay${oxd.length ? `<select class="inp" id="qaOxD">${oxd.map((x, i) => `<option value="${i}"${String(i) === String(S.o.oxDns) ? ' selected' : ''}>${esc(x.name)}${x.host && !isAg() ? ' — ' + esc(String(x.host).replace(/^https?:\/\//, '')) : ''}</option>`).join('')}</select>` : '<small class="mut">Nessun DNS di OrbixPlay impostato</small>'}</label>`, oxOk, isAg() ? 'Serve il permesso «Attivare OrbixPlay e MaxPlayer»' : 'OrbixPlay non è collegato');
+    const orc = S.orcp ? card('orcp', 'ot', orcpName(), "Il cliente apre l'app, sceglie il server e scrive utente e password della linea", `<label class="l" style="grid-column:1/-1">Server che il cliente sceglie nell'app<select class="inp" id="qaOrS">${(S.orcp.servers || []).map((x) => `<option${(S.o.orcpSrv || S.orcp.map[S.panel] || S.orcp.servers[0]) === x ? ' selected' : ''}>${esc(x)}</option>`).join('') || `<option value="">(nessun server: impostali nel Pannello ${esc(orcpName())})</option>`}</select></label>`, true, '') : '';
     const hostField = () => isAg()
       ? `<label class="l">Server della linea${srvList().length ? `<select class="inp" id="qaH">${srvList().map((x) => `<option value="${esc(x.id)}"${x.id === S.o.srv ? ' selected' : ''}>${esc(x.name || 'Server')}</option>`).join('')}</select>` : '<small class="mut">Nessun server assegnato: chiedi a chi ti gestisce</small>'}</label>`
       : `<label class="l">DNS della linea<input class="inp mono" id="qaH" list="qaHL" value="${esc(S.o.host)}" placeholder="${S.panel === 'armada' ? 'lo dà Armada alla creazione' : 'http://dns.esempio.com:8080'}"><datalist id="qaHL">${(S.dns || []).map((x) => `<option value="${esc(x.host)}">${esc(x.name || '')}</option>`).join('')}</datalist></label>`;
@@ -145,13 +148,14 @@
     const ot = others.length ? `<div class="qa-app${others.some((n) => on('app:' + n)) ? ' on' : ''}"><div class="h" style="cursor:default"><span class="qa-ic ot">APP</span><b>Altre app</b><small>${can('lines') ? 'Si segnano in «Appunti App» con i dati della linea' : 'Serve il permesso «Appunti App»'}</small></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${others.map((n) => `<label class="btn sm${on('app:' + n) ? ' pri' : ''}" style="cursor:pointer"><input type="checkbox" data-qaapp="app:${esc(n)}"${on('app:' + n) ? ' checked' : ''}${can('lines') ? '' : ' disabled'} style="display:none">${esc(n)}</label>`).join('')}</div>
       ${others.some((n) => on('app:' + n)) && !S.apps.has('kairos') ? `<div class="b">${hostField()}</div>` : ''}</div>` : '';
-    return `<p class="mut" style="margin:0 0 12px;font-size:13px">La linea <b>${esc(S.panel === 'wolf' ? 'WOLF' : S.panel === 'armada' ? 'Armada' : FX[S.panel] || S.panel)}</b>${S.name ? ' per <b>' + esc(S.name) + '</b>' : ''} va su: (puoi sceglierne più di una)</p>${mx}${ox}${kx}${ot}
+    return `<p class="mut" style="margin:0 0 12px;font-size:13px">La linea <b>${esc(S.panel === 'wolf' ? 'WOLF' : S.panel === 'armada' ? 'Armada' : FX[S.panel] || S.panel)}</b>${S.name ? ' per <b>' + esc(S.name) + '</b>' : ''} va su: (puoi sceglierne più di una)</p>${mx}${ox}${orc}${kx}${ot}
       <div class="qa-ft"><button class="btn" id="qaBack">← Indietro</button><span class="sp"></span><button class="btn qa-red" id="qaGo">⚡ Crea e attiva${S.apps.size ? ' (' + S.apps.size + ')' : ''}</button></div>`;
   }
   function read2() {
     const g = (id) => ($('#' + id) ? $('#' + id).value : undefined);
     if (g('qaMxD') !== undefined) S.o.mxDom = g('qaMxD');
     if (g('qaOxI') !== undefined) S.o.orbixId = g('qaOxI').trim();
+    if (g('qaOrS') !== undefined) S.o.orcpSrv = g('qaOrS');
     if (g('qaOxD') !== undefined) S.o.oxDns = g('qaOxD');
     if (g('qaMode') !== undefined) S.o.mode = g('qaMode');
     if (g('qaCode') !== undefined) S.o.code = g('qaCode').trim().toUpperCase();
@@ -183,6 +187,7 @@
     const L = S.line, name = S.name || L.username;
     if (k === 'max') { const r = await api('POST', '/admin/ext-lists', { app: 'max', name, username: L.username, password: L.password, domain: S.o.mxDom, note: L.ref }); return `Account creato${r.dns ? ' · DNS ' + r.dns : ''}: il cliente entra in MaxPlayer con utente e password della linea`; }
     if (k === 'orbix') { const r = await api('POST', '/admin/ext-lists', { app: 'orbix', name, orbixId: S.o.orbixId, username: L.username, password: L.password, dns: +S.o.oxDns || 0, note: L.ref }); return `Lista caricata sul dispositivo ${r.ref || S.o.orbixId}${r.dns ? ' · DNS ' + r.dns : ''}`; }
+    if (k === 'orcp') { const srv = S.o.orcpSrv || (S.orcp && (S.orcp.map[S.panel] || (S.orcp.servers || [])[0])) || ''; await api('POST', '/admin/linked-lines', { app: orcpName(), username: L.username, password: L.password, dns: '', note: [name !== L.username ? name : '', L.ref, srv ? 'Server ' + srv : ''].filter(Boolean).join(' · ') }); S.o.orcpSrvUsed = srv; return `Segnata in Appunti App${srv ? ' · il cliente sceglie «' + srv + '» nell\'app' : ''}`; }
     if (k === 'kairos') {
       const plName = L.ref.split(' ')[0] || 'Linea';
       // agente: solo il server assegnato (serverId), mai il DNS; titolare: host della linea
@@ -226,13 +231,14 @@
       if (k === 'max') out.push('• MaxPlayer: apri l\'app ed entra con utente e password qui sopra.');
       if (k === 'orbix') out.push(`• OrbixPlay: la lista è già caricata sul tuo dispositivo (${S.o.orbixId}). Apri l'app e basta.`);
       if (k === 'kairos') out.push(S.o.mode === 'new' ? `• App Kairos: all'avvio scrivi il codice ${S.o.newCode || S.o.code || 'che vedi sulla TV'}.` : '• App Kairos: la nuova linea è nel tuo abbonamento.');
+      if (k === 'orcp') out.push(`• ${orcpName()}: apri l'app, scegli il server «${S.o.orcpSrvUsed || 'indicato'}» ed entra con utente e password qui sopra.`);
       if (k.startsWith('app:')) out.push(`• ${k.slice(4)}: carica la lista con utente e password qui sopra.`);
     }
     out.push('', 'Buona visione!');
     return out.join('\n');
   }
   function step3() {
-    const R = S.res, L = S.line, lbl = (k) => APP_NAME[k] || k.replace(/^app:/, '');
+    const R = S.res, L = S.line, lbl = (k) => k === 'orcp' ? orcpName() : APP_NAME[k] || k.replace(/^app:/, '');
     const kv = (k, val) => val ? `<span class="mut">${k}</span><span class="mono" title="${esc(val)}">${esc(val)}</span><button class="btn sm" data-qacp="${esc(val)}">Copia</button>` : '';
     const lineRow = !R.line ? '<div class="r"><i>…</i><div><b>Creo la linea…</b></div></div>'
       : R.line.ok ? `<div class="r ok"><i>✓</i><div><b>Linea creata su ${esc(L.ref)}</b><div class="qa-kv">${kv('Utente', L.username)}${kv('Password', L.password)}${isAg() ? '' : kv('DNS', L.host)}</div></div></div>`
