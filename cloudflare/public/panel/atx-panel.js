@@ -39,7 +39,7 @@
       r.channel || r.ip ? `${r.channel ? `<b>${esc(r.channel)}</b>` : ''}<div class="mut" style="font-size:11.5px">${esc([r.country, r.ip].filter(Boolean).join(' · '))}</div>` : mut,
       r.reseller ? esc(r.reseller) : mut,
       `<button class="btn sm" data-a="note" data-i="${i}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.notes ? esc(r.notes) : '+ nota'}</button>`,
-      `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('renew', i, 'Rinnova')}${Number(r.enabled) === 0 ? btn('on', i, 'Attiva') : btn('off', i, 'Disattiva')}${m3u(r) ? btn('m3u', i, 'M3U') : ''}${window.KXMxpNew ? btn('mxp', i, 'MaxPlayer') : ''}${window.KXOxpNew ? btn('oxp', i, 'OrbixPlay') : ''}${window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : ''}${btn('del', i, 'Elimina', 'style="color:#ff8f8f"')}</div>`
+      `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('edit', i, 'Modifica')}${btn('renew', i, 'Rinnova')}${Number(r.enabled) === 0 ? btn('on', i, 'Attiva') : btn('off', i, 'Disattiva')}${m3u(r) ? btn('m3u', i, 'M3U') : ''}${window.KXMxpNew ? btn('mxp', i, 'MaxPlayer') : ''}${window.KXOxpNew ? btn('oxp', i, 'OrbixPlay') : ''}${window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : ''}${btn('del', i, 'Elimina', 'style="color:#ff8f8f"')}</div>`
     ])));
   }
   function subsHtml(rows) {
@@ -164,6 +164,10 @@
         toast(`${u} rinnovata di ${months} ${months === 1 ? 'mese' : 'mesi'}`); return load();
       }
       if (a === 'on' || a === 'off') { const en = a === 'on'; if (!(await ask((en ? 'Attivare ' : 'Disattivare ') + u + '?', `La linea ${U} viene ${en ? 'attivata' : 'disattivata'} subito su Atlantix.`, en ? 'Attiva' : 'Disattiva'))) return; return await lineAct({ action: 'toggle', user_id: r.id, enabled: en }, `${u} ${en ? 'attivata' : 'disattivata'}`); }
+      if (a === 'edit') {
+        if (!(await ask('Modifica ' + u, `<p class="mut" style="font-size:12.5px;margin:0 0 8px">Utente <b class="mono">${esc(r.username || '')}</b> · password <b class="mono">${esc(r.password || '—')}</b>. Atlantix non permette di cambiarli dal pannello reseller: puoi modificare la nota.</p><label>Nota (nome del cliente, telefono…)<textarea class="inp" id="axN" rows="3" maxlength="300">${esc(r.notes || '')}</textarea></label>`, 'Salva'))) return;
+        return await lineAct({ action: 'save_notes', user_id: r.id, notes: $('#axN').value }, `${u} modificata`);
+      }
       if (a === 'note') { if (!(await ask('Nota di ' + u, `<textarea class="inp" id="axN" rows="3" maxlength="300">${esc(r.notes || '')}</textarea>`, 'Salva'))) return; return await lineAct({ action: 'save_notes', user_id: r.id, notes: $('#axN').value }, 'Nota salvata'); }
       if (a === 'del') { if (!(await ask('Eliminare ' + u + '?', `<p>La linea <b>${U}</b> viene <b>eliminata definitivamente</b> da Atlantix. Non si può annullare.</p>`, 'Elimina'))) return; return await lineAct({ action: 'delete', user_id: r.id }, `${u} eliminata`); }
       if (a === 'kill') { if (!(await ask('Disconnettere ' + u + '?', `Chiude la connessione su ${esc(r.channel || 'questo canale')}.`, 'Disconnetti'))) return; await api('POST', '/admin/atx/conns/kill', { activity_id: r.activity_id }); toast('Disconnesso'); return load(); }
