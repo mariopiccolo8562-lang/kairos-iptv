@@ -805,6 +805,20 @@ const llAutoOff = (env, d, src) => env.DB.prepare('DELETE FROM linked_lines WHER
 async function linkedLinesRoutes(req, env, path, who, ip, ag) {
   const m = req.method;
   const sel = 'SELECT l.*, d.name AS dname, d.code AS dcode FROM linked_lines l LEFT JOIN devices d ON d.id = l.device_id';
+  /* ---------- note KAIROS sulle linee dei pannelli senza campo nota (Armada, MirkoTeam, MaxPlayer, OrbixPlay) ---------- */
+  if (path === '/line-notes' && m === 'GET') {
+    const panel = str(new URL(req.url).searchParams.get('panel'), 20).toLowerCase(); if (!/^[a-z]{2,10}$/.test(panel)) throw new HttpErr(400, 'Pannello non valido');
+    const rows = ((await env.DB.prepare('SELECT ref, note, updated FROM line_notes WHERE panel = ? AND note <> ? LIMIT 5000').bind(panel, '').all()).results) || [];
+    const notes = {}; for (const r of rows) notes[r.ref] = r.note; return json({ notes });
+  }
+  if (path === '/line-notes' && m === 'PUT') {
+    const b = await readJSON(req, 2048), panel = str(b.panel, 20).toLowerCase(), ref = str(b.ref, 120).trim().toLowerCase(), note = str(b.note, 300).trim();
+    if (!/^[a-z]{2,10}$/.test(panel) || !ref) throw new HttpErr(400, 'Linea non valida');
+    if (!note) await env.DB.prepare('DELETE FROM line_notes WHERE panel = ? AND ref = ?').bind(panel, ref).run();
+    else await env.DB.prepare('INSERT INTO line_notes (panel, ref, note, owner_id, updated) VALUES (?, ?, ?, ?, ?) ON CONFLICT(panel, ref) DO UPDATE SET note = excluded.note, owner_id = excluded.owner_id, updated = excluded.updated').bind(panel, ref, note, ag ? ag.id : 0, now()).run();
+    await log(env, 'edit', `${who}: nota ${note ? 'salvata' : 'tolta'} sulla linea ${ref} (${panel})`, ip).catch(() => {});
+    return json({ ok: true, note });
+  }
   if (path === '/linked-lines' && m === 'GET') {
     let rows = [];
     if (!ag) rows = ((await env.DB.prepare(sel + ' ORDER BY l.updated DESC LIMIT 5000').all()).results) || [];
@@ -3722,6 +3736,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   // «Online ora» e «Salute delle app» sono del titolare: mostrano tutti i clienti del pannello (totali, più visti, app da aggiornare)
   if ((path === '/presence' || path === '/health') && m === 'GET') throw new HttpErr(403, '«Online ora» è riservata al titolare');
   // Linee collegate: solo le sue (e dei sotto-agenti, se li vede); gli host delle attivazioni automatiche restano nascosti
+  if (path === '/line-notes') { const r = await linkedLinesRoutes(req, env, path, who, ip, { id: A.id, tree: ctree }); if (r) return r; } // note KAIROS sulle linee (Armada, MirkoTeam, MaxPlayer, OrbixPlay)
   if (path === '/linked-lines' || path.startsWith('/linked-lines/')) { need('lines', 'Non puoi usare le linee collegate'); const r = await linkedLinesRoutes(req, env, path, who, ip, { id: A.id, tree: ctree, hideHosts: !((await getSettings(env)).playersCfg || {}).showDnsAgents }); if (r) return r; throw new HttpErr(404, 'Non trovato'); }
   // Errori dell'applicazione
   if (path === '/app-errors' && m === 'GET') {
@@ -4330,7 +4345,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path === '/requests' || path.startsWith('/requests/')) { const r = await adminRequests(req, env, path, url, who, ip); if (r) return r; }
   if (path === '/app-errors' || path.startsWith('/app-errors/')) { const r = await adminErrors(req, env, path, url, who, ip); if (r) return r; }
   // password delle linee e crediti Armada: solo dal pannello (mai dalle chiavi API di integrazione)
-  if (path === '/linked-lines' || path.startsWith('/linked-lines/')) { if (!ses) throw new HttpErr(403, 'Funzione disponibile solo dal pannello'); const r = await linkedLinesRoutes(req, env, path, who, ip, null); if (r) return r; }
+  if (path === '/linked-lines' || path.startsWith('/linked-lines/') || path === '/line-notes') { if (!ses) throw new HttpErr(403, 'Funzione disponibile solo dal pannello'); const r = await linkedLinesRoutes(req, env, path, who, ip, null); if (r) return r; }
   if (path.startsWith('/armada/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Armada è riservato al titolare, dal pannello'); const r = await armadaRoutes(req, env, url, path, who, ip); if (r) return r; }
 
   /* ---------- DNS (server delle playlist) ---------- */
