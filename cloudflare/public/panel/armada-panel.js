@@ -88,7 +88,7 @@
     const bd = (A.st && A.st.budget) || null, subs = bd && !bd.trial ? SUBS.filter(([v]) => v) : SUBS;
     if (bd && !bd.trial && f.sub === 0) f.sub = 1;
     const noCr = bd && !bd.left && !bd.trial ? '<p class="mut" style="margin:0 0 12px">⚠️ Questo mese non hai più crediti Armada: chiedi a chi ti gestisce di aumentarli.</p>' : '';
-    return `<div class="card glass"><div class="hd"><h3>Nuova linea<small>${bd ? 'Si crea su Armada con i crediti di chi ti gestisce (entro il tuo tetto del mese).' : 'Si crea su Armada con i tuoi crediti.'} Poi la aggiungi a un cliente${bd ? '' : ' o la registri in «Appunti App»'}.</small></h3></div>${noCr}
+    return `<div class="card glass"><div class="hd"><h3>Nuova linea<small>${bd ? 'Si crea su Armada con i crediti di chi ti gestisce (entro il tuo tetto del mese).' : 'Si crea su Armada con i tuoi crediti.'} Poi la aggiungi a un cliente${bd ? '' : ' o la registri in «Appunti App»'}.</small></h3>${window.KXQuick ? KXQuick.button('armada') : ''}</div>${noCr}
       <div class="ar-f">
         <label>Tipo<div class="ar-ch" id="arType"><button type="button" data-t="m3u" class="${f.type === 'm3u' ? 'on' : ''}">Linea M3U / Xtream</button><button type="button" data-t="mag" class="${f.type === 'mag' ? 'on' : ''}">MAG</button></div></label>
         <label style="grid-column:span 2">Durata<div class="ar-ch" id="arSub">${subs.map(([v, l]) => `<button type="button" data-s="${v}" class="${+f.sub === v ? 'on' : ''}">${l}</button>`).join('')}${+f.sub === 0 ? `<select class="inp" id="arH" style="width:auto;padding:5px 8px">${Array.from({ length: 24 }, (_, i) => i + 1).map((h) => `<option value="${h}" ${+f.htime === h ? 'selected' : ''}>${h} ${h === 1 ? 'ora' : 'ore'}</option>`).join('')}</select>` : ''}</div></label>

@@ -84,7 +84,7 @@
     if (A.tab === 'overview' || A.tab === 'conns') return '';
     const st = A.tab === 'lines' ? `<select class="inp" id="axS" style="max-width:160px">${[['', 'Tutti gli stati'], ['active', 'Attive'], ['expiring', 'In scadenza'], ['expired', 'Scadute'], ['disabled', 'Disattivate'], ['trial', 'Prove'], ['online', 'Online']].map(([v, t]) => `<option value="${v}"${A.status === v ? ' selected' : ''}>${t}</option>`).join('')}</select>` : '';
     const rs = A.tab === 'lines' && A.resellers.length ? `<select class="inp" id="axR" style="max-width:180px"><option value="">Tutti i reseller</option>${A.resellers.map((r) => `<option value="${esc(String(r.id))}"${String(A.reseller) === String(r.id) ? ' selected' : ''}>${esc(r.username || '#' + r.id)}</option>`).join('')}</select>` : '';
-    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto">${st}${rs}<input class="inp" id="axQ" placeholder="Cerca utente…" value="${esc(A.q)}" style="max-width:200px">${A.tab === 'lines' ? '<button class="btn pri sm" data-o="new">+ Nuova linea</button>' : ''}</div>`;
+    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto">${st}${rs}<input class="inp" id="axQ" placeholder="Cerca utente…" value="${esc(A.q)}" style="max-width:200px">${A.tab === 'lines' ? '<button class="btn pri sm" data-o="new">+ Nuova linea</button>' + (window.KXQuick ? KXQuick.button('atx') : '') : ''}</div>`;
   }
   function render() {
     const V = $('#v-atx'); if (!V) return;
