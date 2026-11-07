@@ -2117,6 +2117,9 @@ const RC_CAT = [
   ['o.startScr', 'Schermata iniziale', 'sel', [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta'], ['guide', 'Guida TV'], ['lastch', 'Ultimo canale guardato']], KPRO, '', '', 'Generale'],
   ['o.orient', 'Layout su telefoni e tablet', 'sel', [['auto', 'Automatico'], ['land', 'Sempre orizzontale']], KPRO, 'Sulle TV non cambia nulla', '', 'Generale'],
   ['tvmode', 'Modalità TV', 'sel', [['on', 'Attiva: interfaccia per telecomando'], ['off', 'Spenta']], ['nova'], '', '', 'Generale'],
+  /* ---- Home: tipo «txt» = elenco di nomi (o parti di nome) di categorie separati da virgola ---- */
+  ['home.top', 'Categorie in primo piano', 'txt', [], RC_APPS, 'Nomi (anche solo una parte) delle categorie da mettere per prime, separati da virgola e nell\'ordine che vuoi. Es.: Sport, Prime Video, Netflix. Valgono per la Home e per gli elenchi di Film, Serie e canali', '', 'Home'],
+  ['home.hide', 'Categorie nascoste dalla Home', 'txt', [], RC_APPS, 'Nomi (anche solo una parte) delle categorie da non mostrare nella Home, separati da virgola. Es.: adult, xxx, 18+. Negli elenchi di Film, Serie e canali restano in fondo (con il PIN se bloccate)', '', 'Home'],
   /* ---- Aggiornamenti ---- */
   ['bgupd', 'Aggiornamenti in background', 'sel', [['on', 'Sì: scarica da sola, poi chiede solo «Installa»'], ['off', 'No: scarica solo quando il cliente accetta']], RC_APPS, 'Con «Sì» l\'app scarica e verifica da sola la versione nuova (su Wi-Fi o cavo, mai durante la visione): al cliente resta un solo tasto', '', 'Aggiornamenti'],
   ['force', 'Aggiornamento obbligatorio', 'sel', [['off', 'No: il cliente può rimandare'], ['7d', 'Dopo 7 giorni dal primo avviso'], ['3d', 'Dopo 3 giorni dal primo avviso'], ['now', 'Subito']], RC_APPS, 'Scaduto il termine l\'app si apre solo dopo aver installato la versione nuova. Blocca soltanto se l\'APK è già scaricato e verificato sul dispositivo, mai per un problema di rete', 'No: il cliente può rimandare', 'Aggiornamenti'],
@@ -2164,6 +2167,15 @@ const RC_CMDS = [
   ['exit', 'Chiudi l\'app', 'L\'app si chiude; il cliente la riapre quando vuole', RC_LINKED],
 ];
 const rcCatByKey = new Map(RC_CAT.map((x) => [x[0], x]));
+/** voce di tipo «txt»: elenco di nomi separati da virgola (o righe), senza doppioni, al massimo 20 da 40 caratteri; null = non valido */
+const RC_TXT_MAX = 20;
+function rcTxt(v) {
+  if (typeof v !== 'string' && !Array.isArray(v)) return null;
+  const parts = (Array.isArray(v) ? v.map(String) : String(v).split(/[,;\n]+/)).map((x) => x.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)).filter(Boolean);
+  const seen = new Set(), out = [];
+  for (const p of parts) { const k = p.toLowerCase(); if (seen.has(k)) continue; seen.add(k); out.push(p); if (out.length >= RC_TXT_MAX) break; }
+  return out.join(', ');
+}
 /** oggetto di configurazione pulito: solo chiavi e valori del catalogo (per l'app indicata, o per tutte) */
 function rcClean(src, app) {
   let o = src; if (typeof src === 'string') { try { o = src ? JSON.parse(src) : {}; } catch { o = {}; } }
@@ -2173,6 +2185,7 @@ function rcClean(src, app) {
     const c = rcCatByKey.get(k); if (!c) continue;
     if (v === '' || v === null || v === undefined) continue;
     if (app && !c[4].includes(app)) continue;
+    if (c[2] === 'txt') { const t = rcTxt(v); if (t === null) throw new HttpErr(400, `${c[1]}: valore non valido`); if (t) out[k] = t; continue; }
     const ok = c[3].find((x) => x[0] === v || String(x[0]) === String(v));
     if (!ok) throw new HttpErr(400, `${c[1]}: valore non valido`);
     out[k] = ok[0];
@@ -4151,6 +4164,21 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       await settingsPatch(env, { rcApp: { ...rcProfiles(s0), [pa[1]]: rc } });
       await log(env, 'settings', `${who}: controllo remoto — profilo ${APP_NAME[pa[1]]} aggiornato (${Object.keys(rc).length} impostazioni imposte)`, ip);
       return json({ ok: true, rc });
+    }
+    // stesse voci a tutte le app (es. la Home): '' toglie la voce; le app che non la capiscono restano come sono
+    if (path === '/rctl/all' && m === 'PUT') {
+      const b = await readJSON(req, 8192), src = b.rc && typeof b.rc === 'object' && !Array.isArray(b.rc) ? b.rc : {};
+      const keys = Object.keys(src).filter((k) => rcCatByKey.has(k));
+      if (!keys.length) throw new HttpErr(400, 'Niente da salvare');
+      const prof = rcProfiles(s0);
+      for (const a of RC_APPS) {
+        const cur = { ...(prof[a] || {}) };
+        for (const k of keys) { if (!rcCatByKey.get(k)[4].includes(a)) continue; const v = src[k]; if (v === '' || v === null || v === undefined) delete cur[k]; else cur[k] = v; }
+        prof[a] = rcClean(cur, a);
+      }
+      await settingsPatch(env, { rcApp: prof });
+      await log(env, 'settings', `${who}: controllo remoto — ${keys.map((k) => rcCatByKey.get(k)[1]).join(', ')} per tutte le app`, ip);
+      return json({ ok: true, apps: prof });
     }
     const pd = path.match(/^\/rctl\/device\/([A-Za-z0-9_-]{6,20})$/);
     if (pd && m === 'PUT') {
