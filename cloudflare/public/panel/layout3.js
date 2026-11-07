@@ -51,7 +51,7 @@
     lmap: 'App dei clienti', lines: 'Appunti App', dns: 'DNS e server', armada: 'Pannello Armada', wolf: 'Pannello WOLF', mxp: 'Pannello MaxPlayer', oxp: 'Pannello OrbixPlay',
     apps3: 'Link di attivazione', apps3op: 'OrbixPlay e MaxPlayer', xlist: 'Attivazione Max/Orbix', dlc: 'Codici downloader', appk: 'App Kairos', agop: 'OrbixPlay e MaxPlayer', agk: 'App Kairos',
     store: 'App da approvare', reports: 'Segnalazioni', creq: 'Contenuti richiesti', areq: 'Temi richiesti', reqai: 'Domande all\'IA',
-    live: 'Online ora', rctl: 'Controllo remoto', apperr: 'Errori delle app', activity: 'Registro attività', trash: 'Cestino',
+    live: 'Online ora Kairos', rctl: 'Controllo remoto', apperr: 'Errori delle app', activity: 'Registro attività', trash: 'Cestino',
     'set-look': 'Aspetto e marchio', 'set-app': 'Funzioni dell\'app', 'set-addon': 'Store add-on', 'set-ai': 'Assistente IA', 'set-maint': 'Manutenzione', 'set-sec': 'Sicurezza e account', api: 'API e integrazioni',
   };
   const PAL = ['#4f8cff', '#a78bfa', '#2dd4bf', '#f5b041', '#fb7185', '#34d399', '#fb923c', '#38bdf8'];
