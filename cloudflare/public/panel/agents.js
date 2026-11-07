@@ -144,6 +144,25 @@ small.ag-cnt{display:block;margin:6px 0 0 2px;font-size:12px;color:var(--mut)}
 .ag-lim{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;background:var(--glass);border:1px solid var(--line);font-size:13px}
 .ag-lim b{font-size:15px}
 .dv-resp{display:inline-block;margin-top:4px;font-size:12px;color:#8fb3ff}
+.own-sw{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;margin:0 0 12px}
+.own-t{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:12px;border:1px solid var(--line);border-left:4px solid var(--c);background:rgba(255,255,255,.03);flex:1 1 220px;max-width:380px;min-width:0;transition:background .15s,border-color .15s}
+.own-t:hover{background:rgba(255,255,255,.06)}.own-t:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+.own-t>i{font-style:normal;font-size:22px;line-height:1}.own-t>span{min-width:0}
+.own-t b{display:block;font-size:15px;color:#fff}
+.own-t small{display:block;color:var(--mut);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.own-t em{margin-left:auto;padding-left:8px;font-style:normal;font-weight:800;font-size:22px;color:var(--c)}
+.own-t.me{--c:#4f8cff}.own-t.ag{--c:#a78bfa}
+.own-t.me.on{border-color:#4f8cff;background:rgba(79,140,255,.16);box-shadow:0 10px 26px -16px #4f8cff}
+.own-t.ag.on{border-color:#a78bfa;background:rgba(167,139,250,.17);box-shadow:0 10px 26px -16px #a78bfa}
+.own-all{all:unset;cursor:pointer;align-self:center;padding:8px 14px;border-radius:99px;border:1px dashed var(--line);color:var(--mut);font-weight:700;font-size:13px;white-space:nowrap}
+.own-all:hover{color:#fff}.own-all.on{border-style:solid;color:#fff;background:rgba(255,255,255,.08)}
+.own-ags{margin:0 0 12px!important;align-items:center}.own-ags .fchip.off{opacity:.6}
+.own-x{color:var(--mut);font-size:12.5px}
+.own-info,.own-hint{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 12px;padding:9px 14px;border-radius:10px;font-size:13px}
+.own-info{border:1px solid rgba(167,139,250,.35);background:rgba(167,139,250,.08)}.own-info .sp{flex:1}
+.own-hint{border:1px dashed rgba(167,139,250,.55)}
+.ag-cl{display:inline-block;margin-top:6px;padding:4px 10px!important;font-size:12px!important}
+@media (max-width:700px){.own-t{flex:1 1 140px;padding:10px 12px;gap:8px}.own-t small{display:none}.own-t em{font-size:18px}.own-t b{font-size:13.5px}.own-all{width:100%;text-align:center;box-sizing:border-box}}
 body.agent #newDev{display:inline-flex}
 body.agent .dvt input[type=checkbox],body.agent .dvt th.c:first-child,body.agent .dvt td.c:first-child,body.agent #dvBulk{display:none!important}
 body.agent .foot{display:none}
@@ -312,10 +331,111 @@ body.agent .foot{display:none}
 
   /* ---------- Responsabile nelle schede e nella tabella dei clienti ---------- */
   const agName = (id) => { if (!id) return isAgent() ? '' : ''; if (isAgent() && id === me().id) return 'Tu'; const a = (D.agents || []).find((x) => x.id === id); return a ? a.username : 'agente #' + id; };
+  /* ---------- Clienti divisi: «I miei clienti», «Clienti degli agenti» e un pulsante per ogni agente ----------
+     La scelta (kc_own) filtra schede, tabella ed elenco come il filtro per app: 'me' i miei (anche quelli da attivare),
+     'ag' tutti gli agenti, '<id>' un solo agente, 'all' tutti insieme. Per l'agente con sotto-agenti: i suoi / dei sotto-agenti. */
+  const OWN = { k: 'me' };
+  try { OWN.k = localStorage.getItem('kc_own') || 'me'; } catch {}
+  const ownSave = (k) => { OWN.k = String(k); try { localStorage.setItem('kc_own', OWN.k); } catch {} };
+  /** di chi è il cliente: 0 = mio, altrimenti l'id dell'agente; le connessioni collegate seguono il loro cliente principale */
+  function ownKeyFn(all) {
+    const byId = new Map(all.map((d) => [d.id, d])), mine = isAgent() ? +me().id || 0 : 0;
+    return (d) => { const p = d.parent ? byId.get(d.parent) : null; const o = +((p || d).ownerId || 0); return !o || o === mine ? 0 : o; };
+  }
+  const inSec = (k, key) => k === 'all' || (k === 'me' ? key === 0 : k === 'ag' ? key !== 0 : key === +k);
+  const ownOn = (all, keyOf) => (D.agents || []).length > 0 || all.some((d) => keyOf(d) !== 0);
+  const agLabel = (id) => { const a = (D.agents || []).find((x) => x.id === id); return a ? a.username : 'agente eliminato #' + id; };
+  function ownFix(all, keyOf) {
+    const k = OWN.k;
+    if (k === 'me' || k === 'ag' || k === 'all') return;
+    const id = +k;
+    if (id && ((D.agents || []).some((a) => a.id === id) || all.some((d) => !d.parent && keyOf(d) === id))) return;
+    OWN.k = 'ag'; // agente eliminato e senza più clienti: tutti gli agenti
+  }
+  /** un pulsante per ogni agente con clienti (più quello scelto anche se ne ha 0): i più grandi prima, ognuno seguito dai suoi sotto-agenti */
+  function ownAgents(all, keyOf) {
+    const cnt = new Map();
+    for (const d of all) if (!d.parent) { const k = keyOf(d); if (k) cnt.set(k, (cnt.get(k) || 0) + 1); }
+    const cur = +OWN.k; if (cur && !cnt.has(cur) && (D.agents || []).some((a) => a.id === cur)) cnt.set(cur, 0);
+    const byId = new Map((D.agents || []).map((a) => [a.id, a]));
+    const rows = [...cnt.keys()].map((id) => ({ id, a: byId.get(id) || null, n: cnt.get(id) }));
+    const nm = (r) => (r.a ? r.a.username : '~' + r.id);
+    rows.sort((x, y) => y.n - x.n || nm(x).localeCompare(nm(y), 'it'));
+    const has = new Set(rows.map((r) => r.id)), out = [], done = new Set();
+    const push = (r, lvl) => { if (done.has(r.id)) return; done.add(r.id); out.push({ ...r, lvl }); if (lvl < 3) for (const s of rows) if (s.a && s.a.parentId === r.id) push(s, lvl + 1); };
+    for (const r of rows) if (!(r.a && r.a.parentId && has.has(r.a.parentId))) push(r, 0);
+    for (const r of rows) push(r, 0);
+    return { list: out, zero: (D.agents || []).filter((a) => !cnt.has(a.id)).length };
+  }
+  function ownBar(all, keyOf, on) {
+    const tiles = $('#dvTiles'); let box = $('#dvOwn');
+    if (!on || !tiles) { if (box) box.remove(); return; }
+    if (!box) { box = document.createElement('div'); box.id = 'dvOwn'; box.addEventListener('click', ownClick); }
+    if (box.nextElementSibling !== tiles) tiles.before(box);
+    const ag = isAgent(), k = OWN.k, prim = all.filter((d) => !d.parent);
+    const nMe = prim.filter((d) => keyOf(d) === 0).length, nAg = prim.length - nMe;
+    const pend = prim.filter((d) => keyOf(d) === 0 && d.status === 'pending').length;
+    const { list, zero } = ownAgents(all, keyOf), agSel = k !== 'me' && k !== 'all', withCl = list.filter((r) => r.n).length;
+    let h = `<div class="own-sw" role="tablist">
+      <button type="button" class="own-t me ${k === 'me' ? 'on' : ''}" data-own="me" role="tab" aria-selected="${k === 'me'}"><i>👤</i><span><b>I miei clienti</b><small>Attivati da te${pend ? ` · ${pend} da attivare` : ''}</small></span><em>${nMe}</em></button>
+      <button type="button" class="own-t ag ${agSel ? 'on' : ''}" data-own="ag" role="tab" aria-selected="${agSel}"><i>🤝</i><span><b>${ag ? 'Dei sotto-agenti' : 'Clienti degli agenti'}</b><small>${withCl ? `${withCl} ${withCl === 1 ? 'agente' : 'agenti'} con clienti · un pulsante per ognuno` : 'Nessun cliente degli agenti per ora'}</small></span><em>${nAg}</em></button>
+      <button type="button" class="own-all ${k === 'all' ? 'on' : ''}" data-own="all" title="Un solo elenco con tutti, con la colonna Responsabile">Tutti insieme · ${prim.length}</button></div>`;
+    if (agSel) {
+      h += `<div class="filters own-ags"><button type="button" class="fchip ${k === 'ag' ? 'on' : ''}" data-own="ag">Tutti gli agenti<span>${nAg}</span></button>${list.map((r) => `<button type="button" class="fchip ${k === String(r.id) ? 'on' : ''} ${r.a && !r.a.active ? 'off' : ''}" data-own="${r.id}" title="${esc((r.a ? 'Clienti di ' + r.a.username : 'Clienti di un agente eliminato') + (r.a && !r.a.active ? ' (agente disattivato)' : '') + (r.lvl && r.a ? ' · sotto-agente di ' + agLabel(r.a.parentId) : ''))}">${r.lvl ? '↳ ' : ''}${esc(r.a ? r.a.username : 'agente eliminato #' + r.id)}<span>${r.n}</span></button>`).join('')}${zero ? `<span class="own-x">${zero === 1 ? '1 agente' : zero + ' agenti'} senza clienti</span>` : ''}</div>`;
+      const cur = list.find((r) => String(r.id) === k);
+      if (cur) {
+        const a = cur.a, subs = (D.agents || []).filter((x) => x.parentId === cur.id).length;
+        h += `<div class="own-info"><span>👤 Clienti di <b>${esc(a ? a.username : 'agente eliminato #' + cur.id)}</b> · ${cur.n} ${cur.n === 1 ? 'cliente' : 'clienti'}${a && a.maxClients ? ' · limite ' + esc(a.maxClients) : ''}${a && !a.active ? ' · <span class="chip r">Disattivato</span>' : ''}${subs ? ` · <span class="mut">i clienti ${subs === 1 ? 'del suo sotto-agente hanno' : 'dei suoi ' + subs + ' sotto-agenti hanno'} il loro pulsante</span>` : ''}</span>${a ? `<span class="sp"></span><button type="button" class="btn sm" data-ownopen="${cur.id}">Apri la scheda dell'agente</button>` : ''}</div>`;
+      }
+    }
+    // ricerca: se il cliente cercato sta in un'altra sezione lo dico, invece di un elenco vuoto
+    const q = (($('#dvQ') || {}).value || D.q || '').toLowerCase().trim();
+    if (q && k !== 'all') {
+      const hay = (d) => [d.code, d.name, d.notes, d.model].join(' ').toLowerCase();
+      const kidHit = new Set(all.filter((d) => d.parent && hay(d).includes(q)).map((d) => d.parent));
+      const hits = prim.filter((d) => !inSec(k, keyOf(d)) && (hay(d).includes(q) || kidHit.has(d.id)));
+      if (hits.length) {
+        const keys = [...new Set(hits.map(keyOf))], to = keys.length > 1 ? 'all' : keys[0] === 0 ? 'me' : String(keys[0]);
+        const where = to === 'all' ? 'nelle altre sezioni' : to === 'me' ? 'in «I miei clienti»' : `tra i clienti di «${esc(agLabel(+to))}»`;
+        h += `<div class="own-hint"><span>🔎 «${esc(q)}»: ${hits.length === 1 ? 'c\'è 1 cliente' : `ci sono ${hits.length} clienti`} ${where}</span><button type="button" class="btn sm" data-own="${to}">Mostra</button></div>`;
+      }
+    }
+    if (box._h !== h) { box.innerHTML = h; box._h = h; }
+  }
+  function ownClick(e) {
+    const o = e.target.closest('[data-ownopen]');
+    if (o) { const a = (D.agents || []).find((x) => x.id === +o.dataset.ownopen); if (a) openAgent(a); return; }
+    const b = e.target.closest('[data-own]'); if (!b) return;
+    ownSave(b.dataset.own);
+    // il filtro in alto (Attivi, Da attivare…) resta, salvo che nella nuova sezione non mostri nessuno
+    const all = D.devices || [], keyOf = ownKeyFn(all), f = D.filter || 'all';
+    const fit = (d) => f === 'all' || (f === 'soon' ? d.status === 'active' && !d.parent && daysLeft(d) !== null && daysLeft(d) <= 14 : d.status === f);
+    if (f !== 'all' && !all.some((d) => inSec(OWN.k, keyOf(d)) && fit(d))) D.filter = 'all';
+    renderDevices();
+  }
+  window.KXOwn = {
+    /** la sezione mostrata adesso (per la modifica in massa): null = tutti insieme, o nessun agente */
+    scope() {
+      const all = D.devices || [], keyOf = ownKeyFn(all);
+      if (!ownOn(all, keyOf)) return null;
+      ownFix(all, keyOf);
+      const k = OWN.k; if (k === 'all') return null;
+      const label = k === 'me' ? 'I miei clienti' : k === 'ag' ? (isAgent() ? 'Clienti dei sotto-agenti' : 'Clienti degli agenti') : 'Clienti di ' + agLabel(+k);
+      return { k, label, devs: all.filter((d) => !d.parent && inSec(k, keyOf(d))) };
+    },
+    /** apre i Clienti su una sezione: 'me', 'ag', 'all' o l'id di un agente */
+    show(k) { ownSave(k); view('devices'); renderDevices(); },
+  };
   const origRD = renderDevices;
   window.renderDevices = renderDevices = function () {
-    origRD();
-    const show = (D.agents || []).length > 0;
+    const all = D.devices || [], keyOf = ownKeyFn(all), on = ownOn(all, keyOf);
+    if (on) ownFix(all, keyOf);
+    const k = on ? OWN.k : 'all';
+    if (k !== 'all') D.devices = all.filter((d) => inSec(k, keyOf(d)));
+    try { origRD(); } finally { D.devices = all; }
+    ownBar(all, keyOf, on);
+    // colonna e riga «Responsabile» solo dove servono: tutti gli agenti insieme o tutti insieme
+    const show = on && (k === 'ag' || k === 'all');
     if (!show) return;
     $$('#dvCards .dv-card[data-id]').forEach((c) => {
       const d = D.devices.find((x) => x.id === c.dataset.id); if (!d) return;
@@ -368,7 +488,7 @@ body.agent .foot{display:none}
         return `<tr data-ag="${a.id}"><td class="num">${a.id}</td>
         <td><b>${esc(a.username)}</b><small>${esc(a.email || '—')}${up ? ' · sotto ' + esc(up.username) : ''}</small></td>
         <td><b class="mono" title="Il cliente lo scrive nella richiesta dello Store: la richiesta arriva a questo agente (tu la vedi nel pannello, senza avvisi salvo l\'opzione in Approvazione)">${esc(a.storeCode || '—')}</b>${a.stores !== undefined ? `<small title="Store attivati con il suo codice (tetto deciso da te)">${a.stores} store${a.storeMax !== null && a.storeMax !== undefined ? ' / ' + a.storeMax : ''}</small>` : ''}</td>
-        <td><b>${a.clients}</b><small>Limite: ${a.maxClients}</small><div class="ag-bar2"><s style="width:${pct}%"></s></div></td>
+        <td><b>${a.clients}</b><small>Limite: ${a.maxClients}</small><div class="ag-bar2"><s style="width:${pct}%"></s></div><button type="button" class="btn sm ag-cl" data-agcl="${a.id}" title="Apre Clienti con solo i clienti di ${esc(a.username)}">👥 Vedi i suoi clienti</button></td>
         <td class="hm">${a.subAgents}</td>
         <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span>${(a.perms || {}).armada ? '<br><span class="chip" style="margin-top:4px">Armada</span>' : ''}${(a.perms || {}).wolf ? '<br><span class="chip" style="margin-top:4px">WOLF</span>' : ''}${(a.perms || {}).mxp ? '<br><span class="chip" style="margin-top:4px">MaxPlayer</span>' : ''}${(a.perms || {}).oxp ? '<br><span class="chip" style="margin-top:4px">OrbixPlay</span>' : ''}</td>
         <td><button type="button" class="btn sm" data-aglink="${a.id}" title="Link personale e codice di accesso">🔗 Link accesso</button></td>
@@ -392,6 +512,7 @@ body.agent .foot{display:none}
     $('#agNew').onclick = () => openAgent(null);
     $$('[data-ag]', V).forEach((r) => (r.onclick = () => openAgent(L.find((a) => a.id === +r.dataset.ag))));
     $$('[data-aglink]', V).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); linkBox(L.find((a) => a.id === +b.dataset.aglink)); }));
+    $$('[data-agcl]', V).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); window.KXOwn.show(b.dataset.agcl); }));
   }
 
   /* ---------- pagina intera: crea / modifica agente ---------- */

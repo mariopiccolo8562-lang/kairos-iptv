@@ -434,6 +434,14 @@ Kairos TV è l'app **nativa** stile Netflix per chiavette datate (veloce come la
 - **Permessi per cliente** nuovi: *Cambiare la modalità leggera* (`lite`: se spento la decide il pannello o resta automatica) e *Vedere risoluzione e FPS* (`resInd`: riquadro in alto a destra all'apertura di un canale e a ogni cambio di risoluzione).
 - **Presenza**: le app mandano `vis:false` quando vanno in sfondo e risultano subito non in linea (prima restavano «online» fino a 4 minuti); quel battito non conta per il limite dei 15 secondi.
 
+## 27. Clienti divisi: i miei e quelli degli agenti
+
+- In cima a **Clienti** (quando ci sono agenti): **I miei clienti** (attivati dal titolare, più quelli da attivare) e **Clienti degli agenti**, con un pulsante per ogni agente (i sotto-agenti subito dopo il loro capo) e **Tutti insieme** per l'elenco unico con la colonna *Responsabile*. Riquadri, conteggi delle app, ricerca e modifica in massa seguono la sezione scelta (ricordata nel browser, `kc_own`).
+- Se si cerca un cliente che sta in un'altra sezione compare «c'è N clienti in … · Mostra».
+- **Agenti → «👥 Vedi i suoi clienti»** apre Clienti sul solo quell'agente; la riga in alto ha «Apri la scheda dell'agente».
+- **Modifica in massa** da una sezione: di base vale per *quella sezione* (attivi o tutti); restano le scelte «tutti i clienti (tuoi e degli agenti)».
+- L'agente con sotto-agenti vede allo stesso modo «I miei clienti» / «Dei sotto-agenti».
+
 ## Struttura
 
 ```

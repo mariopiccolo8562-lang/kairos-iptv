@@ -39,6 +39,8 @@
   const nAll = () => prim().filter((d) => d.status !== 'pending').length;
   const sel = (name, opts) => `<select class="inp" data-ms="${name}">${opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`;
   let M = null, ids0 = [], after = null;
+  // sezione dei Clienti (I miei / degli agenti / un agente): le scelte «solo questa sezione» vengono prima
+  let sec = null, secA = [], secAll = [];
 
   /** cosa è stato scelto (null = niente) */
   function readForm() {
@@ -63,7 +65,9 @@
     return out;
   }
   const scopeOf = () => (M.querySelector('[name="msSc"]:checked') || {}).value || 'active';
-  const countOf = (sc) => (sc === 'ids' ? ids0.length : sc === 'active' ? nActive() : nAll());
+  const countOf = (sc) => (sc === 'ids' ? ids0.length : sc === 'secA' ? secA.length : sc === 'secAll' ? secAll.length : sc === 'active' ? nActive() : nAll());
+  const idsOf = (sc) => (sc === 'ids' ? ids0 : sc === 'secA' ? secA : sc === 'secAll' ? secAll : null);
+  const scLabel = (sc) => (sc === 'ids' ? 'Clienti selezionati' : sc === 'secA' ? sec.label + ': clienti attivi' : sc === 'secAll' ? sec.label + ': tutti' : sc === 'active' ? 'Tutti i clienti attivi' + (sec ? ' (tuoi e degli agenti)' : '') : 'Tutti i clienti' + (sec ? ' (tuoi e degli agenti)' : ''));
   function refresh() {
     M.querySelectorAll('.ms-sc label').forEach((l) => l.classList.toggle('on', l.querySelector('input').checked));
     M.querySelectorAll('.ms-r').forEach((r) => { const e = r.querySelector('select, input[type=number]'); r.classList.toggle('set', !!e && e.value !== '' && e.value.trim() !== ''); });
@@ -76,13 +80,18 @@
     if (!owner()) return toast('La modifica in massa è riservata al titolare', 1);
     ids0 = (ids || []).filter((i) => { const d = (D.devices || []).find((x) => x.id === i); return d && !d.parent && d.status !== 'pending'; });
     after = done || null;
+    sec = window.KXOwn && KXOwn.scope ? KXOwn.scope() : null;
+    secA = sec ? sec.devs.filter((d) => d.status === 'active').map((d) => d.id) : [];
+    secAll = sec ? sec.devs.filter((d) => d.status !== 'pending').map((d) => d.id) : [];
     M = $('#massM'); if (!M) { M = document.createElement('div'); M.id = 'massM'; document.body.appendChild(M); }
-    const sc = ids0.length ? 'ids' : 'active';
+    const sc = ids0.length ? 'ids' : sec ? 'secA' : 'active';
     M.innerHTML = `<div class="glass"><div class="mhd"><h3>Modifica in massa<small>Cambi le stesse cose a tanti clienti insieme. Le voci su «Non cambiare» restano come sono; le app si aggiornano da sole entro un minuto (alla prossima apertura se sono chiuse).</small></h3><button class="icb" id="msX" title="Chiudi">✕</button></div>
       <div class="ms-h">A chi</div>
       <div class="ms-sc">${ids0.length ? `<label><input type="radio" name="msSc" value="ids" ${sc === 'ids' ? 'checked' : ''}> Solo i clienti selezionati <small>${ids0.length}</small></label>` : ''}
-        <label><input type="radio" name="msSc" value="active" ${sc === 'active' ? 'checked' : ''}> Tutti i clienti attivi <small>${nActive()}</small></label>
-        <label><input type="radio" name="msSc" value="all"> Tutti i clienti (anche scaduti e disattivati) <small>${nAll()}</small></label></div>
+        ${sec ? `<label><input type="radio" name="msSc" value="secA" ${sc === 'secA' ? 'checked' : ''}> <span><b>${esc(sec.label)}</b>: clienti attivi</span> <small>${secA.length}</small></label>
+        <label><input type="radio" name="msSc" value="secAll"> <span><b>${esc(sec.label)}</b>: tutti (anche scaduti e disattivati)</span> <small>${secAll.length}</small></label>` : ''}
+        <label><input type="radio" name="msSc" value="active" ${sc === 'active' ? 'checked' : ''}> Tutti i clienti attivi${sec ? ' (tuoi e degli agenti)' : ''} <small>${nActive()}</small></label>
+        <label><input type="radio" name="msSc" value="all"> Tutti i clienti${sec ? ' (tuoi e degli agenti)' : ''}, anche scaduti e disattivati <small>${nAll()}</small></label></div>
       <div class="ms-h">Lettore <button class="btn sm" type="button" id="msExo">ExoPlayer ovunque</button><button class="btn sm" type="button" id="msCli">Lo sceglie il cliente</button></div>
       ${ENG.map(([k, l]) => `<div class="ms-r"><div><b>${esc(l)}</b><small>${k === 'live' ? 'Canali in diretta' : k === 'movie' ? 'Film on demand' : 'Episodi delle serie'}</small></div>${sel('eng.' + k, ENG_O)}</div>`).join('')}
       <div class="ms-h">Permessi <button class="btn sm" type="button" id="msAllOn">Consenti tutto</button></div>
@@ -104,10 +113,11 @@
     M.querySelector('#msGo').onclick = async () => {
       const b = readForm(), s = summary(b), sc0 = scopeOf(), n = countOf(sc0);
       if (!s.length || !n) return;
-      if (!(await ask(`Modificare ${n} client${n === 1 ? 'e' : 'i'}?`, `<p class="mut" style="margin:0 0 8px">${sc0 === 'ids' ? 'Clienti selezionati' : sc0 === 'active' ? 'Tutti i clienti attivi' : 'Tutti i clienti'}</p>${s.map((x) => '• ' + esc(x)).join('<br>')}`, 'Applica'))) return;
+      if (!(await ask(`Modificare ${n} client${n === 1 ? 'e' : 'i'}?`, `<p class="mut" style="margin:0 0 8px">${esc(scLabel(sc0))}</p>${s.map((x) => '• ' + esc(x)).join('<br>')}`, 'Applica'))) return;
       const go = M.querySelector('#msGo'); go.disabled = true; go.textContent = 'Applico…';
       try {
-        const r = await api('POST', '/admin/devices/mass', { scope: sc0, ...(sc0 === 'ids' ? { ids: ids0 } : {}), ...b });
+        const ids = idsOf(sc0);
+        const r = await api('POST', '/admin/devices/mass', { scope: ids ? 'ids' : sc0, ...(ids ? { ids } : {}), ...b });
         close();
         toast(r.changed ? `Fatto: cambiati ${r.changed} client${r.changed === 1 ? 'e' : 'i'} su ${r.total}. Le app si aggiornano entro un minuto` : `Niente da cambiare: i ${r.total} clienti avevano già queste impostazioni`);
         if (after) try { after(); } catch {}

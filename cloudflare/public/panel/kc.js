@@ -890,7 +890,7 @@
       for (const d of [...pend, ...list.slice(0, st.limit)]) { rows.push(trow(d, false)); for (const k of kidsOf(d.id)) rows.push(trow(k, true)); }
       $('#dvTbl').innerHTML = rows.length ? `<div class="card glass dvt-wrap"><table class="dvt"><thead><tr><th class="c"><input type="checkbox" id="dvtAll" title="Seleziona tutti quelli mostrati"></th><th>Cliente</th><th>Stato</th><th>Scadenza</th><th class="c">Conn.</th><th>Dispositivo</th><th>Playlist</th><th>Note</th><th>Azioni</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`
         : `<div class="emptyc" style="display:block">${q ? 'Nessun cliente trovato per «' + esc(q) + '»' : 'Nessun cliente in questo elenco'}</div>`;
-      const all = $('#dvtAll'); if (all) { const ids = [...pend, ...list.slice(0, st.limit)].map((d) => d.id); all.checked = ids.length > 0 && ids.every((i) => st.sel.has(i)); all.onchange = () => { ids.forEach((i) => (all.checked ? st.sel.add(i) : st.sel.delete(i))); render(); }; }
+      const all = $('#dvtAll'); if (all) { const ids = [...pend, ...list.slice(0, st.limit)].map((d) => d.id); all.checked = ids.length > 0 && ids.every((i) => st.sel.has(i)); all.onchange = () => { ids.forEach((i) => (all.checked ? st.sel.add(i) : st.sel.delete(i))); renderDevices(); }; }
       bulkBar();
     }
     function bulkBar() {
@@ -900,8 +900,8 @@
       $('#dvBulk').classList.toggle('on', !!n && st.view === 'table');
     }
     async function bulk(act) {
-      if (act === 'clear') { st.sel.clear(); return render(); }
-      if (act === 'mass') { if (window.KXMass) KXMass.open([...st.sel], () => { st.sel.clear(); render(); }); return; }
+      if (act === 'clear') { st.sel.clear(); return renderDevices(); }
+      if (act === 'mass') { if (window.KXMass) KXMass.open([...st.sel], () => { st.sel.clear(); renderDevices(); }); return; }
       const ds = [...st.sel].map((i) => D.devices.find((d) => d.id === i)).filter((d) => d && !d.parent && d.status !== 'pending');
       if (!ds.length) return toast('Nessun cliente attivabile tra quelli selezionati', 1);
       if (act === 'addon') {
@@ -946,7 +946,7 @@
         $('#dvPend').innerHTML = $('#dvCards').innerHTML = '';
         renderTable(list, pend, q);
         $('#dvMore').innerHTML = list.length > st.limit ? `<button class="btn" id="dvMoreB" style="width:100%;margin-top:14px">Mostra altri ${Math.min(100, list.length - st.limit)} (${list.length - st.limit} rimanenti)</button>` : '';
-        $('#dvMoreB') && ($('#dvMoreB').onclick = () => { st.limit += 100; render(); });
+        $('#dvMoreB') && ($('#dvMoreB').onclick = () => { st.limit += 100; renderDevices(); });
         return;
       }
       $('#dvTbl').innerHTML = ''; bulkBar();
@@ -954,14 +954,14 @@
       $('#dvCards').innerHTML = shown.map(card).join('') + orphans.map((d) => `<div class="dv-card" data-id="${esc(d.id)}"><div class="dv-top"><div class="dv-av">?</div><div class="dv-n"><b>${esc(d.name || d.model || d.code)}</b><span class="code">${esc(d.code)}</span></div></div><p class="mut" style="font-size:13px">Connessione di un cliente eliminato</p><div class="dv-act"><button class="btn sm pri" data-act="open">Apri scheda</button></div></div>`).join('')
         || (pend.length ? '' : `<div class="emptyc" style="display:block;grid-column:1/-1">${q ? 'Nessun cliente trovato per «' + esc(q) + '»' : 'Nessun cliente in questo elenco'}</div>`);
       $('#dvMore').innerHTML = list.length > st.limit ? `<button class="btn" id="dvMoreB" style="width:100%;margin-top:14px">Mostra altri ${Math.min(60, list.length - st.limit)} (${list.length - st.limit} rimanenti)</button>` : '';
-      $('#dvMoreB') && ($('#dvMoreB').onclick = () => { st.limit += 60; render(); });
+      $('#dvMoreB') && ($('#dvMoreB').onclick = () => { st.limit += 60; renderDevices(); });
     }
     V.addEventListener('click', async (e) => {
       const t = e.target.closest('[data-fl2]'); if (t) { D.filter = t.dataset.fl2; st.limit = st.view === 'table' ? 100 : 60; return renderDevices(); }
       const v = e.target.closest('[data-dv]'); if (v) { st.view = v.dataset.dv; st.limit = st.view === 'table' ? 100 : 60; try { localStorage.setItem('kc_dv', st.view); } catch {} V.classList.toggle('dv-cardsview', st.view !== 'list'); return renderDevices(); }
       const o = e.target.closest('[data-open]'); if (o) { const k = D.devices.find((x) => x.id === o.dataset.open); if (k) openQuick(k); return; }
       const bk = e.target.closest('[data-bulk]'); if (bk) return bulk(bk.dataset.bulk);
-      if (e.target.closest('#dvMass')) { if (window.KXMass) KXMass.open(st.view === 'table' ? [...st.sel] : [], () => { st.sel.clear(); render(); }); return; }
+      if (e.target.closest('#dvMass')) { if (window.KXMass) KXMass.open(st.view === 'table' ? [...st.sel] : [], () => { st.sel.clear(); renderDevices(); }); return; }
       const cp = e.target.closest('[data-copy]'); if (cp) { try { await navigator.clipboard.writeText(cp.dataset.copy); toast('Codice copiato: ' + cp.dataset.copy); } catch { toast(cp.dataset.copy); } return; }
       const sl = e.target.closest('[data-sel]'); if (sl) { sl.checked ? st.sel.add(sl.dataset.sel) : st.sel.delete(sl.dataset.sel); sl.closest('tr').classList.toggle('sel', sl.checked); const all = $('#dvtAll'); if (all && !sl.checked) all.checked = false; return bulkBar(); }
       const nt = e.target.closest('[data-note]');
@@ -970,7 +970,7 @@
         nt.innerHTML = `<input class="inp dvt-ni" maxlength="300" value="${esc(d.notes || '')}" placeholder="Nota (Invio per salvare, Esc per annullare)">`;
         const inp = nt.querySelector('input'); inp.focus(); inp.select();
         let done = false;
-        const fin = async (keep) => { if (done) return; done = true; if (keep && inp.value.trim() !== (d.notes || '')) { await save(d, { notes: inp.value.trim() }); toast('Nota salvata'); } else render(); };
+        const fin = async (keep) => { if (done) return; done = true; if (keep && inp.value.trim() !== (d.notes || '')) { await save(d, { notes: inp.value.trim() }); toast('Nota salvata'); } else renderDevices(); };
         inp.onkeydown = (ev) => { if (ev.key === 'Enter') fin(true); else if (ev.key === 'Escape') fin(false); };
         inp.onblur = () => fin(true);
         return;
@@ -1001,7 +1001,7 @@
       const d = D.devices.find((x) => x.id === c.dataset.id); if (!d) return;
       const act = (e.target.closest('[data-act]') || {}).dataset?.act;
       if (act === 'renew') { const box = c.querySelector('.dv-act'); box.innerHTML = [1, 3, 6, 12].map((m) => `<button class="btn sm" data-act="ext${m}">+${m} ${m === 1 ? 'mese' : 'mesi'}</button>`).join('') + '<button class="btn sm dv-x" data-act="renewx" title="Annulla">✕</button>'; return; }
-      if (act === 'renewx') return render();
+      if (act === 'renewx') return renderDevices();
       const em = /^ext(\d+)$/.exec(act || ''); if (em) return extend(d, +em[1]);
       if (act === 'kick') return kickDev(d);
       if (act === 'tog') { if (d.active && !(await ask('Disattivare il cliente?', `<b>${esc(d.name || d.code)}</b> non potrà più guardare finché non lo riattivi.`, 'Disattiva'))) return; await save(d, { active: !d.active }); return toast(d.active ? 'Cliente disattivato' : 'Cliente riattivato'); }
@@ -1010,8 +1010,8 @@
       if (act === 'open') return openDrawer(d, d.status === 'pending');
       if (!e.target.closest('button')) openQuick(d);
     });
-    $('#dvQ').addEventListener('input', () => { st.limit = st.view === 'table' ? 100 : 60; render(); });
-    $('#dvSort').onchange = (e) => { st.sort = e.target.value; try { localStorage.setItem('kc_dvs', st.sort); } catch {} render(); };
+    $('#dvQ').addEventListener('input', () => { st.limit = st.view === 'table' ? 100 : 60; renderDevices(); });
+    $('#dvSort').onchange = (e) => { st.sort = e.target.value; try { localStorage.setItem('kc_dvs', st.sort); } catch {} renderDevices(); };
     const orig = window.renderDevices;
     window.renderDevices = renderDevices = function () { orig(); render(); };
     KC.dvRender = render;
