@@ -2855,6 +2855,26 @@ function playUrl(v, item, box, triedAlt) {
   v.src = url; v.play().catch(() => {});
 }
 
+/* ---------------- immagini alla misura mostrata (meno memoria e meno decodifica sulle TV) ----------------
+   Locandine e sfondi TMDB (image.tmdb.org/t/p/<misura>/…): si chiede la misura più vicina a quella sullo schermo
+   (locandine w185 sulle chiavette deboli, w342 sulle altre; sfondi w780 / w1280), mai più grande dell'originale.
+   Se la variante piccola non si carica si torna all'indirizzo originale (data-o → kxImgFb). */
+const RX_TMDB = /^(https?:\/\/image\.tmdb\.org\/t\/p\/)([a-z0-9_]+)(\/.+)$/i;
+const TMDB_KIND = { p: [185, 342], hp: [342, 500], b: [780, 1280], t: [300, 300] }; // [classe D, altre]: p locandina, hp locandina grande, b sfondo, t miniatura 16:9
+function imgSm(u, kind) {
+  u = String(u || ''); const m = RX_TMDB.exec(u); if (!m) return u;
+  const sz = m[2].toLowerCase(), cur = sz === 'original' ? 1e5 : +((/^w(\d+)(?:$|_and_h\d+)/.exec(sz) || [])[1] || 0);
+  if (!cur) return u; // misura sconosciuta: indirizzo invariato
+  const want = (TMDB_KIND[kind] || TMDB_KIND.p)[devClass() === 'D' ? 0 : 1];
+  return cur > want ? m[1] + 'w' + want + m[3] : u;
+}
+/** attributi src (+ data-o con l'originale se la misura è stata ridotta) per un <img> */
+const imgSrc = (u, kind) => { const s = imgSm(u, kind); return `src="${esc(s)}"${s !== u ? ` data-o="${esc(u)}"` : ''}`; };
+const IMG_FB = 'if(kxImgFb(this))return;'; // in testa agli onerror: prima si riprova con l'originale
+window.kxImgFb = (img) => { const o = img.getAttribute('data-o'); if (!o) return false; img.removeAttribute('data-o'); img.src = o; return true; };
+/** sfondo CSS ridotto: se la variante piccola non esiste si rimette l'originale */
+function bgFb(el, small, orig) { if (!el || small === orig) return; const t = new Image(); t.onerror = () => { if (el.isConnected) el.style.backgroundImage = `url("${orig.replace(/["\\]/g, '\\$&')}")`; }; t.src = small; }
+
 /* =====================================================================
    LIVE TV
    ===================================================================== */
@@ -3781,7 +3801,7 @@ function closeFs() {
 function osd() {
   const it = fsItem, o = $('#osd');
   const isLive = fsKind === 'live';
-  o.innerHTML = `<div class="row1"><div class="lg">${isLive ? logoHTML(it) : `<img src="${esc(it.poster || '')}" style="object-fit:cover;padding:0">`}</div><div><div class="mut orb" style="font-size:11px;letter-spacing:.3em">${isLive ? '● IN DIRETTA · ' + esc(it.group) : 'ON DEMAND'}</div><h2>${esc(it.name)}</h2><div class="mut" id="osdEpg"></div></div>${isLive ? `<div class="num grad">${it.num}</div>` : ''}</div>
+  o.innerHTML = `<div class="row1"><div class="lg">${isLive ? logoHTML(it) : `<img decoding="async" ${imgSrc(it.poster || '', 'p')} onerror="${IMG_FB}" style="object-fit:cover;padding:0">`}</div><div><div class="mut orb" style="font-size:11px;letter-spacing:.3em">${isLive ? '● IN DIRETTA · ' + esc(it.group) : 'ON DEMAND'}</div><h2>${esc(it.name)}</h2><div class="mut" id="osdEpg"></div></div>${isLive ? `<div class="num grad">${it.num}</div>` : ''}</div>
   <div class="bar"><i id="osdBar" style="width:${isLive ? 100 : 0}%"></i></div><div class="times"><span id="osdA">${isLive ? 'LIVE' : '00:00'}</span><span>${isLive ? '▲▼ cambia canale · OK info' : '◀▶ ±10s · OK pausa'}</span><span id="osdB">${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span></div>`;
   o.classList.remove('hide'); clearTimeout(osdT); osdT = setTimeout(() => o.classList.add('hide'), 4500);
 }
@@ -3833,7 +3853,7 @@ function vodSource() {
 }
 function posterHTML(x, i) {
   const img = x.poster || x.logo;
-  return `<div class="post" data-f data-i="${i}">${img ? `<img loading="lazy" decoding="async" src="${esc(img)}" onerror="this.remove()">` : ''}${plBadge(x)}${x.rating && +x.rating ? `<span class="rt">★ ${(+x.rating).toFixed(1)}</span>` : ''}<div class="t">${esc(x.name)}<small>${esc(x.year || x.group || '')}</small></div></div>`;
+  return `<div class="post" data-f data-i="${i}">${img ? `<img loading="lazy" decoding="async" ${imgSrc(img, 'p')} onerror="${IMG_FB}this.remove()">` : ''}${plBadge(x)}${x.rating && +x.rating ? `<span class="rt">★ ${(+x.rating).toFixed(1)}</span>` : ''}<div class="t">${esc(x.name)}<small>${esc(x.year || x.group || '')}</small></div></div>`;
 }
 function renderVod() {
   vodItems = vodSource(); vodRendered = 0;
@@ -3886,9 +3906,9 @@ async function openDetail(x) {
   const render = (extra = {}) => {
     const pos = store.get('pos', {})[x.id];
     const ex = { year: extra.year || x.year, genre: extra.genre || x.genre, cast: extra.cast || x.cast, duration: extra.duration || x.duration, plot: extra.plot || x.plot };
-    const bg = x.backdrop || x.poster || '';
+    const bg = x.backdrop || x.poster || '', bgS = imgSm(bg, x.backdrop ? 'b' : 'hp'), poS = imgSm(x.poster || '', 'hp');
     $('#dIn').innerHTML = `<div class="dm">
-      <div class="dhero ${x.backdrop ? '' : 'ph'}" style="background-image:url('${esc(bg)}')">${x.backdrop ? '' : `<div class="dblur"></div><div class="dpost" style="background-image:url('${esc(x.poster || '')}')"></div>`}<div class="dfade"></div>
+      <div class="dhero ${x.backdrop ? '' : 'ph'}" style="background-image:url('${esc(bgS)}')">${x.backdrop ? '' : `<div class="dblur"></div><div class="dpost" style="background-image:url('${esc(poS)}')"></div>`}<div class="dfade"></div>
         <span class="brandmark">${kxWord((S.settings.brand || 'KAIROS').toUpperCase(), '')}</span>
         <button class="dx" data-f data-back>✕</button>
         <div class="dht"><div class="hkind"><i class="kb">K</i>${isSeries ? 'SERIE' : 'FILM'}</div><h1>${esc(x.name)}</h1>
@@ -3901,6 +3921,7 @@ async function openDetail(x) {
       ${isSeries ? '<div class="dsec"><div class="dsh"><h3>Episodi</h3><div class="seasons" id="dSeas"></div></div><div class="eps" id="dEps"><div class="mut">Caricamento episodi…</div></div></div>' : ''}
       ${(x._extras || []).some((v) => /^[\w-]{11}$/.test(v.yt)) ? `<div class="dsec"><div class="dsh"><h3>Contenuti speciali</h3></div><div class="xtras">${x._extras.filter((v) => /^[\w-]{11}$/.test(v.yt)).map((v, i) => `<button class="xtra" data-f data-xi="${i}"><img loading="lazy" decoding="async" src="https://i.ytimg.com/vi/${esc(v.yt)}/mqdefault.jpg" onerror="this.remove()"><i>▶</i><b>${esc(v.name)}</b><small>${esc(v.type)}</small></button>`).join('')}</div></div>` : ''}</div>`;
     $$('#dIn [data-xi]').forEach((b) => (b.onclick = () => { const v = x._extras.filter((y) => /^[\w-]{11}$/.test(y.yt))[+b.dataset.xi]; if (!v) return; if (NATIVE && NATIVE.playYoutube) NATIVE.playYoutube(v.yt, v.name); else ytOverlay(v.yt, v.name); }));
+    bgFb($('#dIn .dhero'), bgS, bg); if (!x.backdrop) bgFb($('#dIn .dpost'), poS, x.poster || ''); // misura ridotta non trovata: si torna all'originale
     $('#dEp1') && ($('#dEp1').onclick = () => { const f = $('#dEps .ep'); f && focus(f); });
     // nell'app la scheda resta aperta sotto il lettore: finita la visione si torna qui, e con Indietro alla lista nello stesso punto
     const play = (from) => { if (!HAS_PLAYER) closeDetail(); openFs(x, 'vod', from || 0); addRecent(x, 'movie'); };
@@ -3935,7 +3956,7 @@ async function openDetail(x) {
     const showSeason = (s) => {
       $$('#dSeas .chip').forEach((c) => c.classList.toggle('sel', +c.dataset.s === s));
       const list = eps.filter((e) => e.season === s).sort((a, b) => a.ep - b.ep);
-      $('#dEps').innerHTML = list.map((e, i) => `<div class="ep${S.watched.has(e.id || x.id + 's' + e.season + 'e' + e.ep) ? ' seen' : ''}" data-f data-i="${i}"><b>${e.ep}</b><div class="et">${x.backdrop || x.poster ? `<img loading="lazy" decoding="async" src="${esc(x.backdrop || x.poster)}" onerror="this.remove()">` : ''}<i>▶</i></div><span>${esc(e.title)}</span></div>`).join('');
+      $('#dEps').innerHTML = list.map((e, i) => `<div class="ep${S.watched.has(e.id || x.id + 's' + e.season + 'e' + e.ep) ? ' seen' : ''}" data-f data-i="${i}"><b>${e.ep}</b><div class="et">${x.backdrop || x.poster ? `<img loading="lazy" decoding="async" ${imgSrc(x.backdrop || x.poster, x.backdrop ? 't' : 'p')} onerror="${IMG_FB}this.remove()">` : ''}<i>▶</i></div><span>${esc(e.title)}</span></div>`).join('');
       const epItem = (e) => ({ id: e.id || x.id + 's' + e.season + 'e' + e.ep, ep: 1, name: `${x.name} · S${e.season} E${e.ep}${e.title && !/^episodio/i.test(e.title) ? ' · ' + e.title : ''}`, poster: x.poster, url: e.url, group: x.group, demo: x.episodes && e.url === 'demo' });
       $$('#dEps .ep').forEach((el) => (el.onclick = () => { const i = +el.dataset.i, it = epItem(list[i]); if (!HAS_PLAYER) closeDetail(); openFs(it, 'series', null, { list: list.map(epItem), index: i, parent: x }); addRecent(x, 'series'); }));
     };
@@ -4276,10 +4297,10 @@ function cardHTML(type, x, k, i) {
     return `<div class="nc f" data-f data-k="${k}" style="--h:${h};--h2:${(h + 50) % 360}"><span class="fk">${x.kind === 'live' ? 'LIVE TV' : x.kind === 'movies' ? 'FILM' : 'SERIE TV'}</span><span class="fsv">${FOLD_IC[x.kind]}</span><b>${esc(x.name)}</b><small>${x.count.toLocaleString('it')} ${x.kind === 'live' ? 'canali' : 'titoli'}</small></div>`;
   }
   const img = x.poster || x.logo, ft = `<div class="ft">${esc(x.name)}</div>`;
-  const onerr = `onerror="this.parentNode.classList.add('noimg');this.remove()"`;
+  const onerr = `onerror="${IMG_FB}this.parentNode.classList.add('noimg');this.remove()"`;
   if (type === 'live') return `<div class="nc l${isLocked(x) ? ' lk' : ''}" data-f data-k="${k}"><span class="tg">LIVE</span>${x.logo ? `<img loading="lazy" decoding="async" src="${esc(x.logo)}" data-t="${esc(x.name.slice(0, 2).toUpperCase())}" onerror="kxImgTxt(this,'lini')">` : `<span class="lini">${esc(x.name.slice(0, 2).toUpperCase())}</span>`}<div class="ln"><b>${x.num}</b>${esc(x.name)}</div>${qBadge(x).replace('class="qb', 'class="qb qcard')}${plBadge(x)}</div>`;
   if (type === 'rec') return `<div class="nc l rc" data-f data-k="${k}"><span class="tg rec">REC</span>${x.logo ? `<img loading="lazy" decoding="async" src="${esc(x.logo)}" onerror="this.remove()">` : ''}<div class="ft">${esc(x.name)}<small>${esc(dayTime(x.rec.start || x.rec.at))}</small></div></div>`;
-  if (type === 'top') return `<div class="nc t" data-f data-k="${k}"><span class="big">${i + 1}</span><div class="pp ${img ? '' : 'noimg'}">${img ? `<img loading="lazy" decoding="async" src="${esc(img)}" ${onerr}>` : ''}${ft}${plBadge(x)}${watchedMark(x)}</div></div>`;
+  if (type === 'top') return `<div class="nc t" data-f data-k="${k}"><span class="big">${i + 1}</span><div class="pp ${img ? '' : 'noimg'}">${img ? `<img loading="lazy" decoding="async" ${imgSrc(img, 'p')} ${onerr}>` : ''}${ft}${plBadge(x)}${watchedMark(x)}</div></div>`;
   let extra = '';
   if (type === 'cont') {
     if (isLiveItem(x)) extra = '<span class="tg">LIVE</span>';
@@ -4289,7 +4310,7 @@ function cardHTML(type, x, k, i) {
       if (pct) extra = `<div class="pr"><i style="width:${pct}%"></i></div>`;
     }
   }
-  return `<div class="nc p ${img ? '' : 'noimg'}${isLocked(x) ? ' lk' : ''}" data-f data-k="${k}">${img ? `<img loading="lazy" decoding="async" class="${isLiveItem(x) ? 'lgfit' : ''}" src="${esc(img)}" ${onerr}>` : ''}${ft}${extra}${plBadge(x)}${watchedMark(x)}</div>`;
+  return `<div class="nc p ${img ? '' : 'noimg'}${isLocked(x) ? ' lk' : ''}" data-f data-k="${k}">${img ? `<img loading="lazy" decoding="async" class="${isLiveItem(x) ? 'lgfit' : ''}" ${imgSrc(img, 'p')} ${onerr}>` : ''}${ft}${extra}${plBadge(x)}${watchedMark(x)}</div>`;
 }
 /* le righe partono con poche card (quelle visibili): le altre si aggiungono scorrendo a destra. Meno DOM = più fluido su Fire TV */
 const ROW_FIRST = 14, ROW_STEP = 12, ROW_MAX = 40;
@@ -4392,11 +4413,25 @@ function rebuildBrowse(scr, kind, focusEl) {
   } else if (rows) rows.scrollTop = top;
   return el;
 }
+/* modalità leggerissima: le immagini della copertina sono nascoste (.xlite .hbg img) → non si scaricano né si decodificano */
+const heroOff = () => document.body.classList.contains('xlite');
+/** la modalità leggerissima si è accesa o spenta: le copertine si riallineano (immagini liberate o caricate) */
+function heroRefresh() { for (const h of document.querySelectorAll('.bscr.on .hero')) if (h._want) heroImg(h, ...h._want); } // le altre si rifanno all'apertura (buildBrowse)
 /* immagine grande: la nuova si carica dietro e compare in dissolvenza sopra la vecchia (niente schermo nero) */
 function heroImg(hero, src, mode, blurBg) {
   const imgs = hero.querySelectorAll('img.main'), blur = hero.querySelector('img.blur');
   const fi = hero._fi || 0, front = imgs[fi], backI = imgs[1 - fi];
-  if (blur) { blur.style.display = blurBg && src ? '' : 'none'; if (blurBg && src && blur.getAttribute('src') !== src) blur.src = src; }
+  hero._want = [src, mode, blurBg];
+  if (src && heroOff()) {
+    hero._tok = (hero._tok || 0) + 1; hero._src = '';
+    for (const i of imgs) { i.classList.add('fade'); if (i.hasAttribute('src')) i.removeAttribute('src'); }
+    if (blur && blur.hasAttribute('src')) blur.removeAttribute('src');
+    return;
+  }
+  // sfondo alla misura dello schermo (TMDB), locandina grande per «ph»; i loghi dei canali restano come sono
+  const sm = mode === 'lv' ? src : imgSm(src, mode === 'ph' ? 'hp' : 'b');
+  // sfondo sfocato: nascosto nella modalità leggera (.lite .hbg img.blur) → niente da caricare
+  if (blur) { blur.style.display = blurBg && src ? '' : 'none'; if (blurBg && src && !document.body.classList.contains('lite') && blur.getAttribute('src') !== sm) blur.src = sm; }
   if (!src) { hero._tok = (hero._tok || 0) + 1; imgs.forEach((i) => i.classList.add('fade')); hero._src = ''; return; }
   if (hero._src === src) return;
   hero._src = src;
@@ -4407,8 +4442,8 @@ function heroImg(hero, src, mode, blurBg) {
     requestAnimationFrame(() => { backI.classList.remove('fade'); front.classList.add('fade'); hero._fi = 1 - fi; });
   };
   backI.onload = () => { if (backI.decode) backI.decode().then(reveal, reveal); else reveal(); };
-  backI.onerror = () => { if (hero._tok === tok) front.classList.add('fade'); };
-  backI.src = src;
+  backI.onerror = () => { if (hero._tok !== tok) return; if (sm !== src && backI.getAttribute('src') === sm) { backI.src = src; return; } front.classList.add('fade'); };
+  backI.src = sm;
   if (backI.complete && backI.naturalWidth) backI.onload();
 }
 let heroT;
@@ -5153,8 +5188,9 @@ function rcLiteApply() {
   if (S.rc) store.set('rcLite', rcGet('lite') || ''); // per il prossimo avvio (prima della risposta del pannello)
   const lite = v === 'on' || v === 'max' ? true : v === 'off' ? false : !!NATIVE;
   // leggerissima da sola sulle chiavette con poca memoria (classe D) e dopo un riavvio per memoria (memGuard), salvo «Spenta» imposta dal pannello
-  const autoX = v !== 'off' && (lowMem() || !!store.get('memGuard', 0));
+  const autoX = v !== 'off' && (lowMem() || !!store.get('memGuard', 0)), was = b.className;
   b.classList.toggle('lite', lite); b.classList.toggle('xlite', v === 'max' || autoX);
+  if (was !== b.className) heroRefresh(); // copertine: immagini caricate solo se si vedono
   b.classList.toggle('lowmem', lowMem());
   if (lowMem() && autoX && !store.get('lowMemSeen', 0)) { store.set('lowMemSeen', Date.now()); setTimeout(() => toast('Dispositivo con poca memoria: interfaccia leggerissima attiva da sola'), 4000); }
 }
@@ -5172,7 +5208,7 @@ window.kxTrim = (level) => {
     try { S.xepg = null; S.xepgVer++; XE = new WeakMap(); } catch {}
     whenIdle(() => buildXmltv(), 2 * 60e3, 3000, 10 * 60e3);
   }
-  try { if (opt('liteUi') !== 'off') document.body.classList.add('xlite'); } catch {} // «Spenta» (pannello o cliente) resta spenta: solo le cache si liberano
+  try { if (opt('liteUi') !== 'off' && !document.body.classList.contains('xlite')) { document.body.classList.add('xlite'); heroRefresh(); } } catch {} // «Spenta» (pannello o cliente) resta spenta: solo le cache si liberano; altrimenti via anche le immagini grandi della copertina
   S.trimAt = Date.now();
 };
 function memGuard() {
