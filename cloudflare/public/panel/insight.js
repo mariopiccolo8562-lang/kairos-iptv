@@ -203,7 +203,7 @@
     if (!pill) { const a = $('#arB') || $('#bellB'); if (a) { a.insertAdjacentHTML('beforebegin', '<button id="hlPill" type="button" title="Salute delle app: clienti da controllare"></button>'); pill = $('#hlPill'); pill.onclick = () => { if (window.KXGoTab && KXGoTab('live')) setTimeout(() => { const c = $('#v-live [data-hlcard]'); if (c) c.scrollIntoView({ behavior: 'smooth' }); }, 400); else view('dash'); }; } }
     if (pill) { pill.classList.toggle('on', H && !(H.settings && H.settings.card === false) && L.length > 0); pill.innerHTML = `🩺 ${L.length}`; pill.style.borderColor = bad ? '' : 'rgba(245,176,65,.6)'; }
     // avviso nel pannello quando compaiono problemi gravi nuovi
-    if (lastBad >= 0 && bad > lastBad) toast(`🩺 ${bad - lastBad} ${bad - lastBad === 1 ? 'cliente ha' : 'clienti hanno'} problemi con l'app: guarda «Salute delle app»`, 1);
+    if (lastBad >= 0 && bad > lastBad && !(H && H.settings && H.settings.card === false)) toast(`🩺 ${bad - lastBad} ${bad - lastBad === 1 ? 'cliente ha' : 'clienti hanno'} problemi con l'app: guarda «Salute delle app»`, 1);
     lastBad = bad;
     for (const [sel, full] of [['#v-dash', false], ['#v-live', true]]) {
       const V = $(sel); if (!V) continue;
