@@ -1498,7 +1498,7 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':
 /* i dati personali (preferiti, cronologia, blocchi…) sono separati per ogni profilo */
 let profNs = (() => { try { return JSON.parse(localStorage.getItem('kx_profNs') || '""') || ''; } catch { return ''; } })();
 // il PIN del controllo genitori (pinH) è unico per il dispositivo: è quello del genitore e protegge anche l'uscita dai profili bambini
-const PROF_KEYS = new Set(['favs', 'recent', 'pos', 'dur', 'hidden', 'locked', 'parental', 'adultHome', 'o_lockAdult', 'lastCh', 'watched', 'queue', 'tags', 'catOrder', 'catNames', 'meta', 'epgMap', 'reminders']);
+const PROF_KEYS = new Set(['favs', 'recent', 'pos', 'dur', 'hidden', 'locked', 'parental', 'adultHome', 'o_lockAdult', 'lastCh', 'watched', 'queue', 'tags', 'catOrder', 'catNames', 'meta', 'epgMap', 'reminders', 'habits', 'autoRem']); // habits/autoRem: abitudini e promemoria automatici (autopilota)
 const storeMem = new Map(); // impostazioni semplici (sì/no, testi, numeri) già lette: niente localStorage + JSON.parse a ogni chiamata
 /* tiene solo le ultime n voci di un archivio (le più vecchie sono le prime inserite) */
 const capObj = (o, n) => { const k = Object.keys(o); for (let i = 0; i < k.length - n; i++) delete o[k[i]]; return o; };
