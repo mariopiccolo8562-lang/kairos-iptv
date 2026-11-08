@@ -2356,14 +2356,15 @@ function libFinish(out) {
   out.sig = libSig(out); out.clean = 1;
   return out;
 }
-async function loadXtream(p) {
+async function loadXtream(p, known) {
   const h = p.host.replace(/\/+$/, ''), q = xtBase(p);
   const get = async (a) => { try { return await getText(`${q}&action=${a}`); } catch { return ''; } };
   // tutte e 6 le richieste partono insieme
   const texts = await Promise.all(['get_live_categories', 'get_vod_categories', 'get_series_categories', 'get_live_streams', 'get_vod_streams', 'get_series'].map(get));
   const pl = { id: p.id, host: h, U: encodeURIComponent(p.username), P: encodeURIComponent(p.password) };
   let out = null;
-  try { out = await libWork('xtream', { texts, pl }); } catch {}
+  try { out = await libWork('xtream', { texts, pl, known }); } catch {}
+  if (out && out.same) return out; // uguale alla lista in uso (vedi fetchLibrary)
   if (!out) { const [lc, vc, sc, ls, vs, ss] = texts.map(xtArr); out = libFinish(xtreamMap({ lc, vc, sc, ls, vs, ss }, pl)); }
   if (!out.live.length && !out.movies.length && !out.series.length) throw new Error('nessun contenuto: controlla server, utente e password');
   return out;
@@ -2381,7 +2382,7 @@ function libWorker() {
         let out = null;
         if (op === 'm3u') out = libFinish(parseM3U(data.text, data.plId));
         else if (op === 'xtream') { const [lc, vc, sc, ls, vs, ss] = data.texts.map(xtArr); out = libFinish(xtreamMap({ lc, vc, sc, ls, vs, ss }, data.pl)); }
-        postMessage({ id, out });
+        postMessage({ id, out: data.known && out.sig === data.known ? { same: 1, sig: out.sig } : out });
       } catch (err) { postMessage({ id, error: String(err && err.message || err) }); } };`,
     ].map(String).join('\n');
     libWk = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
@@ -2400,8 +2401,8 @@ function libWork(op, data) {
     try { w.postMessage({ id, op, data }); } catch (e) { clearTimeout(t); libWkJobs.delete(id); rej(e); }
   });
 }
-async function parseM3UAsync(text, plId) {
-  try { return await libWork('m3u', { text, plId }); } catch {}
+async function parseM3UAsync(text, plId, known) {
+  try { return await libWork('m3u', { text, plId, known }); } catch {}
   return libFinish(parseM3U(text, plId));
 }
 const localOk = () => S.settings.allowLocalPlaylists && perm('localPl');
@@ -2479,17 +2480,25 @@ const plBadge = (x) => { if (!S.plBadges || !x || !x.pl) return ''; const t = S.
 const fixUrl = (u) => { u = String(u || '').trim(); return u && !/^[a-z][a-z0-9+.-]*:\/\//i.test(u) ? 'http://' + u : u; };
 function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
 /* scarica e legge tutte le playlist in parallelo */
-async function fetchLibrary(onMsg) {
+async function fetchLibrary(onMsg, quick) {
   const all = libPlaylists();
   S.loadErrors = [];
+  // aggiornamento in sottofondo: con le impronte delle playlist in uso il thread di lavoro risponde solo «uguale»
+  // (niente copia di decine di migliaia di titoli verso l'interfaccia quando la lista non è cambiata)
+  const known = quick && S.partSig && Object.keys(S.partSig).sort().join(',') === all.map((p) => p.id).sort().join(',') ? S.partSig : null;
   let done = 0;
   const parts = await Promise.all(all.map(async (p) => {
     try {
-      const part = p.type === 'xtream' ? await loadXtream({ ...p, host: fixUrl(p.host) }) : await parseM3UAsync(await getText(fixUrl(p.url)), p.id);
+      const k = known ? known[p.id] : undefined;
+      const part = p.type === 'xtream' ? await loadXtream({ ...p, host: fixUrl(p.host) }, k) : await parseM3UAsync(await getText(fixUrl(p.url)), p.id, k);
       onMsg && onMsg(++done, all.length);
       return part;
     } catch (e) { S.loadErrors.push(`${p.name}: ${e.message || 'errore'}`); return null; }
   }));
+  if (parts.some((x) => x && x.same)) {
+    if (!S.loadErrors.length && parts.every((x) => x && x.same)) return { same: true, ok: true, total: all.length }; // tutte uguali
+    return fetchLibrary(onMsg, false); // solo alcune uguali: si riprende tutto per intero (caso raro)
+  }
   const lib = { live: [], movies: [], series: [] };
   const m3uEpg = store.get('m3uEpg', {});
   parts.forEach((part, i) => { if (part && part.epg) m3uEpg[all[i].id] = part.epg.slice(0, 3); });
@@ -2515,7 +2524,8 @@ async function fetchLibrary(onMsg) {
   lib.clean = parts.every((x) => !x || x.clean) ? 1 : 0;
   // impronta della libreria dalle impronte delle parti (già calcolate nel thread di lavoro)
   if (parts.every((x) => !x || x.sig)) lib.sig = hashStr(all.map((p, i) => p.id + ':' + (parts[i] ? parts[i].sig : '-')).join('|'));
-  return { lib, ok: parts.some(Boolean), total: all.length };
+  const psig = {}; all.forEach((p, i) => { if (parts[i] && parts[i].sig) psig[p.id] = parts[i].sig; });
+  return { lib, ok: parts.some(Boolean), total: all.length, psig: Object.keys(psig).length === all.length ? psig : null };
 }
 let libLoadGen = 0; // ogni caricamento ha il suo numero: uno più vecchio che finisce dopo non sovrascrive quello nuovo
 async function loadLibrary() {
@@ -2525,7 +2535,7 @@ async function loadLibrary() {
   if (gen !== libLoadGen) return;
   if (r.total && !r.ok) toast('Impossibile caricare la playlist: ' + (S.loadErrors[0] || ''), 6000);
   else if (S.loadErrors.length) toast('Non caricata: ' + S.loadErrors[0], 5000);
-  setLib(r.lib);
+  setLib(r.lib); S.partSig = r.psig || null;
   if (r.ok) { S.libSig = libSig(r.lib); whenIdle(() => S.fullLib && LibCache.save(S.fullLib), 1500, 1500, 30e3); }
 }
 /* aggiornamento silenzioso dopo un avvio da cache */
@@ -2537,8 +2547,9 @@ async function refreshLibrary(manual) {
   S.refreshing = true;
   const gen = libLoadGen;
   try {
-    const r = await fetchLibrary();
+    const r = await fetchLibrary(null, !manual);
     if (gen !== libLoadGen) return; // nel frattempo è stata caricata un'altra playlist
+    if (r.same) return; // nessun cambiamento: la libreria in uso resta (come prima, ma senza ricopiarla)
     if (!r.ok) { if (manual) toast('Aggiornamento non riuscito: ' + (S.loadErrors[0] || ''), 5000); return; }
     // se una playlist non ha risposto si tiene la versione in memoria (altrimenti i suoi contenuti sparirebbero)
     if (S.loadErrors.length) { if (manual) S.refreshPartial = true; return; }
@@ -2549,7 +2560,7 @@ async function refreshLibrary(manual) {
       // a richiesta manuale si applica subito
       const apply = () => {
         if (S.libSig !== prev || S.inPlayer || gen !== libLoadGen) { if (S.libSig !== prev || gen !== libLoadGen) return; return whenIdle(apply, 2000, 2000, 120e3); }
-        setLib(r.lib); S.libSig = sig;
+        setLib(r.lib); S.libSig = sig; S.partSig = r.psig || null;
         whenIdle(() => S.fullLib && LibCache.save(S.fullLib), 1000, 2000, 60e3); // si salva quando il telecomando è fermo
         if (!manual) toast('Contenuti aggiornati');
       };
@@ -2586,7 +2597,7 @@ const LibCache = {
   },
   async save(lib) {
     if (inView()) { whenIdle(() => S.fullLib && this.save(S.fullLib), 1000, 2000, 60e3); return; } // mai durante la visione (§7)
-    const k = this.key(), data = { live: lib.live, movies: lib.movies, series: lib.series, t: Date.now(), sig: lib.sig || S.libSig || '', clean: lib.clean ? 1 : 0 };
+    const k = this.key(), data = { live: lib.live, movies: lib.movies, series: lib.series, t: Date.now(), sig: lib.sig || S.libSig || '', clean: lib.clean ? 1 : 0, psig: S.partSig || null };
     S.cacheT = data.t;
     try {
       const db = await this.db();
@@ -6732,7 +6743,7 @@ async function loadOrCache() {
   S.fromCache = false;
   const c = await LibCache.load();
   if (c) {
-    setLib(c); S.fromCache = true; S.cacheT = +c.t || 0;
+    setLib(c); S.fromCache = true; S.cacheT = +c.t || 0; S.partSig = c.psig || null;
     if (c.sig) S.libSig = c.sig; else { S.libSig = ''; whenIdle(() => { if (S.fullLib === c) S.libSig = libSig(c); }, 2000); }
     // il fornitore può aver cambiato il server ("DNS") mentre l'app era chiusa: si riscrivono solo gli indirizzi
     const snap = store.get('plSnap', null);
