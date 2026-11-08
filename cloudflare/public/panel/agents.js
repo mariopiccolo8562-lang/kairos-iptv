@@ -78,6 +78,10 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 .st-tab.on{border-color:rgba(61,124,245,.6)!important;background:rgba(61,124,245,.1)!important}
 /* agenti */
 .ag-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}.ag-bar .inp{flex:1;min-width:220px;margin:0}
+.ag-bulk-wrap{max-height:68vh;overflow:auto;padding-right:4px}.ag-bulk-steps{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.ag-bulk-step{padding:5px 9px;border:1px solid var(--line);border-radius:999px;color:var(--mut);font-size:12px}.ag-bulk-step.on{border-color:var(--a1);color:#fff;background:rgba(61,124,245,.14)}
+.ag-bulk-group{border:1px solid var(--line);border-radius:10px;padding:11px;margin:10px 0;background:rgba(255,255,255,.02)}.ag-bulk-group h4{margin:0 0 8px;font-size:13.5px}.ag-bulk-perms{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:7px}.ag-bulk-perm{display:grid;grid-template-columns:minmax(0,1fr) 145px;gap:8px;align-items:center;padding:7px 8px;border-radius:7px;background:var(--glass);font-size:12.5px}.ag-bulk-perm small{display:block;color:var(--mut);font-size:11px;margin-top:2px;line-height:1.3}.ag-bulk-perm select,.ag-bulk-list select{margin:0}
+.ag-bulk-lists{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:9px}.ag-bulk-list{border:1px solid var(--line);border-radius:9px;padding:10px;min-width:0}.ag-bulk-list h5{margin:0 0 6px;font-size:13px}.ag-bulk-list .ag-chk{max-height:145px;overflow:auto;margin:6px 0}.ag-bulk-list small{display:block;color:var(--mut);font-size:11.5px;line-height:1.4;margin-top:6px}.ag-bulk-agents{max-height:42vh;overflow:auto;border:1px solid var(--line);border-radius:9px;padding:5px}.ag-bulk-agent{display:flex;gap:9px;align-items:center;padding:8px;border-bottom:1px solid var(--line);font-size:13px}.ag-bulk-agent:last-child{border-bottom:0}.ag-bulk-agent small{display:block;color:var(--mut)}.ag-bulk-summary{background:var(--glass);border:1px solid var(--line);border-radius:9px;padding:12px;margin:8px 0;font-size:13px}.ag-bulk-summary li{margin:4px 0}
+@media(max-width:600px){.ag-bulk-wrap{max-height:64vh}.ag-bulk-perm{grid-template-columns:1fr}.ag-bulk-perms,.ag-bulk-lists{grid-template-columns:1fr}.ag-bar .inp{min-width:100%}}
 .ag-tbl{width:100%;border-collapse:collapse;font-size:13.5px}
 .ag-tbl th{text-align:left;font-size:12px;font-weight:600;color:var(--mut);padding:11px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
 .ag-tbl td{padding:12px;border-bottom:1px solid var(--line);vertical-align:middle}
@@ -515,7 +519,7 @@ body.agent .foot{display:none}
       <p class="ag-hnote">Il dominio deve essere tuo su Cloudflare e collegato al pannello (dominio personalizzato del Worker <b>kairos-panel</b>). Da quell'indirizzo tu non entri (risulta «credenziali errate»), così nessuno capisce che è anche il tuo pannello. L'assistenza agli agenti la fai sempre dal tuo.</p></div>`;
     V.innerHTML = `${hostCard}<div class="ag-bar"><input class="inp" id="agQ" placeholder="Cerca agente per nome, email o note" value="${esc(st.q)}">
       <div class="seg" id="agF">${[['all', 'Tutti'], ['on', 'Attivi'], ['off', 'Disattivati']].map(([k, l]) => `<button data-f="${k}" class="${st.f === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-      <button class="btn pri" id="agNew">+ Nuovo ${sub ? 'sotto-agente' : 'agente'}</button></div>
+      ${!sub || me().canAgents ? '<button class="btn" id="agBulk">👥 Applica a più agenti</button>' : ''}<button class="btn pri" id="agNew">+ Nuovo ${sub ? 'sotto-agente' : 'agente'}</button></div>
       <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th><th>Link accesso</th><th>DNS</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
       ${list.map((a) => { const pct = a.maxClients ? Math.min(100, Math.round((a.clients / a.maxClients) * 100)) : 100; const up = a.parentId && byId.get(a.parentId);
         return `<tr data-ag="${a.id}"><td class="num">${a.id}</td>
@@ -541,6 +545,7 @@ body.agent .foot{display:none}
         saveHost({ agentHostOnly: on }, on ? 'Agenti solo dal loro indirizzo' : 'Gli agenti possono entrare da entrambi');
       };
     }
+    $('#agBulk') && ($('#agBulk').onclick = openBulkAgents);
     $('#agNew').onclick = () => openAgent(null);
     $$('[data-ag]', V).forEach((r) => (r.onclick = () => openAgent(L.find((a) => a.id === +r.dataset.ag))));
     $$('[data-aglink]', V).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); linkBox(L.find((a) => a.id === +b.dataset.aglink)); }));
@@ -590,6 +595,114 @@ body.agent .foot{display:none}
   const APP_KEYS = ['appstore', 'players', 'appsOp', 'dlcodes', 'appk', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'ro', 'slt']; // hanno la loro sezione nell'editor
   const KAPPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['prem', 'Kairos Premium'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova'], ['store', 'Kairos Store']];
   const dlcNames = () => (Array.isArray(D.dlCodes) ? D.dlCodes : []).map((x) => [x.name, x.name]);
+  const bulkAppFlags = new Set(['appstore', 'players', 'appsOp', 'dlcodes', 'appk']);
+  const bulkPanelFlags = new Set(['armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt']);
+  const bulkFlagGroups = [
+    ['Permessi', FL.filter(([k]) => !bulkAppFlags.has(k) && !bulkPanelFlags.has(k))],
+    ['Pagine del pannello', FP.filter(([k]) => !bulkAppFlags.has(k) && !bulkPanelFlags.has(k) && k !== 'store')],
+    ['Sezione App', [...FL, ...FP].filter(([k]) => bulkAppFlags.has(k))],
+    ['Pannelli IPTV', [
+      ...FP.filter(([k]) => bulkPanelFlags.has(k)),
+      ['armadaTrial', 'Può creare prove gratuite Armada', 'Al massimo 10 al giorno'],
+      ['stormTrial', 'Può creare prove gratuite Storm', 'Al massimo 10 al giorno'],
+      ['oxpNew', 'Può creare playlist OrbixPlay', 'Usa i tuoi posti'],
+    ]],
+  ].map(([title, entries]) => [title, entries.filter((entry, i) => entries.findIndex((x) => x[0] === entry[0]) === i)]);
+  const bulkListDefs = () => {
+    const apps = Array.isArray(D.settings && D.settings.appLinks) ? D.settings.appLinks : Array.isArray(D.appLinks) ? D.appLinks : [];
+    return [
+      { key: 'dlcAllow', title: 'Codici downloader', all: 'Tutti i codici', items: dlcNames() },
+      { key: 'appsAllow', title: 'Attiva app', all: 'Tutte le app', items: [...new Set(apps.map((x) => x.name).filter(Boolean))].map((x) => [x, x]) },
+      { key: 'kAllow', title: 'App Kairos', all: 'Tutte le app', items: KAPPS },
+      { key: 'storeApps', title: 'Store apps', all: 'Tutte le app', items: [...new Set((D.storeAppNames || []).filter(Boolean))].map((x) => [x, x]) },
+    ];
+  };
+  function openBulkAgents() {
+    const agents = D.agents || [], lists = bulkListDefs();
+    const selected = new Set(), state = { step: 1, search: '', flags: {}, lists: {} };
+    const appLabel = (key, value) => value === '*' ? lists.find((x) => x.key === key)?.all || 'Tutti' : lists.find((x) => x.key === key)?.items.find((x) => String(x[0]).toLowerCase() === String(value).toLowerCase())?.[1] || value;
+    const hasChanges = () => Object.keys(state.flags).length > 0 || Object.keys(state.lists).length > 0;
+    const captureChanges = () => {
+      state.flags = Object.fromEntries($$('#mB [data-bulk-flag]').filter((x) => x.value !== '').map((x) => [x.dataset.bulkFlag, x.value === '1']));
+      state.lists = {};
+      for (const def of lists) {
+        const items = $$('#mB [data-bulk-list="' + def.key + '"]:checked').map((x) => x.dataset.bulkValue);
+        if (items.length) state.lists[def.key] = { mode: ($('#mB [data-bulk-mode="' + def.key + '"]') || {}).value || 'add', items };
+      }
+    };
+    const render = () => {
+      const step = state.step, steps = ['Cosa cambiare', 'A quali agenti', 'Riepilogo'];
+      const head = `<div class="ag-bulk-steps">${steps.map((x, i) => `<span class="ag-bulk-step ${step === i + 1 ? 'on' : ''}">${i + 1}. ${x}</span>`).join('')}</div>`;
+      if (step === 1) {
+        const perms = bulkFlagGroups.map(([title, entries]) => `<section class="ag-bulk-group"><h4>${esc(title)}</h4><div class="ag-bulk-perms">${entries.map(([k, label, help]) => `<label class="ag-bulk-perm"><span>${esc(label)}${help ? `<small>${esc(help)}</small>` : ''}</span><select class="inp" data-bulk-flag="${esc(k)}"><option value="">Non cambiare</option><option value="1"${state.flags[k] === true ? ' selected' : ''}>Sì</option><option value="0"${state.flags[k] === false && Object.hasOwn(state.flags, k) ? ' selected' : ''}>No</option></select></label>`).join('')}</div></section>`).join('');
+        const listHtml = lists.map((def) => {
+          const cur = state.lists[def.key], selectedItems = new Set((cur?.items || []).map((x) => String(x).toLowerCase()));
+          const items = [['*', def.all], ...def.items].map(([value, label]) => `<label><input type="checkbox" data-bulk-list="${esc(def.key)}" data-bulk-value="${esc(value)}"${selectedItems.has(String(value).toLowerCase()) ? ' checked' : ''}> ${esc(label)}</label>`).join('');
+          return `<section class="ag-bulk-list"><h5>${esc(def.title)}</h5><select class="inp" data-bulk-mode="${esc(def.key)}"><option value="add"${!cur || cur.mode === 'add' ? ' selected' : ''}>Aggiungi</option><option value="remove"${cur?.mode === 'remove' ? ' selected' : ''}>Togli</option><option value="set"${cur?.mode === 'set' ? ' selected' : ''}>Sostituisci</option></select><div class="ag-chk">${items || '<small>Nessuna voce disponibile.</small>'}</div><small>Nessuna spunta = nessuna modifica. «Tutti» (*) include anche le voci future; con «Togli», un elenco già impostato su tutti resta tutti.</small></section>`;
+        }).join('');
+        $('#mB').innerHTML = `${head}<div class="ag-bulk-wrap"><p class="mut">Scegli solo le voci da cambiare: tutto il resto resta com'è. ${isAgent() ? 'I permessi non concessi a te saranno tolti automaticamente.' : ''}</p>${perms}<section class="ag-bulk-group"><h4>Elenchi consentiti</h4><div class="ag-bulk-lists">${listHtml}</div></section></div>`;
+        const updateNext = () => { captureChanges(); $('#mYes').disabled = !hasChanges(); };
+        $$('#mB [data-bulk-flag], #mB [data-bulk-list], #mB [data-bulk-mode]').forEach((x) => (x.onchange = updateNext));
+        $('#mYes').textContent = 'Avanti'; $('#mYes').disabled = !hasChanges(); $('#mNo').textContent = 'Annulla';
+      } else if (step === 2) {
+        const q = state.search.toLowerCase(), visible = agents.filter((a) => !q || [a.username, a.email, a.id].join(' ').toLowerCase().includes(q));
+        const allVisible = visible.length > 0 && visible.every((a) => selected.has(a.id));
+        $('#mB').innerHTML = `${head}<div class="ag-bulk-wrap"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><input class="inp" id="agBulkQ" placeholder="Cerca agente per nome o email" value="${esc(state.search)}" style="margin:0;flex:1;min-width:180px"><label><input type="checkbox" id="agBulkAll"${allVisible ? ' checked' : ''}> Seleziona tutti</label></div><small class="mut" style="display:block;margin:0 0 8px">Puoi selezionare fino a 200 agenti. Se sei un sotto-agente, qui compaiono solo i tuoi sotto-agenti.</small><div class="ag-bulk-agents">${visible.map((a) => `<label class="ag-bulk-agent"><input type="checkbox" data-bulk-agent="${a.id}"${selected.has(a.id) ? ' checked' : ''}><span><b>${esc(a.username)}</b><small>ID ${a.id}${a.email ? ' · ' + esc(a.email) : ''}</small></span></label>`).join('') || '<div class="emptyc">Nessun agente trovato.</div>'}</div><p class="mut" style="margin:8px 0 0">Selezionati: <b id="agBulkCount">${selected.size}</b></p></div>`;
+        $('#agBulkQ').oninput = (e) => { state.search = e.target.value; render(); $('#agBulkQ').focus(); $('#agBulkQ').setSelectionRange(state.search.length, state.search.length); };
+        const updateSelection = () => {
+          const checks = $$('#mB [data-bulk-agent]');
+          for (const c of checks) { if (c.checked) selected.add(+c.dataset.bulkAgent); else selected.delete(+c.dataset.bulkAgent); }
+          $('#agBulkCount').textContent = selected.size;
+          $('#mYes').disabled = !selected.size;
+        };
+        $('#agBulkAll').onchange = (e) => {
+          if (e.target.checked) for (const a of visible) {
+            if (selected.size >= 200 && !selected.has(a.id)) { toast('Puoi selezionare al massimo 200 agenti', 1); break; }
+            selected.add(a.id);
+          } else visible.forEach((a) => selected.delete(a.id));
+          render();
+        };
+        $$('#mB [data-bulk-agent]').forEach((x) => (x.onchange = () => {
+          if (x.checked && selected.size >= 200 && !selected.has(+x.dataset.bulkAgent)) { x.checked = false; toast('Puoi selezionare al massimo 200 agenti', 1); }
+          updateSelection();
+        }));
+        $('#mYes').textContent = 'Riepilogo'; $('#mYes').disabled = !selected.size; $('#mNo').textContent = 'Indietro';
+      } else if (step === 3) {
+        const flagNames = new Map(bulkFlagGroups.flatMap(([, entries]) => entries.map(([k, name]) => [k, name])));
+        const flagSummary = Object.entries(state.flags).map(([k, v]) => `<li>${esc(flagNames.get(k) || k)} → <b>${v ? 'Sì' : 'No'}</b></li>`).join('');
+        const listSummary = Object.entries(state.lists).map(([k, op]) => `<li>${esc(lists.find((x) => x.key === k)?.title || k)} · ${op.mode === 'add' ? 'Aggiungi' : op.mode === 'remove' ? 'Togli' : 'Sostituisci'}: ${op.items.map((x) => esc(appLabel(k, x))).join(', ')}</li>`).join('');
+        const names = agents.filter((a) => selected.has(a.id)).map((a) => `<li>${esc(a.username)}</li>`).join('');
+        $('#mB').innerHTML = `${head}<div class="ag-bulk-wrap"><p>Conferma le modifiche per questi agenti:</p><div class="ag-bulk-summary"><b>Agenti (${selected.size})</b><ul>${names}</ul></div><div class="ag-bulk-summary"><b>Permessi</b><ul>${flagSummary || '<li>Nessuna modifica</li>'}</ul></div><div class="ag-bulk-summary"><b>Elenchi</b><ul>${listSummary || '<li>Nessuna modifica</li>'}</ul></div>${isAgent() ? '<p class="mut">I permessi e gli elenchi saranno limitati a quelli concessi a te.</p>' : ''}</div>`;
+        $('#mYes').textContent = `Applica a ${selected.size} agenti`; $('#mYes').disabled = !selected.size || !hasChanges(); $('#mNo').textContent = 'Indietro';
+      } else {
+        const skipped = state.result?.skipped || [];
+        $('#mB').innerHTML = `${head}<div class="ag-bulk-wrap"><div class="ag-bulk-summary"><b>${state.error ? 'Non è stato possibile applicare le modifiche' : `Aggiornati ${state.result?.updated || 0} · saltati ${skipped.length}`}</b>${state.error ? `<p>${esc(state.error)}</p>` : ''}${skipped.length ? `<ul>${skipped.map((x) => `<li>${esc(x.username || `Agente ${x.id}`)}: ${esc(x.reason)}</li>`).join('')}</ul>` : ''}</div></div>`;
+        $('#mYes').textContent = 'Chiudi'; $('#mYes').disabled = false; $('#mNo').style.display = 'none';
+      }
+    };
+    const noText = $('#mNo').textContent, promise = ask('👥 Applica a più agenti', '', 'Avanti'), resetNo = () => { $('#mNo').textContent = noText; $('#mNo').style.display = ''; }, okYes = $('#mYes').onclick, okNo = $('#mNo').onclick, closeYes = () => { resetNo(); okYes(); }, closeNo = () => { resetNo(); okNo(); };
+    $('#mYes').onclick = async () => {
+      if (state.step === 1) { captureChanges(); if (!hasChanges()) return; state.step = 2; render(); return; }
+      if (state.step === 2) { if (!selected.size) return; state.step = 3; render(); return; }
+      if (state.step === 3) {
+        $('#mYes').disabled = true;
+        const payload = { ids: [...selected], flags: state.flags, lists: state.lists };
+        try { state.result = await api('POST', '/admin/agents/bulk', payload); } catch (e) { state.error = e.message; }
+        state.step = 4; render(); return;
+      }
+      closeYes();
+    };
+    $('#mNo').onclick = () => {
+      if (state.step === 1) { closeNo(); return; }
+      if (state.step === 4) { closeNo(); return; }
+      state.step--; render();
+    };
+    render();
+    return promise.then(async () => {
+      try { const r = await api('GET', '/admin/agents'); D.agents = r.agents || []; } catch (e) { toast(e.message, 1); }
+      renderAgents();
+    });
+  }
   // elenco «tutti» + voci singole (['*'] = tutte, anche future); un sotto-agente mai oltre chi lo crea
   const listBox = (attr, cur, items, top, empty) => {
     cur = Array.isArray(cur) ? cur : ['*']; const all = cur.includes('*'), topAll = !Array.isArray(top) || top.includes('*');
