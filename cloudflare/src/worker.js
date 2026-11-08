@@ -45,6 +45,7 @@ export default {
     // app terzi: se l'hai chiesto, ogni notte si tolgono le liste inattive
     try { const c = (await getSettings(env)).playersCfg || {}; if (c.autoClean) await thirdCleanup(env, c.cleanDays || 60, 'Pulizia automatica', ''); } catch {}
     try { await wolfCron(env, WOLF_H); } catch {}
+    try { await paymentsAutoRenew(env); } catch {}
   },
 };
 
@@ -803,6 +804,7 @@ async function llNote(env, o) {
 }
 const llAutoOff = (env, d, src) => env.DB.prepare('DELETE FROM linked_lines WHERE device_id = ? AND source = ?').bind(d.id, src).run();
 const PAY_PANELS = new Set(['wolf', 'armada', 'storm', 'atx', 'ora', 'ro', 'slt', 'orcp', 'mxp', 'oxp']);
+const AUTO_PAY_PANELS = new Set(['wolf', 'armada', 'storm', 'atx', 'ro', 'slt']);
 const paymentToday = () => new Date().toISOString().slice(0, 10);
 function paymentEffective(row, today = paymentToday()) {
   if (row.status === 'paid' && row.paid_until && row.paid_until < today)
@@ -871,6 +873,44 @@ async function paymentsRoutes(req, env, who, ip, ag) {
   if (b.note !== undefined && typeof b.note !== 'string') throw new HttpErr(400, 'Nota non valida');
   const note = b.note === undefined ? old?.note || '' : b.note.trim();
   if (note.length > 200) throw new HttpErr(400, 'La nota può contenere al massimo 200 caratteri');
+  let autoMonths = +old?.auto_months || 0, autoOpt = old?.auto_opt || '', autoLine = old?.auto_line || '';
+  const autoTouched = ['autoMonths', 'autoOpt', 'autoLine'].some((k) => Object.prototype.hasOwnProperty.call(b, k));
+  if (autoTouched && kind === 'line' && !AUTO_PAY_PANELS.has(panel)) throw new HttpErr(400, 'Rinnovo automatico non disponibile su questo pannello');
+  if (autoTouched) {
+    autoMonths = b.autoMonths === undefined || b.autoMonths === '' ? 0 : Number(b.autoMonths);
+    autoOpt = b.autoOpt === undefined ? '' : str(b.autoOpt, 80).trim();
+    if (!Number.isInteger(autoMonths) || autoMonths < 0 || autoMonths > 12) throw new HttpErr(400, 'Periodo automatico non valido');
+    const enabled = autoMonths > 0 || !!autoOpt || !!b.autoLine;
+    if (enabled && !(kind === 'device' || kind === 'line' && AUTO_PAY_PANELS.has(panel))) throw new HttpErr(400, 'Rinnovo automatico non disponibile su questo pannello');
+    if (enabled && ag && !ag.autoRenew) throw new HttpErr(403, 'Non puoi usare il rinnovo automatico');
+    if (!enabled) { autoMonths = 0; autoOpt = ''; autoLine = ''; }
+    else if (kind === 'device') {
+      if (autoMonths < 1 || autoMonths > 12 || autoOpt || b.autoLine) throw new HttpErr(400, 'Scegli un rinnovo da 1 a 12 mesi');
+      autoLine = '';
+    } else {
+      let line = b.autoLine;
+      if (typeof line === 'string') { try { line = JSON.parse(line); } catch { line = line.trim(); } }
+      if (panel === 'armada' || panel === 'storm') {
+        if (!line || typeof line !== 'object') throw new HttpErr(400, 'Linea automatica non valida');
+        const type = line.type === 'mag' ? 'mag' : line.type === 'm3u' ? 'm3u' : '';
+        const username = type === 'm3u' ? str(line.username, 120).trim() : '';
+        const mac = type === 'mag' ? str(line.mac, 32).trim() : '';
+        if (!type || (type === 'm3u' ? !username || !/^[\w.@-]{1,120}$/.test(username) : !/^(?:[0-9A-Fa-f]{2}[:-]?){6}$/.test(mac))) throw new HttpErr(400, 'Linea automatica non valida');
+        autoLine = JSON.stringify(type === 'm3u' ? { type, username } : { type, mac });
+        if (![1, 3, 6, 12].includes(autoMonths) || autoOpt) throw new HttpErr(400, 'Scegli 1, 3, 6 o 12 mesi');
+      } else {
+        const id = typeof line === 'object' && line ? String(line.id || '') : String(line || '');
+        const validId = panel === 'wolf' || panel === 'atx' ? /^\d{1,12}$/.test(id) : /^[A-Za-z0-9_-]{1,80}$/.test(id);
+        if (!validId) throw new HttpErr(400, 'Linea automatica non valida');
+        autoLine = id;
+        if (panel === 'atx') {
+          if (![1, 2, 3, 6, 12].includes(autoMonths) || autoOpt) throw new HttpErr(400, 'Scegli 1, 2, 3, 6 o 12 mesi');
+        } else if (panel === 'wolf' || panel === 'ro' || panel === 'slt') {
+          if (autoMonths || !/^[A-Za-z0-9_-]{1,80}$/.test(autoOpt)) throw new HttpErr(400, 'Scegli il pacchetto');
+        }
+      }
+    }
+  }
   let paidUntil = '';
   if (status === 'paid') {
     paidUntil = str(b.paidUntil, 10) || paymentAddMonths(months);
@@ -879,14 +919,101 @@ async function paymentsRoutes(req, env, who, ip, ag) {
   const label = str(b.label, 160) || (old && old.label) || ref;
   const remind = b.remind === undefined ? (old ? +old.remind : 1) : (b.remind === true || b.remind === 1 ? 1 : 0);
   const t = now();
-  await env.DB.prepare(`INSERT INTO payments (kind, panel, ref, owner_id, label, status, months, amount, note, since, paid_until, remind, updated)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  await env.DB.prepare(`INSERT INTO payments (kind, panel, ref, owner_id, label, status, months, amount, note, since, paid_until, remind, updated, auto_months, auto_opt, auto_line)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(kind, panel, ref) DO UPDATE SET owner_id = excluded.owner_id, label = excluded.label, status = excluded.status,
     months = excluded.months, amount = excluded.amount, note = excluded.note, since = excluded.since, paid_until = excluded.paid_until,
-    remind = excluded.remind, updated = excluded.updated`)
-    .bind(kind, panel, ref, ownerId, label, status, months, amount, note, t, paidUntil, remind, t).run();
+    remind = excluded.remind, updated = excluded.updated, auto_months = excluded.auto_months, auto_opt = excluded.auto_opt, auto_line = excluded.auto_line`)
+    .bind(kind, panel, ref, ownerId, label, status, months, amount, note, t, paidUntil, remind, t, autoMonths, autoOpt, autoLine).run();
   await log(env, old ? 'edit' : 'new', `${who}: pagamento ${status === 'due' ? 'da riscuotere' : 'segnato pagato'} · ${label} (${panel || kind})`, ip).catch(() => {});
-  return json({ ok: true, row: paymentEffective({ kind, panel, ref, owner_id: ownerId, label, status, months, amount, note, since: t, paid_until: paidUntil, remind, updated: t }) });
+  return json({ ok: true, row: paymentEffective({ kind, panel, ref, owner_id: ownerId, label, status, months, amount, note, since: t, paid_until: paidUntil, remind, updated: t, auto_months: autoMonths, auto_opt: autoOpt, auto_line: autoLine, last_renew: old?.last_renew || '', last_result: old?.last_result || '' }) });
+}
+async function cronDispatch(env, ownerId, method, path, body) {
+  const settings = ownerId ? await getSettings(env) : null;
+  const agent = ownerId ? await env.DB.prepare("SELECT username FROM admins WHERE id = ? AND role = 'agent'").bind(ownerId).first() : null;
+  const host = String(settings && settings.agentHost || 'localhost');
+  const url = new URL(path, /^https?:\/\//i.test(host) ? host : `https://${host}`);
+  const req = new Request(url, { method, headers: body === undefined ? {} : { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const ctx = { waitUntil: (p) => Promise.resolve(p).catch(() => {}) };
+  const who = 'Rinnovo automatico', ip = '';
+  const res = ownerId
+    ? await agentRoutes(req, env, url, url.pathname, { id: 'auto-renew-' + ownerId, expires: now() + 60000, admin_id: ownerId, username: agent && agent.username || who, role: 'agent', active: 1 }, ip, ctx)
+    : await adminRoutes(req, env, url, url.pathname, who, ip, ctx, { id: 'auto-renew', admin_id: 0, username: who, role: 'admin' });
+  if (!(res instanceof Response)) return res;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.error || data.ok === false || data.success === false) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  return data;
+}
+function autoDate(v) {
+  const s = String(v || '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s) && DATE_RE.test(s)) return s;
+  const n = +v;
+  if (Number.isFinite(n) && n > 0) return new Date((n < 1e12 ? n * 1000 : n)).toISOString().slice(0, 10);
+  const m = s.match(/(\d{4}-\d{2}-\d{2})/);
+  return m && DATE_RE.test(m[1]) ? m[1] : '';
+}
+async function paymentsAutoRenew(env) {
+  const rows = ((await env.DB.prepare("SELECT * FROM payments WHERE auto_months > 0 OR auto_opt <> '' ORDER BY updated LIMIT 200").all()).results) || [];
+  const allAgents = rows.some((r) => +r.owner_id > 0) ? await agentsAll(env) : [];
+  const today = paymentToday();
+  const setResult = (r, result, renewed = '') => env.DB.prepare('UPDATE payments SET last_result = ?, last_renew = CASE WHEN ? <> ? THEN ? ELSE last_renew END, updated = ? WHERE kind = ? AND panel = ? AND ref = ?')
+    .bind(result, renewed, '', renewed, now(), r.kind, r.panel, r.ref).run();
+  for (const r of rows) {
+    try {
+      const owner = +r.owner_id || 0;
+      if (owner) {
+        const P = agEffPerms(allAgents, owner);
+        if (!(await agentChainActive(env, owner, allAgents)) || !P || !P.autoRenew) { await setResult(r, 'Fermo: agente disattivato o senza permesso'); continue; }
+      }
+      let expiry = '', line = null, lineKey = r.auto_line;
+      if (r.kind === 'device') {
+        const d = await env.DB.prepare('SELECT expires FROM devices WHERE id = ? AND parent = ?').bind(r.ref, '').first();
+        expiry = autoDate(d && d.expires);
+      } else {
+        let auto = lineKey;
+        if (r.panel === 'armada' || r.panel === 'storm') { try { auto = JSON.parse(lineKey); } catch { auto = { type: 'm3u', username: lineKey }; } }
+        const path = r.panel === 'wolf' ? '/wolf/lines' : r.panel === 'armada' || r.panel === 'storm' ? `/${r.panel}/${auto.type === 'mag' ? 'mags' : 'lines'}` : r.panel === 'atx' ? '/atx/lines?all=1' : `/${r.panel}/lines`;
+        const data = await cronDispatch(env, owner, 'GET', path);
+        const list = Array.isArray(data) ? data : data.lines || data.rows || data.items || data.list || [];
+        line = list.find((x) => r.panel === 'armada' || r.panel === 'storm'
+          ? auto.type === 'mag' ? String(x.mac || '').replace(/[^0-9a-f]/gi, '').toLowerCase() === String(auto.mac || '').replace(/[^0-9a-f]/gi, '').toLowerCase() : String(x.username || '') === String(auto.username || '')
+          : String(x.id || x.user_id || '') === String(lineKey));
+        expiry = autoDate(line && (line.exp ?? line.exp_date ?? line.expire_date ?? line.expTxt));
+      }
+      if (!expiry) { await setResult(r, 'Fermo: scadenza sconosciuta'); continue; }
+      if (r.last_renew === today) continue;
+      if ((Date.parse(expiry + 'T00:00:00Z') - Date.parse(today + 'T00:00:00Z')) / 864e5 > 2) continue;
+      if (paymentEffective(r, today).status !== 'paid' || !r.paid_until || r.paid_until <= expiry) { await setResult(r, 'Fermo: non ha pagato'); continue; }
+      let out;
+      if (r.kind === 'device') {
+        const base = expiry >= today ? expiry : today;
+        out = await cronDispatch(env, owner, 'PUT', `/devices/${encodeURIComponent(r.ref)}`, { expires: paymentAddMonths(+r.auto_months, base) });
+      } else if (r.panel === 'wolf') out = await cronDispatch(env, owner, 'POST', `/wolf/lines/${encodeURIComponent(lineKey)}/extend`, { package: r.auto_opt });
+      else if (r.panel === 'armada' || r.panel === 'storm') {
+        const auto = JSON.parse(lineKey);
+        out = await cronDispatch(env, owner, 'POST', `/${r.panel}/renew`, { type: auto.type, sub: +r.auto_months, ...(auto.type === 'mag' ? { mac: auto.mac } : { username: auto.username, password: line.password || '' }) });
+      } else if (r.panel === 'atx') out = await cronDispatch(env, owner, 'POST', '/atx/lines/action', { action: 'renew', user_id: lineKey, months: +r.auto_months });
+      else out = await cronDispatch(env, owner, 'POST', `/${r.panel}/lines/action`, { action: 'renew', id: lineKey, package_id: r.auto_opt });
+      let renewed = autoDate(out && (out.exp ?? out.exp_date ?? out.expire_date));
+      if (!renewed && r.kind === 'device') renewed = autoDate((await env.DB.prepare('SELECT expires FROM devices WHERE id = ?').bind(r.ref).first() || {}).expires);
+      if (!renewed && r.kind === 'line') {
+        try {
+          const path = r.panel === 'wolf' ? '/wolf/lines' : r.panel === 'armada' || r.panel === 'storm' ? `/${r.panel}/${JSON.parse(lineKey).type === 'mag' ? 'mags' : 'lines'}` : r.panel === 'atx' ? '/atx/lines?all=1' : `/${r.panel}/lines`;
+          const d = await cronDispatch(env, owner, 'GET', path), list = d.lines || d.rows || [];
+          const a = r.panel === 'armada' || r.panel === 'storm' ? JSON.parse(lineKey) : null;
+          const x = list.find((y) => a ? a.type === 'mag' ? String(y.mac || '').replace(/[^0-9a-f]/gi, '').toLowerCase() === String(a.mac).replace(/[^0-9a-f]/gi, '').toLowerCase() : String(y.username || '') === a.username : String(y.id || y.user_id || '') === lineKey);
+          renewed = autoDate(x && (x.exp ?? x.exp_date ?? x.expire_date ?? x.expTxt));
+        } catch {}
+      }
+      const result = 'Rinnovata' + (renewed ? ` fino al ${renewed}` : '');
+      await setResult(r, result, today);
+      await log(env, 'edit', `Rinnovo automatico: ${r.label || r.ref} (${r.panel || 'device'})${renewed ? ' fino al ' + renewed : ''}`, '').catch(() => {});
+    } catch (e) {
+      const result = 'Errore: ' + String(e && e.message || e || 'operazione non riuscita').replace(/[\r\n]+/g, ' ').slice(0, 160);
+      await setResult(r, result).catch(() => {});
+      await log(env, 'edit', `Rinnovo automatico: ${r.label || r.ref} (${r.panel || 'device'}) — ${result}`, '').catch(() => {});
+    }
+  }
 }
 /** ag: null = titolare (vede tutto) · { id, tree, hideHosts } = agente (solo le linee sue e dei sotto-agenti visibili) */
 async function linkedLinesRoutes(req, env, path, who, ip, ag) {
@@ -3867,10 +3994,10 @@ async function adminInner(req, env, url, ip, ctx) {
    e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
    ====================================================================== */
 const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'account', 'ai',
-  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'payments', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt'];
+  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'payments', 'autoRenew', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt'];
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, payments: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, mxp: false, oxp: false, oxpNew: false, addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, payments: false, autoRenew: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, mxp: false, oxp: false, oxpNew: false, addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
@@ -4235,7 +4362,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const need = (k, msg) => { if (!P[k]) throw new HttpErr(403, msg || 'Funzione non consentita: chiedila a chi ti ha creato'); };
   if (path === '/payments') {
     if (m === 'PUT') need('payments', 'Non puoi gestire i pagamenti');
-    return paymentsRoutes(req, env, who, ip, { id: A.id, tree: ctree, own });
+    return paymentsRoutes(req, env, who, ip, { id: A.id, tree: ctree, own, autoRenew: !!P.autoRenew });
   }
   // tutti i dispositivi dei suoi clienti (principali e collegati)
   let scopeMem = null;
