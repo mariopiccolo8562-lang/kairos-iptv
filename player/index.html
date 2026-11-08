@@ -717,6 +717,41 @@ img{display:block}
 .hmeta .gen{text-transform:uppercase;letter-spacing:.04em}
 .aichips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:6px 0}
 .aians{text-align:left;max-height:40vh;overflow:auto;margin:10px 0;line-height:1.5}.aians .aiq{color:var(--mut);font-size:13px;margin:0 0 6px}.aians .ait{font-size:15px}
+/* ===== assistente IA: ricerca con le frasi, «Cosa guardo stasera?», risposte con i titoli della libreria (leggero: niente ombre né sfocature) ===== */
+.field .qb{flex:none;width:clamp(40px,6.4vh,56px);height:clamp(40px,6.4vh,56px);border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.08);color:#fff;font-size:clamp(17px,2.8vh,24px);font-weight:700}
+.field .qb svg{width:50%;height:50%;color:inherit}
+.field .qb.on{background:var(--a1);color:#fff}
+.field .qb.focused{background:#fff;color:#000;outline:0}
+.aitile,.aibox{display:flex;align-items:center;gap:14px;margin:6px 6px 12px;padding:clamp(10px,1.8vh,16px) clamp(14px,1.4vw,20px);border-radius:14px;border:1px solid var(--a1-40);background:linear-gradient(100deg,var(--a1-22),rgba(255,255,255,.03))}
+.aitile>i,.aibox>i{font-style:normal;font-size:clamp(20px,3.6vh,30px);color:var(--a2);flex:none}
+.aitile b,.aibox b{display:block;font-size:clamp(14px,2.5vh,19px)}
+.aitile small,.aibox small{display:block;color:var(--mut);font-size:clamp(11px,1.9vh,14px);margin-top:3px}
+.aitile.focused{background:linear-gradient(100deg,var(--a1-45),rgba(255,255,255,.08))}
+.aibox.err{border-color:var(--line);background:rgba(255,255,255,.04)}
+.aicr{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.aicr span{padding:2px 10px;border-radius:99px;background:rgba(255,255,255,.09);font-size:clamp(10px,1.8vh,13px)}
+.aiansw{margin:-4px 8px 10px;font-size:clamp(13px,2.4vh,18px);line-height:1.45}
+.aiempty{padding:10px 8px!important;font-size:clamp(12px,2vh,15px)}
+.aiex{padding:2vh 6px;text-align:center}.aiex p{margin:0 0 1.4vh;font-size:clamp(13px,2.3vh,17px)}
+.stile .lg.evlg,.tni.evlg{color:var(--a2)}.stile .lg.evlg svg,.tni.evlg svg{width:55%;height:55%}
+.nc.ai2{width:clamp(220px,min(21vw,42vh),360px);height:clamp(108px,min(10vw,21vh),168px);border-radius:12px;padding:12px 16px;display:flex;flex-direction:column;justify-content:center;gap:4px;background:linear-gradient(135deg,var(--a1-35),#16161d 55%,var(--a2-30));border:1px solid rgba(255,255,255,.12)}
+.nc.ai2 i{font-style:normal;font-size:clamp(20px,3.6vh,30px);color:var(--a2);line-height:1}
+.nc.ai2 b{font-size:clamp(14px,2.5vh,20px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nc.ai2 small{color:#cfd2da;font-size:clamp(10px,1.8vh,13px)}
+.speedm.tnm .sbox{width:min(880px,94vw);text-align:left;padding:2.4vh 2.4vw}
+.tnm h2{margin:.4vh 0 1.4vh;font-size:clamp(16px,3.4vh,24px)}
+.tnl{display:grid;gap:1vh;padding:5px}
+.tnr{display:flex;align-items:center;gap:14px;padding:1vh 1vw;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--line);text-align:left}
+.tnr .tni{width:clamp(40px,7vh,60px);height:clamp(56px,10vh,86px);flex:none;border-radius:8px;overflow:hidden;background:#222;display:grid;place-items:center;font-weight:700;color:#aaa}
+.tnr .tni.l{height:clamp(40px,7vh,60px)}
+.tnr .tni img{width:100%;height:100%;object-fit:cover}.tnr .tni.l img{object-fit:contain;padding:4px}
+.tnr .tx{min-width:0;flex:1}
+.tnr b{display:block;font-size:clamp(14px,2.5vh,18px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tnr small{display:block;color:var(--mut);font-size:clamp(11px,1.9vh,13px);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tnr em{display:block;font-style:normal;color:var(--a2);font-size:clamp(12px,2.1vh,15px);margin-top:4px}
+.tnr.focused{background:rgba(255,255,255,.1)}
+.tnn{display:block;color:var(--mut);font-size:clamp(10px,1.8vh,13px);margin:1vh 0 0;min-height:1em}
+.aim .aih{margin:1.4vh 0 .8vh;font-size:clamp(11px,2vh,14px);color:var(--mut);font-weight:700}
+.aim .tagn .aimic.on{background:var(--a1);color:#fff}
 .rbtn.ai{color:var(--a2)}
 .wv{position:absolute;right:6px;top:6px;z-index:2;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--a1);color:#fff;font-size:12px;font-weight:900;box-shadow:0 2px 6px rgba(0,0,0,.5)}
 .ep.seen>b::after{content:' ✓';color:#3ddc84}
@@ -1420,7 +1455,7 @@ function kxLetters(text, sp = 3.1) {
   <!-- CERCA -->
   <section class="screen" id="search">
     <div class="navslot"></div>
-    <div class="field glass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="q" data-f placeholder="Cerca un canale, un film o una serie…" autocomplete="off"></div>
+    <div class="field glass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="q" data-f placeholder="Cerca un canale, un film o una serie…" autocomplete="off"><button class="qb" data-f id="qMic" title="Cerca a voce" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button><button class="qb" data-f id="qAi" title="Assistente: cerca con una frase" style="display:none">✦</button></div>
     <div class="sres" id="results"></div>
   </section>
 
@@ -3877,35 +3912,496 @@ window.kxMultiClosed = (r) => {
   const ch = r && r.full && S.byId && S.byId.get(r.full);
   if (ch) openFs(ch, 'live');
 };
-/* ======== assistente IA: domande su quello che si guarda (se il fornitore l'ha attivato) ======== */
+/* ======== assistente IA: ricerca con le frasi (anche a voce), «Cosa guardo stasera?», domande sul titolo o libere ========
+   All'IA va solo la frase (o la domanda) con il minimo dei titoli: i risultati li cerca l'app nella sua libreria e nella
+   guida TV. Il motore (Gemini di serie o Claude) lo sceglie il pannello. Ogni richiesta usa una domanda del giorno; senza IA
+   (spenta o domande finite) la ricerca per nome e «Cosa guardo stasera?» funzionano lo stesso, senza IA. */
 const aiOffNow = () => !!S.aiOff && Date.now() - S.aiOff < 10 * 60e3; // «non disponibile» si ricontrolla dopo 10 minuti (es. chiave appena aggiunta)
+const aiOn = () => perm('ai') && rcGet('ai') !== 'off' && !aiOffNow() && !S.demo && !!baseServer();
+const hasVoice = () => !!(NATIVE && NATIVE.voiceStart);
+const profKids = () => !!(S.prof && S.prof.kids);
+/** domanda all'assistente con un tempo massimo; errore con limit (domande finite), off (non disponibile), status */
+async function aiPost(body, ms) {
+  const url = baseServer() + '/api/player/ai', data = JSON.stringify({ code: S.code, secret: S.secret, ...body });
+  const call = hasNativeHttp() ? nativeFetch(url, 'POST', data) : fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: data }).then(async (r) => ({ status: r.status, text: await r.text() }));
+  let tm = 0;
+  call.catch(() => {}); // risposta arrivata dopo il tempo massimo: nessun errore a vuoto
+  const r = await Promise.race([call, new Promise((res) => { tm = setTimeout(() => res(null), ms || 18000); })]).finally(() => clearTimeout(tm));
+  if (!r) throw Object.assign(new Error('lento'), { slow: true });
+  let j = null; try { j = JSON.parse(r.text); } catch {}
+  if (j && j.off) { S.aiOff = Date.now(); throw Object.assign(new Error('spento'), { off: true }); }
+  if (!j || r.status >= 400 || j.error) {
+    const e = Object.assign(new Error((j && j.error) || 'errore ' + r.status), { status: r.status, limit: !!(j && j.limit) });
+    if (r.status === 403) { S.aiOff = Date.now(); e.off = true; }
+    throw e;
+  }
+  if (typeof j.left === 'number') S.aiLeft = j.left;
+  return j;
+}
+/* messaggi semplici, senza dettagli tecnici (chiavi, credito, servizio usato) */
+const aiErrTxt = (e) => (e && e.limit ? 'Per oggi le domande all\'assistente sono finite: riprendono domani.' : e && e.off ? 'L\'assistente non è disponibile adesso.' : e && e.status === 429 ? 'Troppe richieste insieme: riprova tra poco.' : 'L\'assistente non risponde adesso: riprova tra poco.');
+const aiLeftTxt = (n) => (n == null ? '' : n === 0 ? 'Era l\'ultima domanda di oggi' : n === 1 ? 'Ancora 1 domanda oggi' : n <= 5 ? `Ancora ${n} domande oggi` : '');
+/* ---- testi normalizzati: ' parola parola ' (minuscole, senza accenti) → confronti per parola intera ---- */
+const aiN = (s) => { s = String(s || '').toLowerCase(); if (/[^\x00-\x7f]/.test(s)) s = s.normalize('NFD').replace(/[̀-ͯ]/g, ''); return ' ' + s.replace(/[^a-z0-9]+/g, ' ').trim() + ' '; };
+const aiHas = (n, t) => (t.endsWith('*') ? n.includes(' ' + t.slice(0, -1)) : n.includes(' ' + t + ' '));
+/** generi del vocabolario del server → parole da cercare nelle categorie e nei generi dei titoli (* = inizio di parola) */
+const AI_GEN = {
+  azione: ['azione', 'action'], avventura: ['avventur*', 'adventure'], animazione: ['animazione', 'animati', 'animation', 'cartoni', 'cartoon*', 'anime'],
+  commedia: ['commedi*', 'comedy', 'comici', 'comico'], crimine: ['crime', 'crimin*', 'polizies*', 'gangster', 'noir'], documentario: ['document*', 'docu*'],
+  drammatico: ['dramma*', 'drama'], famiglia: ['famiglia', 'family', 'famil*'], fantascienza: ['fantascienza', 'sci fi', 'scifi', 'science fiction'],
+  fantasy: ['fantasy', 'fantastic*'], guerra: ['guerra', 'war', 'bellic*'], horror: ['horror', 'orrore', 'paura'], musica: ['music*', 'concert*'],
+  mistero: ['mister*', 'mystery', 'giallo', 'gialli'], romantico: ['romantic*', 'romance', 'sentimental*'], storico: ['storic*', 'history', 'biografic*', 'biopic'],
+  thriller: ['thriller', 'suspense'], western: ['western'], sport: ['sport*', 'calcio', 'football', 'soccer', 'f1', 'motogp', 'tennis', 'basket', 'nba'],
+  reality: ['reality', 'talent'], notizie: ['news', 'notizie', 'tg', 'telegiornale'],
+};
+// generi TMDB (filmografia degli attori) → vocabolario
+const TMDB_G = { 28: 'azione', 12: 'avventura', 16: 'animazione', 35: 'commedia', 80: 'crimine', 99: 'documentario', 18: 'drammatico', 10751: 'famiglia', 14: 'fantasy', 36: 'storico', 27: 'horror', 10402: 'musica', 9648: 'mistero', 10749: 'romantico', 878: 'fantascienza', 53: 'thriller', 10752: 'guerra', 37: 'western', 10759: 'azione', 10762: 'animazione', 10765: 'fantascienza', 10768: 'guerra', 10764: 'reality', 10763: 'notizie' };
+// parole della guida TV per sport e soprannomi delle squadre («Inter» nella guida, «Internazionale» negli eventi)
+const AI_SP_W = { f1: ['formula 1', 'f1', 'gran premio'], motogp: ['motogp', 'moto gp'], tennis: ['tennis', 'atp', 'wta'], basket: ['basket', 'nba', 'eurolega'], nfl: ['nfl', 'football americano'], ufc: ['ufc', 'mma'], rugby: ['rugby'], calcio: ['serie a', 'champions league', 'europa league', 'conference league', 'coppa italia', 'calcio'] };
+const AI_ALIAS = { inter: ['internazionale'], internazionale: ['inter'], juve: ['juventus'], juventus: ['juve'], f1: ['formula 1', 'gran premio'], 'formula 1': ['f1', 'gran premio'], psg: ['paris saint germain', 'paris sg'] };
+const aiWords = (list) => { const out = []; for (const w0 of list || []) { const w = aiN(w0).trim(); if (w.length < 2) continue; for (const x of [w, ...(AI_ALIAS[w] || [])]) if (!out.includes(' ' + x + ' ')) out.push(' ' + x + ' '); } return out; };
+const aiYr = (x) => +x.year || +((/(?:^|\D)((?:19[2-9]|20[0-4])\d)(?:\D|$)/.exec(x.name || '') || [])[1] || 0);
+const chQ = (ch) => (/\b(4k|uhd)\b/i.test(ch.name) ? 0 : /\bfhd\b/i.test(ch.name) ? 1 : /\bhd\b/i.test(ch.name) ? 2 : 3);
+/** indice titolo normalizzato → titoli della libreria (lo stesso della ricerca per attore) */
+function aiTitleIdx() {
+  if (!titleIdx || titleIdx.src !== S.lib.movies || titleIdx.n !== S.lib.series.length) {
+    const m = new Map();
+    for (const arr of [S.lib.movies, S.lib.series]) for (const x of arr) { const k = titleKey(x.name); if (!k) continue; const a = m.get(k); if (a) a.push(x); else m.set(k, [x]); }
+    titleIdx = { src: S.lib.movies, n: S.lib.series.length, m };
+  }
+  return titleIdx.m;
+}
+/** titoli citati dall'IA → titoli della libreria (titolo uguale, o contenuto se è lungo) */
+function aiTitles(list) {
+  const idx = aiTitleIdx(), out = [];
+  let scans = 0; // ricerche «titolo contenuto» su tutto l'indice: al massimo 3 (chiavette lente)
+  for (const t of list || []) {
+    const k = titleKey(t); if (!k) continue;
+    let a = idx.get(k) || [];
+    if (!a.length && k.length >= 6 && scans++ < 3) { for (const [kk, v] of idx) { if (kk.startsWith(k + ' ') || kk.endsWith(' ' + k)) { a = v; break; } } }
+    for (const x of a) if (!out.includes(x)) out.push(x);
+    if (out.length >= 12) break;
+  }
+  return out;
+}
+/** filmografia (dal server, TMDB, senza IA) confrontata con la libreria, filtrata per tipo, anni e generi */
+async function aiPeople(names, f) {
+  const out = [];
+  if (S.metaOff || !baseServer()) return out;
+  for (const nm of (names || []).slice(0, 2)) {
+    let j = null; try { j = await getJSON(`${baseServer()}/api/player/person?q=${encodeURIComponent(nm)}&c=${encodeURIComponent(S.code || '')}`); } catch {}
+    if (!j) continue; if (j.off) { S.metaOff = true; break; }
+    const p = (j.people || [])[0]; if (!p) continue;
+    const idx = aiTitleIdx();
+    for (const c of p.credits || []) {
+      if ((f.type === 'movie' && c.k !== 'movie') || (f.type === 'series' && c.k !== 'series')) continue;
+      if (f.years && c.y && (c.y < f.years[0] || c.y > f.years[1])) continue;
+      if (f.genres && f.genres.length && Array.isArray(c.g) && c.g.length && !c.g.some((g) => f.genres.includes(TMDB_G[g]))) continue;
+      for (const t of [c.t, c.o]) { const a = t && idx.get(titleKey(t)); if (!a) continue; for (const x of a) if ((c.k === 'series') === (x.k === 's') && (!c.y || !aiYr(x) || Math.abs(aiYr(x) - c.y) <= 1) && !out.includes(x)) out.push(x); }
+      if (out.length >= 40) break;
+    }
+  }
+  return out;
+}
+/** finestra di tempo per la guida TV: adesso, stasera, oggi, domani (senza: i prossimi 3 giorni) */
+function aiWhen(w) {
+  const n = Date.now(), d = new Date(), at = (h, m, dd = 0) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + dd, h, m).getTime();
+  if (w === 'now') return [n, n + 60 * 60e3];
+  if (w === 'tonight') return d.getHours() < 4 ? [n, at(4, 0)] : [Math.max(n, at(18, 0)), at(25, 0)];
+  if (w === 'today') return [n, at(24, 0)];
+  if (w === 'tomorrow') return [at(24, 0), at(48, 0)];
+  return [n, n + 3 * 864e5];
+}
+/** programmi della guida (completa e breve) che corrispondono, nella finestra: [{ ch, p }] per canale, i primi per orario */
+function aiEpg(test, from, to, max) {
+  const hits = [], seen = new Set(), sh = (+opt('epgShift') || 0) * 3600e3, pool = visLive(S.lib.live);
+  if (S.xepg) {
+    const keyHit = new Map();
+    const scan = (map, pfx) => { for (const [k, arr] of map) { if (keyHit.has(pfx + k)) continue; for (const x of arr) { const s = x[0] * 1000 + sh, e = x[1] * 1000 + sh; if (e <= from || s >= to) continue; if (test(x[2] || '', x[3] || '')) { keyHit.set(pfx + k, { start: s, end: e, title: x[2] || '' }); break; } } } };
+    scan(S.xepg.byId, 'id:'); scan(S.xepg.byName, 'n:');
+    if (keyHit.size) for (const ch of pool) {
+      const h = (ch.epgId && keyHit.get('id:' + String(ch.epgId).toLowerCase())) || keyHit.get('n:' + logoKey(ch.name).key);
+      if (h && !seen.has(ch.id) && !isLocked(ch)) { seen.add(ch.id); hits.push({ ch, p: h }); if (hits.length >= max * 4) break; }
+    }
+  }
+  for (const [id, c] of S.epg) {
+    const ch = S.byId && S.byId.get(id); if (!ch || seen.has(ch.id) || isLocked(ch) || S.hidden.has(ch.id)) continue;
+    const p = ((c && c.items) || []).find((x) => x.end > from && x.start < to && test(x.title || '', x.desc || '')); if (p) { seen.add(ch.id); hits.push({ ch, p }); }
+  }
+  // stesso programma su più canali: prima le versioni migliori (4K, FHD, HD)
+  hits.sort((a, b) => a.p.start - b.p.start || chQ(a.ch) - chQ(b.ch));
+  return hits.slice(0, max);
+}
+/** criteri dell'IA → risultati dalla libreria e dalla guida: titoli (vod), programmi (tv), eventi (ev), canali (ch) */
+function aiFindRun(f, people) {
+  const R = { vod: [], tv: [], ev: [], ch: [] };
+  if (!f) return R;
+  const type = f.type || (f.when || f.sport ? 'live' : 'any'), kidsP = profKids();
+  const gens = (f.genres || []).filter((g) => AI_GEN[g]), kids = !!f.kids || (f.genres || []).includes('bambini');
+  const words = aiWords(f.words), yrs = f.years || null;
+  const pp = new Set(people || []), th = new Set(aiTitles(f.titles));
+  const okX = (x) => !isLocked(x) && (showAdult() || !isAdult(x)) && (!kidsP || looksKids(x));
+  if (type !== 'live') {
+    const gC = new Map(), sc = [];
+    const gtxt = (x) => { let n = gC.get(x.group); if (n === undefined) { n = aiN(x.group); gC.set(x.group, n); } return x.genre ? n + aiN(x.genre) : n; };
+    for (const arr of type === 'movie' ? [S.lib.movies] : type === 'series' ? [S.lib.series] : [S.lib.movies, S.lib.series]) for (const x of arr) {
+      let s = 0, hit = false;
+      if (pp.has(x)) { s += 6; hit = true; }
+      if (th.has(x)) { s += 8; hit = true; }
+      if (gens.length || kids) {
+        const n = gtxt(x), gm = gens.filter((g) => AI_GEN[g].some((t) => aiHas(n, t))).length;
+        if (gm) { s += 3 * gm; hit = true; } else if (gens.length && !pp.has(x) && !th.has(x)) continue; // genere chiesto e non trovato
+        if (kids) { if (looksKids(x) || AI_GEN.animazione.some((t) => aiHas(n, t))) { s += 3; hit = true; } else if (!th.has(x)) continue; }
+      }
+      if (words.length) { const nn = aiN(x.name); if (words.some((w) => nn.includes(w))) { s += 4; hit = true; } }
+      if (yrs) { const y = aiYr(x); if (y) { if (y < yrs[0] || y > yrs[1]) continue; s += 2; hit = true; } else s -= 1; }
+      if (!hit || !okX(x)) continue;
+      sc.push([s + Math.min(10, +x.rating || 0) / 10, x]);
+    }
+    sc.sort((a, b) => b[0] - a[0]);
+    R.vod = sc.slice(0, 40).map((v) => v[1]);
+  }
+  if (type === 'live' || type === 'any') {
+    const [from, to] = aiWhen(f.when), sp = f.sport || '';
+    const wl = words.length ? words : aiWords(AI_SP_W[sp] || (gens.includes('sport') ? AI_SP_W.calcio : []));
+    // eventi sportivi (Home): squadre, piloti, gare
+    if (wl.length || sp) for (const e of upcomingEvents()) {
+      const t = +new Date(e.start);
+      if (!(e.live ? from <= Date.now() + 60e3 : t >= from - 15 * 60e3 && t < to)) continue;
+      const n = aiN([e.home && e.home.name, e.away && e.away.name, e.title, e.gp, e.league, EV_SP[e.sport]].filter(Boolean).join(' '));
+      if (words.length ? words.some((w) => n.includes(w)) : e.sport === sp) R.ev.push(e);
+      if (R.ev.length >= 6) break;
+    }
+    const gl = gens.filter((g) => g !== 'sport'), tvAsk = type === 'live' || !!f.when;
+    if (wl.length) R.tv = aiEpg((title) => { const n = aiN(title); return wl.some((w) => n.includes(w)); }, from, to, 12);
+    // generi in TV (solo se si parla di TV o di un orario): nel titolo o nella descrizione della guida
+    else if (gl.length && tvAsk) R.tv = aiEpg((title, desc) => { const n = aiN(title + ' ' + String(desc).slice(0, 160)); return gl.some((g) => AI_GEN[g].some((t) => aiHas(n, t))); }, from, to, 12);
+    // «cosa c'è stasera / adesso in TV?»: i programmi dei canali che guarda (o dei generalisti)
+    else if (type === 'live' && !kids) { const T = tnTaste(); let chs = T.ch.filter((c) => !isLocked(c)); if (chs.length < 6) chs = [...chs, ...tnMainCh().filter((c) => !chs.includes(c))]; for (const ch of chs) { const it = epgOf(ch), p = it && it.find((x) => x.end > from && x.start < to && !/\b(tg\d?|telegiornale|meteo|televendit)/i.test(x.title || '')); if (p) R.tv.push({ ch, p }); if (R.tv.length >= 12) break; } R.tv.sort((a, b) => a.p.start - b.p.start); }
+    const inTv = new Set(R.tv.map((h) => h.ch.id)), pool = visLive(S.lib.live).filter((c) => !inTv.has(c.id) && !isLocked(c) && (showAdult() || !isAdult(c)));
+    if (kids) R.ch = pool.filter((c) => looksKids(c)).slice(0, 12);
+    else if (words.length) R.ch = pool.filter((c) => { const n = aiN(c.name); return words.some((w) => n.includes(w)); }).sort((a, b) => chQ(a) - chQ(b)).slice(0, 12);
+    else if (sp) { const kw = (BROAD.find(([k]) => k === sp) || [, ['sport']])[1].map(kwHit); R.ch = pool.filter((c) => { const n = normT(c.name) + ' ' + String(c.group || '').toLowerCase(); return kw.some((h) => h(n)); }).sort((a, b) => chQ(a) - chQ(b)).slice(0, 12); }
+  }
+  return R;
+}
+const aiResN = (R) => R.vod.length + R.tv.length + R.ev.length + R.ch.length;
+/** criteri in chiaro (chip sotto la frase) */
+function aiCrit(f) {
+  if (!f) return [];
+  const W = { now: 'Adesso', tonight: 'Stasera', today: 'Oggi', tomorrow: 'Domani' }, T = { movie: 'Film', series: 'Serie TV', live: 'TV' };
+  return [T[f.type], ...(f.genres || []).map((g) => g[0].toUpperCase() + g.slice(1)), f.years ? (f.years[0] === f.years[1] ? String(f.years[0]) : f.years[0] + '–' + f.years[1]) : '', ...(f.people || []), ...(f.words || []), W[f.when], f.kids ? 'Per bambini' : ''].filter(Boolean).slice(0, 8);
+}
+/** quando va in onda un programma o un evento */
+const aiWhenTxt = (t, live) => (live || t <= Date.now() ? 'In onda ora' : dayTime(t));
+/** sezioni dei risultati per la pagina Cerca (stessi riquadri della ricerca per nome); items in ordine di data-i */
+function aiResHTML(R, i0) {
+  const items = []; let i = i0;
+  const add = (x) => { items.push(x); return i++; };
+  const sec = (t, n, body) => (n ? `<h4 class="sh">${t} <small>${n}</small></h4>${body}` : '');
+  const html = sec('✦ In TV', R.ev.length + R.tv.length, `<div class="sgrid">${R.ev.map((e) => `<div class="stile" data-f data-i="${add(e)}"><div class="lg evlg">${evIcon(e.sport)}</div><div class="nm"><b>${esc(evTitle(e))}</b><small>${esc(aiWhenTxt(+new Date(e.start), e.live))} · ${esc(evKind(e))}</small></div></div>`).join('')}${R.tv.map((h) => `<div class="stile${isLocked(h.ch) ? ' lk' : ''}" data-f data-i="${add(h.ch)}"><div class="lg">${logoHTML(h.ch)}</div><div class="nm"><b>${esc(h.p.title)}</b><small>${esc(aiWhenTxt(h.p.start))} · ${esc(h.ch.name)}</small></div></div>`).join('')}</div>`)
+    + sec('✦ Nella tua libreria', R.vod.length, `<div class="pgrid">${R.vod.map((x) => posterHTML(x, add(x))).join('')}</div>`)
+    + sec('✦ Canali', R.ch.length, `<div class="sgrid">${R.ch.map((c) => { const n = nowOf(c); return `<div class="stile${isLocked(c) ? ' lk' : ''}" data-f data-i="${add(c)}"><div class="lg">${logoHTML(c)}</div><div class="nm"><b>${esc(c.name)}</b><small>CH ${c.num}${n ? ' · ' + esc(n.title) : c.group ? ' · ' + esc(c.group) : ''}</small></div></div>`; }).join('')}</div>`);
+  return { html, items };
+}
+/* ---------------- ricerca con le frasi (pagina Cerca) ---------------- */
+const AI_CUE = / (film|serie|partita|partite|stasera|oggi|domani|adesso|anni|con|per|bambini|cartoni|qualcosa|simili|simile|tipo|genere|horror|comici|commedia|commedie|azione|thriller|documentari|f1|formula|motogp|gara|calcio|tennis|dove|quando|chi|cosa) /;
+const AI_ASK_RX = /^ (chi|cosa|che cosa|cos e|quando|quanto|quanti|perche|come|quale|quali|dove|a che ora|che ora|mi consigli|consigliami|dimmi|spiegami|parlami) /;
+/** frase (non un nome): almeno 3 parole, oppure 2 con una parola tipica, oppure una domanda */
+const aiPhrase = (q) => { const n = aiN(q), w = n.trim().split(' ').filter(Boolean).length; return /\?\s*$/.test(q) || w >= 3 || (w >= 2 && AI_CUE.test(n)); };
+let aiQ = null; // { q, st: 'busy' | 'ok' | 'err', find, label, answer, res, msg, left }
+async function aiSearch(q0) {
+  const q = String(q0 || '').trim().slice(0, 200), key = q.toLowerCase();
+  if (q.length < 2) return;
+  if (!aiOn()) { aiQ = { q: key, st: 'err', msg: 'L\'assistente non è disponibile adesso: ecco i risultati per nome.' }; doSearch(); return; }
+  if (aiQ && aiQ.q === key && aiQ.st === 'busy') return;
+  const ask = AI_ASK_RX.test(aiN(q)) || /\?\s*$/.test(q);
+  aiQ = { q: key, st: 'busy' }; doSearch();
+  if (!cur || !document.body.contains(cur)) focus($('#qAi'), true);
+  let st;
+  try {
+    const j = await aiPost(ask ? { v: 2, q } : { mode: 'search', q }, ask ? 20000 : 16000);
+    const f = j.find || null, people = f && f.people ? await aiPeople(f.people, f) : [];
+    const R = aiFindRun(f, people);
+    if (ask && j.titles && j.titles.length) { const named = aiTitles(j.titles).filter((x) => !isLocked(x) && (showAdult() || !isAdult(x))); R.vod = [...named, ...R.vod.filter((x) => !named.includes(x))]; }
+    st = { q: key, st: 'ok', find: f, label: j.label || '', answer: ask ? j.answer || '' : '', res: R, left: j.left };
+  } catch (e) { st = { q: key, st: 'err', msg: aiErrTxt(e) + ' Ecco i risultati per nome.' }; }
+  aiQ = st;
+  if ($('#q').value.trim().toLowerCase() !== key || !$('#search').classList.contains('on')) return;
+  doSearch();
+  // la selezione va sul primo risultato dell'assistente (se si era fermi sul campo o sul riquadro)
+  if (!cur || cur.id === 'q' || cur.closest('#results .aibox, #results .aitile') || !document.body.contains(cur)) { const f1 = $('#results [data-i]') || $('#results .aibox [data-f]'); f1 && focus(f1, true); }
+}
+/** riquadro dell'assistente in cima ai risultati: { html, items } (items prima di quelli per nome) */
+function aiBlock(q) {
+  const key = q.toLowerCase();
+  if (aiQ && aiQ.q === key) {
+    if (aiQ.st === 'busy') return { html: `<div class="aibox"><i>✦</i><span><b>Sto cercando…</b><small>«${esc(q)}»</small></span></div>`, items: [] };
+    if (aiQ.st === 'err') return { html: `<div class="aibox err"><i>✦</i><span><b>${esc(aiQ.msg)}</b></span></div>`, items: [] };
+    const R = aiQ.res, n = aiResN(R), cr = aiCrit(aiQ.find), left = aiLeftTxt(aiQ.left);
+    const head = `<div class="aibox"><i>✦</i><span><b>${esc(aiQ.label || '«' + q + '»')}</b>${cr.length ? `<span class="aicr">${cr.map((c) => `<span>${esc(c)}</span>`).join('')}</span>` : ''}${left ? `<small>${esc(left)}</small>` : ''}</span></div>${aiQ.answer ? `<p class="aiansw">${esc(aiQ.answer)}</p>` : ''}`;
+    const body = aiResHTML(R, 0);
+    return { html: head + (n ? body.html : `<div class="empty aiempty">${aiQ.answer ? '' : 'Non ho trovato niente di simile nella tua libreria né nella guida TV. '}Ecco i risultati per nome.</div>`), items: body.items };
+  }
+  if (aiOn() && aiPhrase(q)) return { html: `<div class="aitile" data-f data-ai="go"><i>✦</i><span><b>Cerca con l'assistente</b><small>«${esc(q)}» · premi OK</small></span></div>`, items: [] };
+  return { html: '', items: [] };
+}
+/** pagina Cerca vuota: esempi da provare (con l'assistente acceso) e «Cosa guardo stasera?» */
+function aiEmptyHTML() {
+  const ex = aiOn() ? ['Film d\'azione anni 90', 'La partita dell\'Inter stasera', 'Qualcosa per bambini', 'Commedie italiane'] : [];
+  return `<div class="aiex">${ex.length ? `<p class="mut">Cerca per nome oppure scrivi${hasVoice() ? ' (o di\' 🎤)' : ''} una frase: ci pensa l'assistente.</p>` : '<div class="empty">Scrivi almeno 2 lettere</div>'}<div class="aichips">${ex.map((t) => `<button class="btn" data-f data-aiex="${esc(t)}">✦ ${esc(t)}</button>`).join('')}<button class="btn" data-f data-aiex="#tonight">✦ Cosa guardo stasera?</button>${aiOn() ? '<button class="btn" data-f data-aiex="#ask">✦ Chiedi all\'assistente</button>' : ''}</div></div>`;
+}
+$('#results').addEventListener('click', (e) => {
+  const t = e.target.closest('[data-ai], [data-aiex]'); if (!t) return;
+  if (t.dataset.ai === 'go') return aiSearch($('#q').value);
+  const v = t.dataset.aiex;
+  if (v === '#tonight') return tonightDialog();
+  if (v === '#ask') return aiDialog(null);
+  $('#q').value = v; doSearch(); aiSearch(v);
+});
+/** pulsanti accanto al campo: ✦ (frase con l'assistente; campo vuoto = domanda libera) e 🎤 (solo se l'app ha la voce) */
+function aiSearchBar() {
+  const ai = $('#qAi'), mic = $('#qMic'); if (!ai || !mic) return;
+  ai.style.display = aiOn() ? '' : 'none';
+  mic.style.display = hasVoice() ? '' : 'none';
+  $('#q').placeholder = aiOn() ? 'Cerca un titolo, oppure scrivi una frase…' : 'Cerca un canale, un film o una serie…';
+}
+$('#qAi').onclick = () => { const q = $('#q').value.trim(); if (q.length >= 2) aiSearch(q); else aiDialog(null); };
+$('#qMic').onclick = () => voiceGo('search');
+/* ---------------- voce: NATIVE.voiceStart() → l'app chiama window.kxVoice(testo) o window.kxVoiceErr(motivo) ---------------- */
+let voiceTo = '', voiceT = 0;
+function voiceEnd() { clearTimeout(voiceT); voiceTo = ''; $$('.qb.on, .aimic.on').forEach((b) => b.classList.remove('on')); }
+function voiceGo(to) {
+  if (!hasVoice()) return;
+  if (voiceTo) { voiceEnd(); return; }
+  voiceTo = to; $$(to === 'search' ? '#qMic' : '#aiMic').forEach((b) => b.classList.add('on'));
+  clearTimeout(voiceT); voiceT = setTimeout(voiceEnd, 20000); // nessuna risposta dall'app: si torna come prima, in silenzio
+  try { NATIVE.voiceStart(); } catch { voiceEnd(); toast('Il microfono non è disponibile'); }
+}
+window.kxVoice = (t) => {
+  const to = voiceTo; voiceEnd();
+  t = String(t == null ? '' : t).replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (!t) return toast('Non ho sentito niente: riprova');
+  if (to === 'ask' && $('#aiIn')) { $('#aiIn').value = t; $('#aiGo') && $('#aiGo').click(); return; }
+  if (!$('#search').classList.contains('on')) go('search');
+  $('#q').value = t; doSearch(); clearTimeout(aT); aT = setTimeout(actorSearch, 300);
+  if (aiOn() && (aiPhrase(t) || t.split(' ').length >= 2)) aiSearch(t);
+  else { const f = $('#results [data-i]'); f && focus(f, true); }
+};
+window.kxVoiceErr = (why) => {
+  voiceEnd();
+  const w = String(why || '').toLowerCase();
+  toast(/perm|denied|negat/.test(w) ? 'Per la ricerca a voce serve il permesso del microfono' : /busy|occupat/.test(w) ? 'Il microfono è occupato: riprova tra poco' : /network|rete|server/.test(w) ? 'Ricerca a voce non disponibile adesso: controlla la connessione' : /cancel|annull/.test(w) ? 'Ricerca a voce annullata' : 'Non ho capito: riprova');
+};
+/* ---------------- «Cosa guardo stasera?»: proposte preparate qui (gusti, libreria, guida di stasera), l'IA sceglie e motiva ---------------- */
+/** gusti del profilo: generi e categorie da ciò che guarda e dai preferiti, canali che usa, titoli già visti */
+function tnTaste() {
+  const by = (id) => S.byId && S.byId.get(id);
+  const recent = S.recent.map((r) => by(r.id)).filter(Boolean).slice(0, 40), favs = [...S.favs].map(by).filter(Boolean).slice(0, 60);
+  const gen = new Map(), grp = new Map();
+  const add = (x, w) => {
+    if (x.k === 'l') return;
+    const n = aiN((x.genre || '') + ' ' + (x.group || ''));
+    for (const g of Object.keys(AI_GEN)) if (AI_GEN[g].some((t) => aiHas(n, t))) gen.set(g, (gen.get(g) || 0) + w);
+    grp.set(x.k + x.group, (grp.get(x.k + x.group) || 0) + w);
+  };
+  recent.forEach((x, i) => add(x, 2 + Math.max(0, 15 - i) / 5)); favs.forEach((x) => add(x, 1.5));
+  if (recent.some((x) => isEv(x) || (x.k === 'l' && AI_GEN.sport.some((t) => aiHas(aiN(x.group + ' ' + x.name), t))))) gen.set('sport', (gen.get('sport') || 0) + 3);
+  const ch = [...new Set([...recent, ...favs].filter((x) => x.k === 'l'))].slice(0, 24);
+  return { genres: [...gen].sort((a, b) => b[1] - a[1]).map((x) => x[0]).slice(0, 4), grp, ch, favCh: new Set(favs.filter((x) => x.k === 'l').map((x) => x.id)), seen: new Set([...S.watched, ...S.recent.map((r) => r.id)]) };
+}
+// canali generalisti per la prima serata (se il profilo non ne guarda abbastanza)
+const TN_MAIN = ['rai1', 'canale5', 'rai2', 'italia1', 'rai3', 'rete4', 'la7', 'tv8', 'nove', 'raimovie', 'iris', 'rai4', 'cielo', 'realtime', 'skycinemauno', 'skyuno', 'skysportuno'];
+const TN_MAIN_RX = /\b(rai ?[1-4]|rai movie|rete ?4|canale ?5|italia ?1|la ?7|tv ?8|nove|iris|cielo|real ?time|sky ?(cinema|uno|sport))\b/;
+function tnMainCh() {
+  const best = new Map();
+  for (const ch of visLive(S.lib.live)) {
+    const ln = ch._lc || (ch._lc = String(ch.name || '').toLowerCase()); if (!TN_MAIN_RX.test(ln)) continue;
+    const k = logoKey(ch.name).key; if (!TN_MAIN.includes(k) || isLocked(ch)) continue;
+    const b = best.get(k); if (!b || chQ(ch) < chQ(b)) best.set(k, ch);
+  }
+  return TN_MAIN.map((k) => best.get(k)).filter(Boolean).slice(0, 12);
+}
+/** programma della prima serata di un canale: quello in onda alle 21:15 (o adesso, se è già sera), niente notiziari */
+function tnProg(ch, from, to) {
+  const it = epgOf(ch); if (!it || !it.length) return null;
+  const n = Date.now(), d = new Date(), target = Math.max(n, new Date(d.getFullYear(), d.getMonth(), d.getDate(), 21, 15).getTime());
+  const c = it.filter((p) => p.end > Math.max(n, from) && p.start < to && p.end - p.start >= 25 * 60e3 && !/\b(tg\d?|telegiornale|meteo|news|televendit)/i.test(p.title || ''));
+  return c.find((p) => p.start <= target && p.end > target) || c.find((p) => p.start >= target) || c[0] || null;
+}
+const GEN_LBL = { azione: 'd\'azione', avventura: 'd\'avventura', animazione: 'd\'animazione', commedia: 'commedie', crimine: 'polizieschi', documentario: 'documentari', drammatico: 'drammatici', famiglia: 'per famiglie', fantascienza: 'di fantascienza', fantasy: 'fantasy', guerra: 'di guerra', horror: 'horror', musica: 'musicali', mistero: 'gialli', romantico: 'romantici', storico: 'storici', thriller: 'thriller', western: 'western', sport: 'di sport', reality: 'reality', notizie: 'di attualità' };
+/** il programma della guida è l'evento già proposto? (le due squadre, o il Gran Premio, nel titolo) */
+function evSame(e, title) {
+  const n = aiN(title);
+  if (e.home && e.away) return aiWords([e.home.name]).some((w) => n.includes(w)) && aiWords([e.away.name]).some((w) => n.includes(w));
+  const g = aiN(e.gp || e.title).trim().split(' ').filter((w) => w.length >= 5 && !/^(premio|grand|prix|gara)$/.test(w));
+  return !!g.length && g.every((w) => n.includes(' ' + w + ' '));
+}
+/** circa 20 proposte varie: serie da riprendere, film e serie dei suoi gusti, eventi e programmi di stasera */
+function tnCands() {
+  const T = tnTaste(), out = [], used = new Set(), kidsP = profKids(), yr = new Date().getFullYear(), now = Date.now();
+  const ok = (x) => x && !used.has(x.id) && !isLocked(x) && (showAdult() || !isAdult(x)) && homeOk(x) && (!kidsP || looksKids(x));
+  const push = (c) => { used.add(c.key); if (c.x && c.x.id) used.add(c.x.id); out.push(c); };
+  // 1) serie lasciate a metà
+  for (const r of S.recent) { if (out.length >= 2) break; const x = S.byId && S.byId.get(r.id); if (x && x.k === 's' && ok(x)) push({ key: x.id, x, k: 'serie', w: 'Riprendi da dove eri rimasto', s: 9 }); }
+  // 2) film e serie non ancora visti: dalle categorie che guarda, dalle classifiche e dalle novità
+  const tasteOf = (x) => { const n = aiN((x.genre || '') + ' ' + (x.group || '')); let s = 0, g = ''; T.genres.forEach((k, i) => { if (AI_GEN[k].some((t) => aiHas(n, t))) { s += 3 - i * 0.6; if (!g) g = k; } }); const gw = T.grp.get(x.k + x.group) || 0; return { s: s + Math.min(3, gw / 4), g, gw }; };
+  const TR = trendLists(), trend = new Set([...TR.movies.top, ...TR.movies.hot, ...TR.series.top, ...TR.series.hot]);
+  for (const [k, arr, max] of [['m', S.lib.movies, 8], ['s', S.lib.series, 5]]) {
+    const pool = new Set();
+    for (const [gk] of [...T.grp].filter(([key]) => key[0] === k).sort((a, b) => b[1] - a[1]).slice(0, 4)) { const a = (S.byGroup && S.byGroup.get(gk)) || []; for (let i = 0; i < a.length && i < 400; i++) pool.add(a[i]); }
+    for (const x of trend) if (x.k === k) pool.add(x);
+    for (const x of recentOf(arr).slice(0, 40)) pool.add(x);
+    const sc = [];
+    for (const x of pool) {
+      if (!ok(x) || T.seen.has(x.id)) continue;
+      const t = tasteOf(x), r = Math.min(10, +x.rating || 0), y = aiYr(x), fresh = x.added && now / 1000 - x.added < 30 * 86400;
+      const w = t.g ? `Ti piacciono i titoli ${GEN_LBL[t.g] || t.g}` : t.gw ? `Dalla categoria «${x.group}», che guardi spesso` : trend.has(x) ? 'Tra i più visti in Italia' : fresh ? 'Aggiunto da poco' : r >= 7 ? `Voto ${r.toFixed(1).replace('.', ',')}` : 'Da scoprire';
+      sc.push({ key: x.id, x, k: k === 'm' ? 'film' : 'serie', w, s: t.s + r / 3 + (trend.has(x) ? 1.5 : 0) + (fresh ? 1 : 0) + (y >= yr - 2 ? 0.5 : 0) });
+    }
+    sc.sort((a, b) => b.s - a.s).slice(0, max).forEach(push);
+  }
+  // 3) stasera in TV: eventi sportivi e prima serata dei canali che guarda (poi dei canali generalisti)
+  const d = new Date(), from = d.getHours() < 4 ? now : Math.max(now, new Date(d.getFullYear(), d.getMonth(), d.getDate(), 19, 30).getTime()), to = d.getHours() < 4 ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), 4, 0).getTime() : new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 1, 0).getTime();
+  if (!kidsP) for (const e of upcomingEvents()) {
+    const t = +new Date(e.start); if (!(e.live || (t >= from - 30 * 60e3 && t < to))) continue;
+    push({ key: 'ev:' + e.id, x: e, k: 'sport', t: evTitle(e), g: evKind(e), h: e.live ? '' : hhmm(t), w: e.live ? 'In corso adesso' : `Stasera alle ${hhmm(t)}`, s: 6 + (T.genres.includes('sport') ? 3 : 0) + (e.live ? 1 : 0) });
+    if (out.filter((c) => c.k === 'sport').length >= 3) break;
+  }
+  let chs = T.ch.filter((c) => !isLocked(c) && (!kidsP || looksKids(c)));
+  if (chs.length < 6 && !kidsP) chs = [...chs, ...tnMainCh().filter((c) => !chs.includes(c))];
+  let ntv = 0;
+  for (const ch of chs) {
+    if (ntv >= 7) break;
+    const p = tnProg(ch, from, to); if (!p || used.has('tv:' + ch.id) || out.some((c) => c.k === 'sport' && evSame(c.x, p.title))) continue;
+    const fav = T.favCh.has(ch.id) || T.ch.includes(ch), on = p.start <= now;
+    push({ key: 'tv:' + ch.id, x: ch, p, k: 'tv', t: p.title, c: ch.name, h: on ? '' : hhmm(p.start), w: (on ? `In onda ora su ${ch.name}` : `Alle ${hhmm(p.start)} su ${ch.name}`) + (fav ? ', uno dei tuoi canali' : ''), s: 5 + (fav ? 2 : 0) });
+    ntv++;
+  }
+  return out.slice(0, 22);
+}
+/** senza IA: 3–5 proposte varie (serie da riprendere, sport, TV, film, serie) con il loro perché */
+function tnLocal(all) {
+  const by = (k) => all.filter((c) => c.k === k).sort((a, b) => b.s - a.s), pick = [];
+  const take = (c) => { if (c && !pick.includes(c) && pick.length < 5) pick.push(c); };
+  take(by('serie').find((c) => /^Riprendi/.test(c.w)));
+  take(by('sport')[0]); take(by('tv')[0]); take(by('film')[0]); take(by('serie').find((c) => !pick.includes(c)));
+  for (const c of [...all].sort((a, b) => b.s - a.s)) take(c);
+  return pick;
+}
+const tnWire = (c) => ({ k: c.k, t: String(c.t || c.x.name || '').slice(0, 80), y: c.k === 'film' || c.k === 'serie' ? aiYr(c.x) || undefined : undefined, g: String(c.g || (c.x && c.k !== 'tv' && c.k !== 'sport' ? c.x.genre || c.x.group : '') || '').slice(0, 50), c: c.c || undefined, h: c.h || undefined, w: c.w });
+/** riga di una proposta (stessa per «Cosa guardo stasera?» e per i titoli trovati dall'assistente) */
+function tnRow(c, i, why, attr) {
+  const x = c.x, live = c.k === 'tv' || (x && x.k === 'l'), ev = c.k === 'sport' || isEv(x);
+  const img = ev ? '' : live ? x.logo : x.poster || x.logo;
+  const thumb = ev ? `<div class="tni l evlg">${evIcon(x.sport)}</div>` : `<div class="tni${live ? ' l' : ''}">${img ? `<img loading="lazy" decoding="async" ${imgSrc(img, 'p')} onerror="${IMG_FB}this.remove()">` : esc(String(c.t || x.name || '').slice(0, 2).toUpperCase())}</div>`;
+  const meta = ev ? `${aiWhenTxt(+new Date(x.start), x.live)} · ${evKind(x)}` : live ? (c.p ? `${aiWhenTxt(c.p.start)} · ${x.name}` : `Canale ${x.num}${x.group ? ' · ' + x.group : ''}`) : [x.k === 's' ? 'Serie TV' : 'Film', aiYr(x) || '', +x.rating ? '★ ' + (+x.rating).toFixed(1) : '', /^(film|serie( tv)?)$/i.test(String(x.group || '').trim()) ? '' : x.group].filter(Boolean).join(' · ');
+  return `<div class="tnr" data-f ${attr}="${i}">${thumb}<div class="tx"><b>${esc(c.t || x.name)}</b><small>${esc(meta)}</small>${why ? `<em>✦ ${esc(why)}</em>` : ''}</div></div>`;
+}
+/** apre una proposta: titolo → scheda, programma o canale → canale nella TV in diretta, evento → «Dove vederla» */
+function aiOpen(c) {
+  const x = c.x || c; if (!x) return;
+  const m = $$('.speedm.on').pop(); if (m && (m.id === 'tnM' || m.id === 'aiM')) back();
+  setTimeout(() => {
+    if (c.p && c.p.start > Date.now()) toast(`Inizia alle ${hhmm(c.p.start)} su ${x.name}`);
+    openItem(x);
+  }, 60);
+}
+let tnShown = new Set();
+async function tonightDialog(more) {
+  if (!more) tnShown = new Set();
+  const all = tnCands().filter((c) => !tnShown.has(c.key)), canAi = aiOn() && all.length >= 3;
+  kxModal('tnM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">✦ PER TE</div><h2>Cosa guardo stasera?</h2>
+    <div class="tnl" id="tnL"><div class="mut">${all.length ? (canAi ? '✦ Sto scegliendo per te…' : '') : (more ? 'Per ora non ho altre idee: riprova più tardi.' : 'Non ho ancora proposte: la libreria è vuota o hai già visto tutto.')}</div></div><small class="tnn" id="tnN"></small>
+    <div class="sbtn">${all.length > 5 || more ? '<button class="btn" data-f id="tnMore">Altre idee</button>' : ''}${aiOn() ? '<button class="btn" data-f id="tnAsk">✦ Chiedi all\'assistente</button>' : ''}<button class="btn" data-f id="tnNo">Chiudi</button></div>`, null, 'tnm');
+  $('#tnNo').onclick = () => back();
+  $('#tnMore') && ($('#tnMore').onclick = () => tonightDialog(true));
+  $('#tnAsk') && ($('#tnAsk').onclick = () => { $('#tnM') && $('#tnM').remove(); aiDialog(null); });
+  setTimeout(() => { if ($('#tnM') && (!cur || !$('#tnM').contains(cur))) focus($('#tnNo'), true); }, 40);
+  if (!all.length) return;
+  const T = tnTaste(); let picks = null, note = '';
+  if (canAi) {
+    const list = all.slice(0, 20);
+    try {
+      const j = await aiPost({ mode: 'tonight', cands: list.map(tnWire), taste: T.genres, hm: hhmm(Date.now()), kids: profKids() }, 20000);
+      picks = (j.picks || []).map((p) => list[p.i] && { c: list[p.i], why: p.why || list[p.i].w }).filter(Boolean);
+      note = aiLeftTxt(j.left);
+    } catch (e) { note = e && e.limit ? 'Le domande all\'assistente di oggi sono finite: proposte scelte in base ai tuoi gusti.' : ''; }
+  }
+  const M = $('#tnM'); if (!M) return; // chiusa nel frattempo
+  if (!picks || picks.length < 3) picks = tnLocal(all).map((c) => ({ c, why: c.w }));
+  picks.forEach((p) => tnShown.add(p.c.key));
+  $('#tnL').innerHTML = picks.map((p, i) => tnRow(p.c, i, p.why, 'data-tn')).join('');
+  $('#tnN').textContent = note;
+  $$('#tnM [data-tn]').forEach((b) => (b.onclick = () => aiOpen(picks[+b.dataset.tn].c)));
+  if (!cur || !M.contains(cur) || cur.id === 'tnNo') focus($('#tnM [data-tn]'), true);
+}
+/* riga «Cosa guardo stasera?» nella Home (seconda riga): una card sola, apre le proposte */
+const TN_ITEM = { id: 'ai:tonight', k: 'x', tonight: true, name: 'Cosa guardo stasera?' };
+function tnHomeRow(R) {
+  if (!S.lib.movies.length && !S.lib.series.length && !S.lib.live.length) return;
+  R.splice(Math.min(1, R.length), 0, { title: '✦ Cosa guardo stasera?', type: 'tonight', items: [TN_ITEM] });
+}
+const tnCard = (k) => `<div class="nc ai2" data-f data-k="${k}"><i>✦</i><b>Cosa guardo stasera?</b><small>3–5 proposte per te, con il perché</small></div>`;
+function tnHero(scr, instant) {
+  if (scr._hero === TN_ITEM && !instant) return;
+  scr._hero = TN_ITEM;
+  const info = scr.querySelector('.hinfo'), hero = scr.querySelector('.hero'); info.style.visibility = '';
+  const f = featured('all').find((x) => x && (x.backdrop || x.poster)) || null;
+  heroImg(hero, f ? f.backdrop || f.poster : '', f && !f.backdrop ? 'ph' : '', !(f && f.backdrop));
+  const apply = () => {
+    scr.querySelector('.hkind').innerHTML = '<i class="kb">K</i>✦ PER TE';
+    scr.querySelector('.htitle').textContent = 'Cosa guardo stasera?';
+    scr.querySelector('.hmeta').innerHTML = '<span class="m">Film, serie e TV di stasera</span>';
+    scr.querySelector('.hrate').innerHTML = '';
+    const ha = scr.querySelector('.hage'); if (ha) { ha.innerHTML = ''; ha.classList.remove('on'); }
+    scr.querySelector('.hplot').textContent = (TOUCH ? 'Tocca' : 'Premi OK') + ': ti propongo da 3 a 5 cose da guardare, ognuna con il perché, in base a quello che ti piace e alla guida TV di stasera.';
+    scr.querySelector('[data-hplay] span').textContent = 'Proponi';
+    info.classList.remove('sw');
+  };
+  if (instant) apply(); else { info.classList.add('sw'); clearTimeout(scr._swT); scr._swT = setTimeout(apply, 140); }
+}
+/* ---------------- assistente: domande sul titolo aperto (o libere), con i titoli della libreria da aprire ---------------- */
 function aiDialog(x, prog) {
-  if (!perm('ai')) return toast('L\'assistente non è attivo sul tuo abbonamento');
-  if (aiOffNow()) return toast('Assistente IA non disponibile su questo server');
-  const live = isLiveItem(x), ser = !live && isSeriesItem(x);
-  const ctx = { title: live ? (prog && prog.title) || '' : x.name, ch: live ? x.name : '', kind: live ? 'live' : ser ? 'series' : 'movie', year: x.year || '', plot: String((live ? prog && prog.desc : x.plot) || '').slice(0, 600), genre: x.genre || '', cast: String(x.cast || '').slice(0, 200) };
-  const chips = live ? ['Di cosa parla questo programma?', 'Chi lo conduce?', 'Quando va in onda di nuovo?'] : ['Di cosa parla? (senza spoiler)', 'Chi sono gli attori principali?', 'È adatto ai bambini?', ser ? 'Serie simili da guardare' : 'Film simili da guardare'];
-  kxModal('aiM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">✦ ASSISTENTE IA</div><h2>${esc(ctx.title || x.name)}</h2>
+  if (!perm('ai') || rcGet('ai') === 'off') return toast('L\'assistente non è attivo');
+  if (aiOffNow()) return toast('L\'assistente non è disponibile adesso');
+  const live = !!x && isLiveItem(x), ser = !!x && !live && isSeriesItem(x);
+  const ctx = x ? { title: live ? (prog && prog.title) || '' : x.name, ch: live ? x.name : '', kind: live ? 'live' : ser ? 'series' : 'movie', year: x.year || aiYr(x) || '', plot: String((live ? prog && prog.desc : x.plot) || '').slice(0, 600), genre: x.genre || '', cast: String(x.cast || '').slice(0, 200) } : null;
+  const rec = S.recent.map((r) => S.byId && S.byId.get(r.id)).filter((y) => y && (y.k === 'm' || y.k === 's')).slice(0, 3).map((y) => '«' + y.name + '»');
+  const chips = x ? (live ? ['Di cosa parla questo programma?', 'Chi lo conduce?', 'Quando va in onda di nuovo?', 'Canali simili da guardare'] : ['Di cosa parla? (senza spoiler)', 'Chi sono gli attori principali?', 'È adatto ai bambini?', ser ? 'Serie simili che ho nella libreria' : 'Film simili che ho nella libreria'])
+    : ['Cosa guardo stasera?', rec.length ? 'Titoli simili a quelli che guardo' : 'Film da vedere in famiglia', 'A che ora c\'è la Formula 1?', 'Qualcosa per bambini'];
+  kxModal('aiM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">✦ ASSISTENTE</div><h2>${esc(x ? ctx.title || x.name : 'Chiedimi quello che vuoi')}</h2>
     <div class="aichips">${chips.map((c, i) => `<button class="btn" data-f data-aq="${i}">${esc(c)}</button>`).join('')}</div>
-    <div class="tagn"><input class="inp" data-f id="aiIn" maxlength="200" placeholder="Fai una domanda…"><button class="btn pri" data-f id="aiGo">Chiedi</button></div>
+    <div class="tagn"><input class="inp" data-f id="aiIn" maxlength="200" placeholder="${x ? 'Fai una domanda…' : 'Es. chi è l\'attore di Rambo? · a che ora c\'è la F1?'}">${hasVoice() ? '<button class="btn aimic" data-f id="aiMic" title="Parla">🎤</button>' : ''}<button class="btn pri" data-f id="aiGo">Chiedi</button></div>
     <div class="aians" id="aiA"></div><div class="sbtn"><button class="btn" data-f id="aiNo">Chiudi</button></div>`, null, 'aim');
-  let busy = false;
+  let busy = false, res = [];
   const ask = async (q) => {
     q = String(q || '').trim(); if (!q || busy) return;
-    busy = true; $('#aiA').innerHTML = '<div class="mut">Sto pensando…</div>';
+    if (!x && q === chips[0]) { $('#aiM') && $('#aiM').remove(); return tonightDialog(); }
+    if (/simili a quelli che guardo$/.test(q) && rec.length) q = 'Titoli simili a ' + rec.join(', ');
+    busy = true; $('#aiA').innerHTML = '<div class="mut">✦ Sto pensando…</div>';
     try {
-      const j = await apiPost('/api/player/ai', { q, ctx });
-      if (j && j.off) { S.aiOff = Date.now(); $('#aiA').innerHTML = '<div class="mut">Assistente IA non disponibile su questo server.</div>'; return; }
-      $('#aiA').innerHTML = `<p class="aiq">${esc(q)}</p><div class="ait">${esc(j && j.answer || 'Nessuna risposta.').replace(/\n/g, '<br>')}</div>${j && (j.left != null || j.by) ? `<small class="aileft">${[j.by ? 'Risponde ' + esc(j.by) : '', j.left == null ? '' : j.left === 0 ? 'era l\'ultima domanda di oggi' : 'domande rimaste oggi: ' + j.left].filter(Boolean).join(' · ')}</small>` : ''}`;
+      const j = await aiPost({ v: 2, q, ctx }, 20000);
+      if (!$('#aiM')) return;
+      const f = j.find || null, people = f && f.people ? await aiPeople(f.people, f) : [];
+      const R = f ? aiFindRun(f, people) : { vod: [], tv: [], ev: [], ch: [] };
+      const named = aiTitles(j.titles).filter((y) => !isLocked(y) && (showAdult() || !isAdult(y)));
+      R.vod = [...named, ...R.vod.filter((y) => !named.includes(y))].filter((y) => !x || y.id !== x.id);
+      res = [...R.ev.map((e) => ({ x: e, k: 'sport' })), ...R.tv.map((h) => ({ x: h.ch, p: h.p, k: 'tv', t: h.p.title })), ...R.vod.slice(0, 8).map((y) => ({ x: y, k: y.k === 's' ? 'serie' : 'film' })), ...R.ch.slice(0, 4).map((c) => ({ x: c, k: 'ch' }))].slice(0, 12);
+      const left = aiLeftTxt(j.left);
+      $('#aiA').innerHTML = `<p class="aiq">${esc(q)}</p><div class="ait">${esc(j.answer || 'Non ho una risposta per questa domanda.').replace(/\n/g, '<br>')}</div>${res.length ? `<h5 class="aih">${R.tv.length || R.ev.length ? 'Nella guida e nella tua libreria' : 'Nella tua libreria ci sono'}:</h5><div class="tnl">${res.map((c, i) => tnRow(c, i, '', 'data-ar')).join('')}</div>` : ''}${left ? `<small class="aileft">${esc(left)}</small>` : ''}`;
+      $$('#aiM [data-ar]').forEach((b) => (b.onclick = () => aiOpen(res[+b.dataset.ar])));
+      const f1 = $('#aiM [data-ar]'); if (f1 && cur && (cur.id === 'aiGo' || cur.id === 'aiIn' || cur.hasAttribute('data-aq'))) focus(f1, true);
     } catch (e) {
-      const lim = /domande di oggi|risposte gratuite/i.test(e.message || '');
-      $('#aiA').innerHTML = `<div class="mut">${esc(e.message || 'Non riesco a rispondere adesso')}</div>${lim ? '<button class="btn pri" data-f id="aiMore" style="margin-top:1vh">Chiedi altre domande al fornitore</button>' : ''}`;
-      if ($('#aiMore')) { $('#aiMore').onclick = async () => { const bt = $('#aiMore'); bt.disabled = true; try { const r = await apiPost('/api/player/request', { ctype: 'ai' }); fx('ok'); bt.textContent = r && r.already ? 'Richiesta già inviata ✓' : 'Richiesta inviata ✓'; } catch (er) { if (/^In attesa del fornitore/.test(er.message || '')) { bt.textContent = '⏳ In attesa del fornitore'; toast('⏳ ' + er.message, 7000); } else { bt.disabled = false; toast('Non inviata: ' + (er.message || 'riprova')); } } }; focus($('#aiMore'), true); }
+      if (!$('#aiM')) return;
+      $('#aiA').innerHTML = `<div class="mut">${esc(aiErrTxt(e))}</div>${e && e.limit ? '<button class="btn pri" data-f id="aiMore" style="margin-top:1vh">Chiedi altre domande</button>' : ''}`;
+      if ($('#aiMore')) { $('#aiMore').onclick = async () => { const bt = $('#aiMore'); bt.disabled = true; try { const r = await apiPost('/api/player/request', { ctype: 'ai' }); fx('ok'); bt.textContent = r && r.already ? 'Richiesta già inviata ✓' : 'Richiesta inviata ✓'; } catch (er) { if (/^In attesa/.test(er.message || '')) { bt.textContent = '⏳ Richiesta in attesa'; } else { bt.disabled = false; toast('Richiesta non inviata: riprova'); } } }; focus($('#aiMore'), true); }
     } finally { busy = false; }
   };
   $$('#aiM [data-aq]').forEach((b) => (b.onclick = () => ask(chips[+b.dataset.aq])));
   $('#aiGo').onclick = () => ask($('#aiIn').value);
   $('#aiIn').onkeydown = (e) => { if (e.key === 'Enter') ask($('#aiIn').value); };
+  $('#aiMic') && ($('#aiMic').onclick = () => voiceGo('ask'));
   $('#aiNo').onclick = () => back();
   setTimeout(() => focus($('#aiM [data-aq]'), true), 40);
 }
@@ -4153,6 +4649,7 @@ $('#vodGrid').addEventListener('klong', (e) => { const el = e.target.closest('.p
 
 function openItem(x) {
   if (!x) return;
+  if (x.tonight) return tonightDialog();
   if (x.folder) return openFolder(x);
   if (isEv(x) || (x.home && x.away)) return openEvent(x);
   if (x.k === 'r') return playRec(x.rec);
@@ -4198,7 +4695,7 @@ async function openDetail(x) {
         <button class="dx" data-f data-back>✕</button>
         <div class="dht"><div class="hkind"><i class="kb">K</i>${isSeries ? 'SERIE' : 'FILM'}</div><h1>${esc(x.name)}</h1>
           <div class="acts">${isSeries ? `<button class="nbtn play" data-f data-autof id="dEp1"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>Episodi</button>` : `<button class="nbtn play" data-f data-autof id="dPlay"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>${pos ? 'Riprendi' : 'Riproduci'}</button>${pos ? '<button class="nbtn info" data-f id="dRestart">↺ Dall\'inizio</button>' : ''}`}${!S.demo && baseServer() ? '<button class="nbtn info" data-f id="dTrailer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="m10 9 5 3-5 3z" fill="currentColor"/></svg>Trailer</button>' : ''}
-          <button class="rbtn" data-f id="dFav" title="La mia lista">${S.favs.has(x.id) ? '✓' : '+'}</button>${perm('ai') && !aiOffNow() && !S.demo ? '<button class="rbtn ai" data-f id="dAi" title="Chiedi all\'assistente IA">✦</button>' : ''}</div></div>
+          <button class="rbtn" data-f id="dFav" title="La mia lista">${S.favs.has(x.id) ? '✓' : '+'}</button>${aiOn() ? '<button class="rbtn ai" data-f id="dAi" title="Chiedi all\'assistente IA">✦</button>' : ''}</div></div>
       </div>
       <div class="dbody"><div><div class="hmeta">${ageBadge(x.cert)}${+x.rating ? `<span class="m">★ ${(+x.rating).toFixed(1)}</span>` : ''}${ex.year ? `<span>${esc(ex.year)}</span>` : ''}${ex.duration ? `<span>${esc(ex.duration)}</span>` : ''}<span class="bx">HD</span></div>
         <p class="plot">${esc(ex.plot || 'Nessuna descrizione disponibile.')}</p></div>
@@ -4590,6 +5087,7 @@ function makeRows(kind) {
     const sc = homeOrder(sortCats(cats, kind === 'movies' ? 'm' : 's'));
     catRows(arr, [...safeCats(sc), ...(showAdult() ? [] : sc.filter((c) => RX_ADULT_G.test(c.name)))].filter((c, i, a) => a.indexOf(c) === i), '', kind);
   }
+  if (kind === 'all') tnHomeRow(R); // «Cosa guardo stasera?»: seconda riga della Home
   return R.filter((r) => r.items.length);
 }
 let featMemo = null;
@@ -4638,6 +5136,7 @@ function evCard(x0, k) {
 }
 function cardHTML(type, x, k, i) {
   if (type === 'ev') return evCard(x, k);
+  if (type === 'tonight') return tnCard(k);
   if (type === 'fold') {
     const h = hueOf(x.name);
     return `<div class="nc f" data-f data-k="${k}" style="--h:${h};--h2:${(h + 50) % 360}"><span class="fk">${x.kind === 'live' ? 'LIVE TV' : x.kind === 'movies' ? 'FILM' : 'SERIE TV'}</span><span class="fsv">${FOLD_IC[x.kind]}</span><b>${esc(x.name)}</b><small>${x.count.toLocaleString('it')} ${x.kind === 'live' ? 'canali' : 'titoli'}</small></div>`;
@@ -4845,6 +5344,7 @@ let heroT;
 function heroQueue(scr, x) { clearTimeout(heroT); heroT = setTimeout(() => setHero(scr, x), fastMove ? 360 : 180); }
 function setHero(scr, x, instant) {
   if (x && x.folder) return setFolderHero(scr, x, instant);
+  if (x && x.tonight) return tnHero(scr, instant);
   if (x && (isEv(x) || (x.home && x.away))) { const e = normEv(x); if (e) return setEventHero(scr, e, instant); }
   const info = scr.querySelector('.hinfo'), hero = scr.querySelector('.hero');
   if (!x) { info.style.visibility = 'hidden'; return; }
@@ -5046,7 +5546,13 @@ async function actorSearch() {
   actorRes = { q, name: p.name, items: out };
   if (out.length) doSearch();
 }
-$('#q').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); const f = $('#results [data-i]'); f && focus(f); } });
+$('#q').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const q = $('#q').value.trim();
+  if (aiOn() && aiPhrase(q) && !(aiQ && aiQ.q === q.toLowerCase() && aiQ.st !== 'err')) return void aiSearch(q); // frase: la capisce l'assistente
+  const f = $('#results [data-i]') || $('#results [data-f]'); f && focus(f);
+});
 $('#results').addEventListener('click', (e) => { const el = e.target.closest('[data-i]'); if (el) openItem(searchRes[+el.dataset.i]); });
 $('#results').addEventListener('klong', (e) => { const el = e.target.closest('[data-i]'); if (el) itemMenu(searchRes[+el.dataset.i], el); });
 
@@ -5330,7 +5836,7 @@ async function pinFirstRun(force) {
 
 /* ---------------- menu del tasto OK tenuto premuto ---------------- */
 function itemMenu(x, el) {
-  if (!x || x.folder || x.home || isEv(x) || $('#menuM')) return;
+  if (!x || x.folder || x.home || x.tonight || isEv(x) || $('#menuM')) return;
   const live = isLiveItem(x), fav = S.favs.has(x.id), hid = S.hidden.has(x.id), lk = S.locked.has(x.id);
   const acts = [['fav', fav ? '✕  Rimuovi dalla mia lista' : '★  Aggiungi alla mia lista']];
   if (live) acts.push(['hide', hid ? '👁  Mostra di nuovo il canale' : '⊘  Nascondi canale']);
@@ -5345,7 +5851,7 @@ function itemMenu(x, el) {
   acts.push(['tag', '🏷  Tag…']);
   if (live) acts.push(['epg', '📅  Associa la guida TV…']);
   if (live && HAS_MULTI && perm('multi')) acts.push(['multi', '⊞  Multi-schermo (2 o 4 canali)…']);
-  if (perm('ai') && !aiOffNow() && !S.demo) acts.push(['ai', '✦  Chiedi all\'assistente IA']);
+  if (aiOn()) acts.push(['ai', '✦  Chiedi all\'assistente IA']);
   if (perm('report')) acts.push(['rep', live ? '⚠  Segnala: il canale non funziona' : '⚠  Segnala un problema']);
   fx('ok');
   modalPause();
@@ -6405,24 +6911,26 @@ function openEvent(e0, fi) {
 
 /* ---------------- ricerca: canali, film e serie separati (niente card che si accavallano) ---------------- */
 function doSearch() {
-  const q = $('#q').value.trim().toLowerCase();
-  if (q.length < 2) { searchRes = []; $('#results').innerHTML = '<div class="empty">Scrivi almeno 2 lettere</div>'; return; }
+  aiSearchBar();
+  const q0 = $('#q').value.trim(), q = q0.toLowerCase();
+  if (q.length < 2) { searchRes = []; $('#results').innerHTML = aiEmptyHTML(); return; }
   const m = (x) => (x._lc || (x._lc = String(x.name || '').toLowerCase())).includes(q);
   const L = visLive(S.lib.live).filter(m).slice(0, 48), M = S.lib.movies.filter(m).slice(0, 60), Se = S.lib.series.filter(m).slice(0, 60);
   // attori: dal cast già noto dei titoli (serie, film aperti) e, se il server ha TMDB, dalla filmografia
   const inRes = new Set([...M, ...Se]);
   const A = q.length >= 4 ? [...S.lib.series, ...S.lib.movies].filter((x) => x.cast && !inRes.has(x) && String(x.cast).toLowerCase().includes(q)).slice(0, 40) : [];
   const P = (actorRes && actorRes.q === q ? actorRes.items : []).filter((x) => !inRes.has(x) && !A.includes(x));
-  searchRes = [...L, ...M, ...Se, ...A, ...P];
-  let i = 0;
+  const AI = aiBlock(q0); // assistente: «Cerca con l'assistente», risultati della frase o messaggio
+  searchRes = [...AI.items, ...L, ...M, ...Se, ...A, ...P];
+  let i = AI.items.length;
   const sec = (t, n, body) => (n ? `<h4 class="sh">${t} <small>${n}</small></h4>${body}` : '');
-  $('#results').innerHTML = searchRes.length
+  $('#results').innerHTML = AI.html + (searchRes.length > AI.items.length
     ? sec('Canali', L.length, `<div class="sgrid">${L.map((c) => { const n = nowOf(c); return `<div class="stile${isLocked(c) ? ' lk' : ''}" data-f data-i="${i++}"><div class="lg">${logoHTML(c)}</div><div class="nm"><b>${esc(c.name)}</b><small>CH ${c.num}${n ? ' · ' + esc(n.title) : c.group ? ' · ' + esc(c.group) : ''}</small></div></div>`; }).join('')}</div>`)
       + sec('Film', M.length, `<div class="pgrid">${M.map((x) => posterHTML(x, i++)).join('')}</div>`)
       + sec('Serie TV', Se.length, `<div class="pgrid">${Se.map((x) => posterHTML(x, i++)).join('')}</div>`)
       + sec('🎭 Con questo attore', A.length, `<div class="pgrid">${A.map((x) => posterHTML(x, i++)).join('')}</div>`)
       + sec(`🎭 ${esc(actorRes && actorRes.q === q ? actorRes.name : '')}: nella tua libreria`, P.length, `<div class="pgrid">${P.map((x) => posterHTML(x, i++)).join('')}</div>`)
-    : '<div class="empty">Nessun risultato per “' + esc(q) + '”</div>';
+    : AI.html ? (aiQ && aiQ.q === q && aiQ.st === 'ok' ? '' : '<div class="empty aiempty">Nessun titolo con questo nome</div>') : '<div class="empty">Nessun risultato per “' + esc(q) + '”</div>');
 }
 
 /* ---------------- privacy, condizioni e prezzo prima del codice di attivazione ---------------- */
