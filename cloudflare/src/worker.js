@@ -10,7 +10,7 @@ import { ADDON_ASSETS } from './addon-assets.js';
  *  Variabili: ACCESS_TEAM_DOMAIN, ACCESS_AUD, TURNSTILE_SITEKEY (opzionali)
  */
 import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide, storeAgentAlerts } from './store.js'; // Store aperto: conteggi e compatibilità con gli store vecchi (/api/store/*)
-import { wolfRoutes, wolfCron, sockFetch } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
+import { wolfRoutes, wolfCron, sockFetch, wolfCfg } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
 import { atxRoutes } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz), solo titolare
 import { oraRoutes } from './orapanel.js';
 import { orcpRoutes, ovpnFile } from './orcp.js'; // Pannello ORCP (cp.ottrun.com): l'app brandizzata OTTRUN, accesso passato dal titolare
@@ -729,7 +729,7 @@ function cleanDlCodes(v) {
     const name = str(x && x.name, 60); if (!name) throw new HttpErr(400, `App n. ${i + 1}: manca il nome`);
     const code = str(x.code, 12).replace(/\s+/g, ''); if (code && !/^\d{3,10}$/.test(code)) throw new HttpErr(400, `${name}: il codice downloader è fatto solo di numeri`);
     const links = (Array.isArray(x.links) ? x.links : []).slice(0, 10).map((l) => ({ label: str(l && l.label, 30) || 'Link', url: url(l && l.url, name) })).filter((l) => l.url);
-    return { group: str(x.group, 40), name, code, note: str(x.note, 120), link: url(x.link, name), links };
+    return { group: str(x.group, 40), name, code, note: str(x.note, 120), warn: str(x.warn, 120), link: url(x.link, name), links };
   });
 }
 
@@ -761,7 +761,7 @@ function cleanAppLinks(v) {
     const name = str(x && x.name, 60); if (!name) throw new HttpErr(400, `App n. ${i + 1}: scrivi il nome`);
     const url = str(x && x.url, 300).trim().replace(/\/+$/, '');
     if (url && !/^https?:\/\/[^\s]+$/i.test(url)) throw new HttpErr(400, `${name}: il link deve iniziare con http:// o https://`);
-    return { name, url };
+    return { name, url, warn: str(x && x.warn, 120) };
   });
 }
 
@@ -1263,6 +1263,50 @@ const armP = (pv) => ARM_PROV[pv] || ARM_PROV.armada;
 const armKeyOf = (env, pv) => env[armP(pv).key] || '';
 const armadaUrlOf = (s, pv) => (s && s[armP(pv).sUrl]) || armP(pv).url;
 const armOk = (x) => x === true || x === 'true' || x === 1 || x === '1';
+const armOrigin = (value) => {
+  const raw = str(value, 500).trim();
+  if (!raw) return '';
+  try {
+    const u = new URL(/^https?:\/\//i.test(raw) ? raw : `http://${raw}`);
+    return /^https?:$/.test(u.protocol) && !u.username && !u.password ? u.origin : '';
+  } catch { return ''; }
+};
+const armLineOrigin = (line) => armOrigin(line && (line.url || line.dns || line.host));
+async function linkedPanelDns(env, panel) {
+  try {
+    const row = await env.DB.prepare("SELECT dns FROM linked_lines WHERE source = ? AND dns IS NOT NULL AND dns <> '' LIMIT 1").bind(panel).first();
+    return armOrigin(row && row.dns);
+  } catch { return ''; }
+}
+async function armMasterDns(env, pv, settings, rawLines) {
+  const P = armP(pv);
+  let dns = armOrigin(settings && settings[P.sDns]);
+  if (!dns && Array.isArray(rawLines)) dns = rawLines.map(armLineOrigin).find(Boolean) || '';
+  if (!dns && rawLines === undefined && armKeyOf(env, pv)) {
+    try { dns = armList(await armadaCall(env, settings || await getSettings(env), { action: 'lines_list' }, pv)).map(armLineOrigin).find(Boolean) || ''; } catch {}
+  }
+  if (!dns) dns = await linkedPanelDns(env, pv);
+  if (dns && !(settings && settings[P.sDns])) await settingsPatch(env, { [P.sDns]: dns });
+  return dns;
+}
+async function masterLineDns(env, panel) {
+  if (ARM_PROV[panel]) return armMasterDns(env, panel, await getSettings(env));
+  if (panel === 'wolf') {
+    const cfg = await wolfCfg(env, WOLF_H);
+    return armOrigin(cfg && cfg.dns) || await linkedPanelDns(env, panel);
+  }
+  if (panel === 'ro' || panel === 'slt') {
+    const linked = await linkedPanelDns(env, panel);
+    if (linked) return linked;
+    try {
+      const req = new Request(`https://kairos.local/admin/${panel}/lines`);
+      const res = await extRoutes(req, env, `/${panel}/lines`, 'Risoluzione server', '', WOLF_H, null);
+      const data = res instanceof Response ? await res.json() : res;
+      return armOrigin(data && data.dns);
+    } catch {}
+  }
+  return '';
+}
 async function armadaCall(env, s, params, pv = 'armada') {
   const P = armP(pv), N = P.name, key = armKeyOf(env, pv);
   if (!key) throw new HttpErr(400, `${N} non è collegato: aggiungi il segreto ${P.key} su GitHub (guida nella pagina ${N})`);
@@ -1358,9 +1402,10 @@ async function armadaRoutes(req, env, url, path, who, ip, agentId = 0, pv = 'arm
   if ((path === R + '/lines' || path === R + '/mags') && m === 'GET') {
     const lines = path === R + '/lines', type = lines ? 'm3u' : 'mag';
     const [raw, own, ags] = await Promise.all([call({ action: lines ? 'lines_list' : 'mag_devices_list' }), armOwnerMap(env, pv), agentsAll(env)]);
-    const names = new Map(ags.map((a) => [a.id, a.username]));
-    const list = armList(raw).map((x) => { const o = lines ? { ...armCommon(x), username: str(x.username, 120), password: str(x.password, 200) } : { ...armCommon(x), mac: str(x.mac, 32) }; const by = armByOf(own, type, o); o.byAgent = by || 0; o.by = by ? names.get(by) || 'agente eliminato' : by === 0 ? 'Tu' : ''; return o; });
-    return json(lines ? { lines: list } : { mags: list });
+    const rawLines = armList(raw), names = new Map(ags.map((a) => [a.id, a.username]));
+    const dns = lines && !agentId ? await armMasterDns(env, pv, s, rawLines) : '';
+    const list = rawLines.map((x) => { const o = lines ? { ...armCommon(x), username: str(x.username, 120), password: str(x.password, 200) } : { ...armCommon(x), mac: str(x.mac, 32) }; const by = armByOf(own, type, o); o.byAgent = by || 0; o.by = by ? names.get(by) || 'agente eliminato' : by === 0 ? 'Tu' : ''; return o; });
+    return json(lines ? { lines: list, ...(agentId ? {} : { dns }) } : { mags: list });
   }
   if (path === R + '/resellers' && m === 'GET') return json({ resellers: armList(await call({ action: 'resellers_list' })).map((x) => ({ id: +x.id || 0, username: str(x.username, 80), email: str(x.email, 120), credits: str(String(x.credits ?? ''), 20), enabled: armOk(x.status), notes: str(x.notes, 300), lastLogin: str(x.last_login, 30), group: str(x.group_name, 60), clients: +x.total_clients || 0, owner: str(x.owner_username, 80), relation: str(x.relation_type, 20) })) });
   if (path === R + '/new' && m === 'POST') {
@@ -1377,7 +1422,7 @@ async function armadaRoutes(req, env, url, path, who, ip, agentId = 0, pv = 'arm
     const x = armList(await call(params))[0] || {};
     const out = { type, userId: str(String(x.user_id ?? ''), 20), url: str(x.url, 500), mac: str(x.mac, 32) || params.user || '', message: str(x.message, 120), username: '', password: '', host: '' };
     if (type === 'm3u') { try { const u = new URL(out.url); out.username = u.searchParams.get('username') || ''; out.password = u.searchParams.get('password') || ''; out.host = u.origin; } catch {} }
-    if (out.host && !s[P.sDns]) await settingsPatch(env, { [P.sDns]: out.host }); // il DNS delle linee si impara dalla prima linea creata
+    if (!agentId && out.host && !s[P.sDns]) await settingsPatch(env, { [P.sDns]: out.host }); // il DNS delle linee si impara dalla prima linea creata
     try { await env.DB.prepare('INSERT INTO armada_own (agent_id, type, line_id, username, mac, created, prov) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(agentId, type, out.userId, out.username, type === 'mag' ? out.mac.toUpperCase() : '', now(), pv).run(); memoDrop(env, 'armown:' + pv); } catch (e) { console.error('armada_own', e && e.message); }
     await llNote(env, { src: pv, app: N, owner: agentId, username: out.username || (type === 'mag' ? '' : out.userId), password: out.password, dns: out.host, mac: type === 'mag' ? out.mac : '', note: notes || '' });
     await log(env, 'new', `${who}: ${N} — creata ${type === 'mag' ? 'MAG ' + out.mac : 'linea ' + (out.username || out.userId)} (${sub ? sub + (sub === 1 ? ' mese' : ' mesi') : 'prova'})`, ip);
@@ -4671,7 +4716,15 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const forward = (method, p, body) => adminRoutes(new Request(url.href, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }), env, url, p, who, ip, ctx, aSes);
 
   // «Incolla linea»: a quale server assegnato corrisponde l'indirizzo incollato (l'agente ha già l'host, nessun dato nuovo)
-  if (path === '/match-server' && m === 'POST') { if (!P.create && !P.playlists) throw new HttpErr(403, 'Non puoi impostare le linee'); const b = await readJSON(req, 1024); const sv = servers.find((x) => sameHostname(x.host, str(b.host, 300))); return json({ server: sv ? { id: sv.id, name: sv.name } : null }); }
+  if (path === '/match-server' && m === 'POST') {
+    if (!P.create && !P.playlists) throw new HttpErr(403, 'Non puoi impostare le linee');
+    const b = await readJSON(req, 1024), panel = str(b.panel, 20).toLowerCase();
+    if (panel && !LINE_SYNC_PANELS.has(panel)) throw new HttpErr(400, 'Pannello non valido');
+    if (panel && !P[panel]) throw new HttpErr(403, 'Non puoi usare questo pannello IPTV');
+    const host = str(b.host, 300) || (panel ? await masterLineDns(env, panel) : '');
+    const sv = servers.find((x) => host && sameHostname(x.host, host));
+    return json({ server: sv ? { id: sv.id, name: sv.name } : null });
+  }
   const apv = path.match(/^\/addon-preview\/([a-z0-9-]{3,40})$/);
   if (apv && m === 'GET') { if (!allowedAddons.has(apv[1])) throw new HttpErr(404, 'Anteprima non disponibile'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
   const need = (k, msg) => { if (!P[k]) throw new HttpErr(403, msg || 'Funzione non consentita: chiedila a chi ti ha creato'); };
@@ -4846,7 +4899,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const sNames = canAg ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
     return stateJson(req, { role: 'agent', user: A.username, me: { ...meSafe, storeCode: await sellerAgentCode(env, A), perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: agList,
-      appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { name: x.name, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
+      appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { ...x, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
       // codici Downloader e link delle app Kairos: solo quelli che il titolare gli concede (kAllow)
       settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', plusDownloaderCode: ok('plus') ? s.plusDownloaderCode || '' : '', premDownloaderCode: ok('prem') ? s.premDownloaderCode || '' : '', novaDownloaderCode: ok('nova') ? s.novaDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),

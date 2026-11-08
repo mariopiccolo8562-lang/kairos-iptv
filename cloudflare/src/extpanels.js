@@ -255,6 +255,20 @@ async function call(P, env, H, path, o = {}) {
 }
 
 const PANELS = { ro: RO, slt: SLT };
+const extDnsOrigin = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const u = new URL(/^https?:\/\//i.test(raw) ? raw : `http://${raw}`);
+    return /^https?:$/.test(u.protocol) && !u.username && !u.password ? u.origin : '';
+  } catch { return ''; }
+};
+async function linkedExtDns(env, panel) {
+  try {
+    const row = await env.DB.prepare("SELECT dns FROM linked_lines WHERE source = ? AND dns IS NOT NULL AND dns <> '' LIMIT 1").bind(panel).first();
+    return extDnsOrigin(row && row.dns);
+  } catch { return ''; }
+}
 export async function extRoutes(req, env, path, who, ip, H, ag) {
   const m = req.method, { HttpErr, json, str } = H;
   const mm = path.match(/^\/(ro|slt)\/(.+)$/); if (!mm) return null;
@@ -284,7 +298,12 @@ export async function extRoutes(req, env, path, who, ip, H, ag) {
   }
   if (sub === 'config' && m === 'DELETE') { mem[KK + ':jar'] = null; await env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?)').bind(KK, KK + ':ses').run(); return json({ ok: true }); }
   if (sub === 'overview' && m === 'GET') return json(await P.overview(env, H));
-  if (sub === 'lines' && m === 'GET') { const L = await P.lines(env, H); if (ag) L.dns = ''; return json(L); }
+  if (sub === 'lines' && m === 'GET') {
+    const L = await P.lines(env, H);
+    if (ag) L.dns = '';
+    else L.dns = extDnsOrigin(L.dns) || await linkedExtDns(env, k);
+    return json(L);
+  }
   if (sub === 'packages' && m === 'GET') return json(await P.packages(env, H));
   if (sub === 'subs' && m === 'GET') return json(await P.subs(env, H));
   if (sub === 'conns' && m === 'GET') return json(await P.conns(env, H));

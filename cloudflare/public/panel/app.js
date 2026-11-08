@@ -564,7 +564,7 @@ function renderDrawer() {
     <div class="mut" id="eSyncInfo" style="margin-top:8px;font-size:12px">${lineSyncInfoHtml()}</div>
     ${periodQuickRow('edit-exp')}
     ${!isNew && window.KXPay ? `<div class="ag-c" style="margin-top:12px"><h4>💰 Pagamento</h4><div id="ePayBadge">${KXPay.badge('device', '', edit.id)}</div>${KXPay.canEdit() ? `<button type="button" class="btn sm" data-kxpay-open data-kind="device" data-panel="" data-ref="${esc(edit.id)}" data-label="${esc(edit.name || edit.code)}" data-owner="${+edit.ownerId || 0}" style="margin-top:8px">💰 Gestisci pagamento</button>` : ''}</div>` : ''}`;
-  const linePickBox = !linked && window.KXLinePick ? `<div style="margin-bottom:14px"><b style="display:block;margin-bottom:6px">🔎 Cerca una linea già creata (tutti i pannelli)</b><div class="line-pick-controls"><div id="eLinePick" data-placeholder="🔎 Cerca utente o nota" data-loading="Carico le linee dai pannelli…"></div>${edit.playlists.length > 1 ? `<label class="line-pick-dest"><span>Metti in:</span><select class="inp line-pick-target" id="eLineTarget" aria-label="Playlist di destinazione">${edit.playlists.map((_, i) => `<option value="${i}"${i === 0 ? ' selected' : ''}>Playlist ${i + 1}</option>`).join('')}<option value="new">Nuova playlist</option></select></label>` : ''}</div></div>` : '';
+  const linePickBox = !linked && window.KXLinePick ? `<div style="margin-bottom:14px"><b style="display:block;margin-bottom:6px">🔎 Cerca una linea già creata (tutti i pannelli)</b><div class="line-pick-controls"><div id="eLinePick" data-placeholder="🔎 Cerca utente o nota" data-loading="Carico le linee dai pannelli…"></div>${edit.playlists.length > 1 ? `<label class="line-pick-dest"><span>Metti in:</span><select class="inp line-pick-target" id="eLineTarget" aria-label="Playlist di destinazione">${edit.playlists.map((_, i) => `<option value="${i}"${i === 0 ? ' selected' : ''}>Playlist ${i + 1}</option>`).join('')}<option value="new">Nuova playlist</option></select></label>` : ''}</div><div id="eLineDns"></div></div>` : '';
   const S3 = linked && !edit.own ? '' : `${linePickBox}<div id="pls">${edit.playlists.map((p, i) => `<div class="pl" data-i="${i}">
       <div class="ph"><input class="inp" data-k="name" value="${esc(p.name)}" placeholder="Nome"><input class="inp pltag" data-k="tag" value="${esc(p.tag || '')}" maxlength="6" placeholder="Sigla" title="Sigla mostrata nell'app sui contenuti di questa playlist quando sono unite (es. SKY, A, B)"><div class="seg"><button class="${p.type === 'm3u' ? 'on' : ''}" data-t="m3u">M3U</button><button class="${p.type === 'xtream' ? 'on' : ''}" data-t="xtream">Xtream</button></div><button class="icb" data-rm><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button></div>
       ${p.type === 'm3u' ? `<input class="inp mono" data-k="url" value="${esc(p.url)}" placeholder="http://…/get.php?…&type=m3u_plus">` : `<input class="inp mono" data-k="host" value="${esc(p.host)}" placeholder="http://host:porta"><div class="row"><input class="inp" data-k="username" value="${esc(p.username)}" placeholder="Username"><input class="inp" data-k="password" value="${esc(p.password)}" placeholder="Password"></div>`}
@@ -611,18 +611,29 @@ function renderDrawer() {
     if ($('#eMaxS')) edit.maxStreams = Math.max(0, Math.round(+$('#eMaxS').value) || 0);
     if ($('#eLoc')) edit.vpnLoc = $('#eLoc').value;
   };
-  if (!linked && window.KXLinePick) window.KXLinePick.mount($('#eLinePick'), (line) => {
-    sync();
-    const target = $('#eLineTarget') ? $('#eLineTarget').value : '0';
-    const index = target === 'new' ? edit.playlists.length : Math.max(0, +target || 0);
-    const current = target === 'new' ? { id: 'p' + Date.now(), name: `Playlist ${index + 1}`, tag: '' } : (edit.playlists[index] || { id: 'p' + Date.now(), name: `Playlist ${index + 1}`, tag: '' });
-    edit.playlists[index] = { ...current, type: 'xtream', url: '', host: line.host || '', username: line.username || '', password: line.password || '' };
-    edit.expires = line.exp || '';
-    edit.lineSync = { panel: line.p, username: line.username || '' }; edit.lineSyncDirty = true;
-    renderDrawer();
-    toast(`Linea ${line.username} inserita: premi Salva`);
-    if (!line.host) toast('Scrivi il DNS della linea', 1);
-  });
+  if (!linked && window.KXLinePick) {
+    window.KXLinePick.mount($('#eLinePick'), (line) => {
+      sync();
+      const target = $('#eLineTarget') ? $('#eLineTarget').value : '0';
+      const index = target === 'new' ? edit.playlists.length : Math.max(0, +target || 0);
+      const current = target === 'new' ? { id: 'p' + Date.now(), name: `Playlist ${index + 1}`, tag: '' } : (edit.playlists[index] || { id: 'p' + Date.now(), name: `Playlist ${index + 1}`, tag: '' });
+      edit.playlists[index] = { ...current, type: 'xtream', url: '', host: line.host || '', username: line.username || '', password: line.password || '' };
+      edit.expires = line.exp || '';
+      edit.lineSync = { panel: line.p, username: line.username || '' }; edit.lineSyncDirty = true;
+      edit.lineDnsMissing = line.host ? null : { panel: line.p, tag: line.tag, index };
+      renderDrawer();
+      toast(`Linea ${line.username} inserita: premi Salva`);
+      if (!line.host) toast(`Scegli il DNS della linea ${line.tag || ''}`, 1);
+    });
+    const missing = edit.lineDnsMissing, box = $('#eLineDns');
+    if (D.role !== 'agent' && missing && box && window.KXLinePick.mountDns) window.KXLinePick.mountDns(box, missing.panel, missing.tag, async (host) => {
+      sync();
+      if (edit.playlists[missing.index]) edit.playlists[missing.index].host = host;
+      edit.lineDnsMissing = null;
+      renderDrawer();
+      toast('DNS inserito: premi Salva');
+    });
+  }
   bindLineSyncUnlink();
   $$('[data-addon]').forEach((b) => (b.onclick = () => { const k = b.dataset.addon; edit.addons = edit.addons.includes(k) ? edit.addons.filter((x) => x !== k) : [...edit.addons, k]; b.classList.toggle('on', edit.addons.includes(k)); }));
   $$('[data-perm]').forEach((b) => (b.onclick = () => { const k = b.dataset.perm; edit.perms = { ...(edit.perms || {}) }; edit.perms[k] = edit.perms[k] === false; b.classList.toggle('on', edit.perms[k] !== false); }));
