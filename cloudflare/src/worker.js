@@ -2217,9 +2217,9 @@ const RC_APPS = ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus', 'nova'];
 const RC_LINKED = ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus', 'nova'];
 // catalogo: [chiave, nome, tipo, valori [[valore, etichetta]], app che la capiscono, spiegazione, etichetta «libera» (opz.), sezione]
 // Ogni voce corrisponde a un'impostazione che il cliente trova nell'app: imposta dal pannello, lì risulta «scelta dal fornitore».
-const KPRO = ['tv'], KALL_LITE = ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus'];
+const KPRO = ['tv'], KPRO_XC = ['tv', 'xc'], KALL_LITE = ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus'];
 const YN = [[true, 'Sì'], [false, 'No']];
-const ENG_OPTS = [['auto', 'Automatico avanzato'], ['exo', 'ExoPlayer'], ['vlc', 'VLC']];
+const ENG_OPTS = [['auto', 'Automatico (ExoPlayer, passa a VLC se serve)'], ['exo', 'ExoPlayer'], ['vlc', 'VLC']];
 const RC_CAT = [
   /* ---- Generale ---- */
   ['lite', 'Modalità leggera', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['max', 'Leggerissima'], ['off', 'Spenta']], KALL_LITE, 'Niente animazioni ed effetti, immagini e memoria ridotte: per chiavette e TV vecchie. «Leggerissima» toglie anche le transizioni e svuota le cache: la scelta giusta per Fire Stick con poca memoria', '', 'Generale'],
@@ -2242,13 +2242,14 @@ const RC_CAT = [
   ['posters', 'Locandine', 'sel', [['auto', 'Automatiche (più leggere sulle chiavette da 1 GB)'], ['hi', 'Sempre nitide']], KPRO, 'Automatiche: sulle chiavette da 1 GB (Fire TV Stick/Lite) locandine e sfondi si scaricano più piccoli, un po\' meno nitidi ma con meno memoria. «Sempre nitide»: come sugli altri dispositivi, usa più memoria', '', 'Aspetto'],
   ['intro', 'Animazione d\'avvio', 'sel', [['auto', 'Automatica'], ['simple', 'Semplice'], ['off', 'Spenta']], KPRO, 'Automatica: completa sui dispositivi forti, senza gli effetti di sfondo pesanti su quelli deboli. Semplice: logo, scritta e barra, senza effetti di sfondo. Spenta: logo fermo e barra. Vale dall\'apertura successiva', '', 'Aspetto'],
   /* ---- Lettore ---- */
-  ['o.engLive', 'Lettore TV in diretta', 'sel', ENG_OPTS, KPRO, 'Se nella scheda del cliente hai già scelto il lettore, vale quello', '', 'Lettore'],
-  ['o.engMovie', 'Lettore film', 'sel', ENG_OPTS, KPRO, '', '', 'Lettore'],
-  ['o.engSeries', 'Lettore serie TV', 'sel', ENG_OPTS, KPRO, '', '', 'Lettore'],
-  ['o.hw', 'Accelerazione hardware', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['off', 'Disattivata (software)']], KPRO, 'Disattivala solo se il cliente vede immagini verdi o a scatti', '', 'Lettore'],
-  ['o.adaptQ', 'Qualità adattiva automatica', 'sel', YN, KPRO, 'Se la linea non regge passa da sola a una versione più leggera del canale', '', 'Lettore'],
-  ['p.quality', 'Qualità video', 'sel', [['auto', 'Automatica'], ['max', 'Massima'], ['1080', '1080p'], ['720', '720p'], ['480', '480p']], KPRO, '', '', 'Lettore'],
-  ['p.buffer', 'Buffer di rete', 'sel', [['fast', 'Veloce'], ['balanced', 'Bilanciato'], ['stable', 'Stabile']], ['tv', 'nova'], 'Veloce: parte prima ma regge meno · Stabile: per Wi-Fi debole o server lenti', '', 'Lettore'],
+  ['o.engLive', 'Lettore TV in diretta', 'sel', ENG_OPTS, KPRO_XC, 'Se nella scheda del cliente hai già scelto il lettore, vale quello', '', 'Lettore'],
+  ['o.engMovie', 'Lettore film', 'sel', ENG_OPTS, KPRO_XC, '', '', 'Lettore'],
+  ['o.engSeries', 'Lettore serie TV', 'sel', ENG_OPTS, KPRO_XC, '', '', 'Lettore'],
+  ['o.hw', 'Decodifica', 'sel', [['auto', 'Automatica'], ['on', 'Hardware'], ['off', 'Software']], KPRO_XC, 'Disattivala solo se il cliente vede immagini verdi o a scatti', '', 'Lettore'],
+  ['o.adaptQ', 'Qualità adattiva automatica', 'sel', YN, KPRO_XC, 'Se la linea non regge passa da sola a una versione più leggera del canale', '', 'Lettore'],
+  ['o.drainQ', 'Discesa anticipata della qualità', 'sel', YN, KPRO_XC, '', '', 'Lettore'],
+  ['p.quality', 'Qualità video', 'sel', [['auto', 'Automatica'], ['max', 'Massima'], ['1080', '1080p'], ['720', '720p'], ['480', '480p']], KPRO_XC, '', '', 'Lettore'],
+  ['p.buffer', 'Buffer di rete', 'sel', [['fast', 'Piccolo (veloce)'], ['balanced', 'Normale'], ['stable', 'Grande (stabile)']], ['tv', 'nova', 'xc'], 'Veloce: parte prima ma regge meno · Stabile: per Wi-Fi debole o server lenti', '', 'Lettore'],
   ['p.aspect', 'Formato immagine', 'sel', [['fit', 'Adatta'], ['fill', 'Riempi'], ['zoom', 'Zoom']], KPRO, '', '', 'Lettore'],
   ['o.autoNext', 'Episodio successivo automatico', 'sel', YN, KPRO, '', '', 'Lettore'],
   ['o.introAuto', 'Salta l\'intro delle serie', 'sel', YN, KPRO, '', '', 'Lettore'],
@@ -2292,24 +2293,45 @@ function rcTxt(v) {
 function rcClean(src, app) {
   let o = src; if (typeof src === 'string') { try { o = src ? JSON.parse(src) : {}; } catch { o = {}; } }
   if (!o || typeof o !== 'object') throw new HttpErr(400, 'Configurazione non valida');
-  const out = {};
+  const out = {}, allows = {};
   for (const [k, v] of Object.entries(o)) {
-    const c = rcCatByKey.get(k); if (!c) continue;
+    const allow = k.endsWith(':allow'), base = allow ? k.slice(0, -6) : k, c = rcCatByKey.get(base); if (!c) continue;
+    if (allow && (c[2] !== 'sel' || c[7] !== 'Lettore')) continue;
     if (v === '' || v === null || v === undefined) continue;
     if (app && !c[4].includes(app)) continue;
+    if (allow) {
+      if (!Array.isArray(v)) throw new HttpErr(400, `${c[1]}: valori non validi`);
+      const seen = new Set(), values = [];
+      for (const value of v) {
+        const ok = c[3].find((x) => x[0] === value || String(x[0]) === String(value));
+        if (!ok) throw new HttpErr(400, `${c[1]}: valore non valido`);
+        const key = String(ok[0]); if (seen.has(key)) continue; seen.add(key); values.push(ok[0]);
+      }
+      allows[base] = values;
+      continue;
+    }
     if (c[2] === 'txt') { const t = rcTxt(v); if (t === null) throw new HttpErr(400, `${c[1]}: valore non valido`); if (t) out[k] = t; continue; }
     const ok = c[3].find((x) => x[0] === v || String(x[0]) === String(v));
     if (!ok) throw new HttpErr(400, `${c[1]}: valore non valido`);
     out[k] = ok[0];
   }
+  for (const [k, values] of Object.entries(allows)) {
+    if (Object.prototype.hasOwnProperty.call(out, k)) continue;
+    if (values.length === 1) out[k] = values[0];
+    else if (values.length > 1) out[`${k}:allow`] = values;
+  }
   return out;
 }
 const rcProfiles = (s) => { const r = s && s.rcApp && typeof s.rcApp === 'object' ? s.rcApp : {}; const o = {}; for (const a of RC_APPS) { try { o[a] = rcClean(r[a] || {}, a); } catch { o[a] = {}; } } return o; };
-const rcDevOf = (d) => { try { return rcClean(d && d.rc ? d.rc : {}); } catch { return {}; } };
+const rcDevOf = (d, app) => { try { return rcClean(d && d.rc ? d.rc : {}, app || (d && d.app)); } catch { return {}; } };
 /** configurazione effettiva per un dispositivo: profilo della sua app + impostazioni sue; «rcv» = impronta corta */
 function rcEffective(s, d, app) {
   const a = app || appOfVer('', d && d.app) || 'tv';
-  const rc = { ...(rcProfiles(s)[a] || {}), ...rcDevOf(d) };
+  const rc = { ...(rcProfiles(s)[a] || {}) }, own = rcDevOf(d, a);
+  for (const [k, v] of Object.entries(own)) {
+    const base = k.endsWith(':allow') ? k.slice(0, -6) : k;
+    delete rc[base]; delete rc[`${base}:allow`]; rc[k] = v;
+  }
   const keys = Object.keys(rc).sort();
   const flat = keys.map((k) => k + '=' + JSON.stringify(rc[k])).join('&');
   let h = 0; for (let i = 0; i < flat.length; i++) h = (h * 31 + flat.charCodeAt(i)) >>> 0;
@@ -4336,23 +4358,32 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     // stesse voci a tutte le app (es. la Home): '' toglie la voce; le app che non la capiscono restano come sono
     if (path === '/rctl/all' && m === 'PUT') {
       const b = await readJSON(req, 8192), src = b.rc && typeof b.rc === 'object' && !Array.isArray(b.rc) ? b.rc : {};
-      const keys = Object.keys(src).filter((k) => rcCatByKey.has(k));
+      const keyBase = (k) => k.endsWith(':allow') ? k.slice(0, -6) : k;
+      const keys = Object.keys(src).filter((k) => {
+        const c = rcCatByKey.get(keyBase(k));
+        return c && (!k.endsWith(':allow') || (c[2] === 'sel' && c[7] === 'Lettore'));
+      });
       if (!keys.length) throw new HttpErr(400, 'Niente da salvare');
       const prof = rcProfiles(s0);
       for (const a of RC_APPS) {
         const cur = { ...(prof[a] || {}) };
-        for (const k of keys) { if (!rcCatByKey.get(k)[4].includes(a)) continue; const v = src[k]; if (v === '' || v === null || v === undefined) delete cur[k]; else cur[k] = v; }
+        for (const k of keys) {
+          const base = keyBase(k), c = rcCatByKey.get(base); if (!c[4].includes(a)) continue;
+          const other = k === base ? `${base}:allow` : base, v = src[k];
+          if (v === '' || v === null || v === undefined) { delete cur[k]; if (k === base) delete cur[other]; }
+          else { delete cur[other]; cur[k] = v; }
+        }
         prof[a] = rcClean(cur, a);
       }
       await settingsPatch(env, { rcApp: prof });
-      await log(env, 'settings', `${who}: controllo remoto — ${keys.map((k) => rcCatByKey.get(k)[1]).join(', ')} per tutte le app`, ip);
+      await log(env, 'settings', `${who}: controllo remoto — ${keys.map((k) => rcCatByKey.get(keyBase(k))[1]).join(', ')} per tutte le app`, ip);
       return json({ ok: true, apps: prof });
     }
     const pd = path.match(/^\/rctl\/device\/([A-Za-z0-9_-]{6,20})$/);
     if (pd && m === 'PUT') {
       const d = await env.DB.prepare('SELECT id, name, code, app FROM devices WHERE id = ?').bind(pd[1]).first();
       if (!d) throw new HttpErr(404, 'Cliente non trovato');
-      const b = await readJSON(req, 8192), rc = rcClean(b.rc || {});
+      const b = await readJSON(req, 8192), rc = rcClean(b.rc || {}, d.app);
       await env.DB.prepare('UPDATE devices SET rc = ? WHERE id = ?').bind(Object.keys(rc).length ? JSON.stringify(rc) : '', d.id).run();
       await log(env, 'edit', `${who}: controllo remoto — ${d.name || d.code}: ${Object.keys(rc).length ? Object.keys(rc).length + ' impostazioni imposte' : 'tolte le impostazioni imposte'}`, ip);
       return json({ ok: true, rc, ...rcEffective(s0, { ...d, rc: JSON.stringify(rc) }) });
