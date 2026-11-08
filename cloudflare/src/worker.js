@@ -41,7 +41,7 @@ export default {
   async scheduled(_ev, env0) {
     const env = reqEnv(env0);
     await cleanup(env);
-    try { await pendSweep(env, true); } catch {} // richieste «da attivare» non accettate entro il tempo scelto
+    try { await pendSweep(env, true, effectivePendTtl(await getSettings(env))); } catch {} // richieste «da attivare» non accettate entro il tempo scelto
     // app terzi: se l'hai chiesto, ogni notte si tolgono le liste inattive
     try { const c = (await getSettings(env)).playersCfg || {}; if (c.autoClean) await thirdCleanup(env, c.cleanDays || 60, 'Pulizia automatica', ''); } catch {}
     try { await wolfCron(env, WOLF_H); } catch {}
@@ -294,7 +294,7 @@ function harden(res, req) {
 const DEFAULT_SETTINGS = {
   brand: 'KAIROS', tagline: 'Streaming', accent: 'cinema',
   announcement: 'Benvenuto su KAIROS — buona visione!', supportContact: '',
-  allowLocalPlaylists: true, apkUrl: '', apkVersionCode: 0, downloaderCode: '', storeDownloaderCode: '', liteDownloaderCode: '', liteApkUrl: '', ktvDownloaderCode: '', ktvApkUrl: '', xcDownloaderCode: '', xcApkUrl: '', plusDownloaderCode: '', plusApkUrl: '', premDownloaderCode: '', novaDownloaderCode: '',
+  allowLocalPlaylists: true, codeOnly: false, apkUrl: '', apkVersionCode: 0, downloaderCode: '', storeDownloaderCode: '', liteDownloaderCode: '', liteApkUrl: '', ktvDownloaderCode: '', ktvApkUrl: '', xcDownloaderCode: '', xcApkUrl: '', plusDownloaderCode: '', plusApkUrl: '', premDownloaderCode: '', novaDownloaderCode: '',
   serverUrl: '', showFootball: true,
   price: '22 € / anno', privacy: '',
   aiDaily: 20, aiProvider: 'gm', aiClaude: 'haiku', aiGemini: 'flash',
@@ -3613,11 +3613,14 @@ async function playerRegister(req, env, ip, ctx) {
       pending = await env.DB.prepare('SELECT COUNT(*) AS n ' + PENDING_SQL).first();
       if (pending && pending.n >= MAX_PENDING) return json({ error: 'Registrazioni temporaneamente sospese' }, 503);
     }
-    d = { id: b64url(rand(9)), code, secret_hash: sh, name: '', model, notes: '', active: 0, expires: '', playlists: '', created_at: now(), last_seen: now(), last_ip: ip, perms: defaultPermsJson(await getSettings(env)) };
+    const settings = await getSettings(env);
+    d = { id: b64url(rand(9)), code, secret_hash: sh, name: '', model, notes: '', active: 0, expires: '', playlists: '', created_at: now(), last_seen: now(), last_ip: ip, perms: defaultPermsJson(settings) };
     await env.DB.prepare('INSERT INTO devices (id, code, secret_hash, model, created_at, last_seen, last_ip, perms, max_streams) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)')
       .bind(d.id, code, sh, model, d.created_at, d.last_seen, ip, d.perms).run();
-    ctx.waitUntil(log(env, 'new', `Nuovo dispositivo in attesa: ${code}${model ? ' (' + model + ')' : ''}`, ip));
-    ctx.waitUntil(webhookSend(env, 'device.new', { id: d.id, code, model, ip }));
+    if (!settings.codeOnly) {
+      ctx.waitUntil(log(env, 'new', `Nuovo dispositivo in attesa: ${code}${model ? ' (' + model + ')' : ''}`, ip));
+      ctx.waitUntil(webhookSend(env, 'device.new', { id: d.id, code, model, ip }));
+    }
   } else if (!d.secret_hash) {
     // dispositivo creato dal pannello: il primo che si presenta col codice lo "lega" al proprio segreto
     await env.DB.prepare('UPDATE devices SET secret_hash = ? WHERE id = ? AND secret_hash = ?').bind(sh, d.id, '').run();
@@ -4287,13 +4290,14 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const inboxP = ses.assist ? Promise.resolve([]) : (async () => { try { return ((await env.DB.prepare("SELECT id, title, body, level, created FROM agent_msgs WHERE (target = 'all' OR target = ?) AND (until = 0 OR until > ?) ORDER BY id DESC LIMIT 20").bind(String(A.id), now()).all()).results) || []; } catch { return []; } })();
     // i suoi clienti (principali) e le loro connessioni collegate: una sola query per gruppo di agenti
     const fam = (await Promise.all(chunks(ctree, 45).map((part) => { const q = part.map(() => '?').join(','); return env.DB.prepare(`SELECT * FROM devices WHERE parent = '' AND owner_id IN (${q}) UNION ALL SELECT * FROM devices WHERE parent IN (SELECT id FROM devices WHERE parent = '' AND owner_id IN (${q}))`).bind(...part, ...part).all(); }))).flatMap((r) => r.results || []);
-    const rows = fam.filter((d) => !d.parent).sort((a, b) => (+b.created_at || 0) - (+a.created_at || 0)).slice(0, 5000), kept = new Set(rows.map((d) => d.id));
+    const s = await sP;
+    const rows = fam.filter((d) => !d.parent && !(s.codeOnly && !+d.active && !d.playlists && !d.name && !d.notes && !d.expires)).sort((a, b) => (+b.created_at || 0) - (+a.created_at || 0)).slice(0, 5000), kept = new Set(rows.map((d) => d.id));
     const kids = fam.filter((d) => d.parent && kept.has(d.parent));
     dvOrb = agOrbList(await sP, P.orbDns).map((x) => hostKey(x.host));
     const devices = withPresence((await Promise.all([...rows, ...kids].map((d) => deviceOut(env, d)))).map(dview), await pmP); // in parallelo
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p ? p.status : 'pending'; }
-    const [s, meArr, sAll, agList, actR, msgR, inbox] = await Promise.all([sP, meP, snP, agP, actP, msgP, inboxP]);
+    const [meArr, sAll, agList, actR, msgR, inbox] = await Promise.all([meP, snP, agP, actP, msgP, inboxP]);
     const meOut = meArr[0];
     const { password: _pw, ...meSafe } = meOut;
     const sNames = canAg ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
@@ -4582,7 +4586,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     // tutto in parallelo: le query al database, la decifratura delle playlist e i controlli delle versioni delle app
     if (ses) agentCounts(env).catch(() => {}); // clienti per agente: parte subito (la usa agentsOut alla fine)
     const settings = await getSettings(env);
-    if (+settings.pendTtl) await pendSweep(env, false, +settings.pendTtl).catch(() => {}); // al più ogni 5 minuti
+    const pendTtl = effectivePendTtl(settings);
+    if (pendTtl) await pendSweep(env, false, pendTtl).catch(() => {}); // al più ogni 5 minuti
     const [rowsR, activityR, messagesR, agentMsgsR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, plusF, sAppNames, nCounts, onl, agAll, presLast] = await Promise.all([
       env.DB.prepare('SELECT * FROM devices ORDER BY created_at DESC LIMIT 5000').all(),
       env.DB.prepare('SELECT t, type, text, ip FROM activity ORDER BY id DESC LIMIT 200').all(),
@@ -5059,6 +5064,12 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     }
     if (b.appLinks !== undefined) s.appLinks = cleanAppLinks(b.appLinks);
     let pendNow = 0;
+    if (b.codeOnly !== undefined) {
+      if (!ses || ses.agent || ses.assist) throw new HttpErr(403, 'Impostazione riservata al titolare');
+      if (typeof b.codeOnly !== 'boolean') throw new HttpErr(400, 'Impostazione non valida');
+      if (!!s.codeOnly !== b.codeOnly) await log(env, 'settings', `${who}: attivazione solo con codice ${b.codeOnly ? 'accesa' : 'spenta'}`, ip);
+      s.codeOnly = b.codeOnly;
+    }
     if (b.pendTtl !== undefined) {
       const h = parseInt(b.pendTtl, 10);
       if (!PEND_TTL.includes(h)) throw new HttpErr(400, 'Tempo non valido per le richieste da attivare');
@@ -5205,18 +5216,29 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     let code = str(b.code, 20).toUpperCase();
     if (!code) { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', r = rand(6); const c = [...r].map((x) => A[x % A.length]); code = `KX${c[0]}${c[1]}-${c[2]}${c[3]}${c[4]}${c[5]}`; }
     if (!CODE_RE.test(code)) throw new HttpErr(400, 'Formato codice non valido (es. KXAB-12CD)');
-    if (await env.DB.prepare('SELECT 1 FROM devices WHERE code = ?').bind(code).first()) throw new HttpErr(400, 'Codice già esistente');
+    const existing = await env.DB.prepare('SELECT * FROM devices WHERE code = ?').bind(code).first();
+    if (existing && !(await env.DB.prepare(`SELECT 1 AS x FROM devices WHERE id = ? AND ${FREE_DEV}`).bind(existing.id).first())) throw new HttpErr(400, 'Codice già esistente');
     if (!DATE_RE.test(str(b.expires, 10))) throw new HttpErr(400, 'Data non valida');
-    const id = b64url(rand(9));
+    const id = existing ? existing.id : b64url(rand(9));
     const pls = cleanPlaylists(b.playlists);
     const acc = await accountFields(env, b, { max_streams: 1 }, pls); // di base: una visione alla volta
-    const perms = b.perms !== undefined ? permsJson({ ...permsParse((await getSettings(env)).permsDefault), ...permsInput(b.perms) }) : defaultPermsJson(await getSettings(env));
-    await env.DB.prepare('INSERT INTO devices (id, code, name, notes, active, expires, playlists, created_at, max_conn, max_profiles, profiles, lock_profiles, vpn, vpn_conf, perms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(id, code, str(b.name, 60), str(b.notes, 500), b.active ? 1 : 0, str(b.expires, 10), await seal(env, pls), now(), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, perms).run();
+    const settings = await getSettings(env);
+    const perms = b.perms !== undefined ? permsJson({ ...permsParse(settings.permsDefault), ...permsInput(b.perms) }) : defaultPermsJson(settings);
+    const name = str(b.name, 60), notes = str(b.notes, 500), active = b.active ? 1 : 0, expires = str(b.expires, 10), playlists = await seal(env, pls);
     const newOwner = ses && ses.agent ? ses.admin_id : Math.max(0, parseInt(b.ownerId, 10) || 0);
     if (newOwner && !(ses && ses.agent) && !(await env.DB.prepare("SELECT 1 AS x FROM admins WHERE id = ? AND role = 'agent'").bind(newOwner).first())) throw new HttpErr(400, 'Agente non trovato');
-    await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ?, addons = ?, owner_id = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, Array.isArray(b.addons) ? addonsList(b.addons).join(',') : '', newOwner, id).run();
-    if (APPS.includes(b.app)) await env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(b.app, id).run();
+    const addons = Array.isArray(b.addons) ? addonsList(b.addons).join(',') : '';
+    const app = APPS.includes(b.app) ? b.app : (existing && existing.app) || '';
+    if (existing) {
+      const r = await env.DB.prepare(`UPDATE devices SET name = ?, notes = ?, active = ?, expires = ?, playlists = ?, max_conn = ?, max_profiles = ?, profiles = ?, lock_profiles = ?, vpn = ?, vpn_conf = ?, perms = ?, max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ?, addons = ?, owner_id = ?, app = ? WHERE id = ? AND ${FREE_DEV}`)
+        .bind(name, notes, active, expires, playlists, acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, perms, acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, addons, newOwner, app, id).run();
+      if (!+((r && r.meta && r.meta.changes) || 0)) throw new HttpErr(400, 'Codice già esistente');
+    } else {
+      await env.DB.prepare('INSERT INTO devices (id, code, name, notes, active, expires, playlists, created_at, max_conn, max_profiles, profiles, lock_profiles, vpn, vpn_conf, perms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(id, code, name, notes, active, expires, playlists, now(), acc.max_conn, acc.max_profiles, acc.profiles, acc.lock_profiles, acc.vpn, acc.vpn_conf, perms).run();
+      await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ?, addons = ?, owner_id = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, addons, newOwner, id).run();
+      if (APPS.includes(b.app)) await env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(b.app, id).run();
+    }
     if (ses && ses.agent) return json({ ok: true, id, code });
     await log(env, 'new', `${who}: creato dispositivo ${str(b.name, 60) || code}`, ip);
     return json({ ok: true, id, code });
@@ -5788,9 +5810,14 @@ async function trashRestore(env, id, who, ip) {
 const PEND_TTL = [0, 1, 6, 24, 72, 168];
 const PEND_WHERE = "active = 0 AND playlists = '' AND parent = ''";
 const pendTtlTxt = (h) => (h % 24 ? (h === 1 ? '1 ora' : h + ' ore') : h === 24 ? '24 ore' : h / 24 + ' giorni');
+const effectivePendTtl = (s) => {
+  const h = +(s && s.pendTtl) || 0;
+  return s && s.codeOnly ? (h ? Math.min(h, 24) : 24) : h;
+};
 let pendSweepT = 0;
 async function pendSweep(env, force = false, h0 = null) {
-  const h = h0 !== null ? h0 : +(await getSettings(env)).pendTtl || 0, t = now();
+  const settings = await getSettings(env);
+  const h = effectivePendTtl(h0 !== null ? { ...settings, pendTtl: h0 } : settings), t = now();
   if (!h || !PEND_TTL.includes(h) || (!force && t - pendSweepT < 5 * 60e3)) return 0;
   pendSweepT = t;
   // quelle con un nome o una nota date dal pannello restano (come nella pulizia dei 30 giorni)
