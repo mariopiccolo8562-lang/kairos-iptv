@@ -972,7 +972,22 @@ class MainActivity : ComponentActivity() {
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         // Android chiede memoria: l'interfaccia libera le sue cache prima che il sistema chiuda l'app
-        if (level >= TRIM_MEMORY_RUNNING_LOW) { Watch.note(prefs, "trim", "livello $level"); if (webOk) js("window.kxTrim && kxTrim($level)") }
+        if (level >= TRIM_MEMORY_RUNNING_LOW) {
+            val p = prefs
+            thread(name = "kx-note") { Watch.note(p, "trim", "livello $level") } // scrittura su disco (commit) fuori dal thread dell'interfaccia
+            LogoMem.trim(level)
+            if (webOk) {
+                js("window.kxTrim && kxTrim($level)")
+                // immagini e file non più usati dalla pagina (cache in RAM della WebView; quella su disco resta)
+                try { web.clearCache(false) } catch (_: Throwable) {}
+            }
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onLowMemory() {
+        @Suppress("DEPRECATION") super.onLowMemory()
+        LogoMem.trim(TRIM_MEMORY_COMPLETE)
     }
 
     override fun onDestroy() {

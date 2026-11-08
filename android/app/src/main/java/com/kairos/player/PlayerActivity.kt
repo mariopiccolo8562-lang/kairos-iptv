@@ -1523,8 +1523,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     /** tasti con la lista aperta; false = il tasto prosegue normalmente */
     private fun listKey(keyCode: Int, event: KeyEvent): Boolean {
         when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP -> moveSel(if (event.repeatCount > 15) -3 else -1)
-            KeyEvent.KEYCODE_DPAD_DOWN -> moveSel(if (event.repeatCount > 15) 3 else 1)
+            KeyEvent.KEYCODE_DPAD_UP -> { logoHold(event.repeatCount > 0); moveSel(if (event.repeatCount > 15) -3 else -1) }
+            KeyEvent.KEYCODE_DPAD_DOWN -> { logoHold(event.repeatCount > 0); moveSel(if (event.repeatCount > 15) 3 else 1) }
             KeyEvent.KEYCODE_PAGE_UP, KeyEvent.KEYCODE_CHANNEL_UP -> moveSel(-8)
             KeyEvent.KEYCODE_PAGE_DOWN, KeyEvent.KEYCODE_CHANNEL_DOWN -> moveSel(8)
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> { if (event.repeatCount == 0) pickList(listSel) }
@@ -1660,12 +1660,26 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private val logosLazy = lazy { LogoCache(userAgent()) }
     private val logos: LogoCache get() = logosLazy.value
 
+    /* tasto tenuto premuto nella lista: nessun nuovo download di loghi finché lo scorrimento non si ferma (quelli in memoria restano) */
+    private val logoResume = Runnable { if (logosLazy.isInitialized()) { logos.paused = false; if (listOpen) listAdapter.notifyDataSetChanged() } }
+    private fun logoHold(repeat: Boolean) {
+        if (!repeat || !logosLazy.isInitialized()) return
+        logos.paused = true
+        ui.removeCallbacks(logoResume); ui.postDelayed(logoResume, 250)
+    }
+
     private inner class LogoCache(private val ua: String) {
         // condivisa tra le aperture del player: i loghi non si riscaricano e non si ridecodificano ogni volta
         private val mem = LogoMem.mem
         private val failed = LogoMem.failed
         private val loading = HashSet<String>()
         private var refreshQueued = false
+        /** scorrimento veloce in corso: niente nuove richieste */
+        @Volatile var paused = false
+        // il logo sta in un riquadro di 50×36 dp (FIT_CENTER): si decodifica a quella misura, mai all'originale
+        private val boxW = dp(50)
+        private val boxH = dp(36)
+        private val lowMem = DeviceClass.of(this@PlayerActivity) == "D"
         private val pool = java.util.concurrent.ThreadPoolExecutor(
             2, 2, 30L, java.util.concurrent.TimeUnit.SECONDS,
             object : java.util.concurrent.LinkedBlockingDeque<Runnable>() {
@@ -1676,7 +1690,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         /** sul thread principale: il logo se è già pronto, altrimenti lo chiede e restituisce null */
         fun get(url: String): Bitmap? {
             mem.get(url)?.let { return it }
-            if (url in failed || url in loading || loading.size >= 40) return null
+            if (paused || url in failed || url in loading || loading.size >= 40) return null
             if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) { failed.add(url); return null }
             loading.add(url)
             try {
@@ -1731,10 +1745,26 @@ class PlayerActivity : ComponentActivity(), EngineListener {
                 }
                 val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
-                if (o.outWidth <= 0 || o.outHeight <= 0) return null
+                val w = o.outWidth; val h = o.outHeight
+                if (w <= 0 || h <= 0) return null
+                // misura mostrata (dentro il riquadro, proporzioni invariate); i loghi più piccoli restano come sono
+                val k = minOf(boxW.toFloat() / w, boxH.toFloat() / h, 1f)
+                val tw = maxOf(1, (w * k).toInt()); val th = maxOf(1, (h * k).toInt())
                 var s = 1
-                while (o.outWidth / (s * 2) >= 140 && o.outHeight / (s * 2) >= 70) s *= 2
-                return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = s })
+                while (w / (s * 2) >= tw && h / (s * 2) >= th) s *= 2
+                val opts = BitmapFactory.Options().apply {
+                    inSampleSize = s
+                    // chiavette con poca memoria: i JPEG (nessuna trasparenza) a 16 bit, metà memoria; PNG e simili restano a 32 bit
+                    if (lowMem && o.outMimeType == "image/jpeg") inPreferredConfig = Bitmap.Config.RGB_565
+                }
+                val b = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return null
+                // ancora molto più grande del riquadro (il campionamento va a potenze di 2): si riduce alla misura esatta
+                if (b.width > tw * 3 / 2 || b.height > th * 3 / 2) {
+                    val r = Bitmap.createScaledBitmap(b, tw, th, true)
+                    if (r !== b) b.recycle()
+                    return r
+                }
+                return b
             } catch (_: Throwable) {
                 return null
             } finally {
@@ -1895,4 +1925,11 @@ object LogoMem {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
     val failed: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
+
+    /** memoria scarsa (onTrimMemory/onLowMemory): metà dei loghi; tutti se è critica o l'app è in sfondo (si riscaricano quando servono) */
+    fun trim(level: Int) {
+        try {
+            if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) mem.evictAll() else mem.trimToSize(mem.maxSize() / 2)
+        } catch (_: Throwable) {}
+    }
 }
