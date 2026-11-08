@@ -54,7 +54,7 @@
     return `<div style="overflow:auto"><table class="tbl" style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>${ks.map((k) => `<th style="text-align:left;padding:8px;border-bottom:1px solid var(--line,#333);white-space:nowrap">${esc(k)}</th>`).join('')}${payCol ? '<th style="text-align:left;padding:8px;border-bottom:1px solid var(--line,#333);white-space:nowrap">Pagamento</th>' : ''}</tr></thead><tbody>${rows.map((r) => {
       const ref = payRef(r), label = r && (r.name || r.username || r.user || r.device_name || r.label) || ref;
       const pay = payCol && ref ? KXPay.badge('line', 'ora', ref) : '';
-      const btn = payCol && ref && KXPay.canEdit() ? `<button class="btn sm" data-kxpay-open data-kind="line" data-panel="ora" data-ref="${esc(ref)}" data-label="${esc(label)}">💰 Pagamento</button>` : '';
+      const btn = payCol && ref && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="ora" data-ref="${esc(ref)}" data-label="${esc(label)}">💰 Pagamento</button>` : '';
       return `<tr>${ks.map((k) => `<td style="padding:8px;border-bottom:1px solid var(--line,#222);vertical-align:top">${cell(r && r[k])}</td>`).join('')}${payCol ? `<td style="padding:8px;border-bottom:1px solid var(--line,#222);vertical-align:top">${pay}${btn ? `${pay ? '<br>' : ''}${btn}` : ''}</td>` : ''}</tr>`;
     }).join('')}</tbody></table></div>`;
   }
