@@ -1,0 +1,16 @@
+# Profilo di base di Kairos Pro (scritto a mano): metodi compilati in anticipo all'installazione/aggiornamento,
+# così l'avvio dell'app e l'avvio di un canale non aspettano il compilatore JIT (Android 7+, installato da profileinstaller).
+# App: contenitore, ponte con l'interfaccia, lettori, statistiche
+HSPLcom/kairos/player/**->**(**)**
+Lcom/kairos/player/**;
+# ExoPlayer (media3): creazione del lettore, caricamento, HLS/TS e decodifica all'avvio di un canale
+HSPLandroidx/media3/exoplayer/ExoPlayer$Builder;->**(**)**
+HSPLandroidx/media3/exoplayer/ExoPlayerImpl;->**(**)**
+HSPLandroidx/media3/exoplayer/ExoPlayerImplInternal;->**(**)**
+HSPLandroidx/media3/exoplayer/DefaultLoadControl;->**(**)**
+HSPLandroidx/media3/exoplayer/DefaultRenderersFactory;->**(**)**
+HSPLandroidx/media3/exoplayer/source/**->**(**)**
+HSPLandroidx/media3/exoplayer/hls/**->**(**)**
+HSPLandroidx/media3/exoplayer/mediacodec/**->**(**)**
+HSPLandroidx/media3/exoplayer/video/**->**(**)**
+HSPLandroidx/media3/extractor/ts/**->**(**)**
