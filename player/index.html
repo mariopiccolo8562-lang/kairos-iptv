@@ -549,6 +549,13 @@ img{display:block}
 #boot.out .sp-bg{opacity:0;transition:opacity .4s .12s ease-in}
 /* GPU debole (D, N): niente raggi né pavimento; chiavetta da 1 GB: niente onde grandi (anche con «Modalità leggera: Spenta») */
 .sp-lo .sp-rays,.sp-lo .sp-floor,.sp-d .sp-wave{display:none}
+/* «Animazione d'avvio» dal pannello (rc intro, vale dall'apertura successiva): semplice = solo le entrate di logo, scritta e barra */
+.sp-simple .sp-rays,.sp-simple .sp-floor,.sp-simple .sp-wave,.sp-simple .sp-orbit,.sp-simple .sp-glow,.sp-simple .sp-logo .lo-scan,.sp-simple .sp-word .sfl{display:none}
+.sp-simple .sp-logo .lo-sat{animation:fadein .2s .7s forwards}
+/* spenta = logo e scritta fermi, barra e messaggi (come nella leggerissima) */
+.sp-off #boot *,.sp-off #boot *::before,.sp-off #boot *::after{animation:none!important;transition:none!important}
+.sp-off .sp-logo .lo,.sp-off .sp-word .sl,.sp-off .sp-tag,.sp-off .sp-tv,.sp-off .sp-glow{opacity:1!important;transform:none!important}
+.sp-off .sp-rays,.sp-off .sp-floor,.sp-off .sp-wave,.sp-off .sp-orbit,.sp-off .sp-logo .lo-scan,.sp-off .sp-word .sfl{display:none}
 .kx-boot .aurora{display:none} /* sfondo animato della Home: dietro lo splash non si vede, non si disegna */
 @keyframes fadein{from{opacity:0}to{opacity:1}}
 /* ===== marchio con carattere vettoriale KAIROS (cromato, neon) ===== */
@@ -1197,11 +1204,14 @@ h5.fh{margin-top:16px}
 
   <!-- BOOT -->
   <section class="screen on" id="boot">
-    <script>/* classi dello splash decise prima del primo disegno: GPU debole (classi D e N), chiavetta da 1 GB (D) e leggerissima */
+    <script>/* classi dello splash decise prima del primo disegno: GPU debole (classi D e N), chiavetta da 1 GB (D) e «Animazione
+   d'avvio» scelta dal pannello all'ultimo collegamento (rc intro: auto | simple | off; vale dall'apertura successiva) */
 (function () { var h = document.documentElement.classList, mb = 0, j = function (k, d) { try { return JSON.parse(localStorage.getItem(k) || 'null') || d; } catch (e) { return d; } }; h.add('kx-boot');
   try { mb = +(JSON.parse((window.KairosNative && KairosNative.memInfo && KairosNative.memInfo()) || '{}').totalMb) || 0; if (mb && mb < 1800) h.add('sp-lo'); if (mb && mb <= 1200) h.add('sp-d'); } catch (e) {}
   // leggerissima (scelta, imposta dal pannello o automatica sulle chiavette da 1 GB): splash fermo dal primo fotogramma
   var lv = j('kx_rcLite', '') || j('kx_o_liteUi', 'auto'); if (window.KairosNative && (lv === 'max' || (mb && mb <= 1200 && lv !== 'off'))) document.body.classList.add('xlite');
+  var v = 'auto'; try { v = JSON.parse(localStorage.getItem('kx_rcIntro') || '""') || 'auto'; } catch (e) {}
+  if (v !== 'simple' && v !== 'off') v = 'auto'; window.kxIntro = v; if (v !== 'auto') h.add('sp-' + v);
 })();</script>
     <div class="sp-bg"></div>
     <div class="sp-floor"><i></i></div>
@@ -5430,6 +5440,7 @@ function rcApply(rc, rcv) {
   const next = rc && typeof rc === 'object' ? rc : {};
   const same = JSON.stringify(next) === JSON.stringify(S.rc || {});
   S.rc = next; S.rcv = rcv || '';
+  try { store.set('rcIntro', rcGet('intro') || ''); } catch {} // «Animazione d'avvio»: vale dall'apertura successiva (lo splash parte prima del pannello)
   if (same) return;
   try { rcLiteApply(); } catch {}
   try { applyTheme(rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema'); } catch {}
@@ -5448,7 +5459,7 @@ function updFirstSeen(a) { const fs = store.get('apkFirst', {}); if (fs.v !== a.
 function updMust() { const a = S.apkUpdate, d = updForceDays(); if (!a || d == null || S.apkReady !== a.url) return false; return Date.now() - updFirstSeen(a) >= d * 86400e3; }
 function bgUpdOn() { const v = rcGet('bgupd'); return v != null ? v !== 'off' : store.get('bgUpd', true) !== false; }
 function rcSnapshot() {
-  const o = { bgupd: bgUpdOn() ? 'on' : 'off', lite: document.body.classList.contains('xlite') ? 'max' : document.body.classList.contains('lite') ? 'on' : 'off', theme: rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema', adult: showAdult() ? 'on' : 'off', logos: autoLogoOn() ? 'on' : 'off', posters: rcGet('posters') === 'hi' ? 'hi' : 'auto' };
+  const o = { bgupd: bgUpdOn() ? 'on' : 'off', lite: document.body.classList.contains('xlite') ? 'max' : document.body.classList.contains('lite') ? 'on' : 'off', theme: rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema', adult: showAdult() ? 'on' : 'off', logos: autoLogoOn() ? 'on' : 'off', posters: rcGet('posters') === 'hi' ? 'hi' : 'auto', intro: window.kxIntro || 'auto' };
   try { for (const k of RC_CFG_KEYS) if (OPT[k]) o['o.' + k] = opt(k); } catch {}
   try { const P = playPrefs(); for (const k of ['quality', 'buffer', 'aspect']) o['p.' + k] = P[k]; } catch {}
   return o;
@@ -6925,7 +6936,7 @@ async function enterHome() {
     try { const sc = $('.screen.on'); if (sc && sc.getAnimations) for (const a of sc.getAnimations({ subtree: true })) if (a.effect && a.effect.getTiming().iterations !== Infinity) a.finish(); } catch {}
     await Promise.race([new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), sleep(250)]); // disegnata dietro lo splash
     b.classList.add('out');
-    await sleep(document.body.classList.contains('xlite') ? 0 : 560);
+    await sleep(document.body.classList.contains('xlite') || document.documentElement.classList.contains('sp-off') ? 0 : 560);
     b.classList.remove('out', 'hold'); document.documentElement.classList.remove('kx-hold', 'kx-boot');
     try { heroRefresh(); } catch {} // copertina rimandata durante l'uscita
   } else b.classList.remove('out');
