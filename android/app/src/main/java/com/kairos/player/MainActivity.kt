@@ -271,6 +271,8 @@ class MainActivity : ComponentActivity() {
         Recorder.listener = recListener
         KxVpn.listener = vpnListener
         Recorder.initAsync(this)
+        // autopilota: decoder del dispositivo letti in sottofondo dopo l'avvio (la prima richiesta dell'interfaccia è subito pronta)
+        ui.postDelayed({ thread(name = "kx-caps") { try { DevCaps.json(applicationContext) } catch (_: Throwable) {} } }, 8000)
         loadUi()
         web.requestFocus()
 
