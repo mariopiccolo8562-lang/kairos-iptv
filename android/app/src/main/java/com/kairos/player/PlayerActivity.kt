@@ -169,6 +169,13 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     /** video mai partito: l'audio va (la posizione avanza) ma nessun fotogramma dopo 10 s dall'avvio */
     private var nvPos = -1L
     private var nvSec = 0
+    /** immagine «a scatti» con l'audio che va: fotogrammi mostrati/buttati nell'ultimo secondo (decoder che non ce la fa) */
+    private var slowSec = 0
+    private var slN = -1L
+    private var slD = -1L
+    private var slT = 0L
+    /** chiavetta da 1 GB (classe D): CPU troppo debole per decodificare in software oltre la SD */
+    private val lowDev by lazy { DeviceClass.of(this) == "D" }
     /** primo fotogramma arrivato dall'ultimo avvio / cambio di superficie (prima non si controlla l'immagine ferma) */
     private var frameSeen = false
     private var stallCounted = false
@@ -249,7 +256,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         recDone.clear(); recCooldownUntil = 0L; varIdx = -1; stayDown = false; upAt = 0L
         readyOnce = false; isBuffering = false; bufferingSince = 0L; stallTimes.clear(); stallCounted = false
         drainSamples.clear()
-        lastFrames = -1L; lastQueued = -1L; lastPos = -1L; freezeSec = 0; nvPos = -1L; nvSec = 0; okSince = 0L; frameSeen = false
+        lastFrames = -1L; lastQueued = -1L; lastPos = -1L; freezeSec = 0; nvPos = -1L; nvSec = 0; okSince = 0L; frameSeen = false; slowSec = 0; slN = -1L
         cancelRetry()
         cancelCushion(); cushionN = 0
         deferredErr?.let { ui.removeCallbacks(it) }; deferredErr = null
@@ -346,11 +353,12 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         val now = System.currentTimeMillis()
         if (now < recCooldownUntil) return true
         val canAlt = item.alt.isNotEmpty() && currentUrl != item.alt && !triedAlt
-        val canSw = engine is ExoEngine && !hwOff && prefs.hw != "off"
+        val canSw = engine is ExoEngine && !hwOff && prefs.hw != "off" && !(lowDev && (PlayStats.height == 0 || PlayStats.height > 576))
         val canLite = adapt && varIdx + 1 < item.lite.size
         // scale per problema e per famiglia di errore (§6): mai il riavvio come primo passo per i blocchi
         val ladder = when (problem) {
-            "freeze" -> listOf("reload", "sw", "engine", "lite")
+            // decoder che non ce la fa («a scatti»): mai la decodifica software (più lenta), prima la versione più leggera
+            "freeze" -> if (err == "SLOW_VIDEO" || lowDev) listOf("reload", "lite", "engine", "sw") else listOf("reload", "sw", "engine", "lite")
             "stall" -> listOf("lite", "alt", "reload", "server", "engine")
             "long" -> listOf("reload", "server", "alt", "lite", "engine")
             "fill" -> listOf("lite")
@@ -377,7 +385,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         } ?: return false
         recDone.add(step)
         recCooldownUntil = now + 8000L; lastActionAt = now
-        freezeSec = 0; stallTimes.clear(); okSince = 0L
+        freezeSec = 0; stallTimes.clear(); okSince = 0L; slowSec = 0; slN = -1L
         val pos = curPos()
         val what = when (problem) { "freeze" -> "Immagine ferma"; "stall" -> "Caricamento continuo"; "long" -> "Caricamento lungo"; "fill" -> "Linea insufficiente"; "drain" -> "Buffer in calo"; else -> "Errore" }
         when (step) {
@@ -431,7 +439,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
                 PlayStats.reduced = v.second.ifEmpty { "ridotta" }
                 // i canali successivi partono leggeri solo se è la linea (misurata debole o blocchi su più canali), non il singolo canale
                 if (NetMem.lineClass(this) == "weak" || NetMem.multiStalls(this)) weakUntil = now + 10 * 60_000L
-                toast("Qualità ridotta per la tua connessione" + (if (v.second.isNotEmpty()) " (${v.second})" else ""))
+                toast((if (problem == "freeze") "Qualità ridotta per questo dispositivo" else "Qualità ridotta per la tua connessione") + (if (v.second.isNotEmpty()) " (${v.second})" else ""))
                 startUrl(v.first, pos)
             }
         }
@@ -491,6 +499,19 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             nvPos = pos
             if (nvSec >= 4) { nvSec = 0; nvPos = -1L; if (!recover("freeze", "NO_VIDEO")) closeEvt("non risolto") }
         } else { nvSec = 0; nvPos = -1L }
+        // immagine «a scatti» con l'audio che va (il controllo sopra vede solo lo zero assoluto): per 6 s di fila meno del 35% dei
+        // fotogrammi del canale, oppure più fotogrammi buttati che mostrati → stessa scala, senza la decodifica software
+        if (e is ExoEngine && frameSeen && now - startAt > 10_000L && e.playingVideo() && !isBuffering && seekTarget < 0) {
+            val fr = e.renderedFrames(); val dr = e.droppedFrames(); val t = SystemClock.elapsedRealtime()
+            if (fr >= 0 && slN >= 0 && fr >= slN && dr >= slD && t - slT >= 500L) {
+                val secs = (t - slT) / 1000f
+                val shown = (fr - slN) / secs; val lost = (dr - slD) / secs; val want = e.frameRate()
+                val slow = shown > 0f && ((want >= 10f && shown < want * 0.35f) || (lost >= 5f && lost > shown))
+                if (slow) slowSec++ else slowSec = 0
+            }
+            if (fr >= 0) { slN = fr; slD = dr; slT = t }
+            if (slowSec >= 6) { slowSec = 0; slN = -1L; if (!recover("freeze", "SLOW_VIDEO")) closeEvt("non risolto") }
+        } else { slowSec = 0; slN = -1L }
         // blocco vero: caricamento di almeno 1 s durante la visione (non all'avvio né dopo un salto)
         if (isBuffering && !stallCounted && readyOnce && bufferingSince > 0 && now - bufferingSince >= 1000L && bufferingSince - startAt >= 4000L && seekTarget < 0) {
             stallCounted = true
