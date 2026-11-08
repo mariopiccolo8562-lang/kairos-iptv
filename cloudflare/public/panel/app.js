@@ -385,10 +385,11 @@ function addPeriod(base, n, unit) {
   return b.toISOString().slice(0, 10);
 }
 function periodQuickRow(key) {
-  return `<div class="quick" data-period-row="${key}"><span style="align-self:center">+</span><input class="inp" type="number" min="1" max="999" value="1" data-period-count aria-label="Quantità" style="width:82px;min-width:82px;margin:0"><select class="inp" data-period-unit aria-label="Unità di tempo" style="width:112px;margin:0"><option value="d">giorni</option><option value="m">mesi</option><option value="y">anni</option></select><button type="button" class="btn sm" data-period-add>Aggiungi</button></div>`;
+  return `<div class="quick" data-period-row="${key}">${[1, 3, 6, 12].map((m) => `<button type="button" class="btn sm" data-period-m="${m}">+${m} ${m === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div><div class="quick" data-period-row="${key}-custom"><span style="align-self:center">+</span><input class="inp" type="number" min="1" max="999" value="1" data-period-count aria-label="Quantità" style="width:82px;min-width:82px;margin:0"><select class="inp" data-period-unit aria-label="Unità di tempo" style="width:112px;margin:0"><option value="d">giorni</option><option value="m">mesi</option><option value="y">anni</option></select><button type="button" class="btn sm" data-period-add>Aggiungi</button></div>`;
 }
 function bindPeriodQuick(root, key, apply) {
-  const row = root && root.querySelector(`[data-period-row="${key}"]`);
+  const quick = root && root.querySelector(`[data-period-row="${key}"]`), row = root && root.querySelector(`[data-period-row="${key}-custom"]`);
+  if (quick) quick.querySelectorAll('[data-period-m]').forEach((b) => (b.onclick = () => apply(+b.dataset.periodM, 'm')));
   if (!row) return;
   const count = row.querySelector('[data-period-count]'), unit = row.querySelector('[data-period-unit]');
   const add = () => {
