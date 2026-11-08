@@ -13,7 +13,7 @@ import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide, storeAgent
 import { wolfRoutes, wolfCron, sockFetch, wolfCfg } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
 import { atxRoutes } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz), solo titolare
 import { oraRoutes } from './orapanel.js';
-import { orcpRoutes, ovpnFile } from './orcp.js'; // Pannello ORCP (cp.ottrun.com): l'app brandizzata OTTRUN, accesso passato dal titolare
+import { orcpRoutes, orcpAgentConfig, setOrcpDownloader, ovpnFile } from './orcp.js'; // Pannello ORCP (cp.ottrun.com): l'app brandizzata OTTRUN, accesso passato dal titolare
 import { extRoutes } from './extpanels.js'; // Pannelli Realott e SLT (accesso diretto senza API), solo titolare // Pannello ORA (panel.oraplayers.com), accesso passato dal titolare
 import { oxpRoutes } from './orbixpanel.js'; // playlist OrbixPlay gestite da KAIROS (sezione «Pannello OrbixPlay»)
 import { mxpRoutes } from './mxpanel.js'; // account MaxPlayer gestiti da KAIROS (sezione «Pannello MaxPlayer»)
@@ -4672,10 +4672,17 @@ async function adminInner(req, env, url, ip, ctx) {
    e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
    ====================================================================== */
 const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'account', 'ai',
-  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'payments', 'autoRenew', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt'];
+  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'payments', 'autoRenew', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt', 'orcpApp'];
+const ORCP_SERVER_KEYS = ['portal', 'portal2', 'portal3', 'portal4', 'portal5'];
+function checkedOrcpServers(value) {
+  if (!Array.isArray(value) || value.length > ORCP_SERVER_KEYS.length || value.some((x) => typeof x !== 'string' || !ORCP_SERVER_KEYS.includes(x)) || new Set(value).size !== value.length) {
+    throw new HttpErr(400, 'Server MirkoTeam non validi');
+  }
+  return value;
+}
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, payments: false, autoRenew: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, mxp: false, oxp: false, oxpNew: false, addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, payments: false, autoRenew: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, mxp: false, oxp: false, oxpNew: false, orcpApp: false, orcpSrv: [], addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
@@ -4721,6 +4728,7 @@ function agentPerms(src) {
   p.kAllow = storeAppsList(o.kAllow).filter((x) => x === '*' || KAIROS_APPS.some((k) => k[0] === x)); // app Kairos di cui vede link e codice
   p.orbDns = storeAppsList(o.orbDns); // DNS di OrbixPlay che può usare per le attivazioni (per nome; ['*'] = tutti). Ne vede solo il nome
   p.mxDns = storeAppsList(o.mxDns); // DNS (domini) di MaxPlayer che può usare (per id; ['*'] = tutti). Ne vede solo il nome
+  p.orcpSrv = Array.isArray(o.orcpSrv) ? [...new Set(o.orcpSrv.filter((x) => typeof x === 'string' && ORCP_SERVER_KEYS.includes(x)))].slice(0, 5) : [];
   p.maxConn = Math.max(1, Math.min(MAX_CONN, parseInt(o.maxConn, 10) || 1));
   for (const k of ['armadaCredits', 'stormCredits']) p[k] = Math.max(0, Math.min(100000, Math.round((parseFloat(o[k]) || 0) * 100) / 100)); // crediti Armada/Storm del titolare al mese (0 = nessuno)
   return p;
@@ -4734,6 +4742,7 @@ function agentPermsWithin(req, top) {
   if (!top.storeApps.includes('*')) p.storeApps = p.storeApps.includes('*') ? [...top.storeApps] : p.storeApps.filter((x) => storeAppOk(top.storeApps, x));
   if (!top.appsAllow.includes('*')) p.appsAllow = p.appsAllow.includes('*') ? [...top.appsAllow] : p.appsAllow.filter((x) => storeAppOk(top.appsAllow, x));
   for (const k of ['dlcAllow', 'kAllow', 'orbDns', 'mxDns']) if (!top[k].includes('*')) p[k] = p[k].includes('*') ? [...top[k]] : p[k].filter((x) => storeAppOk(top[k], x));
+  p.orcpSrv = p.orcpSrv.filter((x) => top.orcpSrv.includes(x));
   p.maxConn = Math.min(p.maxConn, top.maxConn);
   p.armadaCredits = Math.min(p.armadaCredits, top.armadaCredits);
   p.stormCredits = Math.min(p.stormCredits, top.stormCredits);
@@ -4891,7 +4900,12 @@ async function agentsAdmin(req, env, path, who, ip, top) {
     if (b.storeMax !== undefined) { const n = b.storeMax === null || b.storeMax === '' ? -1 : parseInt(b.storeMax, 10); if (!(n === -1 || (n >= 0 && n <= 100000))) throw new HttpErr(400, 'Tetto di store non valido (da 0 a 100000, vuoto = quello di serie)'); if (top) { if (n !== (cur ? cur.store_max : -1)) throw new HttpErr(403, 'Il tetto di store attivabili lo decide il titolare'); } else o.store_max = n; }
     if (b.maxClients !== undefined) { const n = parseInt(b.maxClients, 10); if (!(n >= 0 && n <= 100000)) throw new HttpErr(400, 'Limite clienti non valido'); if (top && n > top.max_clients) throw new HttpErr(400, `Il limite non può superare il tuo (${top.max_clients})`); o.max_clients = n; }
     if (b.canAgents !== undefined) { if (top && !top.can_agents) throw new HttpErr(403, 'Non puoi creare sotto-agenti'); o.can_agents = b.canAgents === true ? 1 : 0; }
-    if (b.perms !== undefined) o.perms = JSON.stringify(agentPermsWithin(b.perms, top ? agentPerms(top.perms) : null));
+    if (b.perms !== undefined) {
+      let requested = b.perms;
+      if (typeof requested === 'string') { try { requested = JSON.parse(requested); } catch { requested = {}; } }
+      if (requested && typeof requested === 'object' && Object.hasOwn(requested, 'orcpSrv')) checkedOrcpServers(requested.orcpSrv);
+      o.perms = JSON.stringify(agentPermsWithin(b.perms, top ? agentPerms(top.perms) : null));
+    }
     if (b.servers !== undefined) { if (!Array.isArray(b.servers)) throw new HttpErr(400, 'servers deve essere un elenco'); let l = serverIds(b.servers.join(',')).filter((x) => dnsIds.has(x)); if (top) { const mine = serverIds(top.servers); l = l.filter((x) => mine.includes(x)); } o.servers = l.join(','); }
     if (typeof b.active === 'boolean' && (!cur || b.active !== !!cur.active)) {
       if (b.active && cur && top && cur.disabled_by && !agentTree(all, top.id).includes(cur.disabled_by)) throw new HttpErr(403, 'Disattivato da chi sta sopra di te: non puoi riattivarlo');
@@ -5042,6 +5056,12 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const tree = agentTree(all, A.id), who = ses.assist ? `Assistenza di ${ses.assistBy} · ${A.username}` : 'Agente ' + A.username;
   const ctree = P.subClients ? tree : [A.id]; // clienti visibili: i suoi e (se concesso) quelli dei sotto-agenti
   const aSes = { ...ses, agent: true, orbDns: P.orbDns, mxDns: P.mxDns };
+  if (path === '/agent/orcp') {
+    if (m !== 'GET') throw new HttpErr(405, 'Metodo non consentito');
+    if (!P.orcpApp) throw new HttpErr(403, 'App MirkoTeam non abilitata: chiedila al tuo fornitore');
+    return json(await orcpAgentConfig(env, P.orcpSrv));
+  }
+  if (path.startsWith('/orcp/')) throw new HttpErr(403, 'Solo il titolare può gestire il Pannello ORCP');
   // in assistenza: niente «ultimo accesso» falsato e niente modifiche alla sicurezza dell'account dell'agente
   if (ses.assist && /^\/(logout-all|password|totp\/(setup|enable|disable))$/.test(path)) throw new HttpErr(403, 'In assistenza non puoi cambiare password, verifica in due passaggi o sessioni dell\'agente');
   if (!ses.assist && now() - (+A.last_seen || 0) > 5 * 60e3) ctx.waitUntil(env.DB.prepare('UPDATE admins SET last_seen = ? WHERE id = ?').bind(now(), A.id).run());
@@ -5404,6 +5424,33 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   const m = req.method;
   if (!ses && API_DENY.test(path)) throw new HttpErr(403, 'Funzione disponibile solo dal pannello');
   if (path === '/api-keys' || path.startsWith('/api-keys/') || path === '/webhook' || path.startsWith('/webhook/')) return apiAdmin(req, env, path, who, ip, ctx);
+  if (path === '/orcp/agents') {
+    if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può assegnare l’app MirkoTeam');
+    if (m !== 'PUT') throw new HttpErr(405, 'Metodo non consentito');
+    const b = await readJSON(req, 131072), dl = String(b && b.dl != null ? b.dl : '');
+    if (!/^\d{1,12}$/.test(dl)) throw new HttpErr(400, 'Codice Downloader non valido: usa da 1 a 12 cifre');
+    if (!Array.isArray(b.agents) || b.agents.length > 1000) throw new HttpErr(400, 'Elenco agenti non valido');
+    const all = await agentsAll(env), byId = new Map(all.map((a) => [a.id, a])), seen = new Set(), updates = [];
+    for (const row of b.agents) {
+      if (!row || !Number.isInteger(row.id) || row.id < 1 || seen.has(row.id) || typeof row.on !== 'boolean') throw new HttpErr(400, 'Agente non valido');
+      seen.add(row.id);
+      const srv = checkedOrcpServers(row.srv);
+      if (!byId.has(row.id)) throw new HttpErr(400, `Agente ${row.id} non trovato`);
+      updates.push({ id: row.id, on: row.on, srv, username: byId.get(row.id).username });
+    }
+    const cfg = await setOrcpDownloader(env, dl);
+    for (let i = 0; i < updates.length; i += 100) {
+      const batch = updates.slice(i, i + 100).map((row) => {
+        const perms = agentPerms(byId.get(row.id).perms);
+        perms.orcpApp = row.on; perms.orcpSrv = row.srv;
+        return env.DB.prepare("UPDATE admins SET perms = ? WHERE id = ? AND role = 'agent'").bind(JSON.stringify(perms), row.id);
+      });
+      await env.DB.batch(batch);
+    }
+    if (updates.length) memoDrop(env, 'ags');
+    await log(env, 'edit', `${who}: aggiornati i permessi App MirkoTeam di ${updates.length} agenti`, ip).catch(() => {});
+    return json({ ok: true, cfg, agents: updates.map(({ id, on, srv }) => ({ id, perms: { orcpApp: on, orcpSrv: srv } })) });
+  }
   if (path.startsWith('/oxp/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello OrbixPlay'); const r = await oxpRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
   if (path.startsWith('/atx/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello Atlantix'); const r = await atxRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
   if (path.startsWith('/ora/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello ORA'); const r = await oraRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }

@@ -8,6 +8,7 @@ const BASE = 'https://cp.ottrun.com';
 const K = 'orcp:ses', KC = 'orcp:cfg', KCONNS = 'orcp:conns';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const PANELS = ['wolf', 'armada', 'atx', 'ro', 'slt'];
+const PORTAL_KEYS = ['portal', 'portal2', 'portal3', 'portal4', 'portal5'];
 const mem = {};
 const setRow = (env, k, v) => env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(k, v).run();
 const getRow = async (env, k) => ((await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(k).first()) || {}).v || '';
@@ -41,7 +42,45 @@ async function loadSes(env, H) {
 }
 async function saveSes(env, H, s) { mem.ses = s; await setRow(env, K, await H.seal(env, s)); }
 async function cfgOf(env) { if (mem.cfg) return mem.cfg; let c = {}; try { c = JSON.parse((await getRow(env, KC)) || '{}') || {}; } catch { c = {}; } return (mem.cfg = cfgNorm(c)); }
-function cfgNorm(c) { const map = {}; for (const p of PANELS) map[p] = typeof (c.map || {})[p] === 'string' ? c.map[p].slice(0, 60) : ''; return { name: typeof c.name === 'string' && c.name.trim() ? c.name.trim().slice(0, 40) : '', map }; }
+function cfgNorm(c) {
+  const map = {}; for (const p of PANELS) map[p] = typeof (c.map || {})[p] === 'string' ? c.map[p].slice(0, 60) : '';
+  const names = new Map((Array.isArray(c.portalNames) ? c.portalNames : []).filter((x) => x && PORTAL_KEYS.includes(x.k)).map((x) => [x.k, String(x.name || '').slice(0, 60)]));
+  const dl = String(c.dl || '8128314');
+  return {
+    name: typeof c.name === 'string' && c.name.trim() ? c.name.trim().slice(0, 40) : '',
+    map,
+    dl: /^\d{1,12}$/.test(dl) ? dl : '8128314',
+    portalNames: PORTAL_KEYS.map((k) => ({ k, name: names.get(k) || '' })),
+    apk: typeof c.apk === 'string' && /^https?:\/\/\S+$/i.test(c.apk) ? c.apk.slice(0, 300) : '',
+  };
+}
+async function cachePortalNames(env, list, apk, appName) {
+  const cur = await cfgOf(env), next = cfgNorm({
+    ...cur,
+    name: cur.name || appName || '',
+    portalNames: (Array.isArray(list) ? list : []).map((x) => ({ k: x.k, name: x.name })),
+    apk: apk || '',
+  });
+  mem.cfg = next;
+  await setRow(env, KC, JSON.stringify(next));
+}
+export async function setOrcpDownloader(env, dl) {
+  const cfg = cfgNorm({ ...(await cfgOf(env)), dl });
+  mem.cfg = cfg;
+  await setRow(env, KC, JSON.stringify(cfg));
+  return cfg;
+}
+export async function orcpAgentConfig(env, assigned) {
+  const cfg = await cfgOf(env), keys = new Set(Array.isArray(assigned) ? assigned.filter((k) => PORTAL_KEYS.includes(k)) : []);
+  const assignedNames = new Set(cfg.portalNames.filter((x) => keys.has(x.k) && x.name).map((x) => x.name));
+  return {
+    name: cfg.name || 'MirkoTeam',
+    dl: cfg.dl,
+    apk: cfg.apk,
+    servers: cfg.portalNames.filter((x) => keys.has(x.k)).map((x) => ({ n: PORTAL_KEYS.indexOf(x.k) + 1, name: x.name || `Server ${PORTAL_KEYS.indexOf(x.k) + 1}` })),
+    map: Object.fromEntries(PANELS.map((p) => [p, assignedNames.has(cfg.map[p]) ? cfg.map[p] : ''])),
+  };
+}
 
 /** richiesta a ORCP con i cookie salvati; se la sessione è scaduta il cookie «remember» ne apre una nuova (senza login) */
 async function orcp(env, H, path, o = {}) {
@@ -120,7 +159,9 @@ async function portals(env, H) {
   const app = await appInfo(env, H); if (!app || !app.settings) throw new H.HttpErr(502, 'ORCP: pagina delle impostazioni dell\'app non trovata');
   const st = await orcp(env, H, app.settings), h = st.txt, list = [];
   for (let i = 1; i <= 5; i++) { const k = i === 1 ? 'portal' : 'portal' + i; list.push({ k, name: inputVal(h, k + '_name').slice(0, 60), url: inputVal(h, k).slice(0, 200) }); }
-  return { list, vod: inputVal(h, 'portal_vod'), series: inputVal(h, 'portal_series'), ovpn: inputVal(h, 'ovpn_url'), apk: inputVal(h, 'apkurl_ext').slice(0, 300), support: { email: inputVal(h, 'support_email').slice(0, 120), phone: inputVal(h, 'support_phone').slice(0, 40) } };
+  const apk = inputVal(h, 'apkurl_ext').slice(0, 300);
+  await cachePortalNames(env, list, apk, app.name);
+  return { list, vod: inputVal(h, 'portal_vod'), series: inputVal(h, 'portal_series'), ovpn: inputVal(h, 'ovpn_url'), apk, support: { email: inputVal(h, 'support_email').slice(0, 120), phone: inputVal(h, 'support_phone').slice(0, 40) } };
 }
 const idOf = (html) => inputVal(html, 'id') || inputVal(html, 'announcementid');
 const tblRows = (h) => rows(h).filter((x) => x.cells.length >= 4);
@@ -201,7 +242,7 @@ export async function orcpRoutes(req, env, path, who, ip, H, ctx) {
   if (path === '/orcp/session' && m === 'DELETE') { mem.ses = null; mem.conns = null; await delRow(env, K); await delRow(env, KCONNS).catch(() => {}); await H.log(env, 'edit', `${who}: pannello ORCP scollegato`, ip).catch(() => {}); return json({ ok: true }); }
   if (path === '/orcp/cfg' && m === 'GET') { const cfg = await cfgOf(env); const s = await loadSes(env, H); return json({ cfg: { ...cfg, name: cfg.name || (s && s.app && s.app.name) || '' }, servers: s && s.servers ? s.servers : [] }); }
   if (path === '/orcp/cfg' && m === 'PUT') {
-    const b = await H.readJSON(req, 8192), cfg = cfgNorm({ name: b.name, map: b.map });
+    const b = await H.readJSON(req, 8192), cfg = cfgNorm({ ...(await cfgOf(env)), name: b.name, map: b.map });
     mem.cfg = cfg; await setRow(env, KC, JSON.stringify(cfg));
     await H.log(env, 'settings', `${who}: ORCP, abbinamento server ↔ pannelli aggiornato`, ip).catch(() => {});
     return json({ cfg });

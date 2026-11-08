@@ -12,9 +12,16 @@
   TITLES.orcp = 'Pannello App ORCP';
   const isAg = () => D.role === 'agent';
   const PANEL_NAME = { wolf: 'WOLF', armada: 'Armada', storm: 'Storm', atx: 'Atlantix', ro: 'Realott', slt: 'SLT' };
+  const PORTAL_KEYS = ['portal', 'portal2', 'portal3', 'portal4', 'portal5'];
+  const AG_IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M11 18h2M9 6h6"/></svg>';
+  if (!$('.nav[data-v="orcp-agent"]')) {
+    const b = document.createElement('button'); b.className = 'nav'; b.dataset.v = 'orcp-agent'; b.innerHTML = AG_IC + 'MirkoTeam'; b.onclick = () => view('orcp-agent');
+    const anchor = $('.nav[data-v="orcp"]') || $('.nav[data-v="slt"]'); anchor ? anchor.after(b) : $('#side').appendChild(b);
+    const sec = document.createElement('section'); sec.className = 'view'; sec.id = 'v-orcp-agent'; $('#v-dash').after(sec);
+  }
   const TABS = [['conns', 'Connessioni'], ['msgs', 'Messaggi'], ['ann', 'Annuncio'], ['maint', 'Manutenzione'], ['pin', 'PIN parentale'], ['vpn', 'VPN'], ['portals', 'Portali e server'], ['link', 'Collega']];
   const R = { st: null, tab: 'conns', q: '', onlyOn: false, data: {}, err: '', busy: false, edit: null, pin: null, ck: '' };
-  const name = () => (R.st && R.st.cfg && R.st.cfg.name) || (R.st && R.st.app && R.st.app.name) || 'App ORCP';
+  const name = () => isAg() ? 'MirkoTeam' : (R.st && R.st.cfg && R.st.cfg.name) || (R.st && R.st.app && R.st.app.name) || 'App ORCP';
   const mut = '<span class="mut">—</span>';
   const badge = (t, c) => `<span style="display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;background:${c}22;color:${c}">${esc(t)}</span>`;
   const when = (s) => { const d = new Date(String(s || '').replace(' ', 'T')); return isNaN(d) ? esc(s || '') : d.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' }); };
@@ -102,14 +109,30 @@
     <div style="display:flex;gap:6px"><input class="inp" id="orPC" placeholder="Codice dall'app" style="max-width:220px"><button class="btn pri" data-or="pin">Genera PIN</button></div>
     ${R.pin ? `<div style="margin-top:12px;padding:12px;border-radius:10px;background:var(--bg2,#1b1f2a)">${R.pin.pin ? `PIN master: <b class="mono" style="font-size:20px">${esc(R.pin.pin)}</b> <button class="btn sm" data-orcp="${esc(R.pin.pin)}">Copia</button>` : ''}${R.pin.text ? `<div class="mut" style="font-size:13px;margin-top:6px">${esc(R.pin.text)}</div>` : ''}</div>` : ''}</div>`;
   function portals() {
-    const d = R.data.portals; need('portals'); if (!d) return loading('portals', 'Carico i portali dall\'app…');
-    const cfg = (R.st && R.st.cfg) || { map: {} }, names = d.list.filter((x) => x.name || x.url).map((x) => x.name || x.url);
-    return `<div class="card" style="padding:14px;margin-bottom:12px"><b>Server dell'app ${esc(name())}</b><small class="mut" style="display:block;margin:2px 0 10px">Sono i «portali» che il cliente sceglie nell'app. Gli indirizzi li vedi solo tu: ai venditori e nei messaggi ai clienti va solo il nome.</small>
+    const d = R.data.portals, cfg = (R.st && R.st.cfg) || { map: {}, portalNames: [] };
+    const live = d && Array.isArray(d.list), cached = Array.isArray(cfg.portalNames) ? cfg.portalNames : [];
+    const list = live ? d.list : cached.map((x) => ({ ...x, url: '' }));
+    const labels = list.map((x, i) => ({ ...x, name: x.name || `Server ${i + 1}` }));
+    const names = labels.map((x) => x.name);
+    const apk = live ? d.apk : cfg.apk;
+    const agentRows = (D.agents || []).map((a) => {
+      const p = a.perms || {}, assigned = new Set(Array.isArray(p.orcpSrv) ? p.orcpSrv : []);
+      const choices = PORTAL_KEYS.map((k, i) => `<label style="display:inline-flex;gap:5px;align-items:center;margin:3px 10px 3px 0;white-space:nowrap"><input type="checkbox" data-orcp-srv="${k}"${assigned.has(k) ? ' checked' : ''}> Server ${i + 1} · ${esc(labels[i] ? labels[i].name : `Server ${i + 1}`)}</label>`).join('');
+      return `<tr data-orcp-agent-row="${a.id}"><td><b>${esc(a.username)}</b><small class="mut" style="display:block">ID ${a.id}</small></td><td><div class="tog ${p.orcpApp ? 'on' : ''}" data-orcp-app role="switch" aria-checked="${!!p.orcpApp}" tabindex="0"><div><b>${p.orcpApp ? 'Attiva' : 'Spenta'}</b></div><i></i></div></td><td>${choices}<label style="display:inline-flex;gap:5px;align-items:center;margin:3px 0;white-space:nowrap"><input type="checkbox" data-orcp-all> Tutti</label></td></tr>`;
+    }).join('');
+    const access = `<div class="card" style="padding:14px;margin-bottom:12px"><b>📲 App per gli agenti</b><small class="mut" style="display:block;margin:2px 0 10px">L'agente scarica l'app e vede solo i server che gli assegni, senza indirizzi DNS.</small>
+      <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap"><label class="l" style="max-width:220px">Codice Downloader<input class="inp mono" id="orDL" inputmode="numeric" maxlength="12" value="${esc(cfg.dl || '8128314')}"></label>${apk ? `<a class="btn sm" href="${esc(apk)}" target="_blank" rel="noopener">Link APK</a>` : ''}</div>
+      ${!live ? '<small class="mut" style="display:block;margin:4px 0 10px">I portali non sono aggiornabili ora: uso gli ultimi nomi salvati.</small>' : ''}
+      <div style="overflow:auto;margin-top:8px"><table class="tbl"><thead><tr><th>Agente</th><th>App</th><th>Server assegnabili</th></tr></thead><tbody>${agentRows || '<tr><td colspan="3" class="mut">Nessun agente.</td></tr>'}</tbody></table></div>
+      <div style="margin-top:10px"><button class="btn pri" data-or="agentsave">Salva</button></div></div>`;
+    const livePortals = live ? `<div class="card" style="padding:14px;margin-bottom:12px"><b>Server dell'app ${esc(name())}</b><small class="mut" style="display:block;margin:2px 0 10px">Sono i «portali» che il cliente sceglie nell'app. Gli indirizzi li vedi solo tu: ai venditori e nei messaggi ai clienti va solo il nome.</small>
       ${d.list.map((p, i) => `<div class="g2" style="margin-bottom:6px"><label class="l">Nome server ${i + 1}<input class="inp" data-orpn="${p.k}" value="${esc(p.name)}" placeholder="es. SERVER-${i + 1}"></label><label class="l">Indirizzo (DNS)<input class="inp mono" data-orpu="${p.k}" value="${esc(p.url)}" placeholder="http://dns.esempio.com:8080"></label></div>`).join('')}
-      <div style="display:flex;gap:6px;margin-top:8px;align-items:center"><button class="btn pri" data-or="portsave">Salva i portali su ORCP</button>${d.apk ? `<a class="btn sm" href="${esc(d.apk)}" target="_blank" rel="noopener">Link APK</a>` : ''}</div></div>
-      <div class="card" style="padding:14px"><b>Quale server per ogni pannello</b><small class="mut" style="display:block;margin:2px 0 10px">Così «Nuova attivazione» e il pulsante «${esc(name())}» sulle linee dicono al cliente quale server scegliere nell'app.</small>
+      <div style="display:flex;gap:6px;margin-top:8px;align-items:center"><button class="btn pri" data-or="portsave">Salva i portali su ORCP</button>${apk ? `<a class="btn sm" href="${esc(apk)}" target="_blank" rel="noopener">Link APK</a>` : ''}</div></div>` : '';
+    if (!live && R.st && R.st.connected) need('portals');
+    const mapping = `<div class="card" style="padding:14px"><b>Quale server per ogni pannello</b><small class="mut" style="display:block;margin:2px 0 10px">Così «Nuova attivazione» e il pulsante «${esc(name())}» sulle linee dicono al cliente quale server scegliere nell'app.</small>
       <div class="g2">${inp('orCN', 'Nome dell\'app (come la chiami ai clienti)', cfg.name || (R.st && R.st.app && R.st.app.name) || '', 'placeholder="MirkoTeam"')}${Object.entries(PANEL_NAME).map(([k, n]) => `<label class="l">Linee ${n}<select class="inp" data-ormap="${k}"><option value="">— nessun server —</option>${names.map((s) => `<option${(cfg.map || {})[k] === s ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select></label>`).join('')}</div>
       <div style="margin-top:10px"><button class="btn pri" data-or="cfgsave">Salva abbinamento</button></div></div>`;
+    return access + (live ? livePortals : R.st && R.st.connected ? loading('portals', 'Carico i portali dall\'app…') : '') + mapping;
   }
   function link() {
     const s = R.st || {};
@@ -128,10 +151,10 @@
     if (isAg()) { V.innerHTML = '<p class="mut">Questo pannello è solo del titolare.</p>'; return; }
     const s = R.st;
     if (!s) { V.innerHTML = '<p class="mut">Carico…</p>'; return; }
-    const tabs = `<div class="tabs" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px">${TABS.filter(([k]) => s.connected || k === 'link').map(([k, t]) => `<button class="btn sm${R.tab === k ? ' pri' : ''}" data-ortab="${k}">${t}</button>`).join('')}</div>`;
+    const tabs = `<div class="tabs" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px">${TABS.filter(([k]) => s.connected || k === 'link' || k === 'portals').map(([k, t]) => `<button class="btn sm${R.tab === k ? ' pri' : ''}" data-ortab="${k}">${t}</button>`).join('')}</div>`;
     const head = `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><div class="mut" style="font-size:13px">${s.connected ? `App <b>${esc(name())}</b> su cp.ottrun.com${s.app && s.app.version ? ' · v' + esc(s.app.version) : ''}` : 'Collega il tuo account ORCP per gestire l\'app da qui.'}</div><div style="display:flex;gap:6px">${s.connected && window.KXQuickAct ? `<button class="btn sm" data-or="qa">Nuova attivazione</button>` : ''}</div></div>`;
     const warn = s.expired ? '<div class="card" style="padding:10px 14px;margin-bottom:10px;border-left:3px solid #ff6b6b">L\'accesso a ORCP è scaduto: vai in «Collega» e ripassa l\'accesso.</div>' : '';
-    const tab = !s.connected || s.expired ? 'link' : R.tab;
+    const tab = (!s.connected || s.expired) && R.tab !== 'portals' ? 'link' : R.tab;
     const body = { conns, msgs, ann, maint, pin, vpn, portals, link }[tab]();
     const live = s.connected && !s.expired; if (live) need('conns');
     const stats = live && R.data.conns && window.KXStats ? statsHtml(R.data.conns) : '';
@@ -145,6 +168,13 @@
     $$('[data-ortab]', V).forEach((b) => (b.onclick = () => { R.tab = b.dataset.ortab; R.err = ''; render(); }));
     const q = $('#orQ'); if (q) { q.oninput = () => { R.q = q.value; const st = q.selectionStart; render(); const n = $('#orQ'); if (n) { n.focus(); n.setSelectionRange(st, st); } }; }
     const on = $('#orOn'); if (on) on.onchange = () => { R.onlyOn = on.checked; render(); };
+    $$('[data-orcp-app]', V).forEach((x) => {
+      const toggle = () => { x.classList.toggle('on'); x.setAttribute('aria-checked', String(x.classList.contains('on'))); const b = x.querySelector('b'); if (b) b.textContent = x.classList.contains('on') ? 'Attiva' : 'Spenta'; };
+      x.onclick = toggle; x.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+    });
+    $$('[data-orcp-all]', V).forEach((x) => (x.onchange = () => {
+      const row = x.closest('[data-orcp-agent-row]'); if (row) row.querySelectorAll('[data-orcp-srv]').forEach((s) => (s.checked = x.checked));
+    }));
     const ck = $('#orCK', V); if (ck) ck.oninput = () => { R.ck = ck.value; }; // resta anche se il pannello si ridisegna (aggiornamento automatico)
     $$('[data-orcp]', V).forEach((b) => (b.onclick = () => copy(b.dataset.orcp, 'Testo')));
     $$('[data-ormsg]', V).forEach((b) => (b.onclick = () => { R.edit = { user: b.dataset.ormsg }; R.tab = 'msgs'; render(); setTimeout(() => $('#orMT') && $('#orMT').focus(), 30); }));
@@ -166,6 +196,12 @@
       if (a === 'maintsave') act(async () => { R.data.maint = await api('PUT', '/admin/orcp/maint', { text: val('orMMT'), status: val('orMMS'), expire: val('orMMD') }); }, 'Avviso salvato');
       if (a === 'pin') act(async () => { R.pin = await api('POST', '/admin/orcp/parental', { code: val('orPC') }); if (!R.pin.pin && !R.pin.text) throw new Error('ORCP non ha restituito il PIN: controlla il codice'); });
       if (a === 'portsave') act(async () => { const list = $$('[data-orpn]', V).map((i) => ({ k: i.dataset.orpn, name: i.value, url: ($('[data-orpu="' + i.dataset.orpn + '"]', V) || {}).value || '' })); R.data.portals = await api('PUT', '/admin/orcp/portals', { list }); }, 'Portali aggiornati su ORCP');
+      if (a === 'agentsave') act(async () => {
+        const agents = $$('[data-orcp-agent-row]', V).map((row) => ({ id: +row.dataset.orcpAgentRow, on: row.querySelector('[data-orcp-app]').classList.contains('on'), srv: [...row.querySelectorAll('[data-orcp-srv]:checked')].map((x) => x.dataset.orcpSrv) }));
+        const r = await api('PUT', '/admin/orcp/agents', { dl: val('orDL').trim(), agents });
+        R.st.cfg = r.cfg;
+        for (const item of r.agents || []) { const target = (D.agents || []).find((x) => x.id === item.id); if (target) target.perms = { ...(target.perms || {}), ...item.perms }; }
+      }, 'Permessi MirkoTeam salvati');
       if (a === 'cfgsave') act(async () => { const map = {}; $$('[data-ormap]', V).forEach((s) => (map[s.dataset.ormap] = s.value)); const r = await api('PUT', '/admin/orcp/cfg', { name: val('orCN'), map }); R.st.cfg = r.cfg; await state(true); }, 'Abbinamento salvato');
       if (a === 'linksave') act(async () => { const ck = (val('orCK') || R.ck || '').trim(); if (!ck) throw new Error('Incolla i cookie di cp.ottrun.com'); await api('PUT', '/admin/orcp/session', { cookies: ck }); R.ck = ''; R.data = {}; R.tab = 'conns'; await state(true); }, 'ORCP collegato');
       if (a === 'unlink') ask('Scollegare ORCP?', 'KAIROS dimentica l\'accesso. Su ORCP non cambia niente.').then((ok) => ok && act(async () => { await api('DELETE', '/admin/orcp/session'); R.data = {}; await state(true); }, 'ORCP scollegato'));
@@ -175,13 +211,57 @@
 
   /* ---------- per le linee e «Nuova attivazione»: nome dell'app, server dei pannelli, messaggio per il cliente ---------- */
   let cfgP = null;
-  const cfg = () => (R.st && R.st.connected ? { name: name(), map: (R.st.cfg || {}).map || {}, servers: (R.data.portals ? R.data.portals.list.filter((x) => x.name || x.url).map((x) => x.name || x.url) : (R.st.servers || [])) } : null);
+  const cfg = () => {
+    const c = R.st && R.st.cfg || {};
+    const servers = R.data.portals ? R.data.portals.list.filter((x) => x.name || x.url).map((x) => x.name || x.url) : (c.portalNames || []).map((x) => x.name).filter(Boolean);
+    return { name: c.name || name(), map: c.map || {}, servers, dl: c.dl || '8128314', apk: c.apk || '' };
+  };
+  window.KXOrcpAgentCan = () => isAg() && !!((D.me || {}).perms || {}).orcpApp && Array.isArray(((D.me || {}).perms || {}).orcpSrv) && ((D.me || {}).perms || {}).orcpSrv.length > 0;
   window.KXOrcpName = () => name();
-  window.KXOrcpCfg = async () => { if (isAg()) return null; if (!R.st) await state(); if (!R.st.connected) return null; if (!cfgP) cfgP = api('GET', '/admin/orcp/cfg').then((r) => { R.st.servers = r.servers || []; R.st.cfg = r.cfg || R.st.cfg; return r; }).catch(() => null); const r = await cfgP; return r ? { name: r.cfg.name || name(), map: r.cfg.map || {}, servers: r.servers || [] } : cfg(); };
+  window.KXOrcpCfg = async () => {
+    if (isAg()) return null;
+    if (!R.st) await state();
+    if (!cfgP) cfgP = api('GET', '/admin/orcp/cfg').then((r) => { R.st.servers = r.servers || []; R.st.cfg = r.cfg || R.st.cfg; return r; }).catch(() => null);
+    const r = await cfgP;
+    return r ? { name: r.cfg.name || name(), map: r.cfg.map || {}, servers: (r.cfg.portalNames || []).map((x) => x.name).filter(Boolean), dl: r.cfg.dl, apk: r.cfg.apk } : cfg();
+  };
   window.KXOrcpText = (o) => [`• ${o.app}: apri l'app, scegli il server «${o.server || 'indicato'}» ed entra con utente e password qui sopra.`].join('\n');
+  async function openAgentApp() {
+    const V = $('#v-orcp-agent'); if (!V) return;
+    V.innerHTML = '<p class="mut">Carico MirkoTeam…</p>';
+    try {
+      const c = await api('GET', '/admin/agent/orcp');
+      V.innerHTML = `<div class="card" style="padding:16px;max-width:760px"><h3 style="margin:0 0 8px">📲 ${esc(c.name || 'MirkoTeam')}</h3>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0"><b>Codice Downloader ${esc(c.dl)}</b><button class="btn sm" data-agent-copy="${esc(c.dl)}">Copia</button></div>
+        ${c.apk ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0"><a href="${esc(c.apk)}" target="_blank" rel="noopener">Scarica APK</a><button class="btn sm" data-agent-copy="${esc(c.apk)}">Copia link</button></div>` : ''}
+        <h4>I tuoi server</h4>${c.servers.length ? `<ul>${c.servers.map((s) => `<li>Server ${s.n}${s.name && s.name !== 'Server ' + s.n ? ' · ' + esc(s.name) : ''}</li>`).join('')}</ul>` : '<p class="mut">Non hai ancora server assegnati: chiedili al tuo fornitore</p>'}</div>`;
+      $$('[data-agent-copy]', V).forEach((b) => (b.onclick = () => copy(b.dataset.agentCopy, 'Testo')));
+    } catch (e) { V.innerHTML = `<p class="mut">${esc(e.message)}</p>`; }
+  }
+  async function newAgentOrcp(pre) {
+    let c;
+    try { c = await api('GET', '/admin/agent/orcp'); } catch (e) { return toast(e.message, 1); }
+    if (!c.servers.length) return toast('Non hai server MirkoTeam assegnati', 1);
+    const defName = c.map && c.map[pre.panel], def = c.servers.find((s) => s.name === defName) || c.servers[0];
+    const ov = document.createElement('div'); ov.className = 'kxpay-veil';
+    ov.innerHTML = `<div class="kxpay-box" role="dialog" aria-modal="true" aria-labelledby="orAgentTitle"><h3 id="orAgentTitle">📲 MirkoTeam · ${esc(pre.name || pre.user)}</h3>
+      <label class="l" style="display:grid;gap:6px;margin-top:14px">Server<select class="inp" id="orAgentServer">${c.servers.map((s) => `<option value="${s.n}"${s.n === def.n ? ' selected' : ''}>Server ${s.n}${s.name && s.name !== 'Server ' + s.n ? ' · ' + esc(s.name) : ''}</option>`).join('')}</select></label>
+      <textarea class="inp" id="orAgentMessage" rows="6" readonly aria-label="Messaggio pronto da copiare" style="width:100%;min-height:130px;margin-top:12px;line-height:1.5;resize:vertical"></textarea>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap"><button type="button" class="btn pri" id="orAgentCopy">Copia tutto</button><button type="button" class="btn" id="orAgentClose">Chiudi</button></div></div>`;
+    document.body.appendChild(ov);
+    const close = () => { document.removeEventListener('keydown', onKeydown); ov.remove(); };
+    const onKeydown = (e) => { if (e.key === 'Escape') close(); };
+    const server = () => c.servers.find((s) => s.n === +$('#orAgentServer', ov).value) || c.servers[0];
+    const message = () => `Scarica l'app ${c.name}: Downloader ${c.dl}${c.apk ? ` (oppure ${c.apk})` : ''}. Apri l'app, scegli il server «${server().name}» ed entra con utente ${pre.user} e password ${pre.pass}.`;
+    const update = () => { $('#orAgentMessage', ov).value = message(); };
+    $('#orAgentServer', ov).onchange = update; update();
+    document.addEventListener('keydown', onKeydown); $('#orAgentServer', ov).focus();
+    $('#orAgentClose', ov).onclick = close; ov.onclick = (e) => { if (e.target === ov) close(); };
+    $('#orAgentCopy', ov).onclick = async () => { try { await navigator.clipboard.writeText(message()); toast('Messaggio copiato'); close(); } catch { toast('Copia non riuscita', 1); } };
+  }
   /** pre: { user, pass, name, note, panel } — segna la linea negli Appunti App e prepara il messaggio per il cliente */
   window.KXOrcpNew = async (pre) => {
-    if (isAg()) return toast('Solo il titolare può usare ' + name(), 1);
+    if (isAg()) return window.KXOrcpAgentCan() ? newAgentOrcp(pre) : toast('App MirkoTeam non abilitata o senza server assegnati', 1);
     const c = await KXOrcpCfg(); if (!c) return toast(name() + ' non è collegato: apri il Pannello e collega ORCP', 1);
     const def = c.map[pre.panel] || c.servers[0] || '';
     const ov = document.createElement('div'); ov.style.cssText = 'position:fixed;inset:0;background:#0008;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
@@ -202,7 +282,8 @@
   };
 
   const v0 = view;
-  window.view = view = function (v) { const r = v0.apply(this, arguments); if (v === 'orcp') open(); return r; };
+  window.view = view = function (v) { const r = v0.apply(this, arguments); if (v === 'orcp') open(); if (v === 'orcp-agent') openAgentApp(); return r; };
+  TITLES['orcp-agent'] = 'MirkoTeam';
   const sec = $('#v-orcp');
   if (sec) new MutationObserver(() => { if (sec.classList.contains('on') && !sec.innerHTML.trim()) open(); }).observe(sec, { attributes: true, attributeFilter: ['class'] });
   setTimeout(() => { if (!isAg() && (D.role || D.settings)) state(); }, 1500);

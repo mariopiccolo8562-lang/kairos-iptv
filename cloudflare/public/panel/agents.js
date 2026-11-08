@@ -205,10 +205,11 @@ body.agent .foot{display:none}
   const FP = [['dash', 'Dashboard', 'Riepilogo dei suoi clienti', 'dash'], ['errors', 'Errori applicazione', 'Dei suoi clienti', 'apperr'],
     ['reports', 'Segnalazioni', 'Dei suoi clienti', 'reports'], ['contentReq', 'Richieste contenuti', 'Dei suoi clienti', 'creq'], ['addonReq', 'Richieste temi', 'Assegna solo gli add-on che gli concedi', 'areq'],
     ['messages', 'Messaggi', 'Solo ai suoi clienti, mai a tutti', 'msgs'],
-    ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['dlcodes', 'Codici downloader', 'Le app da far installare ai clienti (solo da copiare)', 'dlc'], ['appstore', 'APP Store', 'Le app per caricare le liste: solo quelle che scegli qui sotto, in sola lettura', 'apps3'], ['appsOp', 'OrbixPlay e MaxPlayer', 'Codici cliente e liste create dei suoi clienti', 'agop'], ['appk', 'App Kairos', 'Link e codici Downloader delle app Kairos che scegli', 'agk'], ['lines', 'Linee collegate', 'Il registro delle linee collegate alle app: solo le sue', 'lines'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', ''], ['armada', 'Pannello Armada', 'Con i tuoi crediti, entro il tetto mensile', 'armada'], ['storm', 'Pannello Storm', 'Con i tuoi crediti Storm, entro il tetto che decidi', 'storm']];
+    ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['dlcodes', 'Codici downloader', 'Le app da far installare ai clienti (solo da copiare)', 'dlc'], ['appstore', 'APP Store', 'Le app per caricare le liste: solo quelle che scegli qui sotto, in sola lettura', 'apps3'], ['appsOp', 'OrbixPlay e MaxPlayer', 'Codici cliente e liste create dei suoi clienti', 'agop'], ['appk', 'App Kairos', 'Link e codici Downloader delle app Kairos che scegli', 'agk'], ['lines', 'Linee collegate', 'Il registro delle linee collegate alle app: solo le sue', 'lines'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', ''], ['armada', 'Pannello Armada', 'Con i tuoi crediti, entro il tetto mensile', 'armada'], ['storm', 'Pannello Storm', 'Con i tuoi crediti Storm, entro il tetto che decidi', 'storm'], ['orcpApp', 'App MirkoTeam: scaricarla e scegliere il server', 'Downloader e solo i server che gli assegni', 'orcp-agent']];
   FP.push(['wolf', 'Pannello WOLF', 'Con il suo account reseller WOLF: sue linee e suoi crediti', 'wolf'], ['mxp', 'Pannello MaxPlayer', 'Solo i clienti del suo agente MaxPlayer', 'mxp'], ['oxp', 'Pannello OrbixPlay', 'Solo le playlist dei suoi clienti', 'oxp'], ['ro', 'Pannello Realott', 'Con il suo account sub-reseller Realott: sue linee e suoi crediti', 'ro'], ['slt', 'Pannello SLT', 'Con il suo account sub-reseller SLT: sue linee e suoi crediti', 'slt']);
   const PERM_VIEW = Object.fromEntries(FP.map(([k, , , v]) => [v, k]));
   PERM_VIEW.payments = 'payments';
+  PERM_VIEW['orcp-agent'] = 'orcpApp';
   const isAgent = () => D.role === 'agent';
   const me = () => D.me || {};
   const can = (k) => !isAgent() || !!(me().perms || {})[k];
@@ -244,7 +245,7 @@ body.agent .foot{display:none}
   // Le voci che un agente non può usare restano nascoste; una sezione senza voci non compare.
   const GROUPS = [
     ['', ['dash', 'devices', 'payments', 'live', 'agents', 'msgs']],
-    ['Linee e pannelli', ['conn', 'lmap', 'lines', 'dns', 'armada', 'storm', 'wolf', 'ro', 'slt', 'orcp', 'mxp', 'oxp', 'ora', 'atx']],
+    ['Linee e pannelli', ['conn', 'lmap', 'lines', 'dns', 'armada', 'storm', 'wolf', 'ro', 'slt', 'orcp', 'orcp-agent', 'mxp', 'oxp', 'ora', 'atx']],
     ['App e Store', ['store', 'apps3', 'apps3op', 'agop', 'xlist', 'dlc', 'appk', 'agk']],
     ['Richieste e controllo', ['reports', 'creq', 'areq', 'reqai', 'rctl', 'apperr', 'activity', 'trash', 'vod']],
     ['Impostazioni', ['set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'sec']],
@@ -293,8 +294,8 @@ body.agent .foot{display:none}
   { const vw = view; window.view = view = function (v) { const r = vw.apply(this, arguments); const b = nav(v), sec = b && b.dataset.sec; if (sec) { const st = closedSet(); if (st.has(sec)) { st.delete(sec); saveClosed(st); layoutMenu(); } } return r; }; }
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
-  const AG_OK = /^\/admin\/(payments|line-notes(\?.*)?|online|insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/(upd|fix)|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|armada\/(state|packages|lines|mags|new|renew|toggle)|storm\/(state|lines)|oxp\/(state|playlists(\/[A-Za-z0-9_-]+)?)|mxp\/(accounts|a\/[a-z0-9]{2,20}\/(overview|domains|agents(\/\d+\/(enable|disable))?|users(\/\d+(\/password|\/devices|\/lists(\/[A-Za-z0-9%-]+)?)?)?(\?fresh=1)?))|guide(?:\/read)?|(ro|slt)\/[A-Za-z0-9_\/%.-]+(\?.*)?|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
   // agente: le pagine senza permesso non chiamano nemmeno il server (prima ogni 20-30 s partivano richieste destinate al «non consentito»)
+  const AG_OK = /^\/admin\/(payments|line-notes(\?.*)?|online|insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/(upd|fix)|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|agent\/orcp|armada\/(state|packages|lines|mags|new|renew|toggle)|storm\/(state|lines)|oxp\/(state|playlists(\/[A-Za-z0-9_-]+)?)|mxp\/(accounts|a\/[a-z0-9]{2,20}\/(overview|domains|agents(\/\d+\/(enable|disable))?|users(\/\d+(\/password|\/devices|\/lists(\/[A-Za-z0-9%-]+)?)?)?(\?fresh=1)?))|guide(?:\/read)?|(ro|slt)\/[A-Za-z0-9_\/%.-]+(\?.*)?|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
   const AG_NEED = [[/^\/admin\/requests.*[?&]kind=content/, 'contentReq'], [/^\/admin\/requests.*[?&]kind=addon/, 'addonReq'], [/^\/admin\/requests.*[?&]kind=ai/, 'ai'],
     [/^\/admin\/requests(\?(?!.*kind=)|\?.*kind=report|$)/, 'reports'], [/^\/admin\/app-errors/, 'errors'], [/^\/admin\/presence/, 'online'], [/^\/admin\/catalog/, 'vod'], [/^\/admin\/apps3\/lists/, 'appsOp'],
     [/^\/admin\/ext-lists/, 'players'], [/^\/admin\/linked-lines/, 'lines'], [/^\/admin\/agent-maint/, 'maint'], [/^\/admin\/armada\//, 'armada'], [/^\/admin\/storm\//, 'storm'], [/^\/admin\/wolf\//, 'wolf'], [/^\/admin\/mxp\//, 'mxp'], [/^\/admin\/oxp\//, 'oxp'], [/^\/admin\/ro\//, 'ro'], [/^\/admin\/slt\//, 'slt']];
@@ -319,11 +320,13 @@ body.agent .foot{display:none}
   // «Online ora» e «Riepilogo store» sono solo del titolare (lo store è aperto: agli agenti non resta nulla da approvare)
   const agentCan = (v) => v === 'payments' ? (can('payments') || !!(window.KXPay && KXPay.hasRows())) : v !== 'live' && v !== 'store' && !!PERM_VIEW[v] && can(PERM_VIEW[v]);
   const OWNER_ONLY = ['dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'storesum', 'dns', 'apps3', 'lines', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity', 'ora', 'atx', 'ro', 'slt', 'orcp', 'payments']; // ora/atx/ro/slt/orcp: solo titolare (il server risponde 403 agli agenti)
+  const AGENT_ONLY = ['orcp-agent'];
   let modeSet = '';
   function applyMode() {
     const ag = isAgent();
     document.body.classList.toggle('agent', ag);
     for (const v of OWNER_ONLY) { const b = nav(v); if (b) b.style.display = ag && !agentCan(v) ? 'none' : ''; }
+    for (const v of AGENT_ONLY) { const b = nav(v); if (b) b.style.display = ag && agentCan(v) ? '' : 'none'; }
     const sb = nav('sec'); if (sb) sb.style.display = ag ? '' : 'none';
     const ab = nav('agents'); if (ab) ab.style.display = !ag || me().canAgents ? '' : 'none';
     layoutMenu();
@@ -338,7 +341,7 @@ body.agent .foot{display:none}
     const nb = $('#newDev').lastChild;
     if (nb && nb.nodeType === 3) nb.textContent = ag ? 'Attiva cliente' : 'Nuovo cliente'; // titolare: come lo scrive nav2.js
     if (modeSet !== (ag ? 'a' : 'o')) { modeSet = ag ? 'a' : 'o'; if (ag) view('devices'); }
-    if (ag && OWNER_ONLY.some((v) => !agentCan(v) && $('#v-' + v) && $('#v-' + v).classList.contains('on'))) view('devices');
+    if (ag && [...OWNER_ONLY, ...AGENT_ONLY].some((v) => !agentCan(v) && $('#v-' + v) && $('#v-' + v).classList.contains('on'))) view('devices');
     let lim = $('#agLim');
     if (ag) {
       if (!lim) { lim = document.createElement('div'); lim.id = 'agLim'; lim.className = 'ag-lim'; $('#newDev').before(lim); }
@@ -360,7 +363,7 @@ body.agent .foot{display:none}
   };
   const view0 = view;
   window.view = view = function (v) {
-    if (isAgent() && OWNER_ONLY.includes(v) && !agentCan(v)) v = 'devices';
+    if (isAgent() && (OWNER_ONLY.includes(v) && !agentCan(v) || AGENT_ONLY.includes(v) && !agentCan(v)) || !isAgent() && AGENT_ONLY.includes(v)) v = 'devices';
     if (v === 'agents' && isAgent() && !me().canAgents) v = 'devices';
     view0(v);
   };
@@ -838,6 +841,13 @@ body.agent .foot{display:none}
     if (D.players && D.players.max) { try { mxItems = ((await api('GET', '/admin/maxplayer/domains')).domains || []).map((x) => [x.id, (x.label || 'DNS ' + x.id) + (!sub && x.domain ? ' — ' + x.domain + (x.port && !['80', '443'].includes(String(x.port)) ? ':' + x.port : '') : '')]); } catch (e) { mxErr = 'DNS di MaxPlayer non disponibili: ' + e.message; } }
     const P = a ? a.perms : { create: true, renew: true, disable: true, kick: true, playlists: true, delete: false, clientPerms: false, vpn: false, addons: [], maxConn: 1 };
     const topP = top ? top.perms || {} : null;
+    const orcpKeys = ['portal', 'portal2', 'portal3', 'portal4', 'portal5'];
+    let orcpItems = [];
+    try {
+      const r = sub ? (topP && topP.orcpApp ? await api('GET', '/admin/agent/orcp') : null) : await api('GET', '/admin/orcp/cfg');
+      if (sub) orcpItems = (r && r.servers || []).map((x) => ({ k: orcpKeys[x.n - 1], n: x.n, name: x.name }));
+      else orcpItems = (r && r.cfg && r.cfg.portalNames || []).map((x, i) => ({ ...x, n: orcpKeys.indexOf(x.k) + 1 || i + 1, name: x.name || `Server ${i + 1}` }));
+    } catch {}
     let wolfAcc = null, wolfErr = '', mxAccs = [], mxMap = null; const extAcc = { ro: null, slt: null };
     if (!sub) { try { mxAccs = (await api('GET', '/admin/mxp/accounts')).accounts || []; if (a) mxMap = ((await api('GET', '/admin/mxp/agents')).agents || []).find((x) => x.id === a.id) || null; } catch (e) { mxAccs = []; } }
     if (!sub && a) { try { wolfAcc = ((await api('GET', '/admin/wolf/agents')).agents || []).find((x) => x.id === a.id) || null; } catch (e) { wolfErr = ''; } }
@@ -876,7 +886,7 @@ body.agent .foot{display:none}
         <div class="ag-chk" id="agPm">${FL.filter(([k]) => !APP_KEYS.includes(k)).map(([k, l, sm]) => chk('perm', k, l, !!P[k], topP && !topP[k], sm)).join('')}</div>
       </div>
       <div class="ag-c"><h4>Pagine del pannello</h4><small>Cosa vede nel suo pannello: sempre e solo i dati dei suoi clienti. Impostazioni, Server DNS, API, la manutenzione generale e le impostazioni dell'assistente restano solo tue (valgono per tutti i clienti). I tuoi clienti e quelli degli altri agenti non li vede mai.</small>
-        <div class="ag-chk" id="agPg">${FP.filter(([k]) => !APP_KEYS.includes(k) && k !== 'store').map(([k, l, sm]) => chk('perm', k, l, !!P[k], topP && !topP[k], sm)).join('')}</div>
+      <div class="ag-chk" id="agPg">${FP.filter(([k]) => !APP_KEYS.includes(k) && k !== 'store' && k !== 'orcpApp').map(([k, l, sm]) => chk('perm', k, l, !!P[k], topP && !topP[k], sm)).join('')}</div>
       </div>
       <div class="ag-c" style="display:none"><h4>App dello store che può approvare</h4><small>Le richieste degli store attivati con il suo codice gli arrivano sempre, con l'avviso nel pannello. Qui scegli le app che può approvare: per le altre l'avviso arriva a te.</small>
         <div class="ag-chk" id="agSa" style="max-height:300px;overflow:auto">${storeAppsBox(P, topP)}</div>
@@ -886,6 +896,8 @@ body.agent .foot{display:none}
         <div class="ag-apg">
           <div class="ag-ap"><div class="ag-chk">${chk('perm', 'appstore', '<b>Attiva app</b>', !!P.appstore, topP && !topP.appstore, 'Le app con cui carica le liste (solo quelle scelte qui sotto)')}</div>
             <div class="ag-chk ag-sub" id="agAa" style="max-height:220px;overflow:auto">${appsAllowBox(P)}</div></div>
+          <div class="ag-ap"><div class="ag-chk">${chk('perm', 'orcpApp', '<b>App MirkoTeam: scaricarla e scegliere il server</b>', !!P.orcpApp, topP && !topP.orcpApp, 'Solo il codice Downloader e i server qui assegnati')}</div>
+            <div class="ag-chk" id="agOrcpSrv">${orcpItems.length ? orcpItems.map((x) => chk('orcp-srv', x.k, `<b>Server ${x.n} · ${esc(x.name)}</b>`, (P.orcpSrv || []).includes(x.k), sub && !(topP.orcpSrv || []).includes(x.k), '')).join('') : '<small class="mut">Assegna prima i server MirkoTeam al tuo agente.</small>'}<label style="display:block;margin-top:6px"><input type="checkbox" data-orcp-all> Tutti</label></div></div>
           <div class="ag-ap"><div class="ag-chk">${chk('perm', 'players', '<b>Attivare OrbixPlay e MaxPlayer dal pannello</b>', !!P.players, topP && !topP.players, 'Manda le linee dei suoi clienti con le tue chiavi (che non vede)')}${chk('perm', 'appsOp', '<b>Pagina «OrbixPlay e MaxPlayer»</b>', !!P.appsOp, topP && !topP.appsOp, 'Codici cliente e liste create dei suoi clienti (senza DNS né impostazioni)')}</div>
             <p class="ag-dn" style="margin:8px 0 0 18px">Quali DNS può usare lo scegli in alto, in «DNS e server dell'agente».</p></div>
           <div class="ag-ap"><div class="ag-chk">${chk('perm', 'dlcodes', '<b>Codici downloader</b>', !!P.dlcodes, topP && !topP.dlcodes, 'Solo quelli scelti qui sotto, da copiare')}</div>
@@ -979,6 +991,8 @@ body.agent .foot{display:none}
       paint(); SYNC[bx] = paint;
     }
     const saSync = () => SYNC.agSa && SYNC.agSa();
+    const orcpAll = $('#agOrcpSrv [data-orcp-all]');
+    if (orcpAll) orcpAll.onchange = () => $$('#agOrcpSrv [data-orcp-srv]').forEach((x) => { x.checked = orcpAll.checked; });
     $('#agSaAdd').onclick = () => { const n = $('#agSaN').value.trim(); if (!n) return; if (!$$('#agSa [data-sapp]').some((i) => i.dataset.sapp.toLowerCase() === n.toLowerCase())) $('#agSa').insertAdjacentHTML('beforeend', chk('sapp', n, esc(n), true, false, '')); else $$('#agSa [data-sapp]').forEach((i) => { if (i.dataset.sapp.toLowerCase() === n.toLowerCase()) i.checked = true; }); const all = $('#agSa [data-sapp="*"]'); if (all) all.checked = false; $('#agSaN').value = ''; saSync(); };
     if (!sub && a) {
       $('#agB').insertAdjacentHTML('beforeend', `<div class="ag-c" id="agLedgerBox" style="margin:0 28px 18px"><h4>💰 Debito</h4><div id="agLedgerSummary" class="mut">Carico il registro…</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><button type="button" class="btn sm" data-ledger-add="debt">➕ Aggiungi debito</button><button type="button" class="btn sm pri" data-ledger-add="pay">✅ Registra pagamento</button></div><div id="agLedgerHistory"></div></div>`);
@@ -1001,7 +1015,8 @@ body.agent .foot{display:none}
       servers: $$('#agS [data-srv]').filter((i) => i.checked).map((i) => i.dataset.srv),
       perms: { ...Object.fromEntries([...FL, ...FP, ['armadaTrial'], ['stormTrial'], ['oxpNew']].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"], .ag-apps [data-perm="${k}"], #agAr [data-perm="${k}"], #agSt [data-perm="${k}"], #agWf [data-perm="${k}"], #agMx [data-perm="${k}"], #agOx [data-perm="${k}"]`) || {}).checked])), armadaCredits: Math.max(0, +(($('#agArC') || {}).value || 0) || 0), stormCredits: Math.max(0, +(($('#agStC') || {}).value || 0) || 0), dlcAllow: listRead('agDc', 'dlca'), kAllow: listRead('agKa', 'kapp'), orbDns: listRead('agOd', 'odns'), mxDns: listRead('agMd', 'mdns'), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad),
         storeApps: $('#agSa [data-sapp="*"]') && $('#agSa [data-sapp="*"]').checked ? ['*'] : $$('#agSa [data-sapp]').filter((i) => i.checked && i.dataset.sapp !== '*').map((i) => i.dataset.sapp),
-        appsAllow: $('#agAa [data-aapp="*"]') && $('#agAa [data-aapp="*"]').checked ? ['*'] : $$('#agAa [data-aapp]').filter((i) => i.checked && i.dataset.aapp !== '*').map((i) => i.dataset.aapp) },
+        appsAllow: $('#agAa [data-aapp="*"]') && $('#agAa [data-aapp="*"]').checked ? ['*'] : $$('#agAa [data-aapp]').filter((i) => i.checked && i.dataset.aapp !== '*').map((i) => i.dataset.aapp),
+        orcpSrv: $$('#agOrcpSrv [data-orcp-srv]:checked').map((i) => i.dataset.orcpSrv) },
     });
     $('#agOk').onclick = async () => {
       const b = read(), pw = $('#agP').value;
