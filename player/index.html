@@ -1954,7 +1954,11 @@ function whenIdle(fn, delay = 0, quiet = 2500, maxWait = 90e3) {
   setTimeout(tick, delay);
 }
 /* lettore o anteprima chiusi: i lavori rimandati ripartono (quando il telecomando è fermo) */
-function jobsResume() { S.viewEndT = Date.now(); for (const j of [...heldJobs]) { clearTimeout(j.t); heldJobs.delete(j); setTimeout(j.tick, 300); } }
+function jobsResume() {
+  S.viewEndT = Date.now(); for (const j of [...heldJobs]) { clearTimeout(j.t); heldJobs.delete(j); setTimeout(j.tick, 300); }
+  try { if ([...rcHeld.values()].includes('wait')) setTimeout(() => heartbeat(true), 1500); } catch {}
+  if (S.pinAsk) { S.pinAsk = false; setTimeout(() => { try { if (!S.inPlayer) pinFirstRun(true); } catch {} }, 1500); }
+}
 /* app in sfondo (Home, altra app): niente battiti periodici e un «vado in sfondo» subito, così il pannello non la vede in linea
    mentre si usa un'altra app Kairos con lo stesso codice; al rientro un battito immediato. Durante la visione i battiti li chiede il nativo. */
 let hbHidden = false;
@@ -5665,6 +5669,13 @@ function rcSnapshot() {
   return o;
 }
 let rcBusy = false;
+/* il server rimanda un comando a ogni battito finché non arriva la conferma: quelli che aspettano la fine della visione
+   ('wait') o sono in corso ('run', es. lo speed test) qui non si ripetono; riavvio, svuota cache e chiudi si ricordano
+   (ultimi 30 id) prima di agire, così se la conferma si perde e il comando torna si conferma soltanto */
+const rcHeld = new Map();
+const rcDoneIds = () => { const a = store.get('cmdDone', []); return Array.isArray(a) ? a : []; };
+const rcMarkDone = (id) => { const a = rcDoneIds().filter((x) => x !== id); a.push(id); store.set('cmdDone', a.slice(-30)); };
+const speedSum = (L) => `↓ ${(+L.mbps).toFixed(1)} Mbps` + (L.ul != null && L.ul >= 0 ? ` · ↑ ${(+L.ul).toFixed(1)} Mbps` : '') + ` · ping ${Math.round(L.ping || 0)} ms`;
 /** esegue i comandi arrivati col battito e li conferma al pannello */
 async function rcRun(cmds) {
   if (rcBusy || !Array.isArray(cmds) || !cmds.length) return; rcBusy = true;
@@ -5672,15 +5683,31 @@ async function rcRun(cmds) {
     for (const c of cmds) {
       const ack = (ok, info) => apiPost('/api/player/cmd', { id: c.id, ok, info: info || '' }).catch(() => {});
       try {
-        if (c.c === 'reload') { await ack(true, 'riavvio'); setTimeout(() => location.reload(), 300); return; }
-        if (c.c === 'cache') { try { await LibCache.clear(); } catch {} try { store.set('plSnap', null); } catch {} await ack(true, 'cache svuotata'); setTimeout(() => location.reload(), 300); return; }
-        if (c.c === 'exit') { await ack(true, 'chiusa'); setTimeout(() => { try { NATIVE && NATIVE.exit ? NATIVE.exit() : window.close(); } catch {} }, 300); return; }
+        if (rcDoneIds().includes(c.id)) { await ack(true, 'già eseguito'); continue; }
+        const held = rcHeld.get(c.id);
+        if (held === 'run' || (held === 'wait' && inView())) continue;
+        rcHeld.delete(c.id);
+        if (c.c === 'reload') { rcMarkDone(c.id); await ack(true, 'riavvio'); setTimeout(() => location.reload(), 300); return; }
+        if (c.c === 'cache') { rcMarkDone(c.id); try { await LibCache.clear(); } catch {} try { store.set('plSnap', null); } catch {} await ack(true, 'cache svuotata'); setTimeout(() => location.reload(), 300); return; }
+        if (c.c === 'exit') { rcMarkDone(c.id); await ack(true, 'chiusa'); setTimeout(() => { try { NATIVE && NATIVE.exit ? NATIVE.exit() : window.close(); } catch {} }, 300); return; }
         if (c.c === 'update') { if (!NATIVE || !hasNativeHttp()) { await ack(false, 'solo nell\'app installata'); continue; } S.lastUpdCheck = 0; await backgroundUpdateCheck(true); if (S.apkUpdate) { await ack(true, S.apkReady === S.apkUpdate.url ? 'versione ' + (S.apkUpdate.version || '') + ' pronta: proposta al cliente' : 'versione ' + (S.apkUpdate.version || '') + ' in scaricamento'); } else await ack(true, 'già aggiornata'); continue; }
-        if (c.c === 'sync') { if (S.inPlayer) { await ack(false, 'visione in corso: rimandato'); continue; } whenIdle(() => loadLibrary().then(plRerender), 100); await ack(true, 'liste in aggiornamento'); continue; }
+        if (c.c === 'sync') { if (S.inPlayer) { rcHeld.set(c.id, 'wait'); continue; } whenIdle(() => loadLibrary().then(plRerender), 100); await ack(true, 'liste in aggiornamento'); continue; }
         if (c.c === 'settings') { if (S.inPlayer) { try { NATIVE && NATIVE.playerClose && NATIVE.playerClose(); } catch {} } try { closeFs && $('#fs').classList.contains('on') && closeFs(); } catch {} const sec = (c.a && c.a.sec) || 'dev'; go('settings'); renderSettings(sec); setTimeout(() => { renderSettings(sec); const m = $(`#settBody .sm[data-sec="${sec}"]`); m && focus(m, true); }, 120); await ack(true, 'impostazioni aperte'); continue; }
-        if (c.c === 'perm') { if (!NATIVE || !NATIVE.canInstall || !NATIVE.openInstallPerm) { await ack(false, 'solo nell\'app installata'); continue; } if (NATIVE.canInstall()) { await ack(true, 'permesso già concesso'); continue; } if (S.inPlayer) { await ack(false, 'visione in corso: rimandato'); continue; } try { toast('Attiva «Consenti da questa fonte», poi premi INDIETRO'); } catch {} NATIVE.openInstallPerm(); await ack(true, 'schermata del permesso aperta sulla TV'); continue; }
-        if (c.c === 'pin') { store.set('pinH', ''); store.set('pinLater', 0); S.unlocked = false; toast('Il fornitore ha reimpostato il PIN del controllo genitori: ora è 0000'); await ack(true, 'PIN riportato a 0000'); if (!S.inPlayer) setTimeout(() => pinFirstRun(true), 1500); continue; }
-        if (c.c === 'speed') { if (inView()) { await ack(false, 'visione in corso: rimandato'); continue; } speedTest().then(() => heartbeat(true)).catch(() => {}); await ack(true, 'speed test avviato'); continue; }
+        if (c.c === 'perm') { if (!NATIVE || !NATIVE.canInstall || !NATIVE.openInstallPerm) { await ack(false, 'solo nell\'app installata'); continue; } if (NATIVE.canInstall()) { await ack(true, 'permesso già concesso'); continue; } if (S.inPlayer) { rcHeld.set(c.id, 'wait'); continue; } try { toast('Attiva «Consenti da questa fonte», poi premi INDIETRO'); } catch {} NATIVE.openInstallPerm(); await ack(true, 'schermata del permesso aperta sulla TV'); continue; }
+        if (c.c === 'pin') { store.set('pinH', ''); store.set('pinLater', 0); S.unlocked = false; toast('Il fornitore ha reimpostato il PIN del controllo genitori: ora è 0000'); await ack(true, 'PIN riportato a 0000'); if (!S.inPlayer) setTimeout(() => pinFirstRun(true), 1500); else S.pinAsk = true; continue; }
+        if (c.c === 'speed') {
+          if (inView()) { rcHeld.set(c.id, 'wait'); continue; }
+          rcHeld.set(c.id, 'run');
+          const t0 = Date.now();
+          (async () => {
+            let ok = false, info = 'speed test interrotto o non riuscito';
+            try { await speedTest(); } catch (e) { info = 'speed test non riuscito: ' + String(e && e.message || e).slice(0, 60); }
+            const L = speedLast;
+            if (L && L.t >= t0 && +L.mbps > 0) { ok = true; info = speedSum(L); }
+            rcHeld.delete(c.id); await ack(ok, info); heartbeat(true);
+          })();
+          continue;
+        }
         await ack(false, 'comando non supportato');
       } catch (e) { await ack(false, String(e && e.message || e).slice(0, 100)); }
     }

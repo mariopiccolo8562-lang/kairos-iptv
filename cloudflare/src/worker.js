@@ -2581,7 +2581,7 @@ const RC_CMDS = [
   ['sync', 'Aggiorna le liste', 'Riscarica canali, film e serie senza riavviare', RC_LINKED],
   ['settings', 'Apri le impostazioni', 'Porta il cliente nella pagina Impostazioni dell\'app', RC_LINKED],
   ['update', 'Aggiorna l\'app', 'L\'app controlla subito se c\'è una versione nuova: la scarica in background e propone «Installa ora»', RC_LINKED],
-  ['speed', 'Speed test', 'Misura la connessione del dispositivo (il risultato arriva in «Online ora»)', ['tv']],
+  ['speed', 'Speed test', 'Misura la connessione del dispositivo: il risultato arriva qui sotto e in «Online ora» (Kairos XC dalla versione 3.3.1)', ['tv', 'xc']],
   ['perm', 'Chiedi il permesso per gli aggiornamenti', 'Apre sulla TV la schermata di Android «Installa app sconosciute»: il cliente deve solo attivarla (Android non permette di farlo da remoto)', ['tv', 'ktv', 'prem', 'lite', 'xc']],
   ['pin', 'Reimposta PIN controllo genitori', 'Il PIN torna 0000 e l\'app chiede al cliente di sceglierne uno nuovo: per chi lo ha dimenticato', RC_LINKED],
   ['exit', 'Chiudi l\'app', 'L\'app si chiude; il cliente la riapre quando vuole', RC_LINKED],
