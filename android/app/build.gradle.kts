@@ -14,8 +14,8 @@ android {
         applicationId = env("APP_ID") ?: "com.kairos.player"
         minSdk = 22
         targetSdk = 35
-        versionCode = env("VERSION_CODE")?.toInt() ?: 1
-        versionName = env("VERSION_NAME") ?: "1.0.0"
+        versionCode = env("VERSION_CODE")?.toInt() ?: 2
+        versionName = env("VERSION_NAME") ?: "1.0.1"
         resValue("string", "app_name", env("APP_NAME") ?: "Kairos Pro")
         // Fire TV / Android TV / telefoni usano processori ARM: escludere x86 riduce molto l'APK
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }

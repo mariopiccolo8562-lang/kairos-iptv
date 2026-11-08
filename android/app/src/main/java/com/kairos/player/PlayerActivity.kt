@@ -84,6 +84,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private var userChangedEngine = false
     private var aspect = "fit"
     private var brand = "KAIROS"
+    private var portal: PortalServer? = null
     private lateinit var prefs: PlayPrefs
     private var currentUrl = ""
     private var triedAlt = false
@@ -206,6 +207,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private var fillP0 = -1L
     private var fillLowSec = 0
     private var fillDoneFor = ""
+    private val drainSamples = java.util.ArrayDeque<Pair<Long, Long>>()
+    private var drainCooldownUntil = 0L
     /** ENDED in diretta: istanti dei riavvii (al più 5 in 5 minuti) · ENDED precoce nei film ritentato (al più 2) */
     private val endTimes = java.util.ArrayDeque<Long>()
     private var endRetries = 0
@@ -228,7 +231,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         try { e.put("outcome", outcome); PlayStats.event(e) } catch (_: Exception) {}
     }
 
-    private fun newEvt(problem: String, action: String, err: String) {
+    private fun newEvt(problem: String, action: String, err: String, srv: String = "") {
         closeEvt("non risolto")
         pendingEvt = try {
             JSONObject().put("t", System.currentTimeMillis()).put("problem", problem).put("action", action).put("err", err.take(120))
@@ -237,6 +240,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
                 .put("res", if (PlayStats.height > 0) "${PlayStats.height}p" else "").put("var", if (varIdx >= 0) item.lite.getOrNull(varIdx)?.second ?: "" else "")
                 // stessi campi del battito (§9)
                 .put("bw", PlayStats.bw).put("line", PlayStats.line).put("dev", PlayStats.dev).put("cls", PlayStats.cls).put("fill", PlayStats.fill).put("fmt", PlayStats.fmt)
+                .apply { if (srv.isNotEmpty()) put("srv", srv) }
         } catch (_: Exception) { null }
     }
 
@@ -244,6 +248,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         closeEvt("chiuso")
         recDone.clear(); recCooldownUntil = 0L; varIdx = -1; stayDown = false; upAt = 0L
         readyOnce = false; isBuffering = false; bufferingSince = 0L; stallTimes.clear(); stallCounted = false
+        drainSamples.clear()
         lastFrames = -1L; lastQueued = -1L; lastPos = -1L; freezeSec = 0; nvPos = -1L; nvSec = 0; okSince = 0L; frameSeen = false
         cancelRetry()
         cancelCushion(); cushionN = 0
@@ -314,6 +319,22 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         return if (pick < 0 && System.currentTimeMillis() < weakUntil) 0 else pick
     }
 
+    private fun codecProblem(err: String): Boolean =
+        err.startsWith("AUDIO_", true) || err.contains("DECOD", true) || err.contains("CODEC", true) ||
+            PlayStats.lastCodecError.contains("DECOD", true) || PlayStats.lastCodecError.contains("CODEC", true)
+
+    private fun networkSourceError(err: String): Boolean =
+        err.contains("_IO_", true) || err.contains("HTTP", true) || err.contains("TIMEOUT", true) ||
+            err.contains("NETWORK", true) || err.contains("CONNECTION", true)
+
+    private fun canServer(err: String): Boolean {
+        val p = portal ?: return false
+        if (p.mode != "auto" || Portals.cands(p).size < 2 || codecProblem(err) ||
+            (NetMem.lineClass(this) == "weak" || uiLine == "weak") || !Portals.canNext(this, p)) return false
+        val type = try { JSONObject(NetInfo.json(this)).optString("type") } catch (_: Exception) { "" }
+        return type.isNotEmpty() && type != "none"
+    }
+
     /**
      * Prova da sola una soluzione quando la visione ha un problema, senza far uscire l'utente.
      * freeze = immagine ferma con l'audio che va · stall = caricamento che si ripete · error = errore del lettore
@@ -321,6 +342,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
      */
     private fun recover(problem: String, err: String = ""): Boolean {
         if (closing || zapPending) return true
+        drainSamples.clear()
         val now = System.currentTimeMillis()
         if (now < recCooldownUntil) return true
         val canAlt = item.alt.isNotEmpty() && currentUrl != item.alt && !triedAlt
@@ -329,9 +351,10 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         // scale per problema e per famiglia di errore (§6): mai il riavvio come primo passo per i blocchi
         val ladder = when (problem) {
             "freeze" -> listOf("reload", "sw", "engine", "lite")
-            "stall" -> listOf("lite", "alt", "reload", "engine")
-            "long" -> listOf("reload", "alt", "lite", "engine")
+            "stall" -> listOf("lite", "alt", "reload", "server", "engine")
+            "long" -> listOf("reload", "server", "alt", "lite", "engine")
             "fill" -> listOf("lite")
+            "drain" -> listOf("lite")
             else -> when {
                 // decoder audio mancante (AC-3, E-AC-3, MP2): l'altro motore li decodifica via software; poi il formato alternativo
                 err.startsWith("AUDIO_") -> listOf("engine", "alt")
@@ -339,15 +362,15 @@ class PlayerActivity : ComponentActivity(), EngineListener {
                 err.contains("DECOD", true) || err.contains("CODEC", true) -> listOf("sw", "engine", "alt", "retry")
                 // contenitore/manifest illeggibili o non supportati: l'altro motore subito
                 err.contains("PARSING", true) || err.contains("UNSUPPORTED", true) -> listOf("engine", "alt", "retry", "lite")
-                // rete/HTTP (404, 503, timeout): formato alternativo, poi nuovi tentativi a 1,5/3/6 s, versione leggera, motore
-                err.contains("_IO_", true) -> listOf("alt", "retry", "retry2", "retry3", "lite", "engine")
+                // rete/HTTP (404, 503, timeout): un riavvio, server di riserva, formato alternativo e altri tentativi
+                networkSourceError(err) -> listOf("reload", "server", "alt", "retry", "retry2", "retry3", "lite", "engine")
                 else -> listOf("alt", "engine", "retry", "retry2", "retry3", "lite")
             }
         }
         // «lite» si può ripetere (FHD → HD → SD) finché ci sono versioni più leggere; gli altri passi una volta per contenuto
         val step = ladder.firstOrNull { st ->
             (st == "lite" || !recDone.contains(st)) && when (st) {
-                "alt" -> canAlt; "sw" -> canSw; "lite" -> canLite
+                "alt" -> canAlt; "sw" -> canSw; "lite" -> canLite; "server" -> canServer(err)
                 "engine" -> !triedFallback
                 else -> true
             }
@@ -356,7 +379,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         recCooldownUntil = now + 8000L; lastActionAt = now
         freezeSec = 0; stallTimes.clear(); okSince = 0L
         val pos = curPos()
-        val what = when (problem) { "freeze" -> "Immagine ferma"; "stall" -> "Caricamento continuo"; "long" -> "Caricamento lungo"; "fill" -> "Linea insufficiente"; else -> "Errore" }
+        val what = when (problem) { "freeze" -> "Immagine ferma"; "stall" -> "Caricamento continuo"; "long" -> "Caricamento lungo"; "fill" -> "Linea insufficiente"; "drain" -> "Buffer in calo"; else -> "Errore" }
         when (step) {
             "reload", "retry", "retry2", "retry3" -> {
                 newEvt(problem, "ricaricato", err)
@@ -393,9 +416,16 @@ class PlayerActivity : ComponentActivity(), EngineListener {
                 PlayStats.recovery = "$what → formato alternativo"
                 startUrl(item.alt, pos)
             }
+            "server" -> {
+                val (old, _) = Portals.next(this, portal ?: return false) ?: return false
+                newEvt(problem, "server di riserva", err, old)
+                PlayStats.recovery = "$what → server di riserva"
+                toast("Passo a un altro server…")
+                startUrl(currentUrl, pos)
+            }
             "lite" -> {
                 val v = item.lite[varIdx + 1]
-                newEvt(problem, "qualità ridotta" + (if (v.second.isNotEmpty()) " (${v.second})" else ""), err)
+                newEvt(if (problem == "drain") "stall" else problem, if (problem == "drain") "qualità ridotta in anticipo" else "qualità ridotta" + (if (v.second.isNotEmpty()) " (${v.second})" else ""), err)
                 varIdx++
                 PlayStats.recovery = "$what → qualità ridotta"
                 PlayStats.reduced = v.second.ifEmpty { "ridotta" }
@@ -419,7 +449,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
 
     private fun watchdog() {
         try { introTick() } catch (_: Throwable) {}
-        if (zapPending || stopped) return
+        if (zapPending || stopped) { drainSamples.clear(); return }
         val now = System.currentTimeMillis()
         val e = engine
         while (stallTimes.isNotEmpty() && now - stallTimes.first > 90_000L) stallTimes.removeFirst()
@@ -440,6 +470,10 @@ class PlayerActivity : ComponentActivity(), EngineListener {
                 }
             }
         }
+        if (e is ExoEngine && readyOnce && isLive && e.isPlaying() && !isBuffering && seekTarget < 0 &&
+            now >= recCooldownUntil && now >= drainCooldownUntil) {
+            checkDrain(e, now)
+        } else drainSamples.clear()
         // immagine ferma: il tempo avanza ma non arriva nessun fotogramma nuovo (solo ExoPlayer espone i contatori).
         // Solo dopo il primo fotogramma e 8 s dall'avvio; per i video quasi fermi (radio con immagine, slide) serve che il
         // decoder stia ricevendo dati, altrimenti un fotogramma ogni tanto è normale.
@@ -487,6 +521,21 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             startUrl(item.url, curPos())
         }
     }
+
+    private fun checkDrain(e: ExoEngine, now: Long) {
+        val t = SystemClock.elapsedRealtime()
+        val ahead = (e.bufferedPos() - e.position()).coerceAtLeast(0L)
+        while (drainSamples.isNotEmpty() && t - drainSamples.first.first > 20_000L) drainSamples.removeFirst()
+        drainSamples.addLast(t to ahead)
+        val old = drainSamples.firstOrNull { t - it.first >= 10_000L }
+        if (adapt && varIdx + 1 < item.lite.size && seekTarget < 0 && now >= recCooldownUntil &&
+            ahead < e.rebufferMs().toLong() + 2_000L && old != null && old.second - ahead >= 3_000L) {
+            drainCooldownUntil = now + 60_000L
+            drainSamples.clear()
+            if (!recover("drain", "buffer in calo")) drainCooldownUntil = 0L
+        }
+    }
+
     private var resumeMs = 0L
     private var numBuf = ""
     private var subScale = 1f
@@ -523,6 +572,19 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             aspect = j.optString("aspect", "fit")
             brand = j.optString("brand", "KAIROS")
             prefs = PlayPrefs(j.optString("quality", "auto"), j.optString("buffer", "balanced"), aspect, live = kind == "live", hw = j.optString("hw", "auto"))
+            j.optJSONObject("srv")?.let { s ->
+                val alts = s.optJSONArray("alts")
+                val altHosts = if (alts == null) emptyList() else (0 until alts.length()).map { alts.optString(it) }.filter { it.isNotBlank() }
+                val id = s.optString("id")
+                val main = s.optString("main")
+                val mode = s.optString("mode", "auto").lowercase(Locale.ROOT).takeIf { it in listOf("auto", "main", "alt") } ?: "auto"
+                if (id.isNotBlank() && main.isNotBlank() && altHosts.isNotEmpty()) {
+                    s.optJSONArray("bad")?.let { bad ->
+                        for (i in 0 until bad.length()) Portals.markBad(this, bad.optString(i), Portals.BAD_MS)
+                    }
+                    portal = PortalServer(id, main, altHosts, mode)
+                }
+            }
             subScale = when (j.optString("sub", "medium")) { "small" -> 0.8f; "large" -> 1.3f; "xl" -> 1.6f; else -> 1f }
             showRes = j.optBoolean("res", true)
             autoNext = j.optBoolean("autoNext", false)
@@ -1036,18 +1098,20 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         // la classe effettiva si ricalcola a ogni avvio: se è cambiata, il lettore (buffer immutabili) si ricrea prima di partire
         val e0 = engine
         if (e0 is ExoEngine && e0.cls != curClass()) startEngine(engineName)
-        currentUrl = url
+        val playUrl = portal?.let { Portals.re(this, it, url) } ?: url
+        currentUrl = playUrl
         playTok++
         startAt = System.currentTimeMillis() // i primi secondi di caricamento non sono «blocchi»
         frameSeen = false; isBuffering = false; bufferingSince = 0L; stallCounted = false
         cancelCushion(); cushionN = 0
         fillT0 = 0L; fillP0 = -1L; fillLowSec = 0
-        PlayStats.lastCodecError = ""; PlayStats.ttff = 0; PlayStats.fmt = fmtOf(url)
+        drainSamples.clear()
+        PlayStats.lastCodecError = ""; PlayStats.ttff = 0; PlayStats.fmt = fmtOf(playUrl)
         PlayStats.variant = if (varIdx >= 0) (item.lite.getOrNull(varIdx)?.second ?: "").ifEmpty { "ridotta" } else "full"
         showMsg(null)
         spinner.visibility = View.VISIBLE
         (engine as? ExoEngine)?.chanKey = item.id
-        engine?.play(url, startMs)
+        engine?.play(playUrl, startMs)
     }
 
     /** cambio canale: numero e nome cambiano subito, il video parte quando smetti di premere (più veloce) */
@@ -1363,6 +1427,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         var t = maxOf(0L, base + delta)
         if (d > 0) t = minOf(t, maxOf(0L, d - 2000))
         seekTarget = t
+        drainSamples.clear()
         ui.removeCallbacks(seekCommit)
         ui.postDelayed(seekCommit, 450)
         showOsd(false)
@@ -1374,6 +1439,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         seekTarget = -1L
         if (t < 0) return
         val e = engine ?: return
+        drainSamples.clear()
         startAt = System.currentTimeMillis() // il caricamento dopo un salto non è un «blocco»
         e.seekTo(t)
         seekHold = t
