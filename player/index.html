@@ -4050,11 +4050,13 @@ function aiFindRun(f, people) {
   const gens = (f.genres || []).filter((g) => AI_GEN[g]), kids = !!f.kids || (f.genres || []).includes('bambini');
   const words = aiWords(f.words), yrs = f.years || null;
   const pp = new Set(people || []), th = new Set(aiTitles(f.titles));
+  const needP = !!(f.people && f.people.length && pp.size); // «con Stallone»: se la filmografia ha trovato titoli, solo quelli (e i titoli citati)
   const okX = (x) => !isLocked(x) && (showAdult() || !isAdult(x)) && (!kidsP || looksKids(x));
   if (type !== 'live') {
     const gC = new Map(), sc = [];
     const gtxt = (x) => { let n = gC.get(x.group); if (n === undefined) { n = aiN(x.group); gC.set(x.group, n); } return x.genre ? n + aiN(x.genre) : n; };
     for (const arr of type === 'movie' ? [S.lib.movies] : type === 'series' ? [S.lib.series] : [S.lib.movies, S.lib.series]) for (const x of arr) {
+      if (needP && !pp.has(x) && !th.has(x)) continue;
       let s = 0, hit = false;
       if (pp.has(x)) { s += 6; hit = true; }
       if (th.has(x)) { s += 8; hit = true; }

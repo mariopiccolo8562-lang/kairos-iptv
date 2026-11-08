@@ -3407,15 +3407,14 @@ function aiFindClean(o) {
   if (o.kids === true || low(o.kids) === 'true') out.kids = true;
   return Object.keys(out).length ? out : null;
 }
-/** proposte per «Cosa guardo stasera?» preparate dalla app: solo titolo, tipo, anno, genere, canale, orario e un indizio */
+/** proposte per «Cosa guardo stasera?» preparate dalla app: solo titolo, tipo, anno, genere, canale, orario e un indizio.
+    Stessa posizione dell'elenco della app (null = proposta non valida), così le scelte tornano con i suoi indici */
 function aiCands(v) {
-  const out = [];
-  for (const c of Array.isArray(v) ? v.slice(0, 24) : []) {
-    if (!c || typeof c !== 'object') continue;
-    const t = nameClean(c.t, 80); if (t.length < 2) continue;
-    out.push({ k: ['film', 'serie', 'tv', 'sport'].includes(c.k) ? c.k : 'film', t, y: parseInt(c.y, 10) || 0, g: nameClean(c.g, 50), c: nameClean(c.c, 40), h: /^\d{1,2}:\d{2}$/.test(String(c.h || '')) ? c.h : '', w: nameClean(c.w, 70) });
-  }
-  return out;
+  return (Array.isArray(v) ? v.slice(0, 24) : []).map((c) => {
+    if (!c || typeof c !== 'object') return null;
+    const t = nameClean(c.t, 80); if (t.length < 2) return null;
+    return { k: ['film', 'serie', 'tv', 'sport'].includes(c.k) ? c.k : 'film', t, y: parseInt(c.y, 10) || 0, g: nameClean(c.g, 50), c: nameClean(c.c, 40), h: /^\d{1,2}:\d{2}$/.test(String(c.h || '')) ? c.h : '', w: nameClean(c.w, 70) };
+  });
 }
 const AI_K_IT = { film: 'Film', serie: 'Serie TV', tv: 'In TV', sport: 'Sport in TV' };
 async function playerAi(req, env, ip, ctx) {
@@ -3439,10 +3438,10 @@ async function playerAi(req, env, ip, ctx) {
   let text = '', o = {}, cands = [];
   if (mode === 'tonight') {
     cands = aiCands(b.cands);
-    if (cands.length < 3) return json({ error: 'Servono almeno 3 proposte' }, 400);
+    if (cands.filter(Boolean).length < 3) return json({ error: 'Servono almeno 3 proposte' }, 400);
     const taste = aiList(b.taste, 5, 24), hm = /^\d{2}:\d{2}$/.test(String(b.hm || '')) ? b.hm : '';
     text = [`Gusti: ${taste.join(', ') || 'non noti'}`, hm ? `Ora: ${hm}` : '', b.kids === true ? 'Profilo bambini: proponi solo cose adatte ai bambini.' : '', q ? `Richiesta: ${q}` : '', 'Proposte:',
-      ...cands.map((x, i) => `${i + 1}. ${AI_K_IT[x.k]} «${x.t}»${x.y ? ` (${x.y})` : ''}${x.h ? ` alle ${x.h}` : ''}${x.c ? ` su ${x.c}` : ''}${x.g ? ` · ${x.g}` : ''}${x.w ? ` · ${x.w}` : ''}`)].filter(Boolean).join('\n');
+      ...cands.map((x, i) => (x ? `${i + 1}. ${AI_K_IT[x.k]} «${x.t}»${x.y ? ` (${x.y})` : ''}${x.h ? ` alle ${x.h}` : ''}${x.c ? ` su ${x.c}` : ''}${x.g ? ` · ${x.g}` : ''}${x.w ? ` · ${x.w}` : ''}` : ''))].filter(Boolean).join('\n');
     o = { system: AI_SYS_TONIGHT, json: true, max: 500, temp: 0.7, ms: 15000 };
   } else {
     if (q.length < 2) return json({ error: 'Scrivi una domanda' }, 400);
@@ -3472,7 +3471,7 @@ async function playerAi(req, env, ip, ctx) {
     if (mode === 'tonight') {
       const j = aiJson(answer), picks = [], seen = new Set();
       for (const p of j && Array.isArray(j.picks) ? j.picks : []) {
-        const i = parseInt(p && p.i, 10) - 1; if (!(i >= 0 && i < cands.length) || seen.has(i)) continue;
+        const i = parseInt(p && p.i, 10) - 1; if (!(i >= 0 && i < cands.length) || !cands[i] || seen.has(i)) continue;
         seen.add(i); picks.push({ i, why: nameClean(String((p && p.why) || ''), 90) }); if (picks.length >= 5) break;
       }
       return { picks };
