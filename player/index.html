@@ -611,7 +611,11 @@ img{display:block}
 /* senza animazioni, ciò che diventa visibile «animandosi» deve essere visibile da subito (altrimenti schermo nero) */
 .xlite .screen.on,.xlite .detail.on,.xlite .boot-title span,.xlite .sp-svg .lo-orb2,.xlite .sp-svg .lo-kb,.xlite .sp-svg .lo-ku,.xlite .sp-svg .lo-kl,.xlite .sp-svg .lo-sat,.xlite .sp-word,.xlite .sp-tag,.xlite .sp-floor,.xlite .sp-orbit,.xlite .sp-wave,.xlite .sp-tv,.xlite .sp-glow,.xlite .sp-scan{opacity:1!important;transform:none!important}
 .xlite .sp-svg .lo-orb{stroke-dasharray:none!important}
-.xlite .hbg img,.xlite .dhero,.xlite .aurora{display:none!important}
+.xlite .hbg img,.xlite .aurora{display:none!important}
+/* scheda del titolo nella leggerissima: titolo e pulsanti (Guarda, Trailer, La mia lista, IA) e l'immagine restano sempre;
+   via solo la copia sfocata (filtro costoso). Con la sola locandina: fondo a tinta unita e locandina a destra, senza doppioni */
+.xlite .dm .dhero .dblur{display:none!important}
+.xlite .dm .dhero.ph{background-image:none!important}
 .xlite .post img{filter:none!important}
 .lite .detail{background:rgba(0,0,0,.9)}
 .lite .detail.on{animation:fadein .25s ease forwards}
