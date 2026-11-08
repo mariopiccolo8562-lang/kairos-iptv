@@ -677,10 +677,10 @@ body.agent .foot{display:none}
       } else {
         const skipped = state.result?.skipped || [];
         $('#mB').innerHTML = `${head}<div class="ag-bulk-wrap"><div class="ag-bulk-summary"><b>${state.error ? 'Non è stato possibile applicare le modifiche' : `Aggiornati ${state.result?.updated || 0} · saltati ${skipped.length}`}</b>${state.error ? `<p>${esc(state.error)}</p>` : ''}${skipped.length ? `<ul>${skipped.map((x) => `<li>${esc(x.username || `Agente ${x.id}`)}: ${esc(x.reason)}</li>`).join('')}</ul>` : ''}</div></div>`;
-        $('#mYes').textContent = 'Chiudi'; $('#mYes').disabled = false; $('#mNo').textContent = 'Chiudi';
+        $('#mYes').textContent = 'Chiudi'; $('#mYes').disabled = false; $('#mNo').style.display = 'none';
       }
     };
-    const promise = ask('👥 Applica a più agenti', '', 'Avanti'), closeYes = $('#mYes').onclick, closeNo = $('#mNo').onclick;
+    const noText = $('#mNo').textContent, promise = ask('👥 Applica a più agenti', '', 'Avanti'), resetNo = () => { $('#mNo').textContent = noText; $('#mNo').style.display = ''; }, okYes = $('#mYes').onclick, okNo = $('#mNo').onclick, closeYes = () => { resetNo(); okYes(); }, closeNo = () => { resetNo(); okNo(); };
     $('#mYes').onclick = async () => {
       if (state.step === 1) { captureChanges(); if (!hasChanges()) return; state.step = 2; render(); return; }
       if (state.step === 2) { if (!selected.size) return; state.step = 3; render(); return; }
