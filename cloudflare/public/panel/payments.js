@@ -13,6 +13,7 @@
   const daysSince = (r) => Math.max(0, Math.floor((new Date(localDay() + 'T00:00:00').getTime() - sinceMs(r)) / 864e5));
   const rowKey = (kind, panel, ref) => `${kind}|${kind === 'line' ? String(panel || '').toLowerCase() : ''}|${kind === 'line' ? String(ref || '').toLowerCase() : String(ref || '')}`;
   let cache = { at: 0, rows: [] }, pending = null;
+  let ledgerCache = { at: 0, summary: [], own: null }, ledgerPending = null;
   const byKey = () => new Map(cache.rows.map((r) => [rowKey(r.kind, r.panel, r.ref), effective(r)]));
   async function load(force = false) {
     if (!force && Date.now() - cache.at < 60e3) return cache.rows.map(effective);
@@ -58,6 +59,20 @@
   const isAgent = () => typeof D !== 'undefined' && D.role === 'agent';
   const canEdit = () => !isAgent() || !!((D.me || {}).perms || {}).payments;
   const dispatch = () => window.dispatchEvent(new CustomEvent('kxpay:update'));
+  async function loadLedger(force = false) {
+    if (!force && Date.now() - ledgerCache.at < 60e3) return ledgerCache;
+    if (ledgerPending) return ledgerPending;
+    const path = isAgent() ? '/admin/agent/agent-ledger' : '/admin/agent-ledger';
+    ledgerPending = api('GET', path).then((r) => {
+      ledgerCache = { at: Date.now(), summary: isAgent() ? [] : (r.agents || []), own: isAgent() ? r : null };
+      maybeRemind();
+      if ($('#v-payments')?.classList.contains('on')) renderPage();
+      dispatch();
+      window.dispatchEvent(new CustomEvent('kxledger:update'));
+      return ledgerCache;
+    }).finally(() => { ledgerPending = null; });
+    return ledgerPending;
+  }
   const css = document.createElement('style');
   css.textContent = `.pay-badge{display:inline-flex;align-items:center;max-width:100%;width:max-content;padding:3px 8px;border-radius:999px;font-size:11px;line-height:1.35;font-weight:700;white-space:normal}.pay-badge.due{background:rgba(239,68,68,.16);border:1px solid rgba(239,68,68,.42);color:#ff9a9a}.pay-badge.paid{background:rgba(34,197,94,.13);border:1px solid rgba(34,197,94,.32);color:#79e6a0}.pay-panel-tile{display:inline-flex;align-items:center;padding:9px 13px;border-radius:11px;border:1px solid rgba(239,68,68,.45);background:rgba(239,68,68,.14);color:#ffaaaa;font-weight:700;cursor:pointer;white-space:nowrap}.kxpay-veil{position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,.68);display:grid;place-items:center;padding:14px}.kxpay-box{width:min(500px,100%);max-height:90vh;overflow:auto;background:#151923;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 20px 80px #0009}.kxpay-box h3{margin:0 0 6px}.kxpay-tabs{display:flex;gap:8px;margin:16px 0}.kxpay-tabs button{flex:1}.kxpay-tabs .on{background:var(--pri,#367bf5);color:#fff;border-color:transparent}.kxpay-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.kxpay-grid label{display:grid;gap:5px;font-size:12px;color:var(--mut)}.kxpay-full{grid-column:1/-1}.kxpay-box textarea{resize:vertical}.kxpay-actions{display:flex;justify-content:space-between;gap:8px;margin-top:18px}.kxpay-actions>span{display:flex;gap:8px}.kxpay-box .ck{margin-top:12px}.kxpay-auto{display:grid;gap:8px;margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:11px}.pay-edit{white-space:nowrap}@media(max-width:500px){.kxpay-grid{grid-template-columns:1fr}.kxpay-full{grid-column:auto}}`;
   document.head.appendChild(css);
@@ -136,6 +151,58 @@
   const rows = () => cache.rows.map(effective);
   const dueRows = () => rows().filter((r) => r.status === 'due');
   const agentId = () => isAgent() ? +((D.me || {}).id) || 0 : 0;
+  const ledgerNumber = (n) => (+n || 0).toLocaleString('it-IT', { maximumFractionDigits: 2 });
+  const ledgerCreditTotal = (balance) => Object.values(balance && balance.credits || {}).reduce((n, x) => n + Math.max(0, +x || 0), 0);
+  const ledgerHasDebt = (balance) => !!balance && (+balance.eur > 0 || Object.values(balance.credits || {}).some((x) => +x > 0));
+  const ledgerPositiveText = (balance) => {
+    const parts = [];
+    if (+balance?.eur > 0) parts.push(`${ledgerNumber(balance.eur)} €`);
+    const panels = { wolf: 'WOLF', armada: 'Armada', storm: 'Storm', atx: 'Atlantix', ro: 'Realott', slt: 'SLT' };
+    for (const [panel, value] of Object.entries(balance?.credits || {})) if (+value > 0) parts.push(`${ledgerNumber(value)} crediti${panel ? ' ' + (panels[panel] || panel) : ''}`);
+    return parts.join(' e ');
+  };
+  const ledgerPanelText = (p) => ({ '': 'Generico', wolf: 'WOLF', armada: 'Armada', storm: 'Storm', atx: 'Atlantix', ro: 'Realott', slt: 'SLT' }[p || ''] || p);
+  function ledgerHistory(entries, deletable = false) {
+    if (!entries || !entries.length) return '<div class="mut" style="padding:12px 4px">Nessun movimento registrato.</div>';
+    return `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Data</th><th>Tipo</th><th>€</th><th>Crediti</th><th>Nota</th>${deletable ? '<th></th>' : ''}</tr></thead><tbody>${entries.map((e) => `<tr><td>${new Date(+e.t).toLocaleDateString('it-IT')}</td><td style="color:${e.type === 'debt' ? '#ff8f8f' : '#6ee3a6'}">${e.type === 'debt' ? 'Debito' : 'Pagamento'}</td><td>${+e.eur ? ledgerNumber(e.eur) : '—'}</td><td>${+e.credits ? `${ledgerNumber(e.credits)} cr${e.panel ? ' · ' + escP(ledgerPanelText(e.panel)) : ''}` : '—'}</td><td>${escP(e.note || '')}</td>${deletable ? `<td><button class="btn sm danger" data-ledger-delete="${e.id}" title="Elimina movimento">🗑</button></td>` : ''}</tr>`).join('')}</tbody></table></div>`;
+  }
+  async function refreshLedger() {
+    await loadLedger(true);
+    if ($('#v-payments')?.classList.contains('on')) renderPage();
+    window.dispatchEvent(new CustomEvent('kxledger:update'));
+  }
+  function promptLedgerEntry(agent, type) {
+    const title = type === 'debt' ? 'Aggiungi debito' : 'Registra pagamento';
+    ask(title, `<label class="lbl">Euro</label><input class="inp" id="payLedgerEur" type="number" min="0" max="100000" step="0.01"><label class="lbl">Crediti</label><div style="display:flex;gap:8px"><input class="inp" id="payLedgerCredits" type="number" min="0" max="1000000" step="0.01" style="flex:1"><select class="inp" id="payLedgerPanel"><option value="">Generico</option><option value="wolf">WOLF</option><option value="armada">Armada</option><option value="storm">Storm</option><option value="atx">Atlantix</option><option value="ro">Realott</option><option value="slt">SLT</option></select></div><label class="lbl">Nota</label><input class="inp" id="payLedgerNote" maxlength="200">`, 'Salva').then(async (ok) => {
+      if (!ok) return;
+      const eur = Number($('#payLedgerEur').value), credits = Number($('#payLedgerCredits').value), note = $('#payLedgerNote').value.trim();
+      if (!Number.isFinite(eur) || eur < 0 || eur > 100000 || !Number.isFinite(credits) || credits < 0 || credits > 1000000 || !(eur > 0 || credits > 0) || note.length > 200) return toast('Controlla importi e nota', 1);
+      try {
+        await api('POST', '/admin/agent-ledger', { agent: agent.id, type, eur, credits, panel: $('#payLedgerPanel').value, note });
+        await refreshLedger(); toast(type === 'debt' ? 'Debito aggiunto' : 'Pagamento registrato');
+      } catch (e) { toast(e.message, 1); }
+    });
+  }
+  async function openAgentLedger(agent) {
+    let data;
+    try { data = await api('GET', `/admin/agent-ledger?agent=${agent.id}`); } catch (e) { toast(e.message, 1); return; }
+    const pr = ask(`Storico · ${agent.username}`, ledgerHistory(data.entries, true), 'Chiudi');
+    const bind = () => $$('#mB [data-ledger-delete]').forEach((button) => {
+      button.onclick = async () => {
+        const entry = data.entries.find((x) => String(x.id) === button.dataset.ledgerDelete);
+        if (!entry || !window.confirm('Eliminare questo movimento?')) return;
+        try {
+          await api('DELETE', `/admin/agent-ledger/${entry.id}`);
+          data = await api('GET', `/admin/agent-ledger?agent=${agent.id}`);
+          $('#mB').innerHTML = ledgerHistory(data.entries, true);
+          bind();
+          await refreshLedger();
+        } catch (e) { toast(e.message, 1); }
+      };
+    });
+    bind();
+    await pr;
+  }
   function renderMenuCount() {
     const b = $('#payCount'), n = dueRows().length; if (!b) return;
     b.textContent = n > 99 ? '99+' : String(n);
@@ -155,14 +222,15 @@
   function maybeRemind() {
     const list = dueRows().filter((r) => r.remind !== 0);
     const failures = rows().filter((r) => String(r.last_result || '').startsWith('Errore') && Date.now() - (+r.updated || 0) < 48 * 3600e3);
-    if (!list.length && !failures.length) { $('#kxPayBanner')?.remove(); return; }
+    const balance = isAgent() && ledgerCache.own && ledgerCache.own.balance;
+    const debt = ledgerHasDebt(balance);
+    if (!list.length && !failures.length && !debt) { $('#kxPayBanner')?.remove(); return; }
     const k = `kx-pay-remind-${isAgent() ? 'agent-' + agentId() : 'owner'}`;
     let seen = 0; try { seen = +localStorage.getItem(k) || 0; } catch {}
     if (Date.now() - seen < 48 * 3600e3) return;
-    const debt = isAgent() ? list.find((r) => r.kind === 'agent' && r.ref === String(agentId())) : null;
     const total = list.reduce((a, r) => a + (+r.amount || 0), 0);
     const paymentText = debt
-      ? `Devi pagare ${amountText(debt.amount) || '—'} al tuo fornitore${debt.note ? ' · ' + debt.note : ''}`
+      ? `Devi pagare ${ledgerPositiveText(balance)} al tuo fornitore`
       : list.length ? `💰 ${list.length} clienti devono ancora pagare (totale ${amountText(total) || '0 €'})` : '';
     const text = [paymentText, failures.length ? `${failures.length} rinnovi automatici non riusciti` : ''].filter(Boolean).join(' · ');
     let b = $('#kxPayBanner');
@@ -188,11 +256,13 @@
       return `<tr><td><b>${escP(r.label || r.ref)}</b><small style="display:block;margin-top:3px;color:var(--mut)">${escP(typeText(r))}${r.note ? ' · ' + escP(r.note) : ''}</small></td><td>${amountText(r.amount) || '—'}</td><td>${escP(dateText(r.paid_until) || '—')}</td><td>${remaining}</td><td>${editable ? `<button class="btn sm" data-edit="${key}">Modifica</button>` : ''}</td></tr>`;
     }).join('')}</tbody></table></div>`;
   }
-  function agentRows(list) {
-    const agents = (D.agents || []).filter((a) => a.active !== 0);
-    return `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Agente</th><th>Importo</th><th>Nota</th><th>Stato</th><th></th></tr></thead><tbody>${agents.map((a) => {
-      const r = list.find((x) => x.ref === String(a.id)), label = escP(a.username);
-      return `<tr><td><b>${label}</b></td><td>${r ? amountText(r.amount) || '—' : '—'}</td><td>${escP(r && r.note || '')}</td><td>${r ? r.status === 'due' ? '<span class="pay-badge due">Ti deve</span>' : '<span class="pay-badge paid">Ha pagato' + (r.paid_until ? ' · fino al ' + escP(dateText(r.paid_until)) : '') + '</span>' : '—'}</td><td><button class="btn sm" data-agentpay="${a.id}">${r ? 'Gestisci' : 'Aggiungi'}</button>${r && r.status === 'due' ? ` <button class="btn sm pri" data-agentpaid="${a.id}">Ha pagato</button>` : ''}</td></tr>`;
+  function agentRows() {
+    const agents = (D.agents || []).filter((a) => a.active !== 0), summary = new Map(ledgerCache.summary.map((x) => [String(x.agentId), x]));
+    const euro = ledgerCache.summary.reduce((n, x) => n + Math.max(0, +x.eur || 0), 0);
+    const credits = ledgerCache.summary.reduce((n, x) => n + Object.values(x.credits || {}).reduce((m, v) => m + Math.max(0, +v || 0), 0), 0);
+    return `<div style="margin:8px 0 12px"><b>Ti devono: ${escP(amountText(euro) || '0 €')} · ${escP(ledgerNumber(credits))} crediti</b></div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Agente</th><th>Saldo €</th><th>Crediti</th><th>Ultimo movimento</th><th></th></tr></thead><tbody>${agents.map((a) => {
+      const s = summary.get(String(a.id)), credit = Object.entries(s?.credits || {}).filter(([, v]) => +v).map(([p, v]) => `${ledgerNumber(v)} cr${p ? ' · ' + escP(ledgerPanelText(p)) : ''}`).join('<br>') || '—';
+      return `<tr><td><b>${escP(a.username)}</b></td><td>${s ? `${ledgerNumber(s.eur)} €` : '0 €'}</td><td>${credit}</td><td>${s?.last ? new Date(+s.last).toLocaleDateString('it-IT') : '—'}</td><td style="white-space:nowrap"><button class="btn sm" data-agent-ledger-add="${a.id}">➕ Aggiungi debito</button> <button class="btn sm pri" data-agent-ledger-pay="${a.id}">✅ Registra pagamento</button> <button class="btn sm" data-agent-ledger-history="${a.id}">Storico</button></td></tr>`;
     }).join('')}</tbody></table></div>`;
   }
   function autoTable(list) {
@@ -209,34 +279,22 @@
     const all = rows(), clients = all.filter((r) => r.kind !== 'agent');
     const due = clients.filter((r) => r.status === 'due'), paid = clients.filter((r) => r.status === 'paid');
     const master = !isAgent(), total = due.reduce((a, r) => a + (+r.amount || 0), 0);
-    const agentDebts = all.filter((r) => r.kind === 'agent');
-    const agentDue = agentDebts.filter((r) => r.status === 'due');
-    const agentTotal = agentDue.reduce((a, r) => a + (+r.amount || 0), 0);
     const autoRows = clients.filter((r) => +r.auto_months > 0 || !!r.auto_opt);
-    const ownDebt = master ? null : agentDebts.find((r) => r.ref === String(agentId()) && r.status === 'due');
-    const debtBox = ownDebt ? `<div style="margin-bottom:14px;padding:12px 14px;border-radius:12px;background:rgba(220,38,38,.16);border:1px solid rgba(239,68,68,.45);color:#ffd2d2"><b>Devi pagare ${escP(amountText(ownDebt.amount) || '—')} al tuo fornitore</b>${ownDebt.note ? `<small style="display:block;margin-top:4px">${escP(ownDebt.note)}</small>` : ''}</div>` : '';
+    const ownBalance = !master && ledgerCache.own && ledgerCache.own.balance;
+    const debtBox = ledgerHasDebt(ownBalance) ? `<div style="margin-bottom:14px;padding:12px 14px;border-radius:12px;background:rgba(220,38,38,.16);border:1px solid rgba(239,68,68,.45);color:#ffd2d2"><b>Devi pagare ${escP(ledgerPositiveText(ownBalance))} al tuo fornitore</b> <button class="btn sm" id="payLedgerHistory">Storico</button></div>` : '';
     if (pageTab === 'agents' && !master) pageTab = 'due';
-    V.innerHTML = `${debtBox}<div class="card glass"><div class="hd"><h3>💰 Pagamenti<small>Così sai sempre chi deve pagare e chi ha già pagato</small></h3>${pageTab === 'agents' ? '<button class="btn pri" id="payAddAgent">+ Aggiungi debito</button>' : ''}</div>
-      <div class="filters"><button class="fchip ${pageTab === 'due' ? 'on' : ''}" data-pt="due">Da pagare <span>${due.length}</span></button><button class="fchip ${pageTab === 'paid' ? 'on' : ''}" data-pt="paid">Pagati <span>${paid.length}</span></button>${master ? `<button class="fchip ${pageTab === 'agents' ? 'on' : ''}" data-pt="agents">Agenti <span>${all.filter((r) => r.kind === 'agent').length}</span></button>` : ''}<button class="fchip ${pageTab === 'auto' ? 'on' : ''}" data-pt="auto">🔁 Rinnovi automatici <span>${autoRows.length}</span></button></div>
-      ${pageTab === 'due' ? `<div style="margin:8px 0 12px"><b>Totale da riscuotere: ${amountText(total) || '0 €'}</b></div>${table(due, true)}` : pageTab === 'paid' ? table(paid, false) : pageTab === 'auto' ? autoTable(autoRows) : `<div style="margin:8px 0 12px"><b>Gli agenti ti devono: ${amountText(agentTotal) || '0 €'}</b></div>${agentRows(agentDebts)}`}</div>`;
+    V.innerHTML = `${debtBox}<div class="card glass"><div class="hd"><h3>💰 Pagamenti<small>Così sai sempre chi deve pagare e chi ha già pagato</small></h3></div>
+      <div class="filters"><button class="fchip ${pageTab === 'due' ? 'on' : ''}" data-pt="due">Da pagare <span>${due.length}</span></button><button class="fchip ${pageTab === 'paid' ? 'on' : ''}" data-pt="paid">Pagati <span>${paid.length}</span></button>${master ? `<button class="fchip ${pageTab === 'agents' ? 'on' : ''}" data-pt="agents">Agenti <span>${ledgerCache.summary.length}</span></button>` : `<button class="fchip ${pageTab === 'ledger' ? 'on' : ''}" data-pt="ledger">Storico <span>${ledgerCache.own?.entries?.length || 0}</span></button>`}<button class="fchip ${pageTab === 'auto' ? 'on' : ''}" data-pt="auto">🔁 Rinnovi automatici <span>${autoRows.length}</span></button></div>
+      ${pageTab === 'due' ? `<div style="margin:8px 0 12px"><b>Totale da riscuotere: ${amountText(total) || '0 €'}</b></div>${table(due, true)}` : pageTab === 'paid' ? table(paid, false) : pageTab === 'auto' ? autoTable(autoRows) : master ? agentRows() : ledgerHistory(ledgerCache.own?.entries || [])}</div>`;
     $$('[data-pt]', V).forEach((b) => { b.onclick = () => { pageTab = b.dataset.pt; renderPage(); }; });
     $$('[data-paid]', V).forEach((b) => { b.onclick = () => { const r = rowFromKey(b.dataset.paid); if (r) open(r.kind, r.panel, r.ref, r.label, r.owner_id, 'paid'); }; });
     $$('[data-edit]', V).forEach((b) => { b.onclick = () => { const r = rowFromKey(b.dataset.edit); if (r) open(r.kind, r.panel, r.ref, r.label, r.owner_id); }; });
     $$('[data-auto-edit]', V).forEach((b) => { b.onclick = () => { const r = rowFromKey(b.dataset.autoEdit); if (r) open(r.kind, r.panel, r.ref, r.label, r.owner_id, r.status, r.auto_line); }; });
     $$('[data-remind]', V).forEach((b) => { b.onclick = async () => { const r = rowFromKey(b.dataset.remind); if (!r) return; try { await api('PUT', '/admin/payments', { kind: r.kind, panel: r.panel, ref: r.ref, label: r.label, ownerId: r.owner_id, status: r.status, months: r.months, amount: r.amount, note: r.note, remind: false }); cache.at = 0; await load(true); toast('Promemoria disattivato'); } catch (e) { toast(e.message, 1); } }; });
-    $$('[data-agentpay]', V).forEach((b) => { b.onclick = () => { const id = b.dataset.agentpay, a = (D.agents || []).find((x) => String(x.id) === id); if (a) open('agent', '', id, a.username, 0); }; });
-    $$('[data-agentpaid]', V).forEach((b) => { b.onclick = () => { const id = b.dataset.agentpaid, a = (D.agents || []).find((x) => String(x.id) === id); if (a) open('agent', '', id, a.username, 0, 'paid'); }; });
-    $('#payAddAgent') && ($('#payAddAgent').onclick = addAgentDebt);
-  }
-  function addAgentDebt() {
-    const agents = (D.agents || []).filter((a) => a.active !== 0);
-    if (!agents.length) return toast('Non ci sono agenti da selezionare', 1);
-    ask('Aggiungi debito agente', `<label class="lbl">Agente</label><select class="inp" id="kpAg">${agents.map((a) => `<option value="${a.id}">${escP(a.username)}</option>`).join('')}</select><label class="lbl">Importo €</label><input class="inp" type="number" id="kpAgAmount" min="0" max="100000" step="0.01"><label class="lbl">Nota</label><input class="inp" id="kpAgNote" maxlength="200" placeholder="es. Pagamento fornitore">`, 'Salva').then(async (ok) => {
-      if (!ok) return;
-      const id = $('#kpAg').value, a = agents.find((x) => String(x.id) === id), amount = Number($('#kpAgAmount').value), note = $('#kpAgNote').value.trim();
-      if (!a || !Number.isFinite(amount) || amount < 0 || amount > 100000 || note.length > 200) return toast('Controlla agente, importo e nota', 1);
-      try { await saveDue('agent', '', id, a.username, 0, 0, amount, note); pageTab = 'agents'; renderPage(); toast('Debito agente salvato'); } catch (e) { toast(e.message, 1); }
-    });
+    $$('[data-agent-ledger-add]', V).forEach((b) => { b.onclick = () => { const agent = (D.agents || []).find((x) => String(x.id) === b.dataset.agentLedgerAdd); if (agent) promptLedgerEntry(agent, 'debt'); }; });
+    $$('[data-agent-ledger-pay]', V).forEach((b) => { b.onclick = () => { const agent = (D.agents || []).find((x) => String(x.id) === b.dataset.agentLedgerPay); if (agent) promptLedgerEntry(agent, 'pay'); }; });
+    $$('[data-agent-ledger-history]', V).forEach((b) => { b.onclick = () => { const agent = (D.agents || []).find((x) => String(x.id) === b.dataset.agentLedgerHistory); if (agent) openAgentLedger(agent); }; });
+    $('#payLedgerHistory') && ($('#payLedgerHistory').onclick = () => { pageTab = 'ledger'; renderPage(); });
   }
   function saveDue(kind, panel, ref, label, ownerId, months = 1, amount = null, note = '') {
     return api('PUT', '/admin/payments', { kind, panel, ref, label, ownerId, status: 'due', months, amount, note, remind: true }).then(async (r) => { cache.at = 0; await load(true); return r; });
@@ -259,7 +317,7 @@
   new MutationObserver(() => { if ($('#v-payments')?.classList.contains('on')) renderPage(); }).observe($('#v-payments'), { attributes: true, attributeFilter: ['class'] });
   window.addEventListener('kxpay:update', () => { renderMenuCount(); refreshOpenBoxes(); if ($('#v-payments')?.classList.contains('on')) renderPage(); });
   Object.assign(TITLES, { payments: 'Pagamenti' });
-  window.KXPay = { load, get, rows, hasRows: () => cache.rows.length > 0, effective, badge, open, isDue, filterDue, daysSince, amountText, dateText, remainingText, canEdit, saveDue, duePrompt, readDuePrompt, panelTile, renderPage };
+  window.KXPay = { load, loadLedger, get, rows, hasRows: () => cache.rows.length > 0 || !!(ledgerCache.own && ledgerCache.own.entries && ledgerCache.own.entries.length), effective, badge, open, isDue, filterDue, daysSince, amountText, dateText, remainingText, canEdit, saveDue, duePrompt, readDuePrompt, panelTile, renderPage };
   document.addEventListener('click', (e) => {
     const del = e.target.closest('[data-kxpay-delete]');
     if (del) {
