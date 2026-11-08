@@ -1288,7 +1288,7 @@ async function agentArmada(req, env, url, path, who, ip, ctx, X, pv = 'armada') 
     Ogni chiamata restituisce oggetti nuovi (JSON riletto), quindi chi li modifica non tocca gli altri */
 const cfgRows = (env) => reqMemo(env, 'cfg', async () => {
   const o = {};
-  for (const r of ((await env.DB.prepare("SELECT k, v FROM settings WHERE k IN ('app', 'dnsl', 'dnsSat')").all()).results) || []) o[r.k] = r.v;
+  for (const r of ((await env.DB.prepare("SELECT k, v FROM settings WHERE k IN ('app', 'dnsl', 'dnsSat', 'chDead')").all()).results) || []) o[r.k] = r.v;
   return o;
 });
 const cfgDirty = (env) => memoDrop(env, 'cfg');
@@ -2383,7 +2383,7 @@ function dayIT(t = now()) {
   catch { return new Date(t).toISOString().slice(0, 10); }
 }
 const FG_MS = 3 * 60e3;          // app dichiarata in primo piano: per 3 minuti i battiti di sfondo di un'altra app non contano
-const PRESENCE_COLS = ['fg_app', 'fg_t', 't', 'hb_t', 'ip', 'ip2', 'ip2_t', 'country', 'city', 'home_country', 'ver', 'ui', 'model', 'state', 'title', 'ch', 'ch_id', 'grp', 'pl', 'prof', 'screen', 'net', 'rssi', 'speed_dl', 'speed_ul', 'speed_ping', 'speed_jit', 'speed_t', 'res', 'fps', 'bitrate', 'buffers', 'dropped', 'engine', 'vpn', 'codec', 'dec', 'stalls_h', 'rec', 'reduced', 'app_cfg', 'rcv', 'bw', 'line', 'dev_class', 'fill', 'ttff', 'stall_ms', 'var', 'fmt'];
+const PRESENCE_COLS = ['fg_app', 'fg_t', 't', 'hb_t', 'ip', 'ip2', 'ip2_t', 'country', 'city', 'home_country', 'ver', 'ui', 'model', 'state', 'title', 'ch', 'ch_id', 'grp', 'pl', 'prof', 'screen', 'net', 'rssi', 'speed_dl', 'speed_ul', 'speed_ping', 'speed_jit', 'speed_t', 'res', 'fps', 'bitrate', 'buffers', 'dropped', 'engine', 'vpn', 'codec', 'dec', 'stalls_h', 'rec', 'reduced', 'app_cfg', 'rcv', 'bw', 'line', 'dev_class', 'fill', 'ttff', 'stall_ms', 'var', 'fmt', 'chk'];
 /** scrive/aggiorna la riga di presenza con i campi indicati (gli altri restano) */
 async function upsertPresence(env, id, fields) {
   const cols = Object.keys(fields).filter((k) => PRESENCE_COLS.includes(k));
@@ -2431,16 +2431,21 @@ async function playerErrors(req, env, ip, ctx) {
   if (await throttled(env, 'er:' + d.id, 300, 3600e3, items.length)) return json({ ok: true, saved: 0, limited: true });
   const t = now(), model = str(b.model, 80) || d.model || '', ver = str(b.ver, 20);
   const stmts = [];
+  const deadNew = new Set();
   for (const x of items) {
     if (!x || typeof x !== 'object') continue;
     const problem = ERR_PROBLEMS.includes(x.problem) ? x.problem : 'error';
     const outcome = ERR_OUTCOMES.includes(x.outcome) ? x.outcome : '';
     // l'orologio del dispositivo può sbagliare: si usa quello dell'app solo se plausibile (ultime 24 h)
     const at = Number.isFinite(+x.t) && +x.t > t - 86400e3 && +x.t <= t + 60e3 ? Math.round(+x.t) : t;
-    stmts.push(env.DB.prepare('INSERT INTO app_errors (t, device_id, problem, action, outcome, err, title, item_id, kind, engine, codec, dec, res, variant, model, ver) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(at, d.id, problem, nameClean(x.action, 60), outcome, str(x.err, 120), nameClean(x.title, 120), str(x.id, 60), x.k === 'live' ? 'live' : x.k ? 'vod' : '', str(x.engine, 12), str(x.codec, 16), x.dec === 'sw' ? 'sw' : x.dec === 'hw' ? 'hw' : '', str(x.res, 12), str(x.var, 12), model, ver));
+    const ck = x.k === 'live' ? ckClean(x.ck) : ''; // canale (server|flusso): per i «Canali non funzionanti»
+    if (ck && outcome === 'non risolto') deadNew.add(ck);
+    stmts.push(env.DB.prepare('INSERT INTO app_errors (t, device_id, problem, action, outcome, err, title, item_id, kind, engine, codec, dec, res, variant, model, ver, ck) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(at, d.id, problem, nameClean(x.action, 60), outcome, str(x.err, 120), nameClean(x.title, 120), str(x.id, 60), x.k === 'live' ? 'live' : x.k ? 'vod' : '', str(x.engine, 12), str(x.codec, 16), x.dec === 'sw' ? 'sw' : x.dec === 'hw' ? 'hw' : '', str(x.res, 12), str(x.var, 12), model, ver, ck));
   }
   if (stmts.length) await env.DB.batch(stmts);
+  // canali che non funzionano per nessuno: ricalcolo al più ogni 3 minuti, subito se il canale è nuovo o finora l'aveva un cliente solo
+  if (deadNew.size) ctx.waitUntil((async () => { const o = await deadOf(env); await deadRefresh(env, [...deadNew].some((k) => !o.d[k] && !((o.c[k] || [])[1] >= 2)) ? 0 : 3 * 60e3); })().catch(() => {}));
   const abandoned = items.filter((x) => x && x.action === 'server di riserva' && typeof x.srv === 'string').map((x) => {
     try { return hostKey(cleanHost(x.srv)); } catch { return ''; }
   }).filter(Boolean);
@@ -2495,6 +2500,99 @@ async function adminErrors(req, env, path, url, who, ip) {
   }
   return null;
 }
+/* ====================================================================== */
+/* Kairos Pro «intelligente» (autopilota)                                  */
+/*  - chk: esito degli auto-controlli silenziosi dell'app, nel battito (campo piccolo, solo voci e valori noti) */
+/*  - canali non funzionanti: lo stesso canale (server della lista + numero del flusso) con errori «non risolti» */
+/*    su almeno 2 clienti, da almeno 10 minuti, e nessuna visione riuscita dopo l'ultimo errore. L'app lo mette  */
+/*    in fondo con «non disponibile»; torna da solo appena qualcuno lo vede di nuovo (o dopo 12 ore senza errori) */
+/* ====================================================================== */
+const CHK_ENUM = { srv: ['ok', 'down', 'alt', 'auth'], acc: ['ok', 'exp', 'full', 'off'], epg: ['ok', 'old', 'fix', 'none', 'err'], dsk: ['ok', 'low', 'fix'] };
+/** campo «chk» del battito → JSON pulito (senza l'istante), undefined se assente o vuoto */
+function chkClean(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const o = {};
+  for (const [k, vals] of Object.entries(CHK_ENUM)) if (vals.includes(v[k])) o[k] = v[k];
+  const int = (k, lo, hi) => { if (typeof v[k] === 'number' && Number.isFinite(v[k])) o[k] = Math.round(num(v[k], lo, hi)); };
+  int('exp', -3650, 36500); int('clk', -1e6, 1e6); int('mb', 0, 1e8); int('boot', 0, 6e5); int('slow', 0, 2);
+  for (const [k, re, max] of [['con', /^\d{1,4}\/\d{1,4}$/, 9], ['eng', /^[a-z0-9:,]+$/, 40], ['fix', /^[a-z,]+$/, 40], ['cap', /^[a-z0-9,]+$/, 40]]) { const x = str(v[k], max); if (x && re.test(x)) o[k] = x; }
+  return Object.keys(o).length ? JSON.stringify(o).slice(0, 380) : undefined;
+}
+const chkCore = (s) => String(s || '').replace(/,?"at":\d+\}$/, '}').replace(/^\{\}$/, '');
+const chkParse = (s) => { try { const o = s ? JSON.parse(s) : null; return o && typeof o === 'object' && !Array.isArray(o) ? o : null; } catch { return null; } };
+const DEAD_SPAN_MS = 10 * 60e3, DEAD_WINDOW_MS = 12 * 3600e3, DEAD_MAX = 300;
+/** canale «server|flusso»: host[:porta] della lista e numero del flusso (uguale per tutti i clienti dello stesso server) */
+const CK_RE = /^[a-z0-9.-]{1,200}(:\d{1,5})?\|\d{1,12}$/;
+const ckClean = (v) => { const x = str(v, 220).toLowerCase(); return CK_RE.test(x) ? x : ''; };
+const capMap = (o, n) => Object.fromEntries(Object.entries(o).slice(0, n));
+async function deadOf(env) {
+  let o = {}; try { o = JSON.parse((await cfgRows(env)).chDead || '{}'); } catch {}
+  const ob = (x) => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
+  o = ob(o);
+  return { at: +o.at || 0, d: ob(o.d), c: ob(o.c), ok: ob(o.ok) };
+}
+async function deadSave(env, o) {
+  await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('chDead', JSON.stringify(o)).run();
+  cfgDirty(env);
+}
+/** ricalcolo dagli errori delle ultime 12 ore (dalle app al più ogni 3 minuti, dal pannello ogni 30 secondi). Non contano
+    gli errori del decoder (sono del dispositivo) né i clienti che l'app vede con la linea scaduta, piena, bloccata o
+    rifiutata (lì non va niente) */
+async function deadRefresh(env, maxAge = 3 * 60e3) {
+  const t = now(), o = await deadOf(env);
+  if (t - o.at < maxAge) return o;
+  const rows = ((await env.DB.prepare(`SELECT e.ck AS ck, MAX(e.title) AS name, COUNT(*) AS n, COUNT(DISTINCT e.device_id) AS devs, MIN(e.t) AS t0, MAX(e.t) AS t1
+    FROM app_errors e LEFT JOIN presence p ON p.device_id = e.device_id
+    WHERE e.t > ? AND e.ck != '' AND e.kind = 'live' AND e.problem = 'error' AND e.outcome = 'non risolto'
+      AND e.err NOT LIKE '%DECOD%' AND e.err NOT LIKE '%CODEC%' AND e.err NOT LIKE 'AUDIO%'
+      AND (CASE WHEN p.chk IS NULL OR p.chk = '' OR NOT json_valid(p.chk) THEN 1
+                WHEN COALESCE(json_extract(p.chk, '$.acc'), 'ok') = 'ok' AND COALESCE(json_extract(p.chk, '$.srv'), 'ok') IN ('ok', 'alt') THEN 1 ELSE 0 END) = 1
+    GROUP BY e.ck ORDER BY t1 DESC LIMIT 600`).bind(t - DEAD_WINDOW_MS).all().catch(() => ({ results: [] }))).results) || [];
+  const d = {}, c = {};
+  for (const r of rows) {
+    const ck = String(r.ck || ''); if (!ck) continue;
+    if ((+o.ok[ck] || 0) > +r.t1) continue; // visto bene dopo l'ultimo errore: funziona
+    c[ck] = [+r.t1, +r.devs]; // con errori recenti: una visione riuscita va annotata (vedi deadOk); quanti clienti finora
+    if (+r.devs >= 2 && +r.t1 - +r.t0 >= DEAD_SPAN_MS) d[ck] = { n: nameClean(r.name, 80), devs: +r.devs, f: +r.n, t0: +r.t0, t1: +r.t1, since: (o.d[ck] && +o.d[ck].since) || t };
+  }
+  const ok = {}; for (const [k, v] of Object.entries(o.ok)) if (t - +v < 864e5) ok[k] = +v; // visioni riuscite: si ricordano 24 ore
+  const out = { at: t, d: capMap(d, DEAD_MAX), c: capMap(c, DEAD_MAX), ok: capMap(ok, DEAD_MAX) };
+  await deadSave(env, out);
+  return out;
+}
+/** un cliente sta vedendo bene un canale segnalato (o con errori recenti): torna subito per tutti */
+async function deadOk(env, ck, t = now()) {
+  const o = await deadOf(env);
+  if (!o.d[ck] && !o.c[ck]) return false;
+  delete o.d[ck]; delete o.c[ck]; o.ok[ck] = t;
+  await deadSave(env, o);
+  return true;
+}
+/** canali non funzionanti dei server di questo cliente (principali e di riserva): «server|flusso», ordinati */
+function deadFor(o, pls, portalPls) {
+  const hosts = new Set();
+  pls.forEach((p, i) => { const h = hostKey(hostOf(p)); if (h) hosts.add(h); for (const a of (portalPls[i] && portalPls[i].alts) || []) hosts.add(hostKey(a)); });
+  const l = [];
+  if (hosts.size) for (const ck of Object.keys(o.d)) { if (hosts.has(ck.slice(0, ck.lastIndexOf('|')))) l.push(ck); if (l.length >= 200) break; }
+  return l.sort();
+}
+const djb = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+/** problemi trovati dagli auto-controlli dell'app (vale l'esito delle ultime 24 ore) */
+function chkIssues(p) {
+  const c = chkParse(p && p.chk), out = [];
+  if (!c || (c.at && now() - +c.at > 864e5)) return out;
+  const days = (n) => `${n} ${n === 1 ? 'giorno' : 'giorni'}`;
+  if (c.acc === 'exp') out.push({ sev: 'bad', key: 'line', what: `Linea scaduta${typeof c.exp === 'number' && c.exp < 0 ? ' da ' + days(-c.exp) : ''} (controllo automatico dell'app)`, fix: 'Rinnova la linea sul pannello IPTV: nell\'app il cliente vede solo un avviso neutro che la linea va rinnovata' });
+  else if (c.acc === 'off') out.push({ sev: 'bad', key: 'line', what: 'Linea disattivata o bloccata sul server della lista (controllo automatico dell\'app)', fix: 'Controlla lo stato della linea sul pannello IPTV' });
+  else if (c.acc === 'full') out.push({ sev: 'warn', key: 'line', what: `Connessioni della linea piene${c.con ? ' (' + c.con + ')' : ''}`, fix: 'Qualcun altro usa la stessa linea o un dispositivo è rimasto collegato: controlla le connessioni sul pannello IPTV' });
+  if (c.srv === 'auth') out.push({ sev: 'bad', key: 'line', what: 'Il server della lista rifiuta utente e password', fix: 'Linea cancellata o password cambiata: correggi la playlist nella scheda del cliente' });
+  else if (c.srv === 'down') out.push({ sev: 'bad', key: 'srv', what: 'Il dispositivo non raggiunge il server della lista', fix: 'Se succede a più clienti è il server: aggiungi un server di riserva in «Server DNS». Se è solo lui, è la sua rete o il suo operatore' });
+  else if (c.srv === 'alt') out.push({ sev: 'warn', key: 'srv', what: 'Server principale della lista non raggiungibile: l\'app usa da sola il server di riserva', fix: 'Controlla il server principale in «Server DNS»' });
+  if (typeof c.clk === 'number' && Math.abs(c.clk) >= 10) out.push({ sev: 'warn', key: 'clock', what: `Orologio del dispositivo sbagliato di ${Math.abs(c.clk) >= 120 ? Math.round(Math.abs(c.clk) / 60) + ' ore' : Math.abs(c.clk) + ' minuti'}`, fix: 'Sul dispositivo: Impostazioni › Data e ora › automatiche. Con l\'ora sbagliata la guida TV è sfasata e alcuni server rifiutano il collegamento' });
+  if (c.dsk === 'low') out.push({ sev: 'warn', key: 'disk', what: `Poco spazio libero sul dispositivo${typeof c.mb === 'number' ? ' (' + c.mb + ' MB)' : ''}`, fix: 'L\'app ha già pulito da sola le sue cache: se continua, sul dispositivo vanno tolte app o file che non si usano' });
+  if (c.epg === 'err') out.push({ sev: 'warn', key: 'epg', what: 'Guida TV vecchia: il riscaricamento automatico non è riuscito', fix: 'Controlla la guida (EPG) della linea o l\'indirizzo EPG del cliente' });
+  return out;
+}
 async function playerHeartbeat(req, env, ip, ctx) {
   let b;
   try { b = await readJSON(req, 4096); } catch (e) { return json({ error: e.message }, e.status || 400); }
@@ -2540,6 +2638,8 @@ async function playerHeartbeat(req, env, ip, ctx) {
     vpn: b.vpn === 'on' ? 'on' : b.vpn === 'off' ? 'off' : '',
     ...rcSnapshot(b), // impostazioni attuali dell'app e configurazione remota applicata
   };
+  // autopilota: esito degli auto-controlli dell'app (arriva quando cambia e ogni 15 minuti), con l'istante del server
+  { const ck0 = chkClean(b.chk); if (ck0) f.chk = ck0.slice(0, -1) + ',"at":' + t + '}'; }
   if (sp) Object.assign(f, { speed_dl: num(sp.dl, 0, 1e5), speed_ul: num(sp.ul, 0, 1e5), speed_ping: num(sp.ping, 0, 1e5), speed_jit: num(sp.jitter, 0, 1e5), speed_t: Math.round(num(sp.t, 0, 1e13)) || t });
   if (st) Object.assign(f, { res: str(st.res, 20), fps: num(st.fps, 0, 1e3), bitrate: num(st.bitrate, 0, 1e9), buffers: Math.round(num(st.buffers, 0, 1e6)), dropped: Math.round(num(st.dropped, 0, 1e9)), engine: str(st.engine, 20), codec: str(st.codec, 16), dec: st.dec === 'sw' ? 'sw' : st.dec === 'hw' ? 'hw' : '', stalls_h: Math.round(num(st.stallsH, 0, 1e4)), rec: nameClean(st.rec, 80), reduced: str(st.reduced, 12),
     // Kairos Adaptive: linea e lettore come li vede l'app (solo se l'app li manda)
@@ -2552,7 +2652,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
   // si riscrive al massimo una volta al minuto, così le scritture su D1 restano quelle di prima
   // bgOther: non si scrive (la presenza resta dell'app in primo piano); «vado in sfondo» (vis false) e cambio di app in primo piano si scrivono sempre
   const same = bgOther || (old && vis !== false && !(vis === true && old.fg_app !== app) && t - (+old.t || 0) < 55e3 && old.state === state && (old.title || '') === f.title && (old.ch_id || '') === f.ch_id
-    && (old.vpn || '') === f.vpn && (old.screen || '') === f.screen && (old.rcv || '') === (f.rcv || '') && (f.app_cfg === undefined || (old.app_cfg || '') === f.app_cfg) && (old.rec || '') === (f.rec ?? old.rec ?? '') && (old.reduced || '') === (f.reduced ?? old.reduced ?? '') && (+old.stalls_h || 0) === (f.stalls_h ?? +old.stalls_h ?? 0) && (!sp || +old.speed_t === f.speed_t) && (old.ip || '') === (f.ip ?? old.ip ?? ''));
+    && (old.vpn || '') === f.vpn && (old.screen || '') === f.screen && (old.rcv || '') === (f.rcv || '') && (f.app_cfg === undefined || (old.app_cfg || '') === f.app_cfg) && (old.rec || '') === (f.rec ?? old.rec ?? '') && (old.reduced || '') === (f.reduced ?? old.reduced ?? '') && (+old.stalls_h || 0) === (f.stalls_h ?? +old.stalls_h ?? 0) && (!sp || +old.speed_t === f.speed_t) && (old.ip || '') === (f.ip ?? old.ip ?? '') && (f.chk === undefined || chkCore(old.chk) === chkCore(f.chk)));
   // la presenza è la cosa che conta: si scrive per prima e un errore qui non fa fallire il battito
   if (!same) { try { await upsertPresence(env, d.id, f); } catch (e) { console.error('presenza non scritta', e && e.message); } }
   // il resto (statistiche) va in sottofondo: non rallenta la risposta e non può bloccarla
@@ -2575,6 +2675,15 @@ async function playerHeartbeat(req, env, ip, ctx) {
   const portalPls = await portalsOf(env, pls);
   const pv = pls.length ? (await sha256(pls.map((p, i) => p.id + '|' + hostOf(p) + '|' + (p.username || '') + '|' + JSON.stringify([(portalPls[i] && portalPls[i].mode) || 'auto', (portalPls[i] && portalPls[i].alts) || []])).join(','))).slice(0, 12) : '';
   const sat = await saturatedHosts(env, pls, portalPls, t);
+  // autopilota: un canale che non funzionava visto bene adesso torna subito per tutti; l'app riceve l'elenco dei
+  // canali non funzionanti dei suoi server solo quando cambia (dv = impronta di quello che ha già)
+  const okCk = state === 'live' && st && (num(st.fps, 0, 1e3) > 0 || str(st.res, 20)) ? ckClean(b.ck) : '';
+  const D0 = await deadOf(env);
+  if (okCk && (D0.d[okCk] || D0.c[okCk])) ctx.waitUntil(deadOk(env, okCk, t).catch(() => {}));
+  // candidati in attesa e ultimo ricalcolo vecchio (nessun errore nuovo da allora): ogni tanto un battito lo rifà
+  else if (Object.keys(D0.c).length && t - D0.at > 3 * 60e3 && Math.random() < 0.2) ctx.waitUntil(deadRefresh(env).catch(() => {}));
+  const dl = deadFor(D0, pls, portalPls).filter((x) => x !== okCk), dv = dl.length ? djb(dl.join(',')) : '';
+  const dead = str(b.dv, 16) !== dv && (dl.length || b.dv) ? { v: dv, l: dl } : null;
   // "Disconnetti" dal pannello: l'ordine resta valido 3 minuti; l'app lo conferma (kickAck) e viene azzerato
   let kick = 0;
   if (+d.kick_t > 0) {
@@ -2591,7 +2700,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
   const eff = rcEffective(S0, d, appOfVer(f.ver, d.app)), cmds = await cmdP;
   // permessi spenti; l'assistente IA anche quando lo spegne il pannello (per tutti o dal profilo dell'app): l'app si riallinea subito
   const ph = P ? permsJson({ ...permsParse(P.perms), ...(aiEngineOf(S0, P, d, appOfVer(f.ver, d.app)) === 'off' ? { ai: false } : {}) }) : '';
-  return json({ ok: true, mt, ...(upd ? { upd } : {}), rc: JSON.stringify(eff.rc), rcv: eff.rcv, ...(cmds.length ? { cmds } : {}), unseen: await unP, ts: t, vm, ph, ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', af: await acctFp(P), ...(sat.length ? { sat } : {}), ...(kick ? { kick } : {}) });
+  return json({ ok: true, mt, ...(upd ? { upd } : {}), rc: JSON.stringify(eff.rc), rcv: eff.rcv, ...(cmds.length ? { cmds } : {}), unseen: await unP, ts: t, vm, ph, ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', af: await acctFp(P), ...(sat.length ? { sat } : {}), ...(kick ? { kick } : {}), ...(dead ? { dead } : {}) });
 }
 /* ---------------- dati del cliente e salute delle app ---------------- */
 const verNum = (v) => { const m = String(v || '').match(/(\d{1,3})\.(\d{1,3})(?:\.(\d{1,3}))?/); return m ? +m[1] * 1e6 + +m[2] * 1e3 + +(m[3] || 0) : 0; };
@@ -2666,6 +2775,8 @@ const RC_CAT = [
   /* ---- TV in diretta e guida TV ---- */
   ['preview', 'Anteprima nella lista canali', 'sel', [['click', 'Al primo OK'], ['off', 'Spenta']], ['ktv', 'prem', 'lite', 'xc', 'plus'], 'Spenta: il canale parte subito a schermo intero (meno lavoro per il dispositivo)', '', 'TV in diretta e guida TV'],
   ['o.liveFmt', 'Formato TV in diretta', 'sel', [['ts', 'Veloce (TS)'], ['hls', 'HLS']], ['tv', 'plus'], 'TS è il formato consigliato; HLS solo se il fornitore lo richiede', '', 'TV in diretta e guida TV'],
+  ['mergeVar', 'Versioni dello stesso canale in una voce sola', 'sel', [['off', 'No: ogni versione ha la sua voce'], ['on', 'Sì: una voce, con la versione giusta per la linea']], KPRO, 'Con «Sì» le versioni 4K, FHD, HD e SD dello stesso canale diventano una sola voce nelle liste e nello zapping: l\'app sceglie da sola quella adatta alla linea e al dispositivo. Le versioni si riconoscono dal nome del canale: se nella lista due canali diversi hanno nomi quasi uguali potrebbero finire insieme, per questo di serie è spenta', '', 'TV in diretta e guida TV'],
+  ['o.autoRem', 'Promemoria automatici', 'sel', YN, KPRO, 'L\'app propone da sola un avviso poco prima dei programmi e delle partite che il cliente guarda spesso, con «Guarda». Il cliente può spegnerli anche dalle Impostazioni', '', 'TV in diretta e guida TV'],
   ['o.epgShift', 'Spostamento orario guida', 'sel', [[0, 'Nessuno'], [1, '+1 ora'], [2, '+2 ore'], [-1, '−1 ora'], [-2, '−2 ore']], KPRO, '', '', 'TV in diretta e guida TV'],
   ['o.showHidden', 'Mostra i canali nascosti', 'sel', [[false, 'No'], [true, 'Sì']], KPRO, 'I canali che il cliente ha nascosto tornano visibili', '', 'TV in diretta e guida TV'],
   /* ---- Ordinamento ---- */
@@ -2884,6 +2995,7 @@ function healthIssues(p, errs, latest, app) {
   if (p && p.state !== 'idle' && +p.stalls_h >= 3) out.push({ sev: 'warn', key: 'stall', what: `${p.stalls_h} blocchi nell'ultima ora`, fix: p.net === 'wifi' && +p.rssi < -70 ? 'Wi-Fi debole: avvicina il router o usa il cavo' : 'Linea o server lenti in questo momento' });
   if (p && p.net === 'wifi' && +p.rssi && +p.rssi < -75) out.push({ sev: 'warn', key: 'wifi', what: `Wi-Fi molto debole (${p.rssi} dBm)`, fix: 'Avvicina il router, usa un ripetitore o il cavo' });
   if (p && +p.speed_dl && +p.speed_dl < 8) out.push({ sev: 'warn', key: 'speed', what: `Connessione lenta (${(+p.speed_dl).toFixed(1)} Mbps)`, fix: 'Per l\'HD servono almeno 8–10 Mbps stabili' });
+  out.push(...chkIssues(p)); // auto-controlli dell'app (linea, server, orologio, spazio, guida)
   return out;
 }
 async function insightFor(env, d, s) {
@@ -2906,6 +3018,7 @@ async function insightFor(env, d, s) {
     watch: { today: byDay.get(today) || 0, week: [...byDay.values()].reduce((a, b) => a + b, 0), days: [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([day, secs]) => ({ day, secs })), top: [...byTitle.values()].sort((a, b) => b.secs - a.secs).slice(0, 15) },
     errors: { n24: errs24.length, n7: errs.length, unresolved24: errs24.filter((e) => e.outcome === 'non risolto').length, list: errs.slice(0, 12) },
     issues: healthIssues(p, errs24, latest, app),
+    chk: chkParse(p && p.chk), // auto-controlli silenziosi dell'app (autopilota)
   };
 }
 /** riepilogo per il pannello: clienti con problemi (versione vecchia, errori, blocchi), dal più grave */
@@ -2914,7 +3027,7 @@ async function healthList(env, s, ids) {
   // presenza, errori e ultime versioni: tutto insieme (prima erano tre attese una dopo l'altra)
   const L = {};
   const [rowsR, erR] = await Promise.all([
-    env.DB.prepare("SELECT p.device_id AS id, p.ver, p.state, p.stalls_h, p.net, p.rssi, p.speed_dl, p.t, d.name, d.code, d.app, d.parent, d.upd_req, d.fix_t FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ?").bind(t - 3 * 864e5).all(),
+    env.DB.prepare("SELECT p.device_id AS id, p.ver, p.state, p.stalls_h, p.net, p.rssi, p.speed_dl, p.t, p.chk, d.name, d.code, d.app, d.parent, d.upd_req, d.fix_t FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ?").bind(t - 3 * 864e5).all(),
     env.DB.prepare('SELECT device_id, t, problem, outcome, codec, dec FROM app_errors WHERE t > ?').bind(t - 864e5).all().catch(() => ({ results: [] })),
     ...['tv', 'ktv', 'prem', 'lite', 'xc', 'plus'].map(async (a) => { L[a] = await latestFor(env, s, a).catch(() => null); }),
   ]);
@@ -4962,6 +5075,22 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   const ins = path.match(/^\/insight\/([A-Za-z0-9_-]{6,20})$/);
   if (ins && m === 'GET') { const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(ins[1]).first(); if (!d) throw new HttpErr(404, 'Cliente non trovato'); return json(await insightFor(env, d, await getSettings(env))); }
   if (path === '/health' && m === 'GET') return json(await healthList(env, await getSettings(env), null));
+  /* ---------- «Canali non funzionanti» (autopilota, solo titolare: gli agenti hanno 403) ---------- */
+  if (path === '/dead-channels' && m === 'GET') {
+    const o = await deadRefresh(env, url.searchParams.get('fresh') === '1' ? 0 : 30e3), byHost = new Map((await dnsList(env)).map((x) => [hostKey(x.host), x.name || '']));
+    const list = Object.entries(o.d).map(([ck, x]) => { const i = ck.lastIndexOf('|'), h = ck.slice(0, i); return { ck, name: x.n || '', host: h, dns: byHost.get(h) || '', sid: ck.slice(i + 1), devs: +x.devs || 0, fails: +x.f || 0, first: +x.t0 || 0, last: +x.t1 || 0, since: +x.since || 0 }; }).sort((a, b) => b.last - a.last);
+    return json({ list, candidates: Object.keys(o.c).length, at: o.at, rules: { devices: 2, minutes: DEAD_SPAN_MS / 60e3, hours: DEAD_WINDOW_MS / 3600e3 } });
+  }
+  const dch = path.match(/^\/dead-channels\/([^/]{3,260})$/);
+  if (dch && m === 'DELETE') {
+    let ck = ''; try { ck = ckClean(decodeURIComponent(dch[1])); } catch {}
+    if (!ck) throw new HttpErr(400, 'Canale non valido');
+    const o = await deadOf(env), x = o.d[ck];
+    delete o.d[ck]; delete o.c[ck]; o.ok[ck] = now();
+    await deadSave(env, o);
+    await log(env, 'edit', `${who}: canale «${(x && x.n) || ck}» segnato come funzionante (torna al suo posto nelle app)`, ip);
+    return json({ ok: true });
+  }
   if (path === '/guide' && m === 'GET') { const g = guideNorm((await getSettings(env)).guide); return json({ guide: { ...g, readBy: g.noticeAt ? (await guideReads(env)).filter((x) => +x.at >= g.noticeAt).map((x) => String(x.agent_id)) : [], defTitle: GUIDE_DEF_TITLE, defText: GUIDE_DEF_TEXT } }); }
   if (path === '/guide' && m === 'PUT') {
     const b = await readJSON(req, 64 * 1024), cur = guideNorm((await getSettings(env)).guide), g = guideNorm({ ...b, noticeAt: cur.noticeAt });

@@ -34,6 +34,34 @@
   const KIND = { live: '📺', movie: '🎬', series: '🎞' };
   const PROB = { freeze: 'Immagine ferma', stall: 'Caricamento continuo', error: 'Errore del lettore', restart: 'Riavvio per memoria', crash: 'Chiusura per errore interno', killed: 'Chiusa dal sistema (memoria)', uierr: 'Errore dell\'interfaccia' };
   const SEV = { bad: '#ef4444', warn: '#f5b041' };
+  /* autopilota: esito degli auto-controlli silenziosi dell'app (Kairos Pro), con la causa probabile in italiano */
+  const CHK_L = {
+    srv: { ok: ['✓ raggiungibile', 'ok'], down: ['non raggiungibile dal dispositivo', 'bad'], alt: ['principale giù: usa il server di riserva', 'warn'], auth: ['rifiuta utente e password', 'bad'] },
+    acc: { ok: ['✓ attiva', 'ok'], exp: ['scaduta', 'bad'], full: ['connessioni piene', 'warn'], off: ['disattivata o bloccata', 'bad'] },
+    epg: { ok: ['✓ aggiornata', 'ok'], old: ['vecchia', 'warn'], fix: ['era vecchia: riscaricata da sola', 'ok'], none: ['nessuna fonte della guida', 'warn'], err: ['vecchia, riscaricamento non riuscito', 'bad'] },
+    dsk: { ok: ['✓ sufficiente', 'ok'], low: ['poco spazio', 'warn'], fix: ['era poco: cache pulite da sola', 'ok'] },
+  };
+  const CHK_C = { ok: '#22c55e', warn: '#f5b041', bad: '#ef4444' };
+  const ENG_N = { exo: 'ExoPlayer', vlc: 'VLC' };
+  const CAP_N = { hevc: 'HEVC', uhd: '4K', b10: '10 bit', fps60: '50/60 fps', nohevc: 'niente HEVC', nouhd: 'niente 4K' };
+  const FIX_N = { epg: 'guida TV riscaricata', disk: 'cache pulite', srv: 'server di riserva', cache: 'cache rovinata ricreata' };
+  function chkHtml(c) {
+    if (!c) return '';
+    const row = (k, v, sev) => `<div class="in-row"><span>${k}</span><b style="color:${CHK_C[sev] || 'inherit'}">${v}</b></div>`;
+    const L = (grp, v) => (CHK_L[grp] || {})[v];
+    const out = [];
+    if (L('srv', c.srv)) out.push(row('Server della lista', esc(L('srv', c.srv)[0]), L('srv', c.srv)[1]));
+    if (L('acc', c.acc)) out.push(row('Linea', esc((c.acc === 'exp' && typeof c.exp === 'number' && c.exp < 0 ? `scaduta da ${-c.exp} g` : L('acc', c.acc)[0] + (typeof c.exp === 'number' && c.exp >= 0 ? ` · scade tra ${c.exp} g` : '')) + (c.con ? ' · connessioni ' + c.con : '')), L('acc', c.acc)[1]));
+    if (L('epg', c.epg)) out.push(row('Guida TV', esc(L('epg', c.epg)[0]), L('epg', c.epg)[1]));
+    if (L('dsk', c.dsk)) out.push(row('Spazio libero', esc(L('dsk', c.dsk)[0] + (typeof c.mb === 'number' ? ' · ' + c.mb + ' MB' : '')), L('dsk', c.dsk)[1]));
+    if (typeof c.clk === 'number') out.push(row('Orologio', Math.abs(c.clk) >= 10 ? `sbagliato di ${Math.abs(c.clk)} min` : '✓ giusto', Math.abs(c.clk) >= 10 ? 'warn' : 'ok'));
+    if (typeof c.boot === 'number' && c.boot > 0) out.push(row('Avvio', `${(c.boot / 1000).toFixed(1)} s${c.slow ? (c.slow >= 2 ? ' · molto lento: interfaccia leggerissima' : ' · lento: animazioni e lavoro all\'avvio ridotti') : ''}`, c.slow ? 'warn' : 'ok'));
+    if (c.eng) out.push(row('Lettore imparato', esc(c.eng.split(',').map((x) => { const [f, e] = x.split(':'); return `${String(f).toUpperCase()} → ${ENG_N[e] || e}`; }).join(' · ')), ''));
+    if (c.cap) out.push(row('Decodifica del dispositivo', esc(c.cap.split(',').map((x) => CAP_N[x] || x).join(' · ')), ''));
+    if (c.fix) out.push(row('Riparato da solo', esc(c.fix.split(',').map((x) => FIX_N[x] || x).join(' · ')), 'ok'));
+    if (!out.length) return '';
+    return `<div class="in-s"><h4>🤖 Auto-controlli dell'app<small class="mut" style="font-weight:400;margin-left:8px">${c.at ? 'ultimo: ' + esc(when(+c.at)) : ''} · fatti in silenzio, mai durante la visione</small></h4>${out.join('')}</div>`;
+  }
   document.body.insertAdjacentHTML('beforeend', '<div id="insM"><div class="ib" id="insB"></div></div>');
   const M = $('#insM');
   M.addEventListener('click', (e) => { if (e.target === M) close(); });
@@ -59,7 +87,7 @@
         <div style="--c:#a78bfa"><small>Dispositivo</small><b style="font-size:15px">${esc(x.model || '—')}</b><em>${x.net && x.net.type ? esc(x.net.type === 'wifi' ? 'Wi-Fi' + (x.net.rssi ? ' ' + x.net.rssi + ' dBm' : '') : x.net.type === 'eth' ? 'Ethernet' : x.net.type) : 'rete non nota'}${x.net && x.net.dl ? ' · ↓ ' + x.net.dl.toFixed(1) + ' Mbps' : ''}</em></div>
       </div>
       ${x.issues.length ? `<div class="in-s" style="border-color:rgba(239,68,68,.45)"><h4>🩺 Problemi trovati e soluzione</h4>${x.issues.map((i) => `<div class="in-iss" style="--c:${SEV[i.sev]}"><span>${i.sev === 'bad' ? '🔴' : '🟠'}</span><div><b>${esc(i.what)}</b><small>${esc(i.fix)}</small></div><span class="sp"></span>${i.act === 'upd' && x.needsUpdate ? '<button class="btn sm pri" data-insupd>⬆ Invia aggiornamento</button>' : ''}</div>`).join('')}</div>` : '<div class="in-s" style="border-color:rgba(34,197,94,.45)"><h4>🩺 Nessun problema trovato ✓</h4><span class="mut" style="font-size:13px">App aggiornata e visione senza errori nelle ultime 24 ore.</span></div>'}
-      <div class="in-g"><div>
+      ${chkHtml(x.chk)}<div class="in-g"><div>
         <div class="in-s"><h4>Visione</h4>
           <div class="in-row"><span>${x.now ? 'Sta guardando' : 'Ultima visione'}</span><b>${x.now ? `${KIND[x.now.kind] || ''} ${esc(x.now.title || x.now.ch || '—')}` : x.last ? `${KIND[x.last.kind] || ''} ${esc(x.last.title)} · ${esc(when(x.last.t))}` : '—'}</b></div>
           ${x.now && (x.now.res || x.now.codec) ? `<div class="in-row"><span>Qualità</span><b>${esc([x.now.res, x.now.codec, x.now.engine].filter(Boolean).join(' · '))}</b></div>` : ''}
