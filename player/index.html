@@ -4212,7 +4212,8 @@ window.kxVoice = (t) => {
 window.kxVoiceErr = (why) => {
   voiceEnd();
   const w = String(why || '').toLowerCase();
-  toast(/perm|denied|negat/.test(w) ? 'Per la ricerca a voce serve il permesso del microfono' : /busy|occupat/.test(w) ? 'Il microfono è occupato: riprova tra poco' : /network|rete|server/.test(w) ? 'Ricerca a voce non disponibile adesso: controlla la connessione' : /cancel|annull/.test(w) ? 'Ricerca a voce annullata' : 'Non ho capito: riprova');
+  // motivi dell'app: permesso negato, occupato, rete, annullato, non capito, audio, lingua non disponibile, errore
+  toast(/perm|denied|negat/.test(w) ? 'Per la ricerca a voce serve il permesso del microfono' : /busy|occupat/.test(w) ? 'Il microfono è occupato: riprova tra poco' : /network|rete|server/.test(w) ? 'Ricerca a voce non disponibile adesso: controlla la connessione' : /cancel|annull/.test(w) ? 'Ricerca a voce annullata' : /audio/.test(w) ? 'Il microfono non risponde: riprova' : /lingua|language/.test(w) ? 'La ricerca a voce in italiano non è disponibile su questo dispositivo' : /^errore?$|error/.test(w) ? 'Ricerca a voce non disponibile adesso: riprova' : 'Non ho capito: riprova');
 };
 /* ---------------- «Cosa guardo stasera?»: proposte preparate qui (gusti, libreria, guida di stasera), l'IA sceglie e motiva ---------------- */
 /** gusti del profilo: generi e categorie da ciò che guarda e dai preferiti, canali che usa, titoli già visti */
