@@ -973,9 +973,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     /* ------------------------------------------------------------------ */
     /* Riproduzione                                                        */
     /* ------------------------------------------------------------------ */
-    private fun userAgent(): String = try {
-        WebSettings.getDefaultUserAgent(this) + " KairosPlayer/" + BuildConfig.VERSION_NAME
-    } catch (e: Exception) { "Mozilla/5.0 (Linux; Android) KairosPlayer/" + BuildConfig.VERSION_NAME }
+    private fun userAgent(): String = KxUa.get(this)
 
     private fun startEngine(name: String) {
         completeHandoff(true) // il video dell'anteprima viene sostituito: l'anteprima sotto va tolta subito

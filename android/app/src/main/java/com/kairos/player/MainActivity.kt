@@ -255,7 +255,7 @@ class MainActivity : ComponentActivity() {
         Recorder.ua = userAgent()
         Recorder.listener = recListener
         KxVpn.listener = vpnListener
-        try { Recorder.init(this) } catch (_: Throwable) {}
+        Recorder.initAsync(this)
         loadUi()
         web.requestFocus()
 
@@ -444,9 +444,7 @@ class MainActivity : ComponentActivity() {
         requestedOrientation = if (mode == "land") android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 
-    private fun userAgent(): String = try {
-        WebSettings.getDefaultUserAgent(this) + " KairosPlayer/" + BuildConfig.VERSION_NAME
-    } catch (e: Exception) { "Mozilla/5.0 (Linux; Android) KairosPlayer/" + BuildConfig.VERSION_NAME }
+    private fun userAgent(): String = KxUa.get(this)
 
     /* ------------------------------------------------------------------ */
     /* Aggiornamento APK                                                   */

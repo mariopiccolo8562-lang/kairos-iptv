@@ -154,10 +154,13 @@ object Recorder {
     }
 
     /** elenco per l'interfaccia (JSON array) */
-    fun listJson(): String = synchronized(lock) {
-        val a = JSONArray()
-        recs.values.sortedByDescending { if (it.start > 0) it.start else it.at }.forEach { a.put(it.json(false)) }
-        a.toString()
+    fun listJson(): String {
+        app?.let { try { ensure(it) } catch (_: Throwable) {} } // indice ancora in caricamento (initAsync): si aspetta la fine
+        return synchronized(lock) {
+            val a = JSONArray()
+            recs.values.sortedByDescending { if (it.start > 0) it.start else it.at }.forEach { a.put(it.json(false)) }
+            a.toString()
+        }
     }
 
     /** elimina la registrazione (e il file); se è in corso viene prima fermata */
@@ -187,6 +190,14 @@ object Recorder {
         val a = ctx.applicationContext
         ensure(a)
         if (hasWork()) kick(a)
+    }
+
+    /** come init, ma il file dell'indice si legge in sottofondo (avvio dell'app senza I/O sul thread dell'interfaccia);
+     *  chi legge la lista prima della fine aspetta il caricamento (ensure è sincronizzato) */
+    fun initAsync(ctx: Context) {
+        val a = ctx.applicationContext
+        if (app == null) app = a
+        Thread({ try { init(a) } catch (_: Throwable) {} }, "kx-rec-init").start()
     }
 
     /** carica l'indice (servizio riavviato dalla sveglia in un processo nuovo, prima della prima notifica) */

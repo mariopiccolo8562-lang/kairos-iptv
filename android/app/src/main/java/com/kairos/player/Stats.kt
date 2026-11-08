@@ -97,6 +97,19 @@ object UiBridge {
     fun call(code: String) { try { js?.invoke(code) } catch (_: Throwable) {} }
 }
 
+/** User agent dell'app: si calcola una volta per processo (prima a ogni lettore, download e speed test) */
+object KxUa {
+    @Volatile private var v = ""
+    fun get(ctx: android.content.Context): String {
+        v.takeIf { it.isNotEmpty() }?.let { return it }
+        val s = try {
+            android.webkit.WebSettings.getDefaultUserAgent(ctx.applicationContext) + " KairosPlayer/" + BuildConfig.VERSION_NAME
+        } catch (e: Exception) { "Mozilla/5.0 (Linux; Android) KairosPlayer/" + BuildConfig.VERSION_NAME }
+        v = s
+        return s
+    }
+}
+
 /** Tipo di rete (wifi | eth | mobile | none) e, sul Wi-Fi, potenza del segnale e velocità del collegamento. */
 object NetInfo {
     fun json(ctx: Context): String = try {
