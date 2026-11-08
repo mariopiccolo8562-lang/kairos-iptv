@@ -108,9 +108,13 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 /* «Attiva un cliente Kairos»: tre passi in fila, ognuno si accende di verde quando è a posto */
 .wz{max-width:900px;margin:0 auto;display:grid;gap:14px}
 .wz-s{background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:grid;grid-template-columns:40px minmax(0,1fr);column-gap:14px}
-.wz-s .n{grid-row:1/span 9;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:15px;background:rgba(255,255,255,.06);border:1px solid var(--line)}
+.wz-s .n{grid-row:1/span 9;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:15px;color:#fff;background:#2563eb;border:1px solid #60a5fa;box-shadow:0 0 0 4px #2563eb22}
+#wzS2 .n{background:#0e7490;border-color:#22d3ee;box-shadow:0 0 0 4px #06b6d422}#wzS3 .n{background:#7c3aed;border-color:#c4b5fd;box-shadow:0 0 0 4px #8b5cf622}
 .wz-s.ok{border-color:color-mix(in srgb,var(--ok) 45%,transparent)}.wz-s.ok .n{background:var(--ok);color:#06120b;border-color:transparent}
-.wz-s h4{margin:5px 0 2px;font-size:16px}.wz-s .hint{color:var(--mut);font-size:13px;margin:0 0 12px;line-height:1.45}
+.wz-s h4{margin:5px 0 3px;font-size:17px;font-weight:800;color:#f8fafc}.wz-s .hint{color:#cbd5e1;font-size:13.5px;margin:0 0 12px;line-height:1.5}
+.wz input.inp,.wz select.inp,.wz textarea.inp{border-color:#566174;background:#11151c;color:#f1f5f9}.wz input.inp:focus,.wz select.inp:focus,.wz textarea.inp:focus{border-color:#60a5fa;box-shadow:0 0 0 3px #3b82f633}
+#wzLinePick{margin:8px 0 5px;padding:7px;border:1px solid #356cba;border-left:4px solid #38bdf8;border-radius:12px;background:linear-gradient(110deg,#10243a,#151c28)}
+#wzLinePick .wz-fp-wrap{width:100%;min-width:0;margin:0}#wzLinePick [data-kx-line-find]{border-color:#60a5fa;box-shadow:inset 0 0 0 1px #60a5fa33}
 .wz-targets{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px;margin:4px 0 12px}
 .wz-target{display:flex;align-items:center;gap:10px;padding:13px 15px;border:1px solid color-mix(in srgb,var(--wzt,#64748b) 52%,var(--line));border-radius:12px;background:color-mix(in srgb,var(--wzt,#64748b) 10%,#171a1f);color:var(--txt,#eef1f8);font:inherit;font-weight:750;text-align:left;cursor:pointer}
 .wz-target i{display:grid;place-items:center;width:22px;height:22px;border:1px solid var(--line);border-radius:7px;font-style:normal;color:transparent}
@@ -127,6 +131,7 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 .wz-custom-duration input{width:90px;margin:0}.wz-custom-duration select{width:120px;margin:0}
 .wz-code{font:700 26px/1.1 ui-monospace,SFMono-Regular,Menlo,monospace!important;letter-spacing:.14em;text-transform:uppercase;padding:14px 16px!important;width:100%;max-width:330px;margin:0!important}
 .wz-st{margin-top:10px;font-size:13.5px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);line-height:1.45}
+.wz-app-st{border-left:4px solid var(--wzt,#0d9488);border-color:color-mix(in srgb,var(--wzt,#0d9488) 48%,var(--line));border-left-color:var(--wzt,#0d9488);background:color-mix(in srgb,var(--wzt,#0d9488) 7%,transparent)}
 .wz-st.good{border-color:color-mix(in srgb,var(--ok) 55%,transparent);background:color-mix(in srgb,var(--ok) 10%,transparent)}
 .wz-st.warn{border-color:rgba(245,176,65,.55);background:rgba(245,176,65,.08)}
 .wz-st.bad{border-color:color-mix(in srgb,var(--bad) 55%,transparent);background:color-mix(in srgb,var(--bad) 10%,transparent)}
@@ -145,6 +150,7 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 .wz-result div{flex:1;min-width:0}.wz-result small{display:block;color:var(--mut);margin-top:3px;word-break:break-word}
 .wz-summary{margin:12px 0 0;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.04);line-height:1.5}
 @media (max-width:700px){.wz-pl,.wz-fields{grid-template-columns:1fr}.wz-s{grid-template-columns:30px minmax(0,1fr);padding:15px 13px}.wz-s .n{width:28px;height:28px}}
+@media(max-width:420px){.wz{width:100%;gap:10px}.wz-s{min-width:0;grid-template-columns:28px minmax(0,1fr);column-gap:9px;padding:12px 10px}.wz-s>div{min-width:0}.wz-targets{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.wz-target{min-width:0;padding:10px 8px;gap:7px;font-size:13px}.wz-target span:not(.wz-ico){overflow-wrap:anywhere}.wz-app-st{padding:9px}.wz-pl{grid-template-columns:minmax(0,1fr)}}
 .ag-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px;align-items:start}
 .ag-c{background:var(--glass);border:1px solid var(--line);border-radius:10px;padding:18px}
 .ag-c h4{font-size:14px;font-weight:600;margin-bottom:2px}.ag-c>small{display:block;color:var(--mut);font-size:12.5px;margin-bottom:12px}
@@ -1455,26 +1461,26 @@ body.agent .foot{display:none}
     const body = () => {
       const targetButtons = targets().filter(([k]) => availableTargets().has(k)).map(([k, label]) =>
         `<button type="button" class="wz-target${has(k) ? ' on' : ''}" style="--wzt:${targetColor(k)}" data-wztarget="${k}" aria-pressed="${has(k)}"><i>✓</i><span class="wz-ico">${esc(targetIcon(k, label))}</span><span>${esc(label)}</span></button>`).join('');
-      const kairos = has('kairos') ? `<div class="wz-st"><b>Codice della TV</b><p class="wz-help">Il cliente apre l’app Kairos e ti manda una foto. Scrivi il codice: maiuscole e trattino li metto io.</p>
+      const kairos = has('kairos') ? `<div class="wz-st wz-app-st" style="--wzt:${targetColor('kairos')}"><b>Codice della TV</b><p class="wz-help">Il cliente apre l’app Kairos e ti manda una foto. Scrivi il codice: maiuscole e trattino li metto io.</p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input class="inp wz-code" id="wzCode" placeholder="KXAB-12CD" maxlength="9" autocomplete="off" spellcheck="false" value="${esc(st.code)}"><button type="button" class="btn sm" id="wzCheck">Controlla codice</button></div>
         <div id="wzCodeSt">${codeStatus()}</div><p class="wz-help">Quale app Kairos usa il cliente?</p>
         <div class="wz-apps">${APPS_W.map(([k, n]) => `<button type="button" class="btn${st.app === k ? ' on' : ''}" data-wzapp="${k}" aria-pressed="${st.app === k}">${n}</button>`).join('')}</div></div>` : '';
-      const max = has('max') ? `<div class="wz-st"><b>MaxPlayer</b><p class="wz-help">Scegli il DNS MaxPlayer dove creare la linea.</p>
+      const max = has('max') ? `<div class="wz-st wz-app-st" style="--wzt:${targetColor('max')}"><b>MaxPlayer</b><p class="wz-help">Scegli il DNS MaxPlayer dove creare la linea.</p>
         <select class="inp" id="wzMxDom" ${mxLoading ? 'disabled' : ''}><option value="">${mxLoading ? 'Carico i DNS…' : mxDomains && mxDomains.length ? 'Scegli un DNS…' : 'Nessun DNS disponibile'}</option>${(mxDomains || []).map((x) => `<option value="${esc(x.id)}"${String(st.mxDomain) === String(x.id) ? ' selected' : ''}>${esc(x.label || 'DNS ' + x.id)}</option>`).join('')}</select>
         ${mxError ? `<div class="wz-st warn">Non riesco a caricare i DNS MaxPlayer: ${esc(mxError)}. Puoi provare l’attivazione e leggere l’esito qui sotto.</div>` : !mxLoading && !(mxDomains || []).length ? '<div class="wz-st warn">Non ci sono DNS MaxPlayer configurati.</div>' : ''}</div>` : '';
-      const orbix = has('orbix') ? `<div class="wz-st"><b>OrbixPlay</b><p class="wz-help">Scrivi il codice dispositivo che il cliente ti ha mandato e scegli il suo DNS.</p>
+      const orbix = has('orbix') ? `<div class="wz-st wz-app-st" style="--wzt:${targetColor('orbix')}"><b>OrbixPlay</b><p class="wz-help">Scrivi il codice dispositivo che il cliente ti ha mandato e scegli il suo DNS.</p>
         <div class="wz-fields"><input class="inp" id="wzOrbixId" data-mac placeholder="Codice dispositivo OrbixPlay" autocomplete="off" value="${esc(st.orbixId)}">
         <select class="inp" id="wzOxDns" ${orbDns.length ? '' : 'disabled'}><option value="">Scegli il DNS OrbixPlay…</option>${orbDns.map((x, i) => `<option value="${i}"${String(st.oxDns) === String(i) ? ' selected' : ''}>${esc(x.name || 'DNS ' + (i + 1))}${!agent && x.host ? ' — ' + esc(x.host) : ''}</option>`).join('')}</select></div>
         ${!orbDns.length ? '<div class="wz-st warn">Non hai DNS OrbixPlay disponibili per il tuo account.</div>' : ''}</div>` : '';
-      const orcp = has('orcp') ? `<div class="wz-st"><b>MirkoTeam</b><p class="wz-help">L'agente inserisce solo utente e password; seleziona il server assegnato.</p>
+      const orcp = has('orcp') ? `<div class="wz-st wz-app-st" style="--wzt:${targetColor('orcp')}"><b>MirkoTeam</b><p class="wz-help">Scegli il server e scrivi solo utente e password della linea.</p>
         <label class="lbl">Server<select class="inp" id="wzOrcpSrv"><option value="">Scegli il server…</option>${((orcpCfg && orcpCfg.servers) || []).map((x) => `<option value="${esc(x.n)}"${String(st.orcpServer) === String(x.n) ? ' selected' : ''}>Server ${esc(x.n)} · ${esc(x.name)}</option>`).join('')}</select></label></div>` : '';
       const apps = dynamicApps.filter((x) => has(x.key)).map((x) => {
         const data = st.appData[x.key] || {};
         const deviceKey = /^(ibo-player|ibo-one)$/.test(x.key) ? `<label class="lbl">Device key (facoltativa)<input class="inp" id="wzActKey-${x.key}" value="${esc(data.deviceKey || '')}" maxlength="120"></label>` : '';
-        return `<div class="wz-st"><b>${esc(x.name)}</b><p class="wz-help">Inserisci il MAC / ID del dispositivo per questa app.</p>
+        return `<div class="wz-st wz-app-st" style="--wzt:${targetColor(x.key)}"><b>${esc(x.name)}</b><p class="wz-help">Inserisci il MAC / ID del dispositivo per questa app.</p>
           <label class="lbl">MAC / ID del dispositivo<input class="inp" data-act-mac id="wzActMac-${x.key}" value="${esc(data.mac || '')}" maxlength="64" autocomplete="off"></label>${deviceKey}</div>`;
       }).join('');
-      const picker = showLinePick ? '<div id="wzLinePick" data-placeholder="🔎 Cerca una linea sui pannelli disponibili"></div>' : '';
+      const picker = showLinePick ? '<div id="wzLinePick" data-placeholder="🔎 Cerca una linea già creata"></div>' : '';
       const dnsFallback = !agent && showLinePick ? '<div id="wzLineDns"></div>' : '';
       const paste = window.KXPaste ? '<textarea class="inp mono" id="wzPaste" rows="2" style="font-size:12.5px;margin-top:8px" placeholder="📋 Incolla un link M3U o il messaggio con server, utente e password"></textarea>' : '';
       const lineFields = agent
