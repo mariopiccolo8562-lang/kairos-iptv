@@ -1665,9 +1665,17 @@ const HAS_PLAYER = !!(NATIVE && NATIVE.play);
 // all'avvio, prima della risposta del pannello: l'ultima modalità imposta dal pannello (rcLite) o quella scelta nell'app; «Spenta» resta spenta
 { const v0 = store.get('rcLite', '') || store.get('o_liteUi', 'auto');
   if (NATIVE && v0 !== 'off') document.body.classList.add('lite'); // poi decide il pannello (rcLiteApply)
-  try { if (NATIVE && devClass() === 'D') { document.body.classList.add('lowmem'); if (v0 !== 'off') document.body.classList.add('xlite'); } } catch {}
-  if (NATIVE && v0 === 'max') document.body.classList.add('xlite'); } // leggerissima scelta: subito (prima arrivava con la risposta del pannello) // chiavetta con poca memoria: leggerissima già dall'avvio (niente animazioni)
-const playPrefs = () => { const o = { engine: 'exo', quality: 'auto', buffer: 'balanced', aspect: 'fit', ...store.get('play', {}) }; for (const k of ['quality', 'buffer', 'aspect']) { const v = rcGet('p.' + k); if (v !== undefined) o[k] = String(v); } return o; };
+  try { if (NATIVE && devClass() === 'D') { document.body.classList.add('lowmem'); if (v0 !== 'off') document.body.classList.add('xlite'); } } catch {} // chiavetta con poca memoria: leggerissima già dall'avvio (niente animazioni)
+  if (NATIVE && v0 === 'max') document.body.classList.add('xlite'); } // Leggerissima scelta: subito (prima arrivava con la risposta del pannello)
+const playPrefs = () => {
+  const defaults = { engine: 'exo', quality: 'auto', buffer: 'balanced', aspect: 'fit' }, o = { ...defaults, ...store.get('play', {}) };
+  for (const k of ['quality', 'buffer', 'aspect']) {
+    const v = rcGet('p.' + k), allowed = rcAllow(k);
+    if (v !== undefined) o[k] = String(v);
+    else if (allowed && !allowed.some((x) => String(x) === String(o[k]))) o[k] = allowed.some((x) => String(x) === String(defaults[k])) ? defaults[k] : allowed[0];
+  }
+  return o;
+};
 
 /* ---------------- audio FX (WebAudio, nessun file) ---------------- */
 let AC;
@@ -3772,6 +3780,9 @@ function engineFor(kind, item) {
 function nativePlay(item, kind, fromSec, extra) {
   if (!HAS_PLAYER || item.demo || item.url === 'demo') return false;
   const P = playPrefs(), adapt = !!opt('adaptQ');
+  const engineKey = kind === 'live' ? 'engLive' : (kind === 'series' || isSeriesItem(item) || item.ep) ? 'engSeries' : 'engMovie';
+  const imposedEngine = panelEng(engineKey) || rcOpt(engineKey);
+  const engineAllow = imposedEngine ? null : rcAllow(engineKey);
   const lc = lineClass(), bw = bwKnown(); // classe della linea ricalcolata a ogni avvio (§1): il lettore ne ricava buffer, ABR e versione
   // l'anteprima si ferma solo se non mostra già questo canale nella stessa versione: in quel caso il video passa allo schermo intero senza
   // interruzioni (l'anteprima usa la versione più leggera: se la partenza prevista è un'altra il lettore riparte da quella, così sa cosa riproduce)
@@ -3818,9 +3829,9 @@ function nativePlay(item, kind, fromSec, extra) {
   const stored = kind === 'live' ? 0 : store.get('pos', {})[item.id] || 0;
   const start = fromSec != null ? fromSec : stored;
   try {
-    NATIVE.play(JSON.stringify({ kind: pk, items, index, start: Math.floor(start * 1000), engine: engineFor(kind, item), engineKey: kind === 'live' ? 'engLive' : kind === 'series' ? 'engSeries' : 'engMovie',
+    NATIVE.play(JSON.stringify({ kind: pk, items, index, start: Math.floor(start * 1000), engine: engineFor(kind, item), engineKey, engAllow: engineAllow, engLock: !!imposedEngine, engAuto: imposedEngine === 'auto',
       quality: P.quality, buffer: P.buffer, aspect: P.aspect, brand: S.settings.brand || 'KAIROS',
-      hw: opt('hw'), sub: opt('subSize'), res: perm('resInd') && !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list), adapt: !!opt('adaptQ'), pip: false,
+      hw: opt('hw'), sub: opt('subSize'), res: perm('resInd') && !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list), adapt: !!opt('adaptQ'), drain: !!opt('drainQ'), pip: false,
       line: lc, ...(bw != null ? { bw } : {}), // Kairos Adaptive: "weak" | "normal" | "good" e banda nota in Mbps (assente se sconosciuta)
       ...(srv ? { srv } : {}),
       ...(extra && extra.parent ? { introKey: String(extra.parent.id), intro: store.get('intro', {})[extra.parent.id] || [], introAuto: !!opt('introAuto') } : {}) }));
@@ -5064,14 +5075,15 @@ const SET_IC = {
 /* =====================================================================
    OPZIONI (impostazioni a scelta con OK)
    ===================================================================== */
-const ENG = [['auto', 'Automatico avanzato'], ['exo', 'ExoPlayer'], ['vlc', 'VLC']];
+const ENG = [['auto', 'Automatico (ExoPlayer, passa a VLC se serve)'], ['exo', 'ExoPlayer'], ['vlc', 'VLC']];
 const YN = [[true, 'Sì'], [false, 'No']];
 const OPT = {
   engLive: ['Lettore TV in diretta', ENG, 'auto'],
   engMovie: ['Lettore film', ENG, 'auto'],
   engSeries: ['Lettore serie TV', ENG, 'auto'],
-  hw: ['Accelerazione hardware', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['off', 'Disattivata (software)']], 'auto'],
+  hw: ['Decodifica', [['auto', 'Automatica'], ['on', 'Hardware'], ['off', 'Software']], 'auto'],
   adaptQ: ['Qualità adattiva automatica', YN, true],
+  drainQ: ['Discesa anticipata della qualità', YN, true],
   autoNext: ['Episodio successivo automatico', YN, true],
   introAuto: ['Salta l\'intro delle serie da solo', YN, false],
   subSize: ['Dimensione sottotitoli', [['small', 'Piccola'], ['medium', 'Media'], ['large', 'Grande'], ['xl', 'Molto grande']], 'medium'],
@@ -5095,16 +5107,29 @@ const panelEng = (k) => { const p = S.account && S.account.player, m = ENG_KIND[
 /* controllo remoto: impostazioni imposte dal pannello (profilo dell'app o questo cliente). Vincono su quelle scelte qui */
 const rcGet = (k) => { const v = S.rc && S.rc[k]; return v === undefined || v === null || v === '' ? undefined : v; };
 const rcOpt = (k) => { const v = rcGet('o.' + k); if (v === undefined) return undefined; const o = OPT[k]; return o && o[1].some((x) => x[0] === v || String(x[0]) === String(v)) ? (o[1].find((x) => x[0] === v || String(x[0]) === String(v)))[0] : undefined; };
+const rcAllow = (k) => {
+  const v = rcGet('o.' + k + ':allow') ?? rcGet('p.' + k + ':allow');
+  return Array.isArray(v) && v.length ? v : null;
+};
 /* modalità leggera: quella imposta dal pannello (voce «lite»); con il permesso «lite» spento resta «Automatica»; altrimenti la sceglie il cliente */
 const LITE_V = ['auto', 'on', 'max', 'off'];
 const liteLocked = () => LITE_V.includes(S.rc ? rcGet('lite') : store.get('rcLite', '')) || !perm('lite');
 /* modalità imposta dal pannello: prima della sua risposta vale l'ultima ricevuta (salvata), così «Spenta» non si perde all'avvio senza rete */
 const rcLiteV = () => (S.rc ? rcGet('lite') : store.get('rcLite', '') || undefined);
-const opt = (k) => { if (k === 'liteUi') { const rl = rcLiteV(); if (LITE_V.includes(rl)) return rl; if (!perm('lite')) return 'auto'; } const pe = panelEng(k); if (pe) return pe; const rv = rcOpt(k); if (rv !== undefined) return rv; const v = store.get('o_' + k, null); return v === null ? (k === 'startScr' ? store.get('startScr', OPT[k][2]) : k === 'sfx' && store.get('sound', true) === false ? 'off' : OPT[k][2]) : v; };
+const opt = (k) => {
+  if (k === 'liteUi') { const rl = rcLiteV(); if (LITE_V.includes(rl)) return rl; if (!perm('lite')) return 'auto'; }
+  const pe = panelEng(k); if (pe) return pe;
+  const rv = rcOpt(k); if (rv !== undefined) return rv;
+  const stored = store.get('o_' + k, null), def = stored === null ? (k === 'startScr' ? store.get('startScr', OPT[k][2]) : k === 'sfx' && store.get('sound', true) === false ? 'off' : OPT[k][2]) : stored;
+  const allowed = rcAllow(k);
+  return allowed && !allowed.some((x) => String(x) === String(def)) ? (allowed.find((x) => String(x) === String(OPT[k][2])) ?? allowed[0]) : def;
+};
 const optLabel = (k) => { const [, o] = OPT[k], v = opt(k); return (o.find((x) => x[0] === v) || o[0])[1]; };
-const optRow = (k) => panelEng(k) || rcOpt(k) !== undefined || (k === 'liteUi' && liteLocked()) ? `<div class="sr static"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))} <small class="mut">· scelto dal fornitore</small></b></div>` : `<div class="sr" data-f data-opt="${k}"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))}</b></div>`;
+const optRow = (k) => panelEng(k) || rcOpt(k) !== undefined || (k === 'liteUi' && liteLocked()) ? `<div class="sr static" data-f data-opt-lock="${k}"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))} <small class="mut">· scelto dal fornitore</small></b></div>` : `<div class="sr" data-f data-opt="${k}"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))}</b></div>`;
 function cycleOpt(k, el) {
-  const [, o, , after] = OPT[k], v = opt(k), i = o.findIndex((x) => x[0] === v), nx = o[(i + 1) % o.length];
+  const [, all, , after] = OPT[k], allowed = rcAllow(k), o = allowed ? all.filter(([x]) => allowed.some((v) => String(v) === String(x))) : all;
+  if (!o.length) return;
+  const v = opt(k), i = o.findIndex((x) => x[0] === v), nx = o[(i + 1) % o.length];
   store.set('o_' + k, nx[0]);
   if (k === 'startScr') store.set('startScr', nx[0]);
   if (el) { const b = el.querySelector('b'); b.textContent = nx[1]; b.classList.remove('flip'); void b.offsetWidth; b.classList.add('flip'); }
@@ -5116,6 +5141,7 @@ document.addEventListener('click', async (e) => {
   if (r.dataset.opt === 'lockAdult' && parentalOn() && !(await checkPin('PIN per modificare'))) return focus(r, true);
   cycleOpt(r.dataset.opt, r); if (r.dataset.opt === 'lockAdult') focus(r, true);
 });
+document.addEventListener('click', (e) => { if (e.target.closest('[data-opt-lock], [data-pk-lock]')) toast('Questa opzione è scelta dal fornitore'); });
 const TS = { s: 0.9, m: 1, l: 1.15, xl: 1.3 };
 function applyTextSize(v) { document.documentElement.style.setProperty('--ts', TS[v] || 1); navRefit(); }
 function applyOrient(v) { try { NATIVE && NATIVE.setOrientation && NATIVE.setOrientation(v); } catch {} }
@@ -5379,7 +5405,12 @@ function sfxPlay(type, tone) {
   return false;
 }
 
-const PLAY_OPTS = [['engine', 'Motore video', [['exo', 'ExoPlayer'], ['vlc', 'VLC']]], ['quality', 'Qualità video', [['auto', 'Automatica'], ['max', 'Massima'], ['1080', '1080p'], ['720', '720p'], ['480', '480p']]], ['buffer', 'Buffer di rete', [['fast', 'Veloce'], ['balanced', 'Bilanciato'], ['stable', 'Stabile']]], ['aspect', 'Formato immagine', [['fit', 'Adatta'], ['fill', 'Riempi'], ['zoom', 'Zoom']]]];
+const PLAY_OPTS = [['engine', 'Motore video', [['exo', 'ExoPlayer'], ['vlc', 'VLC']]], ['quality', 'Qualità video', [['auto', 'Automatica'], ['max', 'Massima'], ['1080', '1080p'], ['720', '720p'], ['480', '480p']]], ['buffer', 'Buffer di rete', [['fast', 'Piccolo (veloce)'], ['balanced', 'Normale'], ['stable', 'Grande (stabile)']]], ['aspect', 'Formato immagine', [['fit', 'Adatta'], ['fill', 'Riempi'], ['zoom', 'Zoom']]]];
+const playOptRow = (k, label, options, prefs) => {
+  const imposed = rcGet('p.' + k) !== undefined, allowed = rcAllow(k), visible = allowed ? options.filter(([v]) => allowed.some((x) => String(x) === String(v))) : options;
+  const current = (visible.find(([v]) => String(v) === String(prefs[k])) || options.find(([v]) => String(v) === String(prefs[k])) || options[0])[1];
+  return `<div class="sr${imposed ? ' static' : ''}" data-f ${imposed ? `data-pk-lock="${k}"` : `data-pk="${k}"`}><span>${label}</span><b>${current}${imposed ? ' <small class="mut">· scelto dal fornitore</small>' : ''}</b></div>`;
+};
 S.setSec = 'dev';
 function renderSettings(sec) {
   if (sec) S.setSec = sec;
@@ -5403,9 +5434,9 @@ function renderSettings(sec) {
       <h3 style="margin-top:26px">Ordinamento</h3>${optRow('sortCats')}${optRow('sortCh')}${optRow('sortVod')}`,
     play: `<h3>Lettore</h3>${HAS_PLAYER ? '' : '<div class="snote">Queste opzioni valgono nell\'app (Fire TV, Android TV, telefoni).</div>'}
       ${optRow('engLive')}${optRow('engMovie')}${optRow('engSeries')}
-      ${PLAY_OPTS.filter((o) => o[0] !== 'engine').map(([k, lbl, opts]) => rcGet('p.' + k) !== undefined ? `<div class="sr static"><span>${lbl}</span><b>${(opts.find((o) => o[0] === P[k]) || opts[0])[1]} <small class="mut">· scelto dal fornitore</small></b></div>` : `<div class="sr" data-f data-pk="${k}"><span>${lbl}</span><b>${(opts.find((o) => o[0] === P[k]) || opts[0])[1]}</b></div>`).join('')}
-      ${optRow('hw')}${optRow('adaptQ')}<div class="snote" style="margin:-4px 0 10px">Se la connessione non regge, il canale passa da solo a una sua versione più leggera (es. da FHD a HD) e torna alla qualità piena quando la linea migliora. Se il video si blocca, l'app prova da sola a ripartire, la decodifica software o l'altro lettore.</div>${optRow('autoNext')}${optRow('introAuto')}${optRow('subSize')}${perm('resInd') ? optRow('resInd') : ''}
-      <div class="snote"><b>Automatico avanzato</b> sceglie da solo il lettore migliore per ogni contenuto (ExoPlayer, oppure VLC per i formati che ExoPlayer non legge) e cambia lettore da solo se qualcosa non parte. Disattiva l'accelerazione hardware solo se vedi immagini verdi o a scatti. Durante la visione premi OK per audio, qualità e sottotitoli.</div>`,
+      ${PLAY_OPTS.filter((o) => o[0] !== 'engine').map(([k, lbl, opts]) => playOptRow(k, lbl, opts, P)).join('')}
+      ${optRow('hw')}${optRow('adaptQ')}${optRow('drainQ')}<div class="snote" style="margin:-4px 0 10px">Se la connessione non regge, il canale passa da solo a una sua versione più leggera (es. da FHD a HD) e torna alla qualità piena quando la linea migliora. Se il video si blocca, l'app prova da sola a ripartire, la decodifica software o l'altro lettore.</div>${optRow('autoNext')}${optRow('introAuto')}${optRow('subSize')}${perm('resInd') ? optRow('resInd') : ''}
+      <div class="snote"><b>Automatico (ExoPlayer, passa a VLC se serve)</b> sceglie da solo il lettore migliore per ogni contenuto e cambia lettore da solo se qualcosa non parte. Disattiva la decodifica hardware solo se vedi immagini verdi o a scatti. Durante la visione premi OK per audio, qualità e sottotitoli.</div>`,
     shop: '<div id="shopCard"></div>',
     org: `<h3>Organizza</h3>
       <div class="snote">Tieni premuto OK su un film, una serie o un canale per: già visto, coda, tag, modifica informazioni, guida TV.</div>
@@ -5514,7 +5545,8 @@ function renderSettings(sec) {
     } catch (e) { toast('✗ Server non raggiungibile: ' + (e.message || 'errore di rete'), 7000); }
   };
   $$('[data-pk]').forEach((b) => (b.onclick = () => {
-    const [k, , opts] = PLAY_OPTS.find((o) => o[0] === b.dataset.pk), P2 = playPrefs();
+    const [k, , all] = PLAY_OPTS.find((o) => o[0] === b.dataset.pk), allowed = rcAllow(k), opts = allowed ? all.filter(([v]) => allowed.some((x) => String(x) === String(v))) : all, P2 = playPrefs();
+    if (!opts.length) return;
     const i = opts.findIndex((o) => o[0] === P2[k]), nx = opts[(i + 1) % opts.length];
     P2[k] = nx[0]; store.set('play', P2); b.querySelector('b').textContent = nx[1];
   }));

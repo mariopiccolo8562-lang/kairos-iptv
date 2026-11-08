@@ -81,6 +81,9 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private var index = 0
     private var kind = "live"
     private var engineName = "exo"
+    private var engAllow: Set<String>? = null
+    private var engLock = false
+    private var engAuto = false
     private var userChangedEngine = false
     private var aspect = "fit"
     private var brand = "KAIROS"
@@ -145,6 +148,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     /* ---------------- recupero automatico ---------------- */
     /** qualità adattiva: passa da solo alla versione più leggera del canale se la linea non regge */
     private var adapt = true
+    private var drainEnabled = true
     /** decodifica software forzata dal recupero (problemi del decoder hardware): vale per tutta la visione */
     private var hwOff = false
     /** passi già provati sul contenuto in onda */
@@ -342,6 +346,11 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         return type.isNotEmpty() && type != "none"
     }
 
+    private fun canEngine(): Boolean {
+        val other = if (engineName == "vlc") "exo" else "vlc"
+        return !triedFallback && (!engLock || engAuto) && (engAllow == null || other in engAllow!!)
+    }
+
     /**
      * Prova da sola una soluzione quando la visione ha un problema, senza far uscire l'utente.
      * freeze = immagine ferma con l'audio che va · stall = caricamento che si ripete · error = errore del lettore
@@ -379,7 +388,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         val step = ladder.firstOrNull { st ->
             (st == "lite" || !recDone.contains(st)) && when (st) {
                 "alt" -> canAlt; "sw" -> canSw; "lite" -> canLite; "server" -> canServer(err)
-                "engine" -> !triedFallback
+                "engine" -> canEngine()
                 else -> true
             }
         } ?: return false
@@ -478,7 +487,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
                 }
             }
         }
-        if (e is ExoEngine && readyOnce && isLive && e.isPlaying() && !isBuffering && seekTarget < 0 &&
+        if (drainEnabled && e is ExoEngine && readyOnce && isLive && e.isPlaying() && !isBuffering && seekTarget < 0 &&
             now >= recCooldownUntil && now >= drainCooldownUntil) {
             checkDrain(e, now)
         } else drainSamples.clear()
@@ -590,6 +599,16 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             kind = j.optString("kind", "live")
             index = j.optInt("index", 0)
             engineName = j.optString("engine", "exo")
+            engLock = j.optBoolean("engLock", false)
+            engAuto = j.optBoolean("engAuto", false)
+            engAllow = j.optJSONArray("engAllow")?.let { a ->
+                val allowed = mutableSetOf<String>()
+                for (i in 0 until a.length()) {
+                    val value = a.optString(i)
+                    if (value == "auto" || value == "exo" || value == "vlc") allowed.add(value)
+                }
+                allowed.takeIf { it.isNotEmpty() }
+            }
             aspect = j.optString("aspect", "fit")
             brand = j.optString("brand", "KAIROS")
             prefs = PlayPrefs(j.optString("quality", "auto"), j.optString("buffer", "balanced"), aspect, live = kind == "live", hw = j.optString("hw", "auto"))
@@ -610,6 +629,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             showRes = j.optBoolean("res", true)
             autoNext = j.optBoolean("autoNext", false)
             adapt = j.optBoolean("adapt", true)
+            drainEnabled = j.optBoolean("drain", true)
             // indizi dall'interfaccia web (politica §1): classe della linea per questo avvio e banda (seme se qui manca una misura)
             uiLine = j.optString("line", "").let { if (it == "weak" || it == "normal" || it == "good") it else "" }
             j.optDouble("bw", 0.0).let { if (it > 0.0) NetMem.seed(this, it) }
@@ -1193,6 +1213,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     }
 
     private fun switchEngine(name: String, byUser: Boolean) {
+        if (byUser && engLock) { toast("Motore scelto dal tuo fornitore"); return }
+        if (byUser && engAllow?.contains(name) == false) { toast("Motore non disponibile per il tuo profilo"); return }
         val pos = if (isLive) 0L else if (seekTarget >= 0) seekTarget else engine?.position() ?: 0L
         if (byUser) userChangedEngine = true
         startEngine(name)
@@ -1357,7 +1379,10 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     }
 
     private fun menuEngine() {
+        if (engLock) { toast("Motore scelto dal tuo fornitore"); return }
         val opts = listOf(Track("exo", "ExoPlayer — più fluido (consigliato)", engineName == "exo"), Track("vlc", "VLC — legge più formati", engineName == "vlc"))
+            .filter { engAllow == null || it.id in engAllow!! }
+        if (opts.isEmpty()) { toast("Motore non disponibile per il tuo profilo"); return }
         choose("Motore di riproduzione", opts, "") { if (it.id != engineName) { switchEngine(it.id, true); toast("Motore: ${engineLabel(it.id)}") } }
     }
 
