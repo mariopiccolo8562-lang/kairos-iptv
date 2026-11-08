@@ -1140,8 +1140,14 @@ async function agentArmada(req, env, url, path, who, ip, ctx, X, pv = 'armada') 
   if (path === R + '/packages' && m === 'GET') return armadaRoutes(req, env, url, path, who, ip, A.id, pv);
   if ((path === R + '/lines' || path === R + '/mags') && m === 'GET') {
     const lines = path === R + '/lines', type = lines ? 'm3u' : 'mag';
-    const [raw, ok] = await Promise.all([call({ action: lines ? 'lines_list' : 'mag_devices_list' }), ownFn()]);
-    const list = armList(raw).map((x) => (lines ? { ...armCommon(x), username: str(x.username, 120), password: str(x.password, 200) } : { ...armCommon(x), mac: str(x.mac, 32) })).filter((o) => ok(type, o)).map(({ owner, ...o }) => o);
+    const [raw, own] = await Promise.all([call({ action: lines ? 'lines_list' : 'mag_devices_list' }), armOwnerMap(env, pv)]);
+    const list = armList(raw).map((x) => {
+      const o = lines ? { ...armCommon(x), username: str(x.username, 120), password: str(x.password, 200) } : { ...armCommon(x), mac: str(x.mac, 32) };
+      return { o, by: armByOf(own, type, o) };
+    }).filter(({ by }) => by !== undefined && mine.has(by)).map(({ o, by }) => {
+      const { owner, ...item } = o;
+      return lines ? { ...item, self: by === A.id } : item;
+    });
     return json(lines ? { lines: list } : { mags: list });
   }
   if (path === R + '/new' && m === 'POST') {

@@ -255,7 +255,7 @@ body.agent .foot{display:none}
   { const vw = view; window.view = view = function (v) { const r = vw.apply(this, arguments); const b = nav(v), sec = b && b.dataset.sec; if (sec) { const st = closedSet(); if (st.has(sec)) { st.delete(sec); saveClosed(st); layoutMenu(); } } return r; }; }
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
-  const AG_OK = /^\/admin\/(line-notes(\?.*)?|online|insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/(upd|fix)|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|armada\/(state|packages|lines|mags|new|renew|toggle)|oxp\/(state|playlists(\/[A-Za-z0-9_-]+)?)|mxp\/(accounts|a\/[a-z0-9]{2,20}\/(overview|domains|agents(\/\d+\/(enable|disable))?|users(\/\d+(\/password|\/devices|\/lists(\/[A-Za-z0-9%-]+)?)?)?(\?fresh=1)?))|guide(?:\/read)?|(ro|slt)\/[A-Za-z0-9_\/%.-]+(\?.*)?|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
+  const AG_OK = /^\/admin\/(line-notes(\?.*)?|online|insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/(upd|fix)|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|armada\/(state|packages|lines|mags|new|renew|toggle)|storm\/(state|lines)|oxp\/(state|playlists(\/[A-Za-z0-9_-]+)?)|mxp\/(accounts|a\/[a-z0-9]{2,20}\/(overview|domains|agents(\/\d+\/(enable|disable))?|users(\/\d+(\/password|\/devices|\/lists(\/[A-Za-z0-9%-]+)?)?)?(\?fresh=1)?))|guide(?:\/read)?|(ro|slt)\/[A-Za-z0-9_\/%.-]+(\?.*)?|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
   // agente: le pagine senza permesso non chiamano nemmeno il server (prima ogni 20-30 s partivano richieste destinate al «non consentito»)
   const AG_NEED = [[/^\/admin\/requests.*[?&]kind=content/, 'contentReq'], [/^\/admin\/requests.*[?&]kind=addon/, 'addonReq'], [/^\/admin\/requests.*[?&]kind=ai/, 'ai'],
     [/^\/admin\/requests(\?(?!.*kind=)|\?.*kind=report|$)/, 'reports'], [/^\/admin\/app-errors/, 'errors'], [/^\/admin\/presence/, 'online'], [/^\/admin\/catalog/, 'vod'], [/^\/admin\/apps3\/lists/, 'appsOp'],
@@ -896,6 +896,17 @@ body.agent .foot{display:none}
   function openWizard() {
     const m = me(), P = m.perms || {}, maxC = Math.max(1, P.maxConn || 1);
     const st = { code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1), pl: { serverId: (D.servers[0] || {}).id || '', username: '', password: '' }, name: '', notes: '', maxConn: 1, busy: false };
+    const linePanels = ['wolf', 'armada', 'storm', 'ro', 'slt'];
+    const canLoadLines = !!window.KXLinePick && (!isAgent() || linePanels.some((k) => !!P[k]));
+    const showLinePick = canLoadLines && (D.servers || []).length > 0;
+    let pickLines = [], pickLoaded = !canLoadLines, drawPick = () => {};
+    if (canLoadLines) window.KXLinePick.load().then((items) => {
+      pickLines = items || []; pickLoaded = true;
+      const list = $('#wzFindL'); drawPick(!!(list && list.classList.contains('on')));
+    }).catch(() => {
+      pickLines = []; pickLoaded = true;
+      const list = $('#wzFindL'); drawPick(!!(list && list.classList.contains('on')));
+    });
     let lkT = 0, lkN = 0;
     const fmtCode = (v) => { let c = String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); return c.length > 4 ? c.slice(0, 4) + '-' + c.slice(4) : c; };
     const okCode = () => /^KX[A-Z0-9]{2}-[A-Z0-9]{4}$/.test(st.code);
@@ -922,7 +933,8 @@ body.agent .foot{display:none}
         <div id="wzCodeSt">${codeStatus()}</div></div>
       <div class="wz-s ${lineOk() ? 'ok' : ''}" id="wzS2"><span class="n">${lineOk() ? '✓' : '2'}</span><h4>Linea del cliente</h4>
         <p class="hint">La linea del tuo pannello IPTV. Il modo più veloce: incolla il link M3U o il messaggio con server, utente e password, il resto lo compilo io.</p>
-        ${D.servers.length ? `${window.KXPaste ? '<textarea class="inp mono" id="wzPaste" rows="2" style="font-size:12.5px" placeholder="📋 Incolla qui la linea (link M3U o messaggio con server, utente e password)"></textarea><div id="wzPasteSt"></div>' : ''}
+        ${D.servers.length ? `${showLinePick ? '<div class="wz-fp-wrap"><input class="inp" id="wzFind" placeholder="🔎 Cerca una linea già creata (utente o nota)" autocomplete="off"><div id="wzFindL"></div></div>' : ''}
+        ${window.KXPaste ? '<textarea class="inp mono" id="wzPaste" rows="2" style="font-size:12.5px" placeholder="📋 Incolla qui la linea (link M3U o messaggio con server, utente e password)"></textarea>' : ''}<div id="wzPasteSt"></div>
         <div class="wz-pl"><select class="inp" id="wzSrv" title="Server">${D.servers.map((x) => `<option value="${esc(x.id)}" ${st.pl.serverId === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
           <input class="inp" id="wzUser" placeholder="Utente" autocomplete="off" value="${esc(st.pl.username)}"><input class="inp" id="wzPass" placeholder="Password" autocomplete="off" value="${esc(st.pl.password)}"></div>`
         : '<div class="wz-st bad">Non hai server assegnati: chiedili a chi ti ha creato.</div>'}</div>
@@ -951,16 +963,41 @@ body.agent .foot{display:none}
       }, 300);
     };
     const bindOpen = () => $$('[data-wzopen]').forEach((b) => (b.onclick = () => { const x = (D.devices || []).find((y) => y.id === b.dataset.wzopen); if (x) openClient(x); }));
-    const pasteGo = async (quiet) => {
-      const r = window.KXPaste && window.KXPaste.parse($('#wzPaste').value);
-      if (!r || !r.username) { if (!quiet) toast('Incolla il link M3U, o utente e password della linea', 1); return; }
+    const fillLine = async (r, label) => {
       let sv = null;
       if (r.host) { try { const mm = await api('POST', '/admin/match-server', { host: r.host }); if (mm && mm.server) sv = D.servers.find((x) => x.id === mm.server.id) || null; } catch {} }
       if (!sv) { const host = (r.host || '').replace(/^https?:\/\//, '').toLowerCase(); sv = D.servers.find((x) => host && String(x.name).length >= 2 && host.includes(String(x.name).toLowerCase())) || null; }
       st.pl.username = r.username; st.pl.password = r.password || st.pl.password; if (sv) st.pl.serverId = sv.id;
       $('#wzUser').value = st.pl.username; $('#wzPass').value = st.pl.password; $('#wzSrv').value = st.pl.serverId;
-      $('#wzPasteSt').innerHTML = sv ? `<div class="wz-st good">✓ Linea riconosciuta · server <b>${esc(sv.name)}</b> · utente <b>${esc(r.username)}</b></div>` : `<div class="wz-st warn">✓ Utente <b>${esc(r.username)}</b> inserito · scegli tu il server qui sotto</div>`;
+      const user = esc(r.username), chosen = label ? `Linea scelta · ${esc(label)} · ` : 'Linea riconosciuta · ';
+      $('#wzPasteSt').innerHTML = sv ? `<div class="wz-st good">✓ ${chosen}server <b>${esc(sv.name)}</b> · utente <b>${user}</b></div>` : `<div class="wz-st warn">✓ Utente <b>${user}</b> inserito · scegli tu il server qui sotto</div>`;
       foot();
+    };
+    const pasteGo = async (quiet) => {
+      const r = window.KXPaste && window.KXPaste.parse($('#wzPaste').value);
+      if (!r || !r.username) { if (!quiet) toast('Incolla il link M3U, o utente e password della linea', 1); return; }
+      await fillLine(r, '');
+    };
+    drawPick = (show) => {
+      const list = $('#wzFindL'), input = $('#wzFind');
+      if (!list) return;
+      if (!show) { list.classList.remove('on'); return; }
+      list.classList.add('on');
+      if (!pickLoaded) { list.innerHTML = '<div class="wz-fp-empty">Carico le tue linee…</div>'; return; }
+      if (!pickLines.length) { list.innerHTML = '<div class="wz-fp-empty">Nessuna linea trovata sui tuoi pannelli</div>'; return; }
+      const rows = window.KXLinePick.find(pickLines, input ? input.value : '');
+      if (!rows.length) { list.innerHTML = '<div class="wz-fp-empty">Nessuna linea corrisponde alla ricerca</div>'; return; }
+      list.innerHTML = rows.map((line, i) => {
+        const used = (D.devices || []).find((d) => (d.playlists || []).some((p) => String(p.username || '').toLowerCase() === String(line.username).toLowerCase()));
+        return `<button type="button" class="wz-fp-item" data-wzline="${i}"><span class="wz-fp-head"><i class="wz-fp-tag">${esc(line.tag)}</i><b>${esc(line.username)}</b>${line.status ? `<em class="wz-fp-status">${esc(line.status)}</em>` : ''}</span>${line.note ? `<span class="wz-fp-note">${esc(line.note)}</span>` : ''}${used ? `<span class="wz-fp-used">già su ${esc(used.name || used.code || 'cliente')}</span>` : ''}</button>`;
+      }).join('');
+      $$('[data-wzline]', list).forEach((b) => (b.onclick = async () => {
+        const line = rows[+b.dataset.wzline];
+        list.classList.remove('on');
+        if (!line) return;
+        if (!st.name.trim() && line.note) { st.name = line.note.slice(0, 60); $('#wzName').value = st.name; }
+        await fillLine(line, line.tag);
+      }));
     };
     const draw = () => {
       $('#agB').innerHTML = body();
@@ -969,6 +1006,12 @@ body.agent .foot{display:none}
       c.oninput = () => { let raw = String(c.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); if (raw.length === 6 && !raw.startsWith('KX')) raw = 'KX' + raw; const v = fmtCode(raw); if (v !== c.value) c.value = v; st.code = v; lookup(); };
       $('#wzPaste') && $('#wzPaste').addEventListener('paste', () => setTimeout(() => pasteGo(true), 0));
       $('#wzPaste') && ($('#wzPaste').oninput = () => { if (/\S{6,}/.test($('#wzPaste').value)) pasteGo(true); });
+      const find = $('#wzFind');
+      if (find) {
+        find.onfocus = () => drawPick(true);
+        find.oninput = () => drawPick(true);
+        find.onblur = () => setTimeout(() => drawPick(false), 160);
+      }
       $('#wzSrv') && ($('#wzSrv').onchange = () => { st.pl.serverId = $('#wzSrv').value; foot(); });
       $('#wzUser') && ($('#wzUser').oninput = () => { st.pl.username = $('#wzUser').value; foot(); });
       $('#wzPass') && ($('#wzPass').oninput = () => { st.pl.password = $('#wzPass').value; foot(); });
