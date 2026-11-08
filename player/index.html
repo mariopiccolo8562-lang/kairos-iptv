@@ -601,6 +601,8 @@ img{display:block}
 .speedm .ubar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ff7a45,#ff2a3d);transition:width .3s}
 /* ---------- prestazioni: le righe fuori schermo non vengono disegnate ---------- */
 .nrow{content-visibility:auto;contain-intrinsic-size:auto 260px}
+/* WebView 85-94: content-visibility sì, «auto» nella misura no → le righe fuori schermo diventerebbero alte 0 e la Home salterebbe; lì si disegnano sempre */
+@supports not (contain-intrinsic-size:auto 260px){.nrow{content-visibility:visible}}
 .track{contain:layout paint}
 .rail .rlogo{width:44px;height:44px;top:26px;left:24px}
 /* ---------- modalità leggera (app su TV): niente effetti costosi, più fluidità ---------- */
@@ -1750,7 +1752,7 @@ function firstVisibleCard(track) {
 function firstRowCard(scr) {
   const rows = scr.querySelector('.rows'); if (!rows) return null;
   const top = rows.getBoundingClientRect().top;
-  for (const r of rows.querySelectorAll('.nrow')) if (r.getBoundingClientRect().bottom > top + 30) { const t = r.querySelector('.track'); return t && firstVisibleCard(t); }
+  for (const r of rows.querySelectorAll('.nrow')) if (r.getBoundingClientRect().bottom > top + 30) { if (r._park) rowUnpark(r); const t = r.querySelector('.track'); return t && firstVisibleCard(t); }
   return null;
 }
 /* candidati per lo spostamento "libero": esclude le card fuori schermo (molto più veloce su Fire TV) */
@@ -1782,7 +1784,7 @@ function move(dir) {
     const row = cur.closest('.nrow');
     let nx = d > 0 ? row.nextElementSibling : row.previousElementSibling;
     if (d > 0 && !nx) { const scr = cur.closest('.bscr'); if (scr && scr._rendered < scr._rows.length) { moreRows(scr, 3); nx = row.nextElementSibling; } }
-    if (nx && nx.classList.contains('nrow')) { const t = nx.querySelector('.track'), c = t && firstVisibleCard(t); if (c) return focus(c); }
+    if (nx && nx.classList.contains('nrow')) { if (nx._park) rowUnpark(nx); const t = nx.querySelector('.track'), c = t && firstVisibleCard(t); if (c) return focus(c); }
     if (d > 0) return;
   }
   // 2) liste verticali (canali, categorie, menu impostazioni)
@@ -1793,6 +1795,8 @@ function move(dir) {
     if (s) return focus(s);
     if (d > 0) return;
   }
+  // griglia «Vedi tutto»: salendo dalla prima riga disegnata, prima si rimettono le righe sopra (poi la ricerca le trova)
+  if (dir === 'up' && vodStart > 0 && par && par.id === 'vodGrid' && +cur.dataset.i - vodStart < (vodCols(par) || 1)) prevVod();
   // dal menu delle impostazioni → prima voce del pannello
   if (dir === 'right' && par && par.classList.contains('smenu')) { const f = $$('#settBody .card.on [data-f]').find(isVis); if (f) return focus(f); }
   // 3) dalla barra in alto verso il basso: prima riga visibile
@@ -2086,6 +2090,7 @@ function closeDrawer(picked) {
 function jumpToRow(scr, ri) {
   while (scr._rendered <= ri && scr._rendered < scr._rows.length) moreRows(scr, 5);
   const row = scr.querySelectorAll('.nrow')[ri]; if (!row) return;
+  if (row._park) rowUnpark(row);
   const t = row.querySelector('.track'); if (t) t.scrollLeft = 0;
   const c = t && t.querySelector('[data-f]');
   c && focus(c, true);
@@ -2099,6 +2104,7 @@ function show(id, push = true, restore) {
   if (now && (now.id === 'live' || now.id === 'guide') && id !== now.id) stopPreview();
   if (now && now.id === 'guide' && id !== 'guide') G.q.length = 0;
   if (push && now && !['boot', 'activate'].includes(now.id)) S.stack.push(now.id);
+  if (now && !S.stack.includes(now.id)) screenFree(now.id);
   $$('.screen').forEach((s) => s.classList.remove('on'));
   $('#' + id).classList.add('on');
   if (cur) cur.classList.remove('focused');
@@ -2107,6 +2113,22 @@ function show(id, push = true, restore) {
   if (restore && $('#' + id).contains(restore)) return void setTimeout(() => focus(isVis(restore) ? restore : visibleF($('#' + id))[0], true), 40);
   const f = $('#' + id).querySelector('[data-autof]') || $('#' + id).querySelector('.sel[data-f]');
   setTimeout(() => focus(f && isVis(f) ? f : visibleF($('#' + id)).find((e) => !e.closest('.tnav')) || visibleF($('#' + id))[0], true), 40);
+}
+/* schermata lasciata e non raggiungibile con Indietro: le liste lunghe (e le loro immagini) si tolgono subito dalla memoria;
+   ogni schermata le ridisegna da sé quando si riapre (renderVod, renderChannels, doSearch, buildBrowse) */
+function screenFree(id) {
+  try {
+    if (id === 'vod') { clearTimeout(vodTrimT); $('#vodGrid').innerHTML = ''; vodRendered = vodStart = 0; }
+    else if (id === 'live') { $('#liveList').innerHTML = ''; chStart = chRendered = 0; }
+    else if (id === 'search') { $('#results').innerHTML = ''; searchRes = []; }
+    else if (id === 'cat') {
+      const c = $('#cat'), r = c.querySelector('.rows'), h = c.querySelector('.hero');
+      clearTimeout(heroT); clearTimeout(c._swT); clearTimeout(c._infoT); // niente copertina ricaricata dopo l'uscita
+      if (r) r.innerHTML = ''; c._rendered = 0;
+      for (const i of c.querySelectorAll('.hbg img')) i.removeAttribute('src');
+      if (h) { h._src = ''; h._tok = (h._tok || 0) + 1; }
+    }
+  } catch {}
 }
 function back() {
   fx('back');
@@ -3082,15 +3104,17 @@ function chHTML(ch, i) {
   const n = nowOf(ch);
   return `<div class="ch ${S.previewing && S.previewing.id === ch.id ? 'playing' : ''}${isLocked(ch) ? ' lk' : ''}${S.hidden.has(ch.id) ? ' hid' : ''}${recFor(ch.id) ? ' recing' : ''}" data-f data-i="${i}"><div class="lg" data-lg="${esc(ch.id)}">${logoHTML(ch)}</div><div class="nm"><b>${esc(ch.name)}</b><small>${plBadge(ch)}${qBadge(ch)}<span data-now="${esc(ch.id)}">${esc(n ? n.title : ch.group || '')}</span></small></div><span class="cn">${ch.num}</span><svg class="star ${S.favs.has(ch.id) ? 'on' : ''}" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></div>`;
 }
-const CH_MAX = 480;
+// righe di canali tenute nel DOM (con i loro loghi): metà sulle chiavette con poca memoria
+const CH_MAX = 480, chMax = () => (lowMem() ? 240 : CH_MAX);
 function moreChannels() {
   const list = $('#liveList'), slice = S.liveIndex.slice(chRendered, chRendered + 120);
   if (!slice.length) return;
   list.insertAdjacentHTML('beforeend', slice.map((ch, i) => chHTML(ch, chRendered + i)).join(''));
   chRendered += slice.length;
   // tiene nel DOM al massimo ~480 righe: quelle troppo in alto si tolgono (la lista resta leggera)
-  if (chRendered - chStart > CH_MAX) {
-    const drop = chRendered - chStart - CH_MAX, h0 = list.scrollHeight;
+  const max = chMax();
+  if (chRendered - chStart > max) {
+    const drop = chRendered - chStart - max, h0 = list.scrollHeight;
     for (let k = 0; k < drop; k++) { const e = list.firstElementChild; if (!e || e === cur) break; e.remove(); chStart++; }
     list.scrollTop -= h0 - list.scrollHeight;
   }
@@ -3101,8 +3125,8 @@ function prevChannels() {
   list.insertAdjacentHTML('afterbegin', slice.map((ch, i) => chHTML(ch, from + i)).join(''));
   list.scrollTop += list.scrollHeight - h0;
   chStart = from;
-  if (chRendered - chStart > CH_MAX) {
-    for (let k = chRendered - chStart - CH_MAX; k > 0; k--) { const e = list.lastElementChild; if (!e || e === cur) break; e.remove(); chRendered--; }
+  if (chRendered - chStart > chMax()) {
+    for (let k = chRendered - chStart - chMax(); k > 0; k--) { const e = list.lastElementChild; if (!e || e === cur) break; e.remove(); chRendered--; }
   }
 }
 function chEl(i) {
@@ -3833,7 +3857,7 @@ $('#fs').addEventListener('dblclick', closeFs);
 /* =====================================================================
    FILM / SERIE / PREFERITI
    ===================================================================== */
-let vodKind = 'movies', vodCat = 'all', vodItems = [], vodRendered = 0;
+let vodKind = 'movies', vodCat = 'all', vodItems = [], vodRendered = 0, vodStart = 0; // locandine disegnate: [vodStart, vodRendered)
 function openVod(kind, cat) {
   vodKind = kind; vodCat = cat || 'all';
   $('#vodTitle').innerHTML = kind === 'movies' ? 'FILM' : kind === 'series' ? 'SERIE <span class="grad">TV</span>' : '★ <span class="grad">PREFERITI</span>';
@@ -3856,12 +3880,48 @@ function posterHTML(x, i) {
   return `<div class="post" data-f data-i="${i}">${img ? `<img loading="lazy" decoding="async" ${imgSrc(img, 'p')} onerror="${IMG_FB}this.remove()">` : ''}${plBadge(x)}${x.rating && +x.rating ? `<span class="rt">★ ${(+x.rating).toFixed(1)}</span>` : ''}<div class="t">${esc(x.name)}<small>${esc(x.year || x.group || '')}</small></div></div>`;
 }
 function renderVod() {
-  vodItems = vodSource(); vodRendered = 0;
+  vodItems = vodSource(); vodRendered = vodStart = 0; clearTimeout(vodTrimT);
   $('#vodGrid').innerHTML = vodItems.length ? '' : '<div class="empty">Nessun contenuto qui. ' + (vodKind === 'favs' ? 'Tieni premuto OK su un canale o un titolo per aggiungerlo.' : '') + '</div>';
   moreVod();
 }
-function moreVod() { const s = vodItems.slice(vodRendered, vodRendered + 120); $('#vodGrid').insertAdjacentHTML('beforeend', s.map((x, i) => posterHTML(x, vodRendered + i)).join('')); vodRendered += s.length; }
-$('#vodGrid').addEventListener('scroll', (e) => { const l = e.target; if (l.scrollTop + l.clientHeight > l.scrollHeight - 600 && vodRendered < vodItems.length) moreVod(); });
+/* Come la lista dei canali: nel DOM resta solo una finestra di locandine (righe intere, così la griglia non si sposta).
+   Con «Vedi tutto» su decine di migliaia di titoli memoria (immagini) e telecomando restano leggeri anche dopo molto scorrere. */
+const vodMax = () => (lowMem() ? 240 : 480);
+function moreVod() {
+  const s = vodItems.slice(vodRendered, vodRendered + 120); if (!s.length) return;
+  $('#vodGrid').insertAdjacentHTML('beforeend', s.map((x, i) => posterHTML(x, vodRendered + i)).join('')); vodRendered += s.length;
+  if (vodRendered - vodStart > vodMax()) { clearTimeout(vodTrimT); if (fastMove) vodTrim(); else vodTrimT = setTimeout(vodTrim, 400); } // senza tasto tenuto: a scorrimento finito
+}
+/** colonne della griglia (locandine sulla prima riga) */
+function vodCols(g) { const f = g.firstElementChild; if (!f || !f.classList.contains('post')) return 0; let n = 0; for (let e = f, t = f.offsetTop; e && e.offsetTop === t; e = e.nextElementSibling) n++; return n; }
+/** scorrimento istantaneo (la griglia ha scroll-behavior:smooth): serve a compensare righe tolte o aggiunte sopra */
+function vodShift(g, dy) { if (!dy) return; const sb = g.style.scrollBehavior; g.style.scrollBehavior = 'auto'; g.scrollTop += dy; g.style.scrollBehavior = sb; }
+let vodTrimT = 0;
+/* toglie le righe troppo in alto (mai vicino alla selezione); la vista resta ferma dov'era */
+function vodTrim() {
+  clearTimeout(vodTrimT);
+  const g = $('#vodGrid'), max = vodMax();
+  if (vodRendered - vodStart <= max || layer() !== $('#vod')) return; // finestra aperta sopra: si riprova al prossimo spostamento
+  const cols = vodCols(g); if (!cols) return;
+  const ci = cur && g.contains(cur) ? +cur.dataset.i : vodRendered;
+  const rows = Math.min(Math.floor((vodRendered - vodStart - max) / cols), Math.floor((ci - vodStart) / cols) - 4);
+  if (rows <= 0) return;
+  const h0 = g.scrollHeight;
+  for (let k = rows * cols; k > 0 && g.firstElementChild; k--) g.firstElementChild.remove();
+  vodStart += rows * cols;
+  vodShift(g, g.scrollHeight - h0);
+}
+/* righe prima della finestra (salendo): si aggiungono sopra senza spostare la vista; in fondo la finestra torna nei limiti */
+function prevVod() {
+  if (vodStart <= 0) return false;
+  const g = $('#vodGrid'), cols = vodCols(g) || 1, from = Math.floor(Math.max(0, vodStart - 120) / cols) * cols, h0 = g.scrollHeight;
+  g.insertAdjacentHTML('afterbegin', vodItems.slice(from, vodStart).map((x, i) => posterHTML(x, from + i)).join(''));
+  vodStart = from;
+  vodShift(g, g.scrollHeight - h0);
+  for (let k = vodRendered - vodStart - vodMax() - 120; k > 0; k--) { const e = g.lastElementChild; if (!e || e === cur) break; e.remove(); vodRendered--; }
+  return true;
+}
+$('#vodGrid').addEventListener('scroll', (e) => { const l = e.target; if (l.scrollTop + l.clientHeight > l.scrollHeight - 600 && vodRendered < vodItems.length) moreVod(); else if (l.scrollTop < 300 && vodStart > 0) prevVod(); });
 document.addEventListener('kfocus', (e) => { const el = e.target; if (el.classList.contains('post') && el.closest('#vodGrid') && +el.dataset.i > vodRendered - 20 && vodRendered < vodItems.length) moreVod(); });
 $('#vodGrid').addEventListener('click', (e) => { const el = e.target.closest('.post'); if (el) openItem(vodItems[+el.dataset.i]); });
 $('#vodGrid').addEventListener('klong', (e) => { const el = e.target.closest('.post'); if (el) itemMenu(vodItems[+el.dataset.i], el); });
@@ -4314,14 +4374,59 @@ function cardHTML(type, x, k, i) {
 }
 /* le righe partono con poche card (quelle visibili): le altre si aggiungono scorrendo a destra. Meno DOM = più fluido su Fire TV */
 const ROW_FIRST = 14, ROW_STEP = 12, ROW_MAX = 40;
+/** le prime n card di una riga più «Vedi tutto» (stesso contenuto quando una riga parcheggiata torna) */
+function trackCards(r, ri, n) {
+  const more = r.more ? `<div class="nc more ${r.type === 'live' ? 'lm' : r.type === 'fold' ? 'fm' : ''}" data-f data-k="${ri}:more">Vedi tutto<br>→</div>` : '';
+  return r.items.slice(0, n).map((x, i) => cardHTML(r.type, x, `${ri}:${i}`, i)).join('') + more;
+}
 function rowHTML(r, ri) {
   const n = Math.min(r.items.length, ROW_FIRST);
-  const cards = r.items.slice(0, n).map((x, i) => cardHTML(r.type, x, `${ri}:${i}`, i)).join('');
-  const more = r.more ? `<div class="nc more ${r.type === 'live' ? 'lm' : r.type === 'fold' ? 'fm' : ''}" data-f data-k="${ri}:more">Vedi tutto<br>→</div>` : '';
-  return `<div class="nrow ${r.type === 'fold' ? 'fold' : ''}"><h3>${r.type === 'fold' ? `<span class="fi">${FOLDER_SVG}</span>` : ''}${esc(r.title)}${r.sub ? `<small>${esc(r.sub)}</small>` : r.items.length > ROW_MAX ? `<small>${r.items.length}</small>` : ''}</h3><div class="track" data-ri="${ri}" data-n="${n}">${cards}${more}</div></div>`;
+  return `<div class="nrow ${r.type === 'fold' ? 'fold' : ''}"><h3>${r.type === 'fold' ? `<span class="fi">${FOLDER_SVG}</span>` : ''}${esc(r.title)}${r.sub ? `<small>${esc(r.sub)}</small>` : r.items.length > ROW_MAX ? `<small>${r.items.length}</small>` : ''}</h3><div class="track" data-ri="${ri}" data-n="${n}">${trackCards(r, ri, n)}</div></div>`;
+}
+/* Righe lontane dalla selezione «parcheggiate»: le loro card (e le immagini) escono dal DOM, la riga tiene la sua altezza
+   (niente spostamenti) e torna uguale (stesse card, stesso scorrimento orizzontale) prima di tornare vicina o visibile.
+   Scorrendo decine di categorie la memoria resta quella di poche righe. Solo con il telecomando (sul telefono scorre il dito). */
+const rowKeep = () => (lowMem() ? 5 : 10);
+function rowUnpark(row) {
+  const p = row && row._park; if (!p) return;
+  row._park = null;
+  const tr = row.querySelector('.track'), scr = row.closest('.bscr'), ri = tr ? +tr.dataset.ri : -1, r = scr && scr._rows && scr._rows[ri];
+  if (scr) scr._parked = Math.max(0, (scr._parked || 0) - 1);
+  row.style.height = '';
+  if (!r) return;
+  const n = Math.min(p.n, r.items.length);
+  tr.innerHTML = trackCards(r, ri, n); tr.dataset.n = n;
+  if (p.sl) tr.scrollLeft = p.sl;
+}
+/** attorno alla riga ri restano disegnate rowKeep() righe per parte; le altre si parcheggiano (prima tutte le letture, poi le scritture) */
+function rowsPark(scr, ri) {
+  if (TOUCH) return;
+  const box = scr.querySelector('.rows'); if (!box) return;
+  const K = rowKeep(), far = [];
+  for (let k = 0; k < box.children.length; k++) {
+    const row = box.children[k]; if (!row.classList.contains('nrow')) continue;
+    if (Math.abs(k - ri) > K) { if (!row._park && !(cur && row.contains(cur))) far.push(row); } else if (row._park) rowUnpark(row);
+  }
+  if (!far.length) return;
+  const geo = far.map((row) => { const tr = row.querySelector('.track'); return [row.offsetHeight, tr ? tr.scrollLeft : 0, tr]; });
+  far.forEach((row, i) => {
+    const [h, sl, tr] = geo[i]; if (!tr || !h) return;
+    row._park = { n: +tr.dataset.n || 0, sl };
+    row.style.height = h + 'px';
+    tr.textContent = ''; tr.dataset.n = 0;
+    scr._parked = (scr._parked || 0) + 1;
+  });
+}
+/** righe parcheggiate entrate (o quasi) nella vista senza passare dalla selezione (rotella del mouse, salto in cima) */
+function rowsNear(scr) {
+  if (!scr._parked) return;
+  const box = scr.querySelector('.rows'), top = box.scrollTop, h = box.clientHeight, near = [];
+  for (const row of box.children) if (row._park && row.offsetTop + row.offsetHeight > top - h && row.offsetTop < top + 2 * h) near.push(row);
+  near.forEach(rowUnpark); // prima le letture, poi le scritture
 }
 /** aggiunge card a una riga (fino a `upto`, almeno ROW_STEP); false se non c'è altro da aggiungere */
 function trackFill(track, upto) {
+  if (track && track.parentElement && track.parentElement._park) rowUnpark(track.parentElement);
   if (!track || track.dataset.n === undefined) return false;
   const scr = track.closest('.bscr'), ri = +track.dataset.ri, r = scr && scr._rows && scr._rows[ri];
   if (!r) return false;
@@ -4351,7 +4456,7 @@ function buildBrowse(scr, kind) {
     </div>
     <div class="rows"></div>
   </div>`;
-  scr._rows = makeRows(kind); scr._rendered = 0;
+  scr._rows = makeRows(kind); scr._rendered = 0; scr._parked = 0;
   moreRows(scr, 5);
   if (!scr._rows.length) scr.querySelector('.rows').innerHTML = `<div class="mut" style="padding:40px 14px;font-size:17px">Nessun contenuto ancora. Vai su <b>Impostazioni › Playlist</b> per collegare una playlist.</div>`;
   const f1 = scr.querySelector('.rows [data-f]'); if (f1) f1.setAttribute('data-autof', '');
@@ -4360,7 +4465,7 @@ function buildBrowse(scr, kind) {
   setHero(scr, scr._rows.length ? scr._rows[0].items[0] : scr._feat[0], true);
   tick(true);
   // la riga delle righe viene ricreata a ogni costruzione: l'ascoltatore va agganciato ogni volta
-  scr.querySelector('.rows').addEventListener('scroll', (e) => { const l = e.target; if (l.scrollTop + l.clientHeight > l.scrollHeight - 500 && scr._rendered < scr._rows.length) moreRows(scr, 3); });
+  scr.querySelector('.rows').addEventListener('scroll', (e) => { const l = e.target; if (l.scrollTop + l.clientHeight > l.scrollHeight - 500 && scr._rendered < scr._rows.length) moreRows(scr, 3); if (scr._parked && !scr._nearRaf) scr._nearRaf = requestAnimationFrame(() => { scr._nearRaf = 0; rowsNear(scr); }); });
   if (scr._wired) return;
   scr._wired = true;
   const item = (k) => { const [ri, ii] = k.split(':'); return ii === 'more' ? null : scr._rows[+ri].items[+ii]; };
@@ -4381,7 +4486,8 @@ function buildBrowse(scr, kind) {
       const [ri, ii] = c.dataset.k.split(':').map(Number);
       if (ri >= scr._rendered - 2) moreRows(scr, 3);
       const tr = c.parentElement; if (tr && tr.dataset.n !== undefined && ii >= +tr.dataset.n - 5) trackFill(tr, 0);
-    } else if (t.closest('.tnav') && !mouse) rows.scrollTo({ top: 0, behavior: 'smooth' });
+      rowsPark(scr, ri);
+    } else if (t.closest('.tnav') && !mouse) { rowsPark(scr, 0); rows.scrollTo({ top: 0, behavior: 'smooth' }); }
   });
 
 }
@@ -4403,7 +4509,7 @@ function browseFind(scr, key) {
 function rebuildBrowse(scr, kind, focusEl) {
   const key = browseKey(scr, focusEl), rowsEl = scr.querySelector('.rows'), top = rowsEl ? rowsEl.scrollTop : 0;
   const lefts = new Map();
-  scr.querySelectorAll('.nrow').forEach((n, i) => { const r = scr._rows && scr._rows[i], t = n.querySelector('.track'); if (r && t && t.scrollLeft) lefts.set(r.title, t.scrollLeft); });
+  scr.querySelectorAll('.nrow').forEach((n, i) => { const r = scr._rows && scr._rows[i], t = n.querySelector('.track'), sl = t ? t.scrollLeft || (n._park && n._park.sl) || 0 : 0; if (r && sl) lefts.set(r.title, sl); });
   buildBrowse(scr, kind);
   const el = browseFind(scr, key), rows = scr.querySelector('.rows');
   scr.querySelectorAll('.nrow').forEach((n, i) => { const r = scr._rows[i], t = n.querySelector('.track'); if (r && t && lefts.has(r.title)) t.scrollLeft = lefts.get(r.title); });
