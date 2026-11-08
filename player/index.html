@@ -3737,6 +3737,7 @@ window.kxNowPlaying = (id) => {
   heartbeat(true);
 };
 function openFs(item, kind, fromSec, extra, gated) {
+  if (updMust()) { updOfferWhenFree(); return; } // aggiornamento obbligatorio: niente visione finché non si installa
   if (!gated && (streamGateNeeded() || lineGateNeeded(item))) { streamGate(kind, item && item.name, item).then((ok) => ok && openFs(item, kind, fromSec, extra, true)); return; }
   { const t = extra && extra.parent ? extra.parent : item; if (certNeeded(t)) { t._certTried = true; ensureCert(t).then(() => openFs(item, kind, fromSec, extra, gated)); return; } }
   if (isLocked(item) || (extra && extra.parent && isLocked(extra.parent))) { gate(extra && extra.parent && isLocked(extra.parent) ? extra.parent : item).then((ok) => ok && openFs(item, kind, fromSec, extra)); return; }
@@ -4798,7 +4799,7 @@ async function setNewPin() {
 }
 /* primo avvio (o PIN reimpostato dal fornitore): si chiede di scegliere il proprio PIN; «Più tardi» rimanda al giorno dopo */
 async function pinFirstRun(force) {
-  if (!parentalOn() || !pinIsDefault() || $('#pinM') || $('#pinFM') || S.inPlayer) return;
+  if (!parentalOn() || !pinIsDefault() || $('#pinM') || $('#pinFM') || $('#updM') || S.inPlayer) return; // mai sopra la finestra dell'aggiornamento
   if (!force && Date.now() - store.get('pinLater', 0) < 86400e3) return;
   fx('ok');
   document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="pinFM"><div class="sbox exitbox"><div class="orb mut" style="font-size:12px;letter-spacing:.35em">CONTROLLO GENITORI</div><h2>Scegli il tuo PIN</h2><p class="mut">Il controllo genitori è attivo: i contenuti per adulti e quelli che bloccherai chiedono un PIN. Ora il PIN è <b>0000</b>: scegline uno tuo di 4 cifre.</p>
@@ -6248,7 +6249,7 @@ const curUi = () => (NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window
 async function checkUpdates() {
   const u = await fetchUpdateInfo(); if (!u) return false;
   S.lastUpdCheck = Date.now();
-  if (apkNewer(u.apk) && !apkTriedSame(u.apk)) S.apkUpdate = u.apk;
+  apkFound(u.apk);
   if (u.ui && u.ui.version && NATIVE.applyUi && u.ui.version !== curUi() && !badUi(u.ui.version)) {
     bootMsg('Aggiornamento');
     const html = await fetchUi(u);
@@ -6266,7 +6267,25 @@ async function checkUpdates() {
 /** l'APK scaricato in background è pronto: lo si propone appena si è in un menu */
 window.kxApkReady = (url) => { S.apkReady = url; if (S.apkUpdate && S.apkUpdate.url === url) { if (updMust() && $('#updM') && !$('#updM')._lock) back(); updOfferWhenFree(); } };
 function updCanOffer() { return !$('#updM') && !$('.speedm.on') && !S.inPlayer && !$('#boot').classList.contains('on') && !$('#activate').classList.contains('on'); }
-function updOfferWhenFree() { if (updCanOffer()) offerApkUpdate(); else whenIdle(() => { if (updCanOffer()) offerApkUpdate(); }, 2000, 2000, 30 * 60e3); }
+function updOfferWhenFree(force) { if (updCanOffer()) offerApkUpdate(force); else whenIdle(() => { if (updCanOffer()) offerApkUpdate(force); }, 2000, 2000, 30 * 60e3); }
+/* L'aggiornamento trovato resta salvato: al prossimo avvio (anche senza rete, prima di qualsiasi canale) il blocco obbligatorio vale subito */
+function apkKeep(a) { try { store.set('apkUpd', a && a.url && a.versionCode ? { url: a.url, versionCode: a.versionCode, version: a.version || '' } : null); } catch {} }
+/** APK già scaricato e verificato in un'apertura precedente: lo dice l'app (serve a updMust) */
+function apkReadyCheck() { const a = S.apkUpdate; try { if (a && S.apkReady !== a.url && NATIVE && NATIVE.apkReady && NATIVE.apkReady(a.url)) S.apkReady = a.url; } catch {} }
+/** risposta del controllo: versione nuova da proporre (salvata) oppure niente (si dimentica quella salvata) */
+function apkFound(apk) {
+  if (apkNewer(apk) && !apkTriedSame(apk)) { S.apkUpdate = apk; apkKeep(apk); apkReadyCheck(); }
+  else if (!apkNewer(apk)) { if (S.apkUpdate && !$('#updM')) S.apkUpdate = null; apkKeep(null); }
+}
+/** all'avvio, prima della rete: l'aggiornamento visto l'ultima volta (se l'app installata non è già quella) */
+function apkRestore() {
+  const a = store.get('apkUpd', null); if (!a || S.apkUpdate) return;
+  if (apkNewer(a) && !apkTriedSame(a)) { S.apkUpdate = a; apkReadyCheck(); } else if (!apkNewer(a)) apkKeep(null);
+}
+/** c'è un aggiornamento da proporre adesso: obbligatorio, oppure non rimandato con «Più tardi» nelle ultime 12 ore (come offerApkUpdate) */
+function updPending() { const a = S.apkUpdate; if (!a) return false; if (updMust()) return true; const skip = store.get('apkSkip', {}); return !(skip.v === a.versionCode && Date.now() - skip.t < 12 * 3600e3); }
+/** quello che aspettava la finestra dell'aggiornamento (es. l'ultimo canale all'avvio): parte dopo «Più tardi» o se la finestra non serve */
+function updThen() { const f = S.updThen; S.updThen = null; if (f) try { f(); } catch {} }
 async function backgroundUpdateCheck(fromPanel) {
   if (S.demo || S.inPlayer && !fromPanel || S.updChecking) return;
   S.updChecking = true;
@@ -6277,12 +6296,11 @@ async function backgroundUpdateCheck(fromPanel) {
       const html = await fetchUi(u);
       if (html) NATIVE.stageUi(html, u.ui.version); // pronta per il prossimo avvio, senza interrompere la visione
     }
+    apkFound(u.apk);
     if (apkNewer(u.apk) && !apkTriedSame(u.apk)) {
-      S.apkUpdate = u.apk;
-      if (S.apkReady !== u.apk.url && NATIVE.apkReady) { try { if (NATIVE.apkReady(u.apk.url)) S.apkReady = u.apk.url; } catch {} } // già scaricato in un'apertura precedente
       // aggiornamento in background: l'APK si scarica e si verifica in silenzio, al cliente resta solo «Installa»
       if (NATIVE.prefetchApk && (bgUpdOn() || fromPanel) && S.apkReady !== u.apk.url) { apkPrefetchWhenFree(u.apk.url, fromPanel); if (!fromPanel) return; } // la proposta arriva con kxApkReady (o, se il download non parte, al prossimo controllo)
-      if (updCanOffer()) offerApkUpdate(fromPanel);
+      updOfferWhenFree(fromPanel); // durante la visione aspetta il ritorno in un menu (non resta nascosta dietro il lettore)
     }
   } finally { S.updChecking = false; }
 }
@@ -6508,16 +6526,18 @@ function reportDialog(preset) {
 }
 
 function offerApkUpdate(force) {
-  const a = S.apkUpdate; if (!a || $('#updM')) return;
+  const a = S.apkUpdate; if (!a) return updThen();
+  if ($('#updM')) return;
   const skip = store.get('apkSkip', {}), must = updMust();
   updFirstSeen(a); // da qui contano i giorni di grazia
-  if (!force && !must && skip.v === a.versionCode && Date.now() - skip.t < 12 * 3600e3) return;
+  if (!force && !must && skip.v === a.versionCode && Date.now() - skip.t < 12 * 3600e3) return updThen();
   modalPause(); // l'anteprima nativa coprirebbe la finestra
   document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="updM"><div class="sbox"><div class="orb mut" style="font-size:12px;letter-spacing:.35em">AGGIORNAMENTO</div>
     <h2 style="margin:14px 0 8px;font-size:26px">${must ? `Aggiornamento ${esc(a.version || '')} necessario` : S.apkReady === a.url ? `Aggiornamento ${esc(a.version || '')} pronto` : `Nuova versione ${esc(a.version || '')} disponibile`}</h2><p class="mut" style="line-height:1.5">${must ? 'Per continuare a usare l\'app va installata la versione nuova: è già scaricata e verificata, premi Installa e conferma nella schermata di Android. Ci vuole meno di un minuto.' : S.apkReady === a.url ? 'È già scaricato e verificato: premi Installa e conferma nella schermata di Android. Ci vuole meno di un minuto.' : 'Contiene miglioramenti e correzioni. Il download richiede pochi secondi, poi conferma l\'installazione.'}</p>
     <div class="ubar"><i id="uBar"></i></div><div class="mut" id="uTxt" style="font-size:13px;min-height:18px;line-height:1.4"></div>
     <div class="sbtn"><button class="btn pri" data-f id="uGo">${S.apkReady === a.url ? 'Installa ora' : 'Aggiorna ora'}</button>${must ? '' : '<button class="btn" data-f id="uLater">Più tardi</button>'}</div></div></div>`);
   if (must) $('#updM')._lock = true; // il tasto indietro non la chiude
+  else $('#updM')._onClose = () => setTimeout(updThen, 60); // «Più tardi» o Indietro: ora può partire ciò che aspettava (es. l'ultimo canale)
   setTimeout(() => focus($('#uGo'), true), 80);
   if ($('#uLater')) $('#uLater').onclick = () => { store.set('apkSkip', { v: a.versionCode, t: Date.now() }); back(); };
   $('#uGo').onclick = () => {
@@ -6526,7 +6546,7 @@ function offerApkUpdate(force) {
     try { store.set('apkTry', { vc: a.versionCode, mine: NATIVE.versionCode(), t: Date.now() }); } catch {}
     $('#uTxt').textContent = 'Download in corso…'; $('#uBar').style.width = '2%';
     window.kxApkCb = (p, msg) => {
-      if (p === -2) { $('#uTxt').innerHTML = 'Abilita <b>Installa app sconosciute</b> per questa app nelle impostazioni che si sono aperte, poi torna qui: l\'installazione partirà da sola.'; return; }
+      if (p === -2) { S.apkDl = false; $('#uTxt').innerHTML = 'Abilita <b>Installa app sconosciute</b> per questa app nelle impostazioni che si sono aperte, poi torna qui: l\'installazione partirà da sola.'; return; }
       if (p < 0 || p >= 100) S.apkDl = false;
       if (p < 0) { $('#uTxt').textContent = 'Download non riuscito' + (msg ? ': ' + msg : '') + '. Riprova più tardi.'; $('#uGo').textContent = 'Riprova'; return; }
       $('#uBar').style.width = p + '%'; $('#uTxt').textContent = p >= 100 ? 'Conferma l\'installazione nella schermata di Android.' : `Download ${p}%`;
@@ -6578,12 +6598,14 @@ async function enterHome() {
     // come TiviMate: si riparte dall'ultimo canale guardato
     const ch = S.byId && S.byId.get(store.get('lastCh', '')) || S.lib.live[0];
     renderLive(); show('live', false); S.stack = ['home'];
-    setTimeout(() => { focusChannel(ch, false); if (!isLocked(ch)) openFs(ch, 'live'); }, 350);
+    // con un aggiornamento da proporre (o obbligatorio) prima la finestra: il canale parte solo dopo «Più tardi»
+    const play = () => setTimeout(() => { if (S.inPlayer || updMust()) return; focusChannel(ch, false); if (!isLocked(ch)) openFs(ch, 'live'); }, 350);
+    if (updPending()) S.updThen = play; else play();
   }
   else show('home', false);
   b.classList.remove('out');
   warpStop && warpStop();
-  if (S.apkUpdate) setTimeout(offerApkUpdate, 900);
+  if (S.apkUpdate) setTimeout(() => updOfferWhenFree(), 900); // nel lettore aspetta il ritorno in un menu
   setTimeout(showNotices, S.apkUpdate ? 2500 : 1600);
   whenIdle(autoLogos, S.fromCache ? 9000 : 5000);
   whenIdle(() => buildXmltv(), S.fromCache ? 2500 : 4000);
@@ -6598,6 +6620,7 @@ function startDemo() {
 
 async function boot() {
   try { NATIVE && NATIVE.uiReady && NATIVE.uiReady(); } catch {} // l'interfaccia è partita
+  apkRestore(); // aggiornamento visto l'ultima volta: il blocco obbligatorio vale subito, anche senza rete
   S.sound = opt('sfx') !== 'off'; applyTextSize(opt('textSize')); if (opt('orient') !== 'auto') applyOrient(opt('orient'));
   const t = store.get('theme'); applyTheme(t || 'cinema');
   fx('boot');
