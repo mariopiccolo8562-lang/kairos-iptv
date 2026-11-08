@@ -277,7 +277,14 @@
     if (!ok) return;
     const due = window.KXPay ? KXPay.readDuePrompt('wnPay') : null; if (due === false) return;
     const body = { username: $('#wnU').value, password: $('#wnP').value, package: $('#wnK').value, note: $('#wnN').value, deviceId: $('#wnD') ? $('#wnD').value : '' };
-    try { const r = await api('POST', '/admin/wolf/lines', body); toast('Linea creata su WOLF'); if (due && r.id) await KXPay.saveDue('line', 'wolf', r.id, body.username, +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Linea creata, ma pagamento non registrato: ' + e.message, 1)); await loadLines(true); } catch (e) { toast(e.message, 1); }
+    try {
+      const r = await api('POST', '/admin/wolf/lines', body);
+      if (due && r.id) await KXPay.saveDue('line', 'wolf', r.id, body.username, +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Linea creata, ma pagamento non registrato: ' + e.message, 1));
+      const refresh = loadLines(true);
+      if (window.KXCreds) KXCreds.show('✅ Linea creata su WOLF', [['Utente', body.username], ['Password', body.password]]);
+      else toast('Linea creata su WOLF');
+      await refresh;
+    } catch (e) { toast(e.message, 1); }
   }
 
   async function act(a, id) {

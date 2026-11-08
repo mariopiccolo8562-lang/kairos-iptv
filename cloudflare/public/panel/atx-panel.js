@@ -132,8 +132,10 @@
     const miss = fields.find((f) => f.required && f.type !== 'checkbox' && !String(vals[f.name] || '').trim());
     if (miss) return toast('Compila «' + miss.label + '»', 1);
     const r = await api('POST', '/admin/atx/lines/create', { fields: vals });
-    await ask('Linea creata', `<p>Utente: <b>${esc(r.username)}</b><br>Password: <b>${esc(r.password)}</b></p>`, 'OK');
-    A.page = 1; return load();
+    A.page = 1; const refresh = load();
+    if (window.KXCreds) await KXCreds.show('✅ Linea creata su Atlantix', [['Utente', r.username], ['Password', r.password]]);
+    else toast('Linea creata su Atlantix');
+    return refresh;
   }
   async function op(o) {
     try {
