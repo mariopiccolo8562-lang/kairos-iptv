@@ -3948,7 +3948,7 @@ let srcMem = { t: 0, map: null };
 /** sorgenti Xtream distinte tra tutte le playlist dei clienti: chiave → {host, user, pass, devices} (mai verso il pannello le credenziali) */
 async function catalogSources(env) {
   if (srcMem.map && now() - srcMem.t < 5 * 60e3) return srcMem.map;
-  const rows = ((await env.DB.prepare("SELECT id, playlists FROM devices WHERE playlists <> '' LIMIT 5000").all()).results) || [];
+  const rows = ((await env.DB.prepare("SELECT id, playlists, owner_id FROM devices WHERE playlists <> '' LIMIT 5000").all()).results) || [];
   const map = new Map();
   for (const d of rows) {
     const pls = await unseal(env, d.playlists).catch(() => []);
@@ -3958,40 +3958,63 @@ async function catalogSources(env) {
       const host = hostOf(p); if (!host) continue;
       const key = (await sha256(`src:${host}|${p.username}|${p.password}`)).slice(0, 16);
       if (seen.has(key)) continue; seen.add(key);
-      const e = map.get(key) || { key, host, user: p.username, pass: p.password, devices: 0 };
-      e.devices++; map.set(key, e);
+      const e = map.get(key) || { key, host, user: p.username, pass: p.password, devices: 0, owners: new Set() };
+      e.devices++; e.owners.add(+d.owner_id || 0); map.set(key, e);
     }
   }
   srcMem = { t: now(), map };
   return map;
 }
 const catMem = new Map(); // piccola cache in memoria (su workers.dev la cache di Cloudflare non è disponibile)
-async function cachedJson(key, loader) {
-  const m = catMem.get(key);
-  if (m && now() - m.t < CAT_TTL) return m.v;
+async function cachedJson(key, loader, ttl = CAT_TTL, fresh = false) {
+  const m = !fresh && catMem.get(key);
+  if (m && now() - m.t < ttl) return m.v;
   const ck = new Request('https://kairos-cache.invalid/' + key);
   let cache = null; try { cache = typeof caches !== 'undefined' && caches.default ? caches.default : null; } catch {}
-  if (cache) { try { const r = await cache.match(ck); if (r) { const v = await r.json(); catMem.set(key, { t: now(), v }); return v; } } catch {} }
+  if (cache && !fresh) { try { const r = await cache.match(ck); if (r) { const v = await r.json(); catMem.set(key, { t: now(), v }); return v; } } catch {} }
   const v = await loader();
   if (catMem.size > 6) catMem.delete(catMem.keys().next().value);
   catMem.set(key, { t: now(), v });
-  if (cache) { try { await cache.put(ck, new Response(JSON.stringify(v), { headers: { 'Content-Type': 'application/json', 'Cache-Control': `max-age=${CAT_TTL / 1000}` } })); } catch {} }
+  if (cache) { try { await cache.put(ck, new Response(JSON.stringify(v), { headers: { 'Content-Type': 'application/json', 'Cache-Control': `max-age=${ttl / 1000}` } })); } catch {} }
   return v;
 }
-async function xtreamGet(src, action) {
-  const u = `${src.host}/player_api.php?username=${encodeURIComponent(src.user)}&password=${encodeURIComponent(src.pass)}&action=${action}`;
-  const r = await fetch(u, { headers: { 'User-Agent': CAT_UA, Accept: 'application/json' }, signal: tmo(20000), redirect: 'follow' });
-  if (!r.ok) throw new HttpErr(502, `Il server ha risposto ${r.status}`);
+async function catalogHosts(env, src) {
+  const saved = await dnsList(env), main = saved.find((x) => hostKey(x.host) === hostKey(src.host));
+  const byId = new Map(saved.map((x) => [x.id, x])), hosts = [src.host], seen = new Set([hostKey(src.host)]);
+  for (const id of (main && main.alts) || []) {
+    const alt = byId.get(id), key = hostKey(alt && alt.host);
+    if (!key || seen.has(key)) continue;
+    seen.add(key); hosts.push(alt.host);
+    if (hosts.length === 5) break;
+  }
+  return hosts;
+}
+async function catalogWithFallback(env, src, get) {
+  let last;
+  for (const host of await catalogHosts(env, src)) {
+    try { return await get(host); }
+    catch (e) {
+      last = e;
+      if (e instanceof HttpErr && Number.isInteger(e.upstreamStatus) && e.upstreamStatus >= 100 && e.upstreamStatus <= 599) throw e;
+    }
+  }
+  throw last;
+}
+async function xtreamGet(src, action, host = src.host) {
+  const u = `${host}/player_api.php?username=${encodeURIComponent(src.user)}&password=${encodeURIComponent(src.pass)}&action=${action}`;
+  const timeout = /^(?:get_[a-z]+_categories|get_[a-z]+_streams|get_series)$/.test(action) ? 45000 : 20000;
+  const r = await fetch(u, { headers: { 'User-Agent': CAT_UA, Accept: 'application/json' }, signal: tmo(timeout), redirect: 'follow' });
+  if (!r.ok) { const e = new HttpErr(502, `Il server ha risposto ${r.status}`); e.upstreamStatus = r.status; throw e; }
   const txt = await r.text();
   if (txt.length > 40 * 1024 * 1024) throw new HttpErr(502, 'Catalogo troppo grande');
   let j; try { j = JSON.parse(txt); } catch { throw new HttpErr(502, 'Il server non ha restituito un catalogo valido'); }
   return Array.isArray(j) ? j : j && typeof j === 'object' ? Object.values(j) : [];
 }
 /** catalogo normalizzato e già in cache: {cats:[{id,name}], items:[{id,name,year,cat,poster,rating,added}]} */
-async function xtreamCatalog(src, kind) {
+async function xtreamCatalog(env, src, kind) {
   return cachedJson(`catalog/${src.key}/${kind}`, async () => {
     const ACT = { series: ['get_series_categories', 'get_series'], live: ['get_live_categories', 'get_live_streams'], movies: ['get_vod_categories', 'get_vod_streams'] }[kind] || ['get_vod_categories', 'get_vod_streams'];
-    const [cats, items] = await Promise.all([xtreamGet(src, ACT[0]), xtreamGet(src, ACT[1])]);
+    const [cats, items] = await catalogWithFallback(env, src, (host) => Promise.all([xtreamGet(src, ACT[0], host), xtreamGet(src, ACT[1], host)]));
     const okUrl = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u.slice(0, 500) : '');
     const s = (v, n) => (v === undefined || v === null ? '' : String(v).slice(0, n));
     return {
@@ -4006,18 +4029,19 @@ async function xtreamCatalog(src, kind) {
 }
 /** scheda di un titolo: film → trama/cast, serie → stagioni ed episodi, canale live → EPG (ora e prossimi). In cache 1 ora */
 const b64txt = (v) => { const t = String(v || ''); if (!t) return ''; try { return decodeURIComponent(escape(atob(t))); } catch { try { return atob(t); } catch { return t; } } };
-async function xtreamInfo(src, kind, id) {
+async function xtreamInfo(env, src, kind, id) {
   return cachedJson(`catalog/${src.key}/info/${kind}/${id}`, async () => {
     const s = (v, n) => (v === undefined || v === null ? '' : String(v).slice(0, n)), okUrl = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u) ? u.slice(0, 500) : '');
     const people = (v) => s(v, 600).split(/\s*,\s*/).map((x) => x.trim()).filter(Boolean).slice(0, 30);
-    const get = async (action, extra) => { const u = `${src.host}/player_api.php?username=${encodeURIComponent(src.user)}&password=${encodeURIComponent(src.pass)}&action=${action}&${extra}`; const r = await fetch(u, { headers: { 'User-Agent': CAT_UA, Accept: 'application/json' }, signal: tmo(20000), redirect: 'follow' }); if (!r.ok) throw new HttpErr(502, `Il server ha risposto ${r.status}`); const j = await r.json().catch(() => null); if (!j || typeof j !== 'object') throw new HttpErr(502, 'Il server non ha restituito la scheda'); return j; };
+    const get = async (action, extra, host = src.host) => { const u = `${host}/player_api.php?username=${encodeURIComponent(src.user)}&password=${encodeURIComponent(src.pass)}&action=${action}&${extra}`; const r = await fetch(u, { headers: { 'User-Agent': CAT_UA, Accept: 'application/json' }, signal: tmo(20000), redirect: 'follow' }); if (!r.ok) { const e = new HttpErr(502, `Il server ha risposto ${r.status}`); e.upstreamStatus = r.status; throw e; } const j = await r.json().catch(() => null); if (!j || typeof j !== 'object') throw new HttpErr(502, 'Il server non ha restituito la scheda'); return j; };
+    const getAny = (action, extra) => catalogWithFallback(env, src, (host) => get(action, extra, host));
     if (kind === 'live') {
-      const j = await get('get_short_epg', `stream_id=${encodeURIComponent(id)}&limit=14`);
+      const j = await getAny('get_short_epg', `stream_id=${encodeURIComponent(id)}&limit=14`);
       const L = Array.isArray(j.epg_listings) ? j.epg_listings : [];
       return { kind, epg: L.map((e) => ({ title: nameClean(b64txt(e.title), 160), desc: b64txt(e.description).slice(0, 1200), start: (+e.start_timestamp || Math.floor(Date.parse(e.start) / 1000) || 0) * 1000, end: (+e.stop_timestamp || Math.floor(Date.parse(e.end) / 1000) || 0) * 1000 })).filter((e) => e.title) };
     }
     if (kind === 'series') {
-      const j = await get('get_series_info', `series_id=${encodeURIComponent(id)}`), I = j.info || {};
+      const j = await getAny('get_series_info', `series_id=${encodeURIComponent(id)}`), I = j.info || {};
       const eps = j.episodes && typeof j.episodes === 'object' ? (Array.isArray(j.episodes) ? j.episodes.flat() : Object.values(j.episodes).flat()) : [];
       const seasons = new Map();
       for (const e of eps) { if (!e || typeof e !== 'object') continue; const sn = +e.season || 0, inf = e.info || {}; if (!seasons.has(sn)) seasons.set(sn, []); seasons.get(sn).push({ id: s(e.id, 20), num: +e.episode_num || 0, title: nameClean(e.title, 160), plot: s(inf.plot, 800), duration: s(inf.duration, 12), date: s(inf.releasedate || inf.release_date, 10), image: okUrl(inf.movie_image), rating: num(inf.rating, 0, 10) }); }
@@ -4025,9 +4049,51 @@ async function xtreamInfo(src, kind, id) {
       return { kind, title: nameClean(I.name, 160), plot: s(I.plot, 2000), cast: people(I.cast), director: people(I.director), genre: s(I.genre, 120), date: s(I.releaseDate || I.release_date, 10), rating: num(I.rating_5based ? I.rating_5based * 2 : I.rating, 0, 10), poster: okUrl(I.cover), backdrop: okUrl(Array.isArray(I.backdrop_path) ? I.backdrop_path[0] : I.backdrop_path), trailer: s(I.youtube_trailer, 40),
         seasons: [...seasons.entries()].sort((a, b) => a[0] - b[0]).map(([n, list]) => { const m = meta.find((x) => +x.season_number === n) || {}; return { num: n, name: nameClean(m.name, 80) || (n ? 'Stagione ' + n : 'Speciali'), date: s(m.air_date, 10), cover: okUrl(m.cover), episodes: list.sort((a, b) => a.num - b.num).slice(0, 400) }; }) };
     }
-    const j = await get('get_vod_info', `vod_id=${encodeURIComponent(id)}`), I = j.info || {}, M = j.movie_data || {};
+    const j = await getAny('get_vod_info', `vod_id=${encodeURIComponent(id)}`), I = j.info || {}, M = j.movie_data || {};
     return { kind: 'movies', title: nameClean(M.name || I.name, 160), plot: s(I.plot || I.description, 2000), cast: people(I.cast || I.actors), director: people(I.director), genre: s(I.genre, 120), date: s(I.releasedate || I.release_date, 10), duration: s(I.duration, 12), rating: num(I.rating_5based ? I.rating_5based * 2 : I.rating, 0, 10), poster: okUrl(I.movie_image || I.cover_big), backdrop: okUrl(Array.isArray(I.backdrop_path) ? I.backdrop_path[0] : I.backdrop_path), trailer: s(I.youtube_trailer, 40), country: s(I.country, 60) };
   });
+}
+async function catalogCheck(env, srcs, labelOf, fresh = false) {
+  const sources = srcs.slice().sort((a, b) => (b.devices || 0) - (a.devices || 0) || a.key.localeCompare(b.key)).slice(0, 150);
+  const sourceKeys = sources.map((x) => x.key).sort(), labels = sources.map((x) => `${x.key}:${labelOf(x)}`).sort().join('\n');
+  const cacheKey = `catalog/check/${sourceKeys.join(',')}/${await sha256(labels)}`;
+  return cachedJson(cacheKey, async () => {
+    const agentRows = ((await env.DB.prepare("SELECT id, username FROM admins WHERE role = 'agent'").all()).results) || [];
+    const agentNames = new Map(agentRows.map((x) => [+x.id, x.username]));
+    const results = new Array(sources.length);
+    let next = 0;
+    const checkOne = async (src) => {
+      let last;
+      for (const host of await catalogHosts(env, src)) {
+        let r;
+        try { r = await fetch(`${host}/player_api.php?username=${encodeURIComponent(src.user)}&password=${encodeURIComponent(src.pass)}`, { headers: { 'User-Agent': CAT_UA, Accept: 'application/json' }, signal: tmo(12000), redirect: 'follow' }); }
+        catch (e) { last = e; continue; }
+        if (!r.ok) return { status: 'http', code: r.status, exp: 0 };
+        let text;
+        try { text = await r.text(); } catch (e) { last = e; continue; }
+        let data; try { data = JSON.parse(text); } catch { return { status: 'down', exp: 0 }; }
+        const info = data && data.user_info, expDate = info ? Number(info.exp_date) : 0;
+        const exp = Number.isFinite(expDate) && expDate > 0 ? expDate * 1000 : 0;
+        if (!info || +info.auth !== 1) return { status: 'auth', exp };
+        const status = String(info.status || '').toLowerCase();
+        if (status === 'expired' || (exp && exp < now())) return { status: 'expired', exp };
+        return { status: status === 'active' ? 'ok' : 'disabled', exp };
+      }
+      return { status: last && last.name === 'TimeoutError' ? 'timeout' : 'down', exp: 0 };
+    };
+    const workers = Array.from({ length: Math.min(6, sources.length) }, async () => {
+      while (true) {
+        const i = next++;
+        if (i >= sources.length) return;
+        const src = sources[i], health = await checkOne(src);
+        const owners = src.owners instanceof Set ? [...src.owners] : [];
+        const agents = [...new Set(owners.map((id) => +id ? agentNames.get(+id) : 'Tu').filter(Boolean))].sort();
+        results[i] = { key: src.key, label: labelOf(src), devices: src.devices, agents, ...health };
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  }, 10 * 60e3, fresh);
 }
 async function adminCatalogInfo(env, url) {
   const srcs = await catalogSources(env);
@@ -4035,7 +4101,7 @@ async function adminCatalogInfo(env, url) {
   if (!src) throw new HttpErr(400, 'Scegli una sorgente');
   const kind = ['series', 'live'].includes(url.searchParams.get('kind')) ? url.searchParams.get('kind') : 'movies', id = str(url.searchParams.get('id'), 20);
   if (!/^[A-Za-z0-9_-]{1,20}$/.test(id)) throw new HttpErr(400, 'Titolo non valido');
-  return xtreamInfo(src, kind, id);
+  return xtreamInfo(env, src, kind, id);
 }
 async function adminCatalog(env, url) {
   const srcs = await catalogSources(env);
@@ -4044,7 +4110,7 @@ async function adminCatalog(env, url) {
   const kind = ['series', 'live'].includes(url.searchParams.get('kind')) ? url.searchParams.get('kind') : 'movies';
   const q = nameClean(url.searchParams.get('q') || '', 80).toLowerCase(), cat = str(url.searchParams.get('cat'), 20);
   const page = Math.max(1, Math.min(10000, parseInt(url.searchParams.get('page') || '1', 10) || 1));
-  const data = await xtreamCatalog(src, kind);
+  const data = await xtreamCatalog(env, src, kind);
   let items = q ? data.items.filter((x) => x.name.toLowerCase().includes(q)) : data.items;
   const perCat = new Map();
   for (const x of items) perCat.set(x.cat, (perCat.get(x.cat) || 0) + 1);
@@ -4924,12 +4990,13 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     return json(maintAg[A.id] || { on: false, msg: '', allow: [] });
   }
   // Videoteca: solo le linee dei suoi clienti, senza indirizzi
-  if (path === '/catalog/sources' || path === '/catalog' || path === '/catalog/info') {
+  if (path === '/catalog/sources' || path === '/catalog' || path === '/catalog/info' || path === '/catalog/check') {
     need('vod');
     const sc = await scope(), all2 = await catalogSources(env), keys = new Set(), dn = dnA;
     const ids = [...sc];
     for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); for (const d of ((await env.DB.prepare(`SELECT playlists FROM devices WHERE playlists <> '' AND id IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || []) for (const p of await unseal(env, d.playlists).catch(() => [])) { if (p.type !== 'xtream' || !p.host || !p.username) continue; const h = hostOf(p); if (h) keys.add((await sha256(`src:${h}|${p.username}|${p.password}`)).slice(0, 16)); } }
     if (path === '/catalog/sources') return json([...all2.values()].filter((x) => keys.has(x.key)).map((x) => ({ key: x.key, label: `${(dn.get(x.host) || {}).name || 'Server'} · ${x.user}`, devices: x.devices })));
+    if (path === '/catalog/check') return json((await catalogCheck(env, [...all2.values()].filter((x) => keys.has(x.key)), (x) => `${(dn.get(x.host) || {}).name || 'Server'} · ${x.user}`, url.searchParams.get('fresh') === '1')).map((x) => ({ ...x, agents: [] })));
     if (!keys.has(str(url.searchParams.get('src') || '', 40))) throw new HttpErr(404, 'Linea non trovata');
     return adminRoutes(req, env, url, path, who, ip, ctx, aSes);
   }
@@ -5637,13 +5704,17 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const srcs = await catalogSources(env);
     return json([...srcs.values()].map((s) => ({ key: s.key, label: `${s.host.replace(/^https?:\/\//, '')} · ${s.user}`, host: s.host, devices: s.devices })).sort((a, b) => b.devices - a.devices || a.label.localeCompare(b.label)));
   }
+  if (path === '/catalog/check' && m === 'GET') {
+    const srcs = await catalogSources(env);
+    return json(await catalogCheck(env, [...srcs.values()], (s) => `${s.host.replace(/^https?:\/\//, '')} · ${s.user}`, url.searchParams.get('fresh') === '1'));
+  }
   if (path === '/catalog/info' && m === 'GET') {
     try { return json(await adminCatalogInfo(env, url)); }
-    catch (e) { if (e instanceof HttpErr) throw e; return json({ error: e && e.name === 'TimeoutError' ? 'Il server non ha risposto entro 20 secondi' : 'Server non raggiungibile' }, 502); }
+    catch (e) { if (e instanceof HttpErr) throw e; return json({ error: e && e.name === 'TimeoutError' ? 'Il server di questa linea non ha risposto entro 45 secondi: può essere lento o non accettare collegamenti da KAIROS. Le app dei clienti non sono toccate.' : 'Il server di questa linea non è raggiungibile da KAIROS. Le app dei clienti non sono toccate.' }, 502); }
   }
   if (path === '/catalog' && m === 'GET') {
     try { return json(await adminCatalog(env, url)); }
-    catch (e) { if (e instanceof HttpErr) throw e; return json({ error: e && e.name === 'TimeoutError' ? 'Il server non ha risposto entro 20 secondi' : 'Server non raggiungibile' }, 502); }
+    catch (e) { if (e instanceof HttpErr) throw e; return json({ error: e && e.name === 'TimeoutError' ? 'Il server di questa linea non ha risposto entro 45 secondi: può essere lento o non accettare collegamenti da KAIROS. Le app dei clienti non sono toccate.' : 'Il server di questa linea non è raggiungibile da KAIROS. Le app dei clienti non sono toccate.' }, 502); }
   }
 
   if (path === '/messages' && m === 'POST') {
@@ -5919,6 +5990,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       await env.DB.prepare('UPDATE devices SET max_streams = ?, vpn_loc = ?, pl_mode = ?, pl_default = ?, player = ?, addons = ?, owner_id = ? WHERE id = ?').bind(acc.max_streams, acc.vpn_loc, acc.pl_mode, acc.pl_default, acc.player, addons, newOwner, id).run();
       if (APPS.includes(b.app)) await env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(b.app, id).run();
     }
+    srcMem.map = null;
     if (ses && ses.agent) return json({ ok: true, id, code });
     await log(env, 'new', `${who}: creato dispositivo ${str(b.name, 60) || code}`, ip);
     return json({ ok: true, id, code });
@@ -6067,6 +6139,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       const kidRows = kids.length ? (((await env.DB.prepare(`SELECT id, active, expires, playlists, profiles, own FROM devices WHERE id IN (${kids.map(() => '?').join(',')})`).bind(...kids.map((k) => k.id)).all()).results) || []) : [];
       await trashPut(env, 'device', d.id, label, d, { kids: kidRows }, who);
       await env.DB.batch([...kids.map((k) => unlinkStmt(env, k.id)), env.DB.prepare('DELETE FROM devices WHERE id = ?').bind(d.id), env.DB.prepare('DELETE FROM link_pins WHERE device_id = ?').bind(d.id)]);
+      srcMem.map = null;
       await log(env, 'del', `${who}: eliminato ${label}${kids.length ? ` (${kids.length} connessioni tornate in attesa)` : ''}`, ip);
       return json({ ok: true });
     }
