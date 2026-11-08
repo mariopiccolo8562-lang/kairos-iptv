@@ -21,6 +21,45 @@
   }
   const TABS = [['conns', 'Connessioni'], ['msgs', 'Messaggi'], ['ann', 'Annuncio'], ['maint', 'Manutenzione'], ['pin', 'PIN parentale'], ['vpn', 'VPN'], ['portals', 'Portali e server'], ['link', 'Collega']];
   const R = { st: null, tab: 'conns', q: '', onlyOn: false, data: {}, err: '', busy: false, edit: null, pin: null, ck: '' };
+  if (!$('#orcp-agent-style')) {
+    const style = document.createElement('style'); style.id = 'orcp-agent-style';
+    style.textContent = `
+#v-orcp-agent .or-agent-page{display:grid;gap:14px;max-width:960px}
+#v-orcp-agent .or-agent-hero{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:15px;padding:20px;border:1px solid #1b7975;border-radius:18px;background:linear-gradient(115deg,#103b39,#172633 78%);box-shadow:0 14px 34px #0003}
+#v-orcp-agent .or-agent-icon{display:grid;place-items:center;width:54px;height:54px;border:1px solid #2dd4bf55;border-radius:16px;background:#0d948822;color:#5eead4;font-size:28px}
+#v-orcp-agent .or-agent-kicker{color:#5eead4;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+#v-orcp-agent .or-agent-hero h2{margin:4px 0;font-size:23px;line-height:1.2;color:#f8fafc}
+#v-orcp-agent .or-agent-hero p{margin:0;color:#cbd5e1;line-height:1.5}
+#v-orcp-agent .or-agent-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+#v-orcp-agent .or-agent-card{min-width:0;padding:16px;border:1px solid #333b49;border-radius:16px;background:linear-gradient(145deg,#202631,#181c23)}
+#v-orcp-agent .or-agent-card h3,#v-orcp-agent .or-agent-section h3{margin:0 0 10px;font-size:15px;color:#eef2f7}
+#v-orcp-agent .or-agent-overline{display:block;margin-bottom:8px;color:#9aa6b8;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+#v-orcp-agent .or-agent-code-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+#v-orcp-agent .or-agent-code{color:#f8fafc;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:27px;font-weight:800;letter-spacing:.04em;overflow-wrap:anywhere}
+#v-orcp-agent .or-agent-hint{margin:9px 0 0;color:#aab5c4;font-size:12px;line-height:1.5}
+#v-orcp-agent .or-agent-apk-actions{display:flex;gap:8px;flex-wrap:wrap}
+#v-orcp-agent .or-agent-apk-actions .btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+#v-orcp-agent .or-agent-download{background:linear-gradient(135deg,#0f766e,#0d9488)!important;border-color:#2dd4bf!important;color:#fff!important}
+#v-orcp-agent .or-agent-section{padding:16px;border:1px solid #333b49;border-radius:16px;background:#1a1e25}
+#v-orcp-agent .or-agent-servers{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+#v-orcp-agent .or-agent-server{display:grid;gap:4px;min-width:0;padding:13px;border:1px solid #286c70;border-radius:14px;background:linear-gradient(145deg,#123538,#1b2831)}
+#v-orcp-agent .or-agent-server strong{color:#5eead4;font-size:17px;line-height:1.2}
+#v-orcp-agent .or-agent-server small{color:#c0ccd6;font-size:12px;overflow-wrap:anywhere}
+#v-orcp-agent .or-agent-empty{display:flex;align-items:flex-start;gap:12px;padding:15px;border:1px dashed #397c7b;border-radius:14px;background:linear-gradient(120deg,#113230,#19242a)}
+#v-orcp-agent .or-agent-empty-icon{font-size:24px}
+#v-orcp-agent .or-agent-empty b{display:block;margin-bottom:3px;color:#d7fffa}
+#v-orcp-agent .or-agent-empty p{margin:0;color:#aabac3;font-size:13px;line-height:1.45}
+#v-orcp-agent .or-agent-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0;padding:0;list-style:none}
+#v-orcp-agent .or-agent-step{display:flex;align-items:flex-start;gap:10px;min-width:0;padding:13px;border:1px solid #333b49;border-radius:14px;background:#20252e}
+#v-orcp-agent .or-agent-step-num{display:grid;place-items:center;flex:0 0 27px;width:27px;height:27px;border-radius:9px;background:#0d948833;color:#5eead4;font-weight:800}
+#v-orcp-agent .or-agent-step b{display:block;margin:1px 0 4px;color:#e8edf3;font-size:13px}
+#v-orcp-agent .or-agent-step small{display:block;color:#aab5c4;font-size:12px;line-height:1.45}
+#v-orcp-agent .or-agent-step code{color:#a5f3fc;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+@media(max-width:760px){#v-orcp-agent .or-agent-grid{grid-template-columns:1fr}#v-orcp-agent .or-agent-steps{grid-template-columns:1fr}}
+@media(max-width:420px){#v-orcp-agent .or-agent-page{gap:10px}#v-orcp-agent .or-agent-hero{gap:11px;padding:15px;border-radius:15px}#v-orcp-agent .or-agent-icon{width:44px;height:44px;border-radius:13px;font-size:23px}#v-orcp-agent .or-agent-hero h2{font-size:20px}#v-orcp-agent .or-agent-card,#v-orcp-agent .or-agent-section{padding:13px;border-radius:14px}#v-orcp-agent .or-agent-code{font-size:23px}#v-orcp-agent .or-agent-servers{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}#v-orcp-agent .or-agent-server{padding:11px}#v-orcp-agent .or-agent-server strong{font-size:15px}#v-orcp-agent .or-agent-step{padding:11px}
+}`;
+    document.head.appendChild(style);
+  }
   const name = () => isAg() ? 'MirkoTeam' : (R.st && R.st.cfg && R.st.cfg.name) || (R.st && R.st.app && R.st.app.name) || 'App ORCP';
   const mut = '<span class="mut">—</span>';
   const badge = (t, c) => `<span style="display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;background:${c}22;color:${c}">${esc(t)}</span>`;
@@ -231,11 +270,23 @@
     V.innerHTML = '<p class="mut">Carico MirkoTeam…</p>';
     try {
       const c = await api('GET', '/admin/agent/orcp');
-      V.innerHTML = `<div class="card" style="padding:16px;max-width:760px"><h3 style="margin:0 0 8px">📲 ${esc(c.name || 'MirkoTeam')}</h3>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0"><b>Codice Downloader ${esc(c.dl)}</b><button class="btn sm" data-agent-copy="${esc(c.dl)}">Copia</button></div>
-        ${c.apk ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0"><a href="${esc(c.apk)}" target="_blank" rel="noopener">Scarica APK</a><button class="btn sm" data-agent-copy="${esc(c.apk)}">Copia link</button></div>` : ''}
-        <h4>I tuoi server</h4>${c.servers.length ? `<ul>${c.servers.map((s) => `<li>Server ${s.n}${s.name && s.name !== 'Server ' + s.n ? ' · ' + esc(s.name) : ''}</li>`).join('')}</ul>` : '<p class="mut">Non hai ancora server assegnati: chiedili al tuo fornitore</p>'}</div>`;
-      $$('[data-agent-copy]', V).forEach((b) => (b.onclick = () => copy(b.dataset.agentCopy, 'Testo')));
+      const servers = Array.isArray(c.servers) ? c.servers : [];
+      V.innerHTML = `<div class="or-agent-page">
+        <header class="or-agent-hero"><div class="or-agent-icon" aria-hidden="true">📲</div><div><span class="or-agent-kicker">La tua app IPTV</span><h2>${esc(c.name || 'MirkoTeam')}</h2><p>Scarica l'app e scegli il server che ti ho assegnato</p></div></header>
+        <div class="or-agent-grid">
+          <section class="or-agent-card"><span class="or-agent-overline">Codice Downloader</span><div class="or-agent-code-row"><code class="or-agent-code">${esc(c.dl || '8128314')}</code><button type="button" class="btn sm pri" data-agent-copy="${esc(c.dl || '8128314')}" data-agent-copy-label="Codice Downloader">Copia</button></div><p class="or-agent-hint">Apri Downloader sulla TV e inserisci questo codice per installare l'app.</p></section>
+          ${c.apk ? `<section class="or-agent-card"><span class="or-agent-overline">App MirkoTeam</span><h3>Scarica l'app</h3><div class="or-agent-apk-actions"><a class="btn sm pri or-agent-download" href="${esc(c.apk)}" target="_blank" rel="noopener">Scarica</a><button type="button" class="btn sm" data-agent-copy="${esc(c.apk)}" data-agent-copy-label="Link APK">Copia link</button></div><p class="or-agent-hint">Oppure copia il link per aprirlo dal dispositivo.</p></section>` : ''}
+        </div>
+        <section class="or-agent-section"><h3>🛰 I tuoi server</h3>
+          ${servers.length ? `<div class="or-agent-servers">${servers.map((s) => `<div class="or-agent-server"><strong>Server ${s.n}</strong><small>${esc(s.name || `Server ${s.n}`)}</small></div>`).join('')}</div>` : `<div class="or-agent-empty"><span class="or-agent-empty-icon" aria-hidden="true">🛰️</span><div><b>Ancora nessun server assegnato</b><p>Chiedi al tuo fornitore di assegnarti un server MirkoTeam: comparirà qui.</p></div></div>`}
+        </section>
+        <section class="or-agent-section"><h3>Come si usa</h3><ol class="or-agent-steps">
+          <li class="or-agent-step"><span class="or-agent-step-num">1</span><div><b>Apri Downloader</b><small>Inserisci il codice <code>${esc(c.dl || '8128314')}</code> per scaricare l'app.</small></div></li>
+          <li class="or-agent-step"><span class="or-agent-step-num">2</span><div><b>Scegli il server</b><small>Apri l'app MirkoTeam e seleziona il server assegnato qui sopra.</small></div></li>
+          <li class="or-agent-step"><span class="or-agent-step-num">3</span><div><b>Inserisci i tuoi dati</b><small>Usa utente e password della linea; premi «MirkoTeam» sulla linea per preparare il messaggio.</small></div></li>
+        </ol></section>
+      </div>`;
+      $$('[data-agent-copy]', V).forEach((b) => (b.onclick = () => copy(b.dataset.agentCopy, b.dataset.agentCopyLabel || 'Testo')));
     } catch (e) { V.innerHTML = `<p class="mut">${esc(e.message)}</p>`; }
   }
   async function newAgentOrcp(pre) {
