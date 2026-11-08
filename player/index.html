@@ -1957,7 +1957,6 @@ function whenIdle(fn, delay = 0, quiet = 2500, maxWait = 90e3) {
 function jobsResume() {
   S.viewEndT = Date.now(); for (const j of [...heldJobs]) { clearTimeout(j.t); heldJobs.delete(j); setTimeout(j.tick, 300); }
   try { if ([...rcHeld.values()].includes('wait')) setTimeout(() => heartbeat(true), 1500); } catch {}
-  if (S.pinAsk) { S.pinAsk = false; setTimeout(() => { try { if (!S.inPlayer) pinFirstRun(true); } catch {} }, 1500); }
 }
 /* app in sfondo (Home, altra app): niente battiti periodici e un «vado in sfondo» subito, così il pannello non la vede in linea
    mentre si usa un'altra app Kairos con lo stesso codice; al rientro un battito immediato. Durante la visione i battiti li chiede il nativo. */
@@ -3970,7 +3969,6 @@ function kickedByPanel() {
   try { stopPreview(); } catch {}
   try { stopVideo($('#pv')); } catch {}
   if (!$('#home').classList.contains('on')) try { go('home', true); } catch {}
-  toast('⛔ Visione interrotta dal tuo fornitore', 6000);
   setTimeout(() => { S.kicked = false; }, 4000);
 }
 window.kxPlayerClosed = (r) => {
@@ -5691,19 +5689,22 @@ async function rcRun(cmds) {
         if (c.c === 'cache') { rcMarkDone(c.id); try { await LibCache.clear(); } catch {} try { store.set('plSnap', null); } catch {} await ack(true, 'cache svuotata'); setTimeout(() => location.reload(), 300); return; }
         if (c.c === 'exit') { rcMarkDone(c.id); await ack(true, 'chiusa'); setTimeout(() => { try { NATIVE && NATIVE.exit ? NATIVE.exit() : window.close(); } catch {} }, 300); return; }
         if (c.c === 'update') { if (!NATIVE || !hasNativeHttp()) { await ack(false, 'solo nell\'app installata'); continue; } S.lastUpdCheck = 0; await backgroundUpdateCheck(true); if (S.apkUpdate) { await ack(true, S.apkReady === S.apkUpdate.url ? 'versione ' + (S.apkUpdate.version || '') + ' pronta: proposta al cliente' : 'versione ' + (S.apkUpdate.version || '') + ' in scaricamento'); } else await ack(true, 'già aggiornata'); continue; }
-        if (c.c === 'sync') { if (S.inPlayer) { rcHeld.set(c.id, 'wait'); continue; } whenIdle(() => loadLibrary().then(plRerender), 100); await ack(true, 'liste in aggiornamento'); continue; }
+        if (c.c === 'sync') { if (S.inPlayer) { rcHeld.set(c.id, 'wait'); continue; } S.cacheT = 0; refreshLibrary(false); await ack(true, 'liste in aggiornamento'); continue; } // in silenzio: si applicano a telecomando fermo, nessun avviso
         if (c.c === 'settings') { if (S.inPlayer) { try { NATIVE && NATIVE.playerClose && NATIVE.playerClose(); } catch {} } try { closeFs && $('#fs').classList.contains('on') && closeFs(); } catch {} const sec = (c.a && c.a.sec) || 'dev'; go('settings'); renderSettings(sec); setTimeout(() => { renderSettings(sec); const m = $(`#settBody .sm[data-sec="${sec}"]`); m && focus(m, true); }, 120); await ack(true, 'impostazioni aperte'); continue; }
-        if (c.c === 'perm') { if (!NATIVE || !NATIVE.canInstall || !NATIVE.openInstallPerm) { await ack(false, 'solo nell\'app installata'); continue; } if (NATIVE.canInstall()) { await ack(true, 'permesso già concesso'); continue; } if (S.inPlayer) { rcHeld.set(c.id, 'wait'); continue; } try { toast('Attiva «Consenti da questa fonte», poi premi INDIETRO'); } catch {} NATIVE.openInstallPerm(); await ack(true, 'schermata del permesso aperta sulla TV'); continue; }
-        if (c.c === 'pin') { store.set('pinH', ''); store.set('pinLater', 0); S.unlocked = false; toast('Il fornitore ha reimpostato il PIN del controllo genitori: ora è 0000'); await ack(true, 'PIN riportato a 0000'); if (!S.inPlayer) setTimeout(() => pinFirstRun(true), 1500); else S.pinAsk = true; continue; }
+        if (c.c === 'perm') { if (!NATIVE || !NATIVE.canInstall || !NATIVE.openInstallPerm) { await ack(false, 'solo nell\'app installata'); continue; } if (NATIVE.canInstall()) { await ack(true, 'permesso già concesso'); continue; } if (S.inPlayer) { rcHeld.set(c.id, 'wait'); continue; } NATIVE.openInstallPerm(); await ack(true, 'schermata del permesso aperta sulla TV'); continue; }
+        // in silenzio: il PIN torna 0000 (la scelta di un PIN nuovo la chiede il normale avvio dell'app, come alla prima installazione)
+        if (c.c === 'pin') { store.set('pinH', ''); store.set('pinLater', 0); S.unlocked = false; await ack(true, 'PIN riportato a 0000'); continue; }
         if (c.c === 'speed') {
           if (inView()) { rcHeld.set(c.id, 'wait'); continue; }
           rcHeld.set(c.id, 'run');
           const t0 = Date.now();
           (async () => {
-            let ok = false, info = 'speed test interrotto o non riuscito';
-            try { await speedTest(); } catch (e) { info = 'speed test non riuscito: ' + String(e && e.message || e).slice(0, 60); }
+            let ok = false, info = 'speed test non riuscito';
+            try { await speedTest(true); } catch (e) { info = 'speed test non riuscito: ' + String(e && e.message || e).slice(0, 60); }
             const L = speedLast;
             if (L && L.t >= t0 && +L.mbps > 0) { ok = true; info = speedSum(L); }
+            // il cliente ha avviato la visione durante la misura: si ferma e si rifà a visione finita (senza conferma)
+            else if (inView()) { rcHeld.set(c.id, 'wait'); return; }
             rcHeld.delete(c.id); await ack(ok, info); heartbeat(true);
           })();
           continue;
@@ -6613,14 +6614,15 @@ function speedUI() {
 }
 const speedStopNative = () => { try { NATIVE && NATIVE.speedStop && NATIVE.speedStop(); } catch {} };
 const mbTxt = (v) => (v >= 100 ? Math.round(v) : v >= 10 ? v.toFixed(1) : v.toFixed(2)) + ' Mbps';
-async function speedTest() {
-  const m = speedUI(); m.classList.add('on');
-  const run = ++speedRun, alive = () => run === speedRun;
+/** quiet = dal pannello: stessa misura senza finestra né avvisi; si ferma da solo se il cliente avvia la visione */
+async function speedTest(quiet) {
+  const m = speedUI(); if (!quiet) m.classList.add('on');
+  const run = ++speedRun, alive = () => run === speedRun && !(quiet && inView());
   const phase = (t, p) => { if (!alive()) return; $('#sPhase').textContent = t; if (p != null) $('#sBar').style.width = Math.max(0, Math.min(100, p)) + '%'; };
   const act = (k) => ['kPing', 'kJit', 'kDl', 'kUl'].forEach((id) => $('#' + id).classList.toggle('act', id === k));
   for (const id of ['sPing', 'sJit', 'sDl', 'sUl']) $('#' + id).textContent = '–';
   $('#sApply').style.display = 'none'; $('#sVerd').textContent = ''; $('#sFit').innerHTML = ''; $('#sSrv').textContent = ''; speedShow(0); phase('LATENZA…', 0); act('kPing');
-  setTimeout(() => focus($('#sClose'), true), 50);
+  if (!quiet) setTimeout(() => focus($('#sClose'), true), 50);
   const R = { ping: null, jitter: null, dl: null, ul: null, server: '' };
   const showR = () => {
     if (R.ping != null) $('#sPing').textContent = Math.round(R.ping) + ' ms';
@@ -6662,7 +6664,7 @@ async function speedTest() {
       const guard = setTimeout(() => { if (!seen) end(false, true); }, 15000);
       window.kxSpeedCb = (o) => {
         try { o = typeof o === 'string' ? JSON.parse(o) : o; } catch { return; }
-        if (!alive()) return end(true, false);
+        if (!alive()) return end(true, !!quiet); // in silenzio e il cliente guarda: si ferma anche la misura nativa
         seen = true;
         if (o.error && !o.done) return R.dl != null ? (finish(), end(true, false)) : end(false, true);
         for (const k of ['ping', 'jitter', 'dl', 'ul']) if (o[k] != null && isFinite(o[k])) R[k] = +o[k];
@@ -7293,7 +7295,7 @@ function dnsSwap(oldPls, newPls) {
   setLib(lib); S.libSig = libSig(lib); S.epg.clear(); S.xepgVer++;
   whenIdle(() => S.fullLib && LibCache.save(S.fullLib), 500, 2000, 60e3);
   store.set('plSnap', plSnapOf(newPls));
-  if (n) toast('Il fornitore ha aggiornato il server: indirizzi aggiornati');
+  // cambio di server dal pannello: in silenzio (nessun avviso al cliente)
   if ($('#live').classList.contains('on')) renderChannels();
   return true;
 }
