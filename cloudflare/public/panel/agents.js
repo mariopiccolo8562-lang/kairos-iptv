@@ -118,6 +118,8 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 .wz-apps button{padding:8px 11px;border-radius:999px;font-size:12.5px}
 .wz-apps button.on{background:var(--a1);border-color:var(--a1);color:#fff}
 .wz-help{font-size:12.5px;color:var(--mut);line-height:1.45;margin:6px 0 0}
+.wz-custom-duration{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;color:var(--mut);font-size:13px}
+.wz-custom-duration input{width:90px;margin:0}.wz-custom-duration select{width:120px;margin:0}
 .wz-code{font:700 26px/1.1 ui-monospace,SFMono-Regular,Menlo,monospace!important;letter-spacing:.14em;text-transform:uppercase;padding:14px 16px!important;width:100%;max-width:330px;margin:0!important}
 .wz-st{margin-top:10px;font-size:13.5px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);line-height:1.45}
 .wz-st.good{border-color:color-mix(in srgb,var(--ok) 55%,transparent);background:color-mix(in srgb,var(--ok) 10%,transparent)}
@@ -821,7 +823,7 @@ body.agent .foot{display:none}
       ${linked ? ownCard() : `<div class="ag-c"><h4>Abbonamento</h4><small>${roExp ? 'Non puoi cambiare la scadenza' : 'Scadenza obbligatoria, massimo 3 anni'}</small>
         <div class="tog ${e.active ? 'on' : ''}" id="cAct" ${!isNew && !P.disable ? 'style="opacity:.5;pointer-events:none"' : ''}><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
         <label class="lbl">Scadenza</label><input class="inp" type="date" id="cExp" value="${esc(e.expires)}" ${roExp ? 'readonly' : ''}>
-        ${roExp ? '' : `<div class="quick">${[1, 3, 6, 12].map((n) => `<button class="btn sm" data-cm="${n}">+${n} ${n === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>`}
+        ${roExp ? '' : periodQuickRow('agent-exp')}
         <label class="lbl">Connessioni (massimo ${P.maxConn || 1})</label><input class="inp" type="number" id="cConn" min="1" max="${P.maxConn || 1}" value="${Math.min(e.maxConn || 1, P.maxConn || 1)}"></div>
       ${lineaCard()}
       ${P.account ? `<div class="ag-c"><h4>Profili e visioni</h4><small>Quanti profili e quante visioni insieme</small>
@@ -845,7 +847,7 @@ body.agent .foot{display:none}
       $('#cApp') && ($('#cApp').onchange = () => { sync(); e.app = $('#cApp').value; appSet = true; draw(); });
       $('#cOth') && KXPlayers.bind($('#cOth'), e, () => { const x = D.devices.find((y) => y.id === e.id); if (x) e.orbix = x.orbix; sync(); draw(); });
       $('#cAct') && ($('#cAct').onclick = () => { e.active = !e.active; $('#cAct').classList.toggle('on', e.active); });
-      $$('[data-cm]').forEach((b) => (b.onclick = () => { $('#cExp').value = addMonths($('#cExp').value, +b.dataset.cm); }));
+      bindPeriodQuick($('#agB'), 'agent-exp', (n, unit) => { $('#cExp').value = addPeriod($('#cExp').value, n, unit); });
       $('#cAddPl') && ($('#cAddPl').onclick = () => { sync(); e.playlists.push({ serverId: (D.servers[0] || {}).id || '', username: '', password: '' }); draw(); });
       $('#cOwn') && ($('#cOwn').onclick = () => {
         sync(); e.own = !e.own;
@@ -913,6 +915,7 @@ body.agent .foot{display:none}
     const maxC = agent ? Math.max(1, P.maxConn || 1) : 20;
     const st = {
       targets: new Set(['kairos']), code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1),
+      durationMode: 'months', durationN: '', durationUnit: 'd',
       pl: { serverId: (servers[0] || {}).id || '', username: '', password: '', host: '', ref: '', note: '' },
       name: '', maxConn: 1, mxDomain: '', orbixId: '', oxDns: '0', busy: false, running: '', results: [],
     };
@@ -933,6 +936,7 @@ body.agent .foot{display:none}
     const codeOk = () => !has('kairos') || (okCode() && st.look && !st.look.taken && !st.look.mine && st.look.ok !== false);
     const lineCredentialsOk = () => !!(st.pl.username.trim() && st.pl.password);
     const lineOk = () => lineCredentialsOk() && (!has('kairos') || (agent ? !!st.pl.serverId : !!st.pl.host.trim()));
+    const durationOk = () => !has('kairos') || (st.durationMode === 'months' ? st.months > 0 : st.durationMode === 'date' ? !!st.expires : Number.isInteger(+st.durationN) && +st.durationN >= 1 && +st.durationN <= 999);
     const targetsOk = () => st.targets.size > 0 &&
       (!has('kairos') || codeOk()) &&
       (!has('max') || (!mxLoading && (mxDomains && mxDomains.length ? !!st.mxDomain : !!mxError))) &&
@@ -955,6 +959,7 @@ body.agent .foot{display:none}
       const out = [];
       if (!st.targets.size) return ['scegli almeno un’app'];
       if (has('kairos') && !codeOk()) out.push(!okCode() ? 'il codice della TV' : st.look && (st.look.taken || st.look.mine) ? 'un codice non ancora attivato' : 'il controllo del codice');
+      if (has('kairos') && !durationOk()) out.push('la durata');
       if (!lineCredentialsOk()) out.push('la linea (utente e password)');
       if (has('kairos') && agent && !st.pl.serverId) out.push('il server');
       if (has('kairos') && !agent && !st.pl.host.trim()) out.push('il DNS della linea');
@@ -969,6 +974,8 @@ body.agent .foot{display:none}
     const syncForm = () => {
       const get = (id) => $('#' + id);
       if (get('wzCode')) st.code = get('wzCode').value;
+      if (get('wzDurN')) st.durationN = get('wzDurN').value;
+      if (get('wzDurUnit')) st.durationUnit = get('wzDurUnit').value;
       if (get('wzApp')) st.app = get('wzApp').value;
       if (get('wzSrv')) st.pl.serverId = get('wzSrv').value;
       if (get('wzHost')) st.pl.host = get('wzHost').value;
@@ -989,6 +996,19 @@ body.agent .foot{display:none}
       const s1 = $('#wzS1'), s2 = $('#wzS2');
       if (s1) { s1.classList.toggle('ok', targetsOk()); s1.querySelector('.n').textContent = targetsOk() ? '✓' : '1'; }
       if (s2) { s2.classList.toggle('ok', lineOk()); s2.querySelector('.n').textContent = lineOk() ? '✓' : '2'; }
+    };
+    const updateDuration = () => {
+      const count = $('#wzDurN'), unit = $('#wzDurUnit');
+      if (!count || !unit) return;
+      st.durationMode = 'custom'; st.durationN = count.value; st.durationUnit = unit.value; st.months = 0;
+      $$('[data-wzm]').forEach((x) => x.classList.remove('on'));
+      const n = Number(count.value);
+      if (Number.isInteger(n) && n >= 1 && n <= 999) {
+        st.expires = addPeriod('', n, unit.value);
+        $('#wzExpT').textContent = dateIt(st.expires);
+        $('#wzExp').value = st.expires;
+      }
+      foot();
     };
     const lookup = (now = false) => {
       clearTimeout(lkT); st.look = null;
@@ -1080,7 +1100,8 @@ body.agent .foot{display:none}
         <p class="hint">Facoltativo: se lo lasci vuoto userò il nome utente della linea.</p>
         <input class="inp" id="wzName" maxlength="60" placeholder="es. Mario Rossi" value="${esc(st.name)}" style="margin:0">
         ${has('kairos') ? `<p class="hint" style="margin-top:14px">Durata e visioni contemporanee valgono solo per l’app Kairos.</p>
-          <div class="wz-dur">${[1, 3, 6, 12].map((n) => `<button type="button" class="btn${st.months === n ? ' on' : ''}" data-wzm="${n}">${n} ${n === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>
+          <div class="wz-dur">${[1, 3, 6, 12].map((n) => `<button type="button" class="btn${st.durationMode === 'months' && st.months === n ? ' on' : ''}" data-wzm="${n}">${n} ${n === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>
+          <div class="wz-custom-duration"><span>Oppure scegli tu:</span><input class="inp" type="number" id="wzDurN" min="1" max="999" step="1" placeholder="es. 45" value="${esc(st.durationN)}"><select class="inp" id="wzDurUnit"><option value="d"${st.durationUnit === 'd' ? ' selected' : ''}>giorni</option><option value="m"${st.durationUnit === 'm' ? ' selected' : ''}>mesi</option><option value="y"${st.durationUnit === 'y' ? ' selected' : ''}>anni</option></select></div>
           <div class="wz-exp">Scade il <b id="wzExpT">${esc(dateIt(st.expires))}</b> · <a href="#" id="wzExpOther">scegli un’altra data</a><input class="inp" type="date" id="wzExp" value="${esc(st.expires)}" style="display:none;max-width:200px;margin:8px 0 0"></div>
           <label class="lbl" style="margin-top:12px">Visioni contemporanee (massimo ${maxC})</label><input class="inp" type="number" id="wzConn" min="1" max="${maxC}" value="${st.maxConn}" style="max-width:180px;margin:0">` : ''}</div></div>`;
       return `<div class="wz">
@@ -1118,20 +1139,25 @@ body.agent .foot{display:none}
       if (paste) { paste.addEventListener('paste', () => setTimeout(() => pasteGo(true), 0)); paste.oninput = () => { if (/\S{6,}/.test(paste.value)) pasteGo(true); }; }
       const find = $('#wzFind');
       if (find) { find.onfocus = () => drawPick(true); find.oninput = () => drawPick(true); find.onblur = () => setTimeout(() => drawPick(false), 160); }
-      ['wzSrv', 'wzHost', 'wzUser', 'wzPass', 'wzName', 'wzConn', 'wzMxDom', 'wzOrbixId', 'wzOxDns'].forEach((id) => {
+      ['wzDurN', 'wzDurUnit', 'wzSrv', 'wzHost', 'wzUser', 'wzPass', 'wzName', 'wzConn', 'wzMxDom', 'wzOrbixId', 'wzOxDns'].forEach((id) => {
         const el = $('#' + id);
-        if (el) el.addEventListener('input', () => { syncForm(); foot(); });
-        if (el && el.tagName === 'SELECT') el.addEventListener('change', () => { syncForm(); foot(); });
+        if (el && id === 'wzDurN') el.addEventListener('input', updateDuration);
+        else if (el && id !== 'wzDurUnit') el.addEventListener('input', () => { syncForm(); foot(); });
+        if (el && el.tagName === 'SELECT') el.addEventListener('change', () => {
+          if (id === 'wzDurUnit') updateDuration();
+          else { syncForm(); foot(); }
+        });
       });
       $$('[data-wzm]').forEach((b) => (b.onclick = () => {
-        st.months = +b.dataset.wzm; st.expires = addMonths('', st.months);
+        st.durationMode = 'months'; st.durationN = ''; st.months = +b.dataset.wzm; st.expires = addMonths('', st.months);
+        if ($('#wzDurN')) $('#wzDurN').value = '';
         $$('[data-wzm]').forEach((x) => x.classList.toggle('on', x === b));
         $('#wzExpT').textContent = dateIt(st.expires); $('#wzExp').value = st.expires; foot();
       }));
       const expOther = $('#wzExpOther');
       if (expOther) expOther.onclick = (e) => { e.preventDefault(); const x = $('#wzExp'); x.style.display = x.style.display === 'none' ? '' : 'none'; };
       const exp = $('#wzExp');
-      if (exp) exp.onchange = () => { if (exp.value) { st.expires = exp.value; st.months = 0; $$('[data-wzm]').forEach((x) => x.classList.remove('on')); $('#wzExpT').textContent = dateIt(st.expires); } };
+      if (exp) exp.onchange = () => { if (exp.value) { st.durationMode = 'date'; st.durationN = ''; st.expires = exp.value; st.months = 0; if ($('#wzDurN')) $('#wzDurN').value = ''; $$('[data-wzm]').forEach((x) => x.classList.remove('on')); $('#wzExpT').textContent = dateIt(st.expires); foot(); } };
       const full = $('#wzFull');
       if (full) full.onclick = (e) => { e.preventDefault(); alive = false; closePage(); origOpen(null); };
       bindOpen(); foot();

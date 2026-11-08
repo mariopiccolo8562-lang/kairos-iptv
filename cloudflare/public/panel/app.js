@@ -377,6 +377,28 @@ $('#rows').addEventListener('click', async (e) => {
   openQuick(d);
 });
 function addMonths(base, m) { const b = base && new Date(base) > new Date() ? new Date(base) : new Date(); b.setMonth(b.getMonth() + m); return b.toISOString().slice(0, 10); }
+function addPeriod(base, n, unit) {
+  const b = base && new Date(base) > new Date() ? new Date(base) : new Date(), amount = Number(n);
+  if (unit === 'd') b.setDate(b.getDate() + amount);
+  else if (unit === 'm') b.setMonth(b.getMonth() + amount);
+  else if (unit === 'y') b.setFullYear(b.getFullYear() + amount);
+  return b.toISOString().slice(0, 10);
+}
+function periodQuickRow(key) {
+  return `<div class="quick" data-period-row="${key}"><span style="align-self:center">+</span><input class="inp" type="number" min="1" max="999" value="1" data-period-count aria-label="Quantità" style="width:82px;min-width:82px;margin:0"><select class="inp" data-period-unit aria-label="Unità di tempo" style="width:112px;margin:0"><option value="d">giorni</option><option value="m">mesi</option><option value="y">anni</option></select><button type="button" class="btn sm" data-period-add>Aggiungi</button></div>`;
+}
+function bindPeriodQuick(root, key, apply) {
+  const row = root && root.querySelector(`[data-period-row="${key}"]`);
+  if (!row) return;
+  const count = row.querySelector('[data-period-count]'), unit = row.querySelector('[data-period-unit]');
+  const add = () => {
+    const n = Number(count.value);
+    if (!Number.isInteger(n) || n < 1 || n > 999) { toast('Inserisci una durata da 1 a 999', 1); count.focus(); return; }
+    apply(n, unit.value);
+  };
+  row.querySelector('[data-period-add]').onclick = add;
+  count.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } };
+}
 /* «Disconnetti»: interrompe la visione in corso sull'app (entro ~20 s); l'abbonamento resta attivo */
 async function kickDev(d, quiet) {
   const kids = d.parent ? [] : kidsOf(d.id);
@@ -423,12 +445,17 @@ function openQuick(d) {
     <label class="lbl">${linked ? 'Nome del dispositivo' : 'Nome cliente'}</label><input class="inp" id="qName" maxlength="60" value="${esc(edit.name)}" placeholder="${linked ? 'es. Camera da letto' : 'es. Mario Rossi'}">
     ${linked ? '' : `<div class="tog ${edit.active ? 'on' : ''}" id="qAct" style="margin-top:16px"><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
     <label class="lbl">Scadenza</label><div class="row"><input class="inp" type="date" id="qExp" value="${esc(edit.expires)}"><button class="btn" id="qInf">${edit.expires ? 'Rendi illimitato' : 'Illimitato ✓'}</button></div>
-    <div class="quick">${[1, 3, 6, 12].map((m) => `<button class="btn sm" data-qm="${m}">+${m} ${m === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>`}
+    ${periodQuickRow('quick-exp')}`}
     <label class="lbl">Note</label><textarea class="inp" id="qNotes" placeholder="Pagamento, contatto, dettagli…">${esc(edit.notes || '')}</textarea>
     <button class="btn qfull" id="qFull">Scheda completa →<small>playlist, lettore, profili, VPN, permessi, add-on</small></button>`;
   if ($('#qAct')) $('#qAct').onclick = () => { edit.active = !edit.active; $('#qAct').classList.toggle('on', edit.active); };
   if ($('#qInf')) $('#qInf').onclick = () => { $('#qExp').value = ''; $('#qInf').textContent = 'Illimitato ✓'; };
-  $$('#dBody [data-qm]').forEach((b) => (b.onclick = () => { const v = addMonths($('#qExp').value, +b.dataset.qm); $('#qExp').value = v; edit.active = true; if ($('#qAct')) $('#qAct').classList.add('on'); $('#qInf').textContent = 'Rendi illimitato'; }));
+  bindPeriodQuick($('#dBody'), 'quick-exp', (n, unit) => {
+    $('#qExp').value = addPeriod($('#qExp').value, n, unit);
+    edit.active = true;
+    if ($('#qAct')) $('#qAct').classList.add('on');
+    if ($('#qInf')) $('#qInf').textContent = 'Rendi illimitato';
+  });
   const read = () => ({ name: $('#qName').value.trim(), notes: $('#qNotes').value, ...(linked ? {} : { expires: $('#qExp').value, active: !!edit.active }) });
   $('#qFull').onclick = () => { const v = read(); const cur = D.devices.find((x) => x.id === edit.id) || d; openDrawer({ ...cur, ...v }, false); };
   $('#dSave').onclick = async () => {
@@ -521,7 +548,7 @@ function renderDrawer() {
     ${!linked && D.role !== 'agent' && (D.agents || []).length ? `<label class="lbl">Responsabile</label><select class="inp" id="eOwner"><option value="0">Tu (nessun agente)</option>${D.agents.map((a) => `<option value="${a.id}" ${+edit.ownerId === a.id ? 'selected' : ''}>${esc(a.username)}${a.active ? '' : ' (disattivato)'}</option>`).join('')}</select><small class="mut" style="display:block;margin-top:6px;font-size:12px">L'agente scelto vede e gestisce questo cliente dal suo pannello.</small>` : ''}`;
   const S2 = linked ? '' : `<div class="tog ${edit.active ? 'on' : ''}" id="eAct"><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
     <div class="row"><input class="inp" type="date" id="eExp" value="${esc(edit.expires)}"><button class="btn" id="eInf">${edit.expires ? 'Rendi illimitato' : 'Illimitato ✓'}</button></div>
-    <div class="quick">${[1, 3, 6, 12].map((m) => `<button class="btn sm" data-m="${m}">+${m} ${m === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>`;
+    ${periodQuickRow('edit-exp')}`;
   const S3 = linked && !edit.own ? '' : `<div id="pls">${edit.playlists.map((p, i) => `<div class="pl" data-i="${i}">
       <div class="ph"><input class="inp" data-k="name" value="${esc(p.name)}" placeholder="Nome"><input class="inp pltag" data-k="tag" value="${esc(p.tag || '')}" maxlength="6" placeholder="Sigla" title="Sigla mostrata nell'app sui contenuti di questa playlist quando sono unite (es. SKY, A, B)"><div class="seg"><button class="${p.type === 'm3u' ? 'on' : ''}" data-t="m3u">M3U</button><button class="${p.type === 'xtream' ? 'on' : ''}" data-t="xtream">Xtream</button></div><button class="icb" data-rm><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button></div>
       ${p.type === 'm3u' ? `<input class="inp mono" data-k="url" value="${esc(p.url)}" placeholder="http://…/get.php?…&type=m3u_plus">` : `<input class="inp mono" data-k="host" value="${esc(p.host)}" placeholder="http://host:porta"><div class="row"><input class="inp" data-k="username" value="${esc(p.username)}" placeholder="Username"><input class="inp" data-k="password" value="${esc(p.password)}" placeholder="Password"></div>`}
@@ -580,7 +607,7 @@ function renderDrawer() {
   const re = () => { sync(); renderDrawer(); };
   $('#eAct') && ($('#eAct').onclick = () => { edit.active = !edit.active; $('#eAct').classList.toggle('on', edit.active); });
   $('#eInf') && ($('#eInf').onclick = () => { sync(); edit.expires = ''; renderDrawer(); });
-  $$('[data-m]').forEach((b) => (b.onclick = () => { sync(); edit.expires = addMonths(edit.expires, +b.dataset.m); edit.active = true; renderDrawer(); }));
+  bindPeriodQuick($('#dBody'), 'edit-exp', (n, unit) => { sync(); edit.expires = addPeriod(edit.expires, n, unit); edit.active = true; renderDrawer(); });
   $$('[data-plm]').forEach((b) => (b.onclick = () => { sync(); edit.plMode = b.dataset.plm; renderDrawer(); }));
   $('#ePlDef') && ($('#ePlDef').onchange = (e) => { edit.plDefault = e.target.value; });
   $('#addPl') && ($('#addPl').onclick = () => { sync(); edit.playlists.push({ id: 'p' + Date.now(), name: 'Playlist ' + (edit.playlists.length + 1), type: 'm3u', url: '', host: '', username: '', password: '' }); renderDrawer(); });
