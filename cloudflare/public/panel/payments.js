@@ -74,9 +74,23 @@
     return ledgerPending;
   }
   const css = document.createElement('style');
-  css.textContent = `.pay-badge{display:inline-flex;align-items:center;max-width:100%;width:max-content;padding:3px 8px;border-radius:999px;font-size:11px;line-height:1.35;font-weight:700;white-space:normal}.pay-badge.due{background:rgba(239,68,68,.16);border:1px solid rgba(239,68,68,.42);color:#ff9a9a}.pay-badge.paid{background:rgba(34,197,94,.13);border:1px solid rgba(34,197,94,.32);color:#79e6a0}.pay-panel-tile{display:inline-flex;align-items:center;padding:9px 13px;border-radius:11px;border:1px solid rgba(239,68,68,.45);background:rgba(239,68,68,.14);color:#ffaaaa;font-weight:700;cursor:pointer;white-space:nowrap}.kxpay-veil{position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,.68);display:grid;place-items:center;padding:14px}.kxpay-box{width:min(500px,100%);max-height:90vh;overflow:auto;background:#151923;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 20px 80px #0009}.kxpay-box h3{margin:0 0 6px}.kxpay-tabs{display:flex;gap:8px;margin:16px 0}.kxpay-tabs button{flex:1}.kxpay-tabs .on{background:var(--pri,#367bf5);color:#fff;border-color:transparent}.kxpay-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.kxpay-grid label{display:grid;gap:5px;font-size:12px;color:var(--mut)}.kxpay-full{grid-column:1/-1}.kxpay-box textarea{resize:vertical}.kxpay-actions{display:flex;justify-content:space-between;gap:8px;margin-top:18px}.kxpay-actions>span{display:flex;gap:8px}.kxpay-box .ck{margin-top:12px}.kxpay-auto{display:grid;gap:8px;margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:11px}.pay-edit{white-space:nowrap}@media(max-width:500px){.kxpay-grid{grid-template-columns:1fr}.kxpay-full{grid-column:auto}}`;
+  css.textContent = `.pay-badge{display:inline-flex;align-items:center;max-width:100%;width:max-content;padding:3px 8px;border-radius:999px;font-size:11px;line-height:1.35;font-weight:700;white-space:normal}.pay-badge.due{background:rgba(239,68,68,.16);border:1px solid rgba(239,68,68,.42);color:#ff9a9a}.pay-badge.paid{background:rgba(34,197,94,.13);border:1px solid rgba(34,197,94,.32);color:#79e6a0}.pay-panel-tile{display:inline-flex;align-items:center;padding:9px 13px;border-radius:11px;border:1px solid rgba(239,68,68,.45);background:rgba(239,68,68,.14);color:#ffaaaa;font-weight:700;cursor:pointer;white-space:nowrap}.kxpay-veil{position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,.68);display:grid;place-items:center;padding:14px}.kxpay-box{width:min(500px,100%);max-height:90vh;overflow:auto;background:#151923;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 20px 80px #0009}.kxpay-box h3{margin:0 0 6px}.kxpay-tabs{display:flex;gap:8px;margin:16px 0}.kxpay-tabs button{flex:1}.kxpay-tabs .on{background:var(--pri,#367bf5);color:#fff;border-color:transparent}.kxpay-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.kxpay-grid label{display:grid;gap:5px;font-size:12px;color:var(--mut)}.kxpay-full{grid-column:1/-1}.kxpay-paid-fields{display:grid;grid-template-columns:1fr;gap:10px}.kxpay-box textarea{resize:vertical}.kxpay-actions{display:flex;justify-content:space-between;gap:8px;margin-top:18px}.kxpay-actions>span{display:flex;gap:8px}.kxpay-box .ck{margin-top:12px}.kxpay-auto{display:grid;gap:8px;margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:11px}.kxpay-switch{display:flex!important;align-items:center;gap:8px}.kxpay-summary{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:11px;font-size:13px;line-height:1.55}.kxpay-summary>div{margin-top:4px}.pay-edit{white-space:nowrap}@media(max-width:500px){.kxpay-grid{grid-template-columns:1fr}.kxpay-full{grid-column:auto}}`;
+  css.textContent += `.kxpay-grid label.ck{display:flex;align-items:center;gap:8px;margin:0;padding:4px 0}.kxpay-grid label.ck input{margin:0}`;
   document.head.appendChild(css);
-  function open(kind, panel, ref, label, ownerId, initialStatus = 'due', autoLine = '') {
+  const PANEL_NAMES = { wolf: 'WOLF', armada: 'Armada', storm: 'Storm', atx: 'Atlantix', ora: 'ORA', ro: 'Realott', slt: 'SLT', orcp: 'MirkoTeam', mxp: 'MaxPlayer', oxp: 'OrbixPlay' };
+  const NATIVE_NOTE_PANELS = new Set(['wolf', 'atx', 'ro', 'slt']);
+  const PAYMENT_NOTE_TAG = /\s*\[K: [^\]]*\]\s*$/;
+  const noteTag = (status, months, amount, paidUntil, autoOn) => {
+    if (status === 'due') return `[K: DEVE PAGARE ${months} ${months === 1 ? 'mese' : 'mesi'}${amount === null ? '' : ` · ${Number(amount).toLocaleString('it-IT', { maximumFractionDigits: 2 })}€`}]`;
+    const d = String(paidUntil || '');
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}` : '';
+    return `[K: PAGATO fino al ${date}${autoOn ? ' · rinnovo auto' : ''}]`;
+  };
+  const panelNoteText = (current, note, tag) => {
+    const base = String(note || '').trim() || String(current || '').replace(PAYMENT_NOTE_TAG, '').trim();
+    return `${base.slice(0, Math.max(0, 300 - tag.length - (base ? 1 : 0)))} ${tag}`.trim();
+  };
+  function open(kind, panel, ref, label, ownerId, initialStatus = '', autoLine = '', currentPanelNote) {
     if (!canEdit()) return toast('Non puoi gestire i pagamenti', 1);
     load().then(async () => {
       const old = get(kind, panel, ref), status = ['due', 'paid'].includes(initialStatus) ? initialStatus : (old && old.status) || 'due';
@@ -91,39 +105,99 @@
       const lineValue = autoLine || row.auto_line || '';
       const lineText = typeof lineValue === 'string' ? lineValue : JSON.stringify(lineValue);
       const periods = kind === 'device' ? Array.from({ length: 12 }, (_, i) => i + 1) : panel === 'atx' ? [1, 2, 3, 6, 12] : [1, 3, 6, 12];
-      const autoControl = !supportedAuto ? kind === 'line' ? '<div class="kxpay-auto kxpay-full mut">Rinnovo automatico non disponibile su questo pannello</div>' : '' : !canAuto ? '' : `<div class="kxpay-auto kxpay-full"><b>🔁 Rinnovo automatico</b><label class="ck"><input id="kpAutoOn" type="checkbox"${(+row.auto_months > 0 || !!row.auto_opt) ? ' checked' : ''}><span>Attiva il rinnovo automatico</span></label>
-        ${packageTarget ? `<label class="kxpay-full">Pacchetto<select class="inp" id="kpAutoOpt">${packages.map((p) => `<option value="${escP(p.id)}"${String(row.auto_opt || '') === String(p.id) ? ' selected' : ''}>${escP(p.name || p.id)}</option>`).join('')}</select></label>` : `<label class="kxpay-full">Ogni<select class="inp" id="kpAutoMonths">${periods.map((n) => `<option value="${n}"${(+row.auto_months || periods[0]) === n ? ' selected' : ''}>${n} ${n === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select></label>`}
-        <input type="hidden" id="kpAutoLine" value="${escP(lineText)}"><small class="mut" id="kpAutoHelp">Rinnova da solo alla scadenza finché è pagato (fino al ${escP(dateText(row.paid_until) || '—')}). Usa i tuoi crediti.</small></div>`;
+      const autoOn0 = +row.auto_months > 0 || !!row.auto_opt;
+      const autoControl = !supportedAuto ? kind === 'line' ? `<div class="kxpay-auto kxpay-full mut" id="kpAutoWrap" style="${status === 'paid' ? '' : 'display:none'}">Rinnovo automatico non disponibile su questo pannello</div>` : '' : !canAuto ? '' : `<div class="kxpay-auto kxpay-full" id="kpAutoWrap" style="${status === 'paid' ? '' : 'display:none'}"><b>🔁 Rinnovo automatico</b><label class="ck kxpay-switch"><input id="kpAutoOn" type="checkbox"${autoOn0 ? ' checked' : ''}><span>Rinnova la linea da solo quando scade</span></label>
+        ${packageTarget ? `<label class="kxpay-full">Ogni volta rinnova di:<select class="inp" id="kpAutoOpt">${packages.map((p) => `<option value="${escP(p.id)}"${String(row.auto_opt || '') === String(p.id) ? ' selected' : ''}>${escP(p.name || p.id)}</option>`).join('')}</select></label>` : `<label class="kxpay-full">Ogni volta rinnova di:<select class="inp" id="kpAutoMonths">${periods.map((n) => `<option value="${n}"${(+row.auto_months || periods[0]) === n ? ' selected' : ''}>${n} ${n === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select></label>`}
+        <input type="hidden" id="kpAutoLine" value="${escP(lineText)}"><small class="mut" id="kpAutoHelp"></small></div>`;
       const veil = document.createElement('div'); veil.className = 'kxpay-veil';
       veil.innerHTML = `<div class="kxpay-box" role="dialog" aria-modal="true" aria-label="Pagamento"><h3>💰 Pagamento</h3><div class="mut">${escP(label || row.label || ref)}</div>
-        <div class="kxpay-tabs"><button type="button" class="btn ${status === 'due' ? 'on' : ''}" data-st="due">Deve pagare</button><button type="button" class="btn ${status === 'paid' ? 'on' : ''}" data-st="paid">Ha pagato</button></div>
-        <div class="kxpay-grid"><label>Mesi<input class="inp" id="kpMonths" type="number" min="0" max="120" step="1" value="${Number.isInteger(+row.months) ? +row.months : 1}"></label>
+        <div class="kxpay-tabs"><button type="button" class="btn ${status === 'due' ? 'on' : ''}" data-st="due">Deve ancora pagare</button><button type="button" class="btn ${status === 'paid' ? 'on' : ''}" data-st="paid">Ha già pagato</button></div>
+        <div class="kxpay-grid"><div class="kxpay-full kxpay-paid-fields"><label id="kpMonthsLabel">${status === 'paid' ? 'Quanti mesi ha pagato?' : 'Quanti mesi deve pagare?'}<input class="inp" id="kpMonths" type="number" min="0" max="120" step="1" value="${Number.isInteger(+row.months) ? +row.months : 1}"></label>
+        <label id="kpDateWrap" style="${status === 'paid' ? '' : 'display:none'}">Coperto fino al<input class="inp" id="kpDate" type="date" value="${escP(status === 'paid' && row.paid_until >= localDay() ? row.paid_until : addMonths(+row.months || 1))}"></label></div>
         <label>Importo € (facoltativo)<input class="inp" id="kpAmount" type="number" min="0" max="100000" step="0.01" value="${row.amount == null ? '' : escP(row.amount)}" placeholder="es. 10"></label>
         <label class="kxpay-full">Nota<textarea class="inp" id="kpNote" maxlength="200" rows="2" placeholder="es. Mario Rossi">${escP(row.note || '')}</textarea></label>
-        <label class="kxpay-full" id="kpDateWrap" style="${status === 'paid' ? '' : 'display:none'}">Pagato fino al<input class="inp" id="kpDate" type="date" value="${escP(status === 'paid' && row.paid_until >= localDay() ? row.paid_until : addMonths(+row.months || 1))}"></label>${autoControl}</div>
-        <label class="ck"><input id="kpRemind" type="checkbox"${row.remind === 0 ? '' : ' checked'}><span>Promemoria ogni 2 giorni</span></label>
+        ${autoControl}</div>
+        <label class="ck" id="kpRemindWrap" style="${status === 'due' ? '' : 'display:none'}"><input id="kpRemind" type="checkbox"${row.remind === 0 ? '' : ' checked'}><span>Ricordamelo ogni 2 giorni finché non paga</span></label>
+        <div class="kxpay-summary" id="kpSummary"><b>Riepilogo</b><div></div></div>
         <div class="kxpay-actions"><button type="button" class="btn danger" id="kpDelete"${old ? '' : ' disabled'}>Togli</button><span><button type="button" class="btn" id="kpCancel">Annulla</button><button type="button" class="btn pri" id="kpSave">Salva</button></span></div></div>`;
       document.body.appendChild(veil);
       let curStatus = status, dateEdited = false;
       const close = () => veil.remove();
       const date = $('#kpDate', veil), months = $('#kpMonths', veil);
-      const toggle = (s) => { curStatus = s; $$('.kxpay-tabs [data-st]', veil).forEach((b) => b.classList.toggle('on', b.dataset.st === s)); $('#kpDateWrap', veil).style.display = s === 'paid' ? '' : 'none'; };
+      if (kind === 'line' && currentPanelNote === undefined && !NATIVE_NOTE_PANELS.has(panel)) {
+        try {
+          const notes = await api('GET', `/admin/line-notes?panel=${encodeURIComponent(panel)}`);
+          currentPanelNote = (notes.notes || {})[String(ref).toLowerCase()] || '';
+        } catch { currentPanelNote = ''; }
+      }
+      currentPanelNote = String(currentPanelNote || '');
+      const autoHelp = $('#kpAutoHelp', veil), summary = $('#kpSummary > div', veil);
+      const selectedAutoPeriod = () => {
+        const opt = $('#kpAutoOpt', veil), period = $('#kpAutoMonths', veil);
+        return opt ? (opt.selectedOptions[0]?.textContent || 'pacchetto') : period ? `${period.value} ${+period.value === 1 ? 'mese' : 'mesi'}` : +row.auto_months ? `${+row.auto_months} ${+row.auto_months === 1 ? 'mese' : 'mesi'}` : row.auto_opt ? 'pacchetto scelto' : '';
+      };
+      const autoHelpText = () => {
+        if (!autoHelp) return;
+        const period = selectedAutoPeriod() || 'periodo scelto';
+        const until = date.value ? dateText(date.value) : '—';
+        const monthsPerRenewal = +($('#kpAutoMonths', veil)?.value || 0);
+        const untilMs = date.value ? Date.parse(date.value + 'T00:00:00') : NaN;
+        const todayMs = Date.parse(localDay() + 'T00:00:00');
+        const count = monthsPerRenewal && Number.isFinite(untilMs) ? Math.max(0, Math.ceil((untilMs - todayMs) / (monthsPerRenewal * 30.4375 * 864e5))) : 0;
+        autoHelp.textContent = `Quando la linea scade, KAIROS la rinnova di ${period} alla volta, fino al ${until}.${monthsPerRenewal ? ` (circa ${count} rinnovi)` : ''} Usa i tuoi crediti.`;
+      };
+      const updateSummary = () => {
+        const n = Number(months.value) || 0, av = $('#kpAmount', veil).value.trim(), amount = av && Number.isFinite(Number(av)) ? Number(av) : null;
+        const monthText = `${n} ${n === 1 ? 'mese' : 'mesi'}`, money = amount === null ? '' : ` (${amountText(amount)})`;
+        let text = curStatus === 'paid' ? `Ha pagato ${monthText}${money}.` : `Deve ancora pagare ${monthText}${money}.`;
+        const autoMonthsValue = +($('#kpAutoMonths', veil)?.value || row.auto_months || 0), autoOptValue = $('#kpAutoOpt', veil)?.value || row.auto_opt || '';
+        const autoOn = $('#kpAutoOn', veil)?.checked ?? autoOn0;
+        if (curStatus === 'paid' && autoOn && supportedAuto) text += ` La linea si rinnova da sola di ${selectedAutoPeriod()} alla volta fino al ${date.value ? dateText(date.value) : '—'}. Usa i tuoi crediti.`;
+        if (curStatus === 'due') text += $('#kpRemind', veil).checked ? ' Ti ricordo ogni 2 giorni.' : ' Promemoria disattivato.';
+        if (kind === 'line') {
+          const paidUntil = curStatus === 'paid' ? date.value || addMonths(n) : '';
+          const tag = noteTag(curStatus, n, amount, paidUntil, autoOn && (autoMonthsValue > 0 || !!autoOptValue));
+          text += ` Sul pannello ${PANEL_NAMES[panel] || panel.toUpperCase()} la nota diventa: «${panelNoteText(currentPanelNote, $('#kpNote', veil).value, tag)}»`;
+        }
+        summary.textContent = text;
+        autoHelpText();
+      };
+      const toggle = (s) => {
+        curStatus = s;
+        $$('.kxpay-tabs [data-st]', veil).forEach((b) => b.classList.toggle('on', b.dataset.st === s));
+        $('#kpDateWrap', veil).style.display = s === 'paid' ? '' : 'none';
+        if ($('#kpAutoWrap', veil)) $('#kpAutoWrap', veil).style.display = s === 'paid' ? '' : 'none';
+        $('#kpMonthsLabel', veil).firstChild.textContent = s === 'paid' ? 'Quanti mesi ha pagato?' : 'Quanti mesi deve pagare?';
+        $('#kpRemindWrap', veil).style.display = s === 'due' ? '' : 'none';
+        updateSummary();
+      };
       $$('.kxpay-tabs [data-st]', veil).forEach((b) => { b.onclick = () => toggle(b.dataset.st); });
-      date.oninput = () => { dateEdited = true; };
-      months.oninput = () => { if (!dateEdited) date.value = addMonths(+months.value || 0); };
-      const autoHelp = $('#kpAutoHelp', veil), autoUpdate = () => { if (autoHelp) autoHelp.textContent = `Rinnova da solo alla scadenza finché è pagato (fino al ${date.value ? dateText(date.value) : '—'}). Usa i tuoi crediti.`; };
-      date.addEventListener('input', autoUpdate);
+      date.oninput = () => { dateEdited = true; updateSummary(); };
+      months.oninput = () => { if (!dateEdited) date.value = addMonths(+months.value || 0); updateSummary(); };
+      ['kpAmount', 'kpNote', 'kpRemind', 'kpAutoOpt', 'kpAutoMonths'].forEach((id) => {
+        const control = $('#' + id, veil);
+        control?.addEventListener('input', updateSummary);
+        control?.addEventListener('change', updateSummary);
+      });
       $('#kpAutoOn', veil)?.addEventListener('change', (e) => {
         const control = $('#kpAutoMonths', veil) || $('#kpAutoOpt', veil);
         if (control) control.disabled = !e.target.checked;
+        updateSummary();
       });
       const autoCtl = $('#kpAutoMonths', veil) || $('#kpAutoOpt', veil);
       if (autoCtl) autoCtl.disabled = !$('#kpAutoOn', veil).checked;
+      updateSummary();
       $('#kpCancel', veil).onclick = close;
       veil.onclick = (e) => { if (e.target === veil) close(); };
       $('#kpDelete', veil).onclick = async () => {
         if (!old) return;
-        try { await api('PUT', '/admin/payments', { kind, panel, ref, label, status: '', ownerId }); cache.at = 0; await load(true); close(); toast('Promemoria tolto'); }
+        try {
+          const result = await api('PUT', '/admin/payments', { kind, panel, ref, label, status: '', ownerId });
+          cache.at = 0; await load(true); close();
+          if (result.panelNote?.ok) toast(result.panelNote.where === 'panel' ? `Nota rimossa su ${result.panelNote.panelName}` : `Nota rimossa in KAIROS (${result.panelNote.panelName} non ha le note)`);
+          else if (result.panelNote) toast(`Promemoria tolto, ma la nota non è stata aggiornata su ${result.panelNote.panelName}: ${result.panelNote.error}`, 1);
+          else toast('Promemoria tolto');
+        }
         catch (e) { toast(e.message, 1); }
       };
       $('#kpSave', veil).onclick = async () => {
@@ -142,8 +216,12 @@
           } : {};
           if (autoOn && kind === 'line' && !autoBody.autoLine) return toast('Linea non valida per il rinnovo automatico', 1);
           if (autoOn && packageTarget && !autoBody.autoOpt) return toast('Scegli il pacchetto per il rinnovo automatico', 1);
-          await api('PUT', '/admin/payments', { kind, panel, ref, ownerId, label, status: curStatus, months: n, amount, note, paidUntil, remind: $('#kpRemind', veil).checked, ...autoBody });
-          cache.at = 0; await load(true); close(); toast(curStatus === 'due' ? 'Pagamento segnato: deve pagare' : 'Pagamento registrato');
+          const result = await api('PUT', '/admin/payments', { kind, panel, ref, ownerId, label, status: curStatus, months: n, amount, note, paidUntil, remind: curStatus === 'due' ? $('#kpRemind', veil).checked : row.remind !== 0, ...autoBody });
+          cache.at = 0; await load(true); close();
+          if (result.panelNote?.ok && result.panelNote.where === 'panel') toast(`Nota scritta anche su ${result.panelNote.panelName}`);
+          else if (result.panelNote?.ok) toast(`Nota salvata in KAIROS (${result.panelNote.panelName} non ha le note)`);
+          else if (result.panelNote) toast(`Pagamento salvato, ma non sono riuscito a scrivere la nota su ${result.panelNote.panelName}: ${result.panelNote.error}`, 1);
+          else toast(curStatus === 'due' ? 'Pagamento segnato: deve pagare' : 'Pagamento registrato');
         } catch (e) { toast(e.message, 1); }
       };
     });
@@ -347,7 +425,7 @@
       return;
     }
     const b = e.target.closest('[data-kxpay-open]'); if (!b) return;
-    e.preventDefault(); open(b.dataset.kind, b.dataset.panel, b.dataset.ref, b.dataset.label, +b.dataset.owner || 0, b.dataset.status || 'due', b.dataset.autoLine || '');
+    e.preventDefault(); open(b.dataset.kind, b.dataset.panel, b.dataset.ref, b.dataset.label, +b.dataset.owner || 0, b.dataset.status || '', b.dataset.autoLine || '', b.dataset.panelNote);
   });
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-kxpay-filter]'); if (!b) return;

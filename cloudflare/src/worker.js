@@ -823,6 +823,82 @@ async function paymentDeviceOwner(env, id) {
   const root = d.parent ? await env.DB.prepare('SELECT owner_id FROM devices WHERE id = ?').bind(d.parent).first() : d;
   return root ? (+root.owner_id || 0) : null;
 }
+const PAYMENT_PANEL_NAMES = { wolf: 'WOLF', armada: 'Armada', storm: 'Storm', atx: 'Atlantix', ora: 'ORA', ro: 'Realott', slt: 'SLT', orcp: 'MirkoTeam', mxp: 'MaxPlayer', oxp: 'OrbixPlay' };
+// Register a panel here only when it has a native, writable line-note field.
+const PAYMENT_PANEL_NOTE_WRITERS = {
+  wolf: {
+    read: async (env, ownerId, ref) => {
+      const d = await cronDispatch(env, ownerId, 'GET', '/wolf/lines');
+      return (d.lines || []).find((x) => String(x.id) === String(ref));
+    },
+    note: (line) => line.note || '',
+    write: (env, ownerId, ref, note) => cronDispatch(env, ownerId, 'PUT', `/wolf/lines/${encodeURIComponent(ref)}`, { note })
+  },
+  atx: {
+    read: async (env, ownerId, ref) => {
+      const d = await cronDispatch(env, ownerId, 'GET', '/atx/lines?all=1');
+      return (d.rows || d.lines || []).find((x) => String(x.id || x.user_id || '') === String(ref));
+    },
+    note: (line) => line.notes || '',
+    write: (env, ownerId, ref, note) => cronDispatch(env, ownerId, 'POST', '/atx/lines/action', { action: 'save_notes', user_id: +ref, notes: note })
+  },
+  ro: {
+    read: async (env, ownerId, ref) => {
+      const d = await cronDispatch(env, ownerId, 'GET', '/ro/lines');
+      return (d.rows || d.lines || []).find((x) => String(x.id || x.user_id || x.username || '') === String(ref));
+    },
+    note: (line) => line.notes || '',
+    write: (env, ownerId, ref, note) => cronDispatch(env, ownerId, 'POST', '/ro/lines/action', { action: 'notes', id: ref, notes: note })
+  },
+  slt: {
+    read: async (env, ownerId, ref) => {
+      const d = await cronDispatch(env, ownerId, 'GET', '/slt/lines');
+      return (d.rows || d.lines || []).find((x) => String(x.id || x.user_id || x.username || '') === String(ref));
+    },
+    note: (line) => line.notes || '',
+    write: (env, ownerId, ref, note) => cronDispatch(env, ownerId, 'POST', '/slt/lines/action', { action: 'notes', id: ref, notes: note })
+  }
+};
+const PAYMENT_NOTE_TAG = /\s*\[K: [^\]]*\]\s*$/;
+function paymentNoteTag(row) {
+  if (row.status === 'due') {
+    const amount = row.amount == null || row.amount === '' ? '' : ` · ${Number(row.amount).toLocaleString('it-IT', { maximumFractionDigits: 2 })}€`;
+    return `[K: DEVE PAGARE ${+row.months || 0} ${+row.months === 1 ? 'mese' : 'mesi'}${amount}]`;
+  }
+  const d = String(row.paid_until || '');
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}` : '';
+  return `[K: PAGATO fino al ${date}${+row.auto_months > 0 || row.auto_opt ? ' · rinnovo auto' : ''}]`;
+}
+function paymentNoteText(current, row) {
+  const currentBase = String(current || '').replace(PAYMENT_NOTE_TAG, '').trim();
+  const base = String(row.note || '').trim() || currentBase;
+  const tag = paymentNoteTag(row);
+  return `${base.slice(0, Math.max(0, 300 - tag.length - (base ? 1 : 0)))} ${tag}`.trim();
+}
+async function setPanelLineNote(env, panel, ref, mutate, ownerId = 0) {
+  const panelName = PAYMENT_PANEL_NAMES[panel] || String(panel || '').toUpperCase();
+  const writer = PAYMENT_PANEL_NOTE_WRITERS[panel], where = writer ? 'panel' : 'kairos';
+  if (writer) {
+    const line = await writer.read(env, ownerId, ref);
+    if (!line) throw new Error('Linea non trovata');
+    const current = String(writer.note(line) || '');
+    const next = String(mutate(current) || '').trim().slice(0, 300);
+    if (next !== current) await writer.write(env, ownerId, ref, next);
+  } else {
+    const key = String(ref || '').toLowerCase();
+    const row = await env.DB.prepare('SELECT note FROM line_notes WHERE panel = ? AND ref = ?').bind(panel, key).first();
+    const current = String(row && row.note || ''), next = String(mutate(current) || '').trim().slice(0, 300);
+    if (next !== current) {
+      if (!next) await env.DB.prepare('DELETE FROM line_notes WHERE panel = ? AND ref = ?').bind(panel, key).run();
+      else await env.DB.prepare('INSERT INTO line_notes (panel, ref, note, owner_id, updated) VALUES (?, ?, ?, ?, ?) ON CONFLICT(panel, ref) DO UPDATE SET note = excluded.note, owner_id = excluded.owner_id, updated = excluded.updated').bind(panel, key, next, ownerId, now()).run();
+    }
+  }
+  return { ok: true, where, panelName };
+}
+async function trySetPanelLineNote(env, panel, ref, mutate, ownerId = 0) {
+  try { return await setPanelLineNote(env, panel, ref, mutate, ownerId); }
+  catch { return { ok: false, where: PAYMENT_PANEL_NOTE_WRITERS[panel] ? 'panel' : 'kairos', panelName: PAYMENT_PANEL_NAMES[panel] || String(panel || '').toUpperCase(), error: 'pannello non raggiungibile o linea non trovata' }; }
+}
 const LEDGER_PANELS = new Set(['', 'wolf', 'armada', 'storm', 'atx', 'ro', 'slt']);
 async function agentLedgerDetail(env, agentId, includeBy = true) {
   const [eur, credits, rows] = await Promise.all([
@@ -1008,11 +1084,14 @@ async function paymentsRoutes(req, env, who, ip, ag) {
   const status = b.status === '' ? '' : str(b.status, 8);
   if (!['', 'due', 'paid'].includes(status)) throw new HttpErr(400, 'Stato del pagamento non valido');
   if (!status) {
+    let panelNote = null;
     if (old) {
       await env.DB.prepare('DELETE FROM payments WHERE kind = ? AND panel = ? AND ref = ?').bind(kind, panel, ref).run();
-      await log(env, 'edit', `${who}: promemoria di pagamento rimosso · ${old.label || ref}`, ip).catch(() => {});
+      if (kind === 'line') panelNote = await trySetPanelLineNote(env, panel, ref, (current) => String(current || '').replace(PAYMENT_NOTE_TAG, '').trim(), ownerId);
+      const noteResult = panelNote ? ` · nota ${panelNote.ok ? panelNote.where === 'panel' ? 'aggiornata su ' + panelNote.panelName : 'aggiornata in KAIROS' : 'non aggiornata'}` : '';
+      await log(env, 'edit', `${who}: promemoria di pagamento rimosso (${panel || kind})${noteResult}`, ip).catch(() => {});
     }
-    return json({ ok: true, deleted: !!old });
+    return json({ ok: true, deleted: !!old, ...(panelNote ? { panelNote } : {}) });
   }
   if (b.months !== undefined && String(b.months).trim() === '') throw new HttpErr(400, 'I mesi devono essere da 0 a 120');
   const months = b.months === undefined ? (+old?.months || 0) : Number(b.months);
@@ -1074,8 +1153,14 @@ async function paymentsRoutes(req, env, who, ip, ag) {
     months = excluded.months, amount = excluded.amount, note = excluded.note, since = excluded.since, paid_until = excluded.paid_until,
     remind = excluded.remind, updated = excluded.updated, auto_months = excluded.auto_months, auto_opt = excluded.auto_opt, auto_line = excluded.auto_line`)
     .bind(kind, panel, ref, ownerId, label, status, months, amount, note, t, paidUntil, remind, t, autoMonths, autoOpt, autoLine).run();
-  await log(env, old ? 'edit' : 'new', `${who}: pagamento ${status === 'due' ? 'da riscuotere' : 'segnato pagato'} · ${label} (${panel || kind})`, ip).catch(() => {});
-  return json({ ok: true, row: paymentEffective({ kind, panel, ref, owner_id: ownerId, label, status, months, amount, note, since: t, paid_until: paidUntil, remind, updated: t, auto_months: autoMonths, auto_opt: autoOpt, auto_line: autoLine, last_renew: old?.last_renew || '', last_result: old?.last_result || '' }) });
+  let panelNote = null;
+  if (kind === 'line') {
+    const payment = { status, months, amount, note, paid_until: paidUntil, auto_months: autoMonths, auto_opt: autoOpt };
+    panelNote = await trySetPanelLineNote(env, panel, ref, (current) => paymentNoteText(current, payment), ownerId);
+  }
+  const noteResult = panelNote ? ` · nota ${panelNote.ok ? panelNote.where === 'panel' ? 'scritta su ' + panelNote.panelName : 'salvata in KAIROS' : 'non scritta'}` : '';
+  await log(env, 'edit', `${who}: pagamento ${status === 'due' ? 'da riscuotere' : 'segnato pagato'} (${panel || kind})${noteResult}`, ip).catch(() => {});
+  return json({ ok: true, row: paymentEffective({ kind, panel, ref, owner_id: ownerId, label, status, months, amount, note, since: t, paid_until: paidUntil, remind, updated: t, auto_months: autoMonths, auto_opt: autoOpt, auto_line: autoLine, last_renew: old?.last_renew || '', last_result: old?.last_result || '' }), ...(panelNote ? { panelNote } : {}) });
 }
 const LINE_SYNC_PANELS = new Set(['wolf', 'armada', 'storm', 'ro', 'slt']);
 function lineSyncDate(v) {
@@ -1252,10 +1337,17 @@ async function paymentsAutoRenew(env) {
 async function linkedLinesRoutes(req, env, path, who, ip, ag) {
   const m = req.method;
   const sel = 'SELECT l.*, d.name AS dname, d.code AS dcode FROM linked_lines l LEFT JOIN devices d ON d.id = l.device_id';
-  /* ---------- note KAIROS sulle linee dei pannelli senza campo nota (Armada, MirkoTeam, MaxPlayer, OrbixPlay) ---------- */
+  /* ---------- note KAIROS sulle linee dei pannelli senza campo nota (Armada, Storm, ORA, MirkoTeam, MaxPlayer, OrbixPlay) ---------- */
   if (path === '/line-notes' && m === 'GET') {
     const panel = str(new URL(req.url).searchParams.get('panel'), 20).toLowerCase(); if (!/^[a-z]{2,10}$/.test(panel)) throw new HttpErr(400, 'Pannello non valido');
-    const rows = ((await env.DB.prepare('SELECT ref, note, updated FROM line_notes WHERE panel = ? AND note <> ? LIMIT 5000').bind(panel, '').all()).results) || [];
+    let rows = [];
+    if (ag) {
+      const tree = Array.isArray(ag.tree) ? ag.tree : [ag.id];
+      for (let i = 0; i < tree.length; i += 90) {
+        const part = tree.slice(i, i + 90);
+        rows.push(...(((await env.DB.prepare(`SELECT ref, note, updated FROM line_notes WHERE panel = ? AND note <> ? AND owner_id IN (${part.map(() => '?').join(',')}) LIMIT 5000`).bind(panel, '', ...part).all()).results) || []));
+      }
+    } else rows = ((await env.DB.prepare('SELECT ref, note, updated FROM line_notes WHERE panel = ? AND note <> ? LIMIT 5000').bind(panel, '').all()).results) || [];
     const notes = {}; for (const r of rows) notes[r.ref] = r.note; return json({ notes });
   }
   if (path === '/line-notes' && m === 'PUT') {
