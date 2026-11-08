@@ -1764,6 +1764,8 @@ function massInput(b) {
   if (b.vpn !== undefined && b.vpn !== null && b.vpn !== '') { const v = Number(b.vpn); if (![0, 1, 2].includes(v)) throw new HttpErr(400, 'Modalità VPN non valida'); o.vpn = v; }
   if (b.maxStreams !== undefined && b.maxStreams !== null && b.maxStreams !== '') o.maxStreams = intIn(b.maxStreams, 0, MAX_CONN, 'Visioni contemporanee');
   if (b.rcClear === true) o.rcClear = true;
+  // assistente IA del cliente (come nella sua scheda): '' = predefinito, 'gm' = Gemini, 'claude' = Claude; «Spento» = permesso ai a false
+  if (b.aiProvider !== undefined && b.aiProvider !== null) { if (!['', ...AI_PROVIDERS].includes(b.aiProvider)) throw new HttpErr(400, 'Assistente IA non valido'); o.aiProvider = b.aiProvider; }
   // voci del Controllo remoto solo per questi clienti: '' = tolta (vale il profilo dell'app)
   if (b.rcSet !== undefined && b.rcSet !== null) {
     if (typeof b.rcSet !== 'object' || Array.isArray(b.rcSet)) throw new HttpErr(400, 'Impostazioni non valide');
@@ -1780,7 +1782,7 @@ function massInput(b) {
 }
 async function massEdit(env, b, who, ip) {
   const ch = massInput(b), scope = ['ids', 'active', 'all'].includes(b.scope) ? b.scope : 'ids';
-  const cols = "id, name, code, parent, active, expires, (playlists <> '') AS has_pl, perms, player, vpn, max_streams, rc, app";
+  const cols = "id, name, code, parent, active, expires, (playlists <> '') AS has_pl, perms, player, vpn, max_streams, rc, app, ai_provider";
   let list;
   if (scope === 'ids') {
     if (!Array.isArray(b.ids) || !b.ids.length) throw new HttpErr(400, 'Scegli almeno un cliente');
@@ -1819,6 +1821,7 @@ async function massEdit(env, b, who, ip) {
     if (ch.perms) { const v = permsJson({ ...permsParse(d.perms), ...ch.perms }); if (v !== (d.perms || '')) set.perms = v; }
     if (ch.vpn !== undefined && ch.vpn !== (+d.vpn || 0)) set.vpn = ch.vpn;
     if (ch.maxStreams !== undefined && ch.maxStreams !== (+d.max_streams || 0)) set.max_streams = ch.maxStreams;
+    if (ch.aiProvider !== undefined && ch.aiProvider !== (d.ai_provider || '')) set.ai_provider = ch.aiProvider;
     { const v = rcChange(d); if (v !== null) set.rc = v; }
     const k = Object.keys(set);
     if (!k.length) continue;
@@ -1839,6 +1842,7 @@ async function massEdit(env, b, who, ip) {
     ch.perms ? 'permessi ' + Object.entries(ch.perms).map(([k, v]) => `${k} ${v ? 'sì' : 'no'}`).join(', ') : '',
     ch.vpn !== undefined ? 'VPN ' + ['spenta', 'a scelta del cliente', 'sempre attiva'][ch.vpn] : '',
     ch.maxStreams !== undefined ? 'visioni ' + (ch.maxStreams || 'illimitate') : '',
+    ch.aiProvider !== undefined ? 'assistente IA ' + (AI_NAMES[ch.aiProvider] || 'predefinito') : '',
     ch.rcClear ? 'tolte le voci imposte solo a loro' : '',
     ch.rcSet ? 'Controllo remoto: ' + Object.entries(ch.rcSet).map(([k, v]) => { const c = rcCatByKey.get(k); return `${c[1]} ${v === '' ? 'come il profilo' : (c[3].find((x) => x[0] === v) || [v, v])[1]}`; }).join(', ') : '',
   ].filter(Boolean).join(' · ');
@@ -2585,7 +2589,9 @@ async function playerHeartbeat(req, env, ip, ctx) {
     const apu = appOfVer(f.ver, d.app); if (RC_APPS.includes(apu)) try { const lp = latestFor(env, S0, apu); ctx.waitUntil(lp.catch(() => {})); const L = await Promise.race([lp, new Promise((r) => setTimeout(() => r(null), 800))]); if (L && verBehind(f.ver, L.version)) upd = L.versionCode || 1; } catch {}
   }
   const eff = rcEffective(S0, d, appOfVer(f.ver, d.app)), cmds = await cmdP;
-  return json({ ok: true, mt, ...(upd ? { upd } : {}), rc: JSON.stringify(eff.rc), rcv: eff.rcv, ...(cmds.length ? { cmds } : {}), unseen: await unP, ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', af: await acctFp(P), ...(sat.length ? { sat } : {}), ...(kick ? { kick } : {}) });
+  // permessi spenti; l'assistente IA anche quando lo spegne il pannello (per tutti o dal profilo dell'app): l'app si riallinea subito
+  const ph = P ? permsJson({ ...permsParse(P.perms), ...(aiEngineOf(S0, P, d, appOfVer(f.ver, d.app)) === 'off' ? { ai: false } : {}) }) : '';
+  return json({ ok: true, mt, ...(upd ? { upd } : {}), rc: JSON.stringify(eff.rc), rcv: eff.rcv, ...(cmds.length ? { cmds } : {}), unseen: await unP, ts: t, vm, ph, ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', af: await acctFp(P), ...(sat.length ? { sat } : {}), ...(kick ? { kick } : {}) });
 }
 /* ---------------- dati del cliente e salute delle app ---------------- */
 const verNum = (v) => { const m = String(v || '').match(/(\d{1,3})\.(\d{1,3})(?:\.(\d{1,3}))?/); return m ? +m[1] * 1e6 + +m[2] * 1e3 + +(m[3] || 0) : 0; };
@@ -2627,6 +2633,8 @@ const RC_CAT = [
   ['o.startScr', 'Schermata iniziale', 'sel', [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta'], ['guide', 'Guida TV'], ['lastch', 'Ultimo canale guardato']], KPRO, '', '', 'Generale'],
   ['o.orient', 'Layout su telefoni e tablet', 'sel', [['auto', 'Automatico'], ['land', 'Sempre orizzontale']], KPRO, 'Sulle TV non cambia nulla', '', 'Generale'],
   ['tvmode', 'Modalità TV', 'sel', [['on', 'Attiva: interfaccia per telecomando'], ['off', 'Spenta']], ['nova'], '', '', 'Generale'],
+  // solo nel profilo dell'app (c[8] = 'prof'): per il singolo cliente l'IA si sceglie nella sua scheda, che vince sul profilo
+  ['ai', 'Assistente IA', 'sel', [['gm', 'Gemini'], ['claude', 'Claude'], ['off', 'Spento']], KPRO, 'Ricerca con le frasi (anche a voce), «Cosa guardo stasera?» e domande sui titoli. Vale per i clienti che nella loro scheda hanno «predefinito»; le domande al giorno restano quelle della pagina Assistente IA. Spento: le funzioni IA spariscono dall\'app', 'Predefinito (pagina Assistente IA)', 'Generale', 'prof'],
   /* ---- Home: tipo «txt» = elenco di nomi (o parti di nome) di categorie separati da virgola ---- */
   ['home.top', 'Categorie in primo piano', 'txt', [], RC_APPS, 'Nomi (anche solo una parte) delle categorie da mettere per prime, separati da virgola e nell\'ordine che vuoi. Es.: Sport, Prime Video, Netflix. Valgono per la Home e per gli elenchi di Film, Serie e canali', '', 'Home'],
   ['home.hide', 'Categorie nascoste dalla Home', 'txt', [], RC_APPS, 'Nomi (anche solo una parte) delle categorie da non mostrare nella Home, separati da virgola. Es.: adult, xxx, 18+. Negli elenchi di Film, Serie e canali restano in fondo (con il PIN se bloccate)', '', 'Home'],
@@ -2680,6 +2688,9 @@ const RC_CMDS = [
   ['exit', 'Chiudi l\'app', 'L\'app si chiude; il cliente la riapre quando vuole', RC_LINKED],
 ];
 const rcCatByKey = new Map(RC_CAT.map((x) => [x[0], x]));
+/** voci che valgono solo nel profilo dell'app (mai imposte al singolo dispositivo) */
+const RC_PROF_ONLY = new Set(RC_CAT.filter((x) => x[8] === 'prof').map((x) => x[0]));
+const rcNoProf = (rc) => { for (const k of Object.keys(rc)) if (RC_PROF_ONLY.has(k.endsWith(':allow') ? k.slice(0, -6) : k)) delete rc[k]; return rc; };
 /** voce di tipo «txt»: elenco di nomi separati da virgola (o righe), senza doppioni, al massimo 20 da 40 caratteri; null = non valido */
 const RC_TXT_MAX = 20;
 function rcTxt(v) {
@@ -2723,7 +2734,7 @@ function rcClean(src, app) {
   return out;
 }
 const rcProfiles = (s) => { const r = s && s.rcApp && typeof s.rcApp === 'object' ? s.rcApp : {}; const o = {}; for (const a of RC_APPS) { try { o[a] = rcClean(r[a] || {}, a); } catch { o[a] = {}; } } return o; };
-const rcDevOf = (d, app) => { try { return rcClean(d && d.rc ? d.rc : {}, app || (d && d.app)); } catch { return {}; } };
+const rcDevOf = (d, app) => { try { return rcNoProf(rcClean(d && d.rc ? d.rc : {}, app || (d && d.app))); } catch { return {}; } };
 /** configurazione effettiva per un dispositivo: profilo della sua app + impostazioni sue; «rcv» = impronta corta */
 function rcEffective(s, d, app) {
   const a = app || appOfVer('', d && d.app) || 'tv';
@@ -3047,9 +3058,13 @@ async function playerMeta(req, env, ip, url, ctx) {
   return json({ cert: v.cert, certSrc: v.certSrc, extras: v.extras });
 }
 /* ======================================================================
-   ASSISTENTE IA: Claude (Anthropic, a pagamento) o Google Gemini (gratis). Il servizio si sceglie nel pannello per tutti
-   e, se serve, per il singolo cliente; se quello scelto non risponde, risponde l'altro (se collegato).
-   Ogni cliente ha un numero di domande al giorno (dal pannello) + domande extra.
+   ASSISTENTE IA: Claude (Anthropic, a pagamento) o Google Gemini (gratis). Gemini di serie; il titolare sceglie Claude
+   (o «Spento») per il singolo cliente nella sua scheda, per tutti i clienti di Kairos Pro nel Controllo remoto (profilo
+   dell'app) o per tutti nella pagina «Assistente IA». Se quello scelto non risponde, risponde l'altro (se collegato).
+   Ogni cliente ha un numero di domande al giorno (dal pannello) + domande extra: ogni richiesta all'IA ne usa una.
+   Modalità: «ask» (domanda su un titolo o libera), «search» (frase → criteri di ricerca: la app cerca da sola nella sua
+   libreria e nella guida TV), «tonight» (sceglie e motiva 3–5 proposte tra quelle preparate dalla app).
+   All'IA arrivano solo la domanda e il minimo dei titoli: mai nome, codice o dati del cliente.
    ====================================================================== */
 const AI_PROVIDERS = ['claude', 'gm'];
 const AI_NAMES = { claude: 'Claude', gm: 'Gemini' };
@@ -3064,26 +3079,36 @@ const AI_GEMINI_MODELS = {
   lite: { name: 'Gemini 3.5 Flash-Lite (più veloce)', list: [['gemini-3.5-flash-lite', ''], ['gemini-3.8-flash', 'low']] },
 };
 const AI_SYSTEM = 'Sei l\'assistente di un\'app per guardare la TV. Rispondi in italiano, in modo breve e chiaro: al massimo 5 frasi brevi, adatte a essere lette sulla TV. Parla solo del contenuto indicato e di argomenti legati (trama, attori, genere, età consigliata, titoli simili). Non rivelare il finale se non te lo chiedono. Se non conosci il titolo dillo chiaramente in una frase, non inventare. Non usare markdown, elenchi puntati o simboli.';
+// vocabolario fisso dei criteri: l'app sa cercarli nei generi, nelle categorie e nella guida TV
+const AI_GENRES = ['azione', 'avventura', 'animazione', 'commedia', 'crimine', 'documentario', 'drammatico', 'famiglia', 'fantascienza', 'fantasy', 'guerra', 'horror', 'musica', 'mistero', 'romantico', 'storico', 'thriller', 'western', 'sport', 'reality', 'notizie', 'bambini'];
+const AI_SPORTS = ['calcio', 'f1', 'motogp', 'tennis', 'basket', 'nfl', 'ufc', 'rugby'];
+const AI_FIND_KEYS = `"type": "movie" (film), "series" (serie TV), "live" (TV in diretta: partite, programmi, canali) o "any"; "genres": solo tra ${AI_GENRES.join(', ')}; "years": [anno iniziale, anno finale] (es. «anni 90» = [1990, 1999]); "people": nomi completi di attori o registi (es. «Stallone» = «Sylvester Stallone»); "titles": titoli precisi citati o chiaramente intesi; "words": parole da cercare nei titoli e nella guida TV (squadre con il nome breve, es. «Inter»; piloti; programmi; canali); "sport": ${AI_SPORTS.join(', ')}; "when": "now" (adesso), "tonight" (stasera), "today" o "tomorrow"; "kids": true se è per bambini`;
+const AI_SYS_FIND = `Trasformi la richiesta di chi guarda la TV in criteri di ricerca per la sua app (film, serie, canali e guida TV). Rispondi solo con un oggetto JSON, senza altro testo. Chiavi, solo quelle utili: ${AI_FIND_KEYS}; "label": riassunto in italiano di massimo 50 caratteri. Non inventare titoli né orari.`;
+const AI_SYS_ASK = `Sei l'assistente di un'app per guardare la TV (film, serie, canali). Rispondi in italiano, breve e chiaro, da leggere sulla TV: al massimo 4 frasi brevi, niente markdown né elenchi. Non rivelare il finale se non te lo chiedono. Se non sai una cosa dillo, non inventare. Orari e programmi TV non li conosci: per quelli (e per film simili, film di un attore, cose da guardare) compila "find" e l'app li cerca nella libreria e nella guida TV di chi chiede. Rispondi solo con JSON: {"answer": "risposta", "titles": ["titoli di film o serie che citi"], "find": {criteri} oppure null}. Criteri di "find": ${AI_FIND_KEYS}.`;
+const AI_SYS_TONIGHT = 'Aiuti a scegliere cosa guardare stasera. Ricevi un elenco numerato di proposte (film, serie, programmi TV con orario) e i gusti di chi guarda. Scegline da 3 a 5, varie tra loro e adatte alla serata. Rispondi solo con JSON: {"picks": [{"i": numero, "why": "motivo"}]}. Il motivo è in italiano, al massimo 70 caratteri, concreto (genere, orario, perché può piacere), senza spoiler. Usa solo i numeri dell\'elenco.';
 const utcDay = (t = now()) => new Date(t).toISOString().slice(0, 10);
-async function claudeAsk(env, model, text) {
+/** o: system (istruzioni), max (parole in uscita), ms (attesa massima) */
+async function claudeAsk(env, model, text, o = {}) {
   const m = AI_CLAUDE_MODELS[model] || AI_CLAUDE_MODELS.haiku;
   const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST', signal: AbortSignal.timeout(25000),
+    method: 'POST', signal: AbortSignal.timeout(o.ms || 25000),
     headers: { 'content-type': 'application/json', 'x-api-key': String(env.ANTHROPIC_API_KEY).trim(), 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: m.id, max_tokens: 400, system: AI_SYSTEM, messages: [{ role: 'user', content: text }] }), // niente «temperature»: Haiku 5.5 e Sonnet 5.5 rispondono con errore 400 se c'è
+    body: JSON.stringify({ model: m.id, max_tokens: o.max || 400, system: o.system || AI_SYSTEM, messages: [{ role: 'user', content: text }] }), // niente «temperature»: Haiku 5.5 e Sonnet 5.5 rispondono con errore 400 se c'è
   });
   const j = await r.json().catch(() => null);
   const answer = j && Array.isArray(j.content) ? j.content.map((p) => (p && p.type === 'text' ? p.text : '')).join('').trim() : '';
   const u = (j && j.usage) || {};
   return { status: r.status, answer, tin: +u.input_tokens || 0, tout: +u.output_tokens || 0, err: (j && j.error && j.error.message) || '' };
 }
-async function geminiAsk(env, model, text, think) {
-  const gc = { maxOutputTokens: 1024, temperature: 0.6 };
+/** o: system, json (risposta in JSON), temp, ms */
+async function geminiAsk(env, model, text, think, o = {}) {
+  const gc = { maxOutputTokens: 1024, temperature: o.temp ?? 0.6 };
   if (think) gc.thinkingConfig = { thinkingLevel: think };
+  if (o.json) gc.responseMimeType = 'application/json';
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: 'POST', signal: AbortSignal.timeout(25000),
+    method: 'POST', signal: AbortSignal.timeout(o.ms || 25000),
     headers: { 'content-type': 'application/json', 'x-goog-api-key': String(env.GEMINI_API_KEY).trim() },
-    body: JSON.stringify({ systemInstruction: { parts: [{ text: AI_SYSTEM }] }, contents: [{ role: 'user', parts: [{ text }] }], generationConfig: gc }),
+    body: JSON.stringify({ systemInstruction: { parts: [{ text: o.system || AI_SYSTEM }] }, contents: [{ role: 'user', parts: [{ text }] }], generationConfig: gc }),
   });
   const j = await r.json().catch(() => null);
   const answer = j && Array.isArray(j.candidates) && j.candidates[0] && j.candidates[0].content ? (j.candidates[0].content.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('').trim() : '';
@@ -3091,15 +3116,72 @@ async function geminiAsk(env, model, text, think) {
 }
 const aiLimitOf = (P, set) => (+P.ai_limit >= 0 ? +P.ai_limit : Math.max(0, parseInt(set.aiDaily ?? 20, 10) || 0));
 const aiProvOf = (set) => (AI_PROVIDERS.includes(set.aiProvider) ? set.aiProvider : 'gm');
+/** IA che risponde a questo cliente: 'gm' | 'claude' | 'off'. Spenta per tutti (pagina Assistente IA), permesso spento o
+    0 domande al giorno = 'off'; poi vince la scelta nella scheda del cliente, poi il profilo dell'app (Controllo remoto),
+    infine l'IA predefinita (Gemini di serie). Decide anche se l'app mostra le funzioni IA (perms.ai). */
+function aiEngineOf(s, P, d, app) {
+  if (!P || s.aiOff || permsParse(P.perms).ai === false) return 'off';
+  if (aiLimitOf(P, s) === 0 && !(+P.ai_extra > 0)) return 'off';
+  if (AI_PROVIDERS.includes(P.ai_provider)) return P.ai_provider;
+  const v = rcEffective(s, d || P, app).rc.ai;
+  if (v === 'off') return 'off';
+  return AI_PROVIDERS.includes(v) ? v : aiProvOf(s);
+}
 async function aiUsed(env, id) { return ((await env.DB.prepare('SELECT n FROM ai_usage WHERE day = ? AND device_id = ?').bind(utcDay(), id).first()) || { n: 0 }).n; }
 async function aiCount(env, id, f, tin = 0, tout = 0) {
   await env.DB.prepare(`INSERT INTO ai_usage (day, device_id, n, gm, cl, cl_in, cl_out) VALUES (?, ?, 1, ?, ?, ?, ?) ON CONFLICT(day, device_id) DO UPDATE SET n = n + 1, gm = gm + excluded.gm, cl = cl + excluded.cl, cl_in = cl_in + excluded.cl_in, cl_out = cl_out + excluded.cl_out`)
     .bind(utcDay(), id, f === 'gm' ? 1 : 0, f === 'claude' ? 1 : 0, tin, tout).run();
 }
+/** primo oggetto JSON nel testo dell'IA (anche dentro ```json … ``` o con una virgola di troppo); null se non c'è */
+function aiJson(t) {
+  let s = String(t || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+  const a = s.indexOf('{'), z = s.lastIndexOf('}');
+  if (a < 0 || z <= a) return null;
+  s = s.slice(a, z + 1);
+  for (const x of [s, s.replace(/,\s*([}\]])/g, '$1')]) { try { const o = JSON.parse(x); if (o && typeof o === 'object' && !Array.isArray(o)) return o; } catch {} }
+  return null;
+}
+/** elenco di testi brevi, senza doppioni */
+const aiList = (v, n, len) => {
+  const out = [];
+  for (const x of Array.isArray(v) ? v : typeof v === 'string' ? [v] : []) {
+    if (typeof x !== 'string' && typeof x !== 'number') continue;
+    const t = nameClean(String(x), len); if (t.length < 2 || out.some((y) => y.toLowerCase() === t.toLowerCase())) continue;
+    out.push(t); if (out.length >= n) break;
+  }
+  return out;
+};
+const AI_TYPE_IT = { film: 'movie', movie: 'movie', movies: 'movie', serie: 'series', series: 'series', tv: 'live', live: 'live', diretta: 'live', any: 'any', tutto: 'any' };
+const AI_WHEN_IT = { now: 'now', adesso: 'now', ora: 'now', tonight: 'tonight', stasera: 'tonight', today: 'today', oggi: 'today', tomorrow: 'tomorrow', domani: 'tomorrow' };
+/** criteri di ricerca dell'IA ripuliti: solo chiavi e valori noti, testi corti (null = niente di utile) */
+function aiFindClean(o) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  const low = (v) => (typeof v === 'string' ? v.toLowerCase().trim() : ''), out = {};
+  if (AI_TYPE_IT[low(o.type)]) out.type = AI_TYPE_IT[low(o.type)];
+  const g = aiList(o.genres, 4, 20).map(low).filter((x) => AI_GENRES.includes(x)); if (g.length) out.genres = g;
+  const ys = (Array.isArray(o.years) ? o.years : [o.years]).map((y) => parseInt(y, 10)).filter((y) => y >= 1900 && y <= 2100);
+  if (ys.length) out.years = [Math.min(...ys), Math.max(...ys)];
+  for (const [k, n, len] of [['people', 3, 50], ['titles', 6, 80], ['words', 5, 30]]) { const v = aiList(o[k], n, len); if (v.length) out[k] = v; }
+  if (AI_SPORTS.includes(low(o.sport))) out.sport = low(o.sport);
+  if (AI_WHEN_IT[low(o.when)]) out.when = AI_WHEN_IT[low(o.when)];
+  if (o.kids === true || low(o.kids) === 'true') out.kids = true;
+  return Object.keys(out).length ? out : null;
+}
+/** proposte per «Cosa guardo stasera?» preparate dalla app: solo titolo, tipo, anno, genere, canale, orario e un indizio */
+function aiCands(v) {
+  const out = [];
+  for (const c of Array.isArray(v) ? v.slice(0, 24) : []) {
+    if (!c || typeof c !== 'object') continue;
+    const t = nameClean(c.t, 80); if (t.length < 2) continue;
+    out.push({ k: ['film', 'serie', 'tv', 'sport'].includes(c.k) ? c.k : 'film', t, y: parseInt(c.y, 10) || 0, g: nameClean(c.g, 50), c: nameClean(c.c, 40), h: /^\d{1,2}:\d{2}$/.test(String(c.h || '')) ? c.h : '', w: nameClean(c.w, 70) });
+  }
+  return out;
+}
+const AI_K_IT = { film: 'Film', serie: 'Serie TV', tv: 'In TV', sport: 'Sport in TV' };
 async function playerAi(req, env, ip, ctx) {
   if (await limited(env.RL_DEVICE, 'ai:' + ip)) return json({ error: 'Troppe richieste' }, 429);
   let b;
-  try { b = await readJSON(req, 8192); } catch (e) { return json({ error: e.message }, e.status || 400); }
+  try { b = await readJSON(req, 16384); } catch (e) { return json({ error: e.message }, e.status || 400); }
   const [d, bad] = await deviceAuth(env, b);
   if (bad) return bad;
   if (!env.GEMINI_API_KEY && !env.ANTHROPIC_API_KEY) return json({ off: true });
@@ -3109,29 +3191,65 @@ async function playerAi(req, env, ip, ctx) {
   if (permsParse(P.perms).ai === false) return json({ error: 'Assistente non attivo su questo abbonamento' }, 403);
   const set = await getSettings(env), limit = aiLimitOf(P, set), used = await aiUsed(env, P.id);
   if (limit === 0 && !(+P.ai_extra > 0)) return json({ error: 'Assistente non attivo su questo abbonamento' }, 403);
+  const eng = aiEngineOf(set, P, d, appFrom(req, b) || appOfVer('', d.app));
+  if (eng === 'off') return json({ off: true }); // spento dal Controllo remoto (profilo dell'app)
+  // domanda della modalità scelta: prima si controlla che sia valida, poi si usa una domanda del giorno
+  const mode = ['search', 'tonight'].includes(b.mode) ? b.mode : 'ask', v2 = mode === 'ask' && +b.v >= 2;
+  const q = nameClean(b.q, 200), c = b.ctx && typeof b.ctx === 'object' ? b.ctx : {};
+  let text = '', o = {}, cands = [];
+  if (mode === 'tonight') {
+    cands = aiCands(b.cands);
+    if (cands.length < 3) return json({ error: 'Servono almeno 3 proposte' }, 400);
+    const taste = aiList(b.taste, 5, 24), hm = /^\d{2}:\d{2}$/.test(String(b.hm || '')) ? b.hm : '';
+    text = [`Gusti: ${taste.join(', ') || 'non noti'}`, hm ? `Ora: ${hm}` : '', b.kids === true ? 'Profilo bambini: proponi solo cose adatte ai bambini.' : '', q ? `Richiesta: ${q}` : '', 'Proposte:',
+      ...cands.map((x, i) => `${i + 1}. ${AI_K_IT[x.k]} «${x.t}»${x.y ? ` (${x.y})` : ''}${x.h ? ` alle ${x.h}` : ''}${x.c ? ` su ${x.c}` : ''}${x.g ? ` · ${x.g}` : ''}${x.w ? ` · ${x.w}` : ''}`)].filter(Boolean).join('\n');
+    o = { system: AI_SYS_TONIGHT, json: true, max: 500, temp: 0.7, ms: 15000 };
+  } else {
+    if (q.length < 2) return json({ error: 'Scrivi una domanda' }, 400);
+    if (mode === 'search') { text = `Richiesta: ${q}`; o = { system: AI_SYS_FIND, json: true, max: 300, temp: 0.2, ms: 12000 }; }
+    else {
+      const info = c.title || c.ch ? [
+        c.kind === 'live' ? `Canale TV: ${nameClean(c.ch, 80)}` : '', `Titolo: ${nameClean(c.title, 120)}`,
+        `Tipo: ${c.kind === 'series' ? 'serie TV' : c.kind === 'live' ? 'programma in diretta' : 'film'}`,
+        c.year ? `Anno: ${str(String(c.year), 8)}` : '', c.genre ? `Generi: ${nameClean(c.genre, 100)}` : '', c.cast ? `Cast: ${nameClean(c.cast, 200)}` : '',
+        c.plot ? `Trama dalla playlist: ${nameClean(c.plot, 600)}` : '',
+      ].filter(Boolean).join('\n') : '';
+      text = v2 ? `${info ? info + '\n\n' : 'Domanda libera (nessun titolo aperto).\n\n'}Domanda: ${q}` : `${info}\n\nDomanda: ${q}`;
+      if (v2) o = { system: AI_SYS_ASK, json: true, max: 500, ms: 15000 };
+    }
+  }
   let extra = false;
   if (used >= limit) {
     const r = await env.DB.prepare('UPDATE devices SET ai_extra = ai_extra - 1 WHERE id = ? AND ai_extra > 0').bind(P.id).run();
-    if (!r.meta || r.meta.changes !== 1) return json({ error: `Hai usato le ${limit} domande di oggi. Puoi chiederne altre al fornitore.`, limit: true, used, max: limit }, 429);
+    if (!r.meta || r.meta.changes !== 1) return json({ error: `Hai usato le ${limit} domande di oggi: riprendono domani.`, limit: true, used, max: limit }, 429);
     extra = true;
   }
   const back = () => (extra ? env.DB.prepare('UPDATE devices SET ai_extra = ai_extra + 1 WHERE id = ?').bind(P.id).run() : null);
-  const q = nameClean(b.q, 200), c = b.ctx && typeof b.ctx === 'object' ? b.ctx : {};
-  if (q.length < 2) { await back(); return json({ error: 'Scrivi una domanda' }, 400); }
-  const info = [
-    c.kind === 'live' ? `Canale TV: ${nameClean(c.ch, 80)}` : '', `Titolo: ${nameClean(c.title, 120)}`,
-    `Tipo: ${c.kind === 'series' ? 'serie TV' : c.kind === 'live' ? 'programma in diretta' : 'film'}`,
-    c.year ? `Anno: ${str(c.year, 8)}` : '', c.genre ? `Generi: ${nameClean(c.genre, 100)}` : '', c.cast ? `Cast: ${nameClean(c.cast, 200)}` : '',
-    c.plot ? `Trama dalla playlist: ${nameClean(c.plot, 600)}` : '',
-  ].filter(Boolean).join('\n');
-  const text = `${info}\n\nDomanda: ${q}`;
   const left = () => Math.max(0, limit - used - 1) + Math.max(0, +P.ai_extra - (extra ? 1 : 0));
-  const ok = (answer, f, tin, tout) => { ctx.waitUntil(aiCount(env, P.id, f, tin, tout)); return json({ answer: (answer || 'Non ho una risposta per questa domanda.').slice(0, 2000), left: left(), by: AI_NAMES[f] }); };
-  const first = AI_PROVIDERS.includes(P.ai_provider) ? P.ai_provider : aiProvOf(set);
-  for (const prov of [first, ...AI_PROVIDERS.filter((x) => x !== first)]) {
+  // risposta dell'IA → quello che serve alla app (criteri, proposte o risposta con i titoli da cercare nella libreria)
+  const shape = (answer) => {
+    if (mode === 'search') { const j = aiJson(answer); return { find: aiFindClean(j), label: j ? nameClean(j.label, 60) : '' }; }
+    if (mode === 'tonight') {
+      const j = aiJson(answer), picks = [], seen = new Set();
+      for (const p of j && Array.isArray(j.picks) ? j.picks : []) {
+        const i = parseInt(p && p.i, 10) - 1; if (!(i >= 0 && i < cands.length) || seen.has(i)) continue;
+        seen.add(i); picks.push({ i, why: nameClean(String((p && p.why) || ''), 90) }); if (picks.length >= 5) break;
+      }
+      return { picks };
+    }
+    if (!v2) return { answer: (answer || 'Non ho una risposta per questa domanda.').slice(0, 2000) };
+    const j = aiJson(answer);
+    if (j && typeof j.answer === 'string') return { answer: j.answer.trim().slice(0, 1200) || 'Non ho una risposta per questa domanda.', titles: aiList(j.titles, 8, 80), find: aiFindClean(j.find) };
+    // niente JSON valido: si usa il testo (senza parentesi e chiavi, se è un JSON rotto)
+    const m = /"answer"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(answer || ''); let t = m ? m[1].replace(/\\n/g, ' ').replace(/\\"/g, '"') : String(answer || '');
+    if (!m && /^\s*[{[]/.test(t)) t = '';
+    return { answer: t.trim().slice(0, 1200) || 'Non ho una risposta per questa domanda.', titles: [], find: null };
+  };
+  const ok = (answer, f, tin, tout) => { ctx.waitUntil(aiCount(env, P.id, f, tin, tout)); return json({ ...shape(answer), left: left(), by: AI_NAMES[f] }); };
+  for (const prov of [eng, ...AI_PROVIDERS.filter((x) => x !== eng)]) {
     if (prov === 'claude' && env.ANTHROPIC_API_KEY) {
       let r = null;
-      try { r = await claudeAsk(env, set.aiClaude, text); } catch {}
+      try { r = await claudeAsk(env, set.aiClaude, text, o); } catch {}
       if (r && r.status === 200 && r.answer) return ok(r.answer, 'claude', r.tin, r.tout);
       if (r && [401, 403].includes(r.status)) ctx.waitUntil(log(env, 'off', `Assistente IA: Anthropic ha rifiutato la chiave ANTHROPIC_API_KEY (errore ${r.status}). Controlla di aver copiato la chiave giusta da console.anthropic.com`, ip));
       else if (r && r.status === 400 && /credit|balance|billing/i.test(r.err)) ctx.waitUntil(log(env, 'off', 'Assistente IA: credito di Claude finito. Ricarica su console.anthropic.com → Billing (intanto risponde Gemini, se è collegato)', ip));
@@ -3142,7 +3260,7 @@ async function playerAi(req, env, ip, ctx) {
       let last = 0;
       for (const [model, think] of list) {
         let r;
-        try { r = await geminiAsk(env, model, text, think); } catch { last = 502; continue; }
+        try { r = await geminiAsk(env, model, text, think, o); } catch { last = 502; continue; }
         if (r.status === 200 && r.answer) return ok(r.answer, 'gm');
         last = r.status;
         if (r.status === 200 || [429, 404, 500, 503].includes(r.status)) continue;
@@ -3160,7 +3278,7 @@ async function playerAiMore(env, d, P, ip, ctx) {
   if (permsParse(P.perms).ai === false) return json({ error: 'Assistente non attivo su questo abbonamento' }, 403);
   { const w = await reqWait(env, 'ai', [P.id, d.id]); if (w) return w; }
   if (!cleanReqWait((await getSettings(env)).reqWait).ai && await env.DB.prepare("SELECT 1 AS x FROM requests WHERE kind = 'ai' AND device_id = ? AND status <> 'done'").bind(P.id).first()) return json({ ok: true, already: true });
-  if (await throttled(env, 'rqi:' + P.id, 5, 86400e3)) return json({ error: 'Hai già chiesto più volte oggi: aspetta la risposta del fornitore' }, 429);
+  if (await throttled(env, 'rqi:' + P.id, 5, 86400e3)) return json({ error: 'Hai già chiesto più volte oggi: aspetta la risposta' }, 429);
   const set = await getSettings(env), limit = aiLimitOf(P, set), used = await aiUsed(env, P.id);
   await addRequest(env, P, 'ai', { ctype: 'ai', title: 'Altre domande all\'assistente IA', body: `Oggi ha usato ${used} domande su ${limit}`, info: 'ai' }, ip);
   ctx.waitUntil(log(env, 'req', `Richiesta di altre domande all'assistente da ${P.name || P.code}`, ip));
@@ -3181,7 +3299,7 @@ async function adminAi(req, env, path, who, ip) {
       month: { n: days.reduce((a, r) => a + (+r.n || 0), 0), cl: days.reduce((a, r) => a + (+r.cl || 0), 0), usd: +days.reduce((a, r) => a + cost(r), 0).toFixed(4) },
       days: days.slice(-14).map((r) => ({ day: r.day, n: r.n, gm: r.gm, cl: r.cl })),
       clients: rows.map((r) => ({ id: r.id, name: r.name || '', code: r.code || '', n: r.n, gm: r.gm || 0, cl: r.cl || 0, limit: r.ai_limit >= 0 ? r.ai_limit : set.aiDaily ?? 20, own: r.ai_limit >= 0, extra: r.ai_extra || 0, provider: AI_PROVIDERS.includes(r.ai_provider) ? r.ai_provider : '' })),
-      settings: { aiDaily: set.aiDaily ?? 20, aiProvider: aiProvOf(set), aiClaude: AI_CLAUDE_MODELS[set.aiClaude] ? set.aiClaude : 'haiku', aiGemini: AI_GEMINI_MODELS[set.aiGemini] ? set.aiGemini : 'flash' },
+      settings: { aiDaily: set.aiDaily ?? 20, aiProvider: aiProvOf(set), aiClaude: AI_CLAUDE_MODELS[set.aiClaude] ? set.aiClaude : 'haiku', aiGemini: AI_GEMINI_MODELS[set.aiGemini] ? set.aiGemini : 'flash', proAi: rcProfiles(set).tv.ai || '' },
       claudeModels: Object.entries(AI_CLAUDE_MODELS).map(([k, v]) => ({ id: k, name: v.name })), geminiModels: Object.entries(AI_GEMINI_MODELS).map(([k, v]) => ({ id: k, name: v.name })),
     });
   }
@@ -3229,7 +3347,7 @@ async function playerPerson(req, env, ip, url, ctx) {
     for (const p of res) {
       const cr = await get(`/person/${p.id}/combined_credits?language=it-IT`).catch(() => ({}));
       const credits = (cr.cast || []).filter((x) => x.media_type === 'movie' || x.media_type === 'tv').sort((a, b) => (b.popularity || 0) - (a.popularity || 0)).slice(0, 120)
-        .map((x) => ({ t: String(x.title || x.name || '').slice(0, 120), o: String(x.original_title || x.original_name || '').slice(0, 120), y: +String(x.release_date || x.first_air_date || '').slice(0, 4) || 0, k: x.media_type === 'tv' ? 'series' : 'movie' }));
+        .map((x) => ({ t: String(x.title || x.name || '').slice(0, 120), o: String(x.original_title || x.original_name || '').slice(0, 120), y: +String(x.release_date || x.first_air_date || '').slice(0, 4) || 0, k: x.media_type === 'tv' ? 'series' : 'movie', g: (Array.isArray(x.genre_ids) ? x.genre_ids : []).filter((n) => Number.isInteger(n)).slice(0, 4) }));
       people.push({ name: String(p.name || '').slice(0, 80), credits });
     }
   } catch { return json({ people: [] }); }
@@ -3765,7 +3883,7 @@ async function playerRegister(req, env, ip, ctx) {
   if (status === 'active') {
     [out.account, out.vpn, out.af] = await Promise.all([accountOf(env, P, d, pls, C), vpnOf(env, P, d), acctFp(P)]);
     out.perms = permsOf(P); // i collegati ereditano i permessi del principale
-    if (s.aiOff) out.perms.ai = false; // assistente spento dal pannello
+    if (aiEngineOf(s, P, d, appFrom(req, b) || appOfVer('', d.app)) === 'off') out.perms.ai = false; // assistente spento dal pannello (per tutti, dal profilo dell'app o per il cliente)
     out.addons = addonsFor(s, P); out.adg = P.addons || ''; // add-on (i collegati usano quelli del principale)
   }
   return json(out);
@@ -4754,7 +4872,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (pd && m === 'PUT') {
       const d = await env.DB.prepare('SELECT id, name, code, app FROM devices WHERE id = ?').bind(pd[1]).first();
       if (!d) throw new HttpErr(404, 'Cliente non trovato');
-      const b = await readJSON(req, 8192), rc = rcClean(b.rc || {}, d.app);
+      const b = await readJSON(req, 8192), rc = rcNoProf(rcClean(b.rc || {}, d.app));
       await env.DB.prepare('UPDATE devices SET rc = ? WHERE id = ?').bind(Object.keys(rc).length ? JSON.stringify(rc) : '', d.id).run();
       await log(env, 'edit', `${who}: controllo remoto — ${d.name || d.code}: ${Object.keys(rc).length ? Object.keys(rc).length + ' impostazioni imposte' : 'tolte le impostazioni imposte'}`, ip);
       return json({ ok: true, rc, ...rcEffective(s0, { ...d, rc: JSON.stringify(rc) }) });
