@@ -296,6 +296,23 @@
     $$('[data-agent-ledger-history]', V).forEach((b) => { b.onclick = () => { const agent = (D.agents || []).find((x) => String(x.id) === b.dataset.agentLedgerHistory); if (agent) openAgentLedger(agent); }; });
     $('#payLedgerHistory') && ($('#payLedgerHistory').onclick = () => { pageTab = 'ledger'; renderPage(); });
   }
+  function openOwnLedgerHistory() {
+    const n = $('.nav[data-v="payments"]'); if (n) n.click();
+    pageTab = 'ledger';
+    renderPage();
+  }
+  function renderAgentDebtDash() {
+    const V = $('#v-dash');
+    if (!V) return;
+    const balance = isAgent() && ledgerCache.own && ledgerCache.own.balance;
+    if (!ledgerHasDebt(balance)) { $('#kxAgentDebtDash')?.remove(); return; }
+    let box = $('#kxAgentDebtDash');
+    if (!box) { box = document.createElement('div'); box.id = 'kxAgentDebtDash'; box.className = 'card glass'; }
+    box.style.cssText = 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;border-radius:12px;background:rgba(220,38,38,.16);border:1px solid rgba(239,68,68,.45);color:#ffd2d2';
+    box.innerHTML = `<b style="flex:1;min-width:220px">💰 Devi pagare ${escP(ledgerPositiveText(balance))} al tuo fornitore</b><button class="btn sm" id="kxAgentDebtHistory">Storico</button>`;
+    if (box.parentElement !== V || V.firstElementChild !== box) V.prepend(box);
+    $('#kxAgentDebtHistory', box).onclick = openOwnLedgerHistory;
+  }
   function saveDue(kind, panel, ref, label, ownerId, months = 1, amount = null, note = '') {
     return api('PUT', '/admin/payments', { kind, panel, ref, label, ownerId, status: 'due', months, amount, note, remind: true }).then(async (r) => { cache.at = 0; await load(true); return r; });
   }
@@ -316,8 +333,11 @@
   }
   new MutationObserver(() => { if ($('#v-payments')?.classList.contains('on')) renderPage(); }).observe($('#v-payments'), { attributes: true, attributeFilter: ['class'] });
   window.addEventListener('kxpay:update', () => { renderMenuCount(); refreshOpenBoxes(); if ($('#v-payments')?.classList.contains('on')) renderPage(); });
+  window.addEventListener('kxledger:update', renderAgentDebtDash);
+  const dash = $('#v-dash'); if (dash) new MutationObserver(renderAgentDebtDash).observe(dash, { childList: true });
   Object.assign(TITLES, { payments: 'Pagamenti' });
-  window.KXPay = { load, loadLedger, get, rows, hasRows: () => cache.rows.length > 0 || !!(ledgerCache.own && ledgerCache.own.entries && ledgerCache.own.entries.length), effective, badge, open, isDue, filterDue, daysSince, amountText, dateText, remainingText, canEdit, saveDue, duePrompt, readDuePrompt, panelTile, renderPage };
+  window.KXPay = { load, loadLedger, get, hasRows: () => cache.rows.length > 0 || !!(ledgerCache.own && ledgerCache.own.entries && ledgerCache.own.entries.length), effective, badge, open, isDue, filterDue, daysSince, amountText, dateText, remainingText, canEdit, saveDue, duePrompt, readDuePrompt, panelTile, renderPage, ownDebtText: () => { const balance = isAgent() && ledgerCache.own && ledgerCache.own.balance; return ledgerHasDebt(balance) ? ledgerPositiveText(balance) : ''; }, openOwnLedgerHistory };
+  renderAgentDebtDash();
   document.addEventListener('click', (e) => {
     const del = e.target.closest('[data-kxpay-delete]');
     if (del) {
