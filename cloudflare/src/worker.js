@@ -4582,6 +4582,60 @@ async function agentsAdmin(req, env, path, who, ip, top) {
     if (b.password !== undefined && b.password !== '') { if (typeof b.password !== 'string' || b.password.length < 10 || b.password.length > 200) throw new HttpErr(400, 'Password di almeno 10 caratteri'); o.pass_hash = await hashPass(b.password); o.pw_seal = await seal(env, b.password); }
     return o;
   };
+  if (path === '/agents/bulk' && m === 'POST') {
+    const b = await readJSON(req, 65536);
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new HttpErr(400, 'Richiesta non valida');
+    if (Object.keys(b).some((k) => !['ids', 'flags', 'lists'].includes(k))) throw new HttpErr(400, 'Campo non valido');
+    if (!Array.isArray(b.ids) || b.ids.length < 1 || b.ids.length > 200 || b.ids.some((id) => !Number.isInteger(id) || id < 1)) throw new HttpErr(400, 'Scegli da 1 a 200 agenti');
+    const ids = [...new Set(b.ids)];
+    const flags = b.flags === undefined ? {} : b.flags, lists = b.lists === undefined ? {} : b.lists;
+    if (!flags || typeof flags !== 'object' || Array.isArray(flags)) throw new HttpErr(400, 'flags deve essere un oggetto');
+    if (!lists || typeof lists !== 'object' || Array.isArray(lists)) throw new HttpErr(400, 'lists deve essere un oggetto');
+    for (const [k, v] of Object.entries(flags)) {
+      if (!AGENT_FLAGS.includes(k)) throw new HttpErr(400, `Permesso non valido: ${k}`);
+      if (typeof v !== 'boolean') throw new HttpErr(400, `Il permesso ${k} deve essere Sì o No`);
+    }
+    const listKeys = ['dlcAllow', 'appsAllow', 'kAllow', 'storeApps'], listOps = {};
+    for (const [k, op] of Object.entries(lists)) {
+      if (!listKeys.includes(k)) throw new HttpErr(400, `Elenco non valido: ${k}`);
+      if (!op || typeof op !== 'object' || Array.isArray(op) || Object.keys(op).some((x) => !['mode', 'items'].includes(x))) throw new HttpErr(400, `Operazione non valida per ${k}`);
+      if (!['add', 'remove', 'set'].includes(op.mode) || !Array.isArray(op.items) || op.items.length > 100) throw new HttpErr(400, `Operazione non valida per ${k}`);
+      const items = [];
+      for (const item of op.items) {
+        if (typeof item !== 'string') throw new HttpErr(400, `Voce non valida per ${k}`);
+        const value = str(item, 80);
+        if (!value) throw new HttpErr(400, `Voce non valida per ${k}`);
+        if (!items.some((x) => x.toLowerCase() === value.toLowerCase())) items.push(value);
+      }
+      if (items.length) listOps[k] = { mode: op.mode, items };
+    }
+    if (!Object.keys(flags).length && !Object.keys(listOps).length) throw new HttpErr(400, 'Scegli almeno una modifica');
+    let updated = 0;
+    const skipped = [];
+    for (const id of ids) {
+      const A = all.find((x) => x.id === id);
+      if (!A) { skipped.push({ id, username: '', reason: 'Agente non trovato' }); continue; }
+      if (!scope.includes(id)) { skipped.push({ id, username: '', reason: 'Agente fuori dalla tua lista' }); continue; }
+      const perms = agentPerms(A.perms);
+      for (const [k, value] of Object.entries(flags)) perms[k] = value;
+      for (const [k, op] of Object.entries(listOps)) {
+        const current = perms[k], selected = op.items;
+        if (op.mode === 'set') perms[k] = selected.includes('*') ? ['*'] : selected;
+        else if (op.mode === 'add') {
+          perms[k] = current.includes('*') || selected.includes('*') ? ['*'] : [...current, ...selected.filter((x) => !current.some((y) => y.toLowerCase() === x.toLowerCase()))];
+        } else if (!current.includes('*')) {
+          const remove = new Set(selected.map((x) => x.toLowerCase()));
+          perms[k] = current.filter((x) => !remove.has(x.toLowerCase()));
+        }
+      }
+      const normalized = agentPermsWithin(perms, top ? agentPerms(top.perms) : null);
+      await env.DB.prepare("UPDATE admins SET perms = ? WHERE id = ? AND role = 'agent'").bind(JSON.stringify(normalized), id).run();
+      await log(env, 'edit', `${who}: applicate modifiche multiple ai permessi e agli elenchi di ${A.username}`, ip);
+      updated++;
+    }
+    if (updated) memoDrop(env, 'ags');
+    return json({ updated, skipped });
+  }
   if (path === '/agents' && m === 'POST') {
     if (top && !top.can_agents) throw new HttpErr(403, 'Non puoi creare sotto-agenti');
     const b = await readJSON(req, 16384);
