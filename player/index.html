@@ -2244,6 +2244,7 @@ async function register() {
   adAssetsApply(); setTimeout(() => adAssetsSync(), 1500); // con calma, dopo l'avvio
   if (j.status === 'active') {
     if (j.account) { S.account = j.account; store.set('acctCache', j.account); }
+    if (typeof j.af === 'string') S.af = j.af; // impronta dell'account (profili, PIN, limiti): il battito dice quando cambia
     S.vpn = j.vpn || { mode: 'off' }; store.set('vpnCache', S.vpn.mode === 'off' ? null : S.vpn);
   } else if (S.vpn && S.vpn.mode !== 'off') { S.vpn = { mode: 'off' }; store.set('vpnCache', null); } // abbonamento non attivo: niente VPN del fornitore
   const mv = j.settings && j.settings.serverUrl;
@@ -5297,7 +5298,7 @@ function profList() {
 const profMax = () => (S.account && S.account.maxProfiles != null ? +S.account.maxProfiles || 0 : 5);
 const profCanEdit = () => (!S.account || S.account.canEdit !== false) && perm('profiles');
 function applyProfile(p, silent) {
-  S.prof = p || null;
+  S.prof = p || null; S.profGone = false;
   let main = store.get('profMain', '');
   if (p && !main) { main = (profList()[0] || p).id; store.set('profMain', main); }
   profNs = p && p.id !== main ? String(p.id).replace(/[^a-z0-9]/gi, '') : '';
@@ -5354,7 +5355,7 @@ function showProfiles(after) {
   const l = profList(), canAdd = profCanEdit() && l.length < profMax();
   const scr = $('#profiles');
   if (after) scr.classList.remove('manage'); // apertura nuova: si parte dalla scelta, non dalla modifica
-  scr._must = !l.length;
+  scr._must = !l.length || !!S.profGone;
   const head = !l.length ? (canAdd ? '<h1>Crea il tuo profilo</h1><p class="mut prsub">Per iniziare serve almeno un profilo: scegli nome e avatar.</p>' : '<h1>Profilo in preparazione</h1><p class="mut prsub">Il tuo fornitore sta creando il tuo profilo. Riprova tra poco.</p>') : '<h1>Chi sta guardando?</h1>';
   scr.innerHTML = `<div class="prw"><div class="prbrand"><b class="brandName" data-b="${esc((S.settings.brand || 'KAIROS').toUpperCase())}">${kxWord((S.settings.brand || 'KAIROS').toUpperCase(), '')}</b><span>${kxWord('PRO', 'tvw', 2.4)}</span></div>${head}
     <div class="prlist">${l.map((p, i) => `<div class="prof" data-f data-pi="${i}" style="animation-delay:${i * 70}ms"><div class="pav">${avatarSVG(p.avatar, p.name)}</div><b>${esc(p.name)}</b>${profTag(p)}</div>`).join('')}${canAdd ? `<div class="prof add" data-f data-pi="add" style="animation-delay:${l.length * 70}ms"><div class="pav"><span>+</span></div><b>Aggiungi profilo</b></div>` : ''}</div>
@@ -5386,6 +5387,36 @@ function showProfiles(after) {
   setTimeout(() => focus($(`#profiles [data-pi="${li >= 0 ? li : 0}"]`) || $('#profiles [data-f]'), true), 60);
   warpStop && warpStop();
   try { NATIVE && NATIVE.uiReady && NATIVE.uiReady(); } catch {}
+}
+/* Profili cambiati dal pannello (nuovi, eliminati, PIN, limiti): si riallinea senza riaprire l'app.
+   Profilo in uso ancora presente: si aggiorna (un PIN nuovo vale dalla prossima scelta); eliminato: di nuovo la scelta del
+   profilo. Schermata dei profili o impostazioni aperte: ridisegnate. Durante la visione si aspetta il ritorno nei menu. */
+function profSync() {
+  if (inView()) return whenIdle(profSync, 800, 1500, 120e3);
+  const l = profList(), ps = $('#profiles');
+  if (S.prof) {
+    const np = l.find((x) => x.id === S.prof.id);
+    if (np && np !== S.prof) {
+      const fk = (p) => [p.pl || 'all', !!p.kids, p.age == null ? '' : +p.age].join('|'), refilter = fk(np) !== fk(S.prof);
+      S.prof = np;
+      if (refilter && S.fullLib && !ps.classList.contains('on')) plRerender(); // playlist o età del profilo cambiate: contenuti rifiltrati
+    } else if (!np && l.length && !ps.classList.contains('on')) {
+      S.profGone = true; S.stack = ['home'];
+      try { if ($('#detail').classList.contains('on')) closeDetail(); } catch {}
+      return showProfiles(() => go('home', true));
+    }
+  }
+  if (ps.classList.contains('on')) {
+    const pi = cur && ps.contains(cur) ? cur.dataset.pi : null;
+    showProfiles();
+    if (pi != null) setTimeout(() => { const e = $(`#profiles [data-pi="${pi}"]`); if (e) focus(e, true); }, 80);
+  }
+  // impostazioni aperte (la scheda «Profili e dispositivi» è già disegnata anche se non è quella in vista); non mentre si scrive
+  if ($('#settings').classList.contains('on') && !$('.speedm.on') && !(cur && cur.tagName === 'INPUT')) {
+    const k = cur && (cur.dataset.pe ? `[data-pe="${CSS.escape(cur.dataset.pe)}"]` : cur.id ? '#' + CSS.escape(cur.id) : cur.dataset.sec ? `[data-sec="${cur.dataset.sec}"]` : '');
+    renderSettings();
+    const f = (k && $('#settBody ' + k)) || $('#settBody .sm.sel'); if (f) focus(f, true);
+  }
 }
 async function saveProfiles(list) {
   if (!S.demo && baseServer() && S.account && Array.isArray(S.account.profiles)) {
@@ -6464,7 +6495,10 @@ async function heartbeat(force) {
     // server delle playlist cambiato dal pannello (DNS): si riscrivono gli indirizzi, la lista non si ricarica
     const dnsNew = typeof j.pv === 'string' && j.pv && hbPlv && j.pv !== hbPlv;
     if (typeof j.pv === 'string' && j.pv) hbPlv = j.pv;
-    if (changed || dnsNew || (typeof j.unseen === 'number' && j.unseen > unseenMsgs().length)) register().then(() => {
+    // profili, PIN o limiti cambiati dal pannello (impronta af diversa; assente con i pannelli vecchi: nessun cambiamento)
+    const acctNew = typeof j.af === 'string' && j.af && S.af && j.af !== S.af;
+    if (changed || dnsNew || acctNew || (typeof j.unseen === 'number' && j.unseen > unseenMsgs().length)) register().then(() => {
+      if (acctNew) profSync();
       if (dnsNew) { const snap = store.get('plSnap', null), pls = activePlaylists(); if (snap && !dnsSwap(snap, pls)) store.set('plSnap', plSnapOf(pls)); }
       { const np = libPlaylists(), need = np.map((p) => p.id).join(',');
         if ((S.libPlIds && need !== S.libPlIds) || (S.libPlKey && plKeyOf(np) !== S.libPlKey)) whenIdle(() => loadLibrary().then(plRerender), 500); // playlist cambiate dal pannello: si ricarica
