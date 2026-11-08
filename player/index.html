@@ -260,7 +260,7 @@ img{display:block}
 .demo .demo-sig{display:block}
 
 /* ===== toast ===== */
-#toast{position:fixed;left:50%;bottom:40px;transform:translateX(-50%) translateY(30px);z-index:60;padding:14px 22px;border-radius:14px;opacity:0;transition:.35s;font-weight:600;pointer-events:none;max-width:90vw;text-align:center}
+#toast{position:fixed;left:50%;bottom:40px;transform:translateX(-50%) translateY(30px);z-index:60;padding:14px 22px;border-radius:14px;opacity:0;transition:opacity .35s,transform .35s;font-weight:600;pointer-events:none;max-width:90vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%)}
 .zap{position:fixed;top:40px;right:50px;z-index:45;font-family:Orbitron;font-weight:900;font-size:72px;text-shadow:0 0 30px var(--a1);display:none}
 
@@ -467,47 +467,33 @@ img{display:block}
 /* anteprima canale nell'app (senza video) */
 .pv-logo{display:flex;flex-direction:column;align-items:center;gap:12px}
 .pv-logo img{max-height:min(16vh,120px);max-width:60%;object-fit:contain;filter:drop-shadow(0 6px 20px rgba(0,0,0,.6))}
-/* ---------- splash v2: animazione corta (≈1,4 s), solo transform/opacity → fluida anche su Fire TV ---------- */
-#boot{background:#030305;justify-content:center;align-items:center;overflow:hidden;padding:0!important;animation:none!important;opacity:1!important}
-.sp-rays{position:absolute;left:50%;top:44%;width:180vmax;height:180vmax;margin:-90vmax 0 0 -90vmax;border-radius:50%;opacity:0;
-  background:repeating-conic-gradient(from 0deg,rgba(255,42,61,.10) 0deg 2deg,transparent 2deg 12deg);
-  -webkit-mask-image:radial-gradient(circle,#000 0,transparent 55%);mask-image:radial-gradient(circle,#000 0,transparent 55%);
+/* ---------- splash v3 (≈1,45 s): SOLO transform/opacity su elementi HTML con livello proprio → l'animazione la muove il
+   compositore e continua anche mentre il thread principale carica cache, libreria e Home. Niente maschere, filtri animati,
+   SVG animati (tratti, SMIL), clip-path, blend né larghezze animate: ogni pezzo del logo e ogni lettera ha il suo SVG fermo.
+   Classi su <html> decise prima del primo disegno (script in testa allo splash): sp-lo = GPU debole (classi D e N: niente
+   raggi né pavimento), sp-d = chiavetta da 1 GB (anche niente onde grandi), anche con «Modalità leggera: Spenta» ---------- */
+#boot{background:none;justify-content:center;align-items:center;overflow:hidden;padding:0!important;animation:none!important;opacity:1!important}
+/* uscita: lo splash resta sopra la schermata già disegnata (hold) e si apre su di lei (out) */
+#boot.hold{display:flex;z-index:30;pointer-events:none}
+.sp-bg{position:absolute;top:0;right:0;bottom:0;left:0;background:#030305}
+#boot.hold .sp-bg{background:rgba(3,3,5,.996)} /* non opaco del tutto: la schermata dietro si prepara (raster) prima di comparire */
+.kx-hold .focus-ring{opacity:0!important}
+#boot.hold~.screen img[loading=lazy]{display:none} /* niente raffica di immagini durante l'uscita: le locandine partono dopo */
+.sp-floor{position:absolute;left:-25%;right:-25%;bottom:-6vh;height:56vh;perspective:340px;perspective-origin:50% 0;opacity:0;animation:fadein 1s .15s forwards;pointer-events:none;will-change:opacity}
+.sp-floor i{position:absolute;left:0;right:0;top:0;height:200%;transform-origin:50% 0;transform:rotateX(64deg);will-change:transform;
+  background-image:linear-gradient(var(--a1-45) 2px,transparent 2px),linear-gradient(90deg,var(--a1-45) 2px,transparent 2px);background-size:64px 64px;animation:spFloor 1.6s linear infinite}
+/* dissolvenza verso l'orizzonte dipinta sopra (prima era una maschera: uno strato in più da comporre a ogni fotogramma) */
+.sp-floor::after{content:'';position:absolute;top:0;right:0;bottom:0;left:0;background:linear-gradient(to top,rgba(3,3,5,0) 0,#030305 92%)}
+@keyframes spFloor{from{transform:rotateX(64deg) translateY(0)}to{transform:rotateX(64deg) translateY(64px)}}
+/* raggi: più piccoli (prima 180vmax con maschera) e sfumati dentro il gradiente */
+.sp-rays{position:absolute;left:50%;top:44%;width:130vmax;height:130vmax;margin:-65vmax 0 0 -65vmax;border-radius:50%;opacity:0;
+  background:radial-gradient(closest-side,rgba(3,3,5,0),#030305),repeating-conic-gradient(from 0deg,rgba(255,42,61,.10) 0deg 2deg,transparent 2deg 12deg);
   animation:spRays 1.2s .1s cubic-bezier(.2,.8,.2,1) forwards,spSpin 24s linear infinite;will-change:transform,opacity}
 @keyframes spRays{from{opacity:0}to{opacity:1}}
 @keyframes spSpin{to{transform:rotate(360deg)}}
 .sp-glow{position:absolute;left:50%;top:44%;width:60vmin;height:60vmin;margin:-30vmin 0 0 -30vmin;border-radius:50%;
   background:radial-gradient(circle,rgba(255,42,61,.45),rgba(255,42,61,0) 62%);opacity:0;transform:scale(.4);animation:spGlow .9s .25s cubic-bezier(.2,.8,.2,1) forwards;will-change:transform,opacity}
 @keyframes spGlow{to{opacity:1;transform:scale(1)}}
-.sp-logo{position:relative;z-index:2;width:min(28vh,220px);height:min(28vh,220px);margin-top:-4vh;will-change:transform,opacity;transition:transform .55s cubic-bezier(.7,0,.84,0),opacity .45s}
-.sp-svg{width:100%;height:100%;overflow:visible}
-.sp-svg .lo-orb{stroke-dasharray:0 528;animation:spOrb .8s .05s cubic-bezier(.6,0,.2,1) forwards}
-@keyframes spOrb{to{stroke-dasharray:400 128}}
-.sp-svg .lo-orb2{opacity:0;animation:fadein .6s .4s forwards}
-.sp-svg .lo-kb{transform:translateY(-60px);opacity:0;animation:spIn .45s .3s cubic-bezier(.2,.9,.25,1.2) forwards}
-.sp-svg .lo-ku{transform:translate(50px,-40px);opacity:0;animation:spIn .45s .45s cubic-bezier(.2,.9,.25,1.2) forwards}
-.sp-svg .lo-kl{transform:translate(50px,40px);opacity:0;animation:spIn .45s .55s cubic-bezier(.2,.9,.25,1.2) forwards}
-.sp-svg .lo-sat{transform-origin:100px 100px;opacity:0;animation:fadein .2s .7s forwards,spSat 2.4s .7s linear infinite}
-@keyframes spIn{to{transform:none;opacity:1}}
-@keyframes spSat{to{transform:rotate(360deg)}}
-.sp-word{position:relative;z-index:2;margin-top:3.6vh;font-family:'Bebas Neue',Orbitron,sans-serif;font-size:clamp(40px,9.5vh,110px);line-height:1;letter-spacing:.36em;margin-right:-.36em;color:#fff;
-  opacity:0;transform:translateY(14px) scale(.96);animation:spWord .5s .75s cubic-bezier(.2,.8,.2,1) forwards;will-change:transform,opacity;transition:opacity .25s}
-@keyframes spWord{to{opacity:1;transform:none}}
-.sp-word{background:linear-gradient(100deg,#fff 0 42%,#ff6a5a 50%,#fff 58% 100%);background-size:300% 100%;background-position:100% 0;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.sp-word.shine{transition:background-position .9s ease-out,opacity .25s;background-position:0 0}
-.sp-tag{position:relative;z-index:2;margin-top:1.4vh;font-size:clamp(9px,1.6vh,13px);font-weight:700;letter-spacing:.7em;margin-right:-.7em;color:#ff4a55;opacity:0;animation:fadein .4s 1s forwards;transition:opacity .25s}
-#boot .boot-bar{position:relative;z-index:2;width:min(200px,36vw);height:2px;margin:4vh 0 0;background:rgba(255,255,255,.08);transition:opacity .25s}
-#boot .boot-bar i{background:linear-gradient(90deg,#ff7a45,#ff2a3d);box-shadow:0 0 10px #ff2a3d;transition:width .35s}
-#boot .boot-msg{display:block;position:relative;z-index:2;margin-top:10px;min-height:12px;font-size:10px;letter-spacing:.38em;color:rgba(255,255,255,.4)}
-#boot.out .sp-logo{transform:scale(6);opacity:0}
-#boot.out .sp-word,#boot.out .sp-tag,#boot.out .boot-bar,#boot.out .boot-msg,#boot.out .sp-rays{opacity:0!important}
-#boot.out .sp-glow{animation:none;opacity:1;transform:scale(3);transition:transform .55s ease-in,opacity .55s;opacity:0}
-@keyframes fadein{from{opacity:0}to{opacity:1}}
-/* ===== intro 1.7: pavimento luminoso, onde d'urto, orbite, scansione (solo transform/opacity: fluida anche sulle TV) ===== */
-.sp-floor{position:absolute;left:-25%;right:-25%;bottom:-6vh;height:56vh;perspective:340px;perspective-origin:50% 0;opacity:0;animation:fadein 1s .15s forwards;pointer-events:none;
-  -webkit-mask-image:linear-gradient(to top,#000 0,transparent 92%);mask-image:linear-gradient(to top,#000 0,transparent 92%)}
-.sp-floor i{position:absolute;left:0;right:0;top:0;height:200%;transform-origin:50% 0;transform:rotateX(64deg);will-change:transform;
-  background-image:linear-gradient(var(--a1-45) 2px,transparent 2px),linear-gradient(90deg,var(--a1-45) 2px,transparent 2px);background-size:64px 64px;animation:spFloor 1.6s linear infinite}
-@keyframes spFloor{from{transform:rotateX(64deg) translateY(0)}to{transform:rotateX(64deg) translateY(64px)}}
 .sp-wave{position:absolute;left:50%;top:44%;width:min(28vh,220px);height:min(28vh,220px);margin:calc(min(28vh,220px) / -2) 0 0 calc(min(28vh,220px) / -2);border-radius:50%;
   border:2px solid var(--a1);box-shadow:0 0 30px var(--a1),inset 0 0 30px var(--a1-40);opacity:0;transform:scale(.6);animation:spWave 1.3s .82s cubic-bezier(.1,.7,.3,1) forwards;pointer-events:none;will-change:transform,opacity}
 .sp-wave.w2{animation-delay:1.02s;border-color:var(--a2)}
@@ -520,43 +506,65 @@ img{display:block}
 @keyframes spOrb1{from{transform:rotate(0) translateX(min(19vh,150px))}to{transform:rotate(360deg) translateX(min(19vh,150px))}}
 @keyframes spOrb2{from{transform:rotate(120deg) translateX(min(23vh,180px)) scale(1)}to{transform:rotate(480deg) translateX(min(23vh,180px))}}
 @keyframes spOrb3{from{transform:rotate(240deg) translateX(min(16vh,126px))}to{transform:rotate(600deg) translateX(min(16vh,126px))}}
-.sp-logo{border-radius:50%;overflow:hidden}
-.sp-logo::after{content:'';position:absolute;top:-10%;bottom:-10%;left:0;width:40%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);transform:translateX(-160%) skewX(-18deg);
-  opacity:0;animation:spScan .7s 1.05s ease-in-out forwards;mix-blend-mode:screen;pointer-events:none;border-radius:50%}
+/* logo: pezzi sovrapposti, ognuno col suo SVG fermo; l'anello entra ruotando (prima si «disegnava» col tratteggio) */
+.sp-logo{position:relative;z-index:2;width:min(28vh,220px);height:min(28vh,220px);margin-top:-4vh;border-radius:50%;overflow:hidden;will-change:transform,opacity;transition:transform .55s cubic-bezier(.7,0,.84,0),opacity .45s}
+.sp-logo .lo{position:absolute;top:0;right:0;bottom:0;left:0;display:block;opacity:0;will-change:transform,opacity}
+.sp-logo .lo svg{display:block;width:100%;height:100%;overflow:visible}
+.sp-logo .lo-orb{transform:rotate(-150deg) scale(.88);animation:spIn .8s .05s cubic-bezier(.6,0,.2,1) forwards}
+.sp-logo .lo-orb2{animation:fadein .6s .4s forwards}
+.sp-logo .lo-kb{transform:translateY(-30%);animation:spIn .45s .3s cubic-bezier(.2,.9,.25,1.2) forwards}
+.sp-logo .lo-ku{transform:translate(25%,-20%);animation:spIn .45s .45s cubic-bezier(.2,.9,.25,1.2) forwards}
+.sp-logo .lo-kl{transform:translate(25%,20%);animation:spIn .45s .55s cubic-bezier(.2,.9,.25,1.2) forwards}
+.sp-logo .lo-sat{animation:fadein .2s .7s forwards,spSat 2.4s .7s linear infinite}
+/* riflesso che attraversa il logo: banda che si sposta (prima con mix-blend-mode) */
+.sp-logo .lo-scan{position:absolute;top:-10%;bottom:-10%;left:0;width:40%;opacity:0;background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.38),rgba(255,255,255,0));
+  transform:translateX(-160%) skewX(-18deg);animation:spScan .7s 1.05s ease-in-out forwards;will-change:transform,opacity;pointer-events:none}
+@keyframes spIn{to{transform:none;opacity:1}}
+@keyframes spSat{to{transform:rotate(360deg)}}
 @keyframes spScan{0%{opacity:1;transform:translateX(-160%) skewX(-18deg)}100%{opacity:0;transform:translateX(330%) skewX(-18deg)}}
+/* marchio: una lettera per elemento (SVG fermo: cromo, bagliore e ombra disegnati una volta), entra con opacità e scala;
+   il lampo finale è una copia bianca della parola che si accende e si spegne */
 .sp-wrow{position:relative;z-index:2;display:flex;align-items:flex-start;margin-top:3.6vh}
-.sp-wrow .sp-word{margin-top:0;animation:spWordIn .8s .7s cubic-bezier(.2,.8,.2,1) forwards}
-@keyframes spWordIn{0%{opacity:0;letter-spacing:.9em;margin-right:-.9em;filter:blur(10px);transform:scale(1.08)}100%{opacity:1;letter-spacing:.36em;margin-right:-.36em;filter:none;transform:none}}
-.sp-tv{align-self:center;margin-left:.3em;font-family:Orbitron,sans-serif;font-weight:900;font-size:clamp(14px,3.2vh,34px);padding:.18em .42em;border-radius:.3em;background:var(--a1);color:#fff;
-  box-shadow:0 0 24px var(--a1-70);opacity:0;transform:scale(.2) rotate(-14deg);animation:spTv .5s 1.35s cubic-bezier(.2,1.6,.4,1) forwards}
+.sp-word{position:relative;display:flex;align-items:flex-start;font-size:clamp(46px,10.5vh,128px);line-height:1;transition:opacity .25s}
+.sp-word .sl{display:block;opacity:0;transform:translateY(.16em) scaleX(1.32);animation:spL .5s cubic-bezier(.2,.8,.2,1) forwards;animation-delay:calc(.5s + var(--i) * .1s);will-change:transform,opacity}
+.sp-word .sl .kxw{filter:drop-shadow(0 0 22px var(--a1-55)) drop-shadow(0 3px 0 rgba(0,0,0,.55))}
+.sp-word .sfl{position:absolute;left:0;top:0;opacity:0;filter:drop-shadow(0 0 14px #fff);animation:spFlash .8s 1.35s ease-out forwards;will-change:opacity;pointer-events:none}
+@keyframes spL{to{opacity:1;transform:none}}
+@keyframes spFlash{0%{opacity:0}30%{opacity:.7}100%{opacity:0}}
+.sp-tv{align-self:center;margin-left:.3em;display:flex;align-items:center;font-family:Orbitron,sans-serif;font-weight:900;font-size:clamp(14px,3.2vh,34px);padding:.22em .4em;border-radius:.3em;background:var(--a1);color:#fff;
+  box-shadow:0 0 24px var(--a1-70);opacity:0;transform:scale(.2) rotate(-14deg);animation:spTv .5s 1.35s cubic-bezier(.2,1.6,.4,1) forwards;will-change:transform,opacity}
 @keyframes spTv{to{opacity:1;transform:none}}
-#boot.out .sp-tv,#boot.out .sp-floor,#boot.out .sp-orbit{opacity:0!important;transition:opacity .25s}
-/* ===== 1.8: marchio più futuristico (Orbitron pesante, bordo luminoso, scia di glitch all'ingresso) ===== */
-.sp-wrow .sp-word{font-family:Orbitron,'Bebas Neue',sans-serif;font-weight:900;font-size:clamp(34px,8.2vh,96px);letter-spacing:.22em;margin-right:-.22em;position:relative;
-  background:linear-gradient(180deg,#fff 0 45%,#dfe3ff 50%,#8e97c8 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
-  filter:drop-shadow(0 0 18px var(--a1-55)) drop-shadow(0 2px 0 rgba(0,0,0,.6));animation:spWordIn .9s .7s cubic-bezier(.2,.8,.2,1) forwards}
-.sp-wrow .sp-word.shine{background:linear-gradient(100deg,#fff 0 40%,var(--a2) 50%,#fff 60% 100%);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;animation:spWordIn .9s .7s cubic-bezier(.2,.8,.2,1) forwards,spShine 1.4s 1.6s ease-in-out forwards}
-@keyframes spShine{from{background-position:100% 0}to{background-position:0 0}}
-.sp-wrow .sp-word::before,.sp-wrow .sp-word::after{content:attr(data-t);position:absolute;left:0;top:0;width:100%;height:100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;opacity:0;pointer-events:none}
-.sp-wrow .sp-word::before{background:var(--a1);animation:spGlA .7s 1.25s steps(2) 2}
-.sp-wrow .sp-word::after{background:var(--a2);animation:spGlB .7s 1.25s steps(2) 2}
-@keyframes spGlA{0%{opacity:0}10%{opacity:.8;transform:translate(-5px,-2px);clip-path:inset(10% 0 55% 0)}30%{opacity:.8;transform:translate(4px,1px);clip-path:inset(60% 0 10% 0)}50%{opacity:0}100%{opacity:0}}
-@keyframes spGlB{0%{opacity:0}15%{opacity:.8;transform:translate(5px,2px);clip-path:inset(40% 0 30% 0)}35%{opacity:.8;transform:translate(-4px,-1px);clip-path:inset(0 0 75% 0)}55%{opacity:0}100%{opacity:0}}
-.sp-tag{font-family:Orbitron,sans-serif;font-weight:700;letter-spacing:.9em;margin-right:-.9em;color:#fff;font-size:clamp(10px,1.8vh,15px);text-shadow:0 0 14px var(--a1)}
-/* ===== 1.9: marchio con carattere vettoriale KAIROS (cromato, neon, si disegna all'avvio) ===== */
+.sp-tag{position:relative;z-index:2;margin-top:1.4vh;display:flex;justify-content:center;font-size:clamp(11px,2vh,18px);opacity:0;animation:fadein .4s 1s forwards;transition:opacity .25s;will-change:opacity}
+/* barra: scala orizzontale invece della larghezza (niente layout a ogni fotogramma) */
+#boot .boot-bar{position:relative;z-index:2;width:min(200px,36vw);height:2px;margin:4vh 0 0;background:rgba(255,255,255,.08);transition:opacity .25s}
+#boot .boot-bar i{width:100%;transform:scaleX(0);transform-origin:0 50%;background:linear-gradient(90deg,#ff7a45,#ff2a3d);box-shadow:0 0 10px #ff2a3d;transition:transform .35s;will-change:transform}
+#boot .boot-msg{display:block;position:relative;z-index:2;margin-top:10px;min-height:12px;font-size:10px;letter-spacing:.38em;color:rgba(255,255,255,.4)}
+/* uscita: il logo vola verso chi guarda, il resto si spegne e lo sfondo si apre sulla schermata già pronta */
+#boot.out .sp-logo{transform:scale(6);opacity:0}
+#boot.out .sp-word,#boot.out .boot-bar,#boot.out .boot-msg{opacity:0}
+#boot.out .sp-rays{opacity:0!important}
+#boot.out .sp-glow{animation:none;transform:scale(3);transition:transform .55s ease-in,opacity .55s;opacity:0}
+#boot.out .sp-tv,#boot.out .sp-tag,#boot.out .sp-floor,#boot.out .sp-orbit{animation:none;opacity:0;transform:none;transition:opacity .25s}
+#boot.out .sp-wave{animation:none;opacity:0}
+#boot.out .sp-bg{opacity:0;transition:opacity .4s .12s ease-in}
+/* GPU debole (D, N): niente raggi né pavimento; chiavetta da 1 GB: niente onde grandi (anche con «Modalità leggera: Spenta») */
+.sp-lo .sp-rays,.sp-lo .sp-floor,.sp-d .sp-wave{display:none}
+/* «Animazione d'avvio» dal pannello (rc intro, vale dall'apertura successiva): semplice = solo le entrate di logo, scritta e barra */
+.sp-simple .sp-rays,.sp-simple .sp-floor,.sp-simple .sp-wave,.sp-simple .sp-orbit,.sp-simple .sp-glow,.sp-simple .sp-logo .lo-scan,.sp-simple .sp-word .sfl{display:none}
+.sp-simple .sp-logo .lo-sat{animation:fadein .2s .7s forwards}
+/* spenta = logo e scritta fermi, barra e messaggi (come nella leggerissima) */
+.sp-off #boot *,.sp-off #boot *::before,.sp-off #boot *::after{animation:none!important;transition:none!important}
+.sp-off .sp-logo .lo,.sp-off .sp-word .sl,.sp-off .sp-tag,.sp-off .sp-tv,.sp-off .sp-glow{opacity:1!important;transform:none!important}
+.sp-off .sp-rays,.sp-off .sp-floor,.sp-off .sp-wave,.sp-off .sp-orbit,.sp-off .sp-logo .lo-scan,.sp-off .sp-word .sfl{display:none}
+.kx-boot .aurora{display:none} /* sfondo animato della Home: dietro lo splash non si vede, non si disegna */
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+/* ===== marchio con carattere vettoriale KAIROS (cromato, neon) ===== */
 .kxw{height:1em;width:auto;display:block;overflow:visible}
 .kxw .kg{opacity:.5}
 .kxw .kc,.kxw .ks,.kxw .kg{stroke-linecap:butt}
-.sp-wrow .sp-word.kxv{font-size:clamp(46px,10.5vh,128px);letter-spacing:0;margin-right:0;background:none;-webkit-text-fill-color:initial;filter:drop-shadow(0 0 22px var(--a1-55)) drop-shadow(0 3px 0 rgba(0,0,0,.55));animation:none;opacity:1}
-.sp-wrow .sp-word.kxv::before,.sp-wrow .sp-word.kxv::after{display:none}
-.kxw.draw .kc path,.kxw.draw .kg path{stroke-dasharray:100 100;stroke-dashoffset:100;animation:kxDraw 1.05s cubic-bezier(.65,0,.25,1) forwards;animation-delay:calc(.5s + var(--i) * .11s)}
-.kxw.draw .ks{opacity:0;animation:fadein .4s 1.9s forwards}
-.kxw.draw{animation:kxFlash .9s 1.55s ease-out both}
-@keyframes kxDraw{to{stroke-dashoffset:0}}
-@keyframes kxFlash{0%{filter:none}35%{filter:brightness(2.4) drop-shadow(0 0 26px #fff)}100%{filter:none}}
-.sp-tv{display:flex;align-items:center;padding:.22em .4em!important}.sp-tv .kxw{height:.78em}
+.sp-tv .kxw{height:.78em}
 .sp-tv .kxw .kc,.prbrand span .kxw .kc{stroke:#fff}.sp-tv .kxw .kg,.sp-tv .kxw .ks,.prbrand span .kxw .kg,.prbrand span .kxw .ks{display:none}
-.sp-tag{letter-spacing:0;margin-right:0;font-size:clamp(11px,2vh,18px);display:flex;justify-content:center}.sp-tag .kxw .kc{stroke:#fff}.sp-tag .kxw .kg{stroke:var(--a1);opacity:.8}
+.sp-tag .kxw .kc{stroke:#fff}.sp-tag .kxw .kg{stroke:var(--a1);opacity:.8}
 .hbrand .kxw{height:.82em}.prbrand .kxw{height:.85em}.prbrand span{display:flex;align-items:center}.prbrand span .kxw{height:.7em}
 .dm .brandmark .kxw{height:.9em}
 /* ---------- qualità canale ---------- */
@@ -581,6 +589,21 @@ img{display:block}
 .nc.ev .evs i img{width:100%;height:100%;object-fit:contain}
 .nc.ev .evs b{font-size:clamp(11px,1.9vh,15px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .nc.ev .vs{font-family:'Bebas Neue',Orbitron;font-size:clamp(14px,2.6vh,22px);color:var(--a1);flex:none}
+/* tutti gli sport: icona dello sport, card «gara/sessione» (F1) e card del tennis (due righe con i set) */
+.nc.ev .evi{width:1.25em;height:1.25em;vertical-align:-.27em;margin-right:.4em;color:var(--a1)}
+.nc.ev .evsub{display:block;color:#9a9aa6;font-size:clamp(9px,1.5vh,12px);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nc.ev.evrc .evrt{flex:1;display:flex;flex-direction:column;justify-content:center;gap:clamp(2px,.5vh,5px);min-width:0}
+.nc.ev.evrc .evrt b{font-size:clamp(14px,2.4vh,20px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nc.ev.evrc .evss{font-family:'Bebas Neue',Orbitron;font-size:clamp(14px,2.6vh,22px);letter-spacing:.08em;color:var(--a1);line-height:1}
+.nc.ev.evtn .evps{flex:1;display:flex;flex-direction:column;justify-content:center;gap:clamp(4px,.9vh,9px)}
+.nc.ev .evp{display:flex;align-items:center;gap:8px;min-width:0}
+.nc.ev .evp i{width:clamp(18px,2.7vh,26px);height:clamp(12px,1.8vh,17px);flex:none;display:grid;place-items:center;overflow:hidden;border-radius:2px;font-style:normal;font-size:9px;font-weight:800;color:#ccc;background:rgba(255,255,255,.06)}
+.nc.ev .evp i img{width:100%;height:100%;object-fit:cover}
+.nc.ev .evp b{flex:1;min-width:0;font-size:clamp(11px,1.9vh,15px);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nc.ev .evp.win b{font-weight:800}
+.nc.ev .evp .sd{flex:none;font-size:clamp(8px,1.3vh,11px);color:#8a8a96}
+.nc.ev .evp em{flex:none;display:flex;gap:clamp(5px,.7vw,9px);font-style:normal;font-family:Orbitron;font-size:clamp(11px,1.9vh,15px);color:#fff}
+.nc.ev .evp em u{text-decoration:none;min-width:.75em;text-align:center}
 /* ---------- anteprima nativa ---------- */
 .screen-box.loading .spinner{display:block}
 /* ---------- speed test / aggiornamento ---------- */
@@ -610,11 +633,12 @@ img{display:block}
 .lite .glass{background:rgba(24,24,30,.94)}
 .lite .aurora,.lite .hbg img.blur{display:none!important}
 .lite .screen.on{animation:fadein .28s ease forwards}
+.lite .nrow{animation-name:fadein}
 /* leggerissima (dal pannello o scelta nell'app): nessuna animazione né sfondo grande */
 .xlite *,.xlite *::before,.xlite *::after{animation:none!important;transition:none!important}
 /* senza animazioni, ciò che diventa visibile «animandosi» deve essere visibile da subito (altrimenti schermo nero) */
-.xlite .screen.on,.xlite .detail.on,.xlite .boot-title span,.xlite .sp-svg .lo-orb2,.xlite .sp-svg .lo-kb,.xlite .sp-svg .lo-ku,.xlite .sp-svg .lo-kl,.xlite .sp-svg .lo-sat,.xlite .sp-word,.xlite .sp-tag,.xlite .sp-floor,.xlite .sp-orbit,.xlite .sp-wave,.xlite .sp-tv,.xlite .sp-glow,.xlite .sp-scan{opacity:1!important;transform:none!important}
-.xlite .sp-svg .lo-orb{stroke-dasharray:none!important}
+.xlite .screen.on,.xlite .detail.on,.xlite .boot-title span,.xlite .sp-logo .lo,.xlite .sp-word .sl,.xlite .sp-word,.xlite .sp-tag,.xlite .sp-floor,.xlite .sp-orbit,.xlite .sp-wave,.xlite .sp-tv,.xlite .sp-glow{opacity:1!important;transform:none!important}
+.xlite .sp-logo .lo-scan,.xlite .sp-word .sfl{opacity:0!important}
 .xlite .hbg img,.xlite .aurora{display:none!important}
 /* scheda del titolo nella leggerissima: titolo e pulsanti (Guarda, Trailer, La mia lista, IA) e l'immagine restano sempre;
    via solo la copia sfocata (filtro costoso). Con la sola locandina: fondo a tinta unita e locandina a destra, senza doppioni */
@@ -1036,6 +1060,18 @@ h5.fh{margin-top:16px}
 .evgo{opacity:0;color:var(--a1)}
 .evch.focused{background:rgba(255,255,255,.12)}.evch.focused .evgo{opacity:1}
 .evmodal .sbtn{margin-top:14px}
+.evmodal .evl .evi{width:1.2em;height:1.2em;vertical-align:-.22em;margin-right:.45em;color:var(--a1)}
+.evrace{text-align:center;margin:16px 0 6px}.evrace b{display:block;font-size:clamp(20px,2.4vw,30px)}
+.evrace span{display:block;font-family:Orbitron;letter-spacing:.2em;text-transform:uppercase;color:var(--a1);margin-top:6px;font-size:clamp(12px,1.3vw,16px)}
+.evrace small{display:block;color:var(--mut);margin-top:6px;font-size:13px}
+.evtop{display:flex;justify-content:center;flex-wrap:wrap;gap:8px 18px;margin-top:10px;font-weight:600}.evtop span{display:flex;align-items:center;gap:6px}
+.evtop i{font-style:normal;color:var(--a1);font-family:Orbitron}.evtop img{width:20px;height:14px;object-fit:cover;border-radius:2px}
+.evtn2{margin:14px auto 6px;width:min(520px,100%);display:flex;flex-direction:column;gap:8px}.evtp{display:flex;align-items:center;gap:12px}
+.evtp i{width:30px;height:20px;flex:none;display:grid;place-items:center;font-style:normal;font-size:11px;font-weight:800;overflow:hidden;border-radius:3px;background:rgba(255,255,255,.06)}.evtp i img{width:100%;height:100%;object-fit:cover}
+.evtp b{flex:1;min-width:0;font-size:clamp(16px,1.8vw,22px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.evtp b small{color:var(--mut);font-size:.7em}
+.evtp em{font-style:normal;display:flex;gap:12px;font-family:Orbitron;font-size:clamp(16px,1.8vw,22px);color:var(--mut)}.evtp em u{text-decoration:none;min-width:1em;text-align:center}
+.evtp.win em{color:#fff}.evtn2>small{color:var(--mut);text-align:center;margin-top:4px}
+.evufc{text-align:center;font-family:Orbitron;letter-spacing:.14em;color:var(--mut);margin-top:12px;font-size:13px;text-transform:uppercase}
 /* ===== privacy, prezzo ===== */
 .privstep{display:flex;flex-direction:column;align-items:center;gap:14px}
 .privstep h2{font-size:clamp(24px,3.4vh,34px)}
@@ -1195,12 +1231,22 @@ h5.fh{margin-top:16px}
 
   <!-- BOOT -->
   <section class="screen on" id="boot">
-    <div class="sp-rays"></div>
+    <script>/* classi dello splash decise prima del primo disegno: GPU debole (classi D e N), chiavetta da 1 GB (D) e «Animazione
+   d'avvio» scelta dal pannello all'ultimo collegamento (rc intro: auto | simple | off; vale dall'apertura successiva) */
+(function () { var h = document.documentElement.classList, mb = 0, j = function (k, d) { try { return JSON.parse(localStorage.getItem(k) || 'null') || d; } catch (e) { return d; } }; h.add('kx-boot');
+  try { mb = +(JSON.parse((window.KairosNative && KairosNative.memInfo && KairosNative.memInfo()) || '{}').totalMb) || 0; if (mb && mb < 1800) h.add('sp-lo'); if (mb && mb <= 1200) h.add('sp-d'); } catch (e) {}
+  // leggerissima (scelta, imposta dal pannello o automatica sulle chiavette da 1 GB): splash fermo dal primo fotogramma
+  var lv = j('kx_rcLite', '') || j('kx_o_liteUi', 'auto'); if (window.KairosNative && (lv === 'max' || (mb && mb <= 1200 && lv !== 'off'))) document.body.classList.add('xlite');
+  var v = 'auto'; try { v = JSON.parse(localStorage.getItem('kx_rcIntro') || '""') || 'auto'; } catch (e) {}
+  if (v !== 'simple' && v !== 'off') v = 'auto'; window.kxIntro = v; if (v !== 'auto') h.add('sp-' + v);
+})();</script>
+    <div class="sp-bg"></div>
     <div class="sp-floor"><i></i></div>
+    <div class="sp-rays"></div>
     <div class="sp-glow"></div>
     <div class="sp-wave"></div><div class="sp-wave w2"></div>
     <div class="sp-orbit"><i></i><i></i><i></i></div>
-    <div class="sp-logo"><svg class="sp-svg" viewBox="0 0 200 200"><defs><linearGradient id="kgS" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><circle class="lo-orb" cx="100" cy="100" r="84" fill="none" stroke="url(#kgS)" stroke-width="7" stroke-linecap="round" stroke-dasharray="400 128" transform="rotate(-38 100 100)"/><circle class="lo-orb2" cx="100" cy="100" r="70" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="1.5" stroke-dasharray="3 7"/><rect class="lo-kb" x="62" y="52" width="22" height="96" rx="4" fill="#fff"/><path class="lo-ku" d="M90 104 L128 52 H156 L116 108 Z" fill="url(#kgS)"/><path class="lo-kl" d="M104 98 L122 92 L158 148 H130 Z" fill="#fff"/><circle class="lo-sat" cx="171" cy="62" r="7" fill="#fff"/></svg></div>
+    <div class="sp-logo"><i class="lo lo-orb"><svg viewBox="0 0 200 200"><defs><linearGradient id="kgS" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><circle cx="100" cy="100" r="84" fill="none" stroke="url(#kgS)" stroke-width="7" stroke-linecap="round" stroke-dasharray="400 128" transform="rotate(-38 100 100)"/></svg></i><i class="lo lo-orb2"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="70" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="1.5" stroke-dasharray="3 7"/></svg></i><i class="lo lo-kb"><svg viewBox="0 0 200 200"><rect x="62" y="52" width="22" height="96" rx="4" fill="#fff"/></svg></i><i class="lo lo-ku"><svg viewBox="0 0 200 200"><defs><linearGradient id="kgS2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><path d="M90 104 L128 52 H156 L116 108 Z" fill="url(#kgS2)"/></svg></i><i class="lo lo-kl"><svg viewBox="0 0 200 200"><path d="M104 98 L122 92 L158 148 H130 Z" fill="#fff"/></svg></i><i class="lo lo-sat"><svg viewBox="0 0 200 200"><circle cx="171" cy="62" r="7" fill="#fff"/></svg></i><i class="lo-scan"></i></div>
     <div class="sp-wrow"><div class="sp-word kxv" id="bootTitle">KAIROS</div><span class="sp-tv">PRO</span></div>
     <div class="sp-tag">PLAYER</div>
     <script>
@@ -1249,7 +1295,7 @@ const KXG = {
   '+': [6, [[0, 5, 6, 5], [3, 2, 3, 8]]],
   ' ': [3.4, []],
 };
-function kxWord(text, cls, sp = 3.1, label = '') {
+function kxWord(text, cls, sp = 3.1, label = '', still = false) {
   const t = String(text || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   let x = 0; const paths = []; let i = 0;
   for (const ch of t) {
@@ -1260,18 +1306,43 @@ function kxWord(text, cls, sp = 3.1, label = '') {
   const W = Math.max(1, x - sp), id = 'kw' + Math.random().toString(36).slice(2, 8), p = paths.join('');
   return `<svg class="kxw ${cls || ''}" viewBox="-1.2 -1.4 ${(W + 2.4).toFixed(2)} 12.8" role="img" aria-label="${(label || t).replace(/"/g, '')}"><defs>
 <linearGradient id="${id}c" x1="0" y1="0" x2="0" y2="10" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffffff"/><stop offset=".46" stop-color="#eef0ff"/><stop offset=".5" stop-color="#9ea6d6"/><stop offset=".62" stop-color="#ffffff"/><stop offset="1" stop-color="var(--a1,#ff2a3d)"/></linearGradient>
-<linearGradient id="${id}s" x1="-14" y1="0" x2="-2" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/><animateTransform attributeName="gradientTransform" type="translate" from="0 0" to="${(W + 28).toFixed(1)} 0" dur="5.5s" begin="2.2s" repeatCount="indefinite"/></linearGradient>
+${still ? '' : `<linearGradient id="${id}s" x1="-14" y1="0" x2="-2" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/><animateTransform attributeName="gradientTransform" type="translate" from="0 0" to="${(W + 28).toFixed(1)} 0" dur="5.5s" begin="2.2s" repeatCount="indefinite"/></linearGradient>`}
 <filter id="${id}g" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="0.9"/></filter></defs>
 <g class="kg" fill="none" stroke="var(--a1,#ff2a3d)" stroke-width="2.6" stroke-linejoin="miter" stroke-miterlimit="2.3" filter="url(#${id}g)">${p}</g>
 <g class="kc" fill="none" stroke="url(#${id}c)" stroke-width="1.45" stroke-linejoin="miter" stroke-miterlimit="2.3">${p}</g>
-<g class="ks" fill="none" stroke="url(#${id}s)" stroke-width="1.45" stroke-linejoin="miter" stroke-miterlimit="2.3">${p}</g></svg>`;
+${still ? '' : `<g class="ks" fill="none" stroke="url(#${id}s)" stroke-width="1.45" stroke-linejoin="miter" stroke-miterlimit="2.3">${p}</g>`}</svg>`;
+}
+/* splash: stesso disegno di kxWord, ma una lettera per elemento HTML (l'entrata la anima il compositore) e senza riflesso
+   animato; sopra, la parola in bianco per il lampo finale */
+function kxLetters(text, sp = 3.1) {
+  const t = String(text || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const id = 'kl' + Math.random().toString(36).slice(2, 7);
+  let x = 0, i = 0, prev = -1.2, html = '', all = '';
+  for (const ch of t) {
+    const g = KXG[ch] || KXG[' '];
+    if (g[1].length) {
+      let p = '';
+      for (const pl of g[1]) { let d = ''; for (let k = 0; k < pl.length; k += 2) d += (k ? 'L' : 'M') + (+(pl[k] + x).toFixed(2)) + ' ' + pl[k + 1]; p += `<path d="${d}"/>`; }
+      all += p;
+      const vx = x - 1.2, vw = g[0] + 2.4, n = id + i;
+      html += `<span class="sl" style="--i:${i};margin-left:${((vx - prev) / 12.8).toFixed(4)}em"><svg class="kxw" viewBox="${vx.toFixed(2)} -1.4 ${vw.toFixed(2)} 12.8" aria-hidden="true"><defs>`
+        + `<linearGradient id="${n}c" x1="0" y1="0" x2="0" y2="10" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffffff"/><stop offset=".46" stop-color="#eef0ff"/><stop offset=".5" stop-color="#9ea6d6"/><stop offset=".62" stop-color="#ffffff"/><stop offset="1" stop-color="var(--a1,#ff2a3d)"/></linearGradient>`
+        + `<filter id="${n}g" filterUnits="userSpaceOnUse" x="${(vx - 2).toFixed(2)}" y="-3.4" width="${(vw + 4).toFixed(2)}" height="16.8"><feGaussianBlur stdDeviation="0.9"/></filter></defs>`
+        + `<g class="kg" fill="none" stroke="var(--a1,#ff2a3d)" stroke-width="2.6" stroke-linejoin="miter" stroke-miterlimit="2.3" filter="url(#${n}g)">${p}</g>`
+        + `<g class="kc" fill="none" stroke="url(#${n}c)" stroke-width="1.45" stroke-linejoin="miter" stroke-miterlimit="2.3">${p}</g></svg></span>`;
+      prev = vx + vw; i++;
+    }
+    x += g[0] + sp;
+  }
+  const W = Math.max(1, x - sp);
+  return html + `<svg class="kxw sfl" viewBox="-1.2 -1.4 ${(W + 2.4).toFixed(2)} 12.8" aria-hidden="true"><g fill="none" stroke="#fff" stroke-width="1.45" stroke-linejoin="miter" stroke-miterlimit="2.3">${all}</g></svg>`;
 }
 
 (function () {
   var b = 'KAIROS'; try { var st = JSON.parse(localStorage.getItem('kx_brand') || '""'); if (st) b = String(st).toUpperCase(); } catch (e) {}
-  var t = document.getElementById('bootTitle'); t.innerHTML = kxWord(b, 'draw'); t.dataset.b = b;
-  document.querySelector('#boot .sp-tv').innerHTML = kxWord('PRO', 'tvw', 2.4);
-  document.querySelector('#boot .sp-tag').innerHTML = kxWord('PLAYER', 'tagw', 6.5);
+  var t = document.getElementById('bootTitle'); t.innerHTML = kxLetters(b); t.dataset.b = b; t.setAttribute('aria-label', b);
+  document.querySelector('#boot .sp-tv').innerHTML = kxWord('PRO', 'tvw', 2.4, '', true);
+  document.querySelector('#boot .sp-tag').innerHTML = kxWord('PLAYER', 'tagw', 6.5, '', true);
 })();
     </script>
     <div class="boot-bar"><i id="bootBar"></i></div>
@@ -1575,7 +1646,8 @@ const HAS_PLAYER = !!(NATIVE && NATIVE.play);
 // all'avvio, prima della risposta del pannello: l'ultima modalità imposta dal pannello (rcLite) o quella scelta nell'app; «Spenta» resta spenta
 { const v0 = store.get('rcLite', '') || store.get('o_liteUi', 'auto');
   if (NATIVE && v0 !== 'off') document.body.classList.add('lite'); // poi decide il pannello (rcLiteApply)
-  try { if (NATIVE && devClass() === 'D') { document.body.classList.add('lowmem'); if (v0 !== 'off') document.body.classList.add('xlite'); } } catch {} } // chiavetta con poca memoria: leggerissima già dall'avvio (niente animazioni)
+  try { if (NATIVE && devClass() === 'D') { document.body.classList.add('lowmem'); if (v0 !== 'off') document.body.classList.add('xlite'); } } catch {} // chiavetta con poca memoria: leggerissima già dall'avvio (niente animazioni)
+  if (NATIVE && v0 === 'max') document.body.classList.add('xlite'); } // Leggerissima scelta: subito (prima arrivava con la risposta del pannello)
 const playPrefs = () => {
   const defaults = { engine: 'exo', quality: 'auto', buffer: 'balanced', aspect: 'fit' }, o = { ...defaults, ...store.get('play', {}) };
   for (const k of ['quality', 'buffer', 'aspect']) {
@@ -2151,6 +2223,7 @@ function show(id, push = true, restore) {
   if (now && !S.stack.includes(now.id)) screenFree(now.id);
   $$('.screen').forEach((s) => s.classList.remove('on'));
   $('#' + id).classList.add('on');
+  if (id !== 'boot' && !$('#boot').classList.contains('hold')) document.documentElement.classList.remove('kx-boot');
   if (cur) cur.classList.remove('focused');
   cur = null;
   fillNav(id);
@@ -2259,6 +2332,16 @@ function readLocal(path) {
     x.send();
   });
 }
+/** come readLocal, ma come Blob: i byte restano fuori dal thread dell'interfaccia (il testo lo ricava il thread di lavoro) */
+function readLocalBlob(path) {
+  return new Promise((res, rej) => {
+    const x = new XMLHttpRequest();
+    x.open('GET', path); x.responseType = 'blob';
+    x.onload = () => (x.response && x.response.size ? res(x.response) : readLocal(path).then(res, rej));
+    x.onerror = () => readLocal(path).then(res, rej);
+    x.send();
+  });
+}
 function nativeFile(url) {
   return new Promise((res, rej) => {
     const id = 'f' + (++fseq) + '_' + Date.now();
@@ -2282,6 +2365,24 @@ async function getText(url) {
   }
 }
 async function getJSON(url) { return JSON.parse(await getText(url)); }
+/** playlist: come getText ma, dove si può, un Blob invece del testo: i byte (decine di MB) non passano dal thread
+    dell'interfaccia, né per la decodifica né per la copia; il testo lo ricava il thread di lavoro (o asText qui) */
+async function getBuf(url) {
+  if (hasFileHttp()) {
+    const r = await nativeFile(url);
+    if (r.status >= 400) throw new Error('HTTP ' + r.status);
+    try { return await readLocalBlob(r.path); } finally { try { NATIVE.dropFile(r.path); } catch {} }
+  }
+  try { const r = await fetch(viaProxy(url)); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.blob(); }
+  catch (e) {
+    if (!hasNativeHttp()) throw e;
+    const r = await nativeFetch(url);
+    if (r.status >= 400) throw new Error('HTTP ' + r.status);
+    return r.text;
+  }
+}
+/** testo di quello che ha restituito getBuf (senza thread di lavoro) */
+const asText = async (b) => (typeof b === 'string' ? b : b && b.size ? new Response(b).text() : '');
 
 async function register() {
   const url = baseServer() + '/api/player/register';
@@ -2340,7 +2441,7 @@ function applyBrand() {
   applyTheme(rcGet('theme') || store.get('theme') || S.settings.accent);
   const brandU = (S.settings.brand || 'KAIROS').toUpperCase();
   $$('.brandName').forEach((e) => { if (e.dataset.b !== brandU) { e.innerHTML = kxWord(brandU, ''); e.dataset.b = brandU; } });
-  { const bt = $('#bootTitle'); if (bt.dataset.b !== brandU) { bt.innerHTML = kxWord(brandU, 'draw'); bt.dataset.b = brandU; } }
+  { const bt = $('#bootTitle'); if (bt.dataset.b !== brandU) { bt.innerHTML = kxLetters(brandU); bt.dataset.b = brandU; bt.setAttribute('aria-label', brandU); } }
   document.title = (S.settings.brand || 'KAIROS') + ' Player';
   $$('.annc .mq').forEach((e) => (e.textContent = S.settings.announcement || ''));
 }
@@ -2424,14 +2525,15 @@ function libFinish(out) {
 }
 async function loadXtream(p, known) {
   const h = p.host.replace(/\/+$/, ''), q = xtBase(p);
-  const get = async (a) => { try { return await getText(`${q}&action=${a}`); } catch { return ''; } };
+  const ACT = ['get_live_categories', 'get_vod_categories', 'get_series_categories', 'get_live_streams', 'get_vod_streams', 'get_series'];
+  const get = async (a) => { try { return await getBuf(`${q}&action=${a}`); } catch { return ''; } };
   // tutte e 6 le richieste partono insieme
-  const texts = await Promise.all(['get_live_categories', 'get_vod_categories', 'get_series_categories', 'get_live_streams', 'get_vod_streams', 'get_series'].map(get));
+  const texts = await Promise.all(ACT.map(get));
   const pl = { id: p.id, host: h, U: encodeURIComponent(p.username), P: encodeURIComponent(p.password) };
   let out = null;
-  try { out = await libWork('xtream', { texts, pl, known }); } catch {}
+  try { out = await libWork('xtream', { texts, pl, known, chunk: LIB_CHUNK }); } catch {}
   if (out && out.same) return out; // uguale alla lista in uso (vedi fetchLibrary)
-  if (!out) { const [lc, vc, sc, ls, vs, ss] = texts.map(xtArr); out = libFinish(xtreamMap({ lc, vc, sc, ls, vs, ss }, pl)); }
+  if (!out) { const [lc, vc, sc, ls, vs, ss] = (await Promise.all(texts.map(asText))).map(xtArr); out = libFinish(xtreamMap({ lc, vc, sc, ls, vs, ss }, pl)); } // senza thread di lavoro: qui
   if (!out.live.length && !out.movies.length && !out.series.length) throw new Error('nessun contenuto: controlla server, utente e password');
   return out;
 }
@@ -2444,20 +2546,40 @@ function libWorker() {
     const src = [
       `const RX_SE = ${RX_SE}, RX_SE2 = ${RX_SE2}, RX_VOD = ${RX_VOD}, RX_SEP = ${RX_SEP}, CC3 = ${JSON.stringify(CC3)}, RX_CC = ${RX_CC}, RX_QUAL = ${RX_QUAL}, RX_ADULT_G = ${RX_ADULT_G}, RX_ADULT_N = ${RX_ADULT_N};`,
       m3uAttr, parseM3U, `const isSepCh = ${isSepCh};`, logoKey, libSig, xtreamMap, `const xtArr = ${xtArr};`, libFinish,
-      `self.onmessage = (e) => { const { id, op, data } = e.data; try {
+      `const txt = async (t) => (typeof t === 'string' ? t : !t || !t.size ? '' : typeof FileReaderSync !== 'undefined' ? new FileReaderSync().readAsText(t, 'utf-8') : new Response(t).text());
+      const KEEP = new Map(), KEYS = ['live', 'movies', 'series'];
+      /* un pezzo del risultato (si consegna a pezzi: un unico clone da decine di MB fermerebbe l'interfaccia per secoli) */
+      const piece = (id) => { const k = KEEP.get(id); if (!k) return postMessage({ id, error: 'risultato non trovato' });
+        while (k.ki < 3 && k.i >= k.out[KEYS[k.ki]].length) { k.ki++; k.i = 0; }
+        if (k.ki >= 3) { KEEP.delete(id); return postMessage({ id, done: 1 }); }
+        const key = KEYS[k.ki], items = k.out[key].slice(k.i, k.i + k.n); k.i += k.n; postMessage({ id, key, items }); };
+      self.onmessage = async (e) => { const { id, op, data } = e.data; if (op === 'more') return piece(id); try {
         let out = null;
-        if (op === 'm3u') out = libFinish(parseM3U(data.text, data.plId));
-        else if (op === 'xtream') { const [lc, vc, sc, ls, vs, ss] = data.texts.map(xtArr); out = libFinish(xtreamMap({ lc, vc, sc, ls, vs, ss }, data.pl)); }
-        postMessage({ id, out: data.known && out.sig === data.known ? { same: 1, sig: out.sig } : out });
+        if (op === 'm3u') out = libFinish(parseM3U(await txt(data.text), data.plId));
+        else if (op === 'xtream') { const tt = []; for (const t of data.texts) tt.push(xtArr(await txt(t))); const [lc, vc, sc, ls, vs, ss] = tt; out = libFinish(xtreamMap({ lc, vc, sc, ls, vs, ss }, data.pl)); }
+        if (data.known && out.sig === data.known) return postMessage({ id, out: { same: 1, sig: out.sig } });
+        if (!data.chunk || out.live.length + out.movies.length + out.series.length <= data.chunk) return postMessage({ id, out });
+        const head = {}; for (const k in out) if (!KEYS.includes(k)) head[k] = out[k]; for (const k of KEYS) head[k] = [];
+        KEEP.set(id, { out, ki: 0, i: 0, n: data.chunk }); postMessage({ id, head });
       } catch (err) { postMessage({ id, error: String(err && err.message || err) }); } };`,
     ].map(String).join('\n');
     libWk = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
-    libWk.onmessage = (e) => { const j = libWkJobs.get(e.data.id); if (!j) return; libWkJobs.delete(e.data.id); clearTimeout(j.t); e.data.error ? j.rej(new Error(e.data.error)) : j.res(e.data.out); };
+    libWk.onmessage = (e) => {
+      const d = e.data, j = libWkJobs.get(d.id); if (!j) return;
+      // risultato a pezzi: si chiede il pezzo seguente solo dopo aver ceduto il thread (tasti e fotogrammi passano in mezzo)
+      if (d.head) { j.out = d.head; return libWkMore(d.id); }
+      if (d.items) { const dst = j.out[d.key]; for (let i = 0; i < d.items.length; i++) dst.push(d.items[i]); return libWkMore(d.id); }
+      libWkJobs.delete(d.id); clearTimeout(j.t);
+      d.error ? j.rej(new Error(d.error)) : j.res(d.done ? j.out : d.out);
+    };
     libWk.onerror = (e) => { libWkBad = true; for (const j of libWkJobs.values()) { clearTimeout(j.t); j.rej(new Error(e.message || 'worker')); } libWkJobs.clear(); try { libWk.terminate(); } catch {} libWk = null; };
   } catch { libWkBad = true; libWk = null; }
   return libWk;
 }
-/** esegue un lavoro nel thread di lavoro; se non disponibile o in errore la promessa fallisce e si usa il thread principale */
+const LIB_CHUNK = 2500; // titoli per pezzo nel passaggio dal thread di lavoro all'interfaccia (≈ 30-50 ms ciascuno su una TV lenta)
+const libWkMore = (id) => setTimeout(() => { if (libWkJobs.has(id) && libWk) try { libWk.postMessage({ id, op: 'more' }); } catch {} }, 0);
+/** esegue un lavoro nel thread di lavoro; se non disponibile o in errore la promessa fallisce e si usa il thread principale.
+    Le playlist arrivano come Blob (passano per riferimento, senza copiare i byte) */
 function libWork(op, data) {
   const w = libWorker(); if (!w) return Promise.reject(new Error('no worker'));
   return new Promise((res, rej) => {
@@ -2468,8 +2590,8 @@ function libWork(op, data) {
   });
 }
 async function parseM3UAsync(text, plId, known) {
-  try { return await libWork('m3u', { text, plId, known }); } catch {}
-  return libFinish(parseM3U(text, plId));
+  try { return await libWork('m3u', { text, plId, known, chunk: LIB_CHUNK }); } catch {}
+  return libFinish(parseM3U(await asText(text), plId));
 }
 const localOk = () => S.settings.allowLocalPlaylists && perm('localPl');
 const allPlaylists = () => [...S.playlists, ...(localOk() ? S.local : [])].map((p) => ({ ...p, id: p.id || 'p' + hashStr((p.url || '') + (p.host || '') + (p.username || '')) }));
@@ -2556,7 +2678,7 @@ async function fetchLibrary(onMsg, quick) {
   const parts = await Promise.all(all.map(async (p) => {
     try {
       const k = known ? known[p.id] : undefined;
-      const part = p.type === 'xtream' ? await loadXtream({ ...p, host: fixUrl(p.host) }, k) : await parseM3UAsync(await getText(fixUrl(p.url)), p.id, k);
+      const part = p.type === 'xtream' ? await loadXtream({ ...p, host: fixUrl(p.host) }, k) : await parseM3UAsync(await getBuf(fixUrl(p.url)), p.id, k);
       onMsg && onMsg(++done, all.length);
       return part;
     } catch (e) { S.loadErrors.push(`${p.name}: ${e.message || 'errore'}`); return null; }
@@ -2624,13 +2746,18 @@ async function refreshLibrary(manual) {
       const prev = S.libSig;
       // la nuova libreria si applica quando il telecomando è fermo (setLib su 100.000 titoli non deve interrompere chi naviga);
       // a richiesta manuale si applica subito
-      const apply = () => {
-        if (S.libSig !== prev || S.inPlayer || gen !== libLoadGen) { if (S.libSig !== prev || gen !== libLoadGen) return; return whenIdle(apply, 2000, 2000, 120e3); }
-        setLib(r.lib); S.libSig = sig; S.partSig = r.psig || null;
-        whenIdle(() => S.fullLib && LibCache.save(S.fullLib), 1000, 2000, 60e3); // si salva quando il telecomando è fermo
+      // (solo a telecomando fermo da 1,5 s e fuori dal lettore: niente più applicazione forzata dopo 90 s di navigazione)
+      const apply = async () => {
+        if (S.libSig !== prev || S.inPlayer || gen !== libLoadGen) { if (S.libSig !== prev || gen !== libLoadGen) return; return whenIdle(apply, 2000, 2000, 1e12); }
+        const t0 = lastInput, g0 = libGen;
+        const still = () => lastInput === t0 && !S.inPlayer && libGen === g0 && S.libSig === prev && gen === libLoadGen;
+        if (manual) setLib(r.lib);
+        else if (!(await setLibAsync(r.lib, still))) { if (S.libSig === prev && gen === libLoadGen) whenIdle(apply, 1000, 1500, 1e12); return; } // si è ripreso a navigare: dopo
+        S.libSig = sig; S.partSig = r.psig || null;
+        whenIdle(() => S.fullLib && LibCache.save(S.fullLib), 1000, 2000, 1e12); // si salva quando il telecomando è fermo
         if (!manual) toast('Contenuti aggiornati');
       };
-      if (manual) apply(); else whenIdle(apply, 0, 1500, 90e3);
+      if (manual) apply(); else whenIdle(apply, 0, 1500, 1e12);
     }
   } finally { S.refreshing = false; }
 }
@@ -2698,29 +2825,32 @@ function applyUserEdits(lib) {
     }
   }
 }
-function setLib(lib) {
+/* libreria nuova: calcolo a passi (generatore) in variabili locali, poi tutto applicato insieme alla fine (mai metà vecchia e metà
+   nuova). setLib fa tutti i passi subito; setLibAsync cede il thread fra un passo e l'altro (aggiornamento in sottofondo) */
+function* setLibSteps(lib) {
   if (!lib.clean && lib.live.some(isSepCh)) lib = { ...lib, live: lib.live.filter((c) => !isSepCh(c)) };
-  S.fullLib = lib; trendCache = null; libGen++; featMemo = null;
-  { // contenuti di una cache vecchia senza la playlist d'origine
-    const ids = activePlaylists().map((p) => p.id);
-    if (ids.length > 1) for (const arr of [lib.live, lib.movies, lib.series]) for (const x of arr) if (!x.pl) { const id = ids.find((i) => String(x.id).endsWith(i)); if (id) x.pl = id; }
-    const pl = plList();
-    S.plTags = new Map(pl.map((p) => [p.id, p]));
-    S.plBadges = pl.length > 1 && plMode() === 'merge' && plSel() === 'all' && !(S.prof && S.prof.pl && S.prof.pl !== 'all');
-  }
+  const full = lib;
+  // contenuti di una cache vecchia senza la playlist d'origine
+  const ids = activePlaylists().map((p) => p.id);
+  if (ids.length > 1) for (const arr of [lib.live, lib.movies, lib.series]) for (const x of arr) if (!x.pl) { const id = ids.find((i) => String(x.id).endsWith(i)); if (id) x.pl = id; }
+  const pl = plList();
+  const plTags = new Map(pl.map((p) => [p.id, p]));
+  const plBadges = pl.length > 1 && plMode() === 'merge' && plSel() === 'all' && !(S.prof && S.prof.pl && S.prof.pl !== 'all');
   lib = plLockFilter(plFilter(profFilter(lib)));
   applyUserEdits(lib);
   lib.live.forEach((c, i) => { c.num = c.num || i + 1; c.k = 'l'; });
   lib.movies.forEach((x) => (x.k = 'm'));
   lib.series.forEach((x) => (x.k = 's'));
-  S.byGroup = new Map();
-  const cats = (arr, k) => { const m = new Map(); for (const x of arr) { let g = S.byGroup.get(k + x.group); if (!g) S.byGroup.set(k + x.group, (g = [])); g.push(x); m.set(x.group, (m.get(x.group) || 0) + 1); } return [...m].map(([name, count]) => ({ name, count })); };
-  S.lib = { live: lib.live, movies: lib.movies, series: lib.series, liveCats: cats(lib.live, 'l'), movieCats: cats(lib.movies, 'm'), seriesCats: cats(lib.series, 's') };
-  S.byId = new Map();
-  for (const arr of [lib.live, lib.movies, lib.series]) for (const x of arr) S.byId.set(x.id, x);
-  S.plMap = new Map(activePlaylists().map((p) => { const c = xtCreds(p); return [p.id, c ? { ...p, ...c } : { ...p, host: fixUrl(p.host) }]; }));
+  yield;
+  const byGroup = new Map();
+  const cats = (arr, k) => { const m = new Map(); for (const x of arr) { let g = byGroup.get(k + x.group); if (!g) byGroup.set(k + x.group, (g = [])); g.push(x); m.set(x.group, (m.get(x.group) || 0) + 1); } return [...m].map(([name, count]) => ({ name, count })); };
+  const L = { live: lib.live, movies: lib.movies, series: lib.series, liveCats: cats(lib.live, 'l'), movieCats: cats(lib.movies, 'm'), seriesCats: cats(lib.series, 's') };
+  yield;
+  const byId = new Map();
+  for (const arr of [lib.live, lib.movies, lib.series]) for (const x of arr) byId.set(x.id, x);
+  const plMap = new Map(activePlaylists().map((p) => { const c = xtCreds(p); return [p.id, c ? { ...p, ...c } : { ...p, host: fixUrl(p.host) }]; }));
   // canali di liste M3U che arrivano da un server Xtream: id del flusso per la guida breve
-  const plOk = new Set([...S.plMap.values()].filter((p) => p.username).map((p) => p.id));
+  const plOk = new Set([...plMap.values()].filter((p) => p.username).map((p) => p.id));
   for (const ch of lib.live) {
     if (ch.sid || !ch.url) continue;
     const plid = ch.pl || [...plOk].find((id) => ch.id.endsWith(id));
@@ -2729,7 +2859,21 @@ function setLib(lib) {
     if (sidc) { ch.sid = sidc; ch.pl = plid; }
   }
   applyLogos(lib.live);
-  if (S.trend) setTimeout(buildTrendIdx, 0); // S.libSig viene aggiornato subito dopo setLib
+  return () => {
+    S.fullLib = full; trendCache = null; libGen++; featMemo = null;
+    S.plTags = plTags; S.plBadges = plBadges; S.byGroup = byGroup; S.lib = L; S.byId = byId; S.plMap = plMap;
+    if (S.trend) setTimeout(buildTrendIdx, 0); // S.libSig viene aggiornato subito dopo setLib
+  };
+}
+function setLib(lib) { const g = setLibSteps(lib); let r = g.next(); while (!r.done) r = g.next(); r.value(); }
+/** cede il thread: passano tasti e fotogrammi in attesa (scheduler.yield dove c'è) */
+const yieldNow = () => new Promise((r) => { try { if (window.scheduler && scheduler.yield) return void scheduler.yield().then(r, r); } catch {} setTimeout(r, 0); });
+/** come setLib, ma a passi; ok() dice se si può ancora applicare (altrimenti si rinuncia e torna false) */
+async function setLibAsync(lib, ok) {
+  const g = setLibSteps(lib); let r = g.next();
+  while (!r.done) { await yieldNow(); if (ok && !ok()) return false; r = g.next(); }
+  if (ok && !ok()) return false;
+  r.value(); return true;
 }
 /* ---------------- loghi automatici dei canali (banca dati pubblica iptv-org) ---------------- */
 const LOGO_DB = 'https://iptv-org.github.io/api/';
@@ -3985,7 +4129,7 @@ $('#vodGrid').addEventListener('klong', (e) => { const el = e.target.closest('.p
 function openItem(x) {
   if (!x) return;
   if (x.folder) return openFolder(x);
-  if (x.home && x.away) return openEvent(x);
+  if (isEv(x) || (x.home && x.away)) return openEvent(x);
   if (x.k === 'r') return playRec(x.rec);
   if (isLiveItem(x)) { S.liveCat = 'all'; renderLive(); show('live'); setTimeout(() => focusChannel(x, true), 80); return; }
   openDetail(x);
@@ -4161,6 +4305,55 @@ function homeOrder(cats) {
   for (const c of cats) { const r = catHome(c.name); if (r[1]) low.push(c); else if (r[0] >= 0) top.push([r[0], c]); else mid.push(c); }
   top.sort((a, b) => a[0] - b[0]); // sort stabile: a parità resta l'ordine di prima
   return [...top.map((x) => x[1]), ...mid, ...low];
+}
+/* ---------- eventi sportivi: tutti gli sport (calcio, F1, tennis, basket, NFL, UFC, rugby) ---------- */
+const EV_SP = { calcio: 'Calcio', f1: 'Formula 1', tennis: 'Tennis', basket: 'Basket', nfl: 'NFL', ufc: 'UFC', rugby: 'Rugby', motogp: 'MotoGP' };
+const EV_IC = {
+  calcio: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5l4.2 3-1.6 5h-5.2l-1.6-5z"/>',
+  f1: '<path d="M5 21V4h13l-2.5 4 2.5 4H5"/>',
+  tennis: '<circle cx="12" cy="12" r="9"/><path d="M6 5.6c3.2 3.4 3.2 9.4 0 12.8M18 5.6c-3.2 3.4-3.2 9.4 0 12.8"/>',
+  basket: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.7 5.7c3.6 3.6 3.6 9 0 12.6M18.3 5.7c-3.6 3.6-3.6 9 0 12.6"/>',
+  nfl: '<ellipse cx="12" cy="12" rx="10" ry="5.8" transform="rotate(-40 12 12)"/><path d="M9.2 14.8l5.6-5.6M10.4 11.4l2.2 2.2M12 9.8l2.2 2.2"/>',
+  ufc: '<path d="M8.3 3h7.4L21 8.3v7.4L15.7 21H8.3L3 15.7V8.3z"/>',
+  rugby: '<ellipse cx="12" cy="12" rx="10" ry="6.3"/><path d="M7.5 12h9M9.5 10.4v3.2M12 10.4v3.2M14.5 10.4v3.2"/>',
+  motogp: '<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-6h4l4 6M10 10l-1-3H7"/>',
+};
+const evIcon = (sp) => `<svg class="evi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${EV_IC[sp] || EV_IC.calcio}</svg>`;
+/** evento del server (v2, o v1 da un server non aggiornato) o della demo → una forma sola; null se non c'è niente da mostrare.
+    Due lati (squadre, giocatori, lottatori) oppure un titolo (gara o sessione: «GP del Brasile · Gara») */
+function normEv(e) {
+  if (!e || typeof e !== 'object') return null;
+  if (e._ev) return e;
+  const t = typeof e.start === 'number' ? e.start : Date.parse(e.start);
+  if (!isFinite(t)) return null;
+  const txt = (v, n = 80) => (typeof v === 'string' ? v.slice(0, n) : typeof v === 'number' && isFinite(v) ? String(v) : '');
+  const img = (v) => (typeof v === 'string' && /^(https?:|data:image\/)/.test(v) ? v : '');
+  const side = (x) => {
+    if (!x || typeof x !== 'object' || !txt(x.name)) return null;
+    const o = { name: txt(x.name, 60), logo: img(x.logo) };
+    if (x.score != null && x.score !== '') o.score = txt(x.score, 8);
+    if (Array.isArray(x.sets)) o.sets = x.sets.filter((v) => typeof v === 'number' && isFinite(v)).slice(0, 5);
+    if (+x.seed > 0) o.seed = +x.seed;
+    if (x.it) o.it = true;
+    return o;
+  };
+  const home = side(e.home), away = side(e.away), two = !!(home && away);
+  const x = { _ev: 1, id: txt(e.id, 60) || 'ev' + t, sport: EV_SP[e.sport] ? e.sport : 'calcio', league: txt(e.league, 60), start: new Date(t).toISOString(), live: !!e.live, state: txt(e.state, 8) || 'pre', clock: txt(e.clock, 30),
+    title: txt(e.title, 90), gp: txt(e.gp, 60), session: txt(e.session, 40), venue: txt(e.venue, 80), round: txt(e.round, 40), logo: img(e.logo), home: two ? home : null, away: two ? away : null,
+    top: Array.isArray(e.top) ? e.top.filter((p) => p && txt(p.name)).slice(0, 3).map((p) => ({ name: txt(p.name, 40), flag: img(p.flag) })) : [] };
+  return two || x.title ? x : null;
+}
+const isEv = (x) => !!(x && x._ev);
+/** etichetta della card, del riquadro grande e della finestra */
+const evHead = (e) => (e.sport === 'ufc' ? e.title || e.league || 'UFC' : e.sport === 'f1' ? EV_SP.f1 : e.league || EV_SP[e.sport]);
+const evKind = (e) => (e.sport === 'calcio' ? e.league : e.sport === 'ufc' ? e.title || 'UFC' : e.sport === 'f1' || !e.league || e.league === EV_SP[e.sport] ? EV_SP[e.sport] : `${EV_SP[e.sport]} · ${e.league}`);
+const evTitle = (e) => (e.home ? `${e.home.name} – ${e.away.name}` : e.title);
+function evMeta(e) {
+  const m = [];
+  if (e.round && e.round !== e.session) m.push(e.round);
+  if (e.venue) m.push(e.venue);
+  if (e.live && e.top.length) m.push(e.top.map((p, i) => `${i + 1}. ${p.name}`).join('  '));
+  return m;
 }
 function upcomingEvents() {
   const t = Date.now();
@@ -4402,12 +4595,24 @@ function evWhen(e) {
   if (diff === 1) return 'Domani · ' + hm;
   return d.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + hm;
 }
-const teamLogo = (t) => t.logo ? `<img loading="lazy" decoding="async" src="${esc(t.logo)}" data-t="${esc(t.name.slice(0, 3).toUpperCase())}" onerror="kxImgTxt(this,'')">` : esc(t.name.slice(0, 3).toUpperCase());
-function cardHTML(type, x, k, i) {
-  if (type === 'ev') {
-    return `<div class="nc ev ${x.live ? 'live' : ''}" data-f data-k="${k}"><div class="evh"><span class="evl">${esc(x.league)}</span><span class="evt">${esc(evWhen(x))}</span></div>
-      <div class="evm"><div class="evs"><i>${teamLogo(x.home)}</i><b>${esc(x.home.name)}</b></div><span class="vs">${x.live && x.home.score != null ? `<em class="sc">${esc(x.home.score)} - ${esc(x.away.score)}</em>` : 'VS'}</span><div class="evs"><i>${teamLogo(x.away)}</i><b>${esc(x.away.name)}</b></div></div></div>`;
+/** logo della squadra o bandiera; senza immagine le prime lettere (del cognome, per «J. Sinner») */
+const teamLogo = (t) => { const ini = esc(String((t && t.name) || '').replace(/^(\p{Lu}\.\s*)+/u, '').slice(0, 3).toUpperCase()); return t && t.logo ? `<img loading="lazy" decoding="async" src="${esc(t.logo)}" data-t="${ini}" onerror="kxImgTxt(this,'')">` : ini; };
+function evCard(x0, k) {
+  const x = normEv(x0); if (!x) return '';
+  const cls = `nc ev sp-${x.sport}${x.live ? ' live' : ''}`;
+  const head = `<div class="evh"><span class="evl">${evIcon(x.sport)}${esc(evHead(x))}</span><span class="evt">${esc(evWhen(x))}</span></div>`;
+  // gara o sessione (F1), serata senza incontro principale: titolo, sessione, orario
+  if (!x.home) return `<div class="${cls} evrc" data-f data-k="${k}">${head}<div class="evrt"><b>${esc(x.gp || x.title)}</b>${x.session ? `<span class="evss">${esc(x.session)}</span>` : ''}</div><small class="evsub">${esc(x.live && x.top.length ? x.top.map((p, i) => `${i + 1}. ${p.name}`).join('  ') : x.venue || x.round)}</small></div>`;
+  // tennis: due righe come un tabellone (bandiera, giocatore, testa di serie, giochi di ogni set)
+  if (x.sport === 'tennis') {
+    const row = (p, q) => `<div class="evp${p.score != null && q.score != null && +p.score > +q.score ? ' win' : ''}"><i>${teamLogo(p)}</i><b>${esc(p.name)}</b>${p.seed ? `<span class="sd">${p.seed}</span>` : ''}<em>${(p.sets || []).map((g) => `<u>${g}</u>`).join('')}</em></div>`;
+    return `<div class="${cls} evtn" data-f data-k="${k}">${head}<div class="evps">${row(x.home, x.away)}${row(x.away, x.home)}</div>${x.round ? `<small class="evsub">${esc(x.round)}</small>` : ''}</div>`;
   }
+  return `<div class="${cls}" data-f data-k="${k}">${head}
+      <div class="evm"><div class="evs"><i>${teamLogo(x.home)}</i><b>${esc(x.home.name)}</b></div><span class="vs">${x.live && x.home.score != null ? `<em class="sc">${esc(x.home.score)} - ${esc(x.away.score)}</em>` : 'VS'}</span><div class="evs"><i>${teamLogo(x.away)}</i><b>${esc(x.away.name)}</b></div></div></div>`;
+}
+function cardHTML(type, x, k, i) {
+  if (type === 'ev') return evCard(x, k);
   if (type === 'fold') {
     const h = hueOf(x.name);
     return `<div class="nc f" data-f data-k="${k}" style="--h:${h};--h2:${(h + 50) % 360}"><span class="fk">${x.kind === 'live' ? 'LIVE TV' : x.kind === 'movies' ? 'FILM' : 'SERIE TV'}</span><span class="fsv">${FOLD_IC[x.kind]}</span><b>${esc(x.name)}</b><small>${x.count.toLocaleString('it')} ${x.kind === 'live' ? 'canali' : 'titoli'}</small></div>`;
@@ -4530,9 +4735,9 @@ function buildBrowse(scr, kind) {
     const c = e.target.closest('[data-k]');
     if (c) { const [ri, ii] = c.dataset.k.split(':'); const r = scr._rows[+ri]; if (ii === 'more') return r.more.go ? go(r.more.go) : r.more.fold ? openFolder(r.more.fold) : openVod(r.more.kind, r.more.cat); if (r.queue) return playQueue(r.items[+ii]); return openItem(r.items[+ii]); }
     if (e.target.closest('[data-hplay]')) return heroPlay(scr);
-    if (e.target.closest('[data-hinfo]')) { const x = scr._hero; if (x) x.folder ? openFolder(x) : x.home ? openEvent(x) : isLiveItem(x) ? openItem(x) : openDetail(x); }
+    if (e.target.closest('[data-hinfo]')) { const x = scr._hero; if (x) x.folder ? openFolder(x) : isEv(x) || x.home ? openEvent(x) : isLiveItem(x) ? openItem(x) : openDetail(x); }
   });
-  scr.addEventListener('klong', (e) => { const c = e.target.closest('[data-k]'); if (c) { const x = item(c.dataset.k); if (x && x.k === 'r') return recMenu(x.rec); x && !x.folder && !x.home && itemMenu(x, c); } });
+  scr.addEventListener('klong', (e) => { const c = e.target.closest('[data-k]'); if (c) { const x = item(c.dataset.k); if (x && x.k === 'r') return recMenu(x.rec); x && !x.folder && !x.home && !isEv(x) && itemMenu(x, c); } });
   scr.addEventListener('kfocus', (e) => {
     const t = e.target, mouse = e.detail && e.detail.mouse;
     const c = t.closest('[data-k]'), rows = scr.querySelector('.rows');
@@ -4585,6 +4790,7 @@ function heroImg(hero, src, mode, blurBg) {
   const imgs = hero.querySelectorAll('img.main'), blur = hero.querySelector('img.blur');
   const fi = hero._fi || 0, front = imgs[fi], backI = imgs[1 - fi];
   hero._want = [src, mode, blurBg];
+  if (src && document.documentElement.classList.contains('kx-hold')) return; // uscita dello splash in corso: dopo (heroRefresh)
   if (src && heroOff()) {
     hero._tok = (hero._tok || 0) + 1; hero._src = '';
     for (const i of imgs) { i.classList.add('fade'); if (i.hasAttribute('src')) i.removeAttribute('src'); }
@@ -4614,7 +4820,7 @@ let heroT;
 function heroQueue(scr, x) { clearTimeout(heroT); heroT = setTimeout(() => setHero(scr, x), fastMove ? 360 : 180); }
 function setHero(scr, x, instant) {
   if (x && x.folder) return setFolderHero(scr, x, instant);
-  if (x && x.home && x.away) return setEventHero(scr, x, instant);
+  if (x && (isEv(x) || (x.home && x.away))) { const e = normEv(x); if (e) return setEventHero(scr, e, instant); }
   const info = scr.querySelector('.hinfo'), hero = scr.querySelector('.hero');
   if (!x) { info.style.visibility = 'hidden'; return; }
   info.style.visibility = '';
@@ -4672,12 +4878,16 @@ function setEventHero(scr, e, instant) {
   if (scr._hero === e && !instant) return;
   scr._hero = e;
   const info = scr.querySelector('.hinfo'), hero = scr.querySelector('.hero');
-  heroImg(hero, e.home.logo || e.away.logo || '', 'lv', true);
+  info.style.visibility = '';
+  // squadre: il loro logo; tennis, UFC e F1: il logo della competizione (o la bandiera)
+  const two = e.home && !/^(tennis|ufc)$/.test(e.sport);
+  heroImg(hero, (two ? e.home.logo || e.away.logo : '') || e.logo || (e.home ? e.home.logo || e.away.logo : '') || '', 'lv', true);
   const apply = () => {
-    scr.querySelector('.hkind').innerHTML = `<i class="kb">K</i>${e.live ? 'IN CORSO · ' : ''}${esc(e.league.toUpperCase())}`;
-    scr.querySelector('.htitle').textContent = `${e.home.name} – ${e.away.name}`;
-    scr.querySelector('.hmeta').innerHTML = `<span class="m">${esc(evWhen(e))}</span>${e.venue ? `<span>${esc(e.venue)}</span>` : ''}`;
+    scr.querySelector('.hkind').innerHTML = `<i class="kb">K</i>${e.live ? 'IN CORSO · ' : ''}${esc(evKind(e).toUpperCase())}`;
+    scr.querySelector('.htitle').textContent = evTitle(e);
+    scr.querySelector('.hmeta').innerHTML = [`<span class="m">${esc(evWhen(e))}</span>`, ...evMeta(e).map((t) => `<span>${esc(t)}</span>`)].join('<i>|</i>');
     scr.querySelector('.hrate').innerHTML = '';
+    const ha = scr.querySelector('.hage'); if (ha) { ha.innerHTML = ''; ha.classList.remove('on'); } // niente età del titolo di prima
     scr.querySelector('.hplot').textContent = TOUCH ? 'Tocca «Dove vederla» per scegliere il canale che la trasmette.' : 'Premi OK su «Dove vederla» per scegliere il canale che la trasmette.';
     scr.querySelector('[data-hplay] span').textContent = 'Dove vederla';
     info.classList.remove('sw');
@@ -4688,10 +4898,12 @@ async function loadEvents() {
   if (S.demo) { S.events = demoEvents(); return; }
   if (!baseServer() || S.settings.showFootball === false) return;
   try {
-    const url = baseServer() + '/api/player/events';
+    // v=2: tutti gli sport accesi dal pannello (senza, il server risponde solo calcio nella forma vecchia)
+    const url = baseServer() + '/api/player/events?v=2';
     const text = hasNativeHttp() ? (await nativeFetch(url)).text : await (await fetch(url)).text();
     const j = JSON.parse(text);
-    const evs = (j.events || []).slice(0, 30), sig = evs.map((e) => e.id + (e.live ? 'L' : '')).join();
+    const evs = (Array.isArray(j.events) ? j.events : []).slice(0, 40).map(normEv).filter(Boolean);
+    const sig = evs.map((e) => e.id + (e.live ? 'L' + (e.home ? e.home.score + '-' + e.away.score : e.clock) : '')).join();
     if (sig !== S.evSig) { S.evSig = sig; S.events = evs; onEventsChanged(); }
   } catch {}
 }
@@ -4707,9 +4919,21 @@ function onEventsChanged() {
 }
 setInterval(() => { if (!S.demo && !S.inPlayer) loadEvents(); }, 10 * 60e3);
 function demoEvents() {
-  const T = [['Inter', 'Milan', 'Serie A'], ['Juventus', 'Napoli', 'Serie A'], ['Real Madrid', 'Bayern', 'Champions League'], ['Roma', 'Lazio', 'Serie A'], ['Atalanta', 'Arsenal', 'Champions League'], ['Fiorentina', 'Bologna', 'Serie A']];
   const base = new Date(); base.setMinutes(0, 0, 0);
-  return T.map(([h, a, l], i) => ({ id: 'dev' + i, league: l, start: new Date(+base + (i * 26 + 3) * 3600e3).toISOString(), home: { name: h, logo: art(h, 0, 0, i) }, away: { name: a, logo: art(a, 0, 0, i + 3) }, venue: '', live: i === 0 }));
+  const at = (h) => new Date(+base + h * 3600e3).toISOString(), lg = (n, i) => art(n, 0, 0, i);
+  const tm = (n, i, more) => ({ name: n, logo: lg(n, i), ...more });
+  return [
+    { id: 'dev0', sport: 'calcio', league: 'Serie A', start: at(3), live: true, clock: "67'", home: tm('Inter', 0, { score: '2' }), away: tm('Milan', 3, { score: '1' }) },
+    { id: 'dev1', sport: 'tennis', league: 'Nitto ATP Finals', start: at(1), live: true, clock: '2° set', round: 'Round robin', venue: 'Centrale', home: tm('J. Sinner', 2, { sets: [6, 3], score: '1', seed: 1, it: true }), away: tm('A. Zverev', 4, { sets: [4, 2], score: '0', seed: 3 }) },
+    { id: 'dev2', sport: 'f1', league: 'Formula 1', start: at(4), title: 'GP del Brasile · Gara', gp: 'GP del Brasile', session: 'Gara', round: 'Gara', venue: 'Interlagos' },
+    { id: 'dev3', sport: 'calcio', league: 'Serie A', start: at(6), home: tm('Juventus', 1), away: tm('Napoli', 4) },
+    { id: 'dev4', sport: 'basket', league: 'NBA', start: at(21), home: tm('Lakers', 5), away: tm('Celtics', 2) },
+    { id: 'dev5', sport: 'calcio', league: 'Champions League', start: at(29), home: tm('Real Madrid', 2), away: tm('Bayern', 5) },
+    { id: 'dev6', sport: 'rugby', league: 'Nations Championship', start: at(32), home: tm('Italia', 0), away: tm('Australia', 3) },
+    { id: 'dev7', sport: 'nfl', league: 'NFL', start: at(37), round: 'Settimana 10', home: tm('Chiefs', 3), away: tm('Bills', 1) },
+    { id: 'dev8', sport: 'ufc', league: 'UFC', title: 'UFC 320', start: at(50), round: 'Incontro principale', home: tm('M. Ankalaev', 1), away: tm('A. Pereira', 2) },
+    { id: 'dev9', sport: 'calcio', league: 'Serie A', start: at(55), home: tm('Roma', 3), away: tm('Lazio', 0) },
+  ].map(normEv).filter(Boolean);
 }
 /* età consigliata: «T», «6+», «14+», «18+» (fasce italiane); da Xtream (mpaa/age) o dal server (TMDB) */
 const US_AGE = { G: 'T', 'TV-Y': 'T', 'TV-G': 'T', 'TV-Y7': '6+', PG: '6+', 'TV-PG': '6+', 'PG-13': '14+', 'TV-14': '14+', R: '14+', 'NC-17': '18+', 'TV-MA': '18+' };
@@ -4755,7 +4979,7 @@ async function fetchInfo(x) {
 function heroPlay(scr) {
   const x = scr._hero; if (!x) return;
   if (x.folder) return openFolder(x);
-  if (x.home && x.away) return openEvent(x);
+  if (isEv(x) || (x.home && x.away)) return openEvent(x);
   if (x.k === 'r') return playRec(x.rec); // registrazione: non ha un url proprio né va in "Continua a guardare"
   if (isLiveItem(x)) { S.liveIndex = visLive(S.lib.live); addRecent(x, 'live'); return openFs(x, 'live'); } // senza i canali nascosti
   if (isSeriesItem(x)) return openDetail(x);
@@ -5079,7 +5303,7 @@ async function pinFirstRun(force) {
 
 /* ---------------- menu del tasto OK tenuto premuto ---------------- */
 function itemMenu(x, el) {
-  if (!x || x.folder || x.home || $('#menuM')) return;
+  if (!x || x.folder || x.home || isEv(x) || $('#menuM')) return;
   const live = isLiveItem(x), fav = S.favs.has(x.id), hid = S.hidden.has(x.id), lk = S.locked.has(x.id);
   const acts = [['fav', fav ? '✕  Rimuovi dalla mia lista' : '★  Aggiungi alla mia lista']];
   if (live) acts.push(['hide', hid ? '👁  Mostra di nuovo il canale' : '⊘  Nascondi canale']);
@@ -5425,6 +5649,7 @@ function rcApply(rc, rcv) {
   const next = rc && typeof rc === 'object' ? rc : {};
   const same = JSON.stringify(next) === JSON.stringify(S.rc || {});
   S.rc = next; S.rcv = rcv || '';
+  try { store.set('rcIntro', rcGet('intro') || ''); } catch {} // «Animazione d'avvio»: vale dall'apertura successiva (lo splash parte prima del pannello)
   if (same) return;
   try { rcLiteApply(); } catch {}
   try { applyTheme(rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema'); } catch {}
@@ -5443,7 +5668,7 @@ function updFirstSeen(a) { const fs = store.get('apkFirst', {}); if (fs.v !== a.
 function updMust() { const a = S.apkUpdate, d = updForceDays(); if (!a || d == null || S.apkReady !== a.url) return false; return Date.now() - updFirstSeen(a) >= d * 86400e3; }
 function bgUpdOn() { const v = rcGet('bgupd'); return v != null ? v !== 'off' : store.get('bgUpd', true) !== false; }
 function rcSnapshot() {
-  const o = { bgupd: bgUpdOn() ? 'on' : 'off', lite: document.body.classList.contains('xlite') ? 'max' : document.body.classList.contains('lite') ? 'on' : 'off', theme: rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema', adult: showAdult() ? 'on' : 'off', logos: autoLogoOn() ? 'on' : 'off', posters: rcGet('posters') === 'hi' ? 'hi' : 'auto' };
+  const o = { bgupd: bgUpdOn() ? 'on' : 'off', lite: document.body.classList.contains('xlite') ? 'max' : document.body.classList.contains('lite') ? 'on' : 'off', theme: rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema', adult: showAdult() ? 'on' : 'off', logos: autoLogoOn() ? 'on' : 'off', posters: rcGet('posters') === 'hi' ? 'hi' : 'auto', intro: window.kxIntro || 'auto' };
   try { for (const k of RC_CFG_KEYS) if (OPT[k]) o['o.' + k] = opt(k); } catch {}
   try { const P = playPrefs(); for (const k of ['quality', 'buffer', 'aspect']) o['p.' + k] = P[k]; } catch {}
   return o;
@@ -5921,7 +6146,7 @@ function remCheck() {
   const keep = S.reminders.filter((r) => t - r.start < 15 * 60e3 && !due.includes(r));
   if (!due.length) { if (keep.length !== S.reminders.length) { S.reminders = keep; store.set('reminders', keep); } return; }
   // mentre si guarda a schermo intero nel lettore dell'app l'avviso aspetta il ritorno (entro 15 minuti dall'inizio)
-  if (S.inPlayer || $('.speedm.on') || $('#boot').classList.contains('on')) return;
+  if (S.inPlayer || $('.speedm.on') || bootOn()) return;
   S.reminders = keep; store.set('reminders', keep);
   const r = due[0], ch = S.byId && S.byId.get(r.ch);
   fx('ok');
@@ -6048,14 +6273,35 @@ const BROAD = [
   [/ligue/i, ['dazn', 'ligue']],
   [/serie b/i, ['dazn', 'sky sport', 'serie b']],
   [/coppa italia/i, ['mediaset', 'canale 5', 'italia 1', 'coppa italia']],
+  // altri sport: per sport (emittenti italiane del 2026; si cercano nel nome del canale e nel gruppo)
+  ['f1', ['sky sport f1', 'tv8', 'formula 1']],
+  ['motogp', ['sky sport motogp', 'tv8', 'motogp']],
+  ['tennis', ['sky sport tennis', 'supertennis', 'tennis']],
+  ['basket', ['sky sport nba', 'nba']],
+  ['nfl', ['dazn', 'nfl']],
+  ['ufc', ['dazn', 'ufc']],
+  ['rugby', ['sky sport', 'rugby']],
 ];
+/** emittenti: il calcio per competizione, gli altri sport per sport */
+const broadOf = (e) => (e.sport && e.sport !== 'calcio' ? BROAD.find(([k]) => k === e.sport) : BROAD.find(([k]) => k instanceof RegExp && k.test(e.league)));
+/** parole per la guida TV: squadre, cognomi di giocatori e lottatori, Gran Premio */
+function evWords(e) {
+  const toks = (s) => normT(s).split(' ').filter((w) => w.length >= 4 && !/^(calcio|club|city|united|real|sport|team|rugby|basket)$/.test(w));
+  const surname = (n) => String(n || '').replace(/^(\p{Lu}\.\s*)+/u, '');
+  if (e.sport === 'f1') return [...new Set(['formula 1', 'f1', ...toks(e.gp || e.title).filter((w) => !/^(gran|premio|grand|prix)$/.test(w))])];
+  if (!e.home) return [...new Set(toks(e.title))];
+  if (e.sport === 'tennis' || e.sport === 'ufc') return [...new Set([...toks(surname(e.home.name)), ...toks(surname(e.away.name)), ...(e.sport === 'ufc' ? ['ufc'] : [])])];
+  return [...new Set([e.home.name, e.away.name].map(normT).join(' ').split(' ').filter((w) => w.length >= 4 && !/^(calcio|club|city|united|real|sport|team|fc)$/.test(w)))];
+}
+/** parola corta (f1, tv8, nba…): solo come parola intera, non dentro altre parole */
+const kwHit = (k) => (k.length < 4 ? ((re) => (s) => re.test(s))(new RegExp('(^|[^a-z0-9])' + k.replace(/[^a-z0-9 ]/g, '') + '($|[^a-z0-9])')) : (s) => s.includes(k));
 function eventChannels(e) {
   const out = [], seen = new Set();
   const push = (ch, why, epg) => { if (seen.has(ch.id) || out.length >= 40) return; seen.add(ch.id); out.push({ ch, why, epg }); };
-  const words = [e.home.name, e.away.name].map(normT).join(' ').split(' ').filter((w) => w.length >= 4 && !/^(calcio|club|city|united|real|sport|team|fc)$/.test(w));
+  const words = evWords(e), wHit = words.map(kwHit);
   const t0 = Date.parse(e.start) || Date.now(), from = t0 - 30 * 60e3, to = t0 + 150 * 60e3, sh = (+opt('epgShift') || 0) * 3600e3;
   const pool = visLive(S.lib.live);
-  const hitTitle = (title) => { const tl = normT(title); return words.some((w) => tl.includes(w)); };
+  const hitTitle = (title) => { const tl = normT(title); return wHit.some((f) => f(tl)); };
   // 1) guida TV completa: programmi intorno all'orario della partita che citano le squadre
   if (S.xepg && words.length) {
     const hit = new Set();
@@ -6065,27 +6311,41 @@ function eventChannels(e) {
   }
   // 2) guida breve già scaricata
   for (const [id, c] of S.epg) { const ch = S.byId && S.byId.get(id); if (ch && c.items.some((p) => p.end >= from && p.start <= to && hitTitle(p.title))) push(ch, 'Trasmessa secondo la guida TV', true); }
-  // 3) canali delle emittenti della competizione (prima FHD/HD)
-  const kw = [...((BROAD.find(([re]) => re.test(e.league)) || [, ['sport']])[1]), normT(e.league)].filter((k) => k && k.length > 2);
+  // 3) canali delle emittenti della competizione o dello sport (prima FHD/HD)
+  const kw = [...new Set([...((broadOf(e) || [, ['sport']])[1]), normT(e.league)])].filter((k) => k && k.length > 2), kHit = kw.map(kwHit);
   const q = (ch) => (/\b(4k|uhd)\b/i.test(ch.name) ? 0 : /\bfhd\b/i.test(ch.name) ? 1 : /\bhd\b/i.test(ch.name) ? 2 : 3);
-  pool.filter((ch) => { const n = normT(ch.name) + ' ' + (ch.group || '').toLowerCase(); return kw.some((k) => n.includes(k)); }).sort((a, b) => q(a) - q(b)).forEach((ch) => push(ch, ch.group || 'Canale sportivo', false));
+  pool.filter((ch) => { const n = normT(ch.name) + ' ' + (ch.group || '').toLowerCase(); return kHit.some((f) => f(n)); }).sort((a, b) => q(a) - q(b)).forEach((ch) => push(ch, ch.group || 'Canale sportivo', false));
   return out;
 }
 /* evento: dopo la visione di un canale (anche se era quello sbagliato) si torna alla lista «Dove vederla» */
 let evBack = null;
 function evReturn() { if (!evBack) return false; const b = evBack; evBack = null; setTimeout(() => openEvent(b.e, b.i), 120); return true; }
-function openEvent(e, fi) {
-  const list = eventChannels(e);
+/** parte centrale della finestra: squadre, tabellone del tennis, oppure gara/sessione */
+function evMid(e) {
+  if (!e.home) return `<div class="evrace"><b>${esc(e.gp || e.title)}</b>${e.session ? `<span>${esc(e.session)}</span>` : ''}${e.venue ? `<small>${esc(e.venue)}</small>` : ''}${e.live && e.top.length ? `<div class="evtop">${e.top.map((p, i) => `<span><i>${i + 1}</i>${p.flag ? `<img src="${esc(p.flag)}" alt="" onerror="this.remove()">` : ''}${esc(p.name)}</span>`).join('')}</div>` : ''}</div>`;
+  if (e.sport === 'tennis') {
+    const row = (p, q) => `<div class="evtp${p.score != null && q.score != null && +p.score > +q.score ? ' win' : ''}"><i>${teamLogo(p)}</i><b>${esc(p.name)}${p.seed ? ` <small>(${p.seed})</small>` : ''}</b><em>${(p.sets || []).map((g) => `<u>${g}</u>`).join('')}</em></div>`;
+    const sub = [e.round, e.venue].filter(Boolean).join(' · ');
+    return `<div class="evtn2">${row(e.home, e.away)}${row(e.away, e.home)}${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
+  }
   const sc = e.live && e.home.score != null ? `<em class="sc">${esc(e.home.score)} - ${esc(e.away.score)}</em>` : '<em>VS</em>';
-  kxModal('evM', `<div class="evhd"><span class="evl">${esc(e.league)}</span><span class="evw ${e.live ? 'live' : ''}">${e.live ? '● IN DIRETTA' : esc(evWhen(e))}</span></div>
-    <div class="evteams"><div><i>${teamLogo(e.home)}</i><b>${esc(e.home.name)}</b></div>${sc}<div><i>${teamLogo(e.away)}</i><b>${esc(e.away.name)}</b></div></div>
+  return `${e.sport === 'ufc' && e.round ? `<div class="evufc">${esc(e.round)}</div>` : ''}<div class="evteams"><div><i>${teamLogo(e.home)}</i><b>${esc(e.home.name)}</b></div>${sc}<div><i>${teamLogo(e.away)}</i><b>${esc(e.away.name)}</b></div></div>`;
+}
+/** «Cerca tra tutti i canali»: il calcio con il nome della competizione, gli altri sport con quello dello sport */
+const EV_Q = { f1: 'F1', motogp: 'MotoGP', tennis: 'Tennis', basket: 'NBA', nfl: 'NFL', ufc: 'UFC', rugby: 'Rugby' };
+const evQuery = (e) => (e.sport !== 'calcio' && EV_Q[e.sport]) || e.league.replace(/League|LaLiga/i, '').trim() || (e.home ? e.home.name : e.title);
+function openEvent(e0, fi) {
+  const e = normEv(e0); if (!e) return;
+  const list = eventChannels(e);
+  kxModal('evM', `<div class="evhd"><span class="evl">${evIcon(e.sport)}${esc(evKind(e))}</span><span class="evw ${e.live ? 'live' : ''}">${e.live ? '● IN DIRETTA' : esc(evWhen(e))}</span></div>
+    ${evMid(e)}
     <h5 class="evh5">DOVE VEDERLA</h5>
     <div class="evlist">${list.map((c, i) => { const n = nowOf(c.ch); return `<div class="evch" data-f data-ei="${i}"><div class="lg">${logoHTML(c.ch)}</div><div class="nm"><b>${esc(c.ch.name)}</b><small>${esc(n ? n.title : c.why)}</small></div>${c.epg ? '<span class="evtag">IN GUIDA</span>' : ''}<span class="evgo">▶</span></div>`; }).join('') || '<div class="noepg"><b>Nessun canale trovato automaticamente</b>Cerca tra tutti i canali qui sotto.</div>'}</div>
     <div class="sbtn"><button class="btn" data-f id="evSearch">🔍 Cerca tra tutti i canali</button><button class="btn" data-f id="evNo">Chiudi</button></div>`, null, 'evmodal');
   setTimeout(() => focus((fi != null && $(`#evM [data-ei="${fi}"]`)) || $('#evM .evch') || $('#evSearch'), true), 60);
   $$('#evM .evch').forEach((el) => (el.onclick = () => { const ch = list[+el.dataset.ei].ch; evBack = { e, i: +el.dataset.ei }; kxClose('evM'); openFs(ch, 'live'); }));
   $('#evNo').onclick = () => kxClose('evM');
-  $('#evSearch').onclick = () => { kxClose('evM'); show('search'); $('#q').value = e.league.replace(/League|LaLiga/i, '').trim() || e.home.name; doSearch(); };
+  $('#evSearch').onclick = () => { kxClose('evM'); show('search'); $('#q').value = evQuery(e); doSearch(); };
 }
 
 /* ---------------- ricerca: canali, film e serie separati (niente card che si accavallano) ---------------- */
@@ -6449,6 +6709,10 @@ const speedLastTxt = () => (speedLast ? `↓ ${mbTxt(speedLast.mbps)}${speedLast
    ATTIVAZIONE + AVVIO
    ===================================================================== */
 function bootMsg(m) { $('#bootMsg').textContent = m; }
+/** splash ancora davanti (anche durante l'uscita, quando la schermata iniziale è già pronta sotto) */
+const bootOn = () => { const b = $('#boot'); return !!b && (b.classList.contains('on') || b.classList.contains('hold')); };
+/** barra dello splash (0…1): scala orizzontale, la anima il compositore */
+function bootBar(f) { const b = $('#bootBar'); if (b) b.style.transform = 'scaleX(' + f + ')'; }
 let pollT;
 function showActivate(serverMode) {
   const box = $('#codeBox');
@@ -6513,11 +6777,11 @@ function enterApp() { if (needProfilePick()) showProfiles(() => enterHome()); el
 async function afterActive() {
   show('boot', false); bootMsg('Sincronizzazione');
   await preLoad();
-  $('#bootBar').style.width = '70%';
+  bootBar(.7);
   const ev = loadEvents();
   await loadOrCache();
   await Promise.race([ev, sleep(1200)]);
-  $('#bootBar').style.width = '100%';
+  bootBar(1);
   await sleep(200);
   enterApp();
   if (S.fromCache) whenIdle(() => refreshLibrary(), 3000);
@@ -6569,7 +6833,7 @@ async function checkUpdates() {
 /* mentre l'app è aperta (le TV restano accese per giorni): controllo ogni 3 ore e al ritorno nell'app */
 /** l'APK scaricato in background è pronto: lo si propone appena si è in un menu */
 window.kxApkReady = (url) => { S.apkReady = url; if (S.apkUpdate && S.apkUpdate.url === url) { if (updMust() && $('#updM') && !$('#updM')._lock) back(); updOfferWhenFree(); } };
-function updCanOffer() { return !$('#updM') && !$('.speedm.on') && !S.inPlayer && !$('#boot').classList.contains('on') && !$('#activate').classList.contains('on'); }
+function updCanOffer() { return !$('#updM') && !$('.speedm.on') && !S.inPlayer && !bootOn() && !$('#activate').classList.contains('on'); }
 function updOfferWhenFree(force) { if (updCanOffer()) offerApkUpdate(force); else whenIdle(() => { if (updCanOffer()) offerApkUpdate(force); }, 2000, 2000, 30 * 60e3); }
 /* L'aggiornamento trovato resta salvato: al prossimo avvio (anche senza rete, prima di qualsiasi canale) il blocco obbligatorio vale subito */
 function apkKeep(a) { try { store.set('apkUpd', a && a.url && a.versionCode ? { url: a.url, versionCode: a.versionCode, version: a.version || '' } : null); } catch {} }
@@ -6638,7 +6902,7 @@ function noticeModal(title, body, level, onClose) {
   return true;
 }
 function showNotices() {
-  if (S.inPlayer || $('.speedm.on') || $('#boot').classList.contains('on') || $('#activate').classList.contains('on')) return;
+  if (S.inPlayer || $('.speedm.on') || bootOn() || $('#activate').classList.contains('on')) return;
   // 1) scadenza vicina (una volta al giorno)
   if (S.expires && !S.demo) {
     const d0 = new Date(); d0.setHours(0, 0, 0, 0);
@@ -6794,7 +7058,7 @@ setInterval(() => heartbeat(false), 20e3); // la funzione decide: ogni 60 s nei 
 window.kxHbTick = () => heartbeat(false);
 /* mentre l'app resta aperta: ogni 20 minuti si aggiornano stato, messaggi e scadenza */
 setInterval(async () => {
-  if (S.demo || !baseServer() || S.inPlayer || $('#activate').classList.contains('on') || $('#boot').classList.contains('on')) return;
+  if (S.demo || !baseServer() || S.inPlayer || $('#activate').classList.contains('on') || bootOn()) return;
   const was = S.status;
   try { await register(); } catch { return; }
   if (was === 'active' && S.status !== 'active') { vpnApply(); showActivate(false); return; }
@@ -6893,8 +7157,9 @@ async function enterHome() {
   try { NATIVE && NATIVE.uiReady && NATIVE.uiReady(); } catch {}
   buildBrowse($('#home'), 'all');
   tick(true); S.stack = [];
-  const b = $('#boot');
-  if (b.classList.contains('on')) { b.classList.add('out'); await sleep(560); }
+  // lo splash resta sopra (hold) mentre sotto si mostra e si disegna la schermata iniziale; poi esce aprendosi su di lei
+  const b = $('#boot'), fromBoot = b.classList.contains('on');
+  if (fromBoot) { b.classList.add('hold'); document.documentElement.classList.add('kx-hold'); }
   // schermata iniziale scelta nelle impostazioni
   try { memGuard(); } catch {} // riavvii forzati per memoria: leggerissima da sola e segnalazione al pannello
   const st = rcOpt('startScr') || store.get('startScr', 'home');
@@ -6910,7 +7175,15 @@ async function enterHome() {
     if (updPending()) S.updThen = play; else play();
   }
   else show('home', false);
-  b.classList.remove('out');
+  if (fromBoot) {
+    // la schermata è già sotto il logo: la sua dissolvenza d'ingresso (nascosta) si salta
+    try { const sc = $('.screen.on'); if (sc && sc.getAnimations) for (const a of sc.getAnimations({ subtree: true })) if (a.effect && a.effect.getTiming().iterations !== Infinity) a.finish(); } catch {}
+    await Promise.race([new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), sleep(250)]); // disegnata dietro lo splash
+    b.classList.add('out');
+    await sleep(document.body.classList.contains('xlite') || document.documentElement.classList.contains('sp-off') ? 0 : 560);
+    b.classList.remove('out', 'hold'); document.documentElement.classList.remove('kx-hold', 'kx-boot');
+    try { heroRefresh(); } catch {} // copertina rimandata durante l'uscita
+  } else b.classList.remove('out');
   warpStop && warpStop();
   if (S.apkUpdate) setTimeout(() => updOfferWhenFree(), 900); // nel lettore aspetta il ritorno in un menu
   setTimeout(showNotices, S.apkUpdate ? 2500 : 1600);
@@ -6931,30 +7204,28 @@ async function boot() {
   S.sound = opt('sfx') !== 'off'; applyTextSize(opt('textSize')); if (opt('orient') !== 'auto') applyOrient(opt('orient'));
   const t = store.get('theme'); applyTheme(t || 'cinema');
   fx('boot');
-  const bar = $('#bootBar');
-  requestAnimationFrame(() => (bar.style.width = '30%'));
+  requestAnimationFrame(() => bootBar(.3));
   const anim = sleep(1450); // durata dell'animazione del logo
-  setTimeout(() => $('#bootTitle').classList.add('shine'), 1150);
   let ok = false;
   if (baseServer()) { try { await register(); ok = true; } catch {} }
   if (t) applyTheme(t);
-  bar.style.width = '60%';
+  bootBar(.6);
   if (ok && (await checkUpdates())) return; // nuova interfaccia: l'app si ricarica da sola
   if (!ok) {
     await anim;
     // Non collegato a un server Kairos: se ci sono playlist personali usale, altrimenti demo
-    if (S.local.length) { S.demo = false; await loadOrCache(); bar.style.width = '100%'; enterApp(); if (S.fromCache) whenIdle(() => refreshLibrary(), 3000); return; }
-    if (S.server) { bar.style.width = '100%'; S.status = 'offline'; return showActivate(false); }
-    bar.style.width = '100%';
+    if (S.local.length) { S.demo = false; await loadOrCache(); bootBar(1); enterApp(); if (S.fromCache) whenIdle(() => refreshLibrary(), 3000); return; }
+    if (S.server) { bootBar(1); S.status = 'offline'; return showActivate(false); }
+    bootBar(1);
     return startDemo();
   }
-  if (S.status !== 'active') { await anim; bar.style.width = '100%'; return showActivate(false); }
+  if (S.status !== 'active') { await anim; bootBar(1); return showActivate(false); }
   // dispositivo già attivo: stessa preparazione di afterActive (VPN, registrazioni, scelta del profilo, tendenze)
   await preLoad();
   const ev = loadEvents();
   await Promise.all([loadOrCache(), anim]);
   await Promise.race([ev, sleep(S.fromCache ? 400 : 1500)]);
-  bar.style.width = '100%';
+  bootBar(1);
   enterApp();
   // avvio istantaneo dalla memoria: la lista viene riscaricata in sottofondo
   if (S.fromCache) whenIdle(() => refreshLibrary(), 3000);

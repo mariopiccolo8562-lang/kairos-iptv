@@ -722,7 +722,7 @@ function renderSettings() {
   if ($('#themes').dataset.dirty !== '1') tmpAccent = s.accent || 'cinema';
   setv('#sBrand', s.brand || ''); setv('#sTag', s.tagline || ''); setv('#sAnn', s.announcement || ''); setv('#sSup', s.supportContact || '');
   sett('#sLocal', !!s.allowLocalPlaylists); setv('#sApk', s.apkUrl || ''); setv('#sDl', s.downloaderCode || ''); setv('#sDlStore', s.storeDownloaderCode || '');
-  sett('#sFoot', s.showFootball !== false); setv('#sSrv', s.serverUrl || ''); setv('#sVer', s.apkVersion || '');
+  sett('#sFoot', s.showFootball !== false); renderSports(s); setv('#sSrv', s.serverUrl || ''); setv('#sVer', s.apkVersion || '');
   setv('#sPrice', typeof s.price === 'string' ? s.price : ''); setv('#sPriv', s.privacy || '');
   showVerCode();
   $('#wgSt').innerHTML = D.wgConf ? '<b style="color:var(--ok)">✓ configurata</b>' : 'non configurata';
@@ -732,6 +732,18 @@ function renderSettings() {
   $$('[data-th]').forEach((b) => (b.onclick = () => { tmpAccent = b.dataset.th; $('#themes').dataset.dirty = '1'; $$('[data-th]').forEach((x) => x.classList.toggle('on', x === b)); applyTheme(tmpAccent); preview(); drawChart(); }));
   preview();
 }
+/* sport degli «Eventi sportivi nella Home» (stessi nomi del server: SPORTS in worker.js); non impostati = tutti */
+const SPORTS_UI = [['calcio', 'Calcio'], ['f1', 'Formula 1'], ['tennis', 'Tennis'], ['basket', 'Basket NBA'], ['nfl', 'Football americano NFL'], ['ufc', 'UFC'], ['rugby', 'Rugby']];
+function renderSports(s) {
+  const box = $('#sSpCk'); if (!box) return;
+  if (box.dataset.dirty !== '1') {
+    const on = Array.isArray(s.sports) ? s.sports : SPORTS_UI.map((x) => x[0]);
+    box.innerHTML = SPORTS_UI.map(([k, l]) => `<label><input type="checkbox" data-sp="${k}"${on.includes(k) ? ' checked' : ''}><span>${l}</span></label>`).join('');
+  }
+  $('#sSports').classList.toggle('off', !$('#sFoot').classList.contains('on'));
+}
+const sportsSel = () => $$('#sSpCk [data-sp]').filter((c) => c.checked).map((c) => c.dataset.sp);
+if ($('#sSpCk')) $('#sSpCk').addEventListener('input', () => { $('#sSpCk').dataset.dirty = '1'; });
 /* codice versione calcolato dal nome (sola lettura), come fa la build su GitHub */
 function showVerCode() { const v = $('#sVer').value.trim(), c = verCode(v); $('#sVerCode').value = !v ? '—' : c ? String(c) : 'non valida'; $('#sVerCode').style.color = v && !c ? 'var(--bad)' : ''; }
 $('#sVer').addEventListener('input', showVerCode);
@@ -749,10 +761,10 @@ $('#sPrivTpl').onclick = async (e) => {
 function preview() { const c = THEMES[tmpAccent]; $('#tvA').style.background = `radial-gradient(circle at 20% 30%,${c[0]},transparent 45%),radial-gradient(circle at 80% 50%,${c[1]},transparent 45%),radial-gradient(circle at 50% 100%,${c[2]},transparent 45%)`; $('#tvN').textContent = ($('#sBrand').value || 'KAIROS').toUpperCase(); $('#tvT').textContent = $('#sAnn').value || '—'; }
 ['#sBrand', '#sAnn'].forEach((s) => $(s).addEventListener('input', preview));
 $('#sLocal').onclick = () => { $('#sLocal').classList.toggle('on'); $('#sLocal').dataset.dirty = '1'; };
-$('#sFoot').onclick = () => { $('#sFoot').classList.toggle('on'); $('#sFoot').dataset.dirty = '1'; };
+$('#sFoot').onclick = () => { $('#sFoot').classList.toggle('on'); $('#sFoot').dataset.dirty = '1'; $('#sSports').classList.toggle('off', !$('#sFoot').classList.contains('on')); };
 $('#sSave').onclick = async () => {
   const wg = $('#sWg').value.trim();
-  try { const r = await api('PUT', '/admin/settings', { brand: $('#sBrand').value.trim() || 'KAIROS', tagline: $('#sTag').value, accent: tmpAccent, announcement: $('#sAnn').value, supportContact: $('#sSup').value, allowLocalPlaylists: $('#sLocal').classList.contains('on'), apkUrl: $('#sApk').value.trim(), downloaderCode: $('#sDl').value.trim(), storeDownloaderCode: $('#sDlStore').value.trim(), showFootball: $('#sFoot').classList.contains('on'), serverUrl: $('#sSrv').value.trim(), apkVersionCode: $('#sVer').value.trim(), price: $('#sPrice').value.trim(), privacy: $('#sPriv').value, ...(wg ? { wgConf: wg } : {}) }); D.settings = r.settings; $('#sWg').value = ''; clearDirty(); await load(); toast('Impostazioni salvate — le app si aggiornano da sole'); if (window.stDirtyUpd) stDirtyUpd(); } catch (e) { toast(e.message, 1); }
+  try { const r = await api('PUT', '/admin/settings', { brand: $('#sBrand').value.trim() || 'KAIROS', tagline: $('#sTag').value, accent: tmpAccent, announcement: $('#sAnn').value, supportContact: $('#sSup').value, allowLocalPlaylists: $('#sLocal').classList.contains('on'), apkUrl: $('#sApk').value.trim(), downloaderCode: $('#sDl').value.trim(), storeDownloaderCode: $('#sDlStore').value.trim(), showFootball: $('#sFoot').classList.contains('on'), ...($('#sSpCk') && $('#sSpCk').dataset.dirty === '1' ? { sports: sportsSel() } : {}), serverUrl: $('#sSrv').value.trim(), apkVersionCode: $('#sVer').value.trim(), price: $('#sPrice').value.trim(), privacy: $('#sPriv').value, ...(wg ? { wgConf: wg } : {}) }); D.settings = r.settings; $('#sWg').value = ''; clearDirty(); await load(); toast('Impostazioni salvate — le app si aggiornano da sole'); if (window.stDirtyUpd) stDirtyUpd(); } catch (e) { toast(e.message, 1); }
 };
 function renderSecurity() {
   const x = D.security || {};
