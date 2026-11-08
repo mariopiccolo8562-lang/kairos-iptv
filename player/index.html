@@ -260,7 +260,7 @@ img{display:block}
 .demo .demo-sig{display:block}
 
 /* ===== toast ===== */
-#toast{position:fixed;left:50%;bottom:40px;transform:translateX(-50%) translateY(30px);z-index:60;padding:14px 22px;border-radius:14px;opacity:0;transition:.35s;font-weight:600;pointer-events:none;max-width:90vw;text-align:center}
+#toast{position:fixed;left:50%;bottom:40px;transform:translateX(-50%) translateY(30px);z-index:60;padding:14px 22px;border-radius:14px;opacity:0;transition:opacity .35s,transform .35s;font-weight:600;pointer-events:none;max-width:90vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%)}
 .zap{position:fixed;top:40px;right:50px;z-index:45;font-family:Orbitron;font-weight:900;font-size:72px;text-shadow:0 0 30px var(--a1);display:none}
 
@@ -467,47 +467,33 @@ img{display:block}
 /* anteprima canale nell'app (senza video) */
 .pv-logo{display:flex;flex-direction:column;align-items:center;gap:12px}
 .pv-logo img{max-height:min(16vh,120px);max-width:60%;object-fit:contain;filter:drop-shadow(0 6px 20px rgba(0,0,0,.6))}
-/* ---------- splash v2: animazione corta (≈1,4 s), solo transform/opacity → fluida anche su Fire TV ---------- */
-#boot{background:#030305;justify-content:center;align-items:center;overflow:hidden;padding:0!important;animation:none!important;opacity:1!important}
-.sp-rays{position:absolute;left:50%;top:44%;width:180vmax;height:180vmax;margin:-90vmax 0 0 -90vmax;border-radius:50%;opacity:0;
-  background:repeating-conic-gradient(from 0deg,rgba(255,42,61,.10) 0deg 2deg,transparent 2deg 12deg);
-  -webkit-mask-image:radial-gradient(circle,#000 0,transparent 55%);mask-image:radial-gradient(circle,#000 0,transparent 55%);
+/* ---------- splash v3 (≈1,45 s): SOLO transform/opacity su elementi HTML con livello proprio → l'animazione la muove il
+   compositore e continua anche mentre il thread principale carica cache, libreria e Home. Niente maschere, filtri animati,
+   SVG animati (tratti, SMIL), clip-path, blend né larghezze animate: ogni pezzo del logo e ogni lettera ha il suo SVG fermo.
+   Classi su <html> decise prima del primo disegno (script in testa allo splash): sp-lo = GPU debole (classi D e N: niente
+   raggi né pavimento), sp-d = chiavetta da 1 GB (anche niente onde grandi), anche con «Modalità leggera: Spenta» ---------- */
+#boot{background:none;justify-content:center;align-items:center;overflow:hidden;padding:0!important;animation:none!important;opacity:1!important}
+/* uscita: lo splash resta sopra la schermata già disegnata (hold) e si apre su di lei (out) */
+#boot.hold{display:flex;z-index:30;pointer-events:none}
+.sp-bg{position:absolute;top:0;right:0;bottom:0;left:0;background:#030305}
+#boot.hold .sp-bg{background:rgba(3,3,5,.996)} /* non opaco del tutto: la schermata dietro si prepara (raster) prima di comparire */
+.kx-hold .focus-ring{opacity:0!important}
+#boot.hold~.screen img[loading=lazy]{display:none} /* niente raffica di immagini durante l'uscita: le locandine partono dopo */
+.sp-floor{position:absolute;left:-25%;right:-25%;bottom:-6vh;height:56vh;perspective:340px;perspective-origin:50% 0;opacity:0;animation:fadein 1s .15s forwards;pointer-events:none;will-change:opacity}
+.sp-floor i{position:absolute;left:0;right:0;top:0;height:200%;transform-origin:50% 0;transform:rotateX(64deg);will-change:transform;
+  background-image:linear-gradient(var(--a1-45) 2px,transparent 2px),linear-gradient(90deg,var(--a1-45) 2px,transparent 2px);background-size:64px 64px;animation:spFloor 1.6s linear infinite}
+/* dissolvenza verso l'orizzonte dipinta sopra (prima era una maschera: uno strato in più da comporre a ogni fotogramma) */
+.sp-floor::after{content:'';position:absolute;top:0;right:0;bottom:0;left:0;background:linear-gradient(to top,rgba(3,3,5,0) 0,#030305 92%)}
+@keyframes spFloor{from{transform:rotateX(64deg) translateY(0)}to{transform:rotateX(64deg) translateY(64px)}}
+/* raggi: più piccoli (prima 180vmax con maschera) e sfumati dentro il gradiente */
+.sp-rays{position:absolute;left:50%;top:44%;width:130vmax;height:130vmax;margin:-65vmax 0 0 -65vmax;border-radius:50%;opacity:0;
+  background:radial-gradient(closest-side,rgba(3,3,5,0),#030305),repeating-conic-gradient(from 0deg,rgba(255,42,61,.10) 0deg 2deg,transparent 2deg 12deg);
   animation:spRays 1.2s .1s cubic-bezier(.2,.8,.2,1) forwards,spSpin 24s linear infinite;will-change:transform,opacity}
 @keyframes spRays{from{opacity:0}to{opacity:1}}
 @keyframes spSpin{to{transform:rotate(360deg)}}
 .sp-glow{position:absolute;left:50%;top:44%;width:60vmin;height:60vmin;margin:-30vmin 0 0 -30vmin;border-radius:50%;
   background:radial-gradient(circle,rgba(255,42,61,.45),rgba(255,42,61,0) 62%);opacity:0;transform:scale(.4);animation:spGlow .9s .25s cubic-bezier(.2,.8,.2,1) forwards;will-change:transform,opacity}
 @keyframes spGlow{to{opacity:1;transform:scale(1)}}
-.sp-logo{position:relative;z-index:2;width:min(28vh,220px);height:min(28vh,220px);margin-top:-4vh;will-change:transform,opacity;transition:transform .55s cubic-bezier(.7,0,.84,0),opacity .45s}
-.sp-svg{width:100%;height:100%;overflow:visible}
-.sp-svg .lo-orb{stroke-dasharray:0 528;animation:spOrb .8s .05s cubic-bezier(.6,0,.2,1) forwards}
-@keyframes spOrb{to{stroke-dasharray:400 128}}
-.sp-svg .lo-orb2{opacity:0;animation:fadein .6s .4s forwards}
-.sp-svg .lo-kb{transform:translateY(-60px);opacity:0;animation:spIn .45s .3s cubic-bezier(.2,.9,.25,1.2) forwards}
-.sp-svg .lo-ku{transform:translate(50px,-40px);opacity:0;animation:spIn .45s .45s cubic-bezier(.2,.9,.25,1.2) forwards}
-.sp-svg .lo-kl{transform:translate(50px,40px);opacity:0;animation:spIn .45s .55s cubic-bezier(.2,.9,.25,1.2) forwards}
-.sp-svg .lo-sat{transform-origin:100px 100px;opacity:0;animation:fadein .2s .7s forwards,spSat 2.4s .7s linear infinite}
-@keyframes spIn{to{transform:none;opacity:1}}
-@keyframes spSat{to{transform:rotate(360deg)}}
-.sp-word{position:relative;z-index:2;margin-top:3.6vh;font-family:'Bebas Neue',Orbitron,sans-serif;font-size:clamp(40px,9.5vh,110px);line-height:1;letter-spacing:.36em;margin-right:-.36em;color:#fff;
-  opacity:0;transform:translateY(14px) scale(.96);animation:spWord .5s .75s cubic-bezier(.2,.8,.2,1) forwards;will-change:transform,opacity;transition:opacity .25s}
-@keyframes spWord{to{opacity:1;transform:none}}
-.sp-word{background:linear-gradient(100deg,#fff 0 42%,#ff6a5a 50%,#fff 58% 100%);background-size:300% 100%;background-position:100% 0;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.sp-word.shine{transition:background-position .9s ease-out,opacity .25s;background-position:0 0}
-.sp-tag{position:relative;z-index:2;margin-top:1.4vh;font-size:clamp(9px,1.6vh,13px);font-weight:700;letter-spacing:.7em;margin-right:-.7em;color:#ff4a55;opacity:0;animation:fadein .4s 1s forwards;transition:opacity .25s}
-#boot .boot-bar{position:relative;z-index:2;width:min(200px,36vw);height:2px;margin:4vh 0 0;background:rgba(255,255,255,.08);transition:opacity .25s}
-#boot .boot-bar i{background:linear-gradient(90deg,#ff7a45,#ff2a3d);box-shadow:0 0 10px #ff2a3d;transition:width .35s}
-#boot .boot-msg{display:block;position:relative;z-index:2;margin-top:10px;min-height:12px;font-size:10px;letter-spacing:.38em;color:rgba(255,255,255,.4)}
-#boot.out .sp-logo{transform:scale(6);opacity:0}
-#boot.out .sp-word,#boot.out .sp-tag,#boot.out .boot-bar,#boot.out .boot-msg,#boot.out .sp-rays{opacity:0!important}
-#boot.out .sp-glow{animation:none;opacity:1;transform:scale(3);transition:transform .55s ease-in,opacity .55s;opacity:0}
-@keyframes fadein{from{opacity:0}to{opacity:1}}
-/* ===== intro 1.7: pavimento luminoso, onde d'urto, orbite, scansione (solo transform/opacity: fluida anche sulle TV) ===== */
-.sp-floor{position:absolute;left:-25%;right:-25%;bottom:-6vh;height:56vh;perspective:340px;perspective-origin:50% 0;opacity:0;animation:fadein 1s .15s forwards;pointer-events:none;
-  -webkit-mask-image:linear-gradient(to top,#000 0,transparent 92%);mask-image:linear-gradient(to top,#000 0,transparent 92%)}
-.sp-floor i{position:absolute;left:0;right:0;top:0;height:200%;transform-origin:50% 0;transform:rotateX(64deg);will-change:transform;
-  background-image:linear-gradient(var(--a1-45) 2px,transparent 2px),linear-gradient(90deg,var(--a1-45) 2px,transparent 2px);background-size:64px 64px;animation:spFloor 1.6s linear infinite}
-@keyframes spFloor{from{transform:rotateX(64deg) translateY(0)}to{transform:rotateX(64deg) translateY(64px)}}
 .sp-wave{position:absolute;left:50%;top:44%;width:min(28vh,220px);height:min(28vh,220px);margin:calc(min(28vh,220px) / -2) 0 0 calc(min(28vh,220px) / -2);border-radius:50%;
   border:2px solid var(--a1);box-shadow:0 0 30px var(--a1),inset 0 0 30px var(--a1-40);opacity:0;transform:scale(.6);animation:spWave 1.3s .82s cubic-bezier(.1,.7,.3,1) forwards;pointer-events:none;will-change:transform,opacity}
 .sp-wave.w2{animation-delay:1.02s;border-color:var(--a2)}
@@ -520,43 +506,58 @@ img{display:block}
 @keyframes spOrb1{from{transform:rotate(0) translateX(min(19vh,150px))}to{transform:rotate(360deg) translateX(min(19vh,150px))}}
 @keyframes spOrb2{from{transform:rotate(120deg) translateX(min(23vh,180px)) scale(1)}to{transform:rotate(480deg) translateX(min(23vh,180px))}}
 @keyframes spOrb3{from{transform:rotate(240deg) translateX(min(16vh,126px))}to{transform:rotate(600deg) translateX(min(16vh,126px))}}
-.sp-logo{border-radius:50%;overflow:hidden}
-.sp-logo::after{content:'';position:absolute;top:-10%;bottom:-10%;left:0;width:40%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);transform:translateX(-160%) skewX(-18deg);
-  opacity:0;animation:spScan .7s 1.05s ease-in-out forwards;mix-blend-mode:screen;pointer-events:none;border-radius:50%}
+/* logo: pezzi sovrapposti, ognuno col suo SVG fermo; l'anello entra ruotando (prima si «disegnava» col tratteggio) */
+.sp-logo{position:relative;z-index:2;width:min(28vh,220px);height:min(28vh,220px);margin-top:-4vh;border-radius:50%;overflow:hidden;will-change:transform,opacity;transition:transform .55s cubic-bezier(.7,0,.84,0),opacity .45s}
+.sp-logo .lo{position:absolute;top:0;right:0;bottom:0;left:0;display:block;opacity:0;will-change:transform,opacity}
+.sp-logo .lo svg{display:block;width:100%;height:100%;overflow:visible}
+.sp-logo .lo-orb{transform:rotate(-150deg) scale(.88);animation:spIn .8s .05s cubic-bezier(.6,0,.2,1) forwards}
+.sp-logo .lo-orb2{animation:fadein .6s .4s forwards}
+.sp-logo .lo-kb{transform:translateY(-30%);animation:spIn .45s .3s cubic-bezier(.2,.9,.25,1.2) forwards}
+.sp-logo .lo-ku{transform:translate(25%,-20%);animation:spIn .45s .45s cubic-bezier(.2,.9,.25,1.2) forwards}
+.sp-logo .lo-kl{transform:translate(25%,20%);animation:spIn .45s .55s cubic-bezier(.2,.9,.25,1.2) forwards}
+.sp-logo .lo-sat{animation:fadein .2s .7s forwards,spSat 2.4s .7s linear infinite}
+/* riflesso che attraversa il logo: banda che si sposta (prima con mix-blend-mode) */
+.sp-logo .lo-scan{position:absolute;top:-10%;bottom:-10%;left:0;width:40%;opacity:0;background:linear-gradient(100deg,rgba(255,255,255,0),rgba(255,255,255,.38),rgba(255,255,255,0));
+  transform:translateX(-160%) skewX(-18deg);animation:spScan .7s 1.05s ease-in-out forwards;will-change:transform,opacity;pointer-events:none}
+@keyframes spIn{to{transform:none;opacity:1}}
+@keyframes spSat{to{transform:rotate(360deg)}}
 @keyframes spScan{0%{opacity:1;transform:translateX(-160%) skewX(-18deg)}100%{opacity:0;transform:translateX(330%) skewX(-18deg)}}
+/* marchio: una lettera per elemento (SVG fermo: cromo, bagliore e ombra disegnati una volta), entra con opacità e scala;
+   il lampo finale è una copia bianca della parola che si accende e si spegne */
 .sp-wrow{position:relative;z-index:2;display:flex;align-items:flex-start;margin-top:3.6vh}
-.sp-wrow .sp-word{margin-top:0;animation:spWordIn .8s .7s cubic-bezier(.2,.8,.2,1) forwards}
-@keyframes spWordIn{0%{opacity:0;letter-spacing:.9em;margin-right:-.9em;filter:blur(10px);transform:scale(1.08)}100%{opacity:1;letter-spacing:.36em;margin-right:-.36em;filter:none;transform:none}}
-.sp-tv{align-self:center;margin-left:.3em;font-family:Orbitron,sans-serif;font-weight:900;font-size:clamp(14px,3.2vh,34px);padding:.18em .42em;border-radius:.3em;background:var(--a1);color:#fff;
-  box-shadow:0 0 24px var(--a1-70);opacity:0;transform:scale(.2) rotate(-14deg);animation:spTv .5s 1.35s cubic-bezier(.2,1.6,.4,1) forwards}
+.sp-word{position:relative;display:flex;align-items:flex-start;font-size:clamp(46px,10.5vh,128px);line-height:1;transition:opacity .25s}
+.sp-word .sl{display:block;opacity:0;transform:translateY(.16em) scaleX(1.32);animation:spL .5s cubic-bezier(.2,.8,.2,1) forwards;animation-delay:calc(.5s + var(--i) * .1s);will-change:transform,opacity}
+.sp-word .sl .kxw{filter:drop-shadow(0 0 22px var(--a1-55)) drop-shadow(0 3px 0 rgba(0,0,0,.55))}
+.sp-word .sfl{position:absolute;left:0;top:0;opacity:0;filter:drop-shadow(0 0 14px #fff);animation:spFlash .8s 1.35s ease-out forwards;will-change:opacity;pointer-events:none}
+@keyframes spL{to{opacity:1;transform:none}}
+@keyframes spFlash{0%{opacity:0}30%{opacity:.7}100%{opacity:0}}
+.sp-tv{align-self:center;margin-left:.3em;display:flex;align-items:center;font-family:Orbitron,sans-serif;font-weight:900;font-size:clamp(14px,3.2vh,34px);padding:.22em .4em;border-radius:.3em;background:var(--a1);color:#fff;
+  box-shadow:0 0 24px var(--a1-70);opacity:0;transform:scale(.2) rotate(-14deg);animation:spTv .5s 1.35s cubic-bezier(.2,1.6,.4,1) forwards;will-change:transform,opacity}
 @keyframes spTv{to{opacity:1;transform:none}}
-#boot.out .sp-tv,#boot.out .sp-floor,#boot.out .sp-orbit{opacity:0!important;transition:opacity .25s}
-/* ===== 1.8: marchio più futuristico (Orbitron pesante, bordo luminoso, scia di glitch all'ingresso) ===== */
-.sp-wrow .sp-word{font-family:Orbitron,'Bebas Neue',sans-serif;font-weight:900;font-size:clamp(34px,8.2vh,96px);letter-spacing:.22em;margin-right:-.22em;position:relative;
-  background:linear-gradient(180deg,#fff 0 45%,#dfe3ff 50%,#8e97c8 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
-  filter:drop-shadow(0 0 18px var(--a1-55)) drop-shadow(0 2px 0 rgba(0,0,0,.6));animation:spWordIn .9s .7s cubic-bezier(.2,.8,.2,1) forwards}
-.sp-wrow .sp-word.shine{background:linear-gradient(100deg,#fff 0 40%,var(--a2) 50%,#fff 60% 100%);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;animation:spWordIn .9s .7s cubic-bezier(.2,.8,.2,1) forwards,spShine 1.4s 1.6s ease-in-out forwards}
-@keyframes spShine{from{background-position:100% 0}to{background-position:0 0}}
-.sp-wrow .sp-word::before,.sp-wrow .sp-word::after{content:attr(data-t);position:absolute;left:0;top:0;width:100%;height:100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;opacity:0;pointer-events:none}
-.sp-wrow .sp-word::before{background:var(--a1);animation:spGlA .7s 1.25s steps(2) 2}
-.sp-wrow .sp-word::after{background:var(--a2);animation:spGlB .7s 1.25s steps(2) 2}
-@keyframes spGlA{0%{opacity:0}10%{opacity:.8;transform:translate(-5px,-2px);clip-path:inset(10% 0 55% 0)}30%{opacity:.8;transform:translate(4px,1px);clip-path:inset(60% 0 10% 0)}50%{opacity:0}100%{opacity:0}}
-@keyframes spGlB{0%{opacity:0}15%{opacity:.8;transform:translate(5px,2px);clip-path:inset(40% 0 30% 0)}35%{opacity:.8;transform:translate(-4px,-1px);clip-path:inset(0 0 75% 0)}55%{opacity:0}100%{opacity:0}}
-.sp-tag{font-family:Orbitron,sans-serif;font-weight:700;letter-spacing:.9em;margin-right:-.9em;color:#fff;font-size:clamp(10px,1.8vh,15px);text-shadow:0 0 14px var(--a1)}
-/* ===== 1.9: marchio con carattere vettoriale KAIROS (cromato, neon, si disegna all'avvio) ===== */
+.sp-tag{position:relative;z-index:2;margin-top:1.4vh;display:flex;justify-content:center;font-size:clamp(11px,2vh,18px);opacity:0;animation:fadein .4s 1s forwards;transition:opacity .25s;will-change:opacity}
+/* barra: scala orizzontale invece della larghezza (niente layout a ogni fotogramma) */
+#boot .boot-bar{position:relative;z-index:2;width:min(200px,36vw);height:2px;margin:4vh 0 0;background:rgba(255,255,255,.08);transition:opacity .25s}
+#boot .boot-bar i{width:100%;transform:scaleX(0);transform-origin:0 50%;background:linear-gradient(90deg,#ff7a45,#ff2a3d);box-shadow:0 0 10px #ff2a3d;transition:transform .35s;will-change:transform}
+#boot .boot-msg{display:block;position:relative;z-index:2;margin-top:10px;min-height:12px;font-size:10px;letter-spacing:.38em;color:rgba(255,255,255,.4)}
+/* uscita: il logo vola verso chi guarda, il resto si spegne e lo sfondo si apre sulla schermata già pronta */
+#boot.out .sp-logo{transform:scale(6);opacity:0}
+#boot.out .sp-word,#boot.out .boot-bar,#boot.out .boot-msg{opacity:0}
+#boot.out .sp-rays{opacity:0!important}
+#boot.out .sp-glow{animation:none;transform:scale(3);transition:transform .55s ease-in,opacity .55s;opacity:0}
+#boot.out .sp-tv,#boot.out .sp-tag,#boot.out .sp-floor,#boot.out .sp-orbit{animation:none;opacity:0;transform:none;transition:opacity .25s}
+#boot.out .sp-wave{animation:none;opacity:0}
+#boot.out .sp-bg{opacity:0;transition:opacity .4s .12s ease-in}
+/* GPU debole (D, N): niente raggi né pavimento; chiavetta da 1 GB: niente onde grandi (anche con «Modalità leggera: Spenta») */
+.sp-lo .sp-rays,.sp-lo .sp-floor,.sp-d .sp-wave{display:none}
+.kx-boot .aurora{display:none} /* sfondo animato della Home: dietro lo splash non si vede, non si disegna */
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+/* ===== marchio con carattere vettoriale KAIROS (cromato, neon) ===== */
 .kxw{height:1em;width:auto;display:block;overflow:visible}
 .kxw .kg{opacity:.5}
 .kxw .kc,.kxw .ks,.kxw .kg{stroke-linecap:butt}
-.sp-wrow .sp-word.kxv{font-size:clamp(46px,10.5vh,128px);letter-spacing:0;margin-right:0;background:none;-webkit-text-fill-color:initial;filter:drop-shadow(0 0 22px var(--a1-55)) drop-shadow(0 3px 0 rgba(0,0,0,.55));animation:none;opacity:1}
-.sp-wrow .sp-word.kxv::before,.sp-wrow .sp-word.kxv::after{display:none}
-.kxw.draw .kc path,.kxw.draw .kg path{stroke-dasharray:100 100;stroke-dashoffset:100;animation:kxDraw 1.05s cubic-bezier(.65,0,.25,1) forwards;animation-delay:calc(.5s + var(--i) * .11s)}
-.kxw.draw .ks{opacity:0;animation:fadein .4s 1.9s forwards}
-.kxw.draw{animation:kxFlash .9s 1.55s ease-out both}
-@keyframes kxDraw{to{stroke-dashoffset:0}}
-@keyframes kxFlash{0%{filter:none}35%{filter:brightness(2.4) drop-shadow(0 0 26px #fff)}100%{filter:none}}
-.sp-tv{display:flex;align-items:center;padding:.22em .4em!important}.sp-tv .kxw{height:.78em}
+.sp-tv .kxw{height:.78em}
 .sp-tv .kxw .kc,.prbrand span .kxw .kc{stroke:#fff}.sp-tv .kxw .kg,.sp-tv .kxw .ks,.prbrand span .kxw .kg,.prbrand span .kxw .ks{display:none}
-.sp-tag{letter-spacing:0;margin-right:0;font-size:clamp(11px,2vh,18px);display:flex;justify-content:center}.sp-tag .kxw .kc{stroke:#fff}.sp-tag .kxw .kg{stroke:var(--a1);opacity:.8}
+.sp-tag .kxw .kc{stroke:#fff}.sp-tag .kxw .kg{stroke:var(--a1);opacity:.8}
 .hbrand .kxw{height:.82em}.prbrand .kxw{height:.85em}.prbrand span{display:flex;align-items:center}.prbrand span .kxw{height:.7em}
 .dm .brandmark .kxw{height:.9em}
 /* ---------- qualità canale ---------- */
@@ -610,11 +611,12 @@ img{display:block}
 .lite .glass{background:rgba(24,24,30,.94)}
 .lite .aurora,.lite .hbg img.blur{display:none!important}
 .lite .screen.on{animation:fadein .28s ease forwards}
+.lite .nrow{animation-name:fadein}
 /* leggerissima (dal pannello o scelta nell'app): nessuna animazione né sfondo grande */
 .xlite *,.xlite *::before,.xlite *::after{animation:none!important;transition:none!important}
 /* senza animazioni, ciò che diventa visibile «animandosi» deve essere visibile da subito (altrimenti schermo nero) */
-.xlite .screen.on,.xlite .detail.on,.xlite .boot-title span,.xlite .sp-svg .lo-orb2,.xlite .sp-svg .lo-kb,.xlite .sp-svg .lo-ku,.xlite .sp-svg .lo-kl,.xlite .sp-svg .lo-sat,.xlite .sp-word,.xlite .sp-tag,.xlite .sp-floor,.xlite .sp-orbit,.xlite .sp-wave,.xlite .sp-tv,.xlite .sp-glow,.xlite .sp-scan{opacity:1!important;transform:none!important}
-.xlite .sp-svg .lo-orb{stroke-dasharray:none!important}
+.xlite .screen.on,.xlite .detail.on,.xlite .boot-title span,.xlite .sp-logo .lo,.xlite .sp-word .sl,.xlite .sp-word,.xlite .sp-tag,.xlite .sp-floor,.xlite .sp-orbit,.xlite .sp-wave,.xlite .sp-tv,.xlite .sp-glow{opacity:1!important;transform:none!important}
+.xlite .sp-logo .lo-scan,.xlite .sp-word .sfl{opacity:0!important}
 .xlite .hbg img,.xlite .aurora{display:none!important}
 /* scheda del titolo nella leggerissima: titolo e pulsanti (Guarda, Trailer, La mia lista, IA) e l'immagine restano sempre;
    via solo la copia sfocata (filtro costoso). Con la sola locandina: fondo a tinta unita e locandina a destra, senza doppioni */
@@ -1195,12 +1197,19 @@ h5.fh{margin-top:16px}
 
   <!-- BOOT -->
   <section class="screen on" id="boot">
-    <div class="sp-rays"></div>
+    <script>/* classi dello splash decise prima del primo disegno: GPU debole (classi D e N), chiavetta da 1 GB (D) e leggerissima */
+(function () { var h = document.documentElement.classList, mb = 0, j = function (k, d) { try { return JSON.parse(localStorage.getItem(k) || 'null') || d; } catch (e) { return d; } }; h.add('kx-boot');
+  try { mb = +(JSON.parse((window.KairosNative && KairosNative.memInfo && KairosNative.memInfo()) || '{}').totalMb) || 0; if (mb && mb < 1800) h.add('sp-lo'); if (mb && mb <= 1200) h.add('sp-d'); } catch (e) {}
+  // leggerissima (scelta, imposta dal pannello o automatica sulle chiavette da 1 GB): splash fermo dal primo fotogramma
+  var lv = j('kx_rcLite', '') || j('kx_o_liteUi', 'auto'); if (window.KairosNative && (lv === 'max' || (mb && mb <= 1200 && lv !== 'off'))) document.body.classList.add('xlite');
+})();</script>
+    <div class="sp-bg"></div>
     <div class="sp-floor"><i></i></div>
+    <div class="sp-rays"></div>
     <div class="sp-glow"></div>
     <div class="sp-wave"></div><div class="sp-wave w2"></div>
     <div class="sp-orbit"><i></i><i></i><i></i></div>
-    <div class="sp-logo"><svg class="sp-svg" viewBox="0 0 200 200"><defs><linearGradient id="kgS" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><circle class="lo-orb" cx="100" cy="100" r="84" fill="none" stroke="url(#kgS)" stroke-width="7" stroke-linecap="round" stroke-dasharray="400 128" transform="rotate(-38 100 100)"/><circle class="lo-orb2" cx="100" cy="100" r="70" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="1.5" stroke-dasharray="3 7"/><rect class="lo-kb" x="62" y="52" width="22" height="96" rx="4" fill="#fff"/><path class="lo-ku" d="M90 104 L128 52 H156 L116 108 Z" fill="url(#kgS)"/><path class="lo-kl" d="M104 98 L122 92 L158 148 H130 Z" fill="#fff"/><circle class="lo-sat" cx="171" cy="62" r="7" fill="#fff"/></svg></div>
+    <div class="sp-logo"><i class="lo lo-orb"><svg viewBox="0 0 200 200"><defs><linearGradient id="kgS" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><circle cx="100" cy="100" r="84" fill="none" stroke="url(#kgS)" stroke-width="7" stroke-linecap="round" stroke-dasharray="400 128" transform="rotate(-38 100 100)"/></svg></i><i class="lo lo-orb2"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="70" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="1.5" stroke-dasharray="3 7"/></svg></i><i class="lo lo-kb"><svg viewBox="0 0 200 200"><rect x="62" y="52" width="22" height="96" rx="4" fill="#fff"/></svg></i><i class="lo lo-ku"><svg viewBox="0 0 200 200"><defs><linearGradient id="kgS2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45"/><stop offset=".5" stop-color="#ff2a3d"/><stop offset="1" stop-color="#b3123a"/></linearGradient></defs><path d="M90 104 L128 52 H156 L116 108 Z" fill="url(#kgS2)"/></svg></i><i class="lo lo-kl"><svg viewBox="0 0 200 200"><path d="M104 98 L122 92 L158 148 H130 Z" fill="#fff"/></svg></i><i class="lo lo-sat"><svg viewBox="0 0 200 200"><circle cx="171" cy="62" r="7" fill="#fff"/></svg></i><i class="lo-scan"></i></div>
     <div class="sp-wrow"><div class="sp-word kxv" id="bootTitle">KAIROS</div><span class="sp-tv">PRO</span></div>
     <div class="sp-tag">PLAYER</div>
     <script>
@@ -1249,7 +1258,7 @@ const KXG = {
   '+': [6, [[0, 5, 6, 5], [3, 2, 3, 8]]],
   ' ': [3.4, []],
 };
-function kxWord(text, cls, sp = 3.1, label = '') {
+function kxWord(text, cls, sp = 3.1, label = '', still = false) {
   const t = String(text || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   let x = 0; const paths = []; let i = 0;
   for (const ch of t) {
@@ -1260,18 +1269,43 @@ function kxWord(text, cls, sp = 3.1, label = '') {
   const W = Math.max(1, x - sp), id = 'kw' + Math.random().toString(36).slice(2, 8), p = paths.join('');
   return `<svg class="kxw ${cls || ''}" viewBox="-1.2 -1.4 ${(W + 2.4).toFixed(2)} 12.8" role="img" aria-label="${(label || t).replace(/"/g, '')}"><defs>
 <linearGradient id="${id}c" x1="0" y1="0" x2="0" y2="10" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffffff"/><stop offset=".46" stop-color="#eef0ff"/><stop offset=".5" stop-color="#9ea6d6"/><stop offset=".62" stop-color="#ffffff"/><stop offset="1" stop-color="var(--a1,#ff2a3d)"/></linearGradient>
-<linearGradient id="${id}s" x1="-14" y1="0" x2="-2" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/><animateTransform attributeName="gradientTransform" type="translate" from="0 0" to="${(W + 28).toFixed(1)} 0" dur="5.5s" begin="2.2s" repeatCount="indefinite"/></linearGradient>
+${still ? '' : `<linearGradient id="${id}s" x1="-14" y1="0" x2="-2" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#fff" stop-opacity="0"/><animateTransform attributeName="gradientTransform" type="translate" from="0 0" to="${(W + 28).toFixed(1)} 0" dur="5.5s" begin="2.2s" repeatCount="indefinite"/></linearGradient>`}
 <filter id="${id}g" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="0.9"/></filter></defs>
 <g class="kg" fill="none" stroke="var(--a1,#ff2a3d)" stroke-width="2.6" stroke-linejoin="miter" stroke-miterlimit="2.3" filter="url(#${id}g)">${p}</g>
 <g class="kc" fill="none" stroke="url(#${id}c)" stroke-width="1.45" stroke-linejoin="miter" stroke-miterlimit="2.3">${p}</g>
-<g class="ks" fill="none" stroke="url(#${id}s)" stroke-width="1.45" stroke-linejoin="miter" stroke-miterlimit="2.3">${p}</g></svg>`;
+${still ? '' : `<g class="ks" fill="none" stroke="url(#${id}s)" stroke-width="1.45" stroke-linejoin="miter" stroke-miterlimit="2.3">${p}</g>`}</svg>`;
+}
+/* splash: stesso disegno di kxWord, ma una lettera per elemento HTML (l'entrata la anima il compositore) e senza riflesso
+   animato; sopra, la parola in bianco per il lampo finale */
+function kxLetters(text, sp = 3.1) {
+  const t = String(text || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const id = 'kl' + Math.random().toString(36).slice(2, 7);
+  let x = 0, i = 0, prev = -1.2, html = '', all = '';
+  for (const ch of t) {
+    const g = KXG[ch] || KXG[' '];
+    if (g[1].length) {
+      let p = '';
+      for (const pl of g[1]) { let d = ''; for (let k = 0; k < pl.length; k += 2) d += (k ? 'L' : 'M') + (+(pl[k] + x).toFixed(2)) + ' ' + pl[k + 1]; p += `<path d="${d}"/>`; }
+      all += p;
+      const vx = x - 1.2, vw = g[0] + 2.4, n = id + i;
+      html += `<span class="sl" style="--i:${i};margin-left:${((vx - prev) / 12.8).toFixed(4)}em"><svg class="kxw" viewBox="${vx.toFixed(2)} -1.4 ${vw.toFixed(2)} 12.8" aria-hidden="true"><defs>`
+        + `<linearGradient id="${n}c" x1="0" y1="0" x2="0" y2="10" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffffff"/><stop offset=".46" stop-color="#eef0ff"/><stop offset=".5" stop-color="#9ea6d6"/><stop offset=".62" stop-color="#ffffff"/><stop offset="1" stop-color="var(--a1,#ff2a3d)"/></linearGradient>`
+        + `<filter id="${n}g" filterUnits="userSpaceOnUse" x="${(vx - 2).toFixed(2)}" y="-3.4" width="${(vw + 4).toFixed(2)}" height="16.8"><feGaussianBlur stdDeviation="0.9"/></filter></defs>`
+        + `<g class="kg" fill="none" stroke="var(--a1,#ff2a3d)" stroke-width="2.6" stroke-linejoin="miter" stroke-miterlimit="2.3" filter="url(#${n}g)">${p}</g>`
+        + `<g class="kc" fill="none" stroke="url(#${n}c)" stroke-width="1.45" stroke-linejoin="miter" stroke-miterlimit="2.3">${p}</g></svg></span>`;
+      prev = vx + vw; i++;
+    }
+    x += g[0] + sp;
+  }
+  const W = Math.max(1, x - sp);
+  return html + `<svg class="kxw sfl" viewBox="-1.2 -1.4 ${(W + 2.4).toFixed(2)} 12.8" aria-hidden="true"><g fill="none" stroke="#fff" stroke-width="1.45" stroke-linejoin="miter" stroke-miterlimit="2.3">${all}</g></svg>`;
 }
 
 (function () {
   var b = 'KAIROS'; try { var st = JSON.parse(localStorage.getItem('kx_brand') || '""'); if (st) b = String(st).toUpperCase(); } catch (e) {}
-  var t = document.getElementById('bootTitle'); t.innerHTML = kxWord(b, 'draw'); t.dataset.b = b;
-  document.querySelector('#boot .sp-tv').innerHTML = kxWord('PRO', 'tvw', 2.4);
-  document.querySelector('#boot .sp-tag').innerHTML = kxWord('PLAYER', 'tagw', 6.5);
+  var t = document.getElementById('bootTitle'); t.innerHTML = kxLetters(b); t.dataset.b = b; t.setAttribute('aria-label', b);
+  document.querySelector('#boot .sp-tv').innerHTML = kxWord('PRO', 'tvw', 2.4, '', true);
+  document.querySelector('#boot .sp-tag').innerHTML = kxWord('PLAYER', 'tagw', 6.5, '', true);
 })();
     </script>
     <div class="boot-bar"><i id="bootBar"></i></div>
@@ -1575,7 +1609,8 @@ const HAS_PLAYER = !!(NATIVE && NATIVE.play);
 // all'avvio, prima della risposta del pannello: l'ultima modalità imposta dal pannello (rcLite) o quella scelta nell'app; «Spenta» resta spenta
 { const v0 = store.get('rcLite', '') || store.get('o_liteUi', 'auto');
   if (NATIVE && v0 !== 'off') document.body.classList.add('lite'); // poi decide il pannello (rcLiteApply)
-  try { if (NATIVE && devClass() === 'D') { document.body.classList.add('lowmem'); if (v0 !== 'off') document.body.classList.add('xlite'); } } catch {} } // chiavetta con poca memoria: leggerissima già dall'avvio (niente animazioni)
+  try { if (NATIVE && devClass() === 'D') { document.body.classList.add('lowmem'); if (v0 !== 'off') document.body.classList.add('xlite'); } } catch {}
+  if (NATIVE && v0 === 'max') document.body.classList.add('xlite'); } // leggerissima scelta: subito (prima arrivava con la risposta del pannello) // chiavetta con poca memoria: leggerissima già dall'avvio (niente animazioni)
 const playPrefs = () => { const o = { engine: 'exo', quality: 'auto', buffer: 'balanced', aspect: 'fit', ...store.get('play', {}) }; for (const k of ['quality', 'buffer', 'aspect']) { const v = rcGet('p.' + k); if (v !== undefined) o[k] = String(v); } return o; };
 
 /* ---------------- audio FX (WebAudio, nessun file) ---------------- */
@@ -2143,6 +2178,7 @@ function show(id, push = true, restore) {
   if (now && !S.stack.includes(now.id)) screenFree(now.id);
   $$('.screen').forEach((s) => s.classList.remove('on'));
   $('#' + id).classList.add('on');
+  if (id !== 'boot' && !$('#boot').classList.contains('hold')) document.documentElement.classList.remove('kx-boot');
   if (cur) cur.classList.remove('focused');
   cur = null;
   fillNav(id);
@@ -2332,7 +2368,7 @@ function applyBrand() {
   applyTheme(rcGet('theme') || store.get('theme') || S.settings.accent);
   const brandU = (S.settings.brand || 'KAIROS').toUpperCase();
   $$('.brandName').forEach((e) => { if (e.dataset.b !== brandU) { e.innerHTML = kxWord(brandU, ''); e.dataset.b = brandU; } });
-  { const bt = $('#bootTitle'); if (bt.dataset.b !== brandU) { bt.innerHTML = kxWord(brandU, 'draw'); bt.dataset.b = brandU; } }
+  { const bt = $('#bootTitle'); if (bt.dataset.b !== brandU) { bt.innerHTML = kxLetters(brandU); bt.dataset.b = brandU; bt.setAttribute('aria-label', brandU); } }
   document.title = (S.settings.brand || 'KAIROS') + ' Player';
   $$('.annc .mq').forEach((e) => (e.textContent = S.settings.announcement || ''));
 }
@@ -4574,6 +4610,7 @@ function heroImg(hero, src, mode, blurBg) {
   const imgs = hero.querySelectorAll('img.main'), blur = hero.querySelector('img.blur');
   const fi = hero._fi || 0, front = imgs[fi], backI = imgs[1 - fi];
   hero._want = [src, mode, blurBg];
+  if (src && document.documentElement.classList.contains('kx-hold')) return; // uscita dello splash in corso: dopo (heroRefresh)
   if (src && heroOff()) {
     hero._tok = (hero._tok || 0) + 1; hero._src = '';
     for (const i of imgs) { i.classList.add('fade'); if (i.hasAttribute('src')) i.removeAttribute('src'); }
@@ -5889,7 +5926,7 @@ function remCheck() {
   const keep = S.reminders.filter((r) => t - r.start < 15 * 60e3 && !due.includes(r));
   if (!due.length) { if (keep.length !== S.reminders.length) { S.reminders = keep; store.set('reminders', keep); } return; }
   // mentre si guarda a schermo intero nel lettore dell'app l'avviso aspetta il ritorno (entro 15 minuti dall'inizio)
-  if (S.inPlayer || $('.speedm.on') || $('#boot').classList.contains('on')) return;
+  if (S.inPlayer || $('.speedm.on') || bootOn()) return;
   S.reminders = keep; store.set('reminders', keep);
   const r = due[0], ch = S.byId && S.byId.get(r.ch);
   fx('ok');
@@ -6417,6 +6454,10 @@ const speedLastTxt = () => (speedLast ? `↓ ${mbTxt(speedLast.mbps)}${speedLast
    ATTIVAZIONE + AVVIO
    ===================================================================== */
 function bootMsg(m) { $('#bootMsg').textContent = m; }
+/** splash ancora davanti (anche durante l'uscita, quando la schermata iniziale è già pronta sotto) */
+const bootOn = () => { const b = $('#boot'); return !!b && (b.classList.contains('on') || b.classList.contains('hold')); };
+/** barra dello splash (0…1): scala orizzontale, la anima il compositore */
+function bootBar(f) { const b = $('#bootBar'); if (b) b.style.transform = 'scaleX(' + f + ')'; }
 let pollT;
 function showActivate(serverMode) {
   const box = $('#codeBox');
@@ -6481,11 +6522,11 @@ function enterApp() { if (needProfilePick()) showProfiles(() => enterHome()); el
 async function afterActive() {
   show('boot', false); bootMsg('Sincronizzazione');
   await preLoad();
-  $('#bootBar').style.width = '70%';
+  bootBar(.7);
   const ev = loadEvents();
   await loadOrCache();
   await Promise.race([ev, sleep(1200)]);
-  $('#bootBar').style.width = '100%';
+  bootBar(1);
   await sleep(200);
   enterApp();
   if (S.fromCache) whenIdle(() => refreshLibrary(), 3000);
@@ -6537,7 +6578,7 @@ async function checkUpdates() {
 /* mentre l'app è aperta (le TV restano accese per giorni): controllo ogni 3 ore e al ritorno nell'app */
 /** l'APK scaricato in background è pronto: lo si propone appena si è in un menu */
 window.kxApkReady = (url) => { S.apkReady = url; if (S.apkUpdate && S.apkUpdate.url === url) { if (updMust() && $('#updM') && !$('#updM')._lock) back(); updOfferWhenFree(); } };
-function updCanOffer() { return !$('#updM') && !$('.speedm.on') && !S.inPlayer && !$('#boot').classList.contains('on') && !$('#activate').classList.contains('on'); }
+function updCanOffer() { return !$('#updM') && !$('.speedm.on') && !S.inPlayer && !bootOn() && !$('#activate').classList.contains('on'); }
 function updOfferWhenFree(force) { if (updCanOffer()) offerApkUpdate(force); else whenIdle(() => { if (updCanOffer()) offerApkUpdate(force); }, 2000, 2000, 30 * 60e3); }
 /* L'aggiornamento trovato resta salvato: al prossimo avvio (anche senza rete, prima di qualsiasi canale) il blocco obbligatorio vale subito */
 function apkKeep(a) { try { store.set('apkUpd', a && a.url && a.versionCode ? { url: a.url, versionCode: a.versionCode, version: a.version || '' } : null); } catch {} }
@@ -6606,7 +6647,7 @@ function noticeModal(title, body, level, onClose) {
   return true;
 }
 function showNotices() {
-  if (S.inPlayer || $('.speedm.on') || $('#boot').classList.contains('on') || $('#activate').classList.contains('on')) return;
+  if (S.inPlayer || $('.speedm.on') || bootOn() || $('#activate').classList.contains('on')) return;
   // 1) scadenza vicina (una volta al giorno)
   if (S.expires && !S.demo) {
     const d0 = new Date(); d0.setHours(0, 0, 0, 0);
@@ -6762,7 +6803,7 @@ setInterval(() => heartbeat(false), 20e3); // la funzione decide: ogni 60 s nei 
 window.kxHbTick = () => heartbeat(false);
 /* mentre l'app resta aperta: ogni 20 minuti si aggiornano stato, messaggi e scadenza */
 setInterval(async () => {
-  if (S.demo || !baseServer() || S.inPlayer || $('#activate').classList.contains('on') || $('#boot').classList.contains('on')) return;
+  if (S.demo || !baseServer() || S.inPlayer || $('#activate').classList.contains('on') || bootOn()) return;
   const was = S.status;
   try { await register(); } catch { return; }
   if (was === 'active' && S.status !== 'active') { vpnApply(); showActivate(false); return; }
@@ -6861,8 +6902,9 @@ async function enterHome() {
   try { NATIVE && NATIVE.uiReady && NATIVE.uiReady(); } catch {}
   buildBrowse($('#home'), 'all');
   tick(true); S.stack = [];
-  const b = $('#boot');
-  if (b.classList.contains('on')) { b.classList.add('out'); await sleep(560); }
+  // lo splash resta sopra (hold) mentre sotto si mostra e si disegna la schermata iniziale; poi esce aprendosi su di lei
+  const b = $('#boot'), fromBoot = b.classList.contains('on');
+  if (fromBoot) { b.classList.add('hold'); document.documentElement.classList.add('kx-hold'); }
   // schermata iniziale scelta nelle impostazioni
   try { memGuard(); } catch {} // riavvii forzati per memoria: leggerissima da sola e segnalazione al pannello
   const st = rcOpt('startScr') || store.get('startScr', 'home');
@@ -6878,7 +6920,15 @@ async function enterHome() {
     if (updPending()) S.updThen = play; else play();
   }
   else show('home', false);
-  b.classList.remove('out');
+  if (fromBoot) {
+    // la schermata è già sotto il logo: la sua dissolvenza d'ingresso (nascosta) si salta
+    try { const sc = $('.screen.on'); if (sc && sc.getAnimations) for (const a of sc.getAnimations({ subtree: true })) if (a.effect && a.effect.getTiming().iterations !== Infinity) a.finish(); } catch {}
+    await Promise.race([new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), sleep(250)]); // disegnata dietro lo splash
+    b.classList.add('out');
+    await sleep(document.body.classList.contains('xlite') ? 0 : 560);
+    b.classList.remove('out', 'hold'); document.documentElement.classList.remove('kx-hold', 'kx-boot');
+    try { heroRefresh(); } catch {} // copertina rimandata durante l'uscita
+  } else b.classList.remove('out');
   warpStop && warpStop();
   if (S.apkUpdate) setTimeout(() => updOfferWhenFree(), 900); // nel lettore aspetta il ritorno in un menu
   setTimeout(showNotices, S.apkUpdate ? 2500 : 1600);
@@ -6899,30 +6949,28 @@ async function boot() {
   S.sound = opt('sfx') !== 'off'; applyTextSize(opt('textSize')); if (opt('orient') !== 'auto') applyOrient(opt('orient'));
   const t = store.get('theme'); applyTheme(t || 'cinema');
   fx('boot');
-  const bar = $('#bootBar');
-  requestAnimationFrame(() => (bar.style.width = '30%'));
+  requestAnimationFrame(() => bootBar(.3));
   const anim = sleep(1450); // durata dell'animazione del logo
-  setTimeout(() => $('#bootTitle').classList.add('shine'), 1150);
   let ok = false;
   if (baseServer()) { try { await register(); ok = true; } catch {} }
   if (t) applyTheme(t);
-  bar.style.width = '60%';
+  bootBar(.6);
   if (ok && (await checkUpdates())) return; // nuova interfaccia: l'app si ricarica da sola
   if (!ok) {
     await anim;
     // Non collegato a un server Kairos: se ci sono playlist personali usale, altrimenti demo
-    if (S.local.length) { S.demo = false; await loadOrCache(); bar.style.width = '100%'; enterApp(); if (S.fromCache) whenIdle(() => refreshLibrary(), 3000); return; }
-    if (S.server) { bar.style.width = '100%'; S.status = 'offline'; return showActivate(false); }
-    bar.style.width = '100%';
+    if (S.local.length) { S.demo = false; await loadOrCache(); bootBar(1); enterApp(); if (S.fromCache) whenIdle(() => refreshLibrary(), 3000); return; }
+    if (S.server) { bootBar(1); S.status = 'offline'; return showActivate(false); }
+    bootBar(1);
     return startDemo();
   }
-  if (S.status !== 'active') { await anim; bar.style.width = '100%'; return showActivate(false); }
+  if (S.status !== 'active') { await anim; bootBar(1); return showActivate(false); }
   // dispositivo già attivo: stessa preparazione di afterActive (VPN, registrazioni, scelta del profilo, tendenze)
   await preLoad();
   const ev = loadEvents();
   await Promise.all([loadOrCache(), anim]);
   await Promise.race([ev, sleep(S.fromCache ? 400 : 1500)]);
-  bar.style.width = '100%';
+  bootBar(1);
   enterApp();
   // avvio istantaneo dalla memoria: la lista viene riscaricata in sottofondo
   if (S.fromCache) whenIdle(() => refreshLibrary(), 3000);
