@@ -160,21 +160,50 @@
   async function loadH(force) { if (D.role === 'agent' || window.__assist) { H = null; drawH(); return; } if (!force && Date.now() - hT < 45e3) return; hT = Date.now(); try { H = await api('GET', '/admin/health'); } catch { H = null; } drawH(); } // «Salute delle app» è del titolare (tutti i clienti del pannello)
   function cardHtml(full) {
     if (!H) return '';
+    if (!full && H.settings && H.settings.card === false) return '';
     const on = H.settings && H.settings.on, L = on ? H.list || [] : [], bad = L.filter((x) => x.bad).length;
     const tg = isAg() ? '' : `<div class="hl-tg"><div class="tog ${on ? 'on' : ''}" data-hlt="on"><div><b>Controllo salute delle app</b><small>Il pannello controlla di continuo versioni, errori e blocchi e te li segnala qui (consigliato)</small></div><i></i></div><div class="tog ${H.settings && H.settings.autoFix ? 'on' : ''}" data-hlt="autoFix"><div><b>Risolvi da solo</b><small>Quando un'app ha errori il pannello applica da solo le correzioni che non interrompono la visione (modalità leggera, qualità adattiva, decodifica)</small></div><i></i></div><div class="tog ${H.settings && H.settings.autoUpd ? 'on' : ''}" data-hlt="autoUpd"><div><b>Aggiorna da solo le app vecchie</b><small>Chi ha una versione vecchia riceve subito l'aggiornamento, senza che tu lo mandi (Kairos Pro)</small></div><i></i></div></div>`;
     const lat = H.latest ? Object.entries(H.latest).filter(([, v]) => v).map(([k, v]) => `${{ tv: 'Pro', ktv: 'TV', prem: 'Premium', lite: 'Lite', xc: 'XC', plus: 'Plus' }[k]} ${esc(v)}`).join(' · ') : '';
-    const items = L.slice(0, full ? 30 : 5).map((x) => `<div class="hl-it"><span>${x.bad ? '🔴' : '🟠'}</span><div class="tx"><b>${esc(x.name || x.code)} <span class="mono mut" style="font-weight:400;font-size:12px">${esc(x.code)}</span></b><small>${x.issues.map((i) => esc(i.what)).join(' · ')}</small><small>💡 ${esc(x.issues[0].fix)}</small></div>${x.issues.some((i) => i.act === 'upd') ? `<button class="btn sm pri" data-hlupd="${esc(x.id)}">${x.updSent ? '⬆ Reinvia' : '⬆ Invia aggiornamento'}</button>` : ''}<button class="btn sm pri" data-hlfix="${esc(x.id)}">🛠 Risolvi</button><button class="btn sm" data-hldati="${esc(x.id)}">📊 Dati</button></div>`).join('');
-    return `<div class="card glass hl-card ${on && !L.length ? 'ok' : ''}" data-hlcard><div class="hd"><h3>🩺 Salute delle app<span class="hl-pri">PRIORITÀ ASSOLUTA</span><small>Le app dei clienti devono essere sempre fluide e senza errori${lat ? ' · ultime versioni: ' + lat : ''}</small></h3>${!on ? '<b style="color:#f5b041;font-size:14px">Controllo spento</b>' : L.length ? `<div class="hl-act"><b style="color:${bad ? '#ef4444' : '#f5b041'};font-size:14px">${L.length} ${L.length === 1 ? 'cliente' : 'clienti'} da controllare</b>${isAg() ? '' : `<button class="btn sm pri" data-hlall title="Applica «Risolvi» a tutti i clienti dell'elenco">🛠 Risolvi tutti (${L.length})</button>`}</div>` : '<b style="color:#22c55e">Tutto a posto ✓</b>'}</div>
-      ${tg}${!on ? `<p style="margin:0;font-size:13.5px;color:#fde68a">${isAg() ? 'Il controllo della salute delle app lo attiva il titolare.' : '⚠️ Accendi «Controllo salute delle app»: il pannello ti segnala qui e in alto ogni cliente con app vecchia, errori o blocchi, con la soluzione.'}</p>` : L.length ? items + (L.length > (full ? 30 : 5) ? `<small class="mut">…e altri ${L.length - (full ? 30 : 5)}</small>` : '') : '<p class="mut" style="margin:0;font-size:13px">Nessun cliente con app vecchia, errori o blocchi negli ultimi giorni.</p>'}</div>`;
+    const items = L.slice(0, full ? 30 : 5).map((x) => `<div class="hl-it"><span>${x.bad ? '🔴' : '🟠'}</span><div class="tx"><b>${esc(x.name || x.code)} <span class="mono mut" style="font-weight:400;font-size:12px">${esc(x.code)}</span></b><small>${x.issues.map((i) => esc(i.what)).join(' · ')}</small><small>💡 ${esc(x.issues[0].fix)}</small></div>${x.issues.some((i) => i.act === 'upd') ? `<button class="btn sm pri" data-hlupd="${esc(x.id)}">${x.updSent ? '⬆ Reinvia' : '⬆ Invia aggiornamento'}</button>` : ''}<button class="btn sm pri" data-hlfix="${esc(x.id)}">🛠 Risolvi</button><button class="btn sm" data-hldati="${esc(x.id)}">📊 Dati</button><button class="btn sm" data-hlhide="${esc(x.id)}">🗑 Togli</button></div>`).join('');
+    const restore = H.hidden > 0 ? `<div style="margin-top:10px"><button class="btn sm" data-hlrestore>Rimetti i clienti tolti (${H.hidden})</button></div>` : '';
+    const cardAction = !isAg() && (H.settings && H.settings.card === false
+      ? full ? '<button class="btn sm" data-hlshowcard>Mostra in Panoramica</button>' : ''
+      : '<button class="btn sm" data-hlhidecard>✕ Nascondi riquadro</button>');
+    return `<div class="card glass hl-card ${on && !L.length ? 'ok' : ''}" data-hlcard><div class="hd"><h3>🩺 Salute delle app<span class="hl-pri">PRIORITÀ ASSOLUTA</span><small>Le app dei clienti devono essere sempre fluide e senza errori${lat ? ' · ultime versioni: ' + lat : ''}</small></h3>${!on ? '<b style="color:#f5b041;font-size:14px">Controllo spento</b>' : L.length ? `<div class="hl-act"><b style="color:${bad ? '#ef4444' : '#f5b041'};font-size:14px">${L.length} ${L.length === 1 ? 'cliente' : 'clienti'} da controllare</b>${isAg() ? '' : `<span style="display:flex;gap:8px;white-space:nowrap"><button class="btn sm pri" data-hlall title="Applica «Risolvi» a tutti i clienti dell'elenco">🛠 Risolvi tutti (${L.length})</button><button class="btn sm" data-hlhall>🗑 Togli tutti</button></span>`}</div>` : '<b style="color:#22c55e">Tutto a posto ✓</b>'}${cardAction}</div>
+      ${tg}${!on ? `<p style="margin:0;font-size:13.5px;color:#fde68a">${isAg() ? 'Il controllo della salute delle app lo attiva il titolare.' : '⚠️ Accendi «Controllo salute delle app»: il pannello ti segnala qui e in alto ogni cliente con app vecchia, errori o blocchi, con la soluzione.'}</p>` : L.length ? items + (L.length > (full ? 30 : 5) ? `<small class="mut">…e altri ${L.length - (full ? 30 : 5)}</small>` : '') : '<p class="mut" style="margin:0;font-size:13px">Nessun cliente con app vecchia, errori o blocchi negli ultimi giorni.</p>'}${restore}</div>`;
+  }
+  function drawHealthSetting() {
+    const pane = $('#v-settings [data-pane="app"]');
+    if (!pane || isAg() || window.__assist) return;
+    let box = $('#hlSettingCard');
+    if (!box) {
+      pane.insertAdjacentHTML('beforeend', '<div class="card glass" id="hlSettingCard" style="margin-top:18px"><div class="hd"><h3>Salute delle app<small>Decidi se mostrare il riquadro nella Panoramica. Il controllo continua a funzionare anche quando il riquadro è nascosto.</small></h3></div><div class="st-row"><div class="st-l"><b>Mostra il riquadro Salute delle app</b></div><div class="st-c"><div class="tog st-tog" id="hlSettingToggle" role="switch" tabindex="0" aria-label="Mostra il riquadro Salute delle app"><i></i></div></div></div></div>');
+      box = $('#hlSettingCard');
+    }
+    const toggle = $('#hlSettingToggle');
+    if (!toggle) return;
+    const shown = !(H && H.settings && H.settings.card === false);
+    toggle.classList.toggle('on', shown);
+    toggle.onclick = async () => {
+      const value = !shown;
+      if (!value && !(await ask('Nascondere il riquadro?', 'Puoi mostrarlo di nuovo da Impostazioni → Funzioni dell’app.', 'Nascondi'))) return;
+      try {
+        const r = await api('PUT', '/admin/health/settings', { card: value });
+        H = H || { list: [], latest: {}, hidden: 0 };
+        H.settings = r.health;
+        toast(value ? 'Riquadro mostrato in Panoramica' : 'Riquadro nascosto');
+        drawH();
+      } catch (e) { toast(e.message, 1); }
+    };
   }
   function drawH() {
     const L = (H && H.settings && H.settings.on && H.list) || [], bad = L.filter((x) => x.bad).length;
     // pulsante rosso in alto quando ci sono problemi
     let pill = $('#hlPill');
     if (!pill) { const a = $('#arB') || $('#bellB'); if (a) { a.insertAdjacentHTML('beforebegin', '<button id="hlPill" type="button" title="Salute delle app: clienti da controllare"></button>'); pill = $('#hlPill'); pill.onclick = () => { if (window.KXGoTab && KXGoTab('live')) setTimeout(() => { const c = $('#v-live [data-hlcard]'); if (c) c.scrollIntoView({ behavior: 'smooth' }); }, 400); else view('dash'); }; } }
-    if (pill) { pill.classList.toggle('on', L.length > 0); pill.innerHTML = `🩺 ${L.length}`; pill.style.borderColor = bad ? '' : 'rgba(245,176,65,.6)'; }
+    if (pill) { pill.classList.toggle('on', H && !(H.settings && H.settings.card === false) && L.length > 0); pill.innerHTML = `🩺 ${L.length}`; pill.style.borderColor = bad ? '' : 'rgba(245,176,65,.6)'; }
     // avviso nel pannello quando compaiono problemi gravi nuovi
-    if (lastBad >= 0 && bad > lastBad) toast(`🩺 ${bad - lastBad} ${bad - lastBad === 1 ? 'cliente ha' : 'clienti hanno'} problemi con l'app: guarda «Salute delle app»`, 1);
+    if (lastBad >= 0 && bad > lastBad && !(H && H.settings && H.settings.card === false)) toast(`🩺 ${bad - lastBad} ${bad - lastBad === 1 ? 'cliente ha' : 'clienti hanno'} problemi con l'app: guarda «Salute delle app»`, 1);
     lastBad = bad;
     for (const [sel, full] of [['#v-dash', false], ['#v-live', true]]) {
       const V = $(sel); if (!V) continue;
@@ -186,8 +215,17 @@
       $$('[data-hldati]', c).forEach((b) => (b.onclick = () => open(b.dataset.hldati)));
       $$('[data-hlfix]', c).forEach((b) => (b.onclick = async () => { if (await fixDev(b.dataset.hlfix, b)) loadH(true); }));
       $$('[data-hlall]', c).forEach((b) => (b.onclick = () => fixAll(b)));
+      $$('[data-hlhide]', c).forEach((b) => (b.onclick = async () => { try { await api('POST', '/admin/health/hide', { ids: [b.dataset.hlhide] }); await loadH(true); toast('Cliente tolto dall’elenco'); } catch (e) { toast(e.message, 1); } }));
+      $$('[data-hlhall]', c).forEach((b) => (b.onclick = async () => { if (!(await ask('Togli tutti i clienti?', `Togli tutti i ${L.length} clienti dall'elenco? Ricompaiono solo se hanno un problema nuovo`, 'Togli tutti'))) return; try { await api('POST', '/admin/health/hide', { all: true }); await loadH(true); toast('Clienti tolti dall’elenco'); } catch (e) { toast(e.message, 1); } }));
+      $$('[data-hlrestore]', c).forEach((b) => (b.onclick = async () => { try { await api('POST', '/admin/health/unhide', { all: true }); await loadH(true); toast('Clienti rimessi nell’elenco'); } catch (e) { toast(e.message, 1); } }));
+      for (const [sel, value] of [['[data-hlhidecard]', false], ['[data-hlshowcard]', true]]) $$(sel, c).forEach((b) => (b.onclick = async () => {
+        if (!value && !(await ask('Nascondere il riquadro?', 'Puoi mostrarlo di nuovo da Impostazioni → Funzioni dell’app.', 'Nascondi'))) return;
+        try { const r = await api('PUT', '/admin/health/settings', { card: value }); H.settings = r.health; toast(value ? 'Riquadro mostrato in Panoramica' : 'Riquadro nascosto'); drawH(); }
+        catch (e) { toast(e.message, 1); }
+      }));
       $$('[data-hlt]', c).forEach((t) => (t.onclick = async () => { const k = t.dataset.hlt, v = !t.classList.contains('on'); try { const r = await api('PUT', '/admin/health/settings', { [k]: v }); H.settings = r.health; toast(k === 'on' ? (v ? 'Controllo salute attivo' : 'Controllo salute spento') : k === 'autoFix' ? (v ? 'Il pannello risolve da solo i problemi delle app' : 'Risoluzione automatica spenta') : v ? 'Le app vecchie si aggiornano da sole' : 'Aggiornamento automatico spento'); delete c.dataset.h; drawH(); } catch (e) { toast(e.message, 1); } }));
     }
+    drawHealthSetting();
   }
   // l'elenco di «Online ora» si ridisegna da solo: la scheda della salute torna in fondo
   const lv = $('#v-live'); if (lv) new MutationObserver(() => { if (!lv.querySelector(':scope > [data-hlwrap]') && H) { delete (lv.dataset || {}).x; drawH(); } }).observe(lv, { childList: true });

@@ -1,0 +1,1 @@
+ALTER TABLE devices ADD COLUMN hl_hide TEXT NOT NULL DEFAULT '';

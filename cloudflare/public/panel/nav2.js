@@ -130,10 +130,14 @@
   const BELL = [['reports', 'nb_reports', 'Segnalazioni'], ['creq', 'nb_creq', 'Contenuti richiesti'], ['areq', 'nb_areq', 'Temi richiesti'], ['reqai', 'nb_ai', 'Domande all\'IA']]; // stessi nomi del menu
   function bell() {
     const items = BELL.map(([v, id, l]) => { const e = document.getElementById(id), n = e && e.style.display !== 'none' && e.classList.contains('on') ? parseInt(e.textContent, 10) || 0 : 0; return [v, l, n]; }).filter(([v]) => { const b = navOf(v); return b && b.style.display !== 'none'; });
-    const tot = items.reduce((a, x) => a + x[2], 0);
+    const debt = window.KXPay && window.KXPay.ownDebtText ? window.KXPay.ownDebtText() : '';
+    const tot = items.reduce((a, x) => a + x[2], 0) + (debt ? 1 : 0);
     const n = $('#bellN'); if (n) { n.textContent = tot > 99 ? '99+' : tot; n.classList.toggle('on', tot > 0); }
     const m = $('#bellM'); if (!m) return;
-    m.innerHTML = items.filter((x) => x[2]).map(([v, l, k]) => `<button data-bv="${v}">${l}<b>${k}</b></button>`).join('') || '<div class="mut">Nessuna richiesta in attesa 👍</div>';
+    const requests = items.filter((x) => x[2]).map(([v, l, k]) => `<button data-bv="${v}">${l}<b>${k}</b></button>`).join('');
+    m.innerHTML = `${debt ? `<button data-own-debt style="color:#ff9a9a;border-left:3px solid #ef4444">💰 Debito: ${esc(debt)}</button>` : ''}${requests || (!debt ? '<div class="mut">Nessuna richiesta in attesa 👍</div>' : '')}`;
+    const debtItem = $('[data-own-debt]', m);
+    if (debtItem) debtItem.onclick = () => { m.classList.remove('on'); if (window.KXPay && window.KXPay.openOwnLedgerHistory) KXPay.openOwnLedgerHistory(); };
     $$('[data-bv]', m).forEach((b) => (b.onclick = () => { m.classList.remove('on'); const nb = navOf(b.dataset.bv); if (nb) nb.click(); }));
   }
   setInterval(bell, 4000);

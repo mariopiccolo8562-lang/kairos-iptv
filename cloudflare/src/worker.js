@@ -3435,20 +3435,25 @@ async function healthList(env, s, ids) {
   // presenza, errori e ultime versioni: tutto insieme (prima erano tre attese una dopo l'altra)
   const L = {};
   const [rowsR, erR] = await Promise.all([
-    env.DB.prepare("SELECT p.device_id AS id, p.ver, p.state, p.stalls_h, p.net, p.rssi, p.speed_dl, p.t, p.chk, d.name, d.code, d.app, d.parent, d.upd_req, d.fix_t FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ?").bind(t - 3 * 864e5).all(),
+    env.DB.prepare("SELECT p.device_id AS id, p.ver, p.state, p.stalls_h, p.net, p.rssi, p.speed_dl, p.t, p.chk, d.name, d.code, d.app, d.parent, d.upd_req, d.fix_t, d.hl_hide FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ?").bind(t - 3 * 864e5).all(),
     env.DB.prepare('SELECT device_id, t, problem, outcome, codec, dec FROM app_errors WHERE t > ?').bind(t - 864e5).all().catch(() => ({ results: [] })),
     ...['tv', 'ktv', 'prem', 'lite', 'xc', 'plus'].map(async (a) => { L[a] = await latestFor(env, s, a).catch(() => null); }),
   ]);
   const rows = (rowsR && rowsR.results) || [];
   const er = new Map(((erR && erR.results) || []).reduce((m, e) => { const a = m.get(e.device_id) || []; a.push(e); m.set(e.device_id, a); return m; }, new Map()));
-  const out = [];
+  const out = []; let hidden = 0;
+  const errorKeys = new Set(['killed', 'uierr', 'crash', 'restart', 'err', 'dec']);
   for (const r of rows) {
     if (ids && !ids.has(r.id)) continue;
-    const app = appOfVer(r.ver, r.app), iss = healthIssues(r, (er.get(r.id) || []).filter((e) => +e.t > (+r.fix_t || 0)), L[app] || null, app);
-    if (iss.length) out.push({ id: r.id, name: r.name || '', code: r.code, app, appName: APP_NAME[app] || '', canUpd: RC_LINKED.includes(app), ver: r.ver, online: t - +r.t <= ONLINE_MS, lastSeen: +r.t, updSent: +r.upd_req || 0, issues: iss, bad: iss.filter((x) => x.sev === 'bad').length });
+    let hide = null; try { const h = r.hl_hide ? JSON.parse(r.hl_hide) : null; if (h && Number.isFinite(+h.t) && Array.isArray(h.keys)) hide = h; } catch {}
+    const app = appOfVer(r.ver, r.app), errs = (er.get(r.id) || []).filter((e) => +e.t > Math.max(+r.fix_t || 0, hide ? +hide.t : 0));
+    let iss = healthIssues(r, errs, L[app] || null, app);
+    if (hide) iss = iss.filter((i) => !hide.keys.includes(i.key) || errorKeys.has(i.key));
+    if (!iss.length) { if (hide) hidden++; continue; }
+    out.push({ id: r.id, name: r.name || '', code: r.code, app, appName: APP_NAME[app] || '', canUpd: RC_LINKED.includes(app), ver: r.ver, online: t - +r.t <= ONLINE_MS, lastSeen: +r.t, updSent: +r.upd_req || 0, issues: iss, bad: iss.filter((x) => x.sev === 'bad').length });
   }
   out.sort((a, b) => b.bad - a.bad || b.issues.length - a.issues.length || b.lastSeen - a.lastSeen);
-  return { list: out.slice(0, 300), latest: Object.fromEntries(Object.entries(L).map(([k, v]) => [k, v ? v.version : ''])), settings: { on: !!(s.health && s.health.on), autoUpd: !!(s.health && s.health.autoUpd), autoFix: !!(s.health && s.health.autoFix) } };
+  return { list: out.slice(0, 300), hidden, latest: Object.fromEntries(Object.entries(L).map(([k, v]) => [k, v ? v.version : ''])), settings: { on: !!(s.health && s.health.on), autoUpd: !!(s.health && s.health.autoUpd), autoFix: !!(s.health && s.health.autoFix), card: !(s.health && s.health.card === false) } };
 }
 /** vista pannello: chi è collegato e cosa guarda */
 /* visioni contemporanee: prima di iniziare a guardare l'app chiede il permesso (solo se il pannello ha messo un limite) */
@@ -5057,7 +5062,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   }
   const REQ_PERM = { report: 'reports', content: 'contentReq', addon: 'addonReq', ai: 'ai' };
   // «Online ora» e «Salute delle app» sono del titolare: mostrano tutti i clienti del pannello (totali, più visti, app da aggiornare)
-  if ((path === '/presence' || path === '/health') && m === 'GET') throw new HttpErr(403, '«Online ora» è riservata al titolare');
+  if ((path === '/presence' && m === 'GET') || ['/health', '/health/hide', '/health/unhide'].includes(path)) throw new HttpErr(403, '«Online ora» e «Salute delle app» sono riservate al titolare');
   // Linee collegate: solo le sue (e dei sotto-agenti, se li vede); gli host delle attivazioni automatiche restano nascosti
   if (path === '/line-notes') { const r = await linkedLinesRoutes(req, env, path, who, ip, { id: A.id, tree: ctree }); if (r) return r; } // note KAIROS sulle linee (Armada, MirkoTeam, MaxPlayer, OrbixPlay)
   if (path === '/linked-lines' || path.startsWith('/linked-lines/')) { need('lines', 'Non puoi usare le linee collegate'); const r = await linkedLinesRoutes(req, env, path, who, ip, { id: A.id, tree: ctree, hideHosts: !((await getSettings(env)).playersCfg || {}).showDnsAgents }); if (r) return r; throw new HttpErr(404, 'Non trovato'); }
@@ -5628,6 +5633,34 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   const ins = path.match(/^\/insight\/([A-Za-z0-9_-]{6,20})$/);
   if (ins && m === 'GET') { const d = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(ins[1]).first(); if (!d) throw new HttpErr(404, 'Cliente non trovato'); return json(await insightFor(env, d, await getSettings(env))); }
   if (path === '/health' && m === 'GET') return json(await healthList(env, await getSettings(env), null));
+  if (path === '/health/hide' && m === 'POST') {
+    const b = await readJSON(req, 12 * 1024);
+    if (b.all === true && b.ids !== undefined || b.all !== true && !Array.isArray(b.ids)) throw new HttpErr(400, 'Indica i clienti da togliere');
+    let ids = b.all === true ? null : b.ids;
+    if (ids && (ids.length > 300 || ids.some((id) => typeof id !== 'string' || !/^[A-Za-z0-9_-]{6,20}$/.test(id)))) throw new HttpErr(400, 'Elenco clienti non valido');
+    const s = await getSettings(env);
+    if (b.all === true) ids = (await healthList(env, s, null)).list.map((x) => x.id);
+    ids = [...new Set(ids)];
+    const current = await healthList(env, s, new Set(ids));
+    const prior = current.list.length ? ((await env.DB.prepare(`SELECT id, hl_hide FROM devices WHERE id IN (${current.list.map(() => '?').join(',')})`).bind(...current.list.map((x) => x.id)).all()).results || []) : [];
+    const priorKeys = new Map(prior.map((x) => { let keys = []; try { const h = JSON.parse(x.hl_hide || ''); if (Array.isArray(h.keys)) keys = h.keys.filter((k) => typeof k === 'string'); } catch {} return [x.id, keys]; }));
+    const t = now(), updates = current.list.map((x) => env.DB.prepare('UPDATE devices SET hl_hide = ? WHERE id = ?').bind(JSON.stringify({ t, keys: [...new Set([...(priorKeys.get(x.id) || []), ...x.issues.map((i) => i.key)])] }), x.id));
+    if (updates.length) await env.DB.batch(updates);
+    await log(env, 'edit', `${who}: ${updates.length} clienti tolti da «Salute delle app»`, ip);
+    return json({ ok: true, updated: updates.length });
+  }
+  if (path === '/health/unhide' && m === 'POST') {
+    const b = await readJSON(req, 12 * 1024);
+    if (b.all === true && b.ids !== undefined || b.all !== true && !Array.isArray(b.ids)) throw new HttpErr(400, 'Indica i clienti da ripristinare');
+    const ids = b.all === true ? null : b.ids;
+    if (ids && (ids.length > 300 || ids.some((id) => typeof id !== 'string' || !/^[A-Za-z0-9_-]{6,20}$/.test(id)))) throw new HttpErr(400, 'Elenco clienti non valido');
+    const result = ids === null
+      ? await env.DB.prepare("UPDATE devices SET hl_hide = '' WHERE hl_hide <> ''").run()
+      : ids.length ? await env.DB.prepare(`UPDATE devices SET hl_hide = '' WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).run() : { meta: { changes: 0 } };
+    const n = +(result.meta && result.meta.changes) || 0;
+    await log(env, 'edit', `${who}: ${n} clienti ripristinati in «Salute delle app»`, ip);
+    return json({ ok: true, updated: n });
+  }
   /* ---------- «Canali non funzionanti» (autopilota, solo titolare: gli agenti hanno 403) ---------- */
   if (path === '/dead-channels' && m === 'GET') {
     const o = await deadRefresh(env, url.searchParams.get('fresh') === '1' ? 0 : 30e3), byHost = new Map((await dnsList(env)).map((x) => [hostKey(x.host), x.name || '']));
@@ -5654,8 +5687,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     return json({ guide: { ...g, readBy: [], defTitle: GUIDE_DEF_TITLE, defText: GUIDE_DEF_TEXT } });
   }
   if (path === '/health/settings' && m === 'PUT' && !(ses && ses.agent)) {
-    const b = await readJSON(req, 1024), s0 = await getSettings(env), h = { on: !!(s0.health && s0.health.on), autoUpd: !!(s0.health && s0.health.autoUpd), autoFix: !!(s0.health && s0.health.autoFix) };
-    if (typeof b.on === 'boolean') h.on = b.on; if (typeof b.autoUpd === 'boolean') h.autoUpd = b.autoUpd; if (typeof b.autoFix === 'boolean') h.autoFix = b.autoFix;
+    const b = await readJSON(req, 1024), s0 = await getSettings(env), h = { on: !!(s0.health && s0.health.on), autoUpd: !!(s0.health && s0.health.autoUpd), autoFix: !!(s0.health && s0.health.autoFix), card: !(s0.health && s0.health.card === false) };
+    if (typeof b.on === 'boolean') h.on = b.on; if (typeof b.autoUpd === 'boolean') h.autoUpd = b.autoUpd; if (typeof b.autoFix === 'boolean') h.autoFix = b.autoFix; if (typeof b.card === 'boolean') h.card = b.card;
     await settingsPatch(env, { health: h });
     await log(env, 'settings', `${who}: salute delle app — controllo ${h.on ? 'attivo' : 'spento'}, aggiornamento automatico ${h.autoUpd ? 'attivo' : 'spento'}, risolvi da solo ${h.autoFix ? 'attivo' : 'spento'}`, ip);
     return json({ ok: true, health: h });
