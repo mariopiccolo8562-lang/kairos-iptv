@@ -3970,6 +3970,9 @@ const TMDB_G = { 28: 'azione', 12: 'avventura', 16: 'animazione', 35: 'commedia'
 const AI_SP_W = { f1: ['formula 1', 'f1', 'gran premio'], motogp: ['motogp', 'moto gp'], tennis: ['tennis', 'atp', 'wta'], basket: ['basket', 'nba', 'eurolega'], nfl: ['nfl', 'football americano'], ufc: ['ufc', 'mma'], rugby: ['rugby'], calcio: ['serie a', 'champions league', 'europa league', 'conference league', 'coppa italia', 'calcio'] };
 const AI_ALIAS = { inter: ['internazionale'], internazionale: ['inter'], juve: ['juventus'], juventus: ['juve'], f1: ['formula 1', 'gran premio'], 'formula 1': ['f1', 'gran premio'], psg: ['paris saint germain', 'paris sg'] };
 const aiWords = (list) => { const out = []; for (const w0 of list || []) { const w = aiN(w0).trim(); if (w.length < 2) continue; for (const x of [w, ...(AI_ALIAS[w] || [])]) if (!out.includes(' ' + x + ' ')) out.push(' ' + x + ' '); } return out; };
+const AI_ACC = { a: '[aàáâä]', e: '[eèéêë]', i: '[iìíîï]', o: '[oòóôö]', u: '[uùúûü]', c: '[cç]', n: '[nñ]' };
+/** espressione veloce che trova i testi che POTREBBERO contenere una delle parole (poi si controlla per bene con aiN) */
+const aiRx = (cores) => { const c = [...new Set(cores.map((x) => String(x).replace(/\*$/, '').trim()).filter(Boolean))]; return c.length ? new RegExp(c.map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[aeioucn]/g, (v) => AI_ACC[v]).replace(/ /g, '[^a-z0-9]+')).join('|'), 'i') : null; };
 const aiYr = (x) => +x.year || +((/(?:^|\D)((?:19[2-9]|20[0-4])\d)(?:\D|$)/.exec(x.name || '') || [])[1] || 0);
 const chQ = (ch) => (/\b(4k|uhd)\b/i.test(ch.name) ? 0 : /\bfhd\b/i.test(ch.name) ? 1 : /\bhd\b/i.test(ch.name) ? 2 : 3);
 /** indice titolo normalizzato → titoli della libreria (lo stesso della ricerca per attore) */
@@ -3983,6 +3986,7 @@ function aiTitleIdx() {
 }
 /** titoli citati dall'IA → titoli della libreria (titolo uguale, o contenuto se è lungo) */
 function aiTitles(list) {
+  if (!list || !list.length) return []; // senza titoli niente indice (costruirlo costa sulle librerie grandi)
   const idx = aiTitleIdx(), out = [];
   let scans = 0; // ricerche «titolo contenuto» su tutto l'indice: al massimo 3 (chiavette lente)
   for (const t of list || []) {
@@ -4052,9 +4056,12 @@ function aiFindRun(f, people) {
   const pp = new Set(people || []), th = new Set(aiTitles(f.titles));
   const needP = !!(f.people && f.people.length && pp.size); // «con Stallone»: se la filmografia ha trovato titoli, solo quelli (e i titoli citati)
   const okX = (x) => !isLocked(x) && (showAdult() || !isAdult(x)) && (!kidsP || looksKids(x));
+  const wrx = aiRx(words.map((w) => w.trim())); // parole: prima il filtro veloce sul nome, poi il confronto per parola intera
   if (type !== 'live') {
-    const gC = new Map(), sc = [];
+    const gC = new Map(), kC = new Map(), sc = [];
     const gtxt = (x) => { let n = gC.get(x.group); if (n === undefined) { n = aiN(x.group); gC.set(x.group, n); } return x.genre ? n + aiN(x.genre) : n; };
+    // bambini: categoria (una volta per categoria), poi nome e generi del titolo
+    const kidsOk = (x, n) => { let k = kC.get(x.group); if (k === undefined) { k = RX_KIDS.test(x.group || '') || AI_GEN.animazione.some((t) => aiHas(n, t)); kC.set(x.group, k); } return k || RX_KIDS.test(x.name || '') || (!!x.genre && AI_GEN.animazione.some((t) => aiHas(n, t))); };
     for (const arr of type === 'movie' ? [S.lib.movies] : type === 'series' ? [S.lib.series] : [S.lib.movies, S.lib.series]) for (const x of arr) {
       if (needP && !pp.has(x) && !th.has(x)) continue;
       let s = 0, hit = false;
@@ -4063,9 +4070,9 @@ function aiFindRun(f, people) {
       if (gens.length || kids) {
         const n = gtxt(x), gm = gens.filter((g) => AI_GEN[g].some((t) => aiHas(n, t))).length;
         if (gm) { s += 3 * gm; hit = true; } else if (gens.length && !pp.has(x) && !th.has(x)) continue; // genere chiesto e non trovato
-        if (kids) { if (looksKids(x) || AI_GEN.animazione.some((t) => aiHas(n, t))) { s += 3; hit = true; } else if (!th.has(x)) continue; }
+        if (kids) { if (kidsOk(x, n)) { s += 3; hit = true; } else if (!th.has(x)) continue; }
       }
-      if (words.length) { const nn = aiN(x.name); if (words.some((w) => nn.includes(w))) { s += 4; hit = true; } }
+      if (wrx && wrx.test(x.name || '')) { const nn = aiN(x.name); if (words.some((w) => nn.includes(w))) { s += 4; hit = true; } }
       if (yrs) { const y = aiYr(x); if (y) { if (y < yrs[0] || y > yrs[1]) continue; s += 2; hit = true; } else s -= 1; }
       if (!hit || !okX(x)) continue;
       sc.push([s + Math.min(10, +x.rating || 0) / 10, x]);
@@ -4085,15 +4092,17 @@ function aiFindRun(f, people) {
       if (R.ev.length >= 6) break;
     }
     const gl = gens.filter((g) => g !== 'sport'), tvAsk = type === 'live' || !!f.when;
-    if (wl.length) R.tv = aiEpg((title) => { const n = aiN(title); return wl.some((w) => n.includes(w)); }, from, to, 12);
+    const tvRx = aiRx(wl.map((w) => w.trim())), gRx = aiRx(gl.flatMap((g) => AI_GEN[g]));
+    if (wl.length) R.tv = aiEpg((title) => { if (!tvRx.test(title)) return false; const n = aiN(title); return wl.some((w) => n.includes(w)); }, from, to, 12);
     // generi in TV (solo se si parla di TV o di un orario): nel titolo o nella descrizione della guida
-    else if (gl.length && tvAsk) R.tv = aiEpg((title, desc) => { const n = aiN(title + ' ' + String(desc).slice(0, 160)); return gl.some((g) => AI_GEN[g].some((t) => aiHas(n, t))); }, from, to, 12);
+    else if (gl.length && tvAsk) R.tv = aiEpg((title, desc) => { const d = String(desc).slice(0, 160); if (!gRx.test(title) && !gRx.test(d)) return false; const n = aiN(title + ' ' + d); return gl.some((g) => AI_GEN[g].some((t) => aiHas(n, t))); }, from, Math.min(to, from + 864e5), 12); // descrizioni: al massimo 24 ore (chiavette lente)
     // «cosa c'è stasera / adesso in TV?»: i programmi dei canali che guarda (o dei generalisti)
     else if (type === 'live' && !kids) { const T = tnTaste(); let chs = T.ch.filter((c) => !isLocked(c)); if (chs.length < 6) chs = [...chs, ...tnMainCh().filter((c) => !chs.includes(c))]; for (const ch of chs) { const it = epgOf(ch), p = it && it.find((x) => x.end > from && x.start < to && !/\b(tg\d?|telegiornale|meteo|televendit)/i.test(x.title || '')); if (p) R.tv.push({ ch, p }); if (R.tv.length >= 12) break; } R.tv.sort((a, b) => a.p.start - b.p.start); }
-    const inTv = new Set(R.tv.map((h) => h.ch.id)), pool = visLive(S.lib.live).filter((c) => !inTv.has(c.id) && !isLocked(c) && (showAdult() || !isAdult(c)));
-    if (kids) R.ch = pool.filter((c) => looksKids(c)).slice(0, 12);
-    else if (words.length) R.ch = pool.filter((c) => { const n = aiN(c.name); return words.some((w) => n.includes(w)); }).sort((a, b) => chQ(a) - chQ(b)).slice(0, 12);
-    else if (sp) { const kw = (BROAD.find(([k]) => k === sp) || [, ['sport']])[1].map(kwHit); R.ch = pool.filter((c) => { const n = normT(c.name) + ' ' + String(c.group || '').toLowerCase(); return kw.some((h) => h(n)); }).sort((a, b) => chQ(a) - chQ(b)).slice(0, 12); }
+    // canali: prima il criterio (veloce), poi blocchi e adulti solo sui pochi trovati
+    const inTv = new Set(R.tv.map((h) => h.ch.id)), okC = (c) => !inTv.has(c.id) && !isLocked(c) && (showAdult() || !isAdult(c)), pick = (test, sort) => { const o = []; for (const c of visLive(S.lib.live)) { if (test(c) && okC(c)) { o.push(c); if (o.length >= 40) break; } } if (sort) o.sort((a, b) => chQ(a) - chQ(b)); return o.slice(0, 12); };
+    if (kids) R.ch = pick((c) => looksKids(c));
+    else if (words.length) R.ch = pick((c) => wrx.test(c.name || '') && words.some((w) => aiN(c.name).includes(w)), true);
+    else if (sp) { const kw = (BROAD.find(([k]) => k === sp) || [, ['sport']])[1].map(kwHit); R.ch = pick((c) => { const n = normT(c.name) + ' ' + String(c.group || '').toLowerCase(); return kw.some((h) => h(n)); }, true); }
   }
   return R;
 }
