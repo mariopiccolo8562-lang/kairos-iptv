@@ -45,7 +45,7 @@
       const pay = window.KXPay ? KXPay.badge('line', k, ref) : '';
       const kv = [KV('Scadenza', day(r.exp, r.expTxt) + (pay ? '<br>' + pay : '')), KV('Conn.', r.max ? `${r.conns}/${r.max}` : String(r.conns ?? '—')), r.type ? KV('Pacchetto', esc(r.type)) : '', r.owner ? KV('Reseller', esc(r.owner)) : '', r.notes ? KV('Note', esc(r.notes)) : '', r.stream ? KV('Ultima visione', esc(r.stream) + (r.last ? ' · ' + esc(r.last) : '')) : ''].filter(Boolean);
       const payBtn = window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="${k}" data-ref="${esc(ref)}" data-label="${esc(r.username)}" data-owner="${+r.ownerId || +r.owner_id || 0}" data-auto-line="${esc(r.id || '')}">💰 Pagamento</button>` : '';
-      const acts = [btn('edit', i, 'Modifica'), btn('renew', i, 'Rinnova'), payBtn, btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', btn('mxp', i, 'MaxPlayer'), btn('oxp', i, 'OrbixPlay'), window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : '', btn('del', i, 'Elimina')].filter(Boolean).join('');
+      const acts = [btn('edit', i, 'Modifica'), btn('renew', i, 'Rinnova'), payBtn, btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', window.KXMxpNew && (!window.KXMxpCan || KXMxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('mxp', i, 'MaxPlayer') : '', window.KXOxpNew && (!window.KXOxpCan || KXOxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('oxp', i, 'OrbixPlay') : '', window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : '', btn('del', i, 'Elimina')].filter(Boolean).join('');
       return card(head, kv, acts);
     }).join('') || '<p class="mut" style="margin:14px 0">Niente da mostrare.</p>';
   }
@@ -59,7 +59,7 @@
       const i = all.indexOf(r);
       const ref = String(r.id || r.username || ''), pay = window.KXPay ? KXPay.badge('line', k, ref) : '';
       const payBtn = window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="${k}" data-ref="${esc(ref)}" data-label="${esc(r.username)}" data-owner="${+r.ownerId || +r.owner_id || 0}" data-auto-line="${esc(r.id || '')}">💰 Pagamento</button>` : '';
-      const acts = [btn('edit', i, 'Modifica'), btn('renew', i, 'Rinnova'), payBtn, btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', btn('mxp', i, 'MaxPlayer'), btn('oxp', i, 'OrbixPlay'), window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : '', btn('del', i, 'Elimina')].filter(Boolean).join(' ');
+      const acts = [btn('edit', i, 'Modifica'), btn('renew', i, 'Rinnova'), payBtn, btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', window.KXMxpNew && (!window.KXMxpCan || KXMxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('mxp', i, 'MaxPlayer') : '', window.KXOxpNew && (!window.KXOxpCan || KXOxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('oxp', i, 'OrbixPlay') : '', window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : '', btn('del', i, 'Elimina')].filter(Boolean).join(' ');
       return tr([`<b>${esc(r.username)}</b> ${btn('cu', i, 'Copia')}${!r.stream && window.KXWatch ? KXWatch.slot(k, r.username) : ''}${r.ip ? `<br><span class="mut" style="font-size:11.5px">${esc(r.stream || '')}${r.last ? ' · ' + esc(r.last) : ''}</span>` : ''}`, r.password ? `<span class="mono">${esc(r.password)}</span> ${btn('cp', i, 'Copia')}` : mut, lineState(r), day(r.exp, r.expTxt) + (pay ? '<br>' + pay : ''), r.max ? `${r.conns}/${r.max}` : String(r.conns ?? '—'), esc(r.type || '—'), esc(r.owner || '—'), r.notes ? esc(r.notes) : mut, `<div style="display:flex;gap:4px;flex-wrap:wrap">${acts}</div>`]);
     }));
   }
@@ -164,7 +164,11 @@
       if (a === 'cp') return copy(r.password, 'Password');
       if (a === 'm3u') return copy(m3u(A.data.dns, r), 'Link M3U');
       if (a === 'orcp') return KXOrcpNew({ user: r.username, pass: r.password, name: r.username, note: P.name + (r.id ? ' #' + r.id : ''), panel: k });
-      if (a === 'mxp' || a === 'oxp') { const pre = { user: r.username, pass: r.password, name: r.username, note: P.name + (r.id ? ' #' + r.id : '') }; return a === 'mxp' ? KXMxpNew(pre) : KXOxpNew(pre); }
+      if (a === 'mxp' || a === 'oxp') {
+        const target = a === 'mxp' ? 'max' : 'orbix', pre = { user: r.username, pass: r.password, name: r.username, note: P.name + (r.id ? ' #' + r.id : '') };
+        const line = { p: k, tag: P.name.toUpperCase(), username: r.username, password: r.password, exp: r.exp || r.exp_date, note: r.notes || r.note };
+        return window.KXOpenLineTarget ? window.KXOpenLineTarget(target, line, pre) : target === 'max' ? KXMxpNew(pre) : KXOxpNew(pre);
+      }
       if (a === 'edit') {
         if (!(await ask('Modifica ' + u, `<label>Utente<input class="inp" id="exEU" maxlength="64" value="${esc(r.username)}"></label><label style="display:block;margin-top:8px">Password<input class="inp" id="exEP" maxlength="64" value="${esc(r.password || '')}"></label><label style="display:block;margin-top:8px">Nota (nome del cliente, telefono…)<textarea class="inp" id="exEN" rows="2" maxlength="300">${esc(r.notes || '')}</textarea></label><p class="mut" style="font-size:12px;margin:8px 0 0">Se cambi utente o password, il cliente deve aggiornarli nella sua app.</p>`, 'Salva'))) return;
         const nu = $('#exEU').value.trim(), np = $('#exEP').value, nn = $('#exEN').value.trim();

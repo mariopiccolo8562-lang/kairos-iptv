@@ -22,6 +22,20 @@
   TITLES.mxp = 'Pannello MaxPlayer';
 
   const isAg = () => D.role === 'agent';
+  const KXMxpCan = () => !isAg() || !!(((D.me || {}).perms || {}).mxp);
+  window.KXMxpCan = KXMxpCan;
+  const linePanels = ['wolf', 'armada', 'storm', 'ro', 'slt'];
+  const canLoadLines = () => !!window.KXLinePick && (!isAg() || linePanels.some((k) => !!(((D.me || {}).perms || {})[k])));
+  const originOf = (value) => {
+    const v = String(value || '').trim();
+    if (!v) return '';
+    try { return new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(v) ? v : `http://${v}`).origin.toLowerCase(); } catch { return ''; }
+  };
+  const domainOrigin = (d) => {
+    if (!d || !d.domain) return '';
+    const port = d.port && !['80', '443'].includes(String(d.port)) ? ':' + d.port : '';
+    return originOf(`${d.https ? 'https' : 'http'}://${d.domain}${port}`);
+  };
   const M = { accs: null, acc: '', tab: 'users', ov: null, users: null, doms: null, agents: null, q: '', limit: 100, show: new Set(), busy: false, err: '', sel: new Set(), stOn: false };
   const copy = (t, w) => navigator.clipboard.writeText(t).then(() => toast(w + ' copiato'), () => toast('Copia non consentita dal browser', 1));
   const gen = (n) => { const a = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const r = crypto.getRandomValues(new Uint8Array(n)); return [...r].map((x) => a[x % a.length]).join(''); };
@@ -152,11 +166,23 @@
   async function newUser(pre) {
     pre = pre || {};
     if (!M.doms || !M.doms.length) return toast('Nessun dominio (DNS) su questo account', 1);
-    const ok = await ask('Nuovo cliente su MaxPlayer', `<div class="wf-f" style="grid-template-columns:1fr 1fr">
+    const prompt = ask('Nuovo cliente su MaxPlayer', `<div class="wf-f" style="grid-template-columns:1fr 1fr">
+      ${canLoadLines() ? '<div id="mnLinePick" style="grid-column:1/-1"></div>' : ''}
       <label>Utente della linea<input class="inp mono" id="mnU" autocomplete="off" value="${esc(pre.user || '')}"></label><label>Password della linea<input class="inp mono" id="mnP" autocomplete="off" value="${esc(pre.pass || '')}"></label>
       <label style="grid-column:1/-1">DNS (dominio)<select class="inp" id="mnD">${domOpts('')}</select></label>
       <label>Nome (facoltativo)<input class="inp" id="mnN" maxlength="60" value="${esc(pre.name || '')}"></label><label>Dispositivi (facoltativo)<input class="inp" id="mnX" type="number" min="1" max="50" placeholder="come da account"></label></div>
       <p class="mut" style="font-size:12.5px;margin:10px 0 0">Usa un posto dell'account (liberi: <b>${M.ov && M.ov.cap ? M.ov.cap.free : '—'}</b>). Il cliente compare subito anche su MaxPlayer.</p>`, 'Crea cliente');
+    if (canLoadLines()) window.KXLinePick.mount($('#mnLinePick'), (line) => {
+      $('#mnU').value = line.username;
+      $('#mnP').value = line.password;
+      if (!$('#mnN').value.trim()) $('#mnN').value = line.username;
+      if (!isAg() && line.host) {
+        const target = originOf(line.host);
+        const domain = (M.doms || []).find((d) => domainOrigin(d) === target);
+        if (domain) $('#mnD').value = domain.id;
+      }
+    });
+    const ok = await prompt;
     if (!ok) return;
     try { await api('POST', P('/users'), { user: $('#mnU').value, pass: $('#mnP').value, domain: $('#mnD').value, name: $('#mnN').value, devices: $('#mnX').value }); toast('Cliente creato su MaxPlayer'); await loadAll(true); } catch (e) { toast(e.message, 1); }
   }
@@ -227,7 +253,14 @@
   function show() { try { render(); } catch (e) { const V = $('#v-mxp'); if (V) V.innerHTML = `<div class="card glass"><p style="color:#ff8f8f">Errore nella sezione MaxPlayer: ${esc(e.message || String(e))}</p></div>`; } }
   function open() { show(); (M.accs ? Promise.resolve() : loadAccs()).then(() => { show(); if (M.acc && !M.users && !M.busy) loadAll(); }); }
   /* da WOLF/Armada: apre MaxPlayer con «Nuovo cliente» già compilato con utente e password della linea */
-  window.KXMxpNew = async (pre) => { view('mxp'); if (!M.accs) await loadAccs(); if (!M.acc) return toast('Collega prima un account MaxPlayer', 1); if (!M.doms) await loadAll(); newUser(pre); };
+  window.KXMxpNew = async (pre) => {
+    if (!KXMxpCan()) return toast('Non hai il permesso per creare clienti MaxPlayer: chiedilo a chi ti gestisce', 1);
+    view('mxp');
+    if (!M.accs) await loadAccs();
+    if (!M.acc) return toast('Collega prima un account MaxPlayer', 1);
+    if (!M.doms) await loadAll();
+    newUser(pre);
+  };
   setTimeout(() => window.KXOnline && KXOnline.watch('v-mxp', () => !!M.on, render), 0);
   const v0 = view;
   window.view = view = function (v) { const r = v0.apply(this, arguments); if (v === 'mxp') open(); return r; };

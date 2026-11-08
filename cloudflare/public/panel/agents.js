@@ -1094,19 +1094,23 @@ body.agent .foot{display:none}
     };
     page.classList.add('on'); $('#agB').scrollTop = 0;
   }
-  function openWizard() {
+  function openWizard(preset) {
+    preset = preset || {};
     const agent = isAgent(), P = me().perms || {}, players = () => D.players || {};
     const servers = Array.isArray(D.servers) ? D.servers : [];
     const maxC = agent ? Math.max(1, P.maxConn || 1) : 20;
+    const showKairos = !agent || can('create');
+    const showMax = !agent || (!!players().max && can('players'));
+    const showOrbix = !agent || (!!players().orbix && can('players'));
+    const availableTargets = new Set([...(showKairos ? ['kairos'] : []), ...(showMax ? ['max'] : []), ...(showOrbix ? ['orbix'] : [])]);
+    const initialTargets = Array.isArray(preset.targets) ? preset.targets.filter((k) => availableTargets.has(k)) : ['kairos'];
     const st = {
-      targets: new Set(['kairos']), code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1), payDue: false, payMonths: 1, payAmount: '',
+      targets: new Set(initialTargets), code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1), payDue: false, payMonths: 1, payAmount: '',
       durationMode: 'months', durationN: '', durationUnit: 'd',
       pl: { serverId: (servers[0] || {}).id || '', username: '', password: '', host: '', ref: '', note: '', panel: '', picked: null }, expSource: '',
       name: '', maxConn: 1, mxDomain: '', orbixId: '', oxDns: '0', busy: false, running: '', results: [],
     };
     const showLinePick = canLoadLines(P);
-    const showMax = !agent || (!!players().max && can('players'));
-    const showOrbix = !agent || (!!players().orbix && can('players'));
     const APPS_W = [['tv', 'Kairos Pro'], ['prem', 'Kairos Premium'], ['ktv', 'Kairos TV'], ['plus', 'Kairos Plus'], ['xc', 'Kairos XC'], ['lite', 'Kairos Lite'], ['nova', 'Kairos Nova']];
     const TARGETS = [['kairos', 'App Kairos'], ['max', 'MaxPlayer'], ['orbix', 'OrbixPlay']];
     const targetNames = { kairos: 'App Kairos', max: 'MaxPlayer', orbix: 'OrbixPlay' };
@@ -1231,7 +1235,7 @@ body.agent .foot{display:none}
     };
     const bindOpen = () => $$('[data-wzopen]').forEach((b) => (b.onclick = () => { const x = (D.devices || []).find((y) => y.id === b.dataset.wzopen); if (x) openClient(x); }));
     const fillLine = async (r, label) => {
-      const sv = agent ? await matchLineServer(r.host, servers, r.p) : null;
+      const sv = agent && has('kairos') ? await matchLineServer(r.host, servers, r.p) : null;
       st.pl.username = r.username || '';
       st.pl.password = r.password || '';
       st.pl.ref = label || r.tag || 'Linea';
@@ -1261,7 +1265,7 @@ body.agent .foot{display:none}
         if ($('#wzDurN')) $('#wzDurN').value = '';
         $$('[data-wzm]').forEach((x) => x.classList.remove('on'));
       }
-      if (!st.name.trim() && r.note) st.name = r.note.slice(0, 60);
+      if (!st.name.trim() && (r.name || r.note)) st.name = (r.name || r.note).slice(0, 60);
       if ($('#wzUser')) $('#wzUser').value = st.pl.username;
       if ($('#wzPass')) $('#wzPass').value = st.pl.password;
       if ($('#wzSrv')) $('#wzSrv').value = st.pl.serverId;
@@ -1272,7 +1276,7 @@ body.agent .foot{display:none}
       const user = esc(st.pl.username), chosen = label ? `Linea scelta · ${esc(label)} · ` : 'Linea riconosciuta · ';
       const msg = $('#wzPasteSt');
       if (msg) msg.innerHTML = where ? `<div class="wz-st good">✓ ${chosen}${agent ? 'server' : 'DNS'} <b>${esc(where)}</b> · utente <b>${user}</b></div>` : `<div class="wz-st warn">✓ Utente <b>${user}</b> inserito · ${agent ? 'scegli il server qui sotto' : r.p ? 'scegli il DNS nel menu qui sopra' : 'completa il campo DNS qui sotto'}</div>`;
-      if (agent && !sv) toast('Scegli il server', 1);
+      if (agent && has('kairos') && !sv) toast('Scegli il server', 1);
       if (!agent && !r.host && r.p && dnsFallback && window.KXLinePick && window.KXLinePick.mountDns) {
         await window.KXLinePick.mountDns(dnsFallback, r.p, r.tag, async (host) => {
           st.pl.host = host;
@@ -1289,7 +1293,7 @@ body.agent .foot{display:none}
       await fillLine(r, '');
     };
     const body = () => {
-      const targetButtons = TARGETS.filter(([k]) => k === 'kairos' || (k === 'max' ? showMax : showOrbix)).map(([k, label]) =>
+      const targetButtons = TARGETS.filter(([k]) => k === 'kairos' ? showKairos : k === 'max' ? showMax : showOrbix).map(([k, label]) =>
         `<button type="button" class="wz-target${has(k) ? ' on' : ''}" data-wztarget="${k}" aria-pressed="${has(k)}"><i>✓</i><span>${label}</span></button>`).join('');
       const kairos = has('kairos') ? `<div class="wz-st"><b>Codice della TV</b><p class="wz-help">Il cliente apre l’app Kairos e ti manda una foto. Scrivi il codice: maiuscole e trattino li metto io.</p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input class="inp wz-code" id="wzCode" placeholder="KXAB-12CD" maxlength="9" autocomplete="off" spellcheck="false" value="${esc(st.code)}"><button type="button" class="btn sm" id="wzCheck">Controlla codice</button></div>
@@ -1459,8 +1463,29 @@ body.agent .foot{display:none}
     $('#wzGo').onclick = startActivation;
     draw(true);
     page.classList.add('on'); $('#agB').scrollTop = 0;
+    if (preset.line && preset.line.username) fillLine(preset.line, preset.line.tag || '');
     loadOptions();
   }
+  window.KXNewClient = (preset) => {
+    const targets = preset && Array.isArray(preset.targets) ? preset.targets : ['kairos'];
+    if (isAgent() && (!targets.length || targets.some((k) => k === 'kairos' ? !can('create') : !['max', 'orbix'].includes(k) || !can('players')))) {
+      return toast('Non hai il permesso per attivare questi target', 1);
+    }
+    return openWizard(preset);
+  };
+  window.KXOpenLineTarget = (target, line, pre) => {
+    const panelCan = target === 'orbix' ? (!window.KXOxpCan || KXOxpCan()) : (!window.KXMxpCan || KXMxpCan());
+    if (isAgent() && !panelCan && can('players')) {
+      const expiry = window.KXLinePick && window.KXLinePick.expiryDate;
+      return window.KXNewClient({ targets: [target], line: {
+        p: line.p, tag: line.tag, username: line.username || '', password: line.password || '',
+        exp: expiry ? expiry(line.exp || line.exp_date || line.expire_date || line.expTxt) : line.exp,
+        note: line.note || '', name: pre && pre.name || line.name || '', host: '',
+      } });
+    }
+    const params = pre || { user: line.username, pass: line.password, name: line.note || line.username, note: `${line.tag || ''} ${line.username || ''}`.trim() };
+    return target === 'orbix' ? window.KXOxpNew(params) : window.KXMxpNew(params);
+  };
   const origOpen = openDrawer, origQuick = openQuick;
   window.openDrawer = openDrawer = function (d, act) {
     if (isAgent()) return !d && can('create') ? openWizard() : openClient(d);

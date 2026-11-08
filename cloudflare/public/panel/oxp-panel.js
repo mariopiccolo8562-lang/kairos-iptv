@@ -10,7 +10,16 @@
   }
   TITLES.oxp = 'Pannello OrbixPlay';
   const isAg = () => D.role === 'agent';
-  const canNew = () => !isAg() || !!(((D.me || {}).perms || {}).oxpNew);
+  const KXOxpCan = () => { const P = ((D.me || {}).perms || {}); return !isAg() || !!(P.oxp && P.oxpNew); };
+  window.KXOxpCan = KXOxpCan;
+  const canNew = KXOxpCan;
+  const linePanels = ['wolf', 'armada', 'storm', 'ro', 'slt'];
+  const canLoadLines = () => !!window.KXLinePick && (!isAg() || linePanels.some((k) => !!(((D.me || {}).perms || {})[k])));
+  const originOf = (value) => {
+    const v = String(value || '').trim();
+    if (!v) return '';
+    try { return new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(v) ? v : `http://${v}`).origin.toLowerCase(); } catch { return ''; }
+  };
   if (!$('#oxCss')) { const c = document.createElement('style'); c.id = 'oxCss'; c.textContent = '.ox-row{grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.3fr) minmax(0,1.2fr) auto!important}.ox-row .oxid{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;word-break:break-all;color:var(--txt,#fff)}@media (max-width:1000px){.ox-row{grid-template-columns:1fr 1fr!important}}'; document.head.appendChild(c); }
   const O = { st: null, pls: null, slots: null, q: '', limit: 100, show: new Set(), busy: false, err: '', sel: new Set(), stOn: false };
   const copy = (t, w) => navigator.clipboard.writeText(t).then(() => toast(w + ' copiato'), () => toast('Copia non consentita dal browser', 1));
@@ -72,12 +81,28 @@
   async function newPl(pre) {
     pre = pre || {};
     const opts = dnsOpts('');
-    const ok = await ask('Nuova playlist su OrbixPlay', `<div class="wf-f" style="grid-template-columns:1fr 1fr">
+    const prompt = ask('Nuova playlist su OrbixPlay', `<div class="wf-f" style="grid-template-columns:1fr 1fr">
+      ${canLoadLines() ? '<div id="onLinePick" style="grid-column:1/-1"></div>' : ''}
       <label style="grid-column:1/-1">ID del dispositivo (dall'app OrbixPlay)<input class="inp mono" id="onD" data-mac maxlength="64" autocomplete="off" placeholder="es. 00:1A:79:AA:BB:CC"></label>
       <label>Utente della linea<input class="inp mono" id="onU" value="${esc(pre.user || '')}"></label><label>Password della linea<input class="inp mono" id="onP" value="${esc(pre.pass || '')}"></label>
-      <label>DNS${opts ? `<select class="inp" id="onH">${opts}</select>` : '<input class="inp mono" id="onH" placeholder="http://dns.esempio.com:8080">'}</label><label>Nome<input class="inp" id="onN" maxlength="40" value="${esc(pre.name || 'Kairos')}"></label>
+      <label>DNS${opts ? `<select class="inp" id="onH">${opts}</select>` : '<input class="inp mono" id="onH" placeholder="http://dns.esempio.com:8080">'}</label><label>Nome<input class="inp" id="onN" maxlength="40" value="${esc(pre.name || '')}"></label>
       <label style="grid-column:1/-1">Note (facoltative)<input class="inp" id="onT" maxlength="60" value="${esc(pre.note || '')}"></label></div>
       <p class="mut" style="font-size:12.5px;margin:10px 0 0">Usa un posto del tuo account OrbixPlay.</p>`, 'Aggiungi');
+    if (canLoadLines()) window.KXLinePick.mount($('#onLinePick'), (line) => {
+      $('#onU').value = line.username;
+      $('#onP').value = line.password;
+      if (!$('#onN').value.trim()) $('#onN').value = line.username;
+      if (!$('#onT').value.trim()) $('#onT').value = `${line.tag} ${line.username}`.trim();
+      if (!isAg() && line.host) {
+        const field = $('#onH');
+        if (field && field.tagName === 'SELECT') {
+          const target = originOf(line.host);
+          const option = [...field.options].find((o) => originOf(o.dataset.h || o.value) === target);
+          if (option) field.value = option.value;
+        } else if (field) field.value = line.host;
+      }
+    });
+    const ok = await prompt;
     if (!ok) return;
     try { await api('POST', '/admin/oxp/playlists', { device: $('#onD').value, user: $('#onU').value, pass: $('#onP').value, host: $('#onH').value, hostUrl: ($('#onH').selectedOptions && $('#onH').selectedOptions[0] && $('#onH').selectedOptions[0].dataset.h) || '', name: $('#onN').value, notes: $('#onT').value }); toast('Playlist aggiunta su OrbixPlay'); load(); } catch (e) { toast(e.message, 1); }
   }
@@ -115,7 +140,13 @@
   function show() { try { render(); } catch (e) { const V = $('#v-oxp'); if (V) V.innerHTML = `<div class="card glass"><p style="color:#ff8f8f">Errore nella sezione OrbixPlay: ${esc(e.message || String(e))}</p></div>`; } }
   function open() { show(); if (!O.pls && !O.busy) load(); }
   /* da WOLF/Armada: apre OrbixPlay con «Nuova playlist» già compilata, resta solo l'ID del dispositivo */
-  window.KXOxpNew = async (pre) => { view('oxp'); if (!O.pls) await load(); if (!canNew()) return toast('OrbixPlay non è collegato o non puoi creare playlist', 1); setTimeout(() => { newPl(pre); $('#onD') && $('#onD').focus(); }, 50); };
+  window.KXOxpNew = async (pre) => {
+    if (!KXOxpCan()) return toast('Non hai il permesso per creare playlist OrbixPlay: chiedilo a chi ti gestisce', 1);
+    view('oxp');
+    if (!O.pls) await load();
+    if (!O.st || !O.st.connected || !O.pls) return toast('OrbixPlay non è collegato', 1);
+    setTimeout(() => { newPl(pre); $('#onD') && $('#onD').focus(); }, 50);
+  };
   setTimeout(() => window.KXOnline && KXOnline.watch('v-oxp', () => !!O.on, render), 0);
   const v0 = view;
   window.view = view = function (v) { const r = v0.apply(this, arguments); if (v === 'oxp') open(); return r; };
