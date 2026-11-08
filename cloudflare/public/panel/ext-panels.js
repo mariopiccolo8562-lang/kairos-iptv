@@ -28,7 +28,8 @@
   const TD = 'padding:9px 8px;border-bottom:1px solid var(--line,#222);vertical-align:middle';
   const grid = (heads, rows) => `<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13.5px"><thead><tr>${heads.map((h) => `<th style="${TH}">${h}</th>`).join('')}</tr></thead><tbody>${rows.join('') || `<tr><td colspan="${heads.length}" class="mut" style="padding:14px 8px">Niente da mostrare.</td></tr>`}</tbody></table></div>`;
   const tr = (cells) => `<tr>${cells.map((c) => `<td style="${TD}">${c}</td>`).join('')}</tr>`;
-  const btn = (a, i, t, extra = '') => `<button class="btn sm" data-a="${a}" data-i="${i}" ${extra}>${t}</button>`;
+  const lineActionClass = (a) => ({ edit: 'act-edit', renew: 'act-renew', m3u: 'act-m3u', mxp: 'act-mxp', oxp: 'act-oxp', orcp: 'act-orcp', on: 'act-toggle act-toggle-on', off: 'act-toggle', kill: 'act-toggle', del: 'act-delete' }[a] || '');
+  const btn = (a, i, t, extra = '') => `<button class="btn sm ${lineActionClass(a)}" data-a="${a}" data-i="${i}" ${extra}>${t}</button>`;
   const filt = (k, rows) => { const A = ST[k], q = A.q.toLowerCase(); return rows.filter((r) => (!q || [r.username, r.notes, r.owner, r.type].some((x) => String(x || '').toLowerCase().includes(q))) && (!A.status || (A.status === 'active' ? r.enabled && !r.expired : A.status === 'expired' ? r.expired : A.status === 'disabled' ? !r.enabled : A.status === 'online' ? r.conns > 0 : A.status === 'expiring' ? r.exp && r.exp > now() && r.exp - now() < 7 * 86400 : true))); };
   const sorted = (k, rows) => (window.KXSort ? KXSort.apply(rows, ST[k], { exp: (r) => (+r.exp || 0) * 1000, name: (r) => r.username, enabled: (r) => !!r.enabled, conns: (r) => r.conns, owner: (r) => r.owner, created: (r) => (+r.created || 0) * 1000, payKey: (r) => [k, String(r.id || r.username || '').toLowerCase()] }) : rows);
 
@@ -43,8 +44,8 @@
       const head = `<div><b style="font-size:15px">${esc(r.username)}</b> ${btn('cu', i, 'Copia')}<div class="mono" style="font-size:13px;margin-top:4px">${r.password ? esc(r.password) + ' ' + btn('cp', i, 'Copia') : mut}</div></div><div>${lineState(r)}</div>`;
       const pay = window.KXPay ? KXPay.badge('line', k, ref) : '';
       const kv = [KV('Scadenza', day(r.exp, r.expTxt) + (pay ? '<br>' + pay : '')), KV('Conn.', r.max ? `${r.conns}/${r.max}` : String(r.conns ?? '—')), r.type ? KV('Pacchetto', esc(r.type)) : '', r.owner ? KV('Reseller', esc(r.owner)) : '', r.notes ? KV('Note', esc(r.notes)) : '', r.stream ? KV('Ultima visione', esc(r.stream) + (r.last ? ' · ' + esc(r.last) : '')) : ''].filter(Boolean);
-      const payBtn = window.KXPay && KXPay.canEdit() ? `<button class="btn sm" data-kxpay-open data-kind="line" data-panel="${k}" data-ref="${esc(ref)}" data-label="${esc(r.username)}" data-owner="${+r.ownerId || +r.owner_id || 0}" data-auto-line="${esc(r.id || '')}">💰 Pagamento</button>` : '';
-      const acts = [btn('edit', i, 'Modifica'), btn('renew', i, 'Rinnova'), payBtn, btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', btn('mxp', i, 'MaxPlayer'), btn('oxp', i, 'OrbixPlay'), window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : '', btn('del', i, 'Elimina', 'style="color:#ff8f8f"')].filter(Boolean).join('');
+      const payBtn = window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="${k}" data-ref="${esc(ref)}" data-label="${esc(r.username)}" data-owner="${+r.ownerId || +r.owner_id || 0}" data-auto-line="${esc(r.id || '')}">💰 Pagamento</button>` : '';
+      const acts = [btn('edit', i, 'Modifica'), btn('renew', i, 'Rinnova'), payBtn, btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', btn('mxp', i, 'MaxPlayer'), btn('oxp', i, 'OrbixPlay'), window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : '', btn('del', i, 'Elimina')].filter(Boolean).join('');
       return card(head, kv, acts);
     }).join('') || '<p class="mut" style="margin:14px 0">Niente da mostrare.</p>';
   }
@@ -57,8 +58,8 @@
     return grid([H('name', 'Utente'), 'Password', H('status', 'Stato'), H('exp', 'Scadenza'), H('conns', 'Conn.'), 'Pacchetto', H('owner', 'Reseller'), 'Note', ''], rows.map((r) => {
       const i = all.indexOf(r);
       const ref = String(r.id || r.username || ''), pay = window.KXPay ? KXPay.badge('line', k, ref) : '';
-      const payBtn = window.KXPay && KXPay.canEdit() ? `<button class="btn sm" data-kxpay-open data-kind="line" data-panel="${k}" data-ref="${esc(ref)}" data-label="${esc(r.username)}" data-owner="${+r.ownerId || +r.owner_id || 0}" data-auto-line="${esc(r.id || '')}">💰 Pagamento</button>` : '';
-      const acts = [btn('edit', i, 'Modifica'), btn('renew', i, 'Rinnova'), payBtn, btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', btn('mxp', i, 'MaxPlayer'), btn('oxp', i, 'OrbixPlay'), window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : '', btn('del', i, 'Elimina', 'style="color:#ff8f8f"')].filter(Boolean).join(' ');
+      const payBtn = window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="${k}" data-ref="${esc(ref)}" data-label="${esc(r.username)}" data-owner="${+r.ownerId || +r.owner_id || 0}" data-auto-line="${esc(r.id || '')}">💰 Pagamento</button>` : '';
+      const acts = [btn('edit', i, 'Modifica'), btn('renew', i, 'Rinnova'), payBtn, btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', btn('mxp', i, 'MaxPlayer'), btn('oxp', i, 'OrbixPlay'), window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : '', btn('del', i, 'Elimina')].filter(Boolean).join(' ');
       return tr([`<b>${esc(r.username)}</b> ${btn('cu', i, 'Copia')}${!r.stream && window.KXWatch ? KXWatch.slot(k, r.username) : ''}${r.ip ? `<br><span class="mut" style="font-size:11.5px">${esc(r.stream || '')}${r.last ? ' · ' + esc(r.last) : ''}</span>` : ''}`, r.password ? `<span class="mono">${esc(r.password)}</span> ${btn('cp', i, 'Copia')}` : mut, lineState(r), day(r.exp, r.expTxt) + (pay ? '<br>' + pay : ''), r.max ? `${r.conns}/${r.max}` : String(r.conns ?? '—'), esc(r.type || '—'), esc(r.owner || '—'), r.notes ? esc(r.notes) : mut, `<div style="display:flex;gap:4px;flex-wrap:wrap">${acts}</div>`]);
     }));
   }
@@ -176,7 +177,7 @@
         const pkgId = $('#exM').value, notes = $('#exN').value.trim();
         const rr = await api('POST', `/admin/${k}/lines/action`, { action: 'renew', id: r.id, username: r.username, package_id: pkgId });
         if (notes !== String(r.notes || '').trim()) await api('POST', `/admin/${k}/lines/action`, { action: 'notes', id: r.id, username: r.username, notes }).catch((e) => toast('Rinnovata, ma la nota non è stata salvata: ' + e.message, 1));
-        toast(`${u} rinnovata` + (rr.balance != null ? ` · crediti: ${rr.balance}` : '')); return load(k);
+        toast(`${u} rinnovata` + (rr.balance != null ? ` · crediti: ${rr.balance}` : '')); return load(k, true);
       }
       if (a === 'on' || a === 'off') { const en = a === 'on'; if (!(await ask((en ? 'Attivare ' : 'Disattivare ') + u + '?', `La linea ${U} viene ${en ? 'attivata' : 'disattivata'} subito su ${esc(P.name)}.`, en ? 'Attiva' : 'Disattiva'))) return; return await lineAct(k, { action: 'toggle', id: r.id, username: r.username, enabled: en }, `${u} ${en ? 'attivata' : 'disattivata'}`); }
       if (a === 'kill') { if (!(await ask('Disconnettere ' + u + '?', 'Chiude le connessioni aperte adesso su questa linea. Il cliente potrà ricollegarsi.', 'Disconnetti'))) return; return await lineAct(k, { action: 'kill', id: r.id, username: r.username }, `${u}: connessioni chiuse`); }
@@ -184,9 +185,9 @@
       if (a === 'stog') { if (!(await ask((r.enabled ? 'Disattivare ' : 'Riattivare ') + u + '?', `Il sub-reseller ${U} viene ${r.enabled ? 'disattivato' : 'riattivato'} su ${esc(P.name)}.`, r.enabled ? 'Disattiva' : 'Riattiva'))) return; await api('POST', `/admin/${k}/subs/action`, { op: 'toggle', id: r.id }); toast('Fatto'); return load(k); }
     } catch (e) { toast(e.message, 1); }
   }
-  async function load(k) {
+  async function load(k, afterRenew = false) {
     const A = ST[k]; A.busy = true; A.err = ''; show(k);
-    try { A.data = await api('GET', `/admin/${k}/${A.tab}`); if (A.tab === 'overview') A.ov = A.data; if (A.tab === 'lines' && Array.isArray(A.data.rows)) A.rows = A.data.rows; } catch (e) { A.err = e.message; A.data = null; }
+    try { A.data = await api('GET', `/admin/${k}/${A.tab}`); if (A.tab === 'overview') A.ov = A.data; if (A.tab === 'lines' && Array.isArray(A.data.rows)) { A.rows = A.data.rows; if (window.KXLineSync) KXLineSync.apply(k, A.rows, afterRenew, api); } } catch (e) { A.err = e.message; A.data = null; }
     A.busy = false; show(k);
   }
   function show(k) { try { render(k); } catch (e) { const V = $('#v-' + k); if (V) V.innerHTML = `<div class="card glass"><p style="color:#ff8f8f">Errore nella sezione ${esc(PANELS[k].name)}: ${esc(e.message || String(e))}</p></div>`; } }

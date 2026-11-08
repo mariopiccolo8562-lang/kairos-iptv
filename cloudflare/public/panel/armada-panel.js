@@ -52,13 +52,13 @@ const mkArmadaLike = (cfg) => {
   const fmtC = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString('it-IT');
 
   async function loadState() { try { A.st = await api('GET', API + '/state'); } catch (e) { A.st = { connected: false, error: e.message }; } render(); }
-  const loadLines = () => A.pL || (A.pL = api('GET', API + '/lines').then((r) => { A.lines = r.lines || []; }).catch((e) => { A.lines = ldErr(e); }).finally(() => { A.pL = null; }));
-  async function loadTab(force) {
+  const loadLines = (afterRenew = false) => A.pL || (A.pL = api('GET', API + '/lines').then((r) => { A.lines = r.lines || []; if (window.KXLineSync) KXLineSync.apply(CFG.k, A.lines, afterRenew, api); }).catch((e) => { A.lines = ldErr(e); }).finally(() => { A.pL = null; }));
+  async function loadTab(force, afterRenew = false) {
     if (!A.st || !A.st.connected) return;
     const t = A.tab;
     try {
       if (t === 'new' && (!A.pk || force)) A.pk = (await api('GET', API + '/packages')).packages || [];
-      if (t === 'lines' && (!A.lines || force)) await loadLines();
+      if (t === 'lines' && (!A.lines || force)) { const pending = !!A.pL; await loadLines(afterRenew); if (afterRenew && pending && Array.isArray(A.lines) && window.KXLineSync) KXLineSync.apply(CFG.k, A.lines, true, api); }
       if (t === 'mags' && (!A.mags || force)) A.mags = (await api('GET', API + '/mags')).mags || [];
       if (t === 'res' && (!A.res || force)) A.res = (await api('GET', API + '/resellers')).resellers || [];
     } catch (e) { if (t === 'new') A.pk = ldErr(e); if (t === 'lines') A.lines = ldErr(e); if (t === 'mags') A.mags = ldErr(e); if (t === 'res') A.res = ldErr(e); }
@@ -141,7 +141,7 @@ const mkArmadaLike = (cfg) => {
         <div><span class="k">Scadenza</span>${esc(fmtD(x.exp))}<br><span class="mut" style="font-size:12px">${esc(left(x.exp))}</span></div>
         <div><span class="ar-tag ${t[1]}">${t[0]}</span>${x.trial && st(x) !== 'trial' ? '<span class="ar-tag w">prova</span>' : ''}<br><span class="mut" style="font-size:12px">${x.maxConn ? x.maxConn + ' conn.' : ''}${x.country ? ' · ' + esc(x.country) : ''}</span></div>
         <div>${kind === 'lines' && window.KXOnline && A.st ? KXOnline.slot(A.st.dns, x.username, x.password) + (window.KXWatch ? KXWatch.slot(K, x.username) : '') + '<br>' : ''}<span class="k">Ultima attività</span>${esc(x.lastActivity || '—')}${x.notes ? `<span class="k" style="margin-top:4px">Note</span><span>${esc(x.notes)}</span>` : ''}${x.owner && A.st.reseller && x.owner !== A.st.reseller.username ? `<span class="k" style="margin-top:4px">Reseller</span><span>${esc(x.owner)}</span>` : ''}${x.byAgent ? `<span class="k" style="margin-top:4px">Creata dall'agente</span><span>${esc(x.by)}</span>` : ''}</div>
-        <div class="ar-act">${link ? `<button class="btn sm" data-arlink="${x.id}">Copia link</button>` : ''}${kind === 'lines' && window.KXMxpNew ? `<button class="btn sm" data-armxp="${x.id}" title="Crea il cliente su MaxPlayer con questa linea">MaxPlayer</button>` : ''}${kind === 'lines' && window.KXOxpNew ? `<button class="btn sm" data-aroxp="${x.id}" title="Aggiungi questa linea a un dispositivo OrbixPlay">OrbixPlay</button>` : ''}${kind === 'lines' && window.KXOrcpNew ? `<button class="btn sm" data-arorcp="${x.id}" title="Segna la linea per l'app e prepara il messaggio al cliente">${esc(KXOrcpName())}</button>` : ''}<select class="inp" data-arsub="${id}">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select><button class="btn sm pri" data-arren="${id}">Rinnova</button><button class="btn sm ${x.enabled ? 'danger' : ''}" data-artog="${id}">${x.enabled ? 'Disattiva' : 'Attiva'}</button></div></div>`;
+        <div class="ar-act">${link ? `<button class="btn sm act-m3u" data-arlink="${x.id}">Copia link</button>` : ''}${kind === 'lines' && window.KXMxpNew ? `<button class="btn sm act-mxp" data-armxp="${x.id}" title="Crea il cliente su MaxPlayer con questa linea">MaxPlayer</button>` : ''}${kind === 'lines' && window.KXOxpNew ? `<button class="btn sm act-oxp" data-aroxp="${x.id}" title="Aggiungi questa linea a un dispositivo OrbixPlay">OrbixPlay</button>` : ''}${kind === 'lines' && window.KXOrcpNew ? `<button class="btn sm act-orcp" data-arorcp="${x.id}" title="Segna la linea per l'app e prepara il messaggio al cliente">${esc(KXOrcpName())}</button>` : ''}<select class="inp" data-arsub="${id}">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select><button class="btn sm act-renew" data-arren="${id}">Rinnova</button><button class="btn sm ${x.enabled ? 'act-toggle' : 'act-toggle act-toggle-on'}" data-artog="${id}">${x.enabled ? 'Disattiva' : 'Attiva'}</button></div></div>`;
     };
     const cnt = (k) => L.filter((x) => !k || st(x) === k).length;
     return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><input class="inp" id="arQ" placeholder="Cerca ${kind === 'lines' ? 'utente' : 'MAC'}, note${isAg() ? '' : ', reseller, agente'}…" value="${esc(F.q)}" style="flex:1;min-width:220px;margin:0">${window.KXSort ? KXSort.ui(F, PRE) : ''}${kind === 'lines' && window.KXPay ? KXPay.panelTile(CFG.k) : ''}${K ? K.sel('arOn', F.on || '') : ''}</div>
@@ -241,7 +241,7 @@ const mkArmadaLike = (cfg) => {
       const bd = A.st && A.st.budget;
       if (!(await ask(`Rinnovare su ${N}?`, `<b>${esc(who)}</b> di <b>${sub} ${sub === 1 ? 'mese' : 'mesi'}</b>. ${bd ? `Usa i crediti del tuo tetto (ne restano ${fmtC(bd.left)} questo mese).` : `Usa i tuoi crediti ${N}.`}${k[0] === 'l' && window.KXPay ? KXPay.duePrompt('arPay', sub) : ''}`, 'Rinnova'))) return;
       const due = k[0] === 'l' && window.KXPay ? KXPay.readDuePrompt('arPay') : null; if (due === false) return;
-      try { const r = await api('POST', API + '/renew', k[0] === 'l' ? { type: 'm3u', username: x.username, password: x.password, sub } : { type: 'mag', mac: x.mac, sub }); if (r.exp) x.exp = r.exp; toast('Rinnovata' + (r.exp ? ' fino al ' + fmtD(r.exp) : '')); if (due) await KXPay.saveDue('line', CFG.k, x.username, x.username, +x.byAgent || +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Rinnovo riuscito, ma pagamento non registrato: ' + e.message, 1)); loadState(); loadTab(true); } catch (e) { toast(e.message, 1); }
+      try { const r = await api('POST', API + '/renew', k[0] === 'l' ? { type: 'm3u', username: x.username, password: x.password, sub } : { type: 'mag', mac: x.mac, sub }); if (r.exp) x.exp = r.exp; toast('Rinnovata' + (r.exp ? ' fino al ' + fmtD(r.exp) : '')); if (due) await KXPay.saveDue('line', CFG.k, x.username, x.username, +x.byAgent || +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Rinnovo riuscito, ma pagamento non registrato: ' + e.message, 1)); loadState(); loadTab(true, true); } catch (e) { toast(e.message, 1); }
     }));
     $$('[data-artog]', V).forEach((b) => (b.onclick = async () => {
       const x = find(b.dataset.artog), on = !x.enabled;
@@ -277,7 +277,7 @@ const mkArmadaLike = (cfg) => {
     if (!ok) return;
     const sub = +Q('#abS').value;
     await KXTools.run(S, async (x) => { const r = await api('POST', API + '/renew', x.mac && !x.username ? { type: 'mag', mac: x.mac, sub } : { type: 'm3u', username: x.username, password: x.password, sub }); if (r.exp) x.exp = r.exp; }, 'Rinnovo');
-    A.sel.clear(); loadState(); render();
+    A.sel.clear(); loadState(); await loadTab(true, true); render();
   }
   async function bulkTgl(on) {
     const S = selX().filter((x) => !!x.enabled !== on);

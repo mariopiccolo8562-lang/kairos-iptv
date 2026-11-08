@@ -410,11 +410,15 @@ async function extend(d, m) { await save(d, { expires: addMonths(d.expires, m), 
 async function save(d, patch) { try { await api('PUT', '/admin/devices/' + d.id, patch); await load(); } catch (e) { toast(e.message, 1); } }
 
 /* ---------------- drawer ---------------- */
-let edit = null, isNew = false;
+let edit = null, isNew = false, lineSyncLoad = Promise.resolve(), lineSyncLoadFailed = false;
 function openDrawer(d, activating) {
   isNew = !d;
   edit = d ? JSON.parse(JSON.stringify(d)) : { code: '', name: '', notes: '', maxStreams: 1, active: true, expires: addMonths('', 12), playlists: [] };
   edit = { parent: '', maxConn: 1, maxProfiles: 3, lockProfiles: false, vpn: 0, vpnConf: false, ...edit, profiles: Array.isArray(edit.profiles) ? edit.profiles : [], wgText: '', vpnConfClear: false };
+  edit.lineSync = null; edit.lineSyncDirty = false; lineSyncLoadFailed = false;
+  lineSyncLoad = edit.id && !edit.parent ? api('GET', '/admin/line-sync?deviceId=' + encodeURIComponent(edit.id)).then((r) => {
+    if (edit && edit.id === d.id && !edit.lineSyncDirty) { edit.lineSync = r.link || null; const box = $('#eSyncInfo'); if (box) { box.innerHTML = lineSyncInfoHtml(); bindLineSyncUnlink(); } }
+  }).catch(() => { lineSyncLoadFailed = true; }) : Promise.resolve();
   if (activating && !edit.parent) { edit.active = true; if (!edit.expires) edit.expires = addMonths('', 12); if (!edit.playlists.length) edit.playlists.push({ id: 'p' + Date.now(), name: 'Principale', type: 'xtream', url: '', host: '', username: '', password: '' }); }
   $('#dTitle').innerHTML = isNew ? 'Nuovo dispositivo' : `${esc(edit.name || (edit.parent ? edit.model : '') || 'Dispositivo')} <span class="code" style="margin-left:6px">${esc(edit.code)}</span>`;
   $('#dAv').textContent = (edit.name || 'K')[0].toUpperCase();
@@ -427,6 +431,14 @@ function openDrawer(d, activating) {
   $('#shade').classList.add('on'); $('#drawer').classList.add('on');
 }
 function closeDrawer() { $('#shade').classList.remove('on'); $('#drawer').classList.remove('on'); }
+function lineSyncInfoHtml() { const link = edit && edit.lineSync; return link ? `🔗 Allineata alla linea ${esc(String(link.panel || '').toUpperCase())} <b>${esc(link.username)}</b> · <button class="btn sm" id="eSyncUnlink">Scollega</button>` : ''; }
+function bindLineSyncUnlink() {
+  const b = $('#eSyncUnlink');
+  if (b) b.onclick = async () => {
+    try { if (edit.id) await api('DELETE', '/admin/line-sync', { deviceId: edit.id }); edit.lineSync = null; edit.lineSyncDirty = true; const box = $('#eSyncInfo'); if (box) box.innerHTML = ''; toast('Allineamento scollegato'); }
+    catch (e) { toast(e.message, 1); }
+  };
+}
 /* modifica veloce nel pannello laterale: nome, attivo, scadenza, note (il resto nella scheda completa) */
 function openQuick(d) {
   if (!d) return openDrawer(null);
@@ -549,6 +561,7 @@ function renderDrawer() {
     ${!linked && D.role !== 'agent' && (D.agents || []).length ? `<label class="lbl">Responsabile</label><select class="inp" id="eOwner"><option value="0">Tu (nessun agente)</option>${D.agents.map((a) => `<option value="${a.id}" ${+edit.ownerId === a.id ? 'selected' : ''}>${esc(a.username)}${a.active ? '' : ' (disattivato)'}</option>`).join('')}</select><small class="mut" style="display:block;margin-top:6px;font-size:12px">L'agente scelto vede e gestisce questo cliente dal suo pannello.</small>` : ''}`;
   const S2 = linked ? '' : `<div class="tog ${edit.active ? 'on' : ''}" id="eAct"><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
     <div class="row"><input class="inp" type="date" id="eExp" value="${esc(edit.expires)}"><button class="btn" id="eInf">${edit.expires ? 'Rendi illimitato' : 'Illimitato ✓'}</button></div>
+    <div class="mut" id="eSyncInfo" style="margin-top:8px;font-size:12px">${lineSyncInfoHtml()}</div>
     ${periodQuickRow('edit-exp')}
     ${!isNew && window.KXPay ? `<div class="ag-c" style="margin-top:12px"><h4>💰 Pagamento</h4><div id="ePayBadge">${KXPay.badge('device', '', edit.id)}</div>${KXPay.canEdit() ? `<button type="button" class="btn sm" data-kxpay-open data-kind="device" data-panel="" data-ref="${esc(edit.id)}" data-label="${esc(edit.name || edit.code)}" data-owner="${+edit.ownerId || 0}" style="margin-top:8px">💰 Gestisci pagamento</button>` : ''}</div>` : ''}`;
   const linePickBox = !linked && window.KXLinePick ? `<div style="margin-bottom:14px"><b style="display:block;margin-bottom:6px">🔎 Cerca una linea già creata (tutti i pannelli)</b><div class="line-pick-controls"><div id="eLinePick" data-placeholder="🔎 Cerca utente o nota" data-loading="Carico le linee dai pannelli…"></div>${edit.playlists.length > 1 ? `<label class="line-pick-dest"><span>Metti in:</span><select class="inp line-pick-target" id="eLineTarget" aria-label="Playlist di destinazione">${edit.playlists.map((_, i) => `<option value="${i}"${i === 0 ? ' selected' : ''}>Playlist ${i + 1}</option>`).join('')}<option value="new">Nuova playlist</option></select></label>` : ''}</div></div>` : '';
@@ -604,10 +617,13 @@ function renderDrawer() {
     const index = target === 'new' ? edit.playlists.length : Math.max(0, +target || 0);
     const current = target === 'new' ? { id: 'p' + Date.now(), name: `Playlist ${index + 1}`, tag: '' } : (edit.playlists[index] || { id: 'p' + Date.now(), name: `Playlist ${index + 1}`, tag: '' });
     edit.playlists[index] = { ...current, type: 'xtream', url: '', host: line.host || '', username: line.username || '', password: line.password || '' };
+    edit.expires = line.exp || '';
+    edit.lineSync = { panel: line.p, username: line.username || '' }; edit.lineSyncDirty = true;
     renderDrawer();
     toast(`Linea ${line.username} inserita: premi Salva`);
     if (!line.host) toast('Scrivi il DNS della linea', 1);
   });
+  bindLineSyncUnlink();
   $$('[data-addon]').forEach((b) => (b.onclick = () => { const k = b.dataset.addon; edit.addons = edit.addons.includes(k) ? edit.addons.filter((x) => x !== k) : [...edit.addons, k]; b.classList.toggle('on', edit.addons.includes(k)); }));
   $$('[data-perm]').forEach((b) => (b.onclick = () => { const k = b.dataset.perm; edit.perms = { ...(edit.perms || {}) }; edit.perms[k] = edit.perms[k] === false; b.classList.toggle('on', edit.perms[k] !== false); }));
   $('#eLinkCode') && ($('#eLinkCode').onclick = async () => {
@@ -697,10 +713,24 @@ function renderDrawer() {
       const own = $('#eOwner') ? { ownerId: edit.ownerId || 0 } : {};
       if (edit.aiLimitIn !== undefined) own.aiLimit = edit.aiLimitIn;
       if (edit.aiProviderIn !== undefined) own.aiProvider = edit.aiProviderIn;
-      if (isNew) await api('POST', '/admin/devices', { code: edit.code, name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart, ...own });
+      let saved;
+      if (isNew) saved = await api('POST', '/admin/devices', { code: edit.code, name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart, ...own });
       else if (edit.parent) await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, ...vpnPart, own: !!edit.own, ...(edit.own ? { playlists: edit.playlists, plMode: acc.plMode, plDefault: acc.plDefault, player: acc.player } : {}) });
       else await api('PUT', '/admin/devices/' + edit.id, { name: edit.name, notes: edit.notes, expires: edit.expires, active: edit.active, playlists: edit.playlists, addons: edit.addons, ...acc, ...vpnPart, ...own });
-      closeDrawer(); await load(); toast(isNew ? 'Dispositivo creato' : 'Modifiche salvate');
+      let syncError = '';
+      if (!edit.parent) {
+        await lineSyncLoad;
+        if (lineSyncLoadFailed && !edit.lineSyncDirty) syncError = 'Non ho potuto controllare il collegamento alla linea';
+        else {
+          const deviceId = isNew ? saved && saved.id : edit.id, link = edit.lineSync;
+          const matches = link && (edit.playlists || []).some((p) => String(p.username || '').trim().toLowerCase() === String(link.username || '').trim().toLowerCase());
+          try {
+            if (matches && deviceId) await api('PUT', '/admin/line-sync', { deviceId, panel: link.panel, username: link.username });
+            else if (link && deviceId) await api('DELETE', '/admin/line-sync', { deviceId });
+          } catch (e) { syncError = e.message; }
+        }
+      }
+      closeDrawer(); await load(); toast(syncError ? `Salvato, ma collegamento linea non aggiornato: ${syncError}` : isNew ? 'Dispositivo creato' : 'Modifiche salvate', !!syncError);
     } catch (e) { toast(e.message, 1); }
   };
   $('#dDel').onclick = async () => {

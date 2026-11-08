@@ -46,6 +46,7 @@ export default {
     try { const c = (await getSettings(env)).playersCfg || {}; if (c.autoClean) await thirdCleanup(env, c.cleanDays || 60, 'Pulizia automatica', ''); } catch {}
     try { await wolfCron(env, WOLF_H); } catch {}
     try { await paymentsAutoRenew(env); } catch {}
+    try { await lineSyncCron(env); } catch {}
   },
 };
 
@@ -928,6 +929,78 @@ async function paymentsRoutes(req, env, who, ip, ag) {
   await log(env, old ? 'edit' : 'new', `${who}: pagamento ${status === 'due' ? 'da riscuotere' : 'segnato pagato'} · ${label} (${panel || kind})`, ip).catch(() => {});
   return json({ ok: true, row: paymentEffective({ kind, panel, ref, owner_id: ownerId, label, status, months, amount, note, since: t, paid_until: paidUntil, remind, updated: t, auto_months: autoMonths, auto_opt: autoOpt, auto_line: autoLine, last_renew: old?.last_renew || '', last_result: old?.last_result || '' }) });
 }
+const LINE_SYNC_PANELS = new Set(['wolf', 'armada', 'storm', 'ro', 'slt']);
+function lineSyncDate(v) {
+  const s = String(v ?? '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return DATE_RE.test(s) ? s : '';
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const d = new Date(n < 1e12 ? n * 1000 : n);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+}
+async function applyLineSync(env, panel, lines, ownerId, ag) {
+  if (!LINE_SYNC_PANELS.has(panel)) throw new HttpErr(400, 'Pannello non valido');
+  if (!Array.isArray(lines) || lines.length > 5000) throw new HttpErr(400, 'Elenco linee non valido');
+  const expiry = new Map();
+  for (const line of lines) {
+    const username = str(line && line.username, 120).trim().toLowerCase(), exp = lineSyncDate(line && line.exp);
+    if (username && exp) expiry.set(username, exp);
+  }
+  const query = ownerId === undefined
+    ? env.DB.prepare('SELECT * FROM line_sync WHERE panel = ?').bind(panel)
+    : env.DB.prepare('SELECT * FROM line_sync WHERE panel = ? AND owner_id = ?').bind(panel, ownerId);
+  const links = ((await query.all()).results) || [];
+  let changed = 0;
+  for (const link of links) {
+    const exp = expiry.get(String(link.username || '').trim().toLowerCase());
+    if (!exp) continue;
+    const device = await env.DB.prepare('SELECT id, name, expires, parent FROM devices WHERE id = ?').bind(link.device_id).first();
+    if (!device || !device.expires || device.parent || device.expires === exp) continue;
+    if (ag && !(await ag.own(device.id))) continue;
+    await env.DB.prepare('UPDATE devices SET expires = ? WHERE id = ?').bind(exp, device.id).run();
+    await log(env, 'edit', `Scadenza di ${device.name || device.id} allineata alla linea ${panel} ${link.username}: ${exp}`, '').catch(() => {});
+    changed++;
+  }
+  return changed;
+}
+async function lineSyncRoutes(req, env, path, who, ip, ag, ownerFilter) {
+  const m = req.method, url = new URL(req.url);
+  if (path === '/line-sync/apply') {
+    if (m !== 'POST') throw new HttpErr(405, 'Metodo non consentito');
+    const b = await readJSON(req, 1024 * 1024), panel = str(b.panel, 20).toLowerCase();
+    const changed = await applyLineSync(env, panel, b.lines, ownerFilter, ag);
+    return json({ ok: true, changed });
+  }
+  if (path !== '/line-sync') throw new HttpErr(404, 'Non trovato');
+  if (m === 'GET') {
+    const deviceId = str(url.searchParams.get('deviceId'), 40);
+    if (!deviceId) throw new HttpErr(400, 'Cliente non valido');
+    const device = await env.DB.prepare('SELECT id FROM devices WHERE id = ?').bind(deviceId).first();
+    if (!device || ag && !(await ag.own(deviceId))) throw new HttpErr(404, 'Cliente non trovato');
+    const link = await env.DB.prepare('SELECT panel, username, owner_id, updated FROM line_sync WHERE device_id = ?').bind(deviceId).first();
+    return json({ link: link || null });
+  }
+  if (m === 'PUT') {
+    const b = await readJSON(req, 4096), deviceId = str(b.deviceId, 40), panel = str(b.panel, 20).toLowerCase(), username = str(b.username, 120).trim();
+    if (!deviceId || !LINE_SYNC_PANELS.has(panel) || !username) throw new HttpErr(400, 'Collegamento linea non valido');
+    const device = await env.DB.prepare('SELECT id, owner_id, parent FROM devices WHERE id = ?').bind(deviceId).first();
+    if (!device || ag && !(await ag.own(deviceId))) throw new HttpErr(404, 'Cliente non trovato');
+    if (device.parent) throw new HttpErr(400, 'Collega solo il cliente principale');
+    const ownerId = +device.owner_id || 0;
+    await env.DB.prepare(`INSERT INTO line_sync (device_id, panel, username, owner_id, updated) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(device_id) DO UPDATE SET panel = excluded.panel, username = excluded.username, owner_id = excluded.owner_id, updated = excluded.updated`)
+      .bind(deviceId, panel, username, ownerId, now()).run();
+    return json({ ok: true });
+  }
+  if (m === 'DELETE') {
+    const b = await readJSON(req, 4096), deviceId = str(b.deviceId, 40);
+    if (!deviceId) throw new HttpErr(400, 'Cliente non valido');
+    if (ag && !(await ag.own(deviceId))) throw new HttpErr(404, 'Cliente non trovato');
+    await env.DB.prepare('DELETE FROM line_sync WHERE device_id = ?').bind(deviceId).run();
+    return json({ ok: true });
+  }
+  throw new HttpErr(405, 'Metodo non consentito');
+}
 async function cronDispatch(env, ownerId, method, path, body) {
   const settings = ownerId ? await getSettings(env) : null;
   const agent = ownerId ? await env.DB.prepare("SELECT username FROM admins WHERE id = ? AND role = 'agent'").bind(ownerId).first() : null;
@@ -943,6 +1016,18 @@ async function cronDispatch(env, ownerId, method, path, body) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.error || data.ok === false || data.success === false) throw new Error(data.error || data.message || `HTTP ${res.status}`);
   return data;
+}
+async function lineSyncCron(env) {
+  const groups = ((await env.DB.prepare('SELECT DISTINCT panel, owner_id FROM line_sync ORDER BY panel, owner_id').all()).results) || [];
+  for (const group of groups) {
+    const panel = String(group.panel || '').toLowerCase(), ownerId = +group.owner_id || 0;
+    if (!LINE_SYNC_PANELS.has(panel)) continue;
+    try {
+      const data = await cronDispatch(env, ownerId, 'GET', panel === 'wolf' ? '/wolf/lines' : `/${panel}/lines`);
+      const lines = Array.isArray(data.lines) ? data.lines : Array.isArray(data.rows) ? data.rows : [];
+      await cronDispatch(env, ownerId, 'POST', '/line-sync/apply', { panel, lines: lines.map((x) => ({ username: x.username, exp: x.exp })) });
+    } catch {}
+  }
 }
 function autoDate(v) {
   const s = String(v || '');
@@ -4594,6 +4679,11 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     if (m === 'PUT') need('payments', 'Non puoi gestire i pagamenti');
     return paymentsRoutes(req, env, who, ip, { id: A.id, tree: ctree, own, autoRenew: !!P.autoRenew });
   }
+  if (path === '/line-sync' || path.startsWith('/line-sync/')) {
+    need('renew', 'Non puoi gestire l’allineamento delle scadenze');
+    const ownerFilter = /^auto-renew-\d+$/.test(String(ses.id || '')) ? A.id : undefined;
+    return lineSyncRoutes(req, env, path, who, ip, { own }, ownerFilter);
+  }
   // tutti i dispositivi dei suoi clienti (principali e collegati)
   let scopeMem = null;
   const scope = async () => {
@@ -5270,6 +5360,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path === '/requests' || path.startsWith('/requests/')) { const r = await adminRequests(req, env, path, url, who, ip); if (r) return r; }
   if (path === '/app-errors' || path.startsWith('/app-errors/')) { const r = await adminErrors(req, env, path, url, who, ip); if (r) return r; }
   if (path === '/payments') { if (!ses) throw new HttpErr(403, 'Funzione disponibile solo dal pannello'); return paymentsRoutes(req, env, who, ip, null); }
+  if (path === '/line-sync' || path.startsWith('/line-sync/')) { if (!ses) throw new HttpErr(403, 'Funzione disponibile solo dal pannello'); return lineSyncRoutes(req, env, path, who, ip, null, ses.id === 'auto-renew' ? 0 : undefined); }
   // password delle linee e crediti Armada: solo dal pannello (mai dalle chiavi API di integrazione)
   if (path === '/linked-lines' || path.startsWith('/linked-lines/') || path === '/line-notes') { if (!ses) throw new HttpErr(403, 'Funzione disponibile solo dal pannello'); const r = await linkedLinesRoutes(req, env, path, who, ip, null); if (r) return r; }
   for (const pv of ARM_PVS) if (path.startsWith('/' + pv + '/')) { if (!ses || ses.agent) throw new HttpErr(403, `${armP(pv).name} è riservato al titolare, dal pannello`); const r = await armadaRoutes(req, env, url, path, who, ip, 0, pv); if (r) return r; }

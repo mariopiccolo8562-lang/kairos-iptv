@@ -43,10 +43,10 @@
   const m3u = (l) => { const h = (W.data && W.data.dns) || l.dns; return h ? `${h}/get.php?username=${encodeURIComponent(l.username)}&password=${encodeURIComponent(l.password)}&type=m3u_plus&output=ts` : ''; };
 
   async function loadCfg() { try { W.cfg = await api('GET', '/admin/wolf/config'); W.err = ''; } catch (e) { W.cfg = { set: false }; W.err = e.message; } }
-  async function loadLines(fresh) {
+  async function loadLines(fresh, afterRenew = false) {
     if (!W.cfg || !W.cfg.set) return;
     W.busy = true; render();
-    try { W.data = await api('GET', '/admin/wolf/lines' + (fresh ? '?fresh=1' : '')); W.err = ''; if (W.data.synced) toast(`${W.data.synced} playlist aggiornate da WOLF`); }
+    try { W.data = await api('GET', '/admin/wolf/lines' + (fresh ? '?fresh=1' : '')); W.err = ''; if (W.data.synced) toast(`${W.data.synced} playlist aggiornate da WOLF`); if (window.KXLineSync) KXLineSync.apply('wolf', W.data.lines || W.data.rows, afterRenew, api); }
     catch (e) { W.err = e.message; }
     W.busy = false; show();
   }
@@ -122,7 +122,7 @@
             <div><span class="k">Scadenza</span>${fmtD(l.exp)}<br><small class="mut">${left(l.exp)}</small>${window.KXPay ? KXPay.badge('line', 'wolf', l.id) : ''}</div>
             <div><span class="k">Stato</span>${window.KXOnline ? KXOnline.dot({ on: l.conns > 0, conns: l.conns, max: l.max }) + (l.conns > 0 && l.watching ? `<small class="mut" title="Sta guardando"> ▶ ${esc(l.watching)}</small>` : '') + '<br>' : ''}${status(l)}${l.trial ? '<span class="wf-tag g">Prova</span>' : ''}<br><small class="mut">${l.conns}/${l.max || '?'} conn.</small></div>
             <div><span class="k">Nota / cliente KAIROS</span><div class="mono">${esc(l.note) || '<span class="mut">—</span>'}</div>${k ? `<span class="wf-tag">↔ ${esc(k.name)}</span>` : ''}${l.owner && l.owner !== W.cfg.user ? `<span class="wf-tag g" title="Reseller">${esc(l.owner)}</span>` : ''}</div>
-            <div class="wf-act"><button class="btn sm" data-a="edit">Modifica</button><button class="btn sm" data-a="ext">Rinnova</button>${window.KXPay && KXPay.canEdit() ? `<button class="btn sm" data-kxpay-open data-kind="line" data-panel="wolf" data-ref="${esc(l.id)}" data-label="${esc(l.username)}" data-owner="${+l.ownerId || 0}" data-auto-line="${esc(l.id)}">💰 Pagamento</button>` : ''}${isAg() ? '' : `<button class="btn sm" data-a="link">${k ? 'Cliente' : 'Collega cliente'}</button>`}<button class="btn sm" data-a="m3u">M3U</button>${window.KXMxpNew ? '<button class="btn sm" data-a="mxp" title="Crea il cliente su MaxPlayer con questa linea">MaxPlayer</button>' : ''}${window.KXOxpNew ? '<button class="btn sm" data-a="oxp" title="Aggiungi questa linea a un dispositivo OrbixPlay">OrbixPlay</button>' : ''}${window.KXOrcpNew ? '<button class="btn sm" data-a="orcp" title="Segna la linea per l\'app e prepara il messaggio al cliente">' + esc(KXOrcpName()) + '</button>' : ''}<button class="btn sm ghost" data-a="tgl">${l.enabled ? 'Disattiva' : 'Attiva'}</button><button class="btn sm ghost" data-a="del" style="color:#ff8f8f">Elimina</button></div></div>`;
+            <div class="wf-act"><button class="btn sm act-edit" data-a="edit">Modifica</button><button class="btn sm act-renew" data-a="ext">Rinnova</button>${window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="wolf" data-ref="${esc(l.id)}" data-label="${esc(l.username)}" data-owner="${+l.ownerId || 0}" data-auto-line="${esc(l.id)}">💰 Pagamento</button>` : ''}${isAg() ? '' : `<button class="btn sm" data-a="link">${k ? 'Cliente' : 'Collega cliente'}</button>`}<button class="btn sm act-m3u" data-a="m3u">M3U</button>${window.KXMxpNew ? '<button class="btn sm act-mxp" data-a="mxp" title="Crea il cliente su MaxPlayer con questa linea">MaxPlayer</button>' : ''}${window.KXOxpNew ? '<button class="btn sm act-oxp" data-a="oxp" title="Aggiungi questa linea a un dispositivo OrbixPlay">OrbixPlay</button>' : ''}${window.KXOrcpNew ? '<button class="btn sm act-orcp" data-a="orcp" title="Segna la linea per l\'app e prepara il messaggio al cliente">' + esc(KXOrcpName()) + '</button>' : ''}<button class="btn sm ghost act-toggle ${l.enabled ? '' : 'act-toggle-on'}" data-a="tgl">${l.enabled ? 'Disattiva' : 'Attiva'}</button><button class="btn sm act-delete" data-a="del">Elimina</button></div></div>`;
         }).join('')}</div>
         ${list.length > shown.length ? `<div style="margin-top:10px"><button class="btn sm" id="wfMore">Mostra altre ${Math.min(100, list.length - shown.length)}</button></div>` : ''}</div>`}`;
     bindCfg();
@@ -170,7 +170,7 @@
     const pkg = $('#wbK').value, c = cost();
     if (cr !== null && c > cr) return toast(`Servono ${c} crediti, ne hai ${cr}`, 1);
     await KXTools.run(S, (l) => api('POST', `/admin/wolf/lines/${l.id}/extend`, { package: pkg }), 'Rinnovo');
-    W.sel.clear(); loadLines(true);
+    W.sel.clear(); loadLines(true, true);
   }
   async function bulkTgl(on) {
     const S = selOf().filter((l) => !!l.enabled !== on);
@@ -308,7 +308,7 @@
         const pkg = $('#wxK').value, note = $('#wxN').value.trim();
         const r = await api('POST', `/admin/wolf/lines/${id}/extend`, { package: pkg });
         if (note !== String(l.note || '').trim()) await api('PUT', '/admin/wolf/lines/' + id, { note }).catch((e) => toast('Rinnovata, ma la nota non è stata salvata: ' + e.message, 1));
-        toast('Linea rinnovata su WOLF'); if (due) await KXPay.saveDue('line', 'wolf', id, l.username, +l.ownerId || +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Rinnovo riuscito, ma pagamento non registrato: ' + e.message, 1)); return loadLines(true);
+        toast('Linea rinnovata su WOLF'); if (due) await KXPay.saveDue('line', 'wolf', id, l.username, +l.ownerId || +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Rinnovo riuscito, ma pagamento non registrato: ' + e.message, 1)); return loadLines(true, true);
       }
       if (a === 'link') {
         const k = linkOf(id);
