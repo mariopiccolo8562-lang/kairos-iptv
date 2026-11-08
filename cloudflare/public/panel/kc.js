@@ -172,6 +172,7 @@
 .kc-det-box{position:relative;width:100%;max-width:880px;background:var(--card,#141821);border:1px solid var(--line,#2a2f3a);border-radius:16px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6)}
 .kc-det-head{display:flex;gap:18px;align-items:flex-end;padding:26px;background-size:cover;background-position:center;min-height:120px}.kc-det-head img{width:120px;aspect-ratio:2/3;object-fit:cover;border-radius:10px;flex:none;box-shadow:0 8px 24px rgba(0,0,0,.5)}
 .kc-det-body{padding:18px 26px 8px}.kc-plot{font-size:14px;line-height:1.55;margin:0 0 14px}.kc-det-row{display:flex;gap:12px;font-size:13px;margin-bottom:9px;align-items:flex-start}.kc-det-row .k{color:var(--mut);min-width:64px;flex:none;padding-top:2px}
+.kc-check-head{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line,#2a2f3a)}.kc-check-body{padding:16px 20px 20px}.kc-check-top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}.kc-check-table-wrap{max-height:68vh;overflow:auto}.kc-check-table{border-collapse:collapse;width:100%;min-width:620px;font-size:13px}.kc-check-table th,.kc-check-table td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line,#2a2f3a)}.kc-check-table tbody tr[data-src]{cursor:pointer}.kc-check-table tbody tr[data-src]:hover{background:rgba(255,255,255,.05)}
 .kc-chip{display:inline-block;padding:2px 9px;border-radius:999px;background:rgba(255,255,255,.07);font-size:12px;margin:0 5px 5px 0}.kc-chip.live{background:rgba(45,212,191,.18);color:#2dd4bf;margin-left:8px}
 .kc-seasons{display:flex;gap:6px;flex-wrap:wrap;padding:6px 26px 12px}.kc-eps{padding:0 26px 22px;display:grid;gap:10px}.kc-ep{display:flex;gap:12px;align-items:flex-start;font-size:13.5px}.kc-ep img{width:150px;aspect-ratio:16/9;object-fit:cover;border-radius:8px;flex:none}.kc-ep-n{width:150px;aspect-ratio:16/9;flex:none;border-radius:8px;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--mut)}.kc-ep small{display:block;margin-top:2px}.kc-ep p{margin:6px 0 0;color:var(--mut);font-size:12.5px;line-height:1.45}
 .kc-epg{padding:10px 26px 24px;display:grid;gap:8px}.kc-epg-i{display:flex;gap:14px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.03);font-size:13.5px}.kc-epg-i.on{background:rgba(45,212,191,.08);border:1px solid rgba(45,212,191,.3)}.kc-epg-i .t{min-width:58px;font-weight:700;flex:none}.kc-epg-i .t small{display:block;font-weight:400;color:var(--mut);font-size:11px}.kc-epg-i p{margin:5px 0 0;color:var(--mut);font-size:12.5px;line-height:1.45}
@@ -648,20 +649,80 @@
     if (!KC.srcs.length) { V.innerHTML = '<div class="card glass"><p class="mut">La videoteca legge film e serie dai server Xtream assegnati ai tuoi clienti: assegna almeno una playlist Xtream per vederla qui.</p></div>'; return; }
     V.innerHTML = `<div class="card glass"><div class="hd" style="flex-wrap:wrap;gap:10px"><h3>Videoteca<small>Canali live, film e serie disponibili sul server scelto</small></h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><select class="inp" id="vSrc" style="width:auto;margin:0">${KC.srcs.map((s) => `<option value="${esc(s.key)}" ${s.key === C.src ? 'selected' : ''}>${esc(s.label)} (${s.devices})</option>`).join('')}</select>
+      <button class="btn sm" id="vChk">🩺 Controlla tutte le linee</button>
       <div class="seg" id="vKind"><button data-k="live" class="${C.kind === 'live' ? 'on' : ''}">Canali live</button><button data-k="movies" class="${C.kind === 'movies' ? 'on' : ''}">Film</button><button data-k="series" class="${C.kind === 'series' ? 'on' : ''}">Serie TV</button></div>
       <input class="inp" id="vQ" placeholder="Cerca un titolo…" style="width:220px;margin:0" value="${esc(C.q)}"></div></div>
       <div class="kc-vc"><div class="kc-cats" id="vCats"></div><div><div class="mut" id="vInfo" style="font-size:13px;margin-bottom:10px"></div><div class="kc-vgrid" id="vGrid"></div><div style="display:flex;gap:8px;justify-content:center;margin-top:16px" id="vPg"></div></div></div></div>`;
     $('#vSrc').onchange = (e) => { C.src = e.target.value; C.cat = ''; C.page = 1; vodLoad(); };
+    $('#vChk').onclick = () => vodCheck();
     $$('#vKind [data-k]').forEach((b) => (b.onclick = () => { C.kind = b.dataset.k; C.cat = ''; C.page = 1; $$('#vKind button').forEach((x) => x.classList.toggle('on', x === b)); vodLoad(); }));
     let qt; $('#vQ').oninput = (e) => { clearTimeout(qt); qt = setTimeout(() => { C.q = e.target.value.trim(); C.page = 1; vodLoad(); }, 350); };
     vodLoad();
   }
+  async function vodCheck(fresh = false) {
+    let ov = $('#kcCheck');
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'kcCheck'; ov.className = 'kc-det'; document.body.appendChild(ov);
+      ov.onclick = (e) => { if (e.target === ov || e.target.closest('[data-close]')) ov.classList.remove('on'); };
+    }
+    const render = (body) => {
+      ov.innerHTML = `<div class="kc-det-box"><div class="kc-check-head"><b>🩺 Controlla tutte le linee</b><button class="btn sm" data-close>✕</button></div><div class="kc-check-body">${body}</div></div>`;
+      ov.classList.add('on');
+    };
+    render('<p class="mut">Controllo in corso… (può servire fino a un minuto)</p>');
+    let rows;
+    try {
+      rows = await kapi('GET', `/admin/catalog/check${fresh ? '?fresh=1' : ''}`);
+      if (rows.error) throw new Error(rows.error);
+    } catch (e) {
+      if (!ov.classList.contains('on')) return;
+      render(`<div class="kc-check-top"><span style="color:#ff8f8f">${esc(e.message)}</span><button class="btn sm" id="vChkFresh">Ricontrolla</button></div>`);
+      $('#vChkFresh').onclick = () => { ov.classList.remove('on'); vodCheck(true); };
+      return;
+    }
+    if (!ov.classList.contains('on')) return;
+    const count = (status) => rows.filter((x) => x.status === status).length;
+    const summary = [`${rows.length} linee`, `${count('ok')} attive`, `${count('expired')} scadute`,
+      count('timeout') ? `${count('timeout')} server non risponde` : '',
+      count('down') ? `${count('down')} server non raggiungibile` : '',
+      count('auth') ? `${count('auth')} utente o password errati` : '',
+      count('disabled') ? `${count('disabled')} disattivate` : '',
+      count('http') ? `${count('http')} errori HTTP` : '',
+    ].filter(Boolean).join(' · ');
+    const state = (row) => ({
+      ok: ['Attiva', '#6ee3a6'],
+      expired: ['Scaduta', '#ff8f8f'],
+      disabled: ['Disattivata', '#9aa2ad'],
+      auth: ['Utente o password errati', '#ff8f8f'],
+      timeout: ['Il server non risponde', '#ecc06f'],
+      down: ['Server non raggiungibile', '#ecc06f'],
+      http: [`Errore ${row.code || ''}`.trim(), '#ecc06f'],
+    }[row.status] || ['Server non raggiungibile', '#ecc06f']);
+    const ordered = rows.slice().sort((a, b) => (a.status === 'ok') - (b.status === 'ok') || (a.exp || Number.MAX_SAFE_INTEGER) - (b.exp || Number.MAX_SAFE_INTEGER));
+    const showAgents = D.role === 'owner';
+    render(`<div class="kc-check-top"><b class="kc-check-summary">${esc(summary)}</b><button class="btn sm" id="vChkFresh">Ricontrolla</button></div>
+      <div class="kc-check-table-wrap"><table class="kc-check-table"><thead><tr><th>Linea</th>${showAgents ? '<th>Agente</th>' : ''}<th>Clienti</th><th>Stato</th><th>Scadenza</th></tr></thead><tbody>${ordered.map((x) => {
+        const [label, color] = state(x), exp = x.exp ? new Date(x.exp).toLocaleDateString('it-IT') : '—';
+        return `<tr data-src="${esc(x.key)}"><td>${esc(x.label)}</td>${showAgents ? `<td>${esc((x.agents || []).join(', ') || '—')}</td>` : ''}<td>${+x.devices || 0}</td><td style="color:${color};font-weight:700">${esc(label)}</td><td>${exp}</td></tr>`;
+      }).join('')}</tbody></table></div>`);
+    $('#vChkFresh').onclick = () => { ov.classList.remove('on'); vodCheck(true); };
+    $$('#kcCheck [data-src]').forEach((row) => (row.onclick = () => {
+      KC.cat.src = row.dataset.src; KC.cat.cat = ''; KC.cat.page = 1;
+      if ($('#vSrc')) $('#vSrc').value = KC.cat.src;
+      ov.classList.remove('on'); vodLoad();
+    }));
+  }
   async function vodLoad() {
     const C = KC.cat;
-    $('#vInfo').textContent = 'Caricamento… (la prima volta il server può impiegare qualche secondo)';
+    $('#vInfo').textContent = 'Caricamento… (la prima volta può servire fino a un minuto)';
+    const vodError = (message) => {
+      $('#vCats').innerHTML = ''; $('#vGrid').innerHTML = ''; $('#vPg').innerHTML = '';
+      $('#vInfo').innerHTML = `${esc(message)} <button class="btn sm" id="vRetry">Riprova</button>`;
+      $('#vRetry').onclick = () => vodLoad();
+    };
     let r;
-    try { r = await kapi('GET', `/admin/catalog?src=${encodeURIComponent(C.src)}&kind=${C.kind}&cat=${encodeURIComponent(C.cat)}&q=${encodeURIComponent(C.q)}&page=${C.page}`); } catch (e) { $('#vInfo').textContent = e.message; $('#vGrid').innerHTML = ''; return; }
-    if (r.error) { $('#vInfo').textContent = r.error; return; }
+    try { r = await kapi('GET', `/admin/catalog?src=${encodeURIComponent(C.src)}&kind=${C.kind}&cat=${encodeURIComponent(C.cat)}&q=${encodeURIComponent(C.q)}&page=${C.page}`); } catch (e) { vodError(e.message); return; }
+    if (r.error) { vodError(r.error); return; }
     $('#vCats').innerHTML = `<button class="${!C.cat ? 'on' : ''}" data-c="">Tutte<small>${r.cats.reduce((a, c) => a + c.n, 0)}</small></button>` + r.cats.map((c) => `<button class="${C.cat === c.id ? 'on' : ''}" data-c="${esc(c.id)}">${esc(c.name)}<small>${c.n}</small></button>`).join('');
     $$('#vCats [data-c]').forEach((b) => (b.onclick = () => { C.cat = b.dataset.c; C.page = 1; vodLoad(); }));
     $('#vInfo').textContent = `${r.total.toLocaleString('it-IT')} ${C.kind === 'series' ? 'serie' : C.kind === 'live' ? 'canali' : 'film'}${C.q ? ' per «' + C.q + '»' : ''} · pagina ${r.page} di ${r.pages}`;
