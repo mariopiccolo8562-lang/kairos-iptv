@@ -4787,7 +4787,9 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     return paymentsRoutes(req, env, who, ip, { id: A.id, tree: ctree, own, autoRenew: !!P.autoRenew });
   }
   if (path === '/line-sync' || path.startsWith('/line-sync/')) {
-    need('renew', 'Non puoi gestire l’allineamento delle scadenze');
+    if (m === 'PUT') {
+      if (!P.create && !P.renew) throw new HttpErr(403, 'Non puoi gestire l’allineamento delle scadenze');
+    } else need('renew', 'Non puoi gestire l’allineamento delle scadenze');
     const ownerFilter = /^auto-renew-\d+$/.test(String(ses.id || '')) ? A.id : undefined;
     return lineSyncRoutes(req, env, path, who, ip, { own }, ownerFilter);
   }
