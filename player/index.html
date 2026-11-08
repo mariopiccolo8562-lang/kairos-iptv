@@ -663,15 +663,16 @@ img{display:block}
 .tnav .tann{max-width:28vw;overflow:hidden;white-space:nowrap;color:#bbb;font-size:13px}
 .tnav .tann .mq{display:inline-block;padding-left:100%;animation:mq 26s linear infinite}
 @media (max-width:1100px){.tnav .tann{display:none}}
-/* barra in alto che non ci sta (testi grandi, tante icone, TV con schermo «stretto»): si stringe a gradini (navFit), mai elementi sovrapposti */
+/* barra in alto che non ci sta (testi grandi, tante icone, TV con schermo «stretto»): si stringe a gradini (navFit), mai elementi sovrapposti.
+   Data, ora e scadenza in alto a sinistra restano sempre (sulle TV): si stringe tutto il resto */
 .tnav.n1{gap:clamp(8px,1vw,16px)}.tnav.n1 .ttabs{gap:2px}.tnav.n1 .ticons{gap:3px}
 .tnav.n1 .ttabs .tt{padding-left:clamp(8px,1vw,14px);padding-right:clamp(8px,1vw,14px)}
 .tnav.n1 .texp .texd,.tnav.n1 .tt.tpl span{display:none!important}
-.tnav.n2 .tdate{display:none}.tnav.n2 .ticons{gap:2px;padding:3px}
+.tnav.n2 .ticons{gap:2px;padding:3px}
 .tnav.n2 .ti{width:clamp(34px,5.4vh,48px);height:clamp(34px,5.4vh,48px)}
 .tnav.n3 .ttabs .tt{font-size:calc(clamp(15px,2.7vh,25px) * var(--ts,1) * .86);padding-left:clamp(6px,.8vw,10px);padding-right:clamp(6px,.8vw,10px)}
 .tnav.n3 .tlogo{width:clamp(30px,5vh,46px);height:clamp(30px,5vh,46px)}
-.tnav.n4 .tmeta{display:none}.tnav.n4 .ttabs .tt{font-size:calc(clamp(15px,2.7vh,25px) * var(--ts,1) * .74);padding-left:6px;padding-right:6px}
+.tnav.n4 .tdate{font-size:clamp(11px,1.8vh,16px)}.tnav.n4 .texp{font-size:clamp(9px,1.4vh,12px)}.tnav.n4 .ttabs .tt{font-size:calc(clamp(15px,2.7vh,25px) * var(--ts,1) * .74);padding-left:6px;padding-right:6px}
 .tnav.n4 .ti{width:clamp(30px,4.8vh,40px);height:clamp(30px,4.8vh,40px)}
 .tnav.n5 .ttabs{justify-content:flex-start;overflow-x:auto;scrollbar-width:none}.tnav.n5 .ttabs::-webkit-scrollbar{display:none}
 #guide{padding-top:calc(var(--navh) + 2px)!important;padding-left:var(--padx)!important;padding-right:var(--padx)!important;padding-bottom:12px!important}
