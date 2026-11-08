@@ -102,11 +102,22 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 #agPage .ab{flex:1;overflow:auto;padding:22px 28px}
 #agPage .af{display:flex;gap:10px;padding:14px 28px;border-top:1px solid var(--line);background:var(--pane)}
 /* «Attiva un cliente Kairos»: tre passi in fila, ognuno si accende di verde quando è a posto */
-.wz{max-width:780px;margin:0 auto;display:grid;gap:14px}
+.wz{max-width:900px;margin:0 auto;display:grid;gap:14px}
 .wz-s{background:var(--glass);border:1px solid var(--line);border-radius:14px;padding:18px 20px;display:grid;grid-template-columns:40px minmax(0,1fr);column-gap:14px}
 .wz-s .n{grid-row:1/span 9;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:15px;background:rgba(255,255,255,.06);border:1px solid var(--line)}
 .wz-s.ok{border-color:color-mix(in srgb,var(--ok) 45%,transparent)}.wz-s.ok .n{background:var(--ok);color:#06120b;border-color:transparent}
 .wz-s h4{margin:5px 0 2px;font-size:16px}.wz-s .hint{color:var(--mut);font-size:13px;margin:0 0 12px;line-height:1.45}
+.wz-targets{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px;margin:4px 0 12px}
+.wz-target{display:flex;align-items:center;gap:10px;padding:13px 15px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.025);color:var(--txt,#eef1f8);font:inherit;font-weight:750;text-align:left;cursor:pointer}
+.wz-target i{display:grid;place-items:center;width:22px;height:22px;border:1px solid var(--line);border-radius:7px;font-style:normal;color:transparent}
+.wz-target.on{border-color:var(--a1);background:color-mix(in srgb,var(--a1) 14%,transparent)}
+.wz-target.on i{background:var(--a1);border-color:var(--a1);color:#fff}
+.wz-target:focus-visible{outline:2px solid var(--a1);outline-offset:2px}
+.wz-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.wz-fields .inp{margin:0}
+.wz-apps{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 0}
+.wz-apps button{padding:8px 11px;border-radius:999px;font-size:12.5px}
+.wz-apps button.on{background:var(--a1);border-color:var(--a1);color:#fff}
+.wz-help{font-size:12.5px;color:var(--mut);line-height:1.45;margin:6px 0 0}
 .wz-code{font:700 26px/1.1 ui-monospace,SFMono-Regular,Menlo,monospace!important;letter-spacing:.14em;text-transform:uppercase;padding:14px 16px!important;width:100%;max-width:330px;margin:0!important}
 .wz-st{margin-top:10px;font-size:13.5px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);line-height:1.45}
 .wz-st.good{border-color:color-mix(in srgb,var(--ok) 55%,transparent);background:color-mix(in srgb,var(--ok) 10%,transparent)}
@@ -116,11 +127,17 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 .wz-dur{display:flex;gap:8px;flex-wrap:wrap}.wz-dur button{min-width:100px;padding:12px 14px;font-size:15px;font-weight:700}
 .wz-dur button.on{background:var(--a1);border-color:var(--a1);color:#fff}
 .wz-exp{margin-top:10px;font-size:13.5px;color:var(--mut)}.wz-exp b{color:var(--txt,#eef1f8)}#wzExpOther{color:var(--a1);text-decoration:underline}
-.wz-more{margin-top:12px}.wz-more summary{cursor:pointer;color:var(--mut);font-size:13px}.wz-more .row{margin-top:8px}
 .wz-miss{font-size:12.5px;color:var(--mut);align-self:center}
-.wz-done{text-align:center;padding:34px 20px}.wz-done .big{font-size:46px;line-height:1}.wz-done h3{font-size:22px;margin:12px 0 6px}
-.wz-done p{color:var(--mut);font-size:14px;margin:4px 0}.wz-done .acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:18px}
-@media (max-width:700px){.wz-pl{grid-template-columns:1fr}}
+.wz-full{display:inline-block;margin-top:2px;color:var(--mut);font-size:12.5px}
+.wz-results{display:grid;gap:9px}
+.wz-result{display:flex;align-items:flex-start;gap:10px;padding:11px 13px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.025)}
+.wz-result.ok{border-color:color-mix(in srgb,var(--ok) 42%,var(--line))}
+.wz-result.ko{border-color:color-mix(in srgb,var(--bad) 48%,var(--line))}
+.wz-result i{display:grid;place-items:center;flex:none;width:25px;height:25px;border-radius:50%;background:rgba(255,255,255,.08);font-style:normal;font-weight:800}
+.wz-result.ok i{color:var(--ok)}.wz-result.ko i{color:var(--bad)}
+.wz-result div{flex:1;min-width:0}.wz-result small{display:block;color:var(--mut);margin-top:3px;word-break:break-word}
+.wz-summary{margin:12px 0 0;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.04);line-height:1.5}
+@media (max-width:700px){.wz-pl,.wz-fields{grid-template-columns:1fr}.wz-s{grid-template-columns:30px minmax(0,1fr);padding:15px 13px}.wz-s .n{width:28px;height:28px}}
 .ag-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px;align-items:start}
 .ag-c{background:var(--glass);border:1px solid var(--line);border-radius:10px;padding:18px}
 .ag-c h4{font-size:14px;font-weight:600;margin-bottom:2px}.ag-c>small{display:block;color:var(--mut);font-size:12.5px;margin-bottom:12px}
@@ -890,92 +907,135 @@ body.agent .foot{display:none}
     };
     page.classList.add('on'); $('#agB').scrollTop = 0;
   }
-  /* «Attiva un cliente Kairos» per gli agenti: tre passi chiari al posto del modulo completo.
-     1) codice della TV (controllato subito: TV trovata, app e modello), 2) linea (incolla o scrivi),
-     3) durata; le altre opzioni restano chiuse in fondo. Alla fine dice cosa succede sulla TV. */
   function openWizard() {
-    const m = me(), P = m.perms || {}, maxC = Math.max(1, P.maxConn || 1);
-    const st = { code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1), pl: { serverId: (D.servers[0] || {}).id || '', username: '', password: '' }, name: '', notes: '', maxConn: 1, busy: false };
+    const agent = isAgent(), P = me().perms || {}, players = () => D.players || {};
+    const servers = Array.isArray(D.servers) ? D.servers : [];
+    const maxC = agent ? Math.max(1, P.maxConn || 1) : 20;
+    const st = {
+      targets: new Set(['kairos']), code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1),
+      pl: { serverId: (servers[0] || {}).id || '', username: '', password: '', host: '', ref: '', note: '' },
+      name: '', maxConn: 1, mxDomain: '', orbixId: '', oxDns: '0', busy: false, running: '', results: [],
+    };
     const linePanels = ['wolf', 'armada', 'storm', 'ro', 'slt'];
-    const canLoadLines = !!window.KXLinePick && (!isAgent() || linePanels.some((k) => !!P[k]));
-    const showLinePick = canLoadLines && (D.servers || []).length > 0;
-    let pickLines = [], pickLoaded = !canLoadLines, drawPick = () => {};
-    if (canLoadLines) window.KXLinePick.load().then((items) => {
-      pickLines = items || []; pickLoaded = true;
-      const list = $('#wzFindL'); drawPick(!!(list && list.classList.contains('on')));
-    }).catch(() => {
-      pickLines = []; pickLoaded = true;
-      const list = $('#wzFindL'); drawPick(!!(list && list.classList.contains('on')));
-    });
+    const canLoadLines = !!window.KXLinePick && (!agent || linePanels.some((k) => !!P[k]));
+    const showMax = !agent || (!!players().max && can('players'));
+    const showOrbix = !agent || (!!players().orbix && can('players'));
+    const showLinePick = canLoadLines;
+    const APPS_W = [['tv', 'Kairos Pro'], ['prem', 'Kairos Premium'], ['ktv', 'Kairos TV'], ['plus', 'Kairos Plus'], ['xc', 'Kairos XC'], ['lite', 'Kairos Lite'], ['nova', 'Kairos Nova']];
+    const TARGETS = [['kairos', 'App Kairos'], ['max', 'MaxPlayer'], ['orbix', 'OrbixPlay']];
+    const targetNames = { kairos: 'App Kairos', max: 'MaxPlayer', orbix: 'OrbixPlay' };
+    const orbDns = (players().dns && players().dns.orbix) || [];
+    let pickLines = [], pickLoaded = !canLoadLines, mxDomains = null, mxError = '', mxLoading = showMax, dnsSaved = [], alive = true, drawPick = () => {};
     let lkT = 0, lkN = 0;
-    const fmtCode = (v) => { let c = String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); return c.length > 4 ? c.slice(0, 4) + '-' + c.slice(4) : c; };
+    const has = (k) => st.targets.has(k);
+    const fmtCode = (v) => { let c = String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); if (c.length === 6 && !c.startsWith('KX')) c = 'KX' + c; return c.length > 4 ? c.slice(0, 4) + '-' + c.slice(4) : c; };
     const okCode = () => /^KX[A-Z0-9]{2}-[A-Z0-9]{4}$/.test(st.code);
-    const codeOk = () => okCode() && st.look && !st.look.taken && !st.look.mine && st.look.ok !== false;
-    const lineOk = () => !!(st.pl.serverId && st.pl.username.trim() && st.pl.password);
+    const codeOk = () => !has('kairos') || (okCode() && st.look && !st.look.taken && !st.look.mine && st.look.ok !== false);
+    const lineCredentialsOk = () => !!(st.pl.username.trim() && st.pl.password);
+    const lineOk = () => lineCredentialsOk() && (!has('kairos') || (agent ? !!st.pl.serverId : !!st.pl.host.trim()));
+    const targetsOk = () => st.targets.size > 0 &&
+      (!has('kairos') || codeOk()) &&
+      (!has('max') || (!mxLoading && (mxDomains && mxDomains.length ? !!st.mxDomain : !!mxError))) &&
+      (!has('orbix') || (!!String(st.orbixId || '').trim() && !!orbDns.length && !!orbDns[+st.oxDns]));
     const ago = (t) => { if (!t) return ''; const s = Math.max(0, (Date.now() - t) / 1000); return s < 90 ? 'adesso' : s < 3600 ? Math.round(s / 60) + ' min fa' : s < 86400 ? Math.round(s / 3600) + ' ore fa' : Math.round(s / 86400) + ' giorni fa'; };
     const dateIt = (iso) => { try { return new Date(iso + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return iso; } };
-    const APPS_W = [['tv', 'Kairos Pro'], ['prem', 'Kairos Premium'], ['ktv', 'Kairos TV'], ['plus', 'Kairos Plus'], ['xc', 'Kairos XC'], ['lite', 'Kairos Lite'], ['nova', 'Kairos Nova']];
     const codeStatus = () => {
+      if (!has('kairos')) return '';
       const L = st.look;
-      if (!st.code) return '';
-      if (!okCode()) return st.code.replace('-', '').length >= 8 ? '<div class="wz-st bad">Il codice è come <b>KXAB-12CD</b>: comincia con KX, poi 6 lettere o cifre.</div>' : '';
+      if (!st.code) return '<div class="wz-help">Il codice è sulla schermata che il cliente vede sull’app Kairos.</div>';
+      if (!okCode()) return '<div class="wz-st bad">Il codice è come <b>KXAB-12CD</b>: KX seguito da altre 6 lettere o cifre.</div>';
       if (!L) return '<div class="wz-st">Controllo il codice…</div>';
       if (L.ok === false) return `<div class="wz-st bad">${esc(L.error || 'Codice non valido')}</div>`;
-      if (L.taken) return '<div class="wz-st bad">Questo codice è già usato da un altro venditore. Controlla di averlo scritto bene: lo leggi sulla TV.</div>';
-      if (L.mine) return `<div class="wz-st warn">Questa TV è già un tuo cliente${L.name ? ` (<b>${esc(L.name)}</b>)` : ''}. Per cambiarla aprila dall'elenco Clienti. <button class="btn sm" data-wzopen="${esc(L.id)}" style="margin-left:6px">Apri il cliente</button></div>`;
-      if (L.free) return `<div class="wz-st good">✓ TV trovata: <b>${esc(L.appName)}</b>${L.model ? ` su <b>${esc(L.model)}</b>` : ''}${L.seen ? ` · aperta ${esc(ago(L.seen))}` : ''}. Ora la linea.</div>`;
-      return '<div class="wz-st warn">Non trovo questa TV. Controlla il codice sulla schermata di attivazione dell\'app Kairos (l\'app deve essere aperta). Se sei sicuro del codice puoi attivarla lo stesso: si sblocca quando l\'app si collega.</div>';
+      if (L.taken) return '<div class="wz-st bad">Questo codice è già usato da un altro venditore. Controlla quello nella foto.</div>';
+      if (L.mine) return `<div class="wz-st warn">Questa TV è già un tuo cliente${L.name ? ` (<b>${esc(L.name)}</b>)` : ''}. Per cambiarla aprila dall’elenco Clienti. <button class="btn sm" data-wzopen="${esc(L.id)}" style="margin-left:6px">Apri il cliente</button></div>`;
+      if (L.free) return `<div class="wz-st good">✓ TV trovata: <b>${esc(L.appName || 'Kairos')}</b>${L.model ? ` su <b>${esc(L.model)}</b>` : ''}${L.seen ? ` · aperta ${esc(ago(L.seen))}` : ''}. Ora scegli la linea.</div>`;
+      return '<div class="wz-st warn">Non trovo questa TV. Controlla il codice mentre l’app è aperta. Se sei sicuro che sia corretto, puoi attivarla lo stesso: si sbloccherà quando l’app si collega.</div>';
     };
-    const body = () => `<div class="wz">
-      <div class="wz-s ${codeOk() ? 'ok' : ''}" id="wzS1"><span class="n">${codeOk() ? '✓' : '1'}</span><h4>Codice della TV</h4>
-        <p class="hint">Lo vedi sulla TV quando il cliente apre l'app Kairos appena installata (schermata di attivazione). Basta scriverlo: maiuscole e trattino li metto io.</p>
-        <input class="inp wz-code" id="wzCode" placeholder="KXAB-12CD" maxlength="9" autocomplete="off" spellcheck="false" value="${esc(st.code)}">
-        <div id="wzCodeSt">${codeStatus()}</div></div>
-      <div class="wz-s ${lineOk() ? 'ok' : ''}" id="wzS2"><span class="n">${lineOk() ? '✓' : '2'}</span><h4>Linea del cliente</h4>
-        <p class="hint">La linea del tuo pannello IPTV. Il modo più veloce: incolla il link M3U o il messaggio con server, utente e password, il resto lo compilo io.</p>
-        ${D.servers.length ? `${showLinePick ? '<div class="wz-fp-wrap"><input class="inp" id="wzFind" placeholder="🔎 Cerca una linea già creata (utente o nota)" autocomplete="off"><div id="wzFindL"></div></div>' : ''}
-        ${window.KXPaste ? '<textarea class="inp mono" id="wzPaste" rows="2" style="font-size:12.5px" placeholder="📋 Incolla qui la linea (link M3U o messaggio con server, utente e password)"></textarea>' : ''}<div id="wzPasteSt"></div>
-        <div class="wz-pl"><select class="inp" id="wzSrv" title="Server">${D.servers.map((x) => `<option value="${esc(x.id)}" ${st.pl.serverId === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
-          <input class="inp" id="wzUser" placeholder="Utente" autocomplete="off" value="${esc(st.pl.username)}"><input class="inp" id="wzPass" placeholder="Password" autocomplete="off" value="${esc(st.pl.password)}"></div>`
-        : '<div class="wz-st bad">Non hai server assegnati: chiedili a chi ti ha creato.</div>'}</div>
-      <div class="wz-s ok" id="wzS3"><span class="n">✓</span><h4>Durata</h4>
-        <p class="hint">Per quanto tempo il cliente può guardare.</p>
-        <div class="wz-dur">${[1, 3, 6, 12].map((n) => `<button class="btn ${st.months === n ? 'on' : ''}" data-wzm="${n}">${n} ${n === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>
-        <div class="wz-exp">Scade il <b id="wzExpT">${esc(dateIt(st.expires))}</b> · <a href="#" id="wzExpOther">scegli un'altra data</a><input class="inp" type="date" id="wzExp" value="${esc(st.expires)}" style="display:none;max-width:200px;margin:8px 0 0"></div>
-        <label class="lbl" style="margin-top:14px">Nome del cliente <span class="mut">(facoltativo)</span></label><input class="inp" id="wzName" maxlength="60" placeholder="es. Mario Rossi" value="${esc(st.name)}" style="margin:0">
-        <details class="wz-more"><summary>Altre opzioni (connessioni, note, app)</summary>
-          <div class="row"><div><label class="lbl">Connessioni (massimo ${maxC})</label><input class="inp" type="number" id="wzConn" min="1" max="${maxC}" value="${st.maxConn}"></div>
-            <div><label class="lbl">App del cliente</label><select class="inp" id="wzApp">${APPS_W.map(([k, n]) => `<option value="${k}" ${st.app === k ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>
-          <label class="lbl">Note</label><textarea class="inp" id="wzNotes" maxlength="500" placeholder="Pagamento, contatto…">${esc(st.notes)}</textarea>
-        </details></div>
-    </div>`;
-    const missing = () => [!codeOk() ? 'il codice della TV' : '', !lineOk() ? 'la linea' : ''].filter(Boolean);
-    const foot = () => { const mi = missing(), go = $('#wzGo'); if (!go) return; go.disabled = !!mi.length || st.busy; $('#wzMiss').textContent = mi.length ? 'Manca ' + mi.join(' e ') : 'Tutto pronto'; ['wzS1', 'wzS2'].forEach((id, k) => { const el = $('#' + id); const ok = k ? lineOk() : codeOk(); if (el) { el.classList.toggle('ok', ok); el.querySelector('.n').textContent = ok ? '✓' : String(k + 1); } }); };
-    const lookup = () => {
-      clearTimeout(lkT); st.look = null; $('#wzCodeSt').innerHTML = codeStatus(); foot();
+    const missing = () => {
+      const out = [];
+      if (!st.targets.size) return ['scegli almeno un’app'];
+      if (has('kairos') && !codeOk()) out.push(!okCode() ? 'il codice della TV' : st.look && (st.look.taken || st.look.mine) ? 'un codice non ancora attivato' : 'il controllo del codice');
+      if (!lineCredentialsOk()) out.push('la linea (utente e password)');
+      if (has('kairos') && agent && !st.pl.serverId) out.push('il server');
+      if (has('kairos') && !agent && !st.pl.host.trim()) out.push('il DNS della linea');
+      if (has('max') && mxLoading) out.push('il caricamento dei DNS MaxPlayer');
+      if (has('max') && !mxLoading && mxDomains && mxDomains.length && !st.mxDomain) out.push('il DNS MaxPlayer');
+      if (has('max') && !mxLoading && mxDomains && !mxDomains.length && !mxError) out.push('un DNS MaxPlayer configurato');
+      if (has('orbix') && !String(st.orbixId || '').trim()) out.push('il codice dispositivo OrbixPlay');
+      if (has('orbix') && !orbDns.length) out.push('un DNS OrbixPlay configurato');
+      if (has('orbix') && orbDns.length && !orbDns[+st.oxDns]) out.push('il DNS OrbixPlay');
+      return [...new Set(out)];
+    };
+    const syncForm = () => {
+      const get = (id) => $('#' + id);
+      if (get('wzCode')) st.code = get('wzCode').value;
+      if (get('wzApp')) st.app = get('wzApp').value;
+      if (get('wzSrv')) st.pl.serverId = get('wzSrv').value;
+      if (get('wzHost')) st.pl.host = get('wzHost').value;
+      if (get('wzUser')) st.pl.username = get('wzUser').value;
+      if (get('wzPass')) st.pl.password = get('wzPass').value;
+      if (get('wzName')) st.name = get('wzName').value;
+      if (get('wzConn')) st.maxConn = Math.max(1, Math.min(maxC, +get('wzConn').value || 1));
+      if (get('wzMxDom')) st.mxDomain = get('wzMxDom').value;
+      if (get('wzOrbixId')) st.orbixId = get('wzOrbixId').value;
+      if (get('wzOxDns')) st.oxDns = get('wzOxDns').value;
+    };
+    const foot = () => {
+      const mi = missing(), go = $('#wzGo');
+      if (!go) return;
+      go.disabled = !!mi.length || st.busy;
+      const miss = $('#wzMiss');
+      if (miss) miss.textContent = mi.length ? 'Per continuare: ' + mi.join(' · ') : 'Tutto pronto';
+      const s1 = $('#wzS1'), s2 = $('#wzS2');
+      if (s1) { s1.classList.toggle('ok', targetsOk()); s1.querySelector('.n').textContent = targetsOk() ? '✓' : '1'; }
+      if (s2) { s2.classList.toggle('ok', lineOk()); s2.querySelector('.n').textContent = lineOk() ? '✓' : '2'; }
+    };
+    const lookup = (now = false) => {
+      clearTimeout(lkT); st.look = null;
+      const status = $('#wzCodeSt');
+      if (status) status.innerHTML = codeStatus();
+      foot();
       if (!okCode()) return;
-      const n = ++lkN;
-      lkT = setTimeout(async () => {
-        let r; try { r = await api('GET', '/admin/devices/lookup?code=' + encodeURIComponent(st.code)); } catch (e) { r = { ok: false, error: e.message }; }
-        if (n !== lkN) return;
-        st.look = r; if (r && r.free && r.app) { st.app = r.app; const sa = $('#wzApp'); if (sa) sa.value = r.app; }
-        $('#wzCodeSt').innerHTML = codeStatus(); bindOpen(); foot();
-      }, 300);
+      const n = ++lkN, run = async () => {
+        let r;
+        try { r = await api('GET', '/admin/devices/lookup?code=' + encodeURIComponent(st.code)); } catch (e) { r = { ok: false, error: e.message }; }
+        if (n !== lkN || !alive) return;
+        st.look = r;
+        if (r && r.free && r.app) { st.app = r.app; const sa = $('#wzApp'); if (sa) sa.value = r.app; }
+        const s = $('#wzCodeSt'); if (s) s.innerHTML = codeStatus();
+        bindOpen(); foot();
+      };
+      if (now) run(); else lkT = setTimeout(run, 300);
     };
     const bindOpen = () => $$('[data-wzopen]').forEach((b) => (b.onclick = () => { const x = (D.devices || []).find((y) => y.id === b.dataset.wzopen); if (x) openClient(x); }));
     const fillLine = async (r, label) => {
       let sv = null;
-      if (r.host) { try { const mm = await api('POST', '/admin/match-server', { host: r.host }); if (mm && mm.server) sv = D.servers.find((x) => x.id === mm.server.id) || null; } catch {} }
-      if (!sv) { const host = (r.host || '').replace(/^https?:\/\//, '').toLowerCase(); sv = D.servers.find((x) => host && String(x.name).length >= 2 && host.includes(String(x.name).toLowerCase())) || null; }
-      st.pl.username = r.username; st.pl.password = r.password || st.pl.password; if (sv) st.pl.serverId = sv.id;
-      $('#wzUser').value = st.pl.username; $('#wzPass').value = st.pl.password; $('#wzSrv').value = st.pl.serverId;
-      const user = esc(r.username), chosen = label ? `Linea scelta · ${esc(label)} · ` : 'Linea riconosciuta · ';
-      $('#wzPasteSt').innerHTML = sv ? `<div class="wz-st good">✓ ${chosen}server <b>${esc(sv.name)}</b> · utente <b>${user}</b></div>` : `<div class="wz-st warn">✓ Utente <b>${user}</b> inserito · scegli tu il server qui sotto</div>`;
+      if (agent && r.host) {
+        try { const mm = await api('POST', '/admin/match-server', { host: r.host }); if (mm && mm.server) sv = servers.find((x) => x.id === mm.server.id) || null; } catch {}
+        if (!sv) { const host = (r.host || '').replace(/^https?:\/\//, '').toLowerCase(); sv = servers.find((x) => host && String(x.name).length >= 2 && host.includes(String(x.name).toLowerCase())) || null; }
+      }
+      st.pl.username = r.username || '';
+      st.pl.password = r.password || '';
+      st.pl.ref = label || r.tag || 'Linea';
+      st.pl.note = r.note || '';
+      if (agent) { if (sv) st.pl.serverId = sv.id; }
+      else st.pl.host = r.host || '';
+      if (!st.name.trim() && r.note) st.name = r.note.slice(0, 60);
+      if ($('#wzUser')) $('#wzUser').value = st.pl.username;
+      if ($('#wzPass')) $('#wzPass').value = st.pl.password;
+      if ($('#wzSrv')) $('#wzSrv').value = st.pl.serverId;
+      if ($('#wzHost')) $('#wzHost').value = st.pl.host;
+      if ($('#wzName')) $('#wzName').value = st.name;
+      const server = agent ? servers.find((x) => x.id === st.pl.serverId) : null;
+      const where = agent ? server && server.name : st.pl.host;
+      const user = esc(st.pl.username), chosen = label ? `Linea scelta · ${esc(label)} · ` : 'Linea riconosciuta · ';
+      const msg = $('#wzPasteSt');
+      if (msg) msg.innerHTML = where ? `<div class="wz-st good">✓ ${chosen}${agent ? 'server' : 'DNS'} <b>${esc(where)}</b> · utente <b>${user}</b></div>` : `<div class="wz-st warn">✓ Utente <b>${user}</b> inserito · completa i campi ${agent ? 'server' : 'DNS'} qui sotto</div>`;
       foot();
     };
     const pasteGo = async (quiet) => {
-      const r = window.KXPaste && window.KXPaste.parse($('#wzPaste').value);
-      if (!r || !r.username) { if (!quiet) toast('Incolla il link M3U, o utente e password della linea', 1); return; }
+      const paste = $('#wzPaste'), r = window.KXPaste && paste && window.KXPaste.parse(paste.value);
+      if (!r || !r.username) { if (!quiet) toast('Incolla il link M3U o il messaggio con utente e password', 1); return; }
       await fillLine(r, '');
     };
     drawPick = (show) => {
@@ -984,7 +1044,7 @@ body.agent .foot{display:none}
       if (!show) { list.classList.remove('on'); return; }
       list.classList.add('on');
       if (!pickLoaded) { list.innerHTML = '<div class="wz-fp-empty">Carico le tue linee…</div>'; return; }
-      if (!pickLines.length) { list.innerHTML = '<div class="wz-fp-empty">Nessuna linea trovata sui tuoi pannelli</div>'; return; }
+      if (!pickLines.length) { list.innerHTML = '<div class="wz-fp-empty">Nessuna linea trovata sui pannelli disponibili</div>'; return; }
       const rows = window.KXLinePick.find(pickLines, input ? input.value : '');
       if (!rows.length) { list.innerHTML = '<div class="wz-fp-empty">Nessuna linea corrisponde alla ricerca</div>'; return; }
       list.innerHTML = rows.map((line, i) => {
@@ -994,68 +1054,168 @@ body.agent .foot{display:none}
       $$('[data-wzline]', list).forEach((b) => (b.onclick = async () => {
         const line = rows[+b.dataset.wzline];
         list.classList.remove('on');
-        if (!line) return;
-        if (!st.name.trim() && line.note) { st.name = line.note.slice(0, 60); $('#wzName').value = st.name; }
-        await fillLine(line, line.tag);
+        if (line) await fillLine(line, line.tag);
       }));
     };
-    const draw = () => {
+    const body = () => {
+      const targetButtons = TARGETS.filter(([k]) => k === 'kairos' || (k === 'max' ? showMax : showOrbix)).map(([k, label]) =>
+        `<button type="button" class="wz-target${has(k) ? ' on' : ''}" data-wztarget="${k}" aria-pressed="${has(k)}"><i>✓</i><span>${label}</span></button>`).join('');
+      const kairos = has('kairos') ? `<div class="wz-st"><b>Codice della TV</b><p class="wz-help">Il cliente apre l’app Kairos e ti manda una foto. Scrivi il codice: maiuscole e trattino li metto io.</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input class="inp wz-code" id="wzCode" placeholder="KXAB-12CD" maxlength="9" autocomplete="off" spellcheck="false" value="${esc(st.code)}"><button type="button" class="btn sm" id="wzCheck">Controlla codice</button></div>
+        <div id="wzCodeSt">${codeStatus()}</div><p class="wz-help">Quale app Kairos usa il cliente?</p>
+        <div class="wz-apps">${APPS_W.map(([k, n]) => `<button type="button" class="btn${st.app === k ? ' on' : ''}" data-wzapp="${k}" aria-pressed="${st.app === k}">${n}</button>`).join('')}</div></div>` : '';
+      const max = has('max') ? `<div class="wz-st"><b>MaxPlayer</b><p class="wz-help">Scegli il DNS MaxPlayer dove creare la linea.</p>
+        <select class="inp" id="wzMxDom" ${mxLoading ? 'disabled' : ''}><option value="">${mxLoading ? 'Carico i DNS…' : mxDomains && mxDomains.length ? 'Scegli un DNS…' : 'Nessun DNS disponibile'}</option>${(mxDomains || []).map((x) => `<option value="${esc(x.id)}"${String(st.mxDomain) === String(x.id) ? ' selected' : ''}>${esc(x.label || 'DNS ' + x.id)}</option>`).join('')}</select>
+        ${mxError ? `<div class="wz-st warn">Non riesco a caricare i DNS MaxPlayer: ${esc(mxError)}. Puoi provare l’attivazione e leggere l’esito qui sotto.</div>` : !mxLoading && !(mxDomains || []).length ? '<div class="wz-st warn">Non ci sono DNS MaxPlayer configurati.</div>' : ''}</div>` : '';
+      const orbix = has('orbix') ? `<div class="wz-st"><b>OrbixPlay</b><p class="wz-help">Scrivi il codice dispositivo che il cliente ti ha mandato e scegli il suo DNS.</p>
+        <div class="wz-fields"><input class="inp" id="wzOrbixId" data-mac placeholder="Codice dispositivo OrbixPlay" autocomplete="off" value="${esc(st.orbixId)}">
+        <select class="inp" id="wzOxDns" ${orbDns.length ? '' : 'disabled'}><option value="">Scegli il DNS OrbixPlay…</option>${orbDns.map((x, i) => `<option value="${i}"${String(st.oxDns) === String(i) ? ' selected' : ''}>${esc(x.name || 'DNS ' + (i + 1))}${!agent && x.host ? ' — ' + esc(x.host) : ''}</option>`).join('')}</select></div>
+        ${!orbDns.length ? '<div class="wz-st warn">Non hai DNS OrbixPlay disponibili per il tuo account.</div>' : ''}</div>` : '';
+      const picker = showLinePick ? '<div class="wz-fp-wrap"><input class="inp" id="wzFind" placeholder="🔎 Cerca una linea sui pannelli disponibili" autocomplete="off"><div id="wzFindL"></div></div>' : '';
+      const paste = window.KXPaste ? '<textarea class="inp mono" id="wzPaste" rows="2" style="font-size:12.5px;margin-top:8px" placeholder="📋 Incolla un link M3U o il messaggio con server, utente e password"></textarea>' : '';
+      const lineFields = agent
+        ? `<select class="inp" id="wzSrv" title="Server"><option value="">Scegli il server…</option>${servers.map((x) => `<option value="${esc(x.id)}"${st.pl.serverId === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`
+        : `<input class="inp" id="wzHost" list="wzDnsSaved" placeholder="DNS della linea, es. http://server:8080" autocomplete="off" value="${esc(st.pl.host)}"><datalist id="wzDnsSaved">${dnsSaved.filter((x) => x.host).map((x) => `<option value="${esc(x.host)}" label="${esc(x.name || x.host)}"></option>`).join('')}</datalist>`;
+      const extra = `<div class="wz-s" id="wzS3"><span class="n">3</span><div><h4>Nome del cliente</h4>
+        <p class="hint">Facoltativo: se lo lasci vuoto userò il nome utente della linea.</p>
+        <input class="inp" id="wzName" maxlength="60" placeholder="es. Mario Rossi" value="${esc(st.name)}" style="margin:0">
+        ${has('kairos') ? `<p class="hint" style="margin-top:14px">Durata e visioni contemporanee valgono solo per l’app Kairos.</p>
+          <div class="wz-dur">${[1, 3, 6, 12].map((n) => `<button type="button" class="btn${st.months === n ? ' on' : ''}" data-wzm="${n}">${n} ${n === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>
+          <div class="wz-exp">Scade il <b id="wzExpT">${esc(dateIt(st.expires))}</b> · <a href="#" id="wzExpOther">scegli un’altra data</a><input class="inp" type="date" id="wzExp" value="${esc(st.expires)}" style="display:none;max-width:200px;margin:8px 0 0"></div>
+          <label class="lbl" style="margin-top:12px">Visioni contemporanee (massimo ${maxC})</label><input class="inp" type="number" id="wzConn" min="1" max="${maxC}" value="${st.maxConn}" style="max-width:180px;margin:0">` : ''}</div></div>`;
+      return `<div class="wz">
+        <div class="wz-s${targetsOk() ? ' ok' : ''}" id="wzS1"><span class="n">${targetsOk() ? '✓' : '1'}</span><div><h4>Dove lo attivi</h4><p class="hint">Puoi attivare il cliente in una o più app. Scegli almeno un’app.</p>
+          <div class="wz-targets">${targetButtons}</div>${kairos}${max}${orbix}</div></div>
+        <div class="wz-s${lineOk() ? ' ok' : ''}" id="wzS2"><span class="n">${lineOk() ? '✓' : '2'}</span><div><h4>Linea del cliente</h4>
+          <p class="hint">Scegli una linea già creata, incollala oppure inserisci i dati a mano. Utente e password servono per tutte le app.</p>
+          ${picker}${paste}<div id="wzPasteSt"></div>
+          <div class="wz-pl">${lineFields}<input class="inp" id="wzUser" placeholder="Utente" autocomplete="off" value="${esc(st.pl.username)}"><input class="inp" id="wzPass" placeholder="Password" autocomplete="off" value="${esc(st.pl.password)}"></div>
+          <p class="wz-help">${agent ? 'Scegli il server solo tra quelli assegnati a te; non vedrai i DNS del titolare.' : 'Il DNS della linea si compila dalla linea scelta o si può selezionare dall’elenco salvato.'}</p>
+          ${agent && !servers.length ? '<div class="wz-st warn">Non hai server assegnati. Chiedi al titolare di assegnartene uno per attivare App Kairos.</div>' : ''}</div></div>
+        ${extra}
+        ${!agent ? '<a class="wz-full" href="#" id="wzFull">Modulo completo (tutte le opzioni)</a>' : ''}
+      </div>`;
+    };
+    const draw = (focus = false) => {
       $('#agB').innerHTML = body();
+      $$('[data-wztarget]').forEach((b) => (b.onclick = () => {
+        syncForm();
+        const k = b.dataset.wztarget;
+        if (has(k)) st.targets.delete(k); else st.targets.add(k);
+        draw(false);
+      }));
+      $$('[data-wzapp]').forEach((b) => (b.onclick = () => {
+        st.app = b.dataset.wzapp;
+        $$('[data-wzapp]').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+      }));
       const c = $('#wzCode');
-      // maiuscole e trattino da soli; se scrive solo le 6 lettere dopo «KX», il KX lo aggiungo io
-      c.oninput = () => { let raw = String(c.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); if (raw.length === 6 && !raw.startsWith('KX')) raw = 'KX' + raw; const v = fmtCode(raw); if (v !== c.value) c.value = v; st.code = v; lookup(); };
-      $('#wzPaste') && $('#wzPaste').addEventListener('paste', () => setTimeout(() => pasteGo(true), 0));
-      $('#wzPaste') && ($('#wzPaste').oninput = () => { if (/\S{6,}/.test($('#wzPaste').value)) pasteGo(true); });
+      if (c) {
+        c.oninput = () => { const v = fmtCode(c.value); if (v !== c.value) c.value = v; st.code = v; lookup(); };
+        $('#wzCheck').onclick = () => { syncForm(); lookup(true); };
+        if (focus) setTimeout(() => c.focus(), 50);
+      }
+      const paste = $('#wzPaste');
+      if (paste) { paste.addEventListener('paste', () => setTimeout(() => pasteGo(true), 0)); paste.oninput = () => { if (/\S{6,}/.test(paste.value)) pasteGo(true); }; }
       const find = $('#wzFind');
-      if (find) {
-        find.onfocus = () => drawPick(true);
-        find.oninput = () => drawPick(true);
-        find.onblur = () => setTimeout(() => drawPick(false), 160);
-      }
-      $('#wzSrv') && ($('#wzSrv').onchange = () => { st.pl.serverId = $('#wzSrv').value; foot(); });
-      $('#wzUser') && ($('#wzUser').oninput = () => { st.pl.username = $('#wzUser').value; foot(); });
-      $('#wzPass') && ($('#wzPass').oninput = () => { st.pl.password = $('#wzPass').value; foot(); });
-      $$('[data-wzm]').forEach((b) => (b.onclick = () => { st.months = +b.dataset.wzm; st.expires = addMonths('', st.months); $$('[data-wzm]').forEach((x) => x.classList.toggle('on', x === b)); $('#wzExpT').textContent = dateIt(st.expires); $('#wzExp').value = st.expires; }));
-      $('#wzExpOther').onclick = (e) => { e.preventDefault(); const x = $('#wzExp'); x.style.display = x.style.display === 'none' ? '' : 'none'; };
-      $('#wzExp').onchange = () => { if ($('#wzExp').value) { st.expires = $('#wzExp').value; st.months = 0; $$('[data-wzm]').forEach((x) => x.classList.remove('on')); $('#wzExpT').textContent = dateIt(st.expires); } };
-      $('#wzName').oninput = () => { st.name = $('#wzName').value; };
-      $('#wzConn').oninput = () => { st.maxConn = Math.max(1, Math.min(maxC, +$('#wzConn').value || 1)); };
-      $('#wzApp').onchange = () => { st.app = $('#wzApp').value; };
-      $('#wzNotes').oninput = () => { st.notes = $('#wzNotes').value; };
-      bindOpen(); foot(); setTimeout(() => c.focus(), 50);
+      if (find) { find.onfocus = () => drawPick(true); find.oninput = () => drawPick(true); find.onblur = () => setTimeout(() => drawPick(false), 160); }
+      ['wzSrv', 'wzHost', 'wzUser', 'wzPass', 'wzName', 'wzConn', 'wzMxDom', 'wzOrbixId', 'wzOxDns'].forEach((id) => {
+        const el = $('#' + id);
+        if (el) el.addEventListener('input', () => { syncForm(); foot(); });
+        if (el && el.tagName === 'SELECT') el.addEventListener('change', () => { syncForm(); foot(); });
+      });
+      $$('[data-wzm]').forEach((b) => (b.onclick = () => {
+        st.months = +b.dataset.wzm; st.expires = addMonths('', st.months);
+        $$('[data-wzm]').forEach((x) => x.classList.toggle('on', x === b));
+        $('#wzExpT').textContent = dateIt(st.expires); $('#wzExp').value = st.expires; foot();
+      }));
+      const expOther = $('#wzExpOther');
+      if (expOther) expOther.onclick = (e) => { e.preventDefault(); const x = $('#wzExp'); x.style.display = x.style.display === 'none' ? '' : 'none'; };
+      const exp = $('#wzExp');
+      if (exp) exp.onchange = () => { if (exp.value) { st.expires = exp.value; st.months = 0; $$('[data-wzm]').forEach((x) => x.classList.remove('on')); $('#wzExpT').textContent = dateIt(st.expires); } };
+      const full = $('#wzFull');
+      if (full) full.onclick = (e) => { e.preventDefault(); alive = false; closePage(); origOpen(null); };
+      bindOpen(); foot();
+      const section3 = $('#wzS3');
+      const completed = missing().length === 0;
+      if (section3) { section3.classList.toggle('ok', completed); section3.querySelector('.n').textContent = completed ? '✓' : '3'; }
     };
-    const doneView = (code, exp, appName) => {
-      $('#agB').innerHTML = `<div class="wz"><div class="wz-s wz-done" style="display:block"><div class="big">✅</div><h3>Cliente attivato</h3>
-        <p><b class="mono">${esc(code)}</b> · ${esc(appName)} · fino al <b>${esc(dateIt(exp))}</b></p>
-        <p>Sulla TV l'app si sblocca da sola entro pochi secondi. Se resta ferma, chiudila e riaprila.</p>
-        <div class="acts"><button class="btn pri" id="wzAgain">+ Attiva un altro cliente</button><button class="btn" id="wzOpen">Apri la scheda del cliente</button><button class="btn" id="wzClose">Chiudi</button></div></div></div>`;
+    const renderResults = () => {
+      const finished = st.results.length && st.results.every((r) => r.status === 'ok' || r.status === 'error');
+      const succeeded = st.results.filter((r) => r.status === 'ok').length;
+      const failed = st.results.filter((r) => r.status === 'error').length;
+      $('#agB').innerHTML = `<div class="wz"><div class="wz-s"><span class="n">${finished && !failed ? '✓' : '⚡'}</span><div><h4>${finished ? 'Esito dell’attivazione' : 'Attivazione in corso'}</h4>
+        <p class="hint">${finished ? `${succeeded} su ${st.results.length} attivati${failed ? ` · ${failed} da riprovare` : ''}.` : 'Eseguo un’app alla volta. Puoi leggere qui il risultato di ciascuna.'}</p>
+        <div class="wz-results">${st.results.map((r) => `<div class="wz-result${r.status === 'ok' ? ' ok' : r.status === 'error' ? ' ko' : ''}"><i>${r.status === 'ok' ? '✓' : r.status === 'error' ? '✕' : r.status === 'running' ? '…' : '·'}</i><div><b>${targetNames[r.key]}</b><small>${esc(r.message || (r.status === 'running' ? 'Attivazione in corso…' : 'In attesa'))}</small></div>${finished && r.status === 'error' && !st.running ? `<button type="button" class="btn sm" data-wzretry="${r.key}">Riprova</button>` : ''}</div>`).join('')}</div>
+        ${finished ? `<div class="wz-summary">${failed ? 'Alcuni target non sono riusciti. Puoi riprovare solo quelli contrassegnati.' : 'Tutti i target selezionati sono stati attivati.'}</div><div class="wz-done" style="padding:14px 0 0"><button type="button" class="btn pri" id="wzClose">Chiudi</button></div>` : ''}</div></div></div>`;
       $('#agFt').innerHTML = '';
-      $('#wzAgain').onclick = () => openWizard();
-      $('#wzClose').onclick = closePage;
-      $('#wzOpen').onclick = () => { const x = (D.devices || []).find((y) => y.code === code && !y.parent); if (x) openClient(x); else closePage(); };
+      const close = $('#wzClose'); if (close) close.onclick = closePage;
+      $$('[data-wzretry]').forEach((b) => (b.onclick = async () => {
+        if (st.running) return;
+        const r = st.results.find((x) => x.key === b.dataset.wzretry);
+        if (!r) return;
+        st.running = r.key; r.status = 'running'; r.message = ''; renderResults();
+        try { r.message = await runTarget(r.key); r.status = 'ok'; } catch (e) { r.message = e.message || 'Attivazione non riuscita'; r.status = 'error'; }
+        st.running = ''; renderResults();
+        if (r.key === 'kairos' && r.status === 'ok') load().catch(() => {});
+      }));
+      $('#agB').scrollTop = 0;
     };
-    $('#agT').innerHTML = 'Attiva un cliente Kairos';
-    $('#agFt').innerHTML = '<span class="wz-miss" id="wzMiss"></span><div style="flex:1"></div><button class="btn" id="wzNo">Annulla</button><button class="btn pri" id="wzGo" style="padding:12px 22px;font-size:15px">✓ Attiva il cliente</button>';
-    $('#wzNo').onclick = closePage;
-    $('#wzGo').onclick = async () => {
-      if (st.busy || missing().length) return;
-      st.busy = true; const go = $('#wzGo'); go.disabled = true; go.textContent = 'Attivo…';
-      try {
-        await api('POST', '/admin/devices', { code: st.code, name: st.name.trim(), notes: st.notes.trim(), expires: st.expires, playlists: [{ serverId: st.pl.serverId, username: st.pl.username.trim(), password: st.pl.password }], maxConn: st.maxConn, addons: [], app: st.app });
-        const appName = (APPS_W.find((x) => x[0] === st.app) || [0, 'Kairos'])[1];
-        doneView(st.code, st.expires, appName);
-        load().catch(() => {});
-      } catch (e) {
-        toast(e.message, 1); st.busy = false; go.textContent = '✓ Attiva il cliente'; foot();
-        if (/codice/i.test(e.message)) { st.look = null; lookup(); }
+    const runTarget = async (k) => {
+      const username = st.pl.username.trim(), name = st.name.trim() || username, note = st.pl.ref || st.pl.note || '';
+      const plName = String(st.pl.ref || '').split(/\s+/)[0] || 'Linea';
+      if (k === 'kairos') {
+        const playlist = agent
+          ? { serverId: st.pl.serverId, name: plName, username, password: st.pl.password }
+          : { id: 'p' + Date.now(), name: plName, type: 'xtream', url: '', host: st.pl.host.trim(), username, password: st.pl.password };
+        await api('POST', '/admin/devices', { code: st.code, name, notes: note, expires: st.expires, playlists: [playlist], active: true, maxConn: st.maxConn, app: st.app });
+        return `Cliente ${st.code} attivato`;
       }
+      if (k === 'max') {
+        await api('POST', '/admin/ext-lists', { app: 'max', name, username, password: st.pl.password, domain: st.mxDomain, note });
+        return 'Linea inviata a MaxPlayer';
+      }
+      await api('POST', '/admin/ext-lists', { app: 'orbix', name, orbixId: st.orbixId.trim(), username, password: st.pl.password, dns: +st.oxDns || 0, note });
+      return 'Linea inviata a OrbixPlay';
     };
-    draw();
+    const startActivation = async () => {
+      syncForm();
+      if (st.busy || missing().length) return;
+      st.busy = true;
+      st.results = TARGETS.map(([k]) => k).filter((k) => has(k)).map((key) => ({ key, status: 'pending', message: '' }));
+      for (const r of st.results) {
+        st.running = r.key; r.status = 'running'; renderResults();
+        try { r.message = await runTarget(r.key); r.status = 'ok'; } catch (e) { r.message = e.message || 'Attivazione non riuscita'; r.status = 'error'; }
+      }
+      st.running = ''; st.busy = false; renderResults();
+      if (st.results.some((r) => r.key === 'kairos' && r.status === 'ok')) load().catch(() => {});
+    };
+    const loadOptions = async () => {
+      const jobs = [];
+      if (showMax) jobs.push(api('GET', '/admin/maxplayer/domains').then((r) => { mxDomains = r.domains || []; if (mxDomains.length && !st.mxDomain) st.mxDomain = String(mxDomains[0].id); }).catch((e) => { mxDomains = []; mxError = e.message || 'DNS MaxPlayer non disponibili'; }).finally(() => { mxLoading = false; }));
+      if (!agent) jobs.push(api('GET', '/admin/dns').then((r) => { dnsSaved = r.saved || []; }).catch(() => { dnsSaved = []; }));
+      if (jobs.length) { await Promise.all(jobs); if (alive) draw(false); }
+    };
+    const footMarkup = '<span class="wz-miss" id="wzMiss"></span><div style="flex:1"></div><button class="btn" id="wzNo">Annulla</button><button class="btn pri" id="wzGo" style="padding:13px 24px;font-size:16px">⚡ Attiva</button>';
+    $('#agT').innerHTML = 'Nuovo cliente / Nuovo dispositivo';
+    $('#agFt').innerHTML = footMarkup;
+    $('#wzNo').onclick = () => { alive = false; closePage(); };
+    $('#wzGo').onclick = startActivation;
+    draw(true);
     page.classList.add('on'); $('#agB').scrollTop = 0;
+    if (canLoadLines) window.KXLinePick.load().then((items) => {
+      pickLines = items || []; pickLoaded = true;
+      const list = $('#wzFindL'); drawPick(!!(list && list.classList.contains('on')));
+    }).catch(() => {
+      pickLines = []; pickLoaded = true;
+      const list = $('#wzFindL'); drawPick(!!(list && list.classList.contains('on')));
+    });
+    loadOptions();
   }
   const origOpen = openDrawer, origQuick = openQuick;
-  // agente: «+ Attiva cliente» apre la procedura guidata; le schede dei clienti restano quelle complete
-  window.openDrawer = openDrawer = function (d, act) { if (isAgent()) return !d && can('create') ? openWizard() : openClient(d); return origOpen(d, act); };
+  window.openDrawer = openDrawer = function (d, act) {
+    if (isAgent()) return !d && can('create') ? openWizard() : openClient(d);
+    return !d && !window.__assist ? openWizard() : origOpen(d, act);
+  };
   window.openQuick = openQuick = function (d) { if (isAgent()) return openClient(d); return origQuick(d); };
   $('#newDev').onclick = () => openDrawer(null);
 
