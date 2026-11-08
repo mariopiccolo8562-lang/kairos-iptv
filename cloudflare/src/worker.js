@@ -9,7 +9,7 @@ import { ADDON_ASSETS } from './addon-assets.js';
  *  Segreti:  ENC_KEY (base64, 32 byte), ADMIN_BOOTSTRAP_PASS, TURNSTILE_SECRET (opzionale)
  *  Variabili: ACCESS_TEAM_DOMAIN, ACCESS_AUD, TURNSTILE_SITEKEY (opzionali)
  */
-import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide, storeAgentAlerts, storeDeviceSeller } from './store.js'; // autorizzazione download dello Store (/api/store/*)
+import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide, storeAgentAlerts } from './store.js'; // Store aperto: conteggi e compatibilità con gli store vecchi (/api/store/*)
 import { wolfRoutes, wolfCron, sockFetch } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
 import { atxRoutes } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz), solo titolare
 import { oraRoutes } from './orapanel.js';
@@ -1003,18 +1003,24 @@ Premi **Crea e attiva**: nel riepilogo hai utente e password da copiare, **Ripro
 
 # 3. Installazione sul dispositivo del cliente e Store
 1. Fai installare al cliente **Kairos Store** (o l'app Kairos scelta) con il **codice Downloader** che trovi in App e Store → Codici downloader.
-2. Nello Store il cliente scrive il **tuo codice venditore** (lo trovi in App e Store, pulsante «Copia»): così le sue richieste arrivano a te.
-3. Quando il cliente chiede un'app, approvala in **App e Store → Richieste** (se l'approvazione è accesa). Da lì scarica e installa l'app.
+2. Lo Store è **aperto**: nessun codice da scrivere e nessuna autorizzazione da chiedere. Il cliente preme **Installa** sull'app che vuole e l'app si scarica subito.
+3. Il cliente apre l'app Kairos e ti manda la **foto del codice** che vede sulla TV: lo attivi tu dal pannello (Clienti → «+ Nuovo cliente» con quel codice), come sempre.
 4. Nell'app Kairos il cliente inserisce il **codice KX** del cliente creato al passo 2; su MaxPlayer e OrbixPlay la lista è già dentro, basta aprire l'app.
 
 # 4. Controlli finali
 - In **Clienti → Appunti App** vedi su quali app è attiva ogni linea.
 - In **Clienti → Collegati ora** vedi se il cliente sta guardando e con quante connessioni.
 - Se qualcosa non riesce, dal riepilogo di «Nuova attivazione» usa **Riprova** senza ricreare la linea.`;
+/* passaggi della guida di prima (codice venditore e approvazione dello store): nelle guide già salvate diventano quelli dello store aperto */
+const GUIDE_OLD_STORE = [
+  ["2. Nello Store il cliente scrive il **tuo codice venditore** (lo trovi in App e Store, pulsante «Copia»): così le sue richieste arrivano a te.", "2. Lo Store è **aperto**: nessun codice da scrivere e nessuna autorizzazione da chiedere. Il cliente preme **Installa** sull'app che vuole e l'app si scarica subito."],
+  ["3. Quando il cliente chiede un'app, approvala in **App e Store → Richieste** (se l'approvazione è accesa). Da lì scarica e installa l'app.", "3. Il cliente apre l'app Kairos e ti manda la **foto del codice** che vede sulla TV: lo attivi tu dal pannello (Clienti → «+ Nuovo cliente» con quel codice), come sempre."],
+];
+const guideStoreOpen = (t) => GUIDE_OLD_STORE.reduce((x, [a, b]) => x.split(a).join(b), t);
 function guideNorm(g) {
   const o = g && typeof g === 'object' ? g : {};
   const share = ['all', 'some', 'none'].includes(o.share) ? o.share : 'none';
-  return { title: typeof o.title === 'string' && o.title.trim() ? o.title.trim().slice(0, 120) : GUIDE_DEF_TITLE, text: typeof o.text === 'string' && o.text.trim() ? o.text.slice(0, 20000) : GUIDE_DEF_TEXT, share, agents: Array.isArray(o.agents) ? o.agents.map(String).slice(0, 500) : [], noticeAt: Number.isFinite(+o.noticeAt) && +o.noticeAt > 0 ? +o.noticeAt : 0 };
+  return { title: typeof o.title === 'string' && o.title.trim() ? o.title.trim().slice(0, 120) : GUIDE_DEF_TITLE, text: typeof o.text === 'string' && o.text.trim() ? guideStoreOpen(o.text).slice(0, 20000) : GUIDE_DEF_TEXT, share, agents: Array.isArray(o.agents) ? o.agents.map(String).slice(0, 500) : [], noticeAt: Number.isFinite(+o.noticeAt) && +o.noticeAt > 0 ? +o.noticeAt : 0 };
 }
 function guideForAgent(s, agentId) {
   const g = guideNorm(s.guide); if (g.share === 'all' || (g.share === 'some' && g.agents.includes(String(agentId)))) return { title: g.title, text: g.text, noticeAt: g.noticeAt };
@@ -3526,9 +3532,9 @@ async function route(req, env, ctx) {
     return json({ error: 'Non trovato' }, 404);
   }
 
-  /* ---------- autorizzazione dei download dello Store (pubblica, vedi store.js) ---------- */
+  /* ---------- Store aperto: conteggio di store e download, compatibilità con gli store vecchi (pubblica, vedi store.js) ---------- */
   if (path === '/api/tg/hook' && req.method === 'POST') return tgHook(req, env, ctx, ip, notifyH(env)); // webhook del bot Telegram
-  if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { sellerOf: (c) => sellerOf(env, c), sellerName: (id) => sellerNameOf(env, id), sellerActive: (id) => (id ? agentChainActive(env, +id) : true), storeCap: (id, def) => storeCapOf(env, id, def), sellerChain: (r) => sellerChain(env, r), smsAgents: (app, ids) => storeSmsAgents(env, app, ids), waitMin: async () => cleanReqWait((await getSettings(env)).reqWait).store, waitTxt });
+  if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { sellerName: (id) => sellerNameOf(env, id) });
 
   /* ---------- informativa privacy e condizioni (pubblica, la apre anche l'app) ---------- */
   if ((path === '/privacy' || path === '/privacy/') && (req.method === 'GET' || req.method === 'HEAD')) return privacyPage(env);
@@ -4241,32 +4247,10 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   }
   // Avvisi su Telegram e notifiche del pannello: solo se il titolare li consente a questo agente
   if (path === '/notify' || path.startsWith('/notify/')) return notifyAdmin(req, env, path, { id: A.id, username: A.username, agent: true }, ip, url.origin, notifyH(env));
-  // Download store: vedere e decidere le richieste (le impostazioni restano tue)
-  // (solo le app che gli concedi; nello storico solo i download decisi da lui o dai suoi sotto-agenti, salvo «vedere tutto»)
-  if (path === '/store' && m === 'GET') {
-    const j = await viaOwner(await storeAdmin(req, env, path, who, ip)); // niente permesso a parte: gli store attivati con il suo codice sono suoi
-    const mineSet = new Set(ctree);
-    // le richieste arrivano a chi ha dato il codice venditore (lui o i suoi sotto-agenti); quelle senza codice sono del titolare
-    const reqs = (j.requests || []).filter((r) => storeAppOk(P.storeApps, r.app) && (P.storeAll || mineSet.has(+r.seller || 0) || (r.status !== 'pending' && mineSet.has(+r.by || 0))));
-    // store intestati a lui (o ai suoi sotto-agenti): li vede e li può scollegare; il tetto è quello deciso dal titolare
-    const stores = (j.devices || []).filter((d) => d.activated && mineSet.has(+d.seller || 0)).map((d) => ({ did: d.did, device: d.device, note: d.note, country: d.country, activated: d.activated, last: d.last, downloads: d.storeDownloads || 0, requests: d.requests, blocked: d.blocked, mine: +d.seller === A.id, sellerName: +d.seller === A.id ? '' : (all.find((x) => x.id === +d.seller) || {}).username || '' }));
-    const cap = await storeCapOf(env, A.id, (j.settings && j.settings.storeMax) || 0);
-    return json({ requests: reqs.map(({ by, seller, ...x }) => ({ ...x, byMe: by === A.id, mine: seller === A.id })), pending: reqs.filter((r) => r.status === 'pending').length, settings: { approval: !!(j.settings && j.settings.approval), activation: !!(j.settings && j.settings.activation) }, mail: {}, agent: true, apps: P.storeApps, sellerCode: await sellerAgentCode(env, A), stores, storeCap: cap, storesUsed: stores.filter((d) => d.mine).length });
-  }
-  if (path === '/store/device/unlink' && m === 'POST') {
-    const b = await readJSON(req, 4096);
-    const sel = await storeDeviceSeller(env, String(b.did || ''));
-    if (sel === null || !ctree.includes(sel)) throw new HttpErr(404, 'Store non trovato tra i tuoi');
-    return storeAdmin(new Request(req.url, { method: 'POST', headers: req.headers, body: JSON.stringify({ did: b.did }) }), env, path, who, ip, A.id);
-  }
-  const sdm = path.match(/^\/store\/([A-Za-z0-9_-]{12,40})\/(approve|deny|revoke)$/);
-  if (sdm && m === 'POST') {
-    const r = await env.DB.prepare('SELECT app, by_admin, seller FROM store_requests WHERE id = ?').bind(sdm[1]).first();
-    if (!r || !storeAppOk(P.storeApps, r.app)) throw new HttpErr(404, 'Richiesta non trovata');
-    if (!P.storeAll && !ctree.includes(+r.seller || 0)) throw new HttpErr(404, 'Richiesta non trovata'); // non è di un suo cliente
-    if (sdm[2] === 'revoke' && !ctree.includes(+r.by_admin || 0)) throw new HttpErr(403, 'Puoi revocare solo i download che hai autorizzato tu');
-    return storeAdmin(req, env, path, who, ip, A.id);
-  }
+  // Store aperto: niente richieste da approvare né store intestati, quindi niente pagina «Download store» per gli agenti
+  // (i download dello store non appartengono a nessun agente: li vede solo il titolare nel Riepilogo store)
+  if (path === '/store' && m === 'GET') return json({ open: true, agent: true, requests: [], pending: 0, devices: [], stores: [], settings: { approval: false, activation: false, open: true }, mail: {} });
+  if (path === '/store' || path.startsWith('/store/')) throw new HttpErr(410, 'Lo store è aperto: non ci sono più richieste da approvare');
   // Altre app (OrbixPlay): solo per i suoi clienti e con il permesso
   const aorb = path.match(/^\/orbix\/([A-Za-z0-9_-]{6,20})$/);
   if (aorb && (m === 'POST' || m === 'DELETE')) { need('players', 'Non puoi inviare le linee alle altre app'); if (!(await own(aorb[1]))) throw new HttpErr(404, 'Cliente non trovato'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
@@ -4574,23 +4558,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     j.sellerCode = await sellerOwnerCode(env);
     return json(j);
   }
-  if (path === '/store/summary' && m === 'GET') {
-    // riepilogo store per il titolare: ogni riga con nome, tetto e stato dell'agente
-    const j = await (await storeAdmin(req, env, path, who, ip, 0)).json();
-    const all = await agentsAll(env), def = (j.settings && j.settings.storeMax) || 0;
-    const seen = new Set((j.sellers || []).map((x) => x.id));
-    for (const a of all) if (!seen.has(a.id)) j.sellers.push({ id: a.id, stores: 0, storeDl: 0, last: 0, newest: 0, dl30: 0, dl7: 0, dl1: 0, devs30: 0, pending: 0, apps: [], storeList: [] });
-    if (!seen.has(0)) j.sellers.push({ id: 0, stores: 0, storeDl: 0, last: 0, newest: 0, dl30: 0, dl7: 0, dl1: 0, devs30: 0, pending: 0, apps: [], storeList: [] });
-    for (const x of j.sellers) {
-      const a = x.id ? all.find((y) => y.id === x.id) : null;
-      x.name = x.id ? (a ? a.username : 'agente eliminato') : 'tu (titolare)';
-      x.capOwn = a && a.store_max >= 0 ? a.store_max : null; // tetto suo (null = quello di serie)
-      x.cap = x.id ? (x.capOwn !== null ? x.capOwn : def) : null;
-      x.active = x.id ? !!(a && a.active) : true; x.parentId = a ? a.parent_id : 0; x.storeCode = a ? a.store_code : '';
-    }
-    j.sellers.sort((p, q) => (q.dl30 - p.dl30) || (q.stores - p.stores) || String(p.name).localeCompare(String(q.name)));
-    return json(j);
-  }
+  if (path === '/store/summary' && m === 'GET') return storeAdmin(req, env, path, who, ip, 0); // riepilogo dello store aperto (solo titolare)
   if (path === '/store' || path.startsWith('/store/')) return storeAdmin(req, env, path, who, ip, 0, { smsAgentList: () => storeSmsAgentList(env) }); // Download store
   if ((path === '/notify' || path.startsWith('/notify/')) && ses && !ses.agent) return notifyAdmin(req, env, path, { id: ses.admin_id, username: ses.username, agent: false }, ip, url.origin, notifyH(env)); // avvisi Telegram / notifiche
 

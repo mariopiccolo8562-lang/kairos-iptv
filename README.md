@@ -101,71 +101,28 @@ Link fisso dell'APK da usare ovunque (Downloader, store, sito):
 
 L'interfaccia (grafica e funzioni) si aggiorna comunque da sola a ogni pubblicazione, anche senza nuovo APK.
 
-## 7. Approvazione download dello store
+## 7. Kairos Store aperto (come IBO Player)
 
-Con questa funzione nessuno scarica un'app dal tuo Kairos Store senza il tuo ok. Quando un cliente preme **Installa**, lo store chiede l'autorizzazione: a te arriva un'**email** con app, dispositivo, ora, paese e un **codice di 6 cifre**, e la richiesta compare nel pannello alla pagina **Download store**. Premi **Autorizza** (nell'email o nel pannello) e il download sul dispositivo parte da solo; oppure detti il codice al cliente, che lo scrive nello store.
+Lo store è **aperto**: chi installa Kairos Store vede subito tutte le app, preme **Installa** e il download parte. Non c'è più il codice del venditore all'avvio, non c'è più «Richiedi autorizzazione», non ci sono blocchi dopo codici sbagliati, né per te né per gli agenti.
 
-**1. Chiave gratuita per le email (Resend)** — una volta sola
-1. Vai su **resend.com** → *Sign up* e registrati **con la tua email**, quella dove vuoi ricevere gli avvisi (il piano gratuito basta: 100 email al giorno).
-2. Nel menu **API Keys** → *Create API Key* → nome `kairos`, permesso **Sending access** → *Add*. Copia la chiave (inizia con `re_`): viene mostrata una volta sola.
-3. Su GitHub, repository **kairos-iptv** → *Settings → Secrets and variables → Actions* → **New repository secret**: nome `RESEND_KEY`, valore la chiave copiata. Non incollarla da nessun'altra parte e non condividerla con nessuno.
-4. (Facoltativo) nella scheda **Variables** crea `OWNER_EMAIL` = la tua email. Puoi anche scriverla direttamente nel pannello.
-5. **Actions → "Pannello Cloudflare" → Run workflow**: crea la tabella delle richieste e carica la chiave sul Worker.
+**Come si lavora con un cliente nuovo** (vale per te e per gli agenti)
+1. Il cliente installa **Kairos Store** (codice Downloader in alto nel pannello, oppure `https://panel-kairos.com/get/store.apk`).
+2. Apre lo store e installa subito le app che vuole.
+3. Apre l'app Kairos e ti manda la **foto del codice** che vede sulla TV.
+4. Tu (o l'agente) attivi quel codice dal pannello con **+ Nuovo cliente**: l'attivazione delle app Kairos è quella di sempre.
 
-> Il mittente di prova `onboarding@resend.dev` funziona senza dominio, ma **solo verso l'email con cui ti sei registrato su Resend**. Se un giorno verifichi un tuo dominio su Resend, crea la variabile `MAIL_FROM` (es. `Kairos Store <store@tuodominio.it>`) e potrai usare qualsiasi indirizzo. Se la prima email finisce nello spam, segnala "Non è spam".
+**Riepilogo store** (pannello → *App e Store* → **Riepilogo store**, solo tu): store installati (quelli che si sono aperti almeno una volta), store usati negli ultimi 30/7 giorni e oggi, download degli ultimi 30 giorni (anche per giorno e per app), ultimi download con dispositivo e paese, elenco degli store con versione, e le regole dell'**App consigliata** (il pulsante dello store che propone l'app adatta al dispositivo). I numeri arrivano da soli: lo store avvisa il pannello quando si apre e quando parte un download; se il pannello non risponde, lo store scarica lo stesso.
 
-**2. Pannello** → pagina **Download store**: controlla che *Chiedi la mia autorizzazione* sia acceso, scrivi la tua email e premi **Salva**. Se lo spegni i download partono subito, ma restano registrati nello storico.
+**Store già installati con la versione vecchia** (fino alla 1.0.129, quelli che chiedevano il codice): funzionano subito, senza aspettare l'aggiornamento.
+- La pagina dello store la prendono da GitHub Pages a ogni apertura: vedono subito quella nuova, senza codice, e la pagina spegne anche il blocco dei download che l'APK vecchio ricordava.
+- Se un APK vecchio mostra comunque la sua copia interna (per esempio GitHub non raggiungibile), il pannello approva **all'istante** ogni richiesta, accetta **qualunque codice** (anche nella schermata «Attiva lo store») e non blocca nessuno store; le richieste rimaste «in attesa» da prima si approvano da sole appena lo store le ricontrolla.
+- In più lo store si aggiorna da solo alla versione nuova (controlla le release su GitHub a ogni apertura e ogni 30 minuti).
 
-**3. Collega lo store** — nel repository **kairos-store** apri `docs/apps.json` e, dentro `"store"`, scrivi l'indirizzo del pannello **senza** `/panel`:
-```json
-"approval": { "server": "https://kairos-panel.TUO-SOTTODOMINIO.workers.dev", "on": true }
-```
-Salva (Commit): lo store si aggiorna da solo in un minuto. Con `"server": ""` oppure `"on": false` lo store torna a scaricare senza chiedere nulla.
+**Cosa è sparito dal pannello**: la pagina «App da approvare / Download store» (richieste, Autorizza/Rifiuta/Revoca, dispositivi bloccati, «senza limiti», codici e tetti degli store per agente, orari di chiusura dello store, avvisi email/SMS/Telegram delle richieste), le richieste dello store nella campanella, l'interruttore «Approvazione download store» nella Panoramica, il codice venditore nella barra in alto e nella scheda degli agenti, i permessi «Download store» degli agenti e il tempo di attesa tra un download e l'altro. Gli agenti non vedono più nulla dello store: i download non sono intestati a nessuno.
 
-**4. App dello store** — la nuova versione di Kairos Store (si aggiorna da sola) blocca anche lei ogni download non autorizzato, non solo la pagina.
+> Le impostazioni vecchie (codici venditore, tetti, email, numeri SMS, dispositivi bloccati) restano salvate nel database ma non vengono più usate. I segreti `RESEND_KEY`, `TWILIO_*` e `TELEGRAM_BOT_TOKEN` non servono più allo store: puoi lasciarli o toglierli.
 
-**Se usi le regole WAF del punto 5**, aggiungi `/api/store` alla regola 1 (*URI Path inizia con `/api/player` **oppure** inizia con `/api/store` → Skip*), altrimenti lo store sulle TV non riesce a chiedere l'autorizzazione.
-
-**Da sapere**
-- La richiesta resta valida 24 ore; dopo l'ok il cliente ha 30 minuti per scaricare. **Ogni autorizzazione vale per una sola app e un solo download**: per installare di nuovo (o un'altra app) serve un nuovo codice. 5 codici sbagliati annullano la richiesta.
-- Nel pannello (*Download store*) puoi **Revocare** un'autorizzazione non ancora usata e **Bloccare un dispositivo**: non potrà più chiederti download e le sue richieste in corso decadono.
-- Senza `RESEND_KEY` non arrivano email, ma le richieste compaiono comunque nel pannello (con il codice) e puoi autorizzarle da lì.
-- Il link **Autorizza** dell'email apre una pagina di conferma con il pulsante: così i programmi antivirus della posta che "aprono" i link da soli non possono autorizzare nulla al posto tuo.
-- I link degli APK e i codici Downloader in `apps.json` restano pubblici su GitHub: chi li copia può scaricare fuori dallo store. L'autorizzazione controlla i download **dallo store**; la tua app Kairos resta comunque protetta dall'attivazione nel pannello.
-
-**Store intestati ai venditori (senza conferma a ogni download)** — in alternativa all'autorizzazione a ogni download, il pannello può chiedere che **ogni installazione dello store venga attivata una volta** con il codice di un venditore (il tuo o quello di un agente):
-- Pannello → **App da approvare → Approvazione** → scegli **Solo store attivati, senza conferma** e imposta il **tetto di store attivabili per agente** (di serie 50; lo cambi per il singolo agente in *Agenti → scheda → Store attivabili*; tu non hai tetto). Premi **Salva**.
-- **Codice del venditore all'avvio** (scheda Approvazione, vale con «Chiedi la mia autorizzazione» e con «Solo store attivati»): di serie **a ogni avvio** — prima di vedere le app il cliente scrive il codice del suo venditore ogni volta che apre lo store (la pagina resta nascosta, la finestra non si chiude); nella richiesta di download resta solo il pulsante **Richiedi autorizzazione** (niente nome né codice: la richiesta va al venditore del codice scritto all'avvio). In alternativa **solo la prima volta**: lo store chiede il codice finché non è intestato a un venditore, poi non più. Chi installa lo store (di solito l'agente, a casa del cliente) scrive il suo **codice venditore**. Da quel momento lo store scarica **senza finestre** e ogni download è **intestato a quel venditore**; nello header dello store si legge *«Store di <nome>»* (toccandolo si può cambiare venditore con un altro codice).
-- Uno store **non attivato non scarica nulla** (vede *«Store da attivare»*). Il link `?v=CODICE` continua solo a precompilare il codice nelle richieste: **non attiva** lo store.
-- **Tre codici sbagliati** sullo stesso store → lo store si **blocca** («Store bloccato», niente download né attivazione) e lo sblocchi **solo tu**: *App da approvare → Dispositivi* → interruttore **Blocca dispositivo** (compare con il nome del dispositivo e del cliente). Appena lo sblocchi, lo store ripropone da solo la richiesta del codice. Da uno stesso IP, dopo 8 codici sbagliati in un'ora, l'attivazione si ferma per un'ora. Il pulsante **Nuovo** (nuovo codice venditore) impedisce altre attivazioni con il vecchio codice, senza scollegare gli store già attivati.
-- **Link senza nomi**: il pannello serve le app e lo store con il proprio indirizzo, così nel link non compare l'account GitHub: `https://panel-kairos.com/get/store.apk` (app Kairos Store), `…/get/pro.apk`, `premium`, `tv`, `plus`, `xc`, `lite`, `nova`; pagina dello store: `https://panel-kairos.com/store/`. I codici Downloader (aftv.news) puntano a un indirizzo fisso: per usare i link nuovi crea nuovi codici su aftv.news con questi indirizzi. `apps.json` dello store usa già i link nuovi.
-- Chi vede cosa: tu vedi ogni store in **Dispositivi** (*«store di …»*, con **Scollega**) e tutto insieme in **Riepilogo store** (store attivati, download, dispositivi e utenti, per agente e per app, ultimi 30 giorni); l'agente vede i suoi in **I tuoi store** e li può scollegare; a ogni attivazione gli arriva un messaggio Telegram (se collegato). Uno store scollegato torna «da attivare».
-- **Agente sospeso** (Agenti → scheda → Attivo spento): il suo codice non attiva più nulla e i suoi store si **fermano** (nello store compare «Store sospeso»; nel pannello «store di … · sospeso») finché un altro venditore, o tu, non li riattiva con il proprio codice. Riattivando l'agente i suoi store ripartono.
-- Con **Chiedi la mia autorizzazione** gli store attivati contano lo stesso: la richiesta va al venditore dello store senza che il cliente scriva nessun codice; con **Download liberi** l'intestazione si spegne.
-
-**Avvisi gratis su Telegram e sul telefono** — ogni richiesta arriva con i pulsanti **Autorizza** e **Rifiuta**; quando qualcuno decide, il messaggio si aggiorna per tutti con l'esito e il nome di chi ha deciso.
-
-*Telegram*
-1. In Telegram apri **@BotFather** → `/newbot` → scegli un nome (es. *Kairos Store*) e un nome utente che finisce con `bot`. Copia il **token** che ti dà (tipo `123456789:AA…`).
-2. Su GitHub, repository **kairos-iptv** → *Settings → Secrets and variables → Actions* → **New repository secret**: `TELEGRAM_BOT_TOKEN` = il token. Poi **Actions → "Pannello Cloudflare" → Run workflow**.
-3. Pannello → **Download store** → **Avvisi su Telegram e sul telefono** → **Collega Telegram**: si apre il bot, premi **Avvia**. Fatto (il bot si collega al pannello da solo la prima volta).
-4. Per gli agenti: nella stessa scheda accendi **Telegram** accanto al loro nome e premi **Salva consensi**; ognuno poi preme **Collega Telegram** dal proprio pannello. Ricevono solo le richieste delle app che gestiscono (permesso *Download store*). Scrivendo `/stop` al bot la chat si scollega.
-
-*Notifiche del pannello (web push)* — niente da configurare su GitHub.
-- **Android / PC**: apri il pannello con Chrome, Edge o Firefox (sul telefono conviene *menu → Installa app*), poi **Attiva notifiche su questo dispositivo** e consenti. Dalla notifica puoi autorizzare o rifiutare direttamente.
-- **iPhone / iPad** (iOS 16.4 o successivo): apri il pannello con Safari → **Condividi → Aggiungi a schermata Home**, apri **Kairos** dalla Home e attiva le notifiche da lì. Tocca la notifica per aprire la richiesta.
-- La notifica arriva senza dati: il testo lo legge il telefono dal pannello con il tuo accesso, quindi su un telefono scollegato non compare niente. Per gli agenti accendi **Notifiche** accanto al loro nome.
-
-**Codici via SMS (facoltativo)** — il codice di ogni richiesta arriva anche per SMS a te e agli agenti che scegli tu. Gli SMS si pagano: con Twilio circa 8-10 centesimi l'uno verso numeri italiani (controlla il prezzo aggiornato su twilio.com).
-1. Registrati su **twilio.com**, aggiungi credito (*Billing*) e compra un numero che possa inviare SMS in Italia (*Phone Numbers → Buy a number*), oppure crea un *Messaging Service*.
-2. Nella home della console copia **Account SID** (inizia con `AC`) e **Auth Token**.
-3. Su GitHub, repository **kairos-iptv** → *Settings → Secrets and variables → Actions*:
-   - **Secrets**: `TWILIO_SID` = Account SID, `TWILIO_TOKEN` = Auth Token;
-   - **Variables**: `TWILIO_FROM` = il numero Twilio con il prefisso (es. `+12025550123`) oppure il SID del Messaging Service (inizia con `MG`).
-4. **Actions → "Pannello Cloudflare" → Run workflow**.
-5. Pannello → **Download store** → scheda **Codici via SMS**: accendi *Invia il codice via SMS*, scrivi il tuo numero e, per ogni agente a cui lo consenti, il suo numero con *Consenti* acceso. Premi **Salva** e poi **Invia SMS di prova**.
-
-Gli agenti ricevono gli SMS solo se il loro account è attivo e hanno il permesso **Download store** per quell'app; i numeri li decidi solo tu. Il **tetto giornaliero** (predefinito 50) evita spese impreviste: raggiunto il tetto, le richieste arrivano solo via email e nel pannello. Con l'account di prova di Twilio gli SMS arrivano solo ai numeri verificati nella console Twilio.
+**Se usi le regole WAF del punto 5**, lascia `/api/store` nella regola 1 (*URI Path inizia con `/api/player` **oppure** inizia con `/api/store` → Skip*): serve allo store per i conteggi e all'App consigliata.
 
 ## 8. Account dei clienti: più dispositivi, profili, VPN, privacy
 
@@ -348,7 +305,7 @@ Solo server e pannello: **non serve un nuovo APK**.
 
 ## 16. Novità 2.5 — Agenti: tutte le funzioni a scelta
 
-- Nella scheda dell'agente, oltre ai permessi sui clienti (ora anche **collegare dispositivi**, **profili/lettore/visioni**, **assistente IA dei clienti**), c'è **«Pagine del pannello»**: Dashboard, Online ora, Errori applicazione, Segnalazioni, Richieste contenuti, Richieste temi, Messaggi, **Download store (accettare le richieste)**, Videoteca, Attività. Ogni pagina mostra **solo i dati dei suoi clienti** (messaggi solo ai suoi clienti, mai a tutti; videoteca solo con le linee dei suoi clienti; attività solo sue). Impostazioni, Server DNS, API, Manutenzione e impostazioni dell'assistente restano solo tue perché valgono per tutti.
+- Nella scheda dell'agente, oltre ai permessi sui clienti (ora anche **collegare dispositivi**, **profili/lettore/visioni**, **assistente IA dei clienti**), c'è **«Pagine del pannello»**: Dashboard, Online ora, Errori applicazione, Segnalazioni, Richieste contenuti, Richieste temi, Messaggi, Videoteca, Attività (la pagina dello store non c'è più per gli agenti: lo store è aperto, vedi punto 7). Ogni pagina mostra **solo i dati dei suoi clienti** (messaggi solo ai suoi clienti, mai a tutti; videoteca solo con le linee dei suoi clienti; attività solo sue). Impostazioni, Server DNS, API, Manutenzione e impostazioni dell'assistente restano solo tue perché valgono per tutti.
 - **Server nascosti agli agenti**: se un DNS salvato non ha un nome (o il nome è l'indirizzo), l'agente vede «Server 1», «Server 2»… Dai un nome ai DNS in *Server DNS e VPN* per mostrarne uno tuo.
 - **Password degli agenti**: nella scheda dell'agente vedi la password attuale con l'occhio 👁 (mostra/nascondi) e *Copia*. È conservata cifrata; per gli agenti creati prima della 2.5 compare dopo che imposti (o l'agente cambia) la password.
 
@@ -371,11 +328,10 @@ Il codice resta **legato a quel dispositivo**: se qualcuno lo copia su un'altra 
 ## 18. Agenti: store, clienti e manutenzione come permessi
 
 Nella scheda di ogni agente (Agenti → apri l'agente):
-- **App dello store che può approvare**: *Tutte le app* oppure solo quelle che spunti (l'elenco si riempie con le app richieste dallo store; puoi aggiungerne a mano). Un sotto-agente non può mai averne più di chi lo crea.
-- **Download store: vedere anche i download degli altri**: spento di base. L'agente vede le richieste in attesa delle sue app e, nello storico, solo i download approvati da lui (e dai suoi sotto-agenti). Può revocare solo i suoi. Tu vedi tutto, con il nome dell'agente accanto a ogni download.
+- *(non più: «App dello store che può approvare» e «Download store: vedere anche i download degli altri» non esistono più, lo store è aperto — punto 7)*
 - **Vedere i clienti dei suoi sotto-agenti**: acceso di base; spento vede e gestisce solo i clienti attivati da lui. I tuoi clienti e quelli degli altri agenti non li vede mai.
 - **Manutenzione dei suoi clienti**: spento di base. Se acceso, l'agente ha il pulsante 🔧 Manutenzione che blocca l'app solo ai suoi clienti. La manutenzione generale resta solo tua; se un agente l'ha accesa lo vedi in alto e puoi spegnerla.
-- **Attività**: l'agente vede solo le sue azioni (anche le approvazioni dello store).
+- **Attività**: l'agente vede solo le sue azioni.
 
 ## 19. Altre app: OrbixPlay (e MaxPlayer)
 
@@ -402,9 +358,9 @@ Nella scheda di ogni agente (Agenti → apri l'agente):
 
 ## 22. Pannello riorganizzato (2.11)
 
-- **Menu in due parti**. *Operatività*: Panoramica · Clienti (Clienti, Agenti, Online ora) · Da gestire (Segnalazioni, Richieste contenuti, Richieste temi, Richieste IA, Download store) · Contenuti e comunicazione (Messaggi, Videoteca) · App e distribuzione (App Kairos, Codici downloader, App terzi) · Controllo (Errori applicazione, Attività). *Impostazioni*: Aspetto e marchio (con prezzo e privacy) · Funzioni dell'app · Store add-on · Assistente IA · Server DNS e VPN (con la VPN generale) · Manutenzione · Sicurezza e account · API e integrazioni.
+- **Menu in due parti**. *Operatività*: Panoramica · Clienti (Clienti, Agenti, Online ora) · Da gestire (Segnalazioni, Richieste contenuti, Richieste temi, Richieste IA) · Contenuti e comunicazione (Messaggi, Videoteca) · App e distribuzione (App Kairos, Codici downloader, App terzi) · Controllo (Errori applicazione, Attività). *Impostazioni*: Aspetto e marchio (con prezzo e privacy) · Funzioni dell'app · Store add-on · Assistente IA · Server DNS e VPN (con la VPN generale) · Manutenzione · Sicurezza e account · API e integrazioni.
 - **Barra in alto**: ricerca, pillola *Manutenzione ON/OFF* (accende e spegne al volo; messaggio ed esclusi in Impostazioni → Manutenzione), campanella con tutte le richieste in attesa, *Nuovo cliente*.
-- **Panoramica**: Azioni rapide (nuovo cliente, rinnova in scadenza, messaggio a tutti, copia codice downloader, attiva su OrbixPlay/MaxPlayer, manutenzione) e Interruttori rapidi (manutenzione, approvazione download store, playlist personali, eventi sportivi, assistente IA, pulizia automatica app terzi, agenti che vedono i DNS), più i riquadri e i grafici di prima.
+- **Panoramica**: Azioni rapide (nuovo cliente, rinnova in scadenza, messaggio a tutti, copia codice downloader, attiva su OrbixPlay/MaxPlayer, manutenzione) e Interruttori rapidi (manutenzione, playlist personali, eventi sportivi, assistente IA, pulizia automatica app terzi, agenti che vedono i DNS), più i riquadri e i grafici di prima.
 - **Clienti → ⋯ Altre opzioni → Elimina clienti inattivi** (come su MaxPlayer): giorni senza aprire l'app, «Includi clienti che non hanno mai effettuato l'accesso», «Solo scaduti o disattivati», numero di clienti idonei, fino a 500 per volta. Si conservano sempre i clienti con liste su OrbixPlay/MaxPlayer e quelli con una connessione collegata usata di recente.
 - **App terzi → Elimina liste inattive**: la stessa finestra per le liste di OrbixPlay e MaxPlayer.
 - Assistente IA spento dall'interruttore: il pulsante sparisce dall'app per tutti.
@@ -479,7 +435,7 @@ android/            progetto Android (Kotlin, WebView) — Fire TV / Android TV 
 player/index.html   interfaccia dell'app (stile Netflix), copiata nell'APK durante la build
 cloudflare/
   src/worker.js     API + sicurezza
-  src/store.js      autorizzazione dei download dello store (/api/store)
+  src/store.js      store aperto: conteggi di store e download, compatibilità con gli store vecchi (/api/store)
   migrations/       tabelle del database D1
   public/panel/     pannello (HTML + JS)
   wrangler.toml     configurazione Cloudflare

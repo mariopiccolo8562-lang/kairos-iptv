@@ -192,7 +192,7 @@ async function tgMessage(env, msg, ip) {
     const name = str([msg.from && msg.from.first_name, msg.from && msg.from.username ? '@' + msg.from.username : ''].filter(Boolean).join(' '), 80);
     await env.DB.prepare("INSERT INTO notify_links (admin_id, tg_chat, tg_name, tg_linked) VALUES (?, ?, ?, ?) ON CONFLICT(admin_id) DO UPDATE SET tg_chat = excluded.tg_chat, tg_name = excluded.tg_name, tg_linked = excluded.tg_linked").bind(a.id, cid, name, now()).run();
     await log(env, 'settings', `${a.role === 'agent' ? 'Agente ' : ''}${a.username}: Telegram collegato (${name || 'chat'})`, ip);
-    await reply(`✅ <b>Collegato al pannello</b> come <b>${htmlEsc(a.username)}</b>.\nQui riceverai le richieste di download dello store con i pulsanti Autorizza e Rifiuta.\n\nPer scollegare scrivi /stop`);
+    await reply(`✅ <b>Collegato al pannello</b> come <b>${htmlEsc(a.username)}</b>.\nIl Kairos Store ora è aperto: i clienti scaricano senza autorizzazione, quindi qui non arrivano più richieste da approvare.\n\nPer scollegare scrivi /stop`);
     return;
   }
   if (/^\/stop\b/.test(text)) {
@@ -202,7 +202,7 @@ async function tgMessage(env, msg, ip) {
     await reply(rows.length ? '👋 Chat scollegata: non riceverai più avvisi.' : 'Questa chat non era collegata.');
     return;
   }
-  await reply('Questo bot invia le richieste di download del tuo Kairos Store.\nPer collegarlo apri il pannello → <b>Download store</b> → <b>Avvisi</b> → <b>Collega Telegram</b>.');
+  await reply('Il Kairos Store ora è aperto: i clienti scaricano senza autorizzazione, quindi questo bot non invia più richieste da approvare. Quanti scaricano lo vedi nel pannello → <b>Riepilogo store</b>.');
 }
 async function tgCallback(env, q, ip, h) {
   const answer = (t, alert = false) => tg(env, 'answerCallbackQuery', { callback_query_id: q.id, text: t, show_alert: alert }).catch(() => {});

@@ -89,12 +89,10 @@
     // senza codice Downloader: l'indirizzo pulito del pannello da scrivere in Downloader (niente nome del titolare)
     const linkIt = (k, label, url) => `<div class="dl"><i>${k}</i><div><small>${label}</small><b style="font-size:13px;letter-spacing:0">${esc(url.replace(/^https?:\/\//, ''))}</b></div><button class="btn sm" data-dlc="${esc(url)}">Copia</button></div>`;
     const owner = D.role !== 'agent';
-    const seller = owner ? s.storeOwnerCode : (D.me && D.me.storeCode);
     const linkOf = (key, slug) => { if (owner) return location.protocol === 'file:' ? '' : location.origin + '/get/' + slug + '.apk'; const x = (D.kairosApps || []).find((a) => a.key === key); return x && x.apk ? x.apk : ''; };
     const dl = (k, label, code, key, slug) => { const u = code ? '' : linkOf(key, slug); return u ? linkIt(k, label.replace('Downloader', 'Indirizzo'), u) : it(k, label, code, owner ? 'non impostato (Impostazioni → App e aggiornamenti)' : 'non impostato'); };
     bar.innerHTML = dl('DL', 'Downloader · Kairos Pro', s.downloaderCode, 'pro', 'pro')
-      + dl('ST', 'Downloader · Kairos Store', s.storeDownloaderCode, 'store', 'store')
-      + (seller ? it('VE', owner ? 'Codice venditore · Store (il tuo)' : 'Codice venditore · Store (dallo ai tuoi clienti)', seller, '') : '');
+      + dl('ST', 'Downloader · Kairos Store', s.storeDownloaderCode, 'store', 'store'); // store aperto: niente più codice venditore da dare ai clienti
     $$('[data-dlc]', bar).forEach((b) => (b.onclick = () => navigator.clipboard.writeText(b.dataset.dlc).then(() => toast(/^https?:/.test(b.dataset.dlc) ? 'Indirizzo copiato' : 'Codice copiato'), () => toast('Copia non consentita', 1))));
     const v = $('#sDlStore'); if (v && !v.dataset.dirty && document.activeElement !== v) v.value = s.storeDownloaderCode || '';
   }

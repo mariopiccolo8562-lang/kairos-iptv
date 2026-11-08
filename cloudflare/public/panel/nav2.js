@@ -127,9 +127,9 @@
     addEventListener('click', (e) => { if (!e.target.closest('#bellM')) $('#bellM').classList.remove('on'); if (!e.target.closest('.dv-more')) $$('.dv-more .mn').forEach((m) => m.classList.remove('on')); });
     $('#newDev').innerHTML = $('#newDev').innerHTML.replace(/Nuovo\s*$/, 'Nuovo cliente');
   }
-  const BELL = [['store', 'storeB', 'App da approvare'], ['reports', 'nb_reports', 'Segnalazioni'], ['creq', 'nb_creq', 'Contenuti richiesti'], ['areq', 'nb_areq', 'Temi richiesti'], ['reqai', 'nb_ai', 'Domande all\'IA']]; // stessi nomi del menu
+  const BELL = [['reports', 'nb_reports', 'Segnalazioni'], ['creq', 'nb_creq', 'Contenuti richiesti'], ['areq', 'nb_areq', 'Temi richiesti'], ['reqai', 'nb_ai', 'Domande all\'IA']]; // stessi nomi del menu
   function bell() {
-    const items = BELL.map(([v, id, l]) => { const e = document.getElementById(id), n = e && e.style.display !== 'none' && (e.classList.contains('on') || id === 'storeB') ? parseInt(e.textContent, 10) || 0 : 0; return [v, l, n]; }).filter(([v]) => { const b = navOf(v); return b && b.style.display !== 'none'; });
+    const items = BELL.map(([v, id, l]) => { const e = document.getElementById(id), n = e && e.style.display !== 'none' && e.classList.contains('on') ? parseInt(e.textContent, 10) || 0 : 0; return [v, l, n]; }).filter(([v]) => { const b = navOf(v); return b && b.style.display !== 'none'; });
     const tot = items.reduce((a, x) => a + x[2], 0);
     const n = $('#bellN'); if (n) { n.textContent = tot > 99 ? '99+' : tot; n.classList.toggle('on', tot > 0); }
     const m = $('#bellM'); if (!m) return;
@@ -145,13 +145,12 @@
   }
 
   /* ---------- Panoramica: azioni rapide e interruttori rapidi ---------- */
-  let storeAppr = null, storeT = 0;
-  async function loadStore() { if (!owner() || Date.now() - storeT < 60e3) return; storeT = Date.now(); try { const j = await api('GET', '/admin/store'); storeAppr = !!(j.settings && j.settings.approval); } catch { storeAppr = null; } drawSw(); }
+  // (lo store è aperto: niente più interruttore «Approvazione download store»)
+  async function loadStore() {}
   const S = () => D.settings || {}, PC = () => S().playersCfg || {};
   const putPC = (k, v) => api('PUT', '/admin/settings', { playersCfg: { ...PC(), [k]: v } });
   const SW = [
     ['maint', 'Manutenzione', 'App ferma per i clienti (tranne gli esclusi)', () => window.KXMaint && KXMaint.on(), async () => { await KXMaint.quick(); return 'done'; }],
-    ['store', 'Approvazione download store', 'Ogni download dello store aspetta il tuo sì', () => storeAppr, async (on) => { await api('PUT', '/admin/store/settings', { approval: on }); storeAppr = on; }, () => storeAppr === null],
     ['local', 'Playlist personali dei clienti', 'Possono aggiungere playlist loro nell\'app', () => !!S().allowLocalPlaylists, (on) => api('PUT', '/admin/settings', { allowLocalPlaylists: on })],
     ['foot', 'Eventi sportivi nella Home', 'Calcio, F1, tennis, basket e altri sport in evidenza nell\'app', () => S().showFootball !== false, (on) => api('PUT', '/admin/settings', { showFootball: on })],
     ['ai', 'Assistente IA', 'Spento: il pulsante sparisce dall\'app per tutti', () => !S().aiOff, (on) => api('PUT', '/admin/settings', { aiOff: !on })],
@@ -248,10 +247,7 @@
     window.demoApi = demoApi = async function (m, p, b) {
       if (p.startsWith('/admin/devices/inactive')) { const days = +(p.match(/days=(\d+)/) || [0, 30])[1], oe = /onlyExp=1/.test(p), t = Date.now(); const l = DEMO.devices.filter((d) => !d.parent && d.playlists && d.playlists.length && !d.orbix && !d.maxp && (d.lastSeen || 0) < t - days * 864e5 && (!oe || (d.expires && d.expires < new Date().toISOString().slice(0, 10)) || d.active === false)); return { days, count: l.length, sample: l.slice(0, 20).map((d) => ({ id: d.id })) }; }
       if (p === '/admin/devices/purge') { const r = await demoApi('GET', `/admin/devices/inactive?days=${b.days}&onlyExp=${b.onlyExp ? 1 : 0}`); const ids = new Set(r.sample.map((x) => x.id)); DEMO.devices = DEMO.devices.filter((d) => !ids.has(d.id)); return { deleted: ids.size, left: 0 }; }
-      if (p === '/admin/store/settings' && m === 'PUT') { DEMO.storeAppr = !!b.approval; return { settings: { approval: DEMO.storeAppr } }; }
-      const r = await dm(m, p, b);
-      if (p === '/admin/store' && m === 'GET' && r && r.settings && DEMO.storeAppr !== undefined) r.settings.approval = DEMO.storeAppr;
-      return r;
+      return dm(m, p, b);
     };
   }
 })();

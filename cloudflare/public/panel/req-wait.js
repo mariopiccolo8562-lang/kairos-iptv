@@ -2,7 +2,7 @@
    Dopo una richiesta il cliente aspetta la fine del tempo oppure la tua risposta; se riprova vede «In attesa del fornitore…».
    Lo decide solo il titolare: la barra compare in cima a ogni pagina delle richieste. */
 (() => {
-  const PAGES = [['v-reports', 'report', 'segnalazione'], ['v-creq', 'content', 'richiesta di contenuto'], ['v-areq', 'addon', 'richiesta di tema/add-on'], ['v-ai', 'ai', 'richiesta di altre domande IA'], ['v-store', 'store', 'richiesta di download dallo store']];
+  const PAGES = [['v-reports', 'report', 'segnalazione'], ['v-creq', 'content', 'richiesta di contenuto'], ['v-areq', 'addon', 'richiesta di tema/add-on'], ['v-ai', 'ai', 'richiesta di altre domande IA']]; // lo store è aperto: niente attesa tra un download e l'altro
   const OPTS = [[0, 'Nessuna attesa'], [5, '5 minuti'], [15, '15 minuti'], [30, '30 minuti'], [60, '1 ora'], [120, '2 ore'], [360, '6 ore'], [720, '12 ore'], [1440, '1 giorno'], [2880, '2 giorni'], [10080, '7 giorni']];
   const css = document.createElement('style');
   css.textContent = `.rw-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;margin-bottom:14px;border-radius:14px;border:1px solid color-mix(in srgb,#f5b041 45%,transparent);border-left:4px solid #f5b041;background:linear-gradient(150deg,color-mix(in srgb,#f5b041 13%,transparent),transparent)}
@@ -32,7 +32,7 @@
     };
   }
   /* anche in Impostazioni → Funzioni dell'app: tutti e quattro insieme */
-  const NAMES = { report: ['Segnalazioni', 'segnalazione'], content: ['Richieste di contenuti', 'richiesta di contenuto'], addon: ['Richieste di temi e add-on', 'richiesta di tema'], ai: ['Richieste di altre domande IA', 'richiesta IA'], store: ['Download dallo store', 'richiesta di download'] };
+  const NAMES = { report: ['Segnalazioni', 'segnalazione'], content: ['Richieste di contenuti', 'richiesta di contenuto'], addon: ['Richieste di temi e add-on', 'richiesta di tema'], ai: ['Richieste di altre domande IA', 'richiesta IA'] };
   const pane = document.querySelector('[data-pane="app"]');
   if (pane && !document.getElementById('rwCard')) {
     pane.insertAdjacentHTML('afterbegin', `<div class="card glass" id="rwCard" style="margin-bottom:18px;border-left:4px solid #f5b041"><div class="hd"><h3>⏱ Tempi di attesa delle richieste<small>Dopo una richiesta il cliente aspetta questo tempo oppure la tua risposta (fatta, rifiutata o eliminata). Se riprova prima vede «In attesa del fornitore…». Uno per tipo, in minuti (es. 1, 7, 34, 68…; 0 = nessuna attesa).</small></h3></div><div id="rwRows"></div></div>`);
@@ -57,6 +57,6 @@
   for (const [id] of PAGES) { const s = document.getElementById(id); if (s) new MutationObserver(() => sync()).observe(s, { childList: true, attributes: true, attributeFilter: ['data-mode'] }); }
   const ra = renderAll;
   window.renderAll = renderAll = function () { ra(); sync(); };
-  if (typeof DEMO !== 'undefined') { DEMO.settings.reqWait = DEMO.settings.reqWait || { report: 0, content: 30, addon: 0, ai: 1440, store: 15 }; }
+  if (typeof DEMO !== 'undefined') { DEMO.settings.reqWait = DEMO.settings.reqWait || { report: 0, content: 30, addon: 0, ai: 1440 }; }
   sync();
 })();

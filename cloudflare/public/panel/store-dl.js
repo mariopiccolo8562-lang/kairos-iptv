@@ -1,726 +1,152 @@
-/* KAIROS — pagina "Download store": autorizzazione dei download dello Store.
+/* KAIROS — pagina «Riepilogo store» (solo titolare). Lo store è APERTO, come IBO Player: il cliente scarica lo store,
+   installa subito le app che vuole, apre l'app Kairos e ti manda la foto del codice che vede sulla TV; tu (o l'agente)
+   lo attivi dal pannello come sempre. Niente codice del venditore, niente «Richiedi autorizzazione», niente blocchi.
+   Qui restano solo i numeri: quanti store ci sono, quanti li usano, quanti download e quali app, più l'«App consigliata».
    Usa le funzioni di app.js ($, $$, esc, api, toast, ago, D, TITLES). In demo usa dati di esempio. */
 (() => {
-  if (typeof TITLES === 'object') TITLES.store = 'Download store';
+  if (typeof TITLES === 'object') TITLES.store = 'Riepilogo store';
   const V = $('#v-store'); if (!V) return;
-
-  const ST = { pending: ['In attesa', 'pending'], approved: ['Autorizzata', 'active'], used: ['Scaricata', 'active'], denied: ['Rifiutata', 'disabled'], expired: ['Scaduta', 'expired'], revoked: ['Revocata', 'disabled'] };
-  const VIA = { email: "dall'email", panel: 'dal pannello', code: 'con il codice', auto: 'approvazione spenta', tries: 'troppi codici errati', telegram: 'da Telegram', push: 'dalla notifica' };
-  const IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v11M7 9l5 5 5-5"/><rect x="4" y="17" width="16" height="4" rx="1.5"/></svg>';
-  const S = { data: null, seen: null, busy: false };
 
   const css = document.createElement('style');
   css.textContent = `
-.sd-req{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;transition:.2s;flex-wrap:wrap}
-.sd-req:hover{background:rgba(255,255,255,.04)}
-.sd-req.on{background:color-mix(in srgb,var(--warn) 7%,transparent);border:1px solid color-mix(in srgb,var(--warn) 25%,transparent);margin-bottom:8px}
-.sd-req .ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex:none;background:rgba(255,255,255,.05);border:1px solid var(--line)}
-.sd-req .ic svg{width:18px}
-.sd-req .tx{flex:1;min-width:180px}
-.sd-req .tx b{display:block;font-size:15px}
-.sd-req .tx small{display:block;color:var(--mut);font-size:12px;word-break:break-word}
-.sd-code{font-size:22px;font-weight:500;letter-spacing:.18em;padding:6px 12px;border-radius:10px;background:rgba(0,0,0,.35);border:1px solid var(--line)}
-.sd-act{display:flex;gap:8px}
-.sd-sub{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);font-weight:600;margin:18px 0 6px}
-.sd-warn{font-size:13.5px;margin:0 0 12px;padding:12px 14px;border-radius:12px;border:1px solid rgba(239,68,68,.55);background:rgba(239,68,68,.12);color:#fecaca;line-height:1.45}.sd-now{font-size:13.5px;margin:0 0 10px}
-.sd-note{font-size:13px;margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.1);color:var(--mut);line-height:1.45}
-.sd-note b{color:var(--txt)}
-.sd-how{padding-left:20px;color:var(--mut);font-size:14px;line-height:1.55}.sd-how li{margin:4px 0}.sd-how b{color:var(--txt)}
-.sd-dev{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;flex-wrap:wrap;transition:.2s}
-.sd-dev:hover{background:rgba(255,255,255,.04)}
-.sd-dev.blk{background:color-mix(in srgb,var(--bad) 7%,transparent);border:1px solid color-mix(in srgb,var(--bad) 25%,transparent);margin-bottom:8px}
-.sd-dev .ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex:none;background:rgba(255,255,255,.05);border:1px solid var(--line)}
-.sd-dev .ic svg{width:18px}
-.sd-dev .tx{flex:1;min-width:160px}.sd-dev .tx b{display:block;font-size:15px}.sd-dev .tx small{display:block;color:var(--mut);font-size:12px;word-break:break-word}
-.sd-dev .tog{margin:0;padding:8px 12px;gap:10px;flex:none}.sd-dev .tog b{font-size:13px}
-.sd-dev .tog.on i{background:linear-gradient(90deg,var(--bad),#ff8a5b);box-shadow:0 0 16px -2px var(--bad)}
-.sd-ag{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--line)}
-.sd-ag:first-child{border-top:0}
-.sd-ag .nm{flex:1;min-width:120px}.sd-ag .nm b{display:block;font-size:14px}.sd-ag .nm small{display:block;color:var(--mut);font-size:12px}
-.sd-ag .inp{flex:1.4;min-width:170px;padding:10px 12px}
-.sd-ag .tog{margin:0;padding:8px 12px;flex:none}.sd-ag .tog b{font-size:13px}
-.nf-row{padding:14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.02);margin-bottom:12px}
-.nf-row h4{margin:0 0 4px;font-size:15px;display:flex;align-items:center;gap:8px}
-.nf-row p{margin:0 0 10px;color:var(--mut);font-size:13px;line-height:1.45}.nf-row p b{color:var(--txt)}
-.nf-btns{display:flex;gap:8px;flex-wrap:wrap}
-.nf-ok{color:var(--ok,#3dffb0)}.nf-warn{color:var(--warn)}
-.sd-ag.off .nm b{color:var(--mut)}
-.sd-seller{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:12px 14px;margin:0 0 12px;border:1px dashed var(--line);border-radius:12px;background:var(--card2,rgba(255,255,255,.03))}.sd-seller b.mono{display:block;font-size:26px;letter-spacing:4px;line-height:1.1}
-@media (max-width:820px){.sd-act{width:100%}.sd-act .btn{flex:1}.sd-dev .tog{width:100%;justify-content:space-between}}`;
-  css.textContent += `
-.sd-mode{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;background:var(--glass)}
-.sd-mode.on{border-color:#4f8cff;background:rgba(79,140,255,.08)}.sd-mode input{margin:4px 0 0;accent-color:#4f8cff;flex:none}
-.sd-mode b{display:block;font-size:14px}.sd-mode small{display:block;color:var(--mut);font-size:12.5px;line-height:1.4;margin-top:2px}
-.sd-act{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(52,199,123,.14);color:#6ee3a6;margin-top:4px}
-.sd-act.no{background:rgba(255,255,255,.06);color:var(--mut)}
-.sd-unl{margin-left:auto}
-.ss-k{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+.so-open{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;margin:0 0 16px;border-radius:12px;border:1px solid rgba(52,199,123,.45);background:rgba(52,199,123,.1);font-size:13.5px;line-height:1.5}
+.so-open b{color:#6ee3a6}.so-open .dot{flex:none;width:10px;height:10px;margin-top:5px;border-radius:50%;background:#34c77b;box-shadow:0 0 12px #34c77b}
+.ss-k{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px}
 .ss-k .k{background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:14px 16px}.ss-k .k b{display:block;font-size:26px;font-weight:800;letter-spacing:-.02em}.ss-k .k small{display:block;color:var(--mut);font-size:12.5px;margin-top:2px}
 .ss-k .k i{display:block;font-style:normal;color:var(--mut);font-size:12px;margin-top:6px}
-.ss-t .mut{font-size:12px}.ss-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;min-width:70px}.ss-bar i{display:block;height:100%;background:linear-gradient(90deg,#4f8cff,#a78bfa)}
-.ss-t tr.ss-r{cursor:pointer}.ss-t tr.ss-r:hover td{background:rgba(255,255,255,.03)}.ss-t tr.ss-r.open td{background:rgba(79,140,255,.07)}
-.ss-cap{display:inline-flex;align-items:center;gap:6px}.ss-cap .inp{width:84px;margin:0;padding:5px 8px}.ss-pen{border:0;background:transparent;color:var(--mut);cursor:pointer;font-size:13px;padding:0 3px}.ss-pen:hover{color:#fff}
-.ss-d td{padding:12px 14px 16px}.ss-dg{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media (max-width:900px){.ss-dg{grid-template-columns:1fr}}
-.ss-dg h4{margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
-.ss-app{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:13px}.ss-app:first-of-type{border-top:0}.ss-app b{font-weight:700}
-.ss-st{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:13px}.ss-st:first-of-type{border-top:0}.ss-st small{color:var(--mut);display:block;font-size:11.5px}
-.ss-def{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:13px}`;
+.so-days{display:flex;align-items:flex-end;gap:5px;height:90px;padding:6px 2px 0;border-bottom:1px solid var(--line)}
+.so-days .d{flex:1;min-width:6px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%}
+.so-days .d i{display:block;width:100%;min-height:2px;border-radius:4px 4px 0 0;background:linear-gradient(180deg,#a78bfa,#4f8cff)}
+.so-days .d small{font-size:10px;color:var(--mut);margin-top:3px;white-space:nowrap}
+.so-dl{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}.so-dl:first-child{border-top:0}
+.so-dl b{font-weight:700}.so-dl small{display:block;color:var(--mut);font-size:11.5px}
+.ss-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;min-width:70px}.ss-bar i{display:block;height:100%;background:linear-gradient(90deg,#4f8cff,#a78bfa)}
+.so-how{padding-left:20px;color:var(--mut);font-size:14px;line-height:1.55;margin:0}.so-how li{margin:4px 0}.so-how b{color:var(--txt)}`;
   document.head.appendChild(css);
 
-  V.innerHTML = `<div class="g2">
-  <div class="card glass">
-    <div class="hd"><h3>Richieste di download<small>I clienti chiedono il tuo permesso prima di scaricare un'app dallo store</small></h3><button class="btn sm" id="sdReload">Aggiorna</button></div>
-    <div id="sdSeller"></div>
-    <div id="sdPend"></div>
-    <div class="sd-sub">Storico · ultimi 30 giorni</div>
-    <div id="sdHist"></div>
-    <button class="btn sm" id="sdClear" style="margin-top:12px">Svuota storico</button>
+  V.innerHTML = `
+  <div class="card glass" style="margin-bottom:18px">
+    <div class="hd"><h3>Riepilogo store<small>Quanti hanno Kairos Store, quanti lo usano e quante app scaricano (download degli ultimi 30 giorni)</small></h3><button class="btn sm" id="soReload">Aggiorna</button></div>
+    <div class="so-open"><span class="dot"></span><div><b>Store aperto</b>, come IBO Player: chi installa Kairos Store vede subito tutte le app e le scarica con <b>Installa</b>, senza codice del venditore, senza autorizzazione e senza blocchi. Per le app Kairos il cliente ti manda la <b>foto del codice</b> che vede sulla TV e tu (o l'agente) lo attivi dal pannello, come sempre.</div></div>
+    <div class="ss-k" id="soK"><div class="k"><b>…</b><small>Caricamento</small></div></div>
+    <div class="sd-sub" style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);font-weight:600;margin:4px 0 6px">Download per giorno · ultimi 14 giorni</div>
+    <div class="so-days" id="soDays"></div>
   </div>
-  <div>
-    <div class="card glass" id="sdMineCard" style="margin-bottom:18px;display:none">
-      <div class="hd"><h3>I tuoi store<small id="sdMineSub">Gli store attivati con il tuo codice venditore</small></h3></div>
-      <div id="sdMine"></div>
-    </div>
-    <div class="card glass" style="margin-bottom:18px">
-      <div class="hd"><h3>Dispositivi<small>Chi ha chiesto di scaricare negli ultimi 30 giorni. Un dispositivo bloccato non può più inviare richieste</small></h3></div>
-      <div id="sdDev"></div>
-    </div>
-    <div class="card glass">
-      <div class="hd"><h3>App consigliata<small>Lo Store sceglie l'app adatta al dispositivo del cliente</small></h3></div>
-      <div class="mut" style="font-size:12.5px;line-height:1.45;margin-bottom:10px">Nello Store il cliente ha il pulsante «App consigliata per questo dispositivo»: lo Store legge memoria, modello e versione Android e propone l'app giusta con Installa già pronto, con una frase cortese. Scrivi i nomi delle app esattamente come compaiono nello Store.</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px 16px">
-        <div><label class="lbl">Fire TV Stick, o chiavetta/box con poca memoria</label><input class="inp" id="rcWeak" placeholder="Kairos Tv" style="margin:0">
-          <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><small class="mut">poca memoria = meno di</small><input class="inp" id="rcMb" type="number" min="256" max="8192" style="margin:0;width:100px"><small class="mut">MB</small></div></div>
-        <div><label class="lbl">Android vecchio</label><input class="inp" id="rcOld" placeholder="Kairos-Lite" style="margin:0">
-          <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><small class="mut">vecchio = prima di Android</small><input class="inp" id="rcSdk" type="number" min="5" max="14" style="margin:0;width:80px"></div></div>
-        <div><label class="lbl">Telefono, tablet o box potente</label><input class="inp" id="rcStrong" placeholder="Kairos Pro" style="margin:0"></div>
-        <div style="grid-column:1/-1"><label class="lbl">Frase mostrata al cliente ({app} = nome dell'app)</label><input class="inp" id="rcText" maxlength="300" style="margin:0"></div>
-      </div>
-      <div style="margin-top:10px"><button class="btn" id="rcSave">Salva</button></div>
-    </div>
-    <div class="card glass">
-      <div class="hd"><h3>Approvazione<small>Decidi tu chi può scaricare</small></h3></div>
-      <div class="sd-warn" id="sdWarn" style="display:none"></div>
-      <div id="sdMode">
-        <label class="sd-mode" data-m="ask"><input type="radio" name="sdMode" value="ask"><div><b>Chiedi la mia autorizzazione</b><small>Ogni download aspetta il sì tuo (o dell'agente del codice scritto dal cliente)</small></div></label>
-        <label class="sd-mode" data-m="act"><input type="radio" name="sdMode" value="act"><div><b>Solo store attivati, senza conferma</b><small>Lo store si attiva una volta sola, alla prima apertura, con il codice di un venditore: da lì scarica da solo e ogni download è intestato a quel venditore. Gli store non attivati non scaricano</small></div></label>
-        <label class="sd-mode" data-m="free"><input type="radio" name="sdMode" value="free"><div><b>Download liberi</b><small>Partono subito, restano registrati qui</small></div></label>
-      </div>
-      <div id="sdActBox" style="display:none;margin:4px 0 10px">
-        <label class="lbl">Store attivabili per agente (tetto di serie)</label>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input class="inp" id="sdMax" type="number" min="0" max="100000" step="1" style="margin:0;width:120px"><small class="mut" style="flex:1;min-width:200px">Lo cambi per il singolo agente nella sua scheda (Agenti). Tu non hai tetto. <span id="sdActInfo"></span></small></div>
-      </div>
-      <div id="sdGateBox" style="margin:4px 0 10px">
-        <label class="lbl">Codice del venditore all'avvio dello store</label>
-        <div id="sdGate">
-          <label class="sd-mode" data-g="every"><input type="radio" name="sdGate" value="every"><div><b>A ogni avvio</b><small>Prima di vedere le app il cliente scrive il codice del suo venditore, ogni volta che apre lo store. Nella richiesta di download resta solo «Richiedi autorizzazione»</small></div></label>
-          <label class="sd-mode" data-g="once"><input type="radio" name="sdGate" value="once"><div><b>Solo la prima volta</b><small>Lo store chiede il codice finché non è intestato a un venditore, poi non più</small></div></label>
+  <div class="g2">
+    <div class="card glass"><div class="hd"><h3>Per app<small>Le app più scaricate dallo store negli ultimi 30 giorni</small></h3></div>
+      <div class="tbl-wrap"><table class="tbl" style="width:100%"><thead><tr><th>App</th><th>Download</th><th>Dispositivi</th><th>Ultimi 7 gg</th><th>Ultimo</th></tr></thead><tbody id="soApps"></tbody></table></div></div>
+    <div class="card glass"><div class="hd"><h3>Ultimi download<small>Gli ultimi download partiti dallo store</small></h3></div><div id="soRecent"></div></div>
+  </div>
+  <div class="g2">
+    <div class="card glass"><div class="hd"><h3>Store installati<small>Ogni Kairos Store che si è aperto almeno una volta (dal più recente)</small></h3></div>
+      <div class="tbl-wrap"><table class="tbl" style="width:100%"><thead><tr><th>Dispositivo</th><th>Versione</th><th>Primo avvio</th><th>Ultimo uso</th><th>Download</th></tr></thead><tbody id="soStores"></tbody></table></div></div>
+    <div>
+      <div class="card glass" style="margin-bottom:18px">
+        <div class="hd"><h3>App consigliata<small>Lo Store sceglie l'app adatta al dispositivo del cliente</small></h3></div>
+        <div class="mut" style="font-size:12.5px;line-height:1.45;margin-bottom:10px">Nello Store il cliente ha il pulsante «App consigliata per questo dispositivo»: lo Store legge memoria, modello e versione Android e propone l'app giusta con Installa già pronto, con una frase cortese. Scrivi i nomi delle app esattamente come compaiono nello Store.</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 16px">
+          <div><label class="lbl">Fire TV Stick, o chiavetta/box con poca memoria</label><input class="inp" id="rcWeak" placeholder="Kairos Tv" style="margin:0">
+            <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><small class="mut">poca memoria = meno di</small><input class="inp" id="rcMb" type="number" min="256" max="8192" style="margin:0;width:100px"><small class="mut">MB</small></div></div>
+          <div><label class="lbl">Android vecchio</label><input class="inp" id="rcOld" placeholder="Kairos-Lite" style="margin:0">
+            <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><small class="mut">vecchio = prima di Android</small><input class="inp" id="rcSdk" type="number" min="5" max="14" style="margin:0;width:80px"></div></div>
+          <div><label class="lbl">Telefono, tablet o box potente</label><input class="inp" id="rcStrong" placeholder="Kairos Pro" style="margin:0"></div>
+          <div style="grid-column:1/-1"><label class="lbl">Frase mostrata al cliente ({app} = nome dell'app)</label><input class="inp" id="rcText" maxlength="300" style="margin:0"></div>
         </div>
+        <div style="margin-top:10px"><button class="btn" id="rcSave">Salva</button></div>
       </div>
-      <div class="tog" id="sdAgAl"><div><b>Avvisami anche per le richieste degli agenti</b><small>Spento: la richiesta con il codice di un agente arriva solo a lui (email, SMS, Telegram, notifiche). Tu la vedi comunque qui, in «In carico agli agenti», e puoi sempre decidere al posto suo</small></div><i></i></div>
-      <label class="lbl">La tua email per gli avvisi</label>
-      <input class="inp" id="sdMail" type="email" autocomplete="email" placeholder="la stessa del tuo account Resend">
-      <div class="sd-note" id="sdMailSt"></div>
-      <button class="btn pri" id="sdSave" style="margin-top:14px">Salva</button>
+      <div class="card glass">
+        <div class="hd"><h3>Come funziona</h3></div>
+        <ol class="so-how">
+          <li>Il cliente installa <b>Kairos Store</b> (codice Downloader o <b>panel-kairos.com/get/store.apk</b>).</li>
+          <li>Apre lo store: vede subito tutte le app. Preme <b>Installa</b> e il download parte, senza codici né attese.</li>
+          <li>Apre l'app Kairos installata e ti manda la <b>foto del codice</b> che compare sulla TV.</li>
+          <li>Tu (o l'agente) attivi quel codice dal pannello con <b>+ Nuovo cliente</b>, come sempre.</li>
+          <li>Gli store già installati con la versione vecchia funzionano subito: non chiedono più il codice e si aggiornano da soli alla versione nuova.</li>
+        </ol>
+      </div>
     </div>
-    <div class="card glass" id="sdClCard">
-      <div class="hd"><h3>🌙 Orari di chiusura<small>In questa fascia (ora italiana) nessuno può chiedere o scaricare app dallo store: vedono il tuo messaggio</small></h3></div>
-      <div class="sd-now" id="sdClNow"></div>
-      <div class="tog" id="sdCl"><div><b>Chiudi lo store dalle… alle…</b><small>Vale ogni giorno; la fascia può passare la mezzanotte (es. dalle 23:00 alle 07:00)</small></div><i></i></div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px"><label class="mut" style="font-size:13px">Dalle</label><input class="inp" id="sdClF" type="time" value="23:00" style="width:auto;margin:0"><label class="mut" style="font-size:13px">alle</label><input class="inp" id="sdClT" type="time" value="07:00" style="width:auto;margin:0"></div>
-      <label class="lbl">Messaggio per i clienti (facoltativo)</label><input class="inp" id="sdClM" maxlength="200" placeholder="Lo store è chiuso dalle 23:00 alle 07:00: riprova più tardi.">
-      <button class="btn pri" id="sdClSave" style="margin-top:14px">Salva orari</button>
-    </div>
-    <div class="card glass" style="margin-top:18px" id="nfCard">
-      <div class="hd"><h3>Avvisi su Telegram e sul telefono<small>Gratis: ricevi ogni richiesta e decidi con un tocco</small></h3></div>
-      <div id="nfBody"><div class="emptyc">Caricamento…</div></div>
-    </div>
-    <div class="card glass" style="margin-top:18px" id="sdSmsCard">
-      <div class="hd"><h3>Codici via SMS<small>Il codice di ogni richiesta arriva anche per SMS a te e agli agenti che scegli tu</small></h3></div>
-      <div class="tog" id="smsOn" role="switch" tabindex="0"><div><b>Invia il codice via SMS</b><small>Insieme all'email, appena un cliente chiede un download</small></div><i></i></div>
-      <label class="lbl">Il tuo numero</label>
-      <input class="inp" id="smsOwner" type="tel" inputmode="tel" autocomplete="tel" placeholder="+39 333 1234567">
-      <div class="sd-sub">Agenti</div>
-      <div id="smsAgents"></div>
-      <div class="tog" id="smsLink" role="switch" tabindex="0" style="margin-top:12px"><div><b>Aggiungi il link «Autorizza»</b><small>Si autorizza con un tocco, ma l'SMS è più lungo e costa circa il doppio</small></div><i></i></div>
-      <label class="lbl">Massimo SMS al giorno</label>
-      <input class="inp" id="smsDay" type="number" min="1" max="500" step="1" style="max-width:160px">
-      <div class="sd-note" id="smsSt"></div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px"><button class="btn pri" id="smsSave">Salva</button><button class="btn" id="smsTest">Invia SMS di prova al mio numero</button></div>
-    </div>
-    <div class="card glass" style="margin-top:18px">
-      <div class="hd"><h3>Come funziona</h3></div>
-      <ol class="sd-how">
-        <li>Il cliente preme <b>Installa</b> nello store e invia la richiesta.</li>
-        <li>Ti arriva un'email con l'app, il dispositivo e un <b>codice di 6 cifre</b>; la richiesta compare anche qui.</li>
-        <li>Premi <b>Autorizza</b> (qui o nell'email) e il download sul dispositivo parte da solo. In alternativa detta il codice al cliente.</li>
-        <li>Se non rispondi, la richiesta scade dopo 24 ore. Dopo l'ok il cliente ha 30 minuti per scaricare: <b>ogni autorizzazione vale per una sola app e un solo download</b>, per reinstallare dovrà chiedertela di nuovo.</li>
-        <li>Hai cambiato idea? Premi <b>Revoca</b> su un'autorizzazione non ancora usata. Con <b>Blocca dispositivo</b> quel dispositivo non può più chiederti nulla finché non lo sblocchi.</li>
-      </ol>
-    </div>
-  </div>
-</div>`;
+  </div>`;
 
   /* ---------------- dati di esempio (demo) ---------------- */
   const DM = (() => {
-    const t = Date.now();
+    const t = Date.now(), dd = 864e5;
     return {
-      settings: { approval: true, activation: false, storeMax: 50, storeGate: 'every', ownerEmail: 'tuo@email.it', blocked: ['demo-did-mt-firetv-000000'], sms: { on: true, owner: '+393331234567', link: false, perDay: 50, agents: [{ id: 2, phone: '+393409876543', on: true }] } },
-      mail: { resend: true, envEmail: false, links: true, sentToday: 3, limit: 90 },
-      sms: { ready: true, sentToday: 5, agents: [{ id: 2, username: 'luca', store: true, active: true }, { id: 3, username: 'sara', store: false, active: true }] },
-      sellerCode: 'K7M4',
-      requests: [
-        { id: 'demo-req-0001', app: 'IboPro', did: 'demo-did-marco-firetv-0000', device: 'Amazon AFTKA (Fire TV)', note: 'Marco', country: 'IT · Milano', code: '482913', status: 'pending', tries: 0, uses: 0, created: t - 90e3 },
-        { id: 'demo-req-0002', app: 'TiviMate', did: 'demo-did-xiaomi-tv-000000', device: 'Xiaomi MiTV-AXSO0 (Android TV)', note: '', country: 'IT', code: '105377', status: 'pending', seller: 3, sellerName: 'luca', tries: 1, uses: 0, created: t - 11 * 60e3 },
-        { id: 'demo-req-0006', app: 'OraPlayer', did: 'demo-did-marco-firetv-0000', device: 'Amazon AFTKA (Fire TV)', note: 'Marco', country: 'IT · Milano', code: '', status: 'approved', via: 'panel', tries: 0, uses: 0, created: t - 6 * 60e3, decided: t - 4 * 60e3 },
-        { id: 'demo-req-0003', app: 'OrbixPlay', did: 'demo-did-giulia-phone-0000', device: 'Samsung SM-A546B', note: 'Giulia', country: 'IT · Roma', code: '', status: 'used', via: 'email', tries: 0, uses: 1, created: t - 3 * 3600e3, decided: t - 3 * 3600e3 + 120e3 },
-        { id: 'demo-req-0007', app: 'IboOne', did: 'demo-did-giulia-phone-0000', device: 'Samsung SM-A546B', note: 'Giulia', country: 'IT · Roma', code: '', status: 'revoked', via: 'code', tries: 0, uses: 0, created: t - 5 * 3600e3, decided: t - 5 * 3600e3 + 60e3 },
-        { id: 'demo-req-0004', app: 'MT', did: 'demo-did-mt-firetv-000000', device: 'Amazon AFTMM (Fire TV)', note: '', country: 'DE', code: '', status: 'denied', via: 'panel', tries: 0, uses: 0, created: t - 26 * 3600e3, decided: t - 25 * 3600e3 },
-        { id: 'demo-req-0005', app: 'Kairos App', did: 'demo-did-bar-centrale-0000', device: 'Amazon AFTSS (Fire TV)', note: 'Bar Centrale', country: 'IT', code: '', status: 'expired', via: '', tries: 0, uses: 0, created: t - 50 * 3600e3 },
-      ],
+      open: true,
+      settings: { recommend: { weakApp: 'Kairos Tv', weakMb: 1536, oldApp: 'Kairos-Lite', oldSdk: 7, strongApp: 'Kairos Pro', text: 'Per questo dispositivo è consigliata {app}: stesso abbonamento e stesse liste, con la migliore fluidità su questo apparecchio.' } },
+      totals: { installs: 37, open30: 29, open7: 18, open1: 6, new30: 11, new7: 4, opens: 412, dl30: 64, dl7: 21, dl1: 3, users30: 26 },
+      apps: [{ app: 'Kairos Pro', n: 31, devs: 18, n7: 10, last: t - 2 * 3600e3 }, { app: 'Kairos Tv', n: 14, devs: 11, n7: 6, last: t - 5 * 3600e3 }, { app: 'IboPro', n: 11, devs: 9, n7: 3, last: t - dd }, { app: 'TiviMate', n: 8, devs: 6, n7: 2, last: t - 3 * dd }],
+      recent: [{ app: 'Kairos Pro', device: 'Amazon AFTKA (Fire TV)', country: 'IT · Milano', created: t - 2 * 3600e3 }, { app: 'Kairos Tv', device: 'Amazon AFTSS (Fire TV)', country: 'IT · Napoli', created: t - 5 * 3600e3 }, { app: 'IboPro', device: 'Xiaomi MiTV-AXSO0 (Android TV)', country: 'IT', created: t - dd }],
+      stores: [{ device: 'Amazon AFTKA (Fire TV)', country: 'IT · Milano', version: '1.0.130', first: t - 20 * dd, last: t - 2 * 3600e3, opens: 41, downloads: 6 }, { device: 'Amazon AFTSS (Fire TV)', country: 'IT · Napoli', version: '1.0.129', first: t - 6 * dd, last: t - 5 * 3600e3, opens: 9, downloads: 2 }, { device: 'Xiaomi MiTV-AXSO0 (Android TV)', country: 'IT', version: '1.0.130', first: t - 2 * dd, last: t - dd, opens: 3, downloads: 1 }],
+      days: Array.from({ length: 14 }, (_, i) => ({ day: Math.floor((t - (13 - i) * dd) / dd) * dd, n: [2, 5, 3, 0, 4, 6, 3, 7, 2, 5, 4, 8, 6, 3][i] })),
     };
   })();
-  function demoDevices() {
-    const by = new Map();
-    for (const r of [...DM.requests].sort((a, b) => b.created - a.created)) {
-      let d = by.get(r.did);
-      if (!d) { d = { did: r.did, device: r.device, note: r.note, country: r.country, last: r.created, requests: 0, downloads: 0, pending: 0, blocked: DM.settings.blocked.includes(r.did), trusted: (DM.settings.trusted || []).includes(r.did) }; by.set(r.did, d); }
-      d.requests++; if (r.uses) d.downloads++; if (r.status === 'pending') d.pending++;
-    }
-    for (const did of DM.settings.blocked) if (!by.has(did)) by.set(did, { did, device: '', note: '', country: '', last: 0, requests: 0, downloads: 0, pending: 0, blocked: true });
-    const x = by.get('demo-did-xiaomi-tv-000000'); if (x) { x.activated = Date.now() - 3 * 864e5; x.seller = 3; x.sellerName = 'luca'; x.storeDownloads = 2; }
-    return [...by.values()].sort((a, b) => (+b.blocked - +a.blocked) || (b.last - a.last));
-  }
-  function demoSummary() {
-    const t = Date.now();
-    return { settings: DM.settings, totals: { stores: 14, devs30: 23, dl30: 61, dl7: 19, dl1: 3, pending: DM.requests.filter((r) => r.status === 'pending').length, users30: 21 },
-      sellers: [{ id: 0, name: 'tu (titolare)', cap: null, capOwn: null, active: true, stores: 5, storeDl: 20, dl30: 24, dl7: 7, dl1: 1, devs30: 9, pending: 1, last: t - 2 * 3600e3, storeCode: 'K7M4', apps: [{ app: 'Kairos Pro', n: 14, devs: 8, last: t - 2 * 3600e3 }, { app: 'IboPro', n: 10, devs: 5, last: t - 864e5 }], storeList: [{ did: 'd1', device: 'Amazon AFTKA (Fire TV)', note: 'Negozio', country: 'IT', activated: t - 20 * 864e5, last: t - 2 * 3600e3, downloads: 9 }] },
-        { id: 2, name: 'mario.rossi', cap: 50, capOwn: null, active: true, stores: 6, storeDl: 31, dl30: 28, dl7: 9, dl1: 2, devs30: 10, pending: 0, last: t - 5 * 3600e3, storeCode: 'K7M4', apps: [{ app: 'Kairos Pro', n: 17, devs: 9, last: t - 5 * 3600e3 }, { app: 'TiviMate', n: 11, devs: 6, last: t - 3 * 864e5 }], storeList: [{ did: 'd2', device: 'Xiaomi MiTV (Android TV)', note: 'Marco', country: 'IT · Milano', activated: t - 10 * 864e5, last: t - 5 * 3600e3, downloads: 4 }, { did: 'd3', device: 'Amazon AFTMM (Fire TV)', note: 'Anna', country: 'IT', activated: t - 6 * 864e5, last: t - 864e5, downloads: 2 }] },
-        { id: 3, name: 'luca.tv', cap: 20, capOwn: 20, active: true, stores: 3, storeDl: 9, dl30: 9, dl7: 3, dl1: 0, devs30: 4, pending: 1, last: t - 864e5, storeCode: 'P3XZ', apps: [{ app: 'IboPro', n: 9, devs: 4, last: t - 864e5 }], storeList: [{ did: 'd4', device: 'Xiaomi MiTV-AXSO0 (Android TV)', note: '', country: 'IT', activated: t - 3 * 864e5, last: t - 864e5, downloads: 2 }] },
-        { id: 5, name: 'bar.sport', cap: 50, capOwn: null, active: false, stores: 0, storeDl: 0, dl30: 0, dl7: 0, dl1: 0, devs30: 0, pending: 0, last: 0, storeCode: 'T2NW', apps: [], storeList: [] }],
-      apps: [{ app: 'Kairos Pro', n: 31, devs: 17, n7: 10 }, { app: 'IboPro', n: 18, devs: 12, n7: 6 }, { app: 'TiviMate', n: 12, devs: 9, n7: 3 }] };
-  }
-  // demo: il tetto personale segue quello salvato nella scheda agente (DEMO.agents di agents.js)
-  function demoSummaryLive() {
-    const d = demoSummary(), ags = (typeof DEMO !== 'undefined' && DEMO && DEMO.agents) || [];
-    for (const x of d.sellers) { if (!x.id) continue; const a = ags.find((y) => y.id === x.id); if (a && a.storeMax !== undefined) x.capOwn = a.storeMax === null ? null : a.storeMax; x.cap = x.capOwn !== null ? x.capOwn : (DM.settings.storeMax || 50); }
-    return d;
-  }
   async function demo(method, path, body) {
     await new Promise((r) => setTimeout(r, 120));
-    if (path === '' && method === 'GET') return { ...DM, pending: DM.requests.filter((r) => r.status === 'pending' && (!r.seller || DM.settings.agentAlerts)).length, pendingAgents: DM.requests.filter((r) => r.status === 'pending' && r.seller).length, devices: demoDevices() };
-    if (path === '/settings') { Object.assign(DM.settings, body); if (body.approval === false && body.activation === undefined) DM.settings.activation = false; return { settings: DM.settings }; }
-    if (path === '/summary') return demoSummaryLive();
-    if (path === '/device/unlink') { const d = demoDevices().find((x) => x.did === body.did); if (!d || !d.activated) throw new Error('Questo store non è attivato'); return { ok: true }; }
-    if (path === '/sms/test') return { ok: true, to: '+39•••567' };
-    if (path === '' && method === 'DELETE') { DM.requests = DM.requests.filter((r) => r.status === 'pending'); return { ok: true }; }
-    if (path === '/device/trust') {
-      DM.settings.trusted = (DM.settings.trusted || []).filter((d) => d !== body.did);
-      if (body.trusted !== false) { DM.settings.trusted.unshift(body.did); DM.settings.blocked = DM.settings.blocked.filter((d) => d !== body.did); }
-      return { ok: true, did: body.did, trusted: body.trusted !== false, settings: DM.settings };
-    }
-    if (path === '/device/block') {
-      DM.settings.blocked = DM.settings.blocked.filter((d) => d !== body.did);
-      if (body.blocked !== false) { DM.settings.trusted = (DM.settings.trusted || []).filter((d) => d !== body.did); DM.settings.blocked.unshift(body.did); DM.requests.forEach((r) => { if (r.did === body.did && (r.status === 'pending' || r.status === 'approved')) Object.assign(r, { status: 'revoked', code: '', decided: Date.now() }); }); }
-      return { ok: true, did: body.did, blocked: body.blocked !== false, settings: DM.settings };
-    }
-    const m = path.match(/^\/(.+)\/(approve|deny|revoke)$/);
-    if (m) {
-      const r = DM.requests.find((x) => x.id === m[1]);
-      if (m[2] === 'revoke') { if (!r || (r.status !== 'pending' && r.status !== 'approved')) throw new Error('Questa richiesta non si può più revocare'); Object.assign(r, { status: 'revoked', decided: Date.now(), code: '' }); return { ok: true, status: 'revoked' }; }
-      if (!r || r.status !== 'pending') throw new Error('La richiesta non è più in attesa'); Object.assign(r, { status: m[2] === 'approve' ? 'approved' : 'denied', via: 'panel', decided: Date.now(), code: '' }); return { ok: true };
-    }
+    if (path === '/summary') return JSON.parse(JSON.stringify(DM));
+    if (path === '/settings') { Object.assign(DM.settings, body); return { settings: DM.settings }; }
     throw new Error('demo');
   }
-  const sApi = (method, path, body) => (D.demo && D.role !== 'agent' ? demo(method, path, body) : api(method, '/admin/store' + path, body));
+  const sApi = (method, path, body) => (D.demo ? demo(method, path, body) : api(method, '/admin/store' + path, body));
 
   /* ---------------- disegno ---------------- */
+  const S = { data: null, busy: false, t: 0 };
   const when = (t) => new Date(t).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
-  function item(r) {
-    const meta = [r.device || 'Dispositivo sconosciuto', r.note, r.country, D.role === 'agent' ? (r.mine === false ? 'sotto-agente' : '') : (r.sellerName ? 'venditore ' + r.sellerName : 'senza codice venditore')].filter(Boolean).map(esc).join(' · ');
-    if (r.status === 'pending') {
-      const left = Math.max(1, Math.ceil((r.created + 24 * 3600e3 - Date.now()) / 3600e3));
-      return `<div class="sd-req on" data-id="${esc(r.id)}"><div class="ic" style="color:var(--warn)">${IC}</div>
-        <div class="tx"><b>${esc(r.app)}</b><small>${meta}</small><small>${esc(ago(r.created))} · scade tra ${left} h${r.tries ? ` · ${+r.tries} ${+r.tries === 1 ? 'codice errato' : 'codici errati'}` : ''}</small></div>
-        <div class="sd-code mono" title="Codice da comunicare al cliente">${esc(r.code)}</div>
-        <div class="sd-act"><button class="btn sm pri" data-sda="approve">Autorizza</button><button class="btn sm danger" data-sda="deny">Rifiuta</button></div></div>`;
-    }
-    const [lb, cls] = ST[r.status] || ST.expired;
-    const how = (r.via && VIA[r.via] ? ' · ' + VIA[r.via] : '') + (r.byName ? ' · da ' + r.byName : r.byMe ? ' · da te' : '');
-    const extra = r.status === 'approved' ? ' · in attesa del download (vale 30 min)' : r.uses && r.status !== 'used' ? ' · scaricata' : '';
-    const act = r.status === 'approved' && (D.role !== 'agent' || r.byMe) ? `<div class="sd-act"><button class="btn sm danger" data-sda="revoke" title="Il cliente non potrà più scaricare con questa autorizzazione">Revoca</button></div>` : '';
-    return `<div class="sd-req" data-id="${esc(r.id)}"><div class="ic" style="color:var(--mut)">${IC}</div>
-      <div class="tx"><b>${esc(r.app)}</b><small>${meta}</small><small>${esc(when(r.created))}${esc(how)}${extra}</small></div>
-      <span class="st ${cls}"><i></i>${lb}</span>${act}</div>`;
+  const day = (t) => new Date(t).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
+  const n = (v) => esc(String(+v || 0));
+  function render() {
+    const d = S.data; if (!d) return;
+    const T = d.totals || {};
+    $('#soK').innerHTML = [
+      [T.installs, 'store installati', `${+T.new30 || 0} nuovi in 30 giorni · ${+T.new7 || 0} in 7 giorni`],
+      [T.open30, 'store usati in 30 giorni', `ultimi 7 giorni: ${+T.open7 || 0} · oggi: ${+T.open1 || 0}`],
+      [T.dl30, 'download in 30 giorni', `ultimi 7 giorni: ${+T.dl7 || 0} · oggi: ${+T.dl1 || 0}`],
+      [T.users30, 'dispositivi che hanno scaricato', `in 30 giorni · ${+T.opens || 0} aperture dello store in tutto`],
+    ].map(([v, l, i]) => `<div class="k"><b>${n(v)}</b><small>${l}</small><i>${esc(i)}</i></div>`).join('');
+    // ultimi 14 giorni (anche quelli senza download)
+    const by = new Map((d.days || []).map((x) => [Math.floor(x.day / 864e5), +x.n || 0])), today = Math.floor((Date.now() + 3600e3) / 864e5);
+    const ds = Array.from({ length: 14 }, (_, i) => { const k = today - 13 + i; return { k, n: by.get(k) || 0 }; }), max = Math.max(1, ...ds.map((x) => x.n));
+    $('#soDays').innerHTML = ds.map((x, i) => `<div class="d" title="${esc(day(x.k * 864e5))}: ${x.n} download"><i style="height:${Math.round((x.n / max) * 70)}px"></i><small>${i % 2 ? '' : esc(day(x.k * 864e5))}</small></div>`).join('');
+    const apps = d.apps || [], top = Math.max(1, ...apps.map((a) => +a.n || 0));
+    $('#soApps').innerHTML = apps.length ? apps.map((a) => `<tr><td><b>${esc(a.app)}</b><div class="ss-bar" style="margin-top:4px"><i style="width:${Math.round(((+a.n || 0) / top) * 100)}%"></i></div></td><td>${n(a.n)}</td><td>${n(a.devs)}</td><td>${n(a.n7)}</td><td>${a.last ? esc(ago(a.last)) : '—'}</td></tr>`).join('')
+      : '<tr><td colspan="5" class="mut">Nessun download negli ultimi 30 giorni</td></tr>';
+    const rec = d.recent || [];
+    $('#soRecent').innerHTML = rec.length ? rec.map((r) => `<div class="so-dl"><span><b>${esc(r.app)}</b><small>${esc([r.device || 'Dispositivo', r.country].filter(Boolean).join(' · '))}</small></span><span style="text-align:right;white-space:nowrap"><small>${esc(when(r.created))}</small><small>${esc(ago(r.created))}</small></span></div>`).join('')
+      : '<div class="emptyc">Nessun download ancora</div>';
+    const st = d.stores || [];
+    $('#soStores').innerHTML = st.length ? st.map((x) => `<tr><td><b>${esc(x.device || 'Dispositivo')}</b><br><small class="mut">${esc(x.country || '')}</small></td><td>${esc(x.version || '—')}</td><td>${x.first ? esc(day(x.first)) : '—'}</td><td>${x.last ? esc(ago(x.last)) : '—'}</td><td>${n(x.downloads)}</td></tr>`).join('')
+      + (st.length >= 200 ? '<tr><td colspan="5" class="mut">Sono mostrati i 200 usati più di recente</td></tr>' : '')
+      : '<tr><td colspan="5" class="mut">Nessuno store si è ancora aperto con la versione aperta</td></tr>';
+    const rc = (d.settings && d.settings.recommend) || {};
+    [['rcMb', 'weakMb'], ['rcWeak', 'weakApp'], ['rcSdk', 'oldSdk'], ['rcOld', 'oldApp'], ['rcStrong', 'strongApp'], ['rcText', 'text']].forEach(([id, k]) => { const el = $('#' + id); if (el && document.activeElement !== el && !el.dataset.dirty) el.value = rc[k] ?? ''; });
   }
-  const DEVI = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>';
-  function devItem(d) {
-    const meta = [d.note, d.country].filter(Boolean).map(esc).join(' · ');
-    const dls = Math.max(d.downloads || 0, d.storeDownloads || 0);
-    const nums = [`${d.requests} ${d.requests === 1 ? 'richiesta' : 'richieste'}`, `${dls} download`, d.pending ? `${d.pending} in attesa` : '', d.trusted ? 'senza limiti' : ''].filter(Boolean).join(' · ');
-    const actOn = !!(S.data && S.data.settings && S.data.settings.activation);
-    const act = d.activated ? `<span class="sd-act${d.sellerOff ? ' no' : ''}" title="Store attivato con il codice di ${esc(d.sellerName || 'un venditore')} il ${esc(when(d.activated))}${d.sellerOff ? ' · agente sospeso: lo store è fermo finché un altro venditore non lo riattiva' : ''}">🏪 store di ${esc(d.sellerName || '…')}${d.sellerOff ? ' · sospeso' : ''} · ${esc(ago(d.activated))}</span>` : actOn ? '<span class="sd-act no">store da attivare</span>' : '';
-    return `<div class="sd-dev${d.blocked ? ' blk' : ''}" data-did="${esc(d.did)}"><div class="ic" style="color:${d.blocked ? 'var(--bad)' : 'var(--mut)'}">${DEVI}</div>
-      <div class="tx"><b>${esc(d.device || 'Dispositivo sconosciuto')}</b>${meta ? `<small>${meta}</small>` : ''}<small>${nums}${d.last ? ' · ultima ' + esc(ago(d.last)) : ''}${d.blocked ? ' · <b style="color:var(--bad);display:inline;font-size:12px">bloccato</b>' : ''}</small>${act}</div>
-      ${d.activated ? '<button class="btn sm sd-unl" data-sdu="1" title="Lo store torna «da attivare»: con «Solo store attivati» non scarica più finché non viene riattivato con un codice">Scollega</button>' : ''}
-      ${D.role !== 'agent' ? `<div class="tog${d.trusted ? ' on' : ''}" data-sdt="1" role="switch" aria-checked="${d.trusted ? 'true' : 'false'}" tabindex="0" title="Eccezione: niente tetto orario né tempo di attesa (per installatori e negozi che fanno tante richieste legittime)"><div><b>Senza limiti</b></div><i></i></div>` : ''}
-      <div class="tog${d.blocked ? ' on' : ''}" data-sdb="1" role="switch" aria-checked="${d.blocked ? 'true' : 'false'}" tabindex="0"><div><b>Blocca dispositivo</b></div><i></i></div></div>`;
-  }
-  function badge() {
-    const n = S.data ? S.data.pending || 0 : 0, b = $('#storeB');
-    if (b) { b.style.display = n ? '' : 'none'; b.textContent = n; }
-  }
-  /** codice venditore: il cliente lo scrive nella richiesta dello Store e la richiesta arriva solo a chi ha quel codice */
-  function renderSeller() {
-    const el = $('#sdSeller'); if (!el) return;
-    const c = S.data && S.data.sellerCode;
-    if (!c) { el.innerHTML = ''; return; }
-    const ag = D.role === 'agent';
-    el.innerHTML = `<div class="sd-seller"><div><small class="mut">Il tuo codice venditore</small><b class="mono" id="sdSellerCode">${esc(c)}</b></div>
-      <div class="mut" style="font-size:12.5px;line-height:1.45;flex:1;min-width:200px">${S.data && S.data.settings && S.data.settings.activation ? 'Scrivilo <b>una volta</b> nello store appena installato (schermata «Attiva lo store»): da lì ogni download è tuo e parte senza conferma. ' : ''}Fallo scrivere ai tuoi clienti nella richiesta dello Store (campo «Codice del venditore», lo ricorda da sola): ${ag ? 'le loro richieste arrivano <b>solo a te</b>, non agli altri agenti (il titolare le vede nel suo pannello).' : 'le richieste con il codice di un agente arrivano <b>a lui</b> (tu le vedi qui, senza avvisi, salvo l\'opzione in Approvazione); quelle senza codice o con il tuo <b>solo a te</b>.'}</div>
-      <button class="btn sm" id="sdSellerCopy">Copia</button>${ag ? '' : '<button class="btn sm" id="sdSellerEdit">Cambia</button>'}</div>`;
-    $('#sdSellerCopy').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(c).then(() => toast('Codice venditore copiato')).catch(() => toast(c)); };
-    // titolare: i codici di tutti gli agenti in un posto solo (ognuno ha il suo, creato da solo la prima volta)
-    const AG = !ag && Array.isArray(D.agents) ? D.agents.slice().sort((x, y) => String(x.username).localeCompare(String(y.username))) : [];
-    if (AG.length) {
-      el.insertAdjacentHTML('beforeend', `<details class="sd-agc" style="margin-top:10px"${AG.length <= 25 ? ' open' : ''}><summary style="cursor:pointer;font-weight:700">Codici venditore dei tuoi agenti (${AG.length})</summary>
-        <p class="mut" style="font-size:12.5px;margin:6px 0 8px">Ogni agente ha il suo codice: dallo a lui. Le richieste dei clienti che scrivono quel codice arrivano a lui (tu le vedi qui, in «In carico agli agenti»); quelle senza codice o con il tuo arrivano solo a te. «Nuovo» cambia il codice: il vecchio smette subito di valere.</p>
-        <div class="tbl-wrap"><table class="tbl" style="width:100%"><thead><tr><th>Agente</th><th>Codice</th><th></th></tr></thead><tbody>${AG.map((a) => `<tr><td>${esc(a.username)}${a.active === false ? ' <span class="mut">(sospeso)</span>' : ''}${a.parentId ? ' <span class="mut">· sotto-agente</span>' : ''}</td>
-          <td><b class="mono" style="letter-spacing:.12em">${esc(a.storeCode || '—')}</b></td><td style="text-align:right;white-space:nowrap">${a.storeCode ? `<button class="btn sm" data-agcp="${esc(a.storeCode)}">Copia</button> ` : ''}<button class="btn sm" data-agnew="${a.id}">Nuovo</button></td></tr>`).join('')}</tbody></table></div></details>`);
-      $$('[data-agcp]', el).forEach((b) => (b.onclick = () => navigator.clipboard.writeText(b.dataset.agcp).then(() => toast('Codice copiato'), () => toast(b.dataset.agcp))));
-      $$('[data-agnew]', el).forEach((b) => (b.onclick = async () => {
-        const a = AG.find((x) => String(x.id) === b.dataset.agnew);
-        if (!(await ask('Nuovo codice per ' + a.username + '?', 'Il codice attuale <b>' + esc(a.storeCode || '—') + '</b> smette subito di valere: i clienti dovranno scrivere quello nuovo.', 'Cambia codice'))) return;
-        try { const r = await api('POST', `/admin/agents/${a.id}/store-code`); a.storeCode = r.storeCode; toast('Nuovo codice: ' + r.storeCode); renderSeller(); } catch (e) { toast(e.message, 1); }
-      }));
-    }
-    // il titolare sceglie il proprio codice (3-8 lettere o cifre)
-    if ($('#sdSellerEdit')) $('#sdSellerEdit').onclick = () => {
-      const box = $('#sdSellerCode'); box.innerHTML = `<input class="inp mono" id="sdSellerInp" maxlength="8" value="${esc(c)}" style="width:150px;margin:0;text-transform:uppercase;letter-spacing:.12em"> <button class="btn sm pri" id="sdSellerOk">Salva</button>`;
-      const inp = $('#sdSellerInp'); inp.focus(); inp.select();
-      inp.oninput = () => { const v = inp.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); if (inp.value !== v) inp.value = v; };
-      const save = async () => { const v = inp.value.trim().toUpperCase(); if (v.length < 3) { toast('Da 3 a 8 lettere o cifre', 1); return; } try { await api('PUT', '/admin/settings', { storeOwnerCode: v }); S.data.sellerCode = v; if (D.settings) D.settings.storeOwnerCode = v; toast('Codice venditore aggiornato: ' + v); renderSeller(); renderAll(); } catch (e) { toast(e.message, 1); } };
-      $('#sdSellerOk').onclick = save; inp.onkeydown = (e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') renderSeller(); };
-    };
-  }
-  function renderList() {
-    renderSeller();
-    const list = (S.data && S.data.requests) || [];
-    const pend = list.filter((r) => r.status === 'pending'), hist = list.filter((r) => r.status !== 'pending');
-    // titolare: le richieste con il codice di un agente le gestisce lui → gruppo a parte (restano visibili e decidibili anche da qui)
-    const owner = D.role !== 'agent', mine = owner ? pend.filter((r) => !r.seller) : pend, ofAg = owner ? pend.filter((r) => r.seller) : [];
-    const alerts = !!(S.data && S.data.settings && S.data.settings.agentAlerts);
-    $('#sdPend').innerHTML = (mine.length ? mine.map(item).join('') : `<div class="emptyc">${ofAg.length ? 'Nessuna richiesta che aspetta te ✓' : 'Nessuna richiesta in attesa ✓'}</div>`)
-      + (ofAg.length ? `<details class="sd-agp" open style="margin-top:10px"><summary style="cursor:pointer;font-weight:700">In carico agli agenti (${ofAg.length})</summary>
-        <p class="mut" style="font-size:12.5px;margin:6px 0 8px">${alerts ? 'Richieste con il codice di un agente: le ricevete tu e lui.' : 'Richieste con il codice di un agente: l\'avviso è arrivato solo a lui. Puoi comunque autorizzarle o rifiutarle tu.'}</p>${ofAg.map(item).join('')}</details>` : '');
-    $('#sdHist').innerHTML = hist.length ? hist.map(item).join('') : '<div class="emptyc">Nessun download registrato</div>';
-    $('#sdClear').style.display = hist.length ? '' : 'none';
-    const devs = (S.data && S.data.devices) || [];
-    $('#sdDev').innerHTML = devs.length ? devs.map(devItem).join('') : '<div class="emptyc">Nessun dispositivo ha ancora chiesto un download</div>';
-    // agente: i suoi store attivati (li può scollegare), con il tetto deciso dal titolare
-    const mc = $('#sdMineCard');
-    if (mc) {
-      const ag = D.role === 'agent', st = (S.data && S.data.stores) || [];
-      mc.style.display = ag && Array.isArray(st) ? '' : 'none';
-      if (ag && Array.isArray(st)) {
-        const cap = S.data.storeCap, used = S.data.storesUsed || 0;
-        $('#sdMineSub').textContent = `${used} attivat${used === 1 ? 'o' : 'i'} con il tuo codice${Number.isInteger(cap) ? ` · ne puoi attivare ${cap} (tetto deciso dal titolare)` : ''}`;
-        $('#sdMine').innerHTML = st.length ? st.map((d) => `<div class="sd-dev${d.blocked ? ' blk' : ''}" data-did="${esc(d.did)}"><div class="ic" style="color:var(--mut)">${DEVI}</div>
-          <div class="tx"><b>${esc(d.device || 'Dispositivo')}</b><small>${[d.note, d.country, d.mine ? '' : 'di ' + d.sellerName].filter(Boolean).map(esc).join(' · ')}</small><small>attivato ${esc(ago(d.activated))} · ${d.downloads || 0} download${d.last ? ' · ultimo ' + esc(ago(d.last)) : ''}${d.blocked ? ' · <b style="color:var(--bad);display:inline;font-size:12px">bloccato</b>' : ''}</small></div>
-          ${d.mine ? '<button class="btn sm sd-unl" data-sdu="1">Scollega</button>' : ''}</div>`).join('') : `<div class="emptyc">Nessuno store attivato con il tuo codice.${Number.isInteger(cap) && !cap ? ' Il titolare non ti ha ancora assegnato store attivabili.' : ' Alla prima apertura dello store scrivi il tuo codice venditore.'}</div>`;
-      }
-    }
-  }
-  const closedNow = (c) => { if (!c || !c.on || c.from === c.to) return false; const hm = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()); const m = (x) => +x.slice(0, 2) * 60 + +x.slice(3, 5), n = m(hm), a = m(c.from), b = m(c.to); return a < b ? n >= a && n < b : n >= a || n < b; };
-  function renderSettings() {
-    const rc = (S.data && S.data.settings && S.data.settings.recommend) || {};
-    if ($('#rcSave')) {
-      [['rcMb', 'weakMb'], ['rcWeak', 'weakApp'], ['rcSdk', 'oldSdk'], ['rcOld', 'oldApp'], ['rcStrong', 'strongApp'], ['rcText', 'text']].forEach(([id, k]) => { const el = $('#' + id); if (el && document.activeElement !== el) el.value = rc[k] ?? ''; });
-      $('#rcSave').onclick = async () => {
-        const v = (id) => ($('#' + id).value || '').trim();
-        if (!v('rcWeak') || !v('rcOld') || !v('rcStrong')) { toast('Scrivi il nome delle tre app', 1); return; }
-        try {
-          const r = await sApi('PUT', '/settings', { recommend: { weakMb: parseInt(v('rcMb'), 10), weakApp: v('rcWeak'), oldSdk: parseInt(v('rcSdk'), 10), oldApp: v('rcOld'), strongApp: v('rcStrong'), text: v('rcText') } });
-          if (S.data) S.data.settings = r.settings;
-          renderSettings(); toast('Salvato: lo Store consiglia ' + r.settings.recommend.weakApp + ' sulle chiavette deboli');
-        } catch (e) { toast(e.message || 'Errore', 1); }
-      };
-    }
-    if (!S.data) return;
-    const s = S.data.settings || {}, m = S.data.mail || {};
-    const mode = s.activation ? 'act' : s.approval === false ? 'free' : 'ask';
-    if (!S.apDirty) { $$('#sdMode .sd-mode').forEach((l) => { const on = l.dataset.m === mode; l.classList.toggle('on', on); l.querySelector('input').checked = on; }); if (document.activeElement !== $('#sdMax')) $('#sdMax').value = Number.isInteger(s.storeMax) ? s.storeMax : 50; }
-    if (!S.apDirty) $$('#sdGate .sd-mode').forEach((l) => { const on = l.dataset.g === (s.storeGate === 'once' ? 'once' : 'every'); l.classList.toggle('on', on); l.querySelector('input').checked = on; });
-    modeBox();
-    const ai = $('#sdActInfo'); if (ai) ai.textContent = S.data.stores !== undefined ? `Store attivati finora: ${S.data.stores}.` : '';
-    if (!S.agDirty && $('#sdAgAl')) $('#sdAgAl').classList.toggle('on', !!s.agentAlerts);
-    const w = $('#sdWarn'); if (w) { w.style.display = s.approval === false ? '' : 'none'; w.innerHTML = '⚠️ <b>Approvazione SPENTA</b>: adesso i clienti scaricano dallo store <b>senza mandarti la richiesta</b> (i download restano registrati qui sotto come «automatico»). Accendi «Chiedi la mia autorizzazione» e premi Salva.'; }
-    const c = s.closed || {}, cl = $('#sdCl');
-    if (cl && !S.clDirty) { cl.classList.toggle('on', !!c.on); $('#sdClF').value = c.from || '23:00'; $('#sdClT').value = c.to || '07:00'; if (document.activeElement !== $('#sdClM')) $('#sdClM').value = c.msg || ''; }
-    const nw = $('#sdClNow'); if (nw) nw.innerHTML = c.on ? (closedNow(c) ? `🔴 <b>Adesso lo store è chiuso</b> (fino alle ${esc(c.to)})` : `🟢 Adesso lo store è aperto · chiude alle ${esc(c.from)}`) : '🟢 Store sempre aperto';
-    if (document.activeElement !== $('#sdMail')) $('#sdMail').value = s.ownerEmail || '';
-    const lines = [];
-    if (!m.resend) lines.push('⚠️ <b>Email non attiva</b>: manca il segreto <b>RESEND_KEY</b> su GitHub (vedi la guida nel README). Le richieste compaiono comunque qui.');
-    else if (!s.ownerEmail && !m.envEmail) lines.push('⚠️ Scrivi qui sopra la tua email per ricevere gli avvisi.');
-    else lines.push(`✅ <b>Email attiva</b> · inviate nelle ultime 24 ore: ${+m.sentToday || 0}/${+m.limit || 90}`);
-    if (m.resend) lines.push("Con il mittente di prova di Resend (onboarding@resend.dev) l'email arriva solo all'indirizzo con cui ti sei registrato su Resend.");
-    if (m.resend && !m.links) lines.push('Pulsanti Autorizza/Rifiuta nell\'email non disponibili: manca ENC_KEY sul Worker.');
-    $('#sdMailSt').innerHTML = lines.join('<br>');
-    renderSms();
-  }
-  /* ---------------- SMS ---------------- */
-  function renderSms() {
-    if (!S.data || !$('#smsOn')) return;
-    const sm = (S.data.settings && S.data.settings.sms) || {}, info = S.data.sms || {};
-    $('#smsOn').classList.toggle('on', !!sm.on); $('#smsOn').setAttribute('aria-checked', sm.on ? 'true' : 'false');
-    $('#smsLink').classList.toggle('on', !!sm.link); $('#smsLink').setAttribute('aria-checked', sm.link ? 'true' : 'false');
-    if (document.activeElement !== $('#smsOwner')) $('#smsOwner').value = sm.owner || '';
-    if (document.activeElement !== $('#smsDay')) $('#smsDay').value = sm.perDay || 50;
-    const saved = new Map((sm.agents || []).map((a) => [a.id, a]));
-    const list = info.agents || [];
-    $('#smsAgents').innerHTML = list.length ? list.map((a) => {
-      const v = saved.get(a.id) || {}, can = a.store && a.active;
-      const why = !a.active ? 'account disattivato: non riceve SMS' : !a.store ? 'senza il permesso «Download store»: non riceve SMS' : 'riceve solo le richieste delle app che gestisce';
-      return `<div class="sd-ag${can ? '' : ' off'}" data-ag="${+a.id}"><div class="nm"><b>${esc(a.username)}</b><small>${why}</small></div>
-        <input class="inp" type="tel" inputmode="tel" placeholder="Numero di ${esc(a.username)}" value="${esc(v.phone || '')}" data-agp="1">
-        <div class="tog${v.phone && v.on !== false ? ' on' : ''}" data-agt="1" role="switch" tabindex="0"><div><b>Consenti</b></div><i></i></div></div>`;
-    }).join('') : '<div class="emptyc">Nessun agente: crea gli agenti dalla pagina Agenti</div>';
-    const lines = [];
-    if (!info.ready) lines.push('⚠️ <b>SMS non attivi</b>: mancano i segreti <b>TWILIO_SID</b>, <b>TWILIO_TOKEN</b> e la variabile <b>TWILIO_FROM</b> su GitHub (vedi la guida nel README). Puoi già salvare i numeri.');
-    else lines.push(`${sm.on ? '✅ <b>SMS attivi</b>' : 'SMS spenti'} · inviati nelle ultime 24 ore: ${+info.sentToday || 0}/${+sm.perDay || 50}`);
-    lines.push('Ogni SMS costa (circa 8-10 centesimi in Italia, li paghi a Twilio). Il tetto giornaliero ti protegge da spese impreviste: raggiunto il tetto, le richieste arrivano solo via email e qui.');
-    $('#smsSt').innerHTML = lines.join('<br>');
-  }
-  function smsBody() {
-    const agents = $$('#smsAgents [data-ag]').map((row) => ({ id: +row.dataset.ag, phone: row.querySelector('[data-agp]').value.trim(), on: row.querySelector('[data-agt]').classList.contains('on') })).filter((a) => a.phone);
-    return { on: $('#smsOn').classList.contains('on'), owner: $('#smsOwner').value.trim(), link: $('#smsLink').classList.contains('on'), perDay: parseInt($('#smsDay').value, 10) || 50, agents };
-  }
-
-  async function refresh(full) {
-    if (S.busy) return;
+  async function refresh(force) {
+    if (D.role === 'agent' || S.busy) return;
+    if (!force && S.data && Date.now() - S.t < 20000) return;
     S.busy = true;
-    try {
-      const d = await sApi('GET', '');
-      const newPend = (d.requests || []).filter((r) => r.status === 'pending');
-      if (S.seen) { const fresh = newPend.filter((r) => !S.seen.has(r.id)); if (fresh.length) toast(`Nuova richiesta di download: ${fresh[0].app}${fresh.length > 1 ? ` (+${fresh.length - 1})` : ''}`); }
-      S.seen = new Set(newPend.map((r) => r.id));
-      // agente: avviso quando dai suoi store parte un download senza approvazione (store attivati, senza conferma)
-      if (D.role === 'agent') {
-        const dl = (d.requests || []).filter((r) => r.status !== 'pending' && (r.via === 'store' || r.via === 'auto'));
-        if (S.seenDl) {
-          const fresh = dl.filter((r) => !S.seenDl.has(r.id));
-          if (fresh.length) { const r = fresh[0], k = /kairos/i.test(r.app || ''); toast(`📲 ${r.app} scaricata${r.device ? ' su ' + r.device : ''} da un tuo store${fresh.length > 1 ? ` (+${fresh.length - 1})` : ''}${k ? ' · per attivarla: «+ Nuovo» e il codice sulla TV' : ''}`); }
-        }
-        S.seenDl = new Set(dl.map((r) => r.id));
-      }
-      const first = !S.data;
-      S.data = d; badge(); renderList();
-      if (full || first) renderSettings();
-    } catch (e) {
-      if (V.classList.contains('on') && full) toast(e.message, 1);
-    } finally { S.busy = false; }
+    try { S.data = await sApi('GET', '/summary'); S.t = Date.now(); render(); }
+    catch (e) { if (V.classList.contains('on') && force) toast(e.message, 1); }
+    finally { S.busy = false; }
   }
 
   /* ---------------- azioni ---------------- */
-  V.addEventListener('click', async (e) => {
-    const tg = e.target.closest('[data-sdb]');
-    if (tg) { await blockDevice(tg); return; }
-    const tt = e.target.closest('[data-sdt]');
-    if (tt) { await trustDevice(tt); return; }
-    const un = e.target.closest('[data-sdu]');
-    if (un) { await unlinkDevice(un); return; }
-    const b = e.target.closest('[data-sda]');
-    if (!b) return;
-    const row = b.closest('[data-id]'), id = row.dataset.id, act = b.dataset.sda;
-    if (act === 'revoke') {
-      const app = row.querySelector('.tx b') ? row.querySelector('.tx b').textContent : '';
-      if (!(await ask('Revocare l\'autorizzazione?', `Il cliente non potrà più scaricare <b>${esc(app)}</b> con questa autorizzazione. Per installarla dovrà chiedertela di nuovo.`, 'Revoca'))) return;
-    }
-    b.disabled = true;
+  $('#soReload').onclick = () => refresh(true);
+  for (const id of ['rcMb', 'rcWeak', 'rcSdk', 'rcOld', 'rcStrong', 'rcText']) $('#' + id).addEventListener('input', (e) => { e.target.dataset.dirty = '1'; });
+  $('#rcSave').onclick = async () => {
+    const v = (id) => ($('#' + id).value || '').trim();
+    if (!v('rcWeak') || !v('rcOld') || !v('rcStrong')) { toast('Scrivi il nome delle tre app', 1); return; }
     try {
-      await sApi('POST', `/${encodeURIComponent(id)}/${act}`);
-      toast(act === 'approve' ? 'Download autorizzato: sul dispositivo parte da solo (vale per un solo download)' : act === 'revoke' ? 'Autorizzazione revocata' : 'Download rifiutato');
-    } catch (err) { toast(err.message, 1); }
-    await refresh();
-  });
-  V.addEventListener('keydown', (e) => { const tg = e.target.closest && e.target.closest('[data-sdb]'); if (tg && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); blockDevice(tg); } });
-  V.addEventListener('keydown', (e) => { const tt = e.target.closest && e.target.closest('[data-sdt]'); if (tt && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); trustDevice(tt); } });
-  /** scollega uno store dal venditore a cui era intestato */
-  async function unlinkDevice(btn) {
-    const row = btn.closest('[data-did]'), did = row.dataset.did;
-    const name = row.querySelector('.tx b') ? row.querySelector('.tx b').textContent : 'questo store';
-    if (!(await ask('Scollegare lo store?', `<b>${esc(name)}</b> non sarà più intestato al venditore: con «Solo store attivati» non potrà scaricare finché qualcuno non lo riattiva con un codice venditore.`, 'Scollega'))) return;
-    btn.disabled = true;
-    try { await sApi('POST', '/device/unlink', { did }); toast('Store scollegato'); } catch (err) { toast(err.message, 1); }
-    await refresh(true);
-  }
-  /** eccezione ai limiti dello Store per un dispositivo (solo titolare) */
-  async function trustDevice(tg) {
-    const row = tg.closest('[data-did]'), did = row.dataset.did, trusted = !tg.classList.contains('on');
-    const name = row.querySelector('.tx b') ? row.querySelector('.tx b').textContent : 'questo dispositivo';
-    if (trusted && !(await ask('Togliere i limiti a questo dispositivo?', `<b>${esc(name)}</b> potrà inviare quante richieste vuole, senza tetto orario né tempo di attesa tra una e l'altra. Ogni download resta comunque da autorizzare. Potrai rimettere i limiti quando vuoi.`, 'Senza limiti'))) return;
-    tg.classList.toggle('on', trusted); tg.setAttribute('aria-checked', trusted ? 'true' : 'false');
-    try {
-      await sApi('POST', '/device/trust', { did, trusted });
-      toast(trusted ? 'Dispositivo senza limiti' : 'Limiti normali ripristinati');
-    } catch (err) { toast(err.message, 1); }
-    await refresh();
-  }
-  async function blockDevice(tg) {
-    const row = tg.closest('[data-did]'), did = row.dataset.did, blocked = !tg.classList.contains('on');
-    const name = row.querySelector('.tx b') ? row.querySelector('.tx b').textContent : 'questo dispositivo';
-    if (blocked && !(await ask('Bloccare il dispositivo?', `<b>${esc(name)}</b> non potrà più chiederti di scaricare app dallo store e le sue richieste in corso decadono. Potrai sbloccarlo quando vuoi.`, 'Blocca'))) return;
-    tg.classList.toggle('on', blocked); tg.setAttribute('aria-checked', blocked ? 'true' : 'false');
-    try {
-      await sApi('POST', '/device/block', { did, blocked });
-      toast(blocked ? 'Dispositivo bloccato: non può più inviare richieste' : 'Dispositivo sbloccato');
-    } catch (err) { toast(err.message, 1); }
-    await refresh();
-  }
-  $('#sdReload').onclick = () => refresh(true);
-  const flip = (el) => { el.classList.toggle('on'); el.setAttribute('aria-checked', el.classList.contains('on') ? 'true' : 'false'); };
-  ['#smsOn', '#smsLink'].forEach((id) => { $(id).onclick = () => flip($(id)); $(id).onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip($(id)); } }; });
-  $('#smsAgents').addEventListener('click', (e) => { const t = e.target.closest('[data-agt]'); if (t) { t.dataset.touched = '1'; flip(t); } });
-  $('#smsAgents').addEventListener('input', (e) => { const i = e.target.closest('[data-agp]'); if (i && i.value.trim()) { const t = i.closest('[data-ag]').querySelector('[data-agt]'); if (!t.dataset.touched) { t.classList.add('on'); } } });
-  $('#smsAgents').addEventListener('keydown', (e) => { const t = e.target.closest && e.target.closest('[data-agt]'); if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); flip(t); } });
-  $('#smsSave').onclick = async () => {
-    const b = $('#smsSave'); b.disabled = true;
-    try {
-      const r = await sApi('PUT', '/settings', { sms: smsBody() });
+      const r = await sApi('PUT', '/settings', { recommend: { weakMb: parseInt(v('rcMb'), 10), weakApp: v('rcWeak'), oldSdk: parseInt(v('rcSdk'), 10), oldApp: v('rcOld'), strongApp: v('rcStrong'), text: v('rcText') } });
+      for (const id of ['rcMb', 'rcWeak', 'rcSdk', 'rcOld', 'rcStrong', 'rcText']) delete $('#' + id).dataset.dirty;
       if (S.data) S.data.settings = r.settings;
-      renderSms();
-      const sm = r.settings.sms || {};
-      toast(sm.on ? `SMS attivi: ${(sm.owner ? 1 : 0) + (sm.agents || []).filter((a) => a.on).length} numeri` : 'Salvato: SMS spenti');
-    } catch (err) { toast(err.message, 1); } finally { b.disabled = false; }
-  };
-  $('#smsTest').onclick = async () => {
-    const phone = $('#smsOwner').value.trim();
-    if (!phone) { toast('Scrivi prima il tuo numero', 1); return; }
-    const b = $('#smsTest'); b.disabled = true;
-    try { const r = await sApi('POST', '/sms/test', { phone }); toast('SMS di prova inviato a ' + r.to); } catch (err) { toast(err.message, 1); } finally { b.disabled = false; }
-  };
-  const curMode = () => { const r = $('#sdMode input:checked'); return r ? r.value : 'ask'; };
-  const modeBox = () => { $$('#sdMode .sd-mode, #sdGate .sd-mode').forEach((l) => l.classList.toggle('on', l.querySelector('input').checked)); $('#sdActBox').style.display = curMode() === 'act' ? '' : 'none'; $('#sdGateBox').style.display = curMode() === 'free' ? 'none' : ''; };
-  $('#sdMode').addEventListener('change', () => { S.apDirty = true; modeBox(); });
-  $('#sdGate').addEventListener('change', () => { S.apDirty = true; modeBox(); });
-  $('#sdMax').addEventListener('input', () => (S.apDirty = true));
-  $('#sdAgAl').onclick = () => { $('#sdAgAl').classList.toggle('on'); S.agDirty = true; };
-  $('#sdSave').onclick = async () => {
-    // finché le impostazioni non sono caricate non si manda l'approvazione: prima un Salva troppo veloce la spegneva
-    if (!S.data) { toast('Attendi il caricamento delle impostazioni', 1); return; }
-    try {
-      const g = $('#sdGate input:checked'), mode = curMode(), body = { approval: mode !== 'free', activation: mode === 'act', storeGate: g ? g.value : 'every', agentAlerts: $('#sdAgAl').classList.contains('on'), ownerEmail: $('#sdMail').value.trim() };
-      if (mode === 'act') { const n = parseInt($('#sdMax').value, 10); if (!(n >= 0)) { toast('Scrivi il tetto di store per agente (0 o più)', 1); return; } body.storeMax = n; }
-      const r = await sApi('PUT', '/settings', body);
-      S.apDirty = false; S.agDirty = false;
-      if (S.data) S.data.settings = r.settings;
-      renderSettings(); renderList(); // la frase del gruppo «In carico agli agenti» dipende dall'interruttore
-      toast(r.settings.activation ? `Salvato: si scarica solo dagli store attivati con un codice venditore (max ${r.settings.storeMax} per agente)` : r.settings.approval ? 'Salvato: ogni download chiede la tua autorizzazione' : 'Salvato: download liberi (restano registrati)');
-    } catch (err) { toast(err.message, 1); }
-  };
-  $('#sdCl').onclick = () => { $('#sdCl').classList.toggle('on'); S.clDirty = true; };
-  for (const id of ['#sdClF', '#sdClT', '#sdClM']) $(id).addEventListener('input', () => (S.clDirty = true));
-  $('#sdClSave').onclick = async () => {
-    if (!S.data) { toast('Attendi il caricamento delle impostazioni', 1); return; }
-    const closed = { on: $('#sdCl').classList.contains('on'), from: $('#sdClF').value, to: $('#sdClT').value, msg: $('#sdClM').value.trim() };
-    try { const r = await sApi('PUT', '/settings', { closed }); S.clDirty = false; S.data.settings = r.settings; renderSettings(); toast(closed.on ? `Store chiuso ogni giorno dalle ${closed.from} alle ${closed.to}` : 'Store sempre aperto'); } catch (err) { toast(err.message, 1); }
-  };
-  $('#sdClear').onclick = async () => {
-    if (!(await ask('Svuotare lo storico?', 'Le richieste già decise o scadute verranno cancellate. Quelle in attesa restano.', 'Svuota'))) return;
-    try { await sApi('DELETE', ''); toast('Storico svuotato'); } catch (err) { toast(err.message, 1); }
-    refresh();
+      render(); toast('Salvato: lo Store consiglia ' + r.settings.recommend.weakApp + ' sulle chiavette deboli');
+    } catch (e) { toast(e.message || 'Errore', 1); }
   };
 
-  /* ---------------- avvisi: Telegram e notifiche del pannello ---------------- */
-  const NF = { d: null, poll: 0 };
-  const nApi = (method, path, body) => (D.demo ? nDemo(method, path, body) : api(method, '/admin/notify' + path, body));
-  const ND = { tg: { ready: true, bot: 'KairosStoreBot', hooked: true, allowed: true, linked: false, name: '' }, push: { allowed: true, key: 'BDemo', devices: 0 },
-    agents: [{ id: 2, username: 'luca', store: true, active: true, tg: true, push: false, tgLinked: true, pushDevices: 0 }, { id: 3, username: 'sara', store: false, active: true, tg: false, push: false, tgLinked: false, pushDevices: 0 }] };
-  async function nDemo(method, path, body) {
-    await new Promise((r) => setTimeout(r, 150));
-    if (path === '' ) return JSON.parse(JSON.stringify(ND));
-    if (path === '/tg/link') { ND.tg.linked = true; ND.tg.name = 'Mario @mario'; return { url: 'https://t.me/KairosStoreBot?start=demo', bot: 'KairosStoreBot' }; }
-    if (path === '/tg/unlink') { ND.tg.linked = false; return { ok: true }; }
-    if (path === '/consent') { ND.agents.forEach((a) => { a.tg = (body.tg || []).includes(a.id); a.push = (body.push || []).includes(a.id); }); return { ok: true }; }
-    return { ok: true };
-  }
-  const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
-  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const standalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
-  const keyBytes = (k) => { const s = atob(k.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((k.length + 3) % 4)); return Uint8Array.from(s, (c) => c.charCodeAt(0)); };
-  async function mySub() {
-    if (!pushOk()) return null;
-    const reg = await navigator.serviceWorker.getRegistration('/panel/');
-    return reg ? reg.pushManager.getSubscription() : null;
-  }
-  async function renderNf() {
-    const box = $('#nfBody'); if (!box) return;
-    let d; try { d = await nApi('GET', ''); } catch (e) { box.innerHTML = `<div class="sd-note">${esc(e.message)}</div>`; return; }
-    NF.d = d;
-    const owner = D.role !== 'agent';
-    let sub = null; try { sub = await mySub(); } catch {}
-    const here = !!sub && Notification.permission === 'granted';
-    const tg = d.tg || {}, pu = d.push || {};
-    let tgHtml;
-    if (!tg.allowed) tgHtml = '<p>Il titolare non ti ha ancora consentito gli avvisi su Telegram.</p>';
-    else if (!tg.ready) tgHtml = owner ? '<p class="nf-warn">⚠️ Manca il segreto <b>TELEGRAM_BOT_TOKEN</b> su GitHub: crea il bot con @BotFather e segui la guida nel README (sezione 7).</p>' : '<p>Telegram non è ancora attivo: chiedi al titolare.</p>';
-    else if (tg.linked) tgHtml = `<p class="nf-ok">✅ Collegato${tg.name ? ': <b>' + esc(tg.name) + '</b>' : ''}. Ogni richiesta arriva con i pulsanti <b>Autorizza</b> e <b>Rifiuta</b>.</p><div class="nf-btns"><button class="btn sm" data-nf="tgtest">Messaggio di prova</button><button class="btn sm danger" data-nf="tgunlink">Scollega</button></div>`;
-    else tgHtml = `<p>Premi <b>Collega Telegram</b>: si apre il bot${tg.bot ? ' <b>@' + esc(tg.bot) + '</b>' : ''}, premi <b>Avvia</b> e il collegamento è fatto.</p><div class="nf-btns"><button class="btn sm pri" data-nf="tglink">Collega Telegram</button>${owner && tg.ready && !tg.hooked ? '<button class="btn sm" data-nf="tgsetup">Ricollega il bot</button>' : ''}</div>`;
-    let puHtml;
-    if (!pu.allowed) puHtml = '<p>Il titolare non ti ha ancora consentito le notifiche.</p>';
-    else if (!pushOk()) puHtml = isIOS && !standalone() ? '<p>Su iPhone e iPad: apri il pannello con <b>Safari</b>, premi <b>Condividi → Aggiungi a schermata Home</b>, poi apri <b>Kairos</b> dalla Home e torna qui (serve iOS 16.4 o successivo).</p>' : '<p>Questo browser non supporta le notifiche. Usa Chrome, Edge, Firefox o Safari aggiornati.</p>';
-    else if (Notification.permission === 'denied') puHtml = '<p class="nf-warn">⚠️ Hai bloccato le notifiche per questo sito: riattivale dalle impostazioni del browser (icona del lucchetto → Notifiche → Consenti), poi ricarica.</p>';
-    else if (here) puHtml = `<p class="nf-ok">✅ Attive su questo dispositivo${pu.devices > 1 ? ` (e su altri ${pu.devices - 1})` : ''}. ${isIOS ? 'Tocca la notifica per aprire la richiesta.' : 'Puoi autorizzare direttamente dalla notifica.'}</p><div class="nf-btns"><button class="btn sm" data-nf="pushtest">Notifica di prova</button><button class="btn sm danger" data-nf="pushoff">Disattiva su questo dispositivo</button></div>`;
-    else puHtml = `<p>Ricevi le richieste come notifiche, anche a pannello chiuso.${pu.devices ? ` Già attive su ${pu.devices} ${pu.devices === 1 ? 'altro dispositivo' : 'altri dispositivi'}.` : ''}${isIOS ? '' : ' Sul telefono conviene prima installare il pannello: menu del browser → <b>Installa app</b> o <b>Aggiungi a schermata Home</b>.'}</p><div class="nf-btns"><button class="btn sm pri" data-nf="pushon">Attiva notifiche su questo dispositivo</button></div>`;
-    let agHtml = '';
-    if (owner) {
-      const list = d.agents || [];
-      agHtml = `<div class="sd-sub">Agenti che possono ricevere gli avvisi</div>${list.length ? list.map((a) => {
-        const why = !a.active ? 'account disattivato' : !a.store ? 'sospeso chi l\'ha creato: non riceve' : [a.tg ? (a.tgLinked ? 'Telegram collegato' : 'Telegram da collegare') : '', a.push ? (a.pushDevices ? a.pushDevices + ' dispositivi con notifiche' : 'notifiche da attivare') : ''].filter(Boolean).join(' · ') || 'nessun avviso';
-        return `<div class="sd-ag${a.store && a.active ? '' : ' off'}" data-nfa="${+a.id}"><div class="nm"><b>${esc(a.username)}</b><small>${esc(why)}</small></div>
-          <div class="tog${a.tg ? ' on' : ''}" data-nfk="tg" role="switch" tabindex="0"><div><b>Telegram</b></div><i></i></div>
-          <div class="tog${a.push ? ' on' : ''}" data-nfk="push" role="switch" tabindex="0"><div><b>Notifiche</b></div><i></i></div></div>`;
-      }).join('') : '<div class="emptyc">Nessun agente</div>'}${list.length ? '<button class="btn sm pri" data-nf="consent" style="margin-top:10px">Salva consensi</button><div class="sd-note">L\'agente collega poi il suo Telegram o attiva le notifiche dal suo pannello. Riceve solo le richieste delle app che gestisce. Togliendo il consenso viene scollegato subito.</div>' : ''}`;
-    }
-    box.innerHTML = `<div class="nf-row"><h4>✈️ Telegram</h4>${tgHtml}</div><div class="nf-row"><h4>🔔 Notifiche del pannello</h4>${puHtml}</div>${agHtml}`;
-  }
-  async function pushOn() {
-    const d = NF.d; if (!d || !d.push.key) throw new Error('Notifiche non disponibili');
-    const perm = await Notification.requestPermission();
-    if (perm !== 'granted') throw new Error('Permesso negato: consenti le notifiche per questo sito');
-    if (D.demo) return;
-    const reg = await navigator.serviceWorker.register('/panel/sw.js', { scope: '/panel/' });
-    await navigator.serviceWorker.ready;
-    let sub = await reg.pushManager.getSubscription();
-    const key = keyBytes(d.push.key);
-    if (sub) { const k = sub.options && sub.options.applicationServerKey ? new Uint8Array(sub.options.applicationServerKey) : null; if (!k || k.length !== key.length || k.some((x, i) => x !== key[i])) { await sub.unsubscribe(); sub = null; } }
-    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
-    await nApi('POST', '/push', { sub: sub.toJSON(), ua: navigator.userAgent.slice(0, 120) });
-  }
-  async function pushOff() {
-    const sub = await mySub();
-    if (sub) { const endpoint = sub.endpoint; await sub.unsubscribe().catch(() => {}); await nApi('DELETE', '/push', { endpoint }); }
-  }
-  $('#nfBody').addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-nfk]'); if (t) { t.classList.toggle('on'); return; }
-    const b = e.target.closest('[data-nf]'); if (!b) return;
-    const act = b.dataset.nf; b.disabled = true;
-    try {
-      if (act === 'tglink') {
-        const w = D.demo ? null : window.open('', '_blank');
-        const r = await nApi('POST', '/tg/link');
-        if (w) w.location = r.url; else if (!D.demo) location.href = r.url;
-        toast('Si apre Telegram: premi Avvia nel bot');
-        clearInterval(NF.poll); let k = 0;
-        NF.poll = setInterval(async () => { k++; try { const d = await nApi('GET', ''); if (d.tg && d.tg.linked) { clearInterval(NF.poll); toast('Telegram collegato ✓'); renderNf(); } } catch {} if (k > 60) clearInterval(NF.poll); }, 3000);
-      } else if (act === 'tgunlink') { await nApi('POST', '/tg/unlink'); toast('Telegram scollegato'); }
-      else if (act === 'tgtest') { await nApi('POST', '/tg/test'); toast('Messaggio di prova inviato su Telegram'); }
-      else if (act === 'tgsetup') { const r = await nApi('POST', '/tg/setup'); toast('Bot @' + r.bot + ' collegato al pannello'); }
-      else if (act === 'pushon') { await pushOn(); toast('Notifiche attive su questo dispositivo'); }
-      else if (act === 'pushoff') { await pushOff(); toast('Notifiche disattivate su questo dispositivo'); }
-      else if (act === 'pushtest') { await nApi('POST', '/push/test'); toast('Notifica di prova inviata: arriva tra pochi secondi'); }
-      else if (act === 'consent') {
-        const rows = $$('#nfBody [data-nfa]');
-        const pick = (k) => rows.filter((r) => r.querySelector(`[data-nfk="${k}"]`).classList.contains('on')).map((r) => +r.dataset.nfa);
-        await nApi('PUT', '/consent', { tg: pick('tg'), push: pick('push') }); toast('Consensi salvati');
-      }
-    } catch (err) { toast(err.message, 1); } finally { b.disabled = false; }
-    if (act !== 'pushtest' && act !== 'tgtest') renderNf();
-  });
-  $('#nfBody').addEventListener('keydown', (e) => { const t = e.target.closest && e.target.closest('[data-nfk]'); if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); t.classList.toggle('on'); } });
-  // dalla notifica: apre il pannello sulla pagina Download store
-  const goStore = () => { const n = document.querySelector('.nav[data-v="store"]'); if (n) n.click(); };
-  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.kairos === 'store') goStore(); });
-
-  /* ---------------- Riepilogo store (titolare): store attivati, dispositivi, download, per agente e per app ---------------- */
-  const SUM = { data: null, busy: false };
-  if (!$('.nav[data-v="storesum"]')) {
-    const b = document.createElement('button'); b.className = 'nav'; b.dataset.v = 'storesum';
-    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Riepilogo store';
-    b.onclick = () => { view('storesum'); renderSum(true); };
-    const after = $('.nav[data-v="store"]'); after ? after.after(b) : $('#side').appendChild(b);
-    const sec = document.createElement('section'); sec.className = 'view'; sec.id = 'v-storesum'; sec.innerHTML = `
-      <div class="card glass" style="margin-bottom:18px"><div class="hd"><h3>Riepilogo store<small>Quanti store sono attivati, chi scarica e quale agente: tutto in una pagina (download degli ultimi 30 giorni)</small></h3><button class="btn sm" id="ssReload">Aggiorna</button></div>
-        <div class="ss-k" id="ssK"></div>
-        <div class="sd-note" id="ssMode"></div>
-        <div class="ss-def" id="ssDef"></div>
-      </div>
-      <div class="g2">
-        <div class="card glass"><div class="hd"><h3>Per agente<small>Store intestati, tetto, download e dispositivi serviti. Clicca una riga per vedere quali app ha scaricato e i suoi store; la matita cambia il tetto</small></h3></div><div class="tbl-wrap"><table class="tbl ss-t" style="width:100%"><thead><tr><th>Venditore</th><th>Store attivati / tetto</th><th>Download 30 gg</th><th>Dispositivi 30 gg</th><th>Ultimo download</th></tr></thead><tbody id="ssAg"></tbody></table></div></div>
-        <div class="card glass"><div class="hd"><h3>Per app<small>Le app più scaricate dallo store negli ultimi 30 giorni</small></h3></div><div class="tbl-wrap"><table class="tbl ss-t" style="width:100%"><thead><tr><th>App</th><th>Download</th><th>Dispositivi</th><th>Ultimi 7 gg</th></tr></thead><tbody id="ssApp"></tbody></table></div></div>
-      </div>`;
-    $('#v-dash').after(sec);
-  }
-  if (typeof TITLES === 'object') TITLES.storesum = 'Riepilogo store';
-  async function renderSum(force, local) {
-    const sec = $('#v-storesum'); if (!sec || D.role === 'agent' || SUM.busy) return;
-    if (!force && SUM.data && Date.now() - SUM.t < 20000) return;
-    SUM.busy = true;
-    try {
-      const d = local && SUM.data ? SUM.data : await sApi('GET', '/summary'); SUM.data = d; if (!local) SUM.t = Date.now();
-      const T = d.totals || {}, st = d.settings || {}, sellers = d.sellers || [], apps = d.apps || [];
-      const withStores = sellers.filter((x) => x.id && x.stores > 0).length;
-      $('#ssK').innerHTML = [
-        [T.stores || 0, 'store attivati', `${withStores} agent${withStores === 1 ? 'e' : 'i'} con store`],
-        [T.dl30 || 0, 'download in 30 giorni', `ultimi 7 giorni: ${T.dl7 || 0} · oggi: ${T.dl1 || 0}`],
-        [T.users30 || 0, 'dispositivi che hanno scaricato', `in 30 giorni · ${T.devs30 || 0} hanno chiesto qualcosa`],
-        [T.pending || 0, 'richieste in attesa', st.activation ? 'con «solo store attivati» di solito zero' : 'aspettano te o gli agenti'],
-      ].map(([n, l, i]) => `<div class="k"><b>${esc(String(n))}</b><small>${l}</small><i>${esc(i)}</i></div>`).join('');
-      $('#ssMode').innerHTML = st.activation ? `🏪 <b>Solo store attivati</b>: si scarica solo dagli store intestati a un venditore, senza conferma. Tetto di serie: <b>${esc(String(st.storeMax))}</b> store per agente (cambialo per agente dalla pagina Agenti).`
-        : st.approval === false ? '⚠️ <b>Download liberi</b>: nessuna conferma e nessuna intestazione. Per sapere quale agente scarica, scegli «Solo store attivati» in App da approvare → Approvazione.'
-        : 'ℹ️ <b>Chiedi la mia autorizzazione</b>: ogni download aspetta un sì. Gli store attivati con un codice risultano comunque intestati a quel venditore.';
-      const defCap = Number.isInteger(st.storeMax) ? st.storeMax : 50;
-      $('#ssDef').innerHTML = `Tetto di serie per agente: <b id="ssDefV">${defCap}</b> store <button class="ss-pen" data-ssdef="1" title="Cambia il tetto di serie (vale per gli agenti senza un tetto proprio)">✎</button><span class="mut">· lo sostituisci per il singolo agente con la matita sulla sua riga; tu non hai tetto</span>`;
-      $('#ssAg').innerHTML = sellers.length ? sellers.map((x) => {
-        const own = x.id && Number.isInteger(x.capOwn) ? x.capOwn : null, cap = x.id ? (own !== null ? own : defCap) : null;
-        const pct = cap ? Math.min(100, Math.round((x.stores / cap) * 100)) : 0;
-        const apps = (x.apps || []).length, open = SUM.open === x.id;
-        return `<tr class="ss-r${open ? ' open' : ''}" data-ssr="${x.id}"><td><b>${esc(x.name)}</b>${x.active === false ? ' <span class="mut">(sospeso)</span>' : ''}<br><small class="mut">${x.id ? 'codice ' + esc(x.storeCode || '—') : 'senza codice o con il tuo'}${x.pending ? ` · <span style="color:#ffd37a">${x.pending} in attesa</span>` : ''}</small></td>
-          <td><span class="ss-cap"><b>${x.stores}</b>${x.id ? ` <span class="mut">/ ${cap}${own === null ? '' : ' <i title="tetto suo, diverso da quello di serie">★</i>'}</span><button class="ss-pen" data-sscap="${x.id}" title="Cambia il tetto di ${esc(x.name)}">✎</button>` : ' <span class="mut">· senza tetto</span>'}</span>${x.id ? `<div class="ss-bar"><i style="width:${pct}%"></i></div>` : ''}</td>
-          <td><b>${x.dl30}</b> <span class="mut">· 7 gg: ${x.dl7} · oggi: ${x.dl1}${apps ? ` · ${apps} app` : ''}</span></td>
-          <td>${x.devs30}</td><td>${x.last ? esc(ago(x.last)) : '—'}</td></tr>${open ? ssDetail(x) : ''}`; }).join('') : '<tr><td colspan="5" class="mut">Ancora nessun dato</td></tr>';
-      $('#ssApp').innerHTML = apps.length ? apps.map((a) => `<tr><td><b>${esc(a.app)}</b></td><td>${a.n}</td><td>${a.devs}</td><td>${a.n7 || 0}</td></tr>`).join('') : '<tr><td colspan="4" class="mut">Nessun download negli ultimi 30 giorni</td></tr>';
-    } catch (e) { if ($('#v-storesum').classList.contains('on')) toast(e.message, 1); }
-    finally { SUM.busy = false; }
-  }
-  /** dettaglio di un venditore: quali app ha scaricato (30 gg) e i suoi store attivati */
-  function ssDetail(x) {
-    const apps = x.apps || [], st = x.storeList || [];
-    return `<tr class="ss-d"><td colspan="5"><div class="ss-dg">
-      <div><h4>App scaricate negli ultimi 30 giorni${apps.length ? ` (${apps.reduce((n, a) => n + a.n, 0)})` : ''}</h4>${apps.length ? apps.map((a) => `<div class="ss-app"><span><b>${esc(a.app)}</b> <span class="mut">· ${a.devs} dispositiv${a.devs === 1 ? 'o' : 'i'}</span></span><span><b>${a.n}</b> <span class="mut">download · ultimo ${esc(ago(a.last))}</span></span></div>`).join('') : '<div class="mut" style="font-size:13px">Nessun download</div>'}</div>
-      <div><h4>Store attivati${st.length ? ` (${x.stores})` : ''}</h4>${st.length ? st.map((d) => `<div class="ss-st"><span><b>${esc(d.device || 'Dispositivo')}</b><small>${[d.note, d.country].filter(Boolean).map(esc).join(' · ')}${d.note || d.country ? ' · ' : ''}attivato ${esc(ago(d.activated))}</small></span><span style="text-align:right"><b>${d.downloads || 0}</b> <span class="mut">download</span><small>${d.last ? 'ultimo ' + esc(ago(d.last)) : 'mai'}</small></span></div>`).join('') + (x.stores > st.length ? `<div class="mut" style="font-size:12px;margin-top:6px">… e altri ${x.stores - st.length}</div>` : '') : '<div class="mut" style="font-size:13px">Nessuno store attivato con il suo codice</div>'}</div>
-    </div></td></tr>`;
-  }
-  /** modifica del tetto (di serie o del singolo agente) direttamente nel riepilogo */
-  function ssEditCap(el, cur, onSave, hint) {
-    el.innerHTML = `<span class="ss-cap"><input class="inp" type="number" min="0" max="100000" step="1" value="${cur === null || cur === undefined ? '' : esc(String(cur))}" placeholder="${hint || ''}"> <button class="btn sm pri" data-ssok="1">Salva</button> <button class="btn sm" data-ssno="1">Annulla</button></span>`;
-    const inp = el.querySelector('input'); inp.focus(); inp.select();
-    const done = async () => { const v = inp.value.trim(); const n = v === '' ? null : parseInt(v, 10); if (n !== null && !(n >= 0 && n <= 100000)) { toast('Scrivi un numero da 0 a 100000', 1); return; } try { await onSave(n); } catch (e) { toast(e.message, 1); } renderSum(true); };
-    el.querySelector('[data-ssok]').onclick = (e) => { e.stopPropagation(); done(); };
-    el.querySelector('[data-ssno]').onclick = (e) => { e.stopPropagation(); renderSum(true); };
-    inp.onkeydown = (e) => { if (e.key === 'Enter') done(); if (e.key === 'Escape') renderSum(true); };
-    inp.onclick = (e) => e.stopPropagation();
-  }
-  const ssSec = $('#v-storesum');
-  if (ssSec) ssSec.addEventListener('click', (e) => {
-    const pen = e.target.closest('[data-sscap]');
-    if (pen) { e.stopPropagation(); const id = +pen.dataset.sscap, x = (SUM.data.sellers || []).find((y) => y.id === id); ssEditCap(pen.closest('.ss-cap'), Number.isInteger(x && x.capOwn) ? x.capOwn : null, async (n) => { await api('PUT', `/admin/agents/${id}`, { storeMax: n }); toast(n === null ? 'Tetto di serie ripristinato per ' + x.name : `Tetto di ${x.name}: ${n} store`); }, 'di serie'); return; }
-    const def = e.target.closest('[data-ssdef]');
-    if (def) { const st = (SUM.data && SUM.data.settings) || {}; ssEditCap(def.parentNode, Number.isInteger(st.storeMax) ? st.storeMax : 50, async (n) => { if (n === null) { toast('Scrivi un numero', 1); return; } await sApi('PUT', '/settings', { storeMax: n }); toast('Tetto di serie: ' + n + ' store per agente'); }); return; }
-    const row = e.target.closest('tr.ss-r');
-    if (row && !e.target.closest('input,button')) { const id = +row.dataset.ssr; SUM.open = SUM.open === id ? null : id; renderSum(true, true); }
-  });
-  const ssR = $('#ssReload'); if (ssR) ssR.onclick = () => renderSum(true);
-  // la pagina si riempie appena diventa visibile (qualunque cosa abbia cambiato vista: menu, scorciatoie, link)
-  { const sv = $('#v-storesum'); if (sv) new MutationObserver(() => { if (sv.classList.contains('on')) renderSum(true); }).observe(sv, { attributes: true, attributeFilter: ['class'] }); }
-
-  /* aggiornamento: all'apertura della pagina e ogni 20 secondi mentre il pannello è aperto */
+  /* aggiornamento: quando la pagina diventa visibile e ogni 30 secondi mentre resta aperta */
+  new MutationObserver(() => { if (V.classList.contains('on')) refresh(true); }).observe(V, { attributes: true, attributeFilter: ['class'] });
   const navB = document.querySelector('.nav[data-v="store"]');
-  if (navB) navB.addEventListener('click', () => { refresh(true); renderNf(); });
+  if (navB) navB.addEventListener('click', () => refresh(true));
   const appEl = $('#app');
-  if (appEl) new MutationObserver(() => {
-    if (appEl.classList.contains('on')) { refresh(true); if (location.hash === '#store') { history.replaceState(null, '', location.pathname); setTimeout(goStore, 300); } }
-    else { S.data = null; S.seen = null; S.seenDl = null; badge(); }
-  }).observe(appEl, { attributes: true, attributeFilter: ['class'] });
-  setInterval(() => { if (appEl && appEl.classList.contains('on') && !document.hidden) { refresh(); if ($('#v-storesum') && $('#v-storesum').classList.contains('on')) renderSum(); } }, 20000);
+  if (appEl) new MutationObserver(() => { if (!appEl.classList.contains('on')) { S.data = null; S.t = 0; } }).observe(appEl, { attributes: true, attributeFilter: ['class'] });
+  setInterval(() => { if (V.classList.contains('on') && !document.hidden) refresh(); }, 30000);
 })();

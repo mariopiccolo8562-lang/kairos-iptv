@@ -75,7 +75,7 @@
   }
   function agents(toks) {
     return isAg() ? [] : (D.agents || []).filter((a) => fits([a.username, a.email, a.storeCode, a.notes].filter(Boolean).join(' ').toLowerCase(), toks)).slice(0, 5)
-      .map((a) => ({ k: 'agent', tag: 'AG', t: a.username, s: ['codice Store ' + (a.storeCode || '—'), a.active === false ? 'sospeso' : ''].filter(Boolean).join(' · '), a }));
+      .map((a) => ({ k: 'agent', tag: 'AG', t: a.username, s: [a.email || '', a.active === false ? 'sospeso' : ''].filter(Boolean).join(' · ') || 'agente', a }));
   }
   function draw(groups, loading) {
     items = []; let h = '';

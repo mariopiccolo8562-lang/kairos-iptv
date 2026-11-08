@@ -200,8 +200,7 @@ body.agent .foot{display:none}
   // pagine del pannello: sempre e solo con i dati dei suoi clienti
   const FP = [['dash', 'Dashboard', 'Riepilogo dei suoi clienti', 'dash'], ['errors', 'Errori applicazione', 'Dei suoi clienti', 'apperr'],
     ['reports', 'Segnalazioni', 'Dei suoi clienti', 'reports'], ['contentReq', 'Richieste contenuti', 'Dei suoi clienti', 'creq'], ['addonReq', 'Richieste temi', 'Assegna solo gli add-on che gli concedi', 'areq'],
-    ['messages', 'Messaggi', 'Solo ai suoi clienti, mai a tutti', 'msgs'], ['store', 'Download store: accettare le richieste', 'Solo per le app che scegli qui sotto (le impostazioni restano tue)', 'store'],
-    ['storeAll', 'Download store: vedere anche i download degli altri', 'Se spento nello storico vede solo quelli approvati da lui', ''],
+    ['messages', 'Messaggi', 'Solo ai suoi clienti, mai a tutti', 'msgs'],
     ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['dlcodes', 'Codici downloader', 'Le app da far installare ai clienti (solo da copiare)', 'dlc'], ['appstore', 'APP Store', 'Le app per caricare le liste: solo quelle che scegli qui sotto, in sola lettura', 'apps3'], ['appsOp', 'OrbixPlay e MaxPlayer', 'Codici cliente e liste create dei suoi clienti', 'agop'], ['appk', 'App Kairos', 'Link e codici Downloader delle app Kairos che scegli', 'agk'], ['lines', 'Linee collegate', 'Il registro delle linee collegate alle app: solo le sue', 'lines'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', ''], ['armada', 'Pannello Armada', 'Con i tuoi crediti, entro il tetto mensile', 'armada'], ['storm', 'Pannello Storm', 'Con i tuoi crediti Storm, entro il tetto che decidi', 'storm']];
   FP.push(['wolf', 'Pannello WOLF', 'Con il suo account reseller WOLF: sue linee e suoi crediti', 'wolf'], ['mxp', 'Pannello MaxPlayer', 'Solo i clienti del suo agente MaxPlayer', 'mxp'], ['oxp', 'Pannello OrbixPlay', 'Solo le playlist dei suoi clienti', 'oxp'], ['ro', 'Pannello Realott', 'Con il suo account sub-reseller Realott: sue linee e suoi crediti', 'ro'], ['slt', 'Pannello SLT', 'Con il suo account sub-reseller SLT: sue linee e suoi crediti', 'slt']);
   const PERM_VIEW = Object.fromEntries(FP.map(([k, , , v]) => [v, k]));
@@ -297,16 +296,14 @@ body.agent .foot{display:none}
   };
 
   /* ---------- modalità agente ---------- */
-  // «Online ora» è solo del titolare: mostra tutti i clienti del pannello. «Download store» è di tutti gli agenti: lì hanno
-  // il loro codice venditore, i loro store e le richieste che arrivano da quegli store (prima serviva un permesso, spento di serie)
-  const agentCan = (v) => v !== 'live' && (v === 'store' || (!!PERM_VIEW[v] && can(PERM_VIEW[v])));
+  // «Online ora» e «Riepilogo store» sono solo del titolare (lo store è aperto: agli agenti non resta nulla da approvare)
+  const agentCan = (v) => v !== 'live' && v !== 'store' && !!PERM_VIEW[v] && can(PERM_VIEW[v]);
   const OWNER_ONLY = ['dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'storesum', 'dns', 'apps3', 'lines', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity', 'ora', 'atx', 'ro', 'slt', 'orcp']; // ora/atx/ro/slt/orcp: solo titolare (il server risponde 403 agli agenti)
   let modeSet = '';
   function applyMode() {
     const ag = isAgent();
     document.body.classList.toggle('agent', ag);
     for (const v of OWNER_ONLY) { const b = nav(v); if (b) b.style.display = ag && !agentCan(v) ? 'none' : ''; }
-    { const c = ($('#sdMode') || $('#sdOn')) && ($('#sdMode') || $('#sdOn')).closest('.card'); if (c) c.style.display = ag ? 'none' : ''; const d = $('#sdDev') && $('#sdDev').closest('.card'); if (d) d.style.display = ag ? 'none' : ''; const k = $('#sdClear'); if (k) k.style.visibility = ag ? 'hidden' : ''; const sm = $('#sdSmsCard'); if (sm) sm.style.display = ag ? 'none' : ''; const cc = $('#sdClCard'); if (cc) cc.style.display = ag ? 'none' : ''; }
     const sb = nav('sec'); if (sb) sb.style.display = ag ? '' : 'none';
     const ab = nav('agents'); if (ab) ab.style.display = !ag || me().canAgents ? '' : 'none';
     layoutMenu();
@@ -502,11 +499,10 @@ body.agent .foot{display:none}
     V.innerHTML = `${hostCard}<div class="ag-bar"><input class="inp" id="agQ" placeholder="Cerca agente per nome, email o note" value="${esc(st.q)}">
       <div class="seg" id="agF">${[['all', 'Tutti'], ['on', 'Attivi'], ['off', 'Disattivati']].map(([k, l]) => `<button data-f="${k}" class="${st.f === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       <button class="btn pri" id="agNew">+ Nuovo ${sub ? 'sotto-agente' : 'agente'}</button></div>
-      <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Codice Store</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th><th>Link accesso</th><th>DNS</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
+      <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th><th>Link accesso</th><th>DNS</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
       ${list.map((a) => { const pct = a.maxClients ? Math.min(100, Math.round((a.clients / a.maxClients) * 100)) : 100; const up = a.parentId && byId.get(a.parentId);
         return `<tr data-ag="${a.id}"><td class="num">${a.id}</td>
         <td><b>${esc(a.username)}</b><small>${esc(a.email || '—')}${up ? ' · sotto ' + esc(up.username) : ''}</small></td>
-        <td><b class="mono" title="Il cliente lo scrive nella richiesta dello Store: la richiesta arriva a questo agente (tu la vedi nel pannello, senza avvisi salvo l\'opzione in Approvazione)">${esc(a.storeCode || '—')}</b>${a.stores !== undefined ? `<small title="Store attivati con il suo codice (tetto deciso da te)">${a.stores} store${a.storeMax !== null && a.storeMax !== undefined ? ' / ' + a.storeMax : ''}</small>` : ''}</td>
         <td><b>${a.clients}</b><small>Limite: ${a.maxClients}</small><div class="ag-bar2"><s style="width:${pct}%"></s></div><button type="button" class="btn sm ag-cl" data-agcl="${a.id}" title="Apre Clienti con solo i clienti di ${esc(a.username)}">👥 Vedi i suoi clienti</button></td>
         <td class="hm">${a.subAgents}</td>
         <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span>${(a.perms || {}).armada ? '<br><span class="chip" style="margin-top:4px">Armada</span>' : ''}${(a.perms || {}).storm ? '<br><span class="chip" style="margin-top:4px">Storm</span>' : ''}${(a.perms || {}).wolf ? '<br><span class="chip" style="margin-top:4px">WOLF</span>' : ''}${(a.perms || {}).mxp ? '<br><span class="chip" style="margin-top:4px">MaxPlayer</span>' : ''}${(a.perms || {}).oxp ? '<br><span class="chip" style="margin-top:4px">OrbixPlay</span>' : ''}</td>
@@ -614,8 +610,6 @@ body.agent .foot{display:none}
         <div class="row"><div><label class="lbl">Clienti massimi</label><input class="inp" id="agM" type="number" min="0" max="${top ? top.maxClients : 100000}" value="${a ? a.maxClients : Math.min(10, top ? top.maxClients : 10)}"></div>
         <div><label class="lbl">Connessioni per cliente</label><input class="inp" id="agC" type="number" min="1" max="${topP ? topP.maxConn : 10}" value="${P.maxConn || 1}"></div></div>
         ${a ? `<p class="mut" style="font-size:12.5px;margin-top:8px">Clienti ora: <b>${a.clients}</b>${a.subAgents ? ` (di cui ${a.clients - a.ownClients} dei suoi ${a.subAgents} sotto-agenti)` : ''}</p>` : ''}
-        ${!top ? `<label class="lbl" style="margin-top:10px">Codice venditore Store</label><div class="row" style="grid-template-columns:1fr auto auto"><input class="inp mono" id="agSc" maxlength="8" autocapitalize="characters" spellcheck="false" placeholder="es. MARIO o K7M4" value="${esc(a && a.storeCode || '')}" style="text-transform:uppercase;letter-spacing:.12em"><button type="button" class="btn" id="agScCp" title="Copia">Copia</button><button type="button" class="btn" id="agScNew" title="Ne propone uno casuale di 4 caratteri">Casuale</button></div>
-        <label class="lbl" style="margin-top:10px">Store attivabili <small>(con «Solo store attivati»; vuoto = tetto di serie)</small></label><div class="row" style="grid-template-columns:140px 1fr;align-items:center"><input class="inp" id="agSm" type="number" min="0" max="100000" step="1" placeholder="di serie" value="${a && a.storeMax !== null && a.storeMax !== undefined ? a.storeMax : ''}" style="margin:0"><small class="mut">${a && a.stores !== undefined ? `Finora ne ha attivati <b>${a.stores}</b>. ` : ''}Quanti store (installazioni) può intestarsi con il suo codice.</small></div><p class="mut" style="font-size:12px;margin-top:6px">Lo scegli tu (da 3 a 8 lettere o cifre, es. il nome dell'agente). I suoi clienti lo scrivono nella richiesta dello Store: la richiesta arriva solo a lui e a te. Lasciato vuoto, lo crea il pannello.</p>` : ''}
         ${a && !top ? `<label class="lbl" style="margin-top:10px">Link di accesso personale</label><button type="button" class="btn" id="agLink" style="width:100%">🔗 Link e codice di accesso</button><small class="mut" style="display:block;margin-top:4px">Apre il pannello solo con il suo account, senza utente e password</small>` : ''}
         <label class="lbl">Accesso</label><div class="ag-radio" id="agR">
           <label class="${a && a.canAgents ? '' : 'on'}"><input type="radio" name="agr" value="0" ${a && a.canAgents ? '' : 'checked'}><b>Solo clienti</b><small>Gestisce solo i suoi clienti</small></label>
@@ -638,7 +632,7 @@ body.agent .foot{display:none}
       <div class="ag-c"><h4>Pagine del pannello</h4><small>Cosa vede nel suo pannello: sempre e solo i dati dei suoi clienti. Impostazioni, Server DNS, API, la manutenzione generale e le impostazioni dell'assistente restano solo tue (valgono per tutti i clienti). I tuoi clienti e quelli degli altri agenti non li vede mai.</small>
         <div class="ag-chk" id="agPg">${FP.filter(([k]) => !APP_KEYS.includes(k) && k !== 'store').map(([k, l, sm]) => chk('perm', k, l, !!P[k], topP && !topP[k], sm)).join('')}</div>
       </div>
-      <div class="ag-c"><h4>App dello store che può approvare</h4><small>Le richieste degli store attivati con il suo codice gli arrivano sempre, con l'avviso nel pannello. Qui scegli le app che può approvare: per le altre l'avviso arriva a te.</small>
+      <div class="ag-c" style="display:none"><h4>App dello store che può approvare</h4><small>Le richieste degli store attivati con il suo codice gli arrivano sempre, con l'avviso nel pannello. Qui scegli le app che può approvare: per le altre l'avviso arriva a te.</small>
         <div class="ag-chk" id="agSa" style="max-height:300px;overflow:auto">${storeAppsBox(P, topP)}</div>
         <div style="display:flex;gap:8px;margin-top:10px"><input class="inp" id="agSaN" maxlength="80" placeholder="Aggiungi un'app (nome come nello store)" style="margin:0;flex:1"><button class="btn sm" id="agSaAdd">Aggiungi</button></div>
       </div>
