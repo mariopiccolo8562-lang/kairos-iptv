@@ -59,14 +59,29 @@
   }
   const subsHtml = (k, rows) => narrow() ? subsCards(k, rows) : grid(['Utente', 'Superiore', 'Tipo', 'Crediti', 'Linee', 'Stato', ''], rows.map((r, i) => tr([`<b>${esc(r.username)}</b>`, esc(r.owner || '—'), esc(r.type || '—'), esc(String(r.credits ?? '—')), esc(String(r.lines ?? '—')), r.enabled ? badge(r.status || 'Attivo', '#2ecc71') : badge(r.status || 'Disattivato', '#9aa4b2'), k === 'ro' ? btn('stog', i, r.enabled ? 'Disattiva' : 'Riattiva') : ''])));
   const connsHtml = (rows) => narrow() ? connsCards(rows) : grid(['Utente', 'Canale', 'IP', 'Info'], rows.map((r) => tr([`<b>${esc(r.username)}</b>`, esc(r.stream || '—'), esc(r.ip || '—'), esc(r.info || '—')])));
-  const overviewHtml = (d, m) => { const T = [['Crediti', d.credits, 'green'], ['Linee totali', d.total, 'dark'], ['Attive', d.active, 'red'], ['Scadute', d.expired, 'dark'], ['Online ora', d.online, 'blue'], ['Connessioni aperte', d.conns, 'blue']].filter(([, v]) => v != null); return window.KXStats ? KXStats.strip(T.map(([l, v, c]) => ({ label: l, v: esc(String(v)), c })), { margin: m || '0' }) : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">${T.map(([l, v]) => `<div class="card" style="padding:14px"><div class="mut" style="font-size:12px">${l}</div><div style="font-size:24px;font-weight:700">${esc(String(v))}</div></div>`).join('')}</div>`; };
+  /* riquadri in testa: se la lista linee è caricata i numeri (attive, in scadenza, scadute, disattivate, online) li calcola KAIROS dalle linee
+     e un clic sul riquadro filtra la lista; altrimenti usa quelli della panoramica del pannello (Realott non dà scadute né online) */
+  const overviewHtml = (d, m, rows) => {
+    d = d || {};
+    if (Array.isArray(rows)) {
+      const t = now(), c = { total: rows.length, active: 0, soon: 0, expired: 0, off: 0, online: 0, conns: 0 }; /* r.exp in secondi, come il filtro della lista */
+      for (const r of rows) {
+        const ex = !!r.enabled && (r.expired || (r.exp && r.exp < t));
+        if (!r.enabled) c.off++; else if (ex) c.expired++; else { c.active++; if (r.exp && r.exp - t < 7 * 86400) c.soon++; }
+        if (r.conns > 0) { c.online++; c.conns += +r.conns || 0; }
+      }
+      const T = [['Crediti', d.credits, 'green'], ['Online ora', c.online, 'blue', 'online'], ['Abbonamenti attivi', c.active, 'red', 'active'], ['Linee totali', c.total, 'dark', ''],
+        ['Scadono entro 7 giorni', c.soon, 'dark', 'expiring'], ['Scadute', c.expired, 'dark', 'expired'], ['Disattivate', c.off, 'dark', 'disabled']].filter(([, v]) => v != null);
+      return window.KXStats ? KXStats.strip(T.map(([l, v, cl, k]) => ({ k, label: l, v: esc(String(v)), c: cl })), { margin: m || '0' }) : '';
+    }
+    const T = [['Crediti', d.credits, 'green'], ['Linee totali', d.total, 'dark'], ['Attive', d.active, 'red'], ['Scadute', d.expired, 'dark'], ['Online ora', d.online, 'blue'], ['Connessioni aperte', d.conns, 'blue']].filter(([, v]) => v != null); return window.KXStats ? KXStats.strip(T.map(([l, v, c]) => ({ label: l, v: esc(String(v)), c })), { margin: m || '0' }) : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">${T.map(([l, v]) => `<div class="card" style="padding:14px"><div class="mut" style="font-size:12px">${l}</div><div style="font-size:24px;font-weight:700">${esc(String(v))}</div></div>`).join('')}</div>`; };
 
   function body(k) {
     const A = ST[k], P = PANELS[k];
     if (A.busy) return `<p class="mut" style="margin:14px 0">Carico da ${P.name}…</p>`;
     if (A.err) return `<p style="color:#ff8f8f;margin:14px 0">${esc(A.err)}</p>`;
     if (A.data == null) return '';
-    if (A.tab === 'overview') return overviewHtml(A.data);
+    if (A.tab === 'overview') return overviewHtml(A.data, null, A.rows);
     const rows = Array.isArray(A.data.rows) ? A.data.rows : [], vis = A.tab === 'lines' ? sorted(k, filt(k, rows)) : rows;
     const sum = A.tab === 'lines' ? ` · attive: <b>${rows.filter((r) => r.enabled && !r.expired).length}</b> · scadute: <b>${rows.filter((r) => r.expired).length}</b> · disattivate: <b>${rows.filter((r) => !r.enabled).length}</b>${A.data.dns ? ` · DNS: <b>${esc(A.data.dns)}</b>` : ''}` : '';
     return `<p style="font-size:12.5px;margin:10px 0">${vis.length}${vis.length !== rows.length ? ' di ' + rows.length : ''} ${A.tab === 'lines' ? 'linee' : A.tab === 'subs' ? 'sub-reseller' : 'collegati'}${sum}</p>${A.tab === 'lines' ? linesHtml(k, vis, A.data.dns) : A.tab === 'subs' ? subsHtml(k, vis) : connsHtml(vis)}`;
@@ -80,6 +95,7 @@
     const V = $('#v-' + k); if (!V) return; const A = ST[k], P = PANELS[k];
     const st = A.st || {};
     if (st.connected && A.ov === undefined) { A.ov = null; api('GET', `/admin/${k}/overview`).then((d) => { A.ov = d; show(k); }).catch(() => { A.ov = false; }); }
+    if (st.connected && A.rows === undefined) { A.rows = null; api('GET', `/admin/${k}/lines`).then((d) => { A.rows = Array.isArray(d.rows) ? d.rows : []; show(k); }).catch(() => { A.rows = false; }); }
     {
       const form = !st.connected || A.edit;
       V.innerHTML = `<div class="card glass" style="margin-bottom:14px">
@@ -91,10 +107,11 @@
           <label>Username<input class="inp" id="exU" autocomplete="off" value="${esc(st.user || '')}"></label>
           <label>Password<input class="inp" id="exP" type="password" autocomplete="new-password" placeholder="${st.connected ? 'lascia vuoto per non cambiarla' : ''}"></label></div>
           <button class="btn pri" data-o="save" style="margin-top:12px">Collega ${esc(P.name)}</button>` : ''}</div>
-        ${st.connected && A.tab !== 'overview' && A.ov ? overviewHtml(A.ov, '0 0 14px') : ''}
+        ${st.connected && A.tab !== 'overview' && (A.ov || Array.isArray(A.rows)) ? overviewHtml(A.ov, '0 0 14px', A.rows) : ''}
         ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.map(([t, n]) => `<button class="btn sm${A.tab === t ? ' pri' : ''}" data-t="${t}">${n}</button>`).join('')}${toolbar(k)}</div>${body(k)}</div>` : ''}`;
     }
     $$('[data-t]', V).forEach((b) => (b.onclick = () => { A.tab = b.dataset.t; A.q = ''; A.status = ''; A.days = 0; load(k); }));
+    if (window.KXStats) KXStats.bind(V, (f) => { const F = { online: 'online', active: 'active', expiring: 'expiring', expired: 'expired', disabled: 'disabled', total: '' }; if (!(f in F)) return; const go = () => { A.q = ''; A.days = 0; A.status = F[f]; show(k); }; if (A.tab !== 'lines') { A.tab = 'lines'; A.status = F[f]; load(k); } else go(); });
     $$('[data-o]', V).forEach((b) => (b.onclick = () => op(k, b.dataset.o)));
     $$('[data-a]', V).forEach((b) => (b.onclick = () => act(k, b.dataset.a, (A.data && A.data.rows || [])[+b.dataset.i])));
     const q = $('#exQ', V); if (q) q.oninput = () => { A.q = q.value.trim(); const x = $('#exQ', V); show(k); const y = $('#exQ', V); if (y && x !== y) { y.focus(); y.setSelectionRange(y.value.length, y.value.length); } };
@@ -164,7 +181,7 @@
   }
   async function load(k) {
     const A = ST[k]; A.busy = true; A.err = ''; show(k);
-    try { A.data = await api('GET', `/admin/${k}/${A.tab}`); if (A.tab === 'overview') A.ov = A.data; } catch (e) { A.err = e.message; A.data = null; }
+    try { A.data = await api('GET', `/admin/${k}/${A.tab}`); if (A.tab === 'overview') A.ov = A.data; if (A.tab === 'lines' && Array.isArray(A.data.rows)) A.rows = A.data.rows; } catch (e) { A.err = e.message; A.data = null; }
     A.busy = false; show(k);
   }
   function show(k) { try { render(k); } catch (e) { const V = $('#v-' + k); if (V) V.innerHTML = `<div class="card glass"><p style="color:#ff8f8f">Errore nella sezione ${esc(PANELS[k].name)}: ${esc(e.message || String(e))}</p></div>`; } }
