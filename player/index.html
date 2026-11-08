@@ -1556,8 +1556,10 @@ if (!S.secret) {
 }
 const NATIVE = window.KairosNative || null;
 const HAS_PLAYER = !!(NATIVE && NATIVE.play);
-if (NATIVE) document.body.classList.add('lite'); // poi decide il pannello (rcLiteApply)
-try { if (NATIVE && devClass() === 'D') document.body.classList.add('xlite', 'lowmem'); } catch {} // chiavetta con poca memoria: leggerissima già dall'avvio (niente animazioni)
+// all'avvio, prima della risposta del pannello: l'ultima modalità imposta dal pannello (rcLite) o quella scelta nell'app; «Spenta» resta spenta
+{ const v0 = store.get('rcLite', '') || store.get('o_liteUi', 'auto');
+  if (NATIVE && v0 !== 'off') document.body.classList.add('lite'); // poi decide il pannello (rcLiteApply)
+  try { if (NATIVE && devClass() === 'D') { document.body.classList.add('lowmem'); if (v0 !== 'off') document.body.classList.add('xlite'); } } catch {} } // chiavetta con poca memoria: leggerissima già dall'avvio (niente animazioni)
 const playPrefs = () => { const o = { engine: 'exo', quality: 'auto', buffer: 'balanced', aspect: 'fit', ...store.get('play', {}) }; for (const k of ['quality', 'buffer', 'aspect']) { const v = rcGet('p.' + k); if (v !== undefined) o[k] = String(v); } return o; };
 
 /* ---------------- audio FX (WebAudio, nessun file) ---------------- */
@@ -4646,8 +4648,10 @@ const rcGet = (k) => { const v = S.rc && S.rc[k]; return v === undefined || v ==
 const rcOpt = (k) => { const v = rcGet('o.' + k); if (v === undefined) return undefined; const o = OPT[k]; return o && o[1].some((x) => x[0] === v || String(x[0]) === String(v)) ? (o[1].find((x) => x[0] === v || String(x[0]) === String(v)))[0] : undefined; };
 /* modalità leggera: quella imposta dal pannello (voce «lite»); con il permesso «lite» spento resta «Automatica»; altrimenti la sceglie il cliente */
 const LITE_V = ['auto', 'on', 'max', 'off'];
-const liteLocked = () => LITE_V.includes(rcGet('lite')) || !perm('lite');
-const opt = (k) => { if (k === 'liteUi') { const rl = rcGet('lite'); if (LITE_V.includes(rl)) return rl; if (!perm('lite')) return 'auto'; } const pe = panelEng(k); if (pe) return pe; const rv = rcOpt(k); if (rv !== undefined) return rv; const v = store.get('o_' + k, null); return v === null ? (k === 'startScr' ? store.get('startScr', OPT[k][2]) : k === 'sfx' && store.get('sound', true) === false ? 'off' : OPT[k][2]) : v; };
+const liteLocked = () => LITE_V.includes(S.rc ? rcGet('lite') : store.get('rcLite', '')) || !perm('lite');
+/* modalità imposta dal pannello: prima della sua risposta vale l'ultima ricevuta (salvata), così «Spenta» non si perde all'avvio senza rete */
+const rcLiteV = () => (S.rc ? rcGet('lite') : store.get('rcLite', '') || undefined);
+const opt = (k) => { if (k === 'liteUi') { const rl = rcLiteV(); if (LITE_V.includes(rl)) return rl; if (!perm('lite')) return 'auto'; } const pe = panelEng(k); if (pe) return pe; const rv = rcOpt(k); if (rv !== undefined) return rv; const v = store.get('o_' + k, null); return v === null ? (k === 'startScr' ? store.get('startScr', OPT[k][2]) : k === 'sfx' && store.get('sound', true) === false ? 'off' : OPT[k][2]) : v; };
 const optLabel = (k) => { const [, o] = OPT[k], v = opt(k); return (o.find((x) => x[0] === v) || o[0])[1]; };
 const optRow = (k) => panelEng(k) || rcOpt(k) !== undefined || (k === 'liteUi' && liteLocked()) ? `<div class="sr static"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))} <small class="mut">· scelto dal fornitore</small></b></div>` : `<div class="sr" data-f data-opt="${k}"><span>${OPT[k][0]}</span><b>${esc(optLabel(k))}</b></div>`;
 function cycleOpt(k, el) {
@@ -5097,6 +5101,7 @@ const RC_CFG_KEYS = ['startScr', 'hw', 'adaptQ', 'liveFmt', 'autoNext', 'introAu
 const lowMem = () => !!NATIVE && devClass() === 'D';
 function rcLiteApply() {
   const v = opt('liteUi'), b = document.body; // pannello («lite»), permesso del cliente o scelta nell'app
+  if (S.rc) store.set('rcLite', rcGet('lite') || ''); // per il prossimo avvio (prima della risposta del pannello)
   const lite = v === 'on' || v === 'max' ? true : v === 'off' ? false : !!NATIVE;
   // leggerissima da sola sulle chiavette con poca memoria (classe D) e dopo un riavvio per memoria (memGuard), salvo «Spenta» imposta dal pannello
   const autoX = v !== 'off' && (lowMem() || !!store.get('memGuard', 0));
@@ -5118,7 +5123,7 @@ window.kxTrim = (level) => {
     try { S.xepg = null; S.xepgVer++; XE = new WeakMap(); } catch {}
     whenIdle(() => buildXmltv(), 2 * 60e3, 3000, 10 * 60e3);
   }
-  try { document.body.classList.add('xlite'); } catch {}
+  try { if (opt('liteUi') !== 'off') document.body.classList.add('xlite'); } catch {} // «Spenta» (pannello o cliente) resta spenta: solo le cache si liberano
   S.trimAt = Date.now();
 };
 function memGuard() {
@@ -5130,23 +5135,21 @@ function memGuard() {
     for (const x of Array.isArray(list) ? list : []) {
       if (x.kind !== 'crash' && x.kind !== 'killed') continue;
       pendEvts.push({ t: x.t, problem: x.kind, action: x.kind === 'killed' ? 'modalità leggerissima' : 'riapertura', outcome: '', err: `${x.kind === 'killed' ? 'chiusa dal sistema' : 'errore interno'} · ${x.info || ''}${mem.totalMb ? ` · dispositivo ${mem.totalMb} MB` : ''}`.slice(0, 120) });
-      if (x.kind === 'killed' && !store.get('memGuard', 0)) { store.set('memGuard', Date.now()); setTimeout(() => toast('Il dispositivo ha poca memoria: attivata la modalità leggerissima'), 2500); }
+      if (x.kind === 'killed' && !store.get('memGuard', 0)) { store.set('memGuard', Date.now()); if (opt('liteUi') !== 'off') setTimeout(() => toast('Il dispositivo ha poca memoria: attivata la modalità leggerissima'), 2500); }
     }
     if (list.length) setTimeout(() => sendPlayEvents().catch(() => {}), 4000);
   } catch {}
-  if (!NATIVE.renderGone) { rcLiteApply(); return; }
-  let g = {}; try { g = JSON.parse(NATIVE.renderGone() || '{}'); } catch {}
-  if (!g.last) { rcLiteApply(); return; }
-  if (g.last !== store.get('rgSeen', 0)) {
+  let g = {}; try { if (NATIVE.renderGone) g = JSON.parse(NATIVE.renderGone() || '{}'); } catch {}
+  if (g.last && g.last !== store.get('rgSeen', 0)) {
     store.set('rgSeen', g.last);
     pendEvts.push({ t: g.last, problem: 'restart', action: g.n30 >= 2 ? 'modalità leggerissima attivata da sola' : 'nessuna', outcome: g.n30 >= 2 ? 'risolto' : '', err: `motore web chiuso da Android (${g.why || 'memoria'}) · ${g.n30} negli ultimi 30 min · ${g.total} in tutto` });
     setTimeout(() => sendPlayEvents().catch(() => {}), 4000);
   }
-  if (g.n30 >= 2 && !store.get('memGuard', 0)) {
+  if (g.last && g.n30 >= 2 && !store.get('memGuard', 0)) {
     store.set('memGuard', Date.now());
-    rcLiteApply();
-    setTimeout(() => toast('Il dispositivo ha poca memoria: attivata la modalità leggerissima'), 2500);
+    if (opt('liteUi') !== 'off') setTimeout(() => toast('Il dispositivo ha poca memoria: attivata la modalità leggerissima'), 2500);
   }
+  rcLiteApply(); // sempre: le classi rispecchiano la modalità leggera scelta (pannello, permesso o cliente)
 }
 /** applica la configurazione ricevuta (se diversa da quella già applicata) */
 function rcApply(rc, rcv) {
