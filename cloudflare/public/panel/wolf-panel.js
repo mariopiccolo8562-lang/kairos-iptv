@@ -77,7 +77,8 @@
       if (q && !`${l.id} ${l.username} ${l.note} ${l.owner}`.toLowerCase().includes(q)) return false;
       if (W.own && l.owner !== W.own) return false;
       if (W.f === 'on') return l.enabled && (!l.exp || l.exp > now);
-      if (W.f === 'exp') return l.exp && l.exp < now + 7 * DAY;
+      if (W.f === 'soon') return l.enabled && l.exp && l.exp > now && l.exp < now + 7 * DAY;
+      if (W.f === 'exp') return l.exp && l.exp < now;
       if (W.f === 'off') return !l.enabled;
       if (W.f === 'link') return linkOf(l.id);
       if (W.f === 'conn') return l.conns > 0;
@@ -100,7 +101,7 @@
       bindCfg(); return;
     }
     const d = W.data || {}, list = filtered(), shown = list.slice(0, W.limit);
-    const FL = [['', 'Tutte'], ['on', 'Attive'], ['exp', 'In scadenza / scadute'], ['off', 'Disattivate'], ['conn', 'Collegate ora'], ['disc', 'Scollegate'], ...(isAg() ? [] : [['link', 'Collegate a clienti']])];
+    const FL = [['', 'Tutte'], ['on', 'Attive'], ['soon', 'In scadenza'], ['exp', 'Scadute'], ['off', 'Disattivate'], ['conn', 'Collegate ora'], ['disc', 'Scollegate'], ...(isAg() ? [] : [['link', 'Collegate a clienti']])];
     V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">✅ Pannello WOLF collegato</b><small>${isAg() ? esc(W.cfg.user) : esc(W.cfg.url) + ' · ' + esc(W.cfg.user)}</small><small>Quello che fai qui succede subito anche su WOLF, e viceversa.</small></div>
         <div><small>Crediti WOLF</small><span class="cr">${d.credits ?? '—'}</span></div><div><small>Linee</small><span class="cr">${d.lines ? d.lines.length : '—'}</span></div>
         <button class="btn sm" id="wfPw">Cambia password</button><button class="btn sm" id="wfRe">${W.busy || W.rsBusy ? 'Carico…' : 'Aggiorna'}</button><button class="btn sm" id="wfNew">${W.tab === 'rs' ? '+ Nuovo reseller' : '+ Nuova linea'}</button>${W.tab !== 'rs' && window.KXQuick ? KXQuick.button('wolf') : ''}</div>
@@ -136,7 +137,7 @@
     if (window.KXSort) KXSort.bind(V, W, 'wf', () => { W.limit = 100; render(); });
     if ($('#wfMore')) $('#wfMore').onclick = () => { W.limit += 100; render(); };
     V.querySelectorAll('.wf-row [data-a]').forEach((b) => { b.onclick = () => act(b.dataset.a, +b.closest('.wf-row').dataset.id); });
-    if (window.KXStats) KXStats.bind(V, (k) => { const F = { online: 'conn', active: 'on', expired: 'exp', soon: 'exp', off: 'off', total: '' }; if (k in F) { W.f = F[k]; W.q = ''; render(); } });
+    if (window.KXStats) KXStats.bind(V, (k) => { const F = { online: 'conn', active: 'on', expired: 'exp', soon: 'soon', off: 'off', total: '' }; if (k in F) { W.f = F[k]; W.q = ''; render(); } });
     if (window.KXTools && d.lines) KXTools.bind(V, 'wf', W.sel, () => filtered().map((l) => l.id), { ext: bulkExt, on: () => bulkTgl(true), off: () => bulkTgl(false), msg: bulkMsg, csv: exportCsv, stats: () => { W.st = !W.st; render(); } }, render);
   }
   /* azioni su più linee: solo quelle selezionate e visibili con i filtri attuali */
