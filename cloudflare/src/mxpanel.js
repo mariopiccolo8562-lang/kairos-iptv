@@ -46,6 +46,7 @@ async function allPages(H, key, path, max = 40) {
   return out;
 }
 const s = (v, n = 200) => String(v ?? '').slice(0, n);
+const hostLike = (v) => /^(?:https?:\/\/|localhost(?::\d+)?$|(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?$|[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/|$))/i.test(String(v || '').trim());
 function userOut(u) {
   return {
     id: s(u.id, 30), username: s(u.username, 120), email: s(u.email, 120),
@@ -153,9 +154,9 @@ export async function mxpRoutes(req, env, path, who, ip, H, ag = null) {
   if (mx && sub === '/users' && m === 'GET') {
     const fresh = new URL(req.url).searchParams.get('fresh') === '1';
     const [ids, all] = await Promise.all([agIds(H, acc, key, mx, fresh), usersAll(H, acc, key, fresh)]);
-    return json({ users: all.filter((u) => ids.has(u.id)) });
+    return json({ users: all.filter((u) => ids.has(u.id)).map((u) => ({ ...u, lists: u.lists.map((l) => ({ ...l, fqdn: '', port: '', ssl: false })) })) });
   }
-  if (mx && sub === '/domains' && m === 'GET') { const j = await call(H, key, 'GET', `/agents/${mx}/domains`); return json({ domains: (Array.isArray(j.data) ? j.data : []).map(domOut).filter((x) => x.id).map((d) => ({ id: d.id, label: d.label || 'DNS ' + d.id, domain: '', port: 0, https: !!d.https })) }); } // solo nome: l'indirizzo lo vede il Master
+  if (mx && sub === '/domains' && m === 'GET') { const j = await call(H, key, 'GET', `/agents/${mx}/domains`); return json({ domains: (Array.isArray(j.data) ? j.data : []).map(domOut).filter((x) => x.id).map((d) => ({ id: d.id, label: d.label && !hostLike(d.label) ? d.label : 'DNS ' + d.id, domain: '', port: 0, https: !!d.https })) }); } // solo nome: l'indirizzo lo vede il Master
   if (mx && sub === '/agents' && m === 'GET') return json({ agents: (await allPages(H, key, `/agents/${mx}/agents`, 10)).map(agentOut) });
 
   if (sub === '/overview' && m === 'GET') {

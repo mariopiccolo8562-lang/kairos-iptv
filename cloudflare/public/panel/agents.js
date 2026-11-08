@@ -112,10 +112,11 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 .wz-s.ok{border-color:color-mix(in srgb,var(--ok) 45%,transparent)}.wz-s.ok .n{background:var(--ok);color:#06120b;border-color:transparent}
 .wz-s h4{margin:5px 0 2px;font-size:16px}.wz-s .hint{color:var(--mut);font-size:13px;margin:0 0 12px;line-height:1.45}
 .wz-targets{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px;margin:4px 0 12px}
-.wz-target{display:flex;align-items:center;gap:10px;padding:13px 15px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.025);color:var(--txt,#eef1f8);font:inherit;font-weight:750;text-align:left;cursor:pointer}
+.wz-target{display:flex;align-items:center;gap:10px;padding:13px 15px;border:1px solid color-mix(in srgb,var(--wzt,#64748b) 52%,var(--line));border-radius:12px;background:color-mix(in srgb,var(--wzt,#64748b) 10%,#171a1f);color:var(--txt,#eef1f8);font:inherit;font-weight:750;text-align:left;cursor:pointer}
 .wz-target i{display:grid;place-items:center;width:22px;height:22px;border:1px solid var(--line);border-radius:7px;font-style:normal;color:transparent}
-.wz-target.on{border-color:var(--a1);background:color-mix(in srgb,var(--a1) 14%,transparent)}
-.wz-target.on i{background:var(--a1);border-color:var(--a1);color:#fff}
+.wz-target.on{border-color:var(--wzt,#64748b);background:color-mix(in srgb,var(--wzt,#64748b) 24%,#171a1f)}
+.wz-target.on i{background:var(--wzt,#64748b);border-color:var(--wzt,#64748b);color:#fff}
+.wz-target .wz-ico{display:grid;place-items:center;min-width:28px;height:28px;border-radius:9px;background:color-mix(in srgb,var(--wzt,#64748b) 22%,transparent);font-style:normal;font-size:12px;font-weight:900}
 .wz-target:focus-visible{outline:2px solid var(--a1);outline-offset:2px}
 .wz-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.wz-fields .inp{margin:0}
 .wz-apps{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 0}
@@ -213,6 +214,7 @@ body.agent .foot{display:none}
   const isAgent = () => D.role === 'agent';
   const me = () => D.me || {};
   const can = (k) => !isAgent() || !!(me().perms || {})[k];
+  const canOpenActivationWizard = () => !isAgent() || can('create') || (D.activationApps || []).some((x) => x.enabled && (me().perms || {}).actApps?.includes(x.key)) || (!!(me().perms || {}).orcpApp && (me().perms || {}).orcpSrv?.length > 0);
   const linePanels = ['wolf', 'armada', 'storm', 'ro', 'slt'];
   const canLoadLines = (perms = me().perms || {}) => !!window.KXLinePick && (!isAgent() || linePanels.some((k) => !!perms[k]));
   const matchLineServer = async (host, servers, panel) => {
@@ -295,7 +297,7 @@ body.agent .foot{display:none}
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
   // agente: le pagine senza permesso non chiamano nemmeno il server (prima ogni 20-30 s partivano richieste destinate al «non consentito»)
-  const AG_OK = /^\/admin\/(payments|line-notes(\?.*)?|online|insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/(upd|fix)|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|agent\/orcp|armada\/(state|packages|lines|mags|new|renew|toggle)|storm\/(state|lines)|oxp\/(state|playlists(\/[A-Za-z0-9_-]+)?)|mxp\/(accounts|a\/[a-z0-9]{2,20}\/(overview|domains|agents(\/\d+\/(enable|disable))?|users(\/\d+(\/password|\/devices|\/lists(\/[A-Za-z0-9%-]+)?)?)?(\?fresh=1)?))|guide(?:\/read)?|(ro|slt)\/[A-Za-z0-9_\/%.-]+(\?.*)?|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
+  const AG_OK = /^\/admin\/(payments|line-notes(\?.*)?|online|insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/(upd|fix)|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|agent\/(orcp|act-request)|armada\/(state|packages|lines|mags|new|renew|toggle)|storm\/(state|lines)|oxp\/(state|playlists(\/[A-Za-z0-9_-]+)?)|mxp\/(accounts|a\/[a-z0-9]{2,20}\/(overview|domains|agents(\/\d+\/(enable|disable))?|users(\/\d+(\/password|\/devices|\/lists(\/[A-Za-z0-9%-]+)?)?)?(\?fresh=1)?))|guide(?:\/read)?|(ro|slt)\/[A-Za-z0-9_\/%.-]+(\?.*)?|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
   const AG_NEED = [[/^\/admin\/requests.*[?&]kind=content/, 'contentReq'], [/^\/admin\/requests.*[?&]kind=addon/, 'addonReq'], [/^\/admin\/requests.*[?&]kind=ai/, 'ai'],
     [/^\/admin\/requests(\?(?!.*kind=)|\?.*kind=report|$)/, 'reports'], [/^\/admin\/app-errors/, 'errors'], [/^\/admin\/presence/, 'online'], [/^\/admin\/catalog/, 'vod'], [/^\/admin\/apps3\/lists/, 'appsOp'],
     [/^\/admin\/ext-lists/, 'players'], [/^\/admin\/linked-lines/, 'lines'], [/^\/admin\/agent-maint/, 'maint'], [/^\/admin\/armada\//, 'armada'], [/^\/admin\/storm\//, 'storm'], [/^\/admin\/wolf\//, 'wolf'], [/^\/admin\/mxp\//, 'mxp'], [/^\/admin\/oxp\//, 'oxp'], [/^\/admin\/ro\//, 'ro'], [/^\/admin\/slt\//, 'slt']];
@@ -309,7 +311,7 @@ body.agent .foot{display:none}
     if (p === '/admin/state' && m === 'GET' && (window.__assist || null) !== asAt) throw new Error('Pannello cambiato nel frattempo');
     if (p === '/admin/state' && m === 'GET' && r) {
       D.role = r.role === 'agent' ? 'agent' : 'owner'; D.agents = r.agents || []; D.me = r.me || null; D.servers = r.servers || [];
-      D.storeAppNames = r.storeAppNames || []; D.maintMe = r.maint || null; D.maintAg = r.maintAg || []; D.appLinks = Array.isArray(r.appLinks) ? r.appLinks : []; D.kairosApps = Array.isArray(r.kairosApps) ? r.kairosApps : [];
+      D.storeAppNames = r.storeAppNames || []; D.activationApps = Array.isArray(r.activationApps) ? r.activationApps : []; D.maintMe = r.maint || null; D.maintAg = r.maintAg || []; D.appLinks = Array.isArray(r.appLinks) ? r.appLinks : []; D.kairosApps = Array.isArray(r.kairosApps) ? r.kairosApps : [];
       if (r.addonCat) D.addonCat = r.addonCat;
     }
     if (p === '/admin/login' && r && r.role) D.role = r.role;
@@ -336,7 +338,7 @@ body.agent .foot{display:none}
     const h = $('#aUser') && $('#aUser').closest('.card') && $('#aUser').closest('.card').querySelector('h3');
     if (h) h.innerHTML = ag ? 'Il tuo account<small>Nome utente e password per entrare nel pannello</small>' : 'Account amministratore<small>Nome utente e password per entrare nel pannello</small>';
     if (ag && $('#aUser') && !$('#aUser').value) $('#aUser').value = D.user || '';
-    $('#newDev').style.display = !ag || can('create') ? '' : 'none';
+    $('#newDev').style.display = !ag || canOpenActivationWizard() ? '' : 'none';
     // per l'agente il pulsante dice cosa fa: apre «Attiva un cliente Kairos»
     const nb = $('#newDev').lastChild;
     if (nb && nb.nodeType === 3) nb.textContent = ag ? 'Attiva cliente' : 'Nuovo cliente'; // titolare: come lo scrive nav2.js
@@ -692,6 +694,12 @@ body.agent .foot{display:none}
     const names = [...new Set([...(((D.settings && D.settings.appLinks) || []).map((x) => x.name)), ...cur.filter((x) => x !== '*')])].sort((a, b) => a.localeCompare(b));
     return chk('aapp', '*', '<b>Tutte le app</b>', all, false, 'Anche quelle che aggiungerai in futuro') + (names.length ? names.map((n) => chk('aapp', n, esc(n), !all && cur.some((x) => x.toLowerCase() === n.toLowerCase()), false, '')).join('') : '<p class="mut" style="font-size:12.5px">Nessuna app: le aggiungi in APP Store → Attiva app.</p>');
   };
+  const actAppsBox = (P, topP) => {
+    const cur = new Set(Array.isArray(P.actApps) ? P.actApps : []);
+    const allowed = new Set(Array.isArray(topP && topP.actApps) ? topP.actApps : []);
+    const apps = (D.activationApps || []).filter((x) => !topP || allowed.has(x.key));
+    return apps.length ? apps.map((x) => chk('actapp', x.key, esc(x.name) + (x.enabled ? '' : ' <small>(spenta dal Master)</small>'), cur.has(x.key), !x.enabled, '')).join('') : '<small class="mut">Il Master non ha ancora attivato app per Nuovo cliente.</small>';
+  };
   /* link di accesso personale di un agente + codice: copia, rigenera, revoca (come i pannelli dei fornitori) */
   async function linkBox(a) {
     const P = `/admin/agents/${a.id}/access-link`, day = (t) => (t ? new Date(t).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
@@ -734,6 +742,7 @@ body.agent .foot{display:none}
       { key: 'appsAllow', title: 'Attiva app', all: 'Tutte le app', items: [...new Set(apps.map((x) => x.name).filter(Boolean))].map((x) => [x, x]) },
       { key: 'kAllow', title: 'App Kairos', all: 'Tutte le app', items: KAPPS },
       { key: 'storeApps', title: 'Store apps', all: 'Tutte le app', items: [...new Set((D.storeAppNames || []).filter(Boolean))].map((x) => [x, x]) },
+      { key: 'actApps', title: 'App da attivare in Nuovo cliente', all: 'Tutte le app attive', items: (D.activationApps || []).map((x) => [x.key, x.name]) },
     ];
   };
   function openBulkAgents() {
@@ -898,6 +907,8 @@ body.agent .foot{display:none}
             <div class="ag-chk ag-sub" id="agAa" style="max-height:220px;overflow:auto">${appsAllowBox(P)}</div></div>
           <div class="ag-ap"><div class="ag-chk">${chk('perm', 'orcpApp', '<b>App MirkoTeam: scaricarla e scegliere il server</b>', !!P.orcpApp, topP && !topP.orcpApp, 'Solo il codice Downloader e i server qui assegnati')}</div>
             <div class="ag-chk" id="agOrcpSrv">${orcpItems.length ? orcpItems.map((x) => chk('orcp-srv', x.k, `<b>Server ${x.n} · ${esc(x.name)}</b>`, (P.orcpSrv || []).includes(x.k), sub && !(topP.orcpSrv || []).includes(x.k), '')).join('') : '<small class="mut">Assegna prima i server MirkoTeam al tuo agente.</small>'}<label style="display:block;margin-top:6px"><input type="checkbox" data-orcp-all> Tutti</label></div></div>
+          <div class="ag-ap"><div class="ag-chk"><b style="display:block;margin-bottom:6px">App da attivare in Nuovo cliente</b><small class="mut">Solo le app accese dal Master e concesse anche a questo agente.</small></div>
+            <div class="ag-chk ag-sub" id="agActApps" style="max-height:220px;overflow:auto">${actAppsBox(P, topP)}</div></div>
           <div class="ag-ap"><div class="ag-chk">${chk('perm', 'players', '<b>Attivare OrbixPlay e MaxPlayer dal pannello</b>', !!P.players, topP && !topP.players, 'Manda le linee dei suoi clienti con le tue chiavi (che non vede)')}${chk('perm', 'appsOp', '<b>Pagina «OrbixPlay e MaxPlayer»</b>', !!P.appsOp, topP && !topP.appsOp, 'Codici cliente e liste create dei suoi clienti (senza DNS né impostazioni)')}</div>
             <p class="ag-dn" style="margin:8px 0 0 18px">Quali DNS può usare lo scegli in alto, in «DNS e server dell'agente».</p></div>
           <div class="ag-ap"><div class="ag-chk">${chk('perm', 'dlcodes', '<b>Codici downloader</b>', !!P.dlcodes, topP && !topP.dlcodes, 'Solo quelli scelti qui sotto, da copiare')}</div>
@@ -1015,6 +1026,7 @@ body.agent .foot{display:none}
       servers: $$('#agS [data-srv]').filter((i) => i.checked).map((i) => i.dataset.srv),
       perms: { ...Object.fromEntries([...FL, ...FP, ['armadaTrial'], ['stormTrial'], ['oxpNew']].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"], .ag-apps [data-perm="${k}"], #agAr [data-perm="${k}"], #agSt [data-perm="${k}"], #agWf [data-perm="${k}"], #agMx [data-perm="${k}"], #agOx [data-perm="${k}"]`) || {}).checked])), armadaCredits: Math.max(0, +(($('#agArC') || {}).value || 0) || 0), stormCredits: Math.max(0, +(($('#agStC') || {}).value || 0) || 0), dlcAllow: listRead('agDc', 'dlca'), kAllow: listRead('agKa', 'kapp'), orbDns: listRead('agOd', 'odns'), mxDns: listRead('agMd', 'mdns'), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad),
         storeApps: $('#agSa [data-sapp="*"]') && $('#agSa [data-sapp="*"]').checked ? ['*'] : $$('#agSa [data-sapp]').filter((i) => i.checked && i.dataset.sapp !== '*').map((i) => i.dataset.sapp),
+        actApps: $$('#agActApps [data-actapp]:checked').map((i) => i.dataset.actapp),
         appsAllow: $('#agAa [data-aapp="*"]') && $('#agAa [data-aapp="*"]').checked ? ['*'] : $$('#agAa [data-aapp]').filter((i) => i.checked && i.dataset.aapp !== '*').map((i) => i.dataset.aapp),
         orcpSrv: $$('#agOrcpSrv [data-orcp-srv]:checked').map((i) => i.dataset.orcpSrv) },
     });
@@ -1230,18 +1242,29 @@ body.agent .foot{display:none}
     const showKairos = !agent || can('create');
     const showMax = !agent || (!!players().max && can('players'));
     const showOrbix = !agent || (!!players().orbix && can('players'));
-    const availableTargets = new Set([...(showKairos ? ['kairos'] : []), ...(showMax ? ['max'] : []), ...(showOrbix ? ['orbix'] : [])]);
-    const initialTargets = Array.isArray(preset.targets) ? preset.targets.filter((k) => availableTargets.has(k)) : ['kairos'];
+    const dynamicApps = (D.activationApps || []).filter((x) => x.enabled && (!agent || (P.actApps || []).includes(x.key)));
+    let orcpCfg = null;
+    const availableTargets = () => new Set([...(showKairos ? ['kairos'] : []), ...(showMax ? ['max'] : []), ...(showOrbix ? ['orbix'] : []), ...(orcpCfg && orcpCfg.servers && orcpCfg.servers.length ? ['orcp'] : []), ...dynamicApps.map((x) => x.key)]);
+    const initialTargets = Array.isArray(preset.targets) ? preset.targets.filter((k) => availableTargets().has(k) || k === 'orcp') : [showKairos ? 'kairos' : (dynamicApps[0] && dynamicApps[0].key)].filter(Boolean);
     const st = {
       targets: new Set(initialTargets), code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1), payDue: false, payMonths: 1, payAmount: '',
       durationMode: 'months', durationN: '', durationUnit: 'd',
       pl: { serverId: (servers[0] || {}).id || '', username: '', password: '', host: '', ref: '', note: '', panel: '', picked: null }, expSource: '',
-      name: '', maxConn: 1, mxDomain: '', orbixId: '', oxDns: '0', busy: false, running: '', results: [],
+      name: '', maxConn: 1, mxDomain: '', orbixId: '', oxDns: '0', orcpServer: '', appData: {}, busy: false, running: '', results: [],
     };
     const showLinePick = canLoadLines(P);
     const APPS_W = [['tv', 'Kairos Pro'], ['prem', 'Kairos Premium'], ['ktv', 'Kairos TV'], ['plus', 'Kairos Plus'], ['xc', 'Kairos XC'], ['lite', 'Kairos Lite'], ['nova', 'Kairos Nova']];
-    const TARGETS = [['kairos', 'App Kairos'], ['max', 'MaxPlayer'], ['orbix', 'OrbixPlay']];
-    const targetNames = { kairos: 'App Kairos', max: 'MaxPlayer', orbix: 'OrbixPlay' };
+    const targets = () => [['kairos', 'App Kairos'], ['max', 'MaxPlayer'], ['orbix', 'OrbixPlay'], ...(orcpCfg && orcpCfg.servers && orcpCfg.servers.length ? [['orcp', 'MirkoTeam']] : []), ...dynamicApps.map((x) => [x.key, x.name])];
+    const targetNames = () => Object.fromEntries(targets().map(([k, n]) => [k, n]));
+    const appColors = ['#2563eb', '#06b6d4', '#ec4899', '#22c55e', '#8b5cf6', '#f97316', '#14b8a6', '#eab308', '#6366f1', '#ef4444'];
+    const targetColor = (k) => ({ kairos: '#2563eb', max: '#8b5cf6', orbix: '#f97316', orcp: '#0d9488' })[k] || (() => { let h = 0; for (const c of String(k)) h = (h * 31 + c.charCodeAt(0)) | 0; return appColors[Math.abs(h) % appColors.length]; })();
+    const targetIcon = (k, label) => ({ kairos: 'K', max: 'M', orbix: 'O', orcp: 'MT' })[k] || String(label || '').trim().split(/\s+/).slice(0, 2).map((x) => x[0] || '').join('').toUpperCase();
+    const preselectOrcp = () => {
+      if (!orcpCfg || !st.pl.panel) return;
+      const name = String((orcpCfg.map || {})[st.pl.panel] || '');
+      const server = (orcpCfg.servers || []).find((x) => x.name === name);
+      if (server) st.orcpServer = String(server.n);
+    };
     const orbDns = (players().dns && players().dns.orbix) || [];
     let mxDomains = null, mxError = '', mxLoading = showMax, dnsSaved = [], alive = true;
     let lkT = 0, lkN = 0;
@@ -1252,7 +1275,7 @@ body.agent .foot{display:none}
     const lineCredentialsOk = () => !!(st.pl.username.trim() && st.pl.password);
     const lineOk = () => lineCredentialsOk() && (!has('kairos') || (agent ? !!st.pl.serverId : !!st.pl.host.trim()));
     const durationOk = () => !has('kairos') || (st.durationMode === 'months' ? st.months > 0 : st.durationMode === 'date' ? !!st.expires : Number.isInteger(+st.durationN) && +st.durationN >= 1 && +st.durationN <= 999);
-    const targetsOk = () => st.targets.size > 0 &&
+    const targetsOk = () => st.targets.size > 0 && [...st.targets].every((k) => availableTargets().has(k)) &&
       (!has('kairos') || codeOk()) &&
       (!has('max') || (!mxLoading && (mxDomains && mxDomains.length ? !!st.mxDomain : !!mxError))) &&
       (!has('orbix') || (!!String(st.orbixId || '').trim() && !!orbDns.length && !!orbDns[+st.oxDns]));
@@ -1289,7 +1312,7 @@ body.agent .foot{display:none}
     };
     const missing = () => {
       const out = [];
-      if (!st.targets.size) return ['scegli almeno un’app'];
+      if (!st.targets.size || [...st.targets].some((k) => !availableTargets().has(k))) return ['scegli un’app disponibile'];
       if (has('kairos') && !codeOk()) out.push(!okCode() ? 'il codice della TV' : st.look && (st.look.taken || st.look.mine) ? 'un codice non ancora attivato' : 'il controllo del codice');
       if (has('kairos') && !durationOk()) out.push('la durata');
       if (!lineCredentialsOk()) out.push('la linea (utente e password)');
@@ -1301,6 +1324,8 @@ body.agent .foot{display:none}
       if (has('orbix') && !String(st.orbixId || '').trim()) out.push('il codice dispositivo OrbixPlay');
       if (has('orbix') && !orbDns.length) out.push('un DNS OrbixPlay configurato');
       if (has('orbix') && orbDns.length && !orbDns[+st.oxDns]) out.push('il DNS OrbixPlay');
+      if (has('orcp') && !((orcpCfg && orcpCfg.servers) || []).some((x) => String(x.n) === String(st.orcpServer))) out.push('il server MirkoTeam');
+      for (const app of dynamicApps) if (has(app.key) && !String((st.appData[app.key] || {}).mac || '').trim()) out.push(`il MAC / ID del dispositivo per ${app.name}`);
       return [...new Set(out)];
     };
     const syncForm = () => {
@@ -1318,6 +1343,12 @@ body.agent .foot{display:none}
       if (get('wzMxDom')) st.mxDomain = get('wzMxDom').value;
       if (get('wzOrbixId')) st.orbixId = get('wzOrbixId').value;
       if (get('wzOxDns')) st.oxDns = get('wzOxDns').value;
+      if (get('wzOrcpSrv')) st.orcpServer = get('wzOrcpSrv').value;
+      for (const app of dynamicApps) {
+        const data = st.appData[app.key] || (st.appData[app.key] = {});
+        if (get('wzActMac-' + app.key)) data.mac = get('wzActMac-' + app.key).value;
+        if (get('wzActKey-' + app.key)) data.deviceKey = get('wzActKey-' + app.key).value;
+      }
     };
     const foot = () => {
       const mi = missing(), go = $('#wzGo');
@@ -1363,14 +1394,15 @@ body.agent .foot{display:none}
     };
     const bindOpen = () => $$('[data-wzopen]').forEach((b) => (b.onclick = () => { const x = (D.devices || []).find((y) => y.id === b.dataset.wzopen); if (x) openClient(x); }));
     const fillLine = async (r, label) => {
-      const sv = agent && has('kairos') ? await matchLineServer(r.host, servers, r.p) : null;
+      const sv = agent && r.p ? await matchLineServer(r.host, servers, r.p) : null;
       st.pl.username = r.username || '';
       st.pl.password = r.password || '';
       st.pl.ref = label || r.tag || 'Linea';
       st.pl.note = r.note || '';
       st.pl.panel = r.p || '';
+      preselectOrcp();
       if (agent) {
-        if (sv) st.pl.serverId = sv.id;
+        if (r.p) st.pl.serverId = sv ? sv.id : '';
         st.pl.picked = r.p ? { username: st.pl.username, password: st.pl.password } : null;
         resetAgentExpiry();
       }
@@ -1421,8 +1453,8 @@ body.agent .foot{display:none}
       await fillLine(r, '');
     };
     const body = () => {
-      const targetButtons = TARGETS.filter(([k]) => k === 'kairos' ? showKairos : k === 'max' ? showMax : showOrbix).map(([k, label]) =>
-        `<button type="button" class="wz-target${has(k) ? ' on' : ''}" data-wztarget="${k}" aria-pressed="${has(k)}"><i>✓</i><span>${label}</span></button>`).join('');
+      const targetButtons = targets().filter(([k]) => availableTargets().has(k)).map(([k, label]) =>
+        `<button type="button" class="wz-target${has(k) ? ' on' : ''}" style="--wzt:${targetColor(k)}" data-wztarget="${k}" aria-pressed="${has(k)}"><i>✓</i><span class="wz-ico">${esc(targetIcon(k, label))}</span><span>${esc(label)}</span></button>`).join('');
       const kairos = has('kairos') ? `<div class="wz-st"><b>Codice della TV</b><p class="wz-help">Il cliente apre l’app Kairos e ti manda una foto. Scrivi il codice: maiuscole e trattino li metto io.</p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input class="inp wz-code" id="wzCode" placeholder="KXAB-12CD" maxlength="9" autocomplete="off" spellcheck="false" value="${esc(st.code)}"><button type="button" class="btn sm" id="wzCheck">Controlla codice</button></div>
         <div id="wzCodeSt">${codeStatus()}</div><p class="wz-help">Quale app Kairos usa il cliente?</p>
@@ -1434,6 +1466,14 @@ body.agent .foot{display:none}
         <div class="wz-fields"><input class="inp" id="wzOrbixId" data-mac placeholder="Codice dispositivo OrbixPlay" autocomplete="off" value="${esc(st.orbixId)}">
         <select class="inp" id="wzOxDns" ${orbDns.length ? '' : 'disabled'}><option value="">Scegli il DNS OrbixPlay…</option>${orbDns.map((x, i) => `<option value="${i}"${String(st.oxDns) === String(i) ? ' selected' : ''}>${esc(x.name || 'DNS ' + (i + 1))}${!agent && x.host ? ' — ' + esc(x.host) : ''}</option>`).join('')}</select></div>
         ${!orbDns.length ? '<div class="wz-st warn">Non hai DNS OrbixPlay disponibili per il tuo account.</div>' : ''}</div>` : '';
+      const orcp = has('orcp') ? `<div class="wz-st"><b>MirkoTeam</b><p class="wz-help">L'agente inserisce solo utente e password; seleziona il server assegnato.</p>
+        <label class="lbl">Server<select class="inp" id="wzOrcpSrv"><option value="">Scegli il server…</option>${((orcpCfg && orcpCfg.servers) || []).map((x) => `<option value="${esc(x.n)}"${String(st.orcpServer) === String(x.n) ? ' selected' : ''}>Server ${esc(x.n)} · ${esc(x.name)}</option>`).join('')}</select></label></div>` : '';
+      const apps = dynamicApps.filter((x) => has(x.key)).map((x) => {
+        const data = st.appData[x.key] || {};
+        const deviceKey = /^(ibo-player|ibo-one)$/.test(x.key) ? `<label class="lbl">Device key (facoltativa)<input class="inp" id="wzActKey-${x.key}" value="${esc(data.deviceKey || '')}" maxlength="120"></label>` : '';
+        return `<div class="wz-st"><b>${esc(x.name)}</b><p class="wz-help">Inserisci il MAC / ID del dispositivo per questa app.</p>
+          <label class="lbl">MAC / ID del dispositivo<input class="inp" data-act-mac id="wzActMac-${x.key}" value="${esc(data.mac || '')}" maxlength="64" autocomplete="off"></label>${deviceKey}</div>`;
+      }).join('');
       const picker = showLinePick ? '<div id="wzLinePick" data-placeholder="🔎 Cerca una linea sui pannelli disponibili"></div>' : '';
       const dnsFallback = !agent && showLinePick ? '<div id="wzLineDns"></div>' : '';
       const paste = window.KXPaste ? '<textarea class="inp mono" id="wzPaste" rows="2" style="font-size:12.5px;margin-top:8px" placeholder="📋 Incolla un link M3U o il messaggio con server, utente e password"></textarea>' : '';
@@ -1454,7 +1494,7 @@ body.agent .foot{display:none}
           ${(!agent || can('payments')) ? `<label class="ck" style="margin-top:14px"><input type="checkbox" id="wzPayDue"${st.payDue ? ' checked' : ''}><span>Non ha ancora pagato</span></label><div class="wz-fields" id="wzPayFields" style="${st.payDue ? '' : 'display:none'}"><input class="inp" type="number" id="wzPayMonths" min="0" max="120" value="${st.payMonths}" placeholder="Mesi"><input class="inp" type="number" id="wzPayAmount" min="0" max="100000" step="0.01" value="${esc(st.payAmount)}" placeholder="Importo € (facoltativo)"></div>` : ''}` : ''}</div></div>`;
       return `<div class="wz">
         <div class="wz-s${targetsOk() ? ' ok' : ''}" id="wzS1"><span class="n">${targetsOk() ? '✓' : '1'}</span><div><h4>Dove lo attivi</h4><p class="hint">Puoi attivare il cliente in una o più app. Scegli almeno un’app.</p>
-          <div class="wz-targets">${targetButtons}</div>${kairos}${max}${orbix}</div></div>
+          <div class="wz-targets">${targetButtons}</div>${kairos}${max}${orbix}${orcp}${apps}</div></div>
         <div class="wz-s${lineOk() ? ' ok' : ''}" id="wzS2"><span class="n">${lineOk() ? '✓' : '2'}</span><div><h4>Linea del cliente</h4>
           <p class="hint">Scegli una linea già creata, incollala oppure inserisci i dati a mano. Utente e password servono per tutte le app.</p>
           ${picker}${dnsFallback}${paste}<div id="wzPasteSt"></div>
@@ -1486,7 +1526,7 @@ body.agent .foot{display:none}
       }
       const paste = $('#wzPaste');
       if (paste) { paste.addEventListener('paste', () => setTimeout(() => pasteGo(true), 0)); paste.oninput = () => { if (/\S{6,}/.test(paste.value)) pasteGo(true); }; }
-      ['wzDurN', 'wzDurUnit', 'wzSrv', 'wzHost', 'wzUser', 'wzPass', 'wzName', 'wzConn', 'wzMxDom', 'wzOrbixId', 'wzOxDns'].forEach((id) => {
+      ['wzDurN', 'wzDurUnit', 'wzSrv', 'wzHost', 'wzUser', 'wzPass', 'wzName', 'wzConn', 'wzMxDom', 'wzOrbixId', 'wzOxDns', 'wzOrcpSrv'].forEach((id) => {
         const el = $('#' + id);
         if (el && id === 'wzDurN') el.addEventListener('input', updateDuration);
         else if (el && id !== 'wzDurUnit') el.addEventListener('input', () => { syncForm(); if (id === 'wzUser' || id === 'wzPass') detachChangedLine(); foot(); });
@@ -1495,6 +1535,8 @@ body.agent .foot{display:none}
           else { syncForm(); foot(); }
         });
       });
+      $$('[data-act-mac]').forEach((el) => { el.oninput = () => { syncForm(); foot(); }; });
+      dynamicApps.forEach((app) => { const el = $('#wzActKey-' + app.key); if (el) el.oninput = () => syncForm(); });
       const payDue = $('#wzPayDue');
       if (payDue) payDue.onchange = () => { st.payDue = payDue.checked; $('#wzPayFields').style.display = st.payDue ? '' : 'none'; };
       $('#wzPayMonths') && ($('#wzPayMonths').oninput = () => { st.payMonths = +$('#wzPayMonths').value; });
@@ -1525,16 +1567,22 @@ body.agent .foot{display:none}
       const failed = st.results.filter((r) => r.status === 'error').length;
       $('#agB').innerHTML = `<div class="wz"><div class="wz-s"><span class="n">${finished && !failed ? '✓' : '⚡'}</span><div><h4>${finished ? 'Esito dell’attivazione' : 'Attivazione in corso'}</h4>
         <p class="hint">${finished ? `${succeeded} su ${st.results.length} attivati${failed ? ` · ${failed} da riprovare` : ''}.` : 'Eseguo un’app alla volta. Puoi leggere qui il risultato di ciascuna.'}</p>
-        <div class="wz-results">${st.results.map((r) => `<div class="wz-result${r.status === 'ok' ? ' ok' : r.status === 'error' ? ' ko' : ''}"><i>${r.status === 'ok' ? '✓' : r.status === 'error' ? '✕' : r.status === 'running' ? '…' : '·'}</i><div><b>${targetNames[r.key]}</b><small>${esc(r.message || (r.status === 'running' ? 'Attivazione in corso…' : 'In attesa'))}</small></div>${finished && r.status === 'error' && !st.running ? `<button type="button" class="btn sm" data-wzretry="${r.key}">Riprova</button>` : ''}</div>`).join('')}</div>
+        <div class="wz-results">${st.results.map((r, ri) => `<div class="wz-result${r.status === 'ok' ? ' ok' : r.status === 'error' ? ' ko' : ''}"><i>${r.status === 'ok' ? '✓' : r.status === 'error' ? '✕' : r.status === 'running' ? '…' : '·'}</i><div><b>${esc(targetNames()[r.key] || r.key)}</b><small>${esc(r.message || (r.status === 'running' ? 'Attivazione in corso…' : 'In attesa'))}</small>
+          ${r.activationUrl ? `<a class="btn sm" href="${esc(r.activationUrl)}" target="_blank" rel="noopener">Apri il sito di attivazione ↗</a>` : ''}
+          ${r.copyText ? `<button type="button" class="btn sm" data-wz-copy="${ri}">Copia tutto</button>` : ''}
+          ${r.copyItems && r.copyItems.length ? `<div class="wz-copy-items">${r.copyItems.map((x, xi) => `<button type="button" class="btn sm" data-wz-copyitem="${ri}:${xi}">Copia ${esc(x.label)}</button>`).join('')}</div>` : ''}
+        </div>${finished && r.status === 'error' && !st.running ? `<button type="button" class="btn sm" data-wzretry="${r.key}">Riprova</button>` : ''}</div>`).join('')}</div>
         ${finished ? `<div class="wz-summary">${failed ? 'Alcuni target non sono riusciti. Puoi riprovare solo quelli contrassegnati.' : 'Tutti i target selezionati sono stati attivati.'}</div><div class="wz-done" style="padding:14px 0 0"><button type="button" class="btn pri" id="wzClose">Chiudi</button></div>` : ''}</div></div></div>`;
       $('#agFt').innerHTML = '';
       const close = $('#wzClose'); if (close) close.onclick = closePage;
+      $$('[data-wz-copy]').forEach((b) => (b.onclick = () => navigator.clipboard.writeText(st.results[+b.dataset.wzCopy].copyText || '').then(() => toast('Messaggio copiato'), () => toast('Copia non consentita dal browser', 1))));
+      $$('[data-wz-copyitem]').forEach((b) => (b.onclick = () => { const [ri, xi] = b.dataset.wzCopyitem.split(':').map(Number), item = (st.results[ri] || {}).copyItems?.[xi]; if (item) navigator.clipboard.writeText(item.value).then(() => toast(item.label + ' copiato'), () => toast('Copia non consentita dal browser', 1)); }));
       $$('[data-wzretry]').forEach((b) => (b.onclick = async () => {
         if (st.running) return;
         const r = st.results.find((x) => x.key === b.dataset.wzretry);
         if (!r) return;
         st.running = r.key; r.status = 'running'; r.message = ''; renderResults();
-        try { r.message = await runTarget(r.key); r.status = 'ok'; } catch (e) { r.message = e.message || 'Attivazione non riuscita'; r.status = 'error'; }
+        try { const result = await runTarget(r.key); if (typeof result === 'string') r.message = result; else Object.assign(r, result); r.status = 'ok'; } catch (e) { r.message = e.message || 'Attivazione non riuscita'; r.status = 'error'; }
         st.running = ''; renderResults();
         if (r.key === 'kairos' && r.status === 'ok') load().catch(() => {});
       }));
@@ -1543,6 +1591,7 @@ body.agent .foot{display:none}
     const runTarget = async (k) => {
       const username = st.pl.username.trim(), name = st.name.trim() || username, note = st.pl.ref || st.pl.note || '';
       const plName = String(st.pl.ref || '').split(/\s+/)[0] || 'Linea';
+      const linkedLine = (app, mac = '', rowNote = '', dns = '') => api('POST', '/admin/linked-lines', { app, username, password: st.pl.password, dns, mac, note: rowNote });
       if (k === 'kairos') {
         const playlist = agent
           ? { serverId: st.pl.serverId, name: plName, username, password: st.pl.password }
@@ -1563,17 +1612,43 @@ body.agent .foot{display:none}
         await api('POST', '/admin/ext-lists', { app: 'max', name, username, password: st.pl.password, domain: st.mxDomain, note });
         return 'Linea inviata a MaxPlayer';
       }
-      await api('POST', '/admin/ext-lists', { app: 'orbix', name, orbixId: st.orbixId.trim(), username, password: st.pl.password, dns: +st.oxDns || 0, note });
-      return 'Linea inviata a OrbixPlay';
+      if (k === 'orbix') {
+        await api('POST', '/admin/ext-lists', { app: 'orbix', name, orbixId: st.orbixId.trim(), username, password: st.pl.password, dns: +st.oxDns || 0, note });
+        return 'Linea inviata a OrbixPlay';
+      }
+      if (k === 'orcp') {
+        const server = (orcpCfg.servers || []).find((x) => String(x.n) === String(st.orcpServer));
+        if (!server) throw new Error('Scegli un server MirkoTeam assegnato');
+        if (!agent || can('lines')) await linkedLine(orcpCfg.name || 'MirkoTeam', '', `Server ${server.n}`);
+        const download = orcpCfg.apk ? `Downloader ${orcpCfg.dl || '8128314'} (oppure ${orcpCfg.apk})` : `Downloader ${orcpCfg.dl || '8128314'}`;
+        const message = `Scarica l'app ${orcpCfg.name || 'MirkoTeam'}: ${download}. Apri l'app, scegli il server «${server.name}» ed entra con utente ${username} e password ${st.pl.password}.`;
+        return { message, copyText: message };
+      }
+      const app = dynamicApps.find((x) => x.key === k);
+      if (!app) throw new Error('App non disponibile');
+      const data = st.appData[k] || {}, mac = String(data.mac || '').trim(), deviceKey = String(data.deviceKey || '').trim();
+      const rowNote = deviceKey ? `key: ${deviceKey}` : '';
+      const m3u = (dns) => `${String(dns || '').replace(/\/$/, '')}/get.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(st.pl.password)}&type=m3u_plus&output=ts`;
+      let dns = '', playlist = '', activationUrl = app.link || '';
+      if (agent) {
+        const response = await api('POST', '/admin/agent/act-request', { appKey: k, username, password: st.pl.password, mac, deviceKey, serverId: st.pl.panel ? (st.pl.serverId || '') : '' });
+        if (response.pending) return { message: `Richiesta inviata: il tuo fornitore attiverà ${app.name} sul dispositivo ${mac}.` };
+        dns = response.dns || ''; playlist = response.m3u || (dns ? m3u(dns) : '');
+      } else {
+        dns = st.pl.host.trim(); playlist = dns ? m3u(dns) : '';
+        await linkedLine(app.name, mac, rowNote, dns);
+      }
+      const copyItems = [{ label: 'MAC', value: mac }, ...(playlist ? [{ label: 'M3U', value: playlist }] : []), ...(dns ? [{ label: 'DNS', value: dns }] : []), { label: 'utente', value: username }, { label: 'password', value: st.pl.password }];
+      return { message: `${app.name} registrata per ${mac}.`, activationUrl, copyItems };
     };
     const startActivation = async () => {
       syncForm();
       if (st.busy || missing().length) return;
       st.busy = true;
-      st.results = TARGETS.map(([k]) => k).filter((k) => has(k)).map((key) => ({ key, status: 'pending', message: '' }));
+      st.results = targets().map(([k]) => k).filter((k) => has(k) && availableTargets().has(k)).map((key) => ({ key, status: 'pending', message: '' }));
       for (const r of st.results) {
         st.running = r.key; r.status = 'running'; renderResults();
-        try { r.message = await runTarget(r.key); r.status = 'ok'; } catch (e) { r.message = e.message || 'Attivazione non riuscita'; r.status = 'error'; }
+        try { const result = await runTarget(r.key); if (typeof result === 'string') r.message = result; else Object.assign(r, result); r.status = 'ok'; } catch (e) { r.message = e.message || 'Attivazione non riuscita'; r.status = 'error'; }
       }
       st.running = ''; st.busy = false; renderResults();
       if (st.results.some((r) => r.key === 'kairos' && r.status === 'ok')) load().catch(() => {});
@@ -1581,8 +1656,15 @@ body.agent .foot{display:none}
     const loadOptions = async () => {
       const jobs = [];
       if (showMax) jobs.push(api('GET', '/admin/maxplayer/domains').then((r) => { mxDomains = r.domains || []; if (mxDomains.length && !st.mxDomain) st.mxDomain = String(mxDomains[0].id); }).catch((e) => { mxDomains = []; mxError = e.message || 'DNS MaxPlayer non disponibili'; }).finally(() => { mxLoading = false; }));
+      if (agent) jobs.push(api('GET', '/admin/agent/orcp').then((c) => { orcpCfg = { ...c, servers: (c.servers || []).map((x) => ({ n: x.n, name: x.name })) }; preselectOrcp(); }).catch(() => { orcpCfg = null; }));
+      else jobs.push(api('GET', '/admin/orcp/cfg').then((r) => {
+        const c = r && r.cfg; if (!c) return;
+        const list = (c.portalNames || []).map((x, i) => ({ n: +(String(x.k || '').replace('portal', '') || 1), name: x.name || `SERVER-${i + 1}` })).filter((x) => x.name);
+        orcpCfg = { ...c, servers: list.length ? list : (r.servers || []).map((name, i) => ({ n: i + 1, name })) };
+        preselectOrcp();
+      }).catch(() => { orcpCfg = null; }));
       if (!agent) jobs.push(api('GET', '/admin/dns').then((r) => { dnsSaved = r.saved || []; }).catch(() => { dnsSaved = []; }));
-      if (jobs.length) { await Promise.all(jobs); if (alive) draw(false); }
+      if (jobs.length) { await Promise.all(jobs); if (!orcpCfg || !orcpCfg.servers || !orcpCfg.servers.length) st.targets.delete('orcp'); else if (!st.targets.size && !showKairos && !dynamicApps.length) st.targets.add('orcp'); if (alive) draw(false); }
     };
     const footMarkup = '<span class="wz-miss" id="wzMiss"></span><div style="flex:1"></div><button class="btn" id="wzNo">Annulla</button><button class="btn pri" id="wzGo" style="padding:13px 24px;font-size:16px">⚡ Attiva</button>';
     $('#agT').innerHTML = 'Nuovo cliente / Nuovo dispositivo';
@@ -1596,7 +1678,8 @@ body.agent .foot{display:none}
   }
   window.KXNewClient = (preset) => {
     const targets = preset && Array.isArray(preset.targets) ? preset.targets : ['kairos'];
-    if (isAgent() && (!targets.length || targets.some((k) => k === 'kairos' ? !can('create') : !['max', 'orbix'].includes(k) || !can('players')))) {
+    const P = (me().perms || {}), allowed = (k) => k === 'kairos' ? can('create') : ['max', 'orbix'].includes(k) ? can('players') : k === 'orcp' ? !!P.orcpApp && Array.isArray(P.orcpSrv) && P.orcpSrv.length > 0 : (D.activationApps || []).some((x) => x.key === k && x.enabled && (P.actApps || []).includes(k));
+    if (isAgent() && (!targets.length || targets.some((k) => !allowed(k)))) {
       return toast('Non hai il permesso per attivare questi target', 1);
     }
     return openWizard(preset);
@@ -1616,7 +1699,7 @@ body.agent .foot{display:none}
   };
   const origOpen = openDrawer, origQuick = openQuick;
   window.openDrawer = openDrawer = function (d, act) {
-    if (isAgent()) return !d && can('create') ? openWizard() : openClient(d);
+    if (isAgent()) return !d && canOpenActivationWizard() ? openWizard() : openClient(d);
     return !d && !window.__assist ? openWizard() : origOpen(d, act);
   };
   window.openQuick = openQuick = function (d) { if (isAgent()) return openClient(d); return origQuick(d); };
@@ -1658,17 +1741,17 @@ body.agent .foot{display:none}
         if (!demoAgent) return { ...r, role: 'owner', agents: DEMO.agents.map(out), storeAppNames: ['IBO Player', 'IboOne', 'OrbixPlay', 'Smarters Pro', 'TiviMate'], maintAg: DEMO.maintAg.on ? [2] : [] };
         const A = DEMO.agents[0], tree = [2, 4];
         const devs = r.devices.filter((d) => tree.includes(d.ownerId) || (d.parent && r.devices.some((x) => x.id === d.parent && tree.includes(x.ownerId))))
-          .map((d) => ({ ...d, playlists: d.playlists.map((pl, i) => ({ id: pl.id, name: pl.name, type: 'xtream', serverId: i % 2 ? 's2' : 's1', serverName: i % 2 ? 'ATLX' : 'NKI', username: 'cliente' + d.id, password: 'xxxx' })) }));
+          .map((d) => { const { hosts, vpnConf, ...safe } = d; if (safe.orbix) { const { h, ...ob } = safe.orbix; safe.orbix = ob; } return { ...safe, playlists: d.playlists.map((pl, i) => ({ id: pl.id, name: pl.name, type: 'xtream', serverId: i % 2 ? 's2' : 's1', serverName: i % 2 ? 'ATLX' : 'NKI', username: 'cliente' + d.id, password: 'xxxx' })) }; });
         return { role: 'agent', user: A.username, me: { ...out(A), clientsUsed: out(A).clients }, devices: devs, agents: DEMO.agents.filter((x) => x.parentId === 2).map(out), servers: DEMO.srv.slice(0, 2).map(({ id, name }) => ({ id, name })),
           addonCat: addonCatNow().filter((x) => A.perms.addons.includes(x.id) && x.mode === 'some'), settings: (() => { const ka = Array.isArray(A.perms.kAllow) ? A.perms.kAllow : ['*'], ok = (k) => ka.includes('*') || ka.includes(k), S = r.settings; return { brand: S.brand, accent: S.accent, downloaderCode: ok('pro') ? S.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? S.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? S.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? S.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? S.xcDownloaderCode || '' : '', apkUrl: ok('pro') ? S.apkUrl || '' : '' }; })(),
           kairosApps: [['pro', 'Kairos Pro', r.settings.apkUrl || 'https://github.com/tuo-utente/kairos-iptv/releases/latest/download/kairos.apk', r.settings.downloaderCode], ['tv', 'Kairos TV', 'https://github.com/mariopiccolo8562-lang/kairos-tv/releases/latest/download/kairos-tv.apk', r.settings.ktvDownloaderCode], ['lite', 'Kairos Lite', 'https://github.com/mariopiccolo8562-lang/kairos-lite/releases/latest/download/kairos-lite.apk', r.settings.liteDownloaderCode], ['xc', 'Kairos XC', 'https://github.com/mariopiccolo8562-lang/kairos-xc/releases/latest/download/kairos-xc.apk', r.settings.xcDownloaderCode], ['store', 'Kairos Store', '', r.settings.storeDownloaderCode]].filter(([k]) => { const ka = Array.isArray(A.perms.kAllow) ? A.perms.kAllow : ['*']; return ka.includes('*') || ka.includes(k); }).map(([key, name, apk, code]) => ({ key, name, apk: `https://panel-kairos.com/get/${key === 'prem' ? 'premium' : key}.apk`, code: code || '' })),
-          security: { totp: true }, activity: [], messages: [], counts: {}, dlCodes: A.perms.dlcodes ? (r.dlCodes || []).filter((x) => !Array.isArray(A.perms.dlcAllow) || A.perms.dlcAllow.includes('*') || A.perms.dlcAllow.includes(x.name)) : [], storeAppNames: ['IBO Player', 'OrbixPlay'], maint: A.perms.maint ? { ...DEMO.maintAg } : null, appLinks: A.perms.appstore ? (DEMO.settings.appLinks || []).filter((x) => !Array.isArray(A.perms.appsAllow) || A.perms.appsAllow.includes('*') || A.perms.appsAllow.some((y) => y.toLowerCase() === x.name.toLowerCase())) : [], players: A.perms.players ? (() => { const c = DEMO.settings.playersCfg || { orbix: [{ name: 'Principale', host: 'http://dns.kairos-esempio.tv:8080' }], max: [] }, v = (l) => (l || []).map((x) => (c.showDnsAgents ? { name: x.name, host: x.host } : { name: x.name })); const okO = (n) => !Array.isArray(A.perms.orbDns) || A.perms.orbDns.includes('*') || A.perms.orbDns.some((y) => y.toLowerCase() === String(n).toLowerCase());
+          security: { totp: true }, activity: [], messages: [], counts: {}, dlCodes: A.perms.dlcodes ? (r.dlCodes || []).filter((x) => !Array.isArray(A.perms.dlcAllow) || A.perms.dlcAllow.includes('*') || A.perms.dlcAllow.includes(x.name)) : [], storeAppNames: ['IBO Player', 'OrbixPlay'], maint: A.perms.maint ? { ...DEMO.maintAg } : null, appLinks: A.perms.appstore ? (DEMO.settings.appLinks || []).filter((x) => !Array.isArray(A.perms.appsAllow) || A.perms.appsAllow.includes('*') || A.perms.appsAllow.some((y) => y.toLowerCase() === x.name.toLowerCase())).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { ...x, url: '' } : x)) : [], players: A.perms.players ? (() => { const c = DEMO.settings.playersCfg || { orbix: [{ name: 'Principale', host: 'http://dns.kairos-esempio.tv:8080' }], max: [] }, hostLike = (x) => /^(?:https?:\/\/|localhost(?::\d+)?$|(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?$|[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/|$))/i.test(String(x || '').trim()), v = (l) => (l || []).map((x, i) => ({ name: hostLike(x.name) ? `DNS ${i + 1}` : x.name })); const okO = (n) => !Array.isArray(A.perms.orbDns) || A.perms.orbDns.includes('*') || A.perms.orbDns.some((y) => y.toLowerCase() === String(n).toLowerCase());
             // come il worker: codici cliente solo dei fornitori dei DNS concessi (per host del link, o per nome se lo slot non ha link)
             const orbOk = (c.orbix || []).filter((x) => okO(x.name)), mxAl = A.perms.mxDns, allM = !Array.isArray(mxAl) || mxAl.includes('*');
             const mxOk = [DEMO.mx0 || { id: '1', domain: 'dns.kairos-esempio.tv', label: 'Principale' }, ...(DEMO.mxNew || [])].filter((x) => allM || mxAl.includes(x.id));
             const hn = (x) => String(x || '').trim().replace(/^https?:\/\//i, '').split(/[:/]/)[0].toLowerCase(), lc = (x) => String(x || '').toLowerCase();
             const slotOk = (x) => { const h = hn(x.link), n = lc(x.name); return x.app === 'orbix' ? (!Array.isArray(A.perms.orbDns) || A.perms.orbDns.includes('*') || orbOk.some((d) => (h ? hn(d.host) === h : !!n && lc(d.name).includes(n)))) : (allM || mxOk.some((d) => (h ? lc(d.domain) === h : !!n && lc(d.label).includes(n)))); };
-            return { orbix: true, max: true, dns: { orbix: v(orbOk), max: [] }, codes: c.codes || { orbix: '265847', max: '265847' }, slots: (c.slots || [{ id: 'nki-max', name: 'NKI', app: 'max', link: 'maxplayer.nki-max.stream', code: '265847' }, { id: 'armada-max', name: 'Armada', app: 'max', link: 'maxplayer-armada.chasertv2.stream', code: '265847' }, { id: 'nki-orbix', name: 'NKI', app: 'orbix', link: 'orbx.nki-orbx.download', code: '265847' }]).filter(slotOk).map((x) => (c.showDnsAgents ? x : { ...x, link: '' })) }; })() : null };
+            return { orbix: true, max: true, dns: { orbix: v(orbOk), max: [] }, showDnsAgents: false, codes: c.codes || { orbix: '265847', max: '265847' }, slots: (c.slots || [{ id: 'nki-max', name: 'NKI', app: 'max', link: 'maxplayer.nki-max.stream', code: '265847' }, { id: 'armada-max', name: 'Armada', app: 'max', link: 'maxplayer-armada.chasertv2.stream', code: '265847' }, { id: 'nki-orbix', name: 'NKI', app: 'orbix', link: 'orbx.nki-orbx.download', code: '265847' }]).filter(slotOk).map((x, i) => ({ ...x, name: hostLike(x.name) ? `DNS ${i + 1}` : x.name, link: '' })) }; })() : null };
       }
       if (p === '/admin/agent-maint' && m === 'PUT') { DEMO.maintAg = { on: !!b.on, msg: b.msg || '', allow: b.allow || [] }; return { ...DEMO.maintAg }; }
       if (/^\/admin\/agent-maint\/\d+$/.test(p) && m === 'DELETE') { DEMO.maintAg = { on: false, msg: '', allow: [] }; return { ok: true }; }

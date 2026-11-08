@@ -23,7 +23,10 @@
   if (!$('#oxCss')) { const c = document.createElement('style'); c.id = 'oxCss'; c.textContent = '.ox-row{grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.3fr) minmax(0,1.2fr) auto!important}.ox-row .oxid{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;word-break:break-all;color:var(--txt,#fff)}@media (max-width:1000px){.ox-row{grid-template-columns:1fr 1fr!important}}'; document.head.appendChild(c); }
   const O = { st: null, pls: null, slots: null, q: '', limit: 100, show: new Set(), busy: false, err: '', sel: new Set(), stOn: false };
   const copy = (t, w) => navigator.clipboard.writeText(t).then(() => toast(w + ' copiato'), () => toast('Copia non consentita dal browser', 1));
-  const dnsOpts = (sel) => { const L = ((((D.settings || {}).playersCfg || {}).orbix) || []).filter((x) => x && (x.host || x.code)); return L.map((x) => { const v = x.code || x.host; return `<option value="${esc(v)}" data-h="${esc(x.code ? x.host || '' : '')}"${v === sel ? ' selected' : ''}>${esc(x.name || v)}</option>`; }).join(''); };
+  const dnsOpts = (sel) => {
+    const L = isAg() ? (((D.players || {}).dns || {}).orbix || []).filter((x) => x && x.name) : ((((D.settings || {}).playersCfg || {}).orbix) || []).filter((x) => x && (x.host || x.code));
+    return L.map((x, i) => { const v = isAg() ? String(i) : x.code || x.host; return `<option value="${esc(v)}"${v === sel ? ' selected' : ''}>${isAg() ? `DNS ${i + 1} · ` : ''}${esc(x.name || v)}</option>`; }).join('');
+  };
 
   async function load() {
     O.busy = true; O.err = ''; render();
@@ -31,7 +34,7 @@
       if (!O.st) O.st = await api('GET', '/admin/oxp/state');
       if (O.st.connected) {
         const [p, sl] = await Promise.all([api('GET', '/admin/oxp/playlists'), isAg() ? Promise.resolve({ slots: null }) : api('GET', '/admin/oxp/slots').catch((e) => ({ slots: null, err: e.message }))]);
-        O.pls = p.playlists || []; O.slots = sl.slots; if (sl.err) O.err = sl.err;
+        O.pls = (p.playlists || []).map((x) => isAg() ? { ...x, host: '' } : x); O.slots = sl.slots; if (sl.err) O.err = sl.err;
       }
     } catch (e) { O.err = e.message; }
     O.busy = false; show();
@@ -85,7 +88,7 @@
       ${canLoadLines() ? '<div id="onLinePick" style="grid-column:1/-1"></div>' : ''}
       <label style="grid-column:1/-1">ID del dispositivo (dall'app OrbixPlay)<input class="inp mono" id="onD" data-mac maxlength="64" autocomplete="off" placeholder="es. 00:1A:79:AA:BB:CC"></label>
       <label>Utente della linea<input class="inp mono" id="onU" value="${esc(pre.user || '')}"></label><label>Password della linea<input class="inp mono" id="onP" value="${esc(pre.pass || '')}"></label>
-      <label>DNS${opts ? `<select class="inp" id="onH">${opts}</select>` : '<input class="inp mono" id="onH" placeholder="http://dns.esempio.com:8080">'}</label><label>Nome<input class="inp" id="onN" maxlength="40" value="${esc(pre.name || '')}"></label>
+      <label>${isAg() ? 'Server OrbixPlay assegnato' : 'DNS'}${opts ? `<select class="inp" id="onH">${opts}</select>` : isAg() ? '<select class="inp" id="onH" disabled><option>Nessun server DNS assegnato</option></select>' : '<input class="inp mono" id="onH" placeholder="http://dns.esempio.com:8080">'}</label><label>Nome<input class="inp" id="onN" maxlength="40" value="${esc(pre.name || '')}"></label>
       <label style="grid-column:1/-1">Note (facoltative)<input class="inp" id="onT" maxlength="60" value="${esc(pre.note || '')}"></label></div>
       <p class="mut" style="font-size:12.5px;margin:10px 0 0">Usa un posto del tuo account OrbixPlay.</p>`, 'Aggiungi');
     if (canLoadLines()) window.KXLinePick.mount($('#onLinePick'), (line) => {
@@ -106,7 +109,7 @@
     if (!ok) return;
     try {
       const device = $('#onD').value, user = $('#onU').value, pass = $('#onP').value;
-      await api('POST', '/admin/oxp/playlists', { device, user, pass, host: $('#onH').value, hostUrl: ($('#onH').selectedOptions && $('#onH').selectedOptions[0] && $('#onH').selectedOptions[0].dataset.h) || '', name: $('#onN').value, notes: $('#onT').value });
+      await api('POST', '/admin/oxp/playlists', { device, user, pass, ...(isAg() ? { dns: $('#onH').value } : { host: $('#onH').value, hostUrl: ($('#onH').selectedOptions && $('#onH').selectedOptions[0] && $('#onH').selectedOptions[0].dataset.h) || '' }), name: $('#onN').value, notes: $('#onT').value });
       const refresh = load();
       if (window.KXCreds) await KXCreds.show('✅ Playlist aggiunta su OrbixPlay', [['ID dispositivo', device], ['Utente della linea', user], ['Password della linea', pass]]);
       else toast('Playlist aggiunta su OrbixPlay');

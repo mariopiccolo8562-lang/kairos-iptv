@@ -301,9 +301,10 @@ const DEFAULT_SETTINGS = {
   price: '22 € / anno', privacy: '',
   aiDaily: 20, aiProvider: 'gm', aiClaude: 'haiku', aiGemini: 'flash',
   maint: { on: false, msg: '', allow: [] },
-  // DNS personali per OrbixPlay e MaxPlayer (gli agenti vedono solo il nome, salvo showDnsAgents)
+  // DNS MaxPlayer/OrbixPlay degli agenti: solo etichette, indipendentemente da showDnsAgents
   playersCfg: { orbix: [{ name: 'NKI OrbixPlay', host: 'http://orbx.nki-orbx.download' }], max: [], showDnsAgents: false, codes: { orbix: '265847', max: '265847' }, slots: null }, // link diretto NKI e codice cliente già pronti (slots: vedi SLOTS_DEFAULT)
   // «Attiva app»: il link di gestione dispositivo di ogni app dello store (dove il titolare attiva la lista col codice del cliente). Modificabile e ampliabile dal pannello.
+  actApps: {},
   appLinks: [
     { name: 'OrbixPlay', url: 'https://orbixplay.com/mylist' },
     { name: 'MaxPlayer', url: 'https://maxplayer.tv/it/tools/playlist-checker' },
@@ -318,6 +319,23 @@ const DEFAULT_SETTINGS = {
     { name: 'TiviMate Pro', url: 'https://www.tivimateiptvpro.com/playlist' },
   ],
 };
+const actAppSlug = (name) => String(name || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+const actAppExcluded = (name) => /^(?:kairos\b|max\s*-?player\b|orbix\s*play\b|mirkoteam\b)/i.test(String(name || '').trim());
+const isPanelHost = (value) => /^(?:https?:\/\/|localhost(?::\d+)?$|(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?$|[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/|$))/i.test(String(value || '').trim());
+const agentDnsLabel = (value, index, fallback = '') => { const label = str(value, 80).trim(); return label && !isPanelHost(label) ? label : fallback || `DNS ${index + 1}`; };
+async function activationApps(env, settings) {
+  const names = [...(await storeAppNames(env)), ...((Array.isArray(settings.appLinks) ? settings.appLinks : []).map((x) => x && x.name))];
+  const seen = new Set(), keys = new Set(), apps = [];
+  for (const value of names) {
+    const name = String(value || '').trim(), norm = name.toLowerCase(), key = actAppSlug(name);
+    if (!name || !key || actAppExcluded(name) || seen.has(norm) || keys.has(key)) continue;
+    seen.add(norm); keys.add(key);
+    const link = (Array.isArray(settings.appLinks) ? settings.appLinks : []).find((x) => String(x && x.name || '').trim().toLowerCase() === norm && /^https?:\/\//i.test(String(x && x.url || '')));
+    apps.push({ key, name, link: link || null });
+  }
+  return apps;
+}
+const validActAppKey = (key) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(key || ''));
 /* Versione dell'APK da proporre alle app: quella pubblicata in automatico da GitHub (kairos-tv.json)
    oppure, solo se strettamente più recente, quella scritta a mano nel pannello.
    Il versionCode si ricava SEMPRE dal nome versione con lo stesso schema della build (X.Y.Z → X*10000+Y*100+Z):
@@ -577,7 +595,7 @@ async function extListsRoutes(req, env, path, who, ip, ag) {
   if (path === '/ext-lists' && m === 'GET') {
     const rows = ((await env.DB.prepare('SELECT * FROM ext_lists ORDER BY created DESC LIMIT 1000').all()).results || []).filter((r) => !mine || mine.includes(+r.owner_id));
     const names = new Map((await agentsAll(env)).map((a) => [a.id, a.username]));
-    return json({ lists: rows.map((r) => ({ id: r.id, app: r.app, name: r.name, ref: r.ref, username: r.username, dns: r.dns, note: r.note, created: r.created, updated: r.updated, by: +r.owner_id ? names.get(+r.owner_id) || 'agente eliminato' : 'Tu', mine: ag ? +r.owner_id === ag.id : !+r.owner_id })) });
+    return json({ lists: rows.map((r) => ({ id: r.id, app: r.app, name: r.name, ref: r.ref, username: r.username, dns: ag && /^(orbix|max)$/.test(r.app) ? agentDnsLabel(r.dns, 0, r.app === 'orbix' ? 'DNS OrbixPlay' : 'DNS MaxPlayer') : r.dns, note: r.note, created: r.created, updated: r.updated, by: +r.owner_id ? names.get(+r.owner_id) || 'agente eliminato' : 'Tu', mine: ag ? +r.owner_id === ag.id : !+r.owner_id })) });
   }
   if (path === '/ext-lists' && m === 'POST') {
     const b = await readJSON(req, 4096);
@@ -1367,8 +1385,9 @@ async function linkedLinesRoutes(req, env, path, who, ip, ag) {
     const items = [];
     for (const r of rows) {
       const auto = !!r.source;
+      const hidePlayerDns = ag && /orbix|max\s*-?player/i.test(r.app || ''), assignedDns = ag && Array.isArray(ag.dnsHosts) && ag.dnsHosts.includes(r.dns), hideUnassignedDns = ag && isPanelHost(r.dns) && !assignedDns;
       items.push({ id: r.id, ownerId: +r.owner_id || 0, ownerName: names.get(+r.owner_id) || '', app: r.app, username: r.username, password: await unsealText(env, r.pass_seal),
-        dns: ag && ((ag.hideHosts && auto) || String(r.source).startsWith('p-')) ? '' : r.dns, dnsName: r.dns_name || '', mac: r.mac, deviceId: r.device_id, deviceName: r.dname || '', deviceCode: r.dcode || '', deviceGone: !!r.device_id && !r.dcode,
+        dns: ag && (hidePlayerDns || hideUnassignedDns || ((ag.hideHosts || String(r.source).startsWith('p-')) && !assignedDns && auto)) ? '' : r.dns, dnsName: hidePlayerDns && isPanelHost(r.dns_name) ? (/max\s*-?player/i.test(r.app) ? 'DNS MaxPlayer' : 'DNS OrbixPlay') : r.dns_name || '', mac: r.mac, deviceId: r.device_id, deviceName: r.dname || '', deviceCode: r.dcode || '', deviceGone: !!r.device_id && !r.dcode,
         note: r.note, source: r.source, created: r.created, updated: r.updated });
     }
     return json({ items });
@@ -1383,6 +1402,16 @@ async function linkedLinesRoutes(req, env, path, who, ip, ag) {
       .bind(owner, b.app, b.username, await seal(env, b.password || ''), b.dns, '', b.mac, b.deviceId, b.note, '', t, t).first();
     await log(env, 'new', `${who}: linea ${b.username} collegata a ${b.app}`, ip);
     return json({ id: (r && r.id) || 0 });
+  }
+  const doneMatch = path.match(/^\/linked-lines\/(\d+)\/done$/);
+  if (doneMatch && m === 'POST') {
+    if (ag) throw new HttpErr(403, 'Solo il Master può completare una richiesta');
+    const row = await env.DB.prepare('SELECT * FROM linked_lines WHERE id = ?').bind(+doneMatch[1]).first();
+    if (!row) throw new HttpErr(404, 'Linea non trovata');
+    const note = String(row.note || '').replace(/\s*·?\s*DA ATTIVARE\b/ig, '').replace(/^[\s·]+|[\s·]+$/g, '').slice(0, 300);
+    await env.DB.prepare('UPDATE linked_lines SET note = ?, updated = ? WHERE id = ?').bind(note, now(), +doneMatch[1]).run();
+    await log(env, 'edit', `Richiesta app completata: ${row.username} (${row.app})`, ip).catch(() => {});
+    return json({ ok: true, note });
   }
   const mm = path.match(/^\/linked-lines\/(\d+)$/);
   if (mm && (m === 'PUT' || m === 'DELETE')) {
@@ -1792,7 +1821,8 @@ const cfgDirty = (env) => memoDrop(env, 'cfg');
 async function getSettings(env) {
   const v = (await cfgRows(env)).app;
   let s = {}; try { s = v ? JSON.parse(v) : {}; } catch {}
-  return { ...DEFAULT_SETTINGS, ...s };
+  const actApps = s.actApps && typeof s.actApps === 'object' && !Array.isArray(s.actApps) ? Object.fromEntries(Object.entries(s.actApps).filter(([k, v]) => validActAppKey(k) && typeof v === 'boolean')) : {};
+  return { ...DEFAULT_SETTINGS, ...s, actApps };
 }
 const publicSettings = (s) => ({ brand: s.brand, tagline: s.tagline, accent: s.accent, announcement: s.announcement, supportContact: s.supportContact, allowLocalPlaylists: !!s.allowLocalPlaylists, serverUrl: s.serverUrl || '', showFootball: s.showFootball !== false, price: typeof s.price === 'string' ? s.price : DEFAULT_SETTINGS.price, privacy: typeof s.privacy === 'string' ? s.privacy : '' });
 
@@ -4682,7 +4712,7 @@ function checkedOrcpServers(value) {
 }
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, payments: false, autoRenew: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, mxp: false, oxp: false, oxpNew: false, orcpApp: false, orcpSrv: [], addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, payments: false, autoRenew: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, mxp: false, oxp: false, oxpNew: false, orcpApp: false, orcpSrv: [], actApps: [], addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
@@ -4699,13 +4729,13 @@ function kairosAppsOf(s) {
 }
 const storeAppOk = (list, app) => list.includes('*') || list.some((x) => x.toLowerCase() === String(app || '').toLowerCase());
 /** DNS che un agente può usare per OrbixPlay (scelti dal titolare per nome) e MaxPlayer (per id del dominio); ['*'] = tutti */
-const agOrbList = (s, allow) => (((s.playersCfg || {}).orbix) || []).filter((x) => storeAppOk(Array.isArray(allow) ? allow : ['*'], x.name));
-const agMxList = (doms, allow) => doms.filter((x) => storeAppOk(Array.isArray(allow) ? allow : ['*'], x.id));
+const agOrbList = (s, allow) => (((s.playersCfg || {}).orbix) || []).filter((x) => storeAppOk(Array.isArray(allow) ? allow : ['*'], x.name)).map((x, i) => ({ ...x, name: agentDnsLabel(x.name, i, `DNS ${i + 1}`) }));
+const agMxList = (doms, allow) => doms.filter((x) => storeAppOk(Array.isArray(allow) ? allow : ['*'], x.id)).map((x, i) => ({ ...x, label: agentDnsLabel(x.label, i, `DNS ${x.id || i + 1}`) }));
 /** «OrbixPlay e MaxPlayer» nel pannello dell'agente: solo i DNS che gli hai concesso (per nome) e i codici cliente
     dei soli fornitori di quei DNS. Uno slot con il link (il DNS del fornitore) si abbina per host; senza link per nome.
     mxAll = domini di MaxPlayer (null se non disponibili: con DNS MaxPlayer limitati gli slot MaxPlayer restano nascosti) */
 function agPlayers(env, s, P, mxAll) {
-  const c = s.playersCfg || {}, show = !!c.showDnsAgents, orb = agOrbList(s, P.orbDns);
+  const c = s.playersCfg || {}, orb = agOrbList(s, P.orbDns);
   const hn = (x) => String(x || '').trim().replace(/^https?:\/\//i, '').split(/[:/]/)[0].toLowerCase(), lc = (x) => String(x || '').trim().toLowerCase();
   const allO = !Array.isArray(P.orbDns) || P.orbDns.includes('*'), allM = !Array.isArray(P.mxDns) || P.mxDns.includes('*');
   const mx = allM ? [] : agMxList(Array.isArray(mxAll) ? mxAll : [], P.mxDns);
@@ -4714,8 +4744,8 @@ function agPlayers(env, s, P, mxAll) {
     if (x.app === 'orbix') return allO || orb.some((d) => (h ? hn(d.host) === h : !!n && lc(d.name).includes(n)));
     return allM || mx.some((d) => (h ? lc(d.domain) === h : !!n && lc(d.label).includes(n)));
   };
-  return { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: orb.map((x) => (show ? { name: x.name, host: x.host } : { name: x.name })), max: [] }, showDnsAgents: show,
-    codes: c.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(c).filter(ok).map((x) => (show ? x : { ...x, link: '' })) };
+  return { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: orb.map((x) => ({ name: x.name })), max: [] }, showDnsAgents: false,
+    codes: c.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(c).filter(ok).map((x, i) => ({ ...x, name: agentDnsLabel(x.name, i), link: '' })) };
 }
 function agentPerms(src) {
   let o = {}; try { o = typeof src === 'string' ? JSON.parse(src || '{}') : src || {}; } catch {}
@@ -4729,6 +4759,7 @@ function agentPerms(src) {
   p.orbDns = storeAppsList(o.orbDns); // DNS di OrbixPlay che può usare per le attivazioni (per nome; ['*'] = tutti). Ne vede solo il nome
   p.mxDns = storeAppsList(o.mxDns); // DNS (domini) di MaxPlayer che può usare (per id; ['*'] = tutti). Ne vede solo il nome
   p.orcpSrv = Array.isArray(o.orcpSrv) ? [...new Set(o.orcpSrv.filter((x) => typeof x === 'string' && ORCP_SERVER_KEYS.includes(x)))].slice(0, 5) : [];
+  p.actApps = Array.isArray(o.actApps) ? [...new Set(o.actApps.filter(validActAppKey))].slice(0, 200) : [];
   p.maxConn = Math.max(1, Math.min(MAX_CONN, parseInt(o.maxConn, 10) || 1));
   for (const k of ['armadaCredits', 'stormCredits']) p[k] = Math.max(0, Math.min(100000, Math.round((parseFloat(o[k]) || 0) * 100) / 100)); // crediti Armada/Storm del titolare al mese (0 = nessuno)
   return p;
@@ -4743,6 +4774,7 @@ function agentPermsWithin(req, top) {
   if (!top.appsAllow.includes('*')) p.appsAllow = p.appsAllow.includes('*') ? [...top.appsAllow] : p.appsAllow.filter((x) => storeAppOk(top.appsAllow, x));
   for (const k of ['dlcAllow', 'kAllow', 'orbDns', 'mxDns']) if (!top[k].includes('*')) p[k] = p[k].includes('*') ? [...top[k]] : p[k].filter((x) => storeAppOk(top[k], x));
   p.orcpSrv = p.orcpSrv.filter((x) => top.orcpSrv.includes(x));
+  p.actApps = p.actApps.filter((x) => top.actApps.includes(x));
   p.maxConn = Math.min(p.maxConn, top.maxConn);
   p.armadaCredits = Math.min(p.armadaCredits, top.armadaCredits);
   p.stormCredits = Math.min(p.stormCredits, top.stormCredits);
@@ -4903,8 +4935,15 @@ async function agentsAdmin(req, env, path, who, ip, top) {
     if (b.perms !== undefined) {
       let requested = b.perms;
       if (typeof requested === 'string') { try { requested = JSON.parse(requested); } catch { requested = {}; } }
-      if (requested && typeof requested === 'object' && Object.hasOwn(requested, 'orcpSrv')) checkedOrcpServers(requested.orcpSrv);
-      o.perms = JSON.stringify(agentPermsWithin(b.perms, top ? agentPerms(top.perms) : null));
+      if (requested && typeof requested === 'object' && !Array.isArray(requested)) {
+        if (Object.hasOwn(requested, 'orcpSrv')) checkedOrcpServers(requested.orcpSrv);
+        if (Object.hasOwn(requested, 'actApps')) {
+          if (!Array.isArray(requested.actApps)) throw new HttpErr(400, 'Le app da attivare devono essere un elenco');
+          const known = new Set((await activationApps(env, await getSettings(env))).map((x) => x.key));
+          requested = { ...requested, actApps: [...new Set(requested.actApps.filter((x) => typeof x === 'string' && known.has(x)))] };
+        }
+      }
+      o.perms = JSON.stringify(agentPermsWithin(requested, top ? agentPerms(top.perms) : null));
     }
     if (b.servers !== undefined) { if (!Array.isArray(b.servers)) throw new HttpErr(400, 'servers deve essere un elenco'); let l = serverIds(b.servers.join(',')).filter((x) => dnsIds.has(x)); if (top) { const mine = serverIds(top.servers); l = l.filter((x) => mine.includes(x)); } o.servers = l.join(','); }
     if (typeof b.active === 'boolean' && (!cur || b.active !== !!cur.active)) {
@@ -4927,7 +4966,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
       if (!AGENT_FLAGS.includes(k)) throw new HttpErr(400, `Permesso non valido: ${k}`);
       if (typeof v !== 'boolean') throw new HttpErr(400, `Il permesso ${k} deve essere Sì o No`);
     }
-    const listKeys = ['dlcAllow', 'appsAllow', 'kAllow', 'storeApps'], listOps = {};
+    const actSettings = await getSettings(env), actCatalog = await activationApps(env, actSettings), listKeys = ['dlcAllow', 'appsAllow', 'kAllow', 'storeApps', 'actApps'], listOps = {}, actKeys = new Set(actCatalog.map((x) => x.key)), actEnabled = new Set(actCatalog.filter((x) => actSettings.actApps[x.key]).map((x) => x.key));
     for (const [k, op] of Object.entries(lists)) {
       if (!listKeys.includes(k)) throw new HttpErr(400, `Elenco non valido: ${k}`);
       if (!op || typeof op !== 'object' || Array.isArray(op) || Object.keys(op).some((x) => !['mode', 'items'].includes(x))) throw new HttpErr(400, `Operazione non valida per ${k}`);
@@ -4937,6 +4976,8 @@ async function agentsAdmin(req, env, path, who, ip, top) {
         if (typeof item !== 'string') throw new HttpErr(400, `Voce non valida per ${k}`);
         const value = str(item, 80);
         if (!value) throw new HttpErr(400, `Voce non valida per ${k}`);
+        if (k === 'actApps' && value === '*') { for (const key of actEnabled) if (!items.includes(key)) items.push(key); continue; }
+        if (k === 'actApps' && !actKeys.has(value)) continue;
         if (!items.some((x) => x.toLowerCase() === value.toLowerCase())) items.push(value);
       }
       if (items.length) listOps[k] = { mode: op.mode, items };
@@ -5052,6 +5093,8 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   let P = agentPerms(A.perms), mine = serverIds(A.servers);
   let canAg = !!A.can_agents;
   for (let x = by.get(A.parent_id), n = 0; x && n < 20; x = by.get(x.parent_id), n++) { P = agentPermsWithin(P, agentPerms(x.perms)); const up = serverIds(x.servers); mine = mine.filter((y) => up.includes(y)); if (!x.can_agents) canAg = false; }
+  const currentActKeys = new Set((await activationApps(env, await getSettings(env))).map((x) => x.key));
+  P.actApps = P.actApps.filter((x) => currentActKeys.has(x));
   const Aeff = { ...A, can_agents: canAg ? 1 : 0, perms: JSON.stringify(P), servers: mine.join(',') };
   const tree = agentTree(all, A.id), who = ses.assist ? `Assistenza di ${ses.assistBy} · ${A.username}` : 'Agente ' + A.username;
   const ctree = P.subClients ? tree : [A.id]; // clienti visibili: i suoi e (se concesso) quelli dei sotto-agenti
@@ -5069,6 +5112,26 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   if (AGENT_SELF.test(path) && m !== 'GET') return adminRoutes(req, env, url, path, who, ip, ctx, aSes);
   if (path === '/agents' || path.startsWith('/agents/')) { if (!canAg) throw new HttpErr(403, 'Non puoi gestire agenti'); return agentsAdmin(req, env, path, who, ip, Aeff); }
   const dns = (await dnsList(env)).map((x, i) => ({ ...x, name: svName(x, i) })), servers = dns.filter((x) => mine.includes(x.id));
+  if (path === '/agent/act-request') {
+    if (m !== 'POST') throw new HttpErr(405, 'Metodo non consentito');
+    const b = await readJSON(req, 4096);
+    if (!b || typeof b !== 'object' || Array.isArray(b) || Object.keys(b).some((k) => !['appKey', 'username', 'password', 'mac', 'deviceKey', 'serverId'].includes(k))) throw new HttpErr(400, 'Richiesta di attivazione non valida');
+    const key = str(b.appKey, 60), settings = await getSettings(env), app = (await activationApps(env, settings)).find((x) => x.key === key);
+    if (!app || !P.actApps.includes(key) || !settings.actApps[key]) throw new HttpErr(403, 'Questa app non è abilitata per te');
+    const username = str(b.username, 120).trim(), password = str(b.password, 200), mac = str(b.mac, 64).trim(), deviceKey = str(b.deviceKey, 120).trim();
+    if (!username || !password || !mac) throw new HttpErr(400, 'Scrivi utente, password e MAC / ID del dispositivo');
+    const serverId = str(b.serverId, 20), server = serverId ? servers.find((x) => x.id === serverId && x.host) || null : null;
+    const pending = !server;
+    const note = [deviceKey ? `key: ${deviceKey}` : '', pending ? 'DA ATTIVARE' : ''].filter(Boolean).join(' · ');
+    const clean = llClean({ app: app.name, username, password, dns: server ? server.host : '', mac, note });
+    if (((await env.DB.prepare('SELECT COUNT(*) AS n FROM linked_lines').first()) || { n: 0 }).n >= LL_MAX) throw new HttpErr(400, 'Hai raggiunto il massimo di linee registrate: togli quelle che non servono');
+    const t = now(), row = await env.DB.prepare('INSERT INTO linked_lines (owner_id, app, username, pass_seal, dns, dns_name, mac, device_id, note, source, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id')
+      .bind(A.id, clean.app, clean.username, await seal(env, clean.password || ''), clean.dns, server ? server.name : '', clean.mac, '', clean.note, '', t, t).first();
+    await log(env, 'new', `${who}: ${pending ? 'richiesta da attivare per' : 'linea registrata per'} ${clean.app} · ${clean.username}`, ip);
+    if (pending) return json({ id: (row && row.id) || 0, pending: true, app: clean.app, mac: clean.mac });
+    const dnsHost = server.host.replace(/\/+$/, ''), m3u = `${dnsHost}/get.php?username=${encodeURIComponent(clean.username)}&password=${encodeURIComponent(clean.password || '')}&type=m3u_plus&output=ts`;
+    return json({ id: (row && row.id) || 0, pending: false, app: clean.app, mac: clean.mac, serverName: server.name, activationUrl: app.link ? app.link.url : '', dns: server.host, m3u });
+  }
   // l'agente non vede gli indirizzi dei server: solo il nome del server scelto
   let dvOrb = null; // DNS OrbixPlay concessi all'agente (chiavi degli host, in ordine): per indicare quello del cliente senza mostrarlo
   const dnA = new Map(servers.map((y) => [y.host, y])); // solo i server assegnati: degli altri non vede nemmeno il nome
@@ -5109,7 +5172,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
 
   // «Incolla linea»: a quale server assegnato corrisponde l'indirizzo incollato (l'agente ha già l'host, nessun dato nuovo)
   if (path === '/match-server' && m === 'POST') {
-    if (!P.create && !P.playlists) throw new HttpErr(403, 'Non puoi impostare le linee');
+    if (!P.create && !P.playlists && !P.actApps.length) throw new HttpErr(403, 'Non puoi impostare le linee');
     const b = await readJSON(req, 1024), panel = str(b.panel, 20).toLowerCase();
     if (panel && !LINE_SYNC_PANELS.has(panel)) throw new HttpErr(400, 'Pannello non valido');
     if (panel && !P[panel]) throw new HttpErr(403, 'Non puoi usare questo pannello IPTV');
@@ -5157,7 +5220,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   // Pannello Armada: solo con il permesso del titolare (suoi crediti, tetto mensile, solo le linee create da lui)
   for (const pv of ARM_PVS) if (path.startsWith('/' + pv + '/')) { need(pv, `Non puoi usare il pannello ${armP(pv).name}: chiedilo a chi ti gestisce`); return agentArmada(req, env, url, path, who, ip, ctx, { A, P, all, tree: ctree }, pv); }
   // Pannello OrbixPlay: con il permesso del titolare, solo le playlist dei dispositivi dei suoi clienti e delle sue liste
-  if (path.startsWith('/oxp/')) { need('oxp', 'Non puoi usare il Pannello OrbixPlay: chiedilo a chi ti gestisce'); const r = await oxpRoutes(req, env, path, who, ip, WOLF_H, { id: A.id, tree: ctree, canNew: !!P.oxpNew }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
+  if (path.startsWith('/oxp/')) { need('oxp', 'Non puoi usare il Pannello OrbixPlay: chiedilo a chi ti gestisce'); const r = await oxpRoutes(req, env, path, who, ip, WOLF_H, { id: A.id, tree: ctree, canNew: !!P.oxpNew, orbDns: agOrbList(await getSettings(env), P.orbDns) }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
   // Pannello MaxPlayer: con il permesso del titolare, solo i clienti dell'agente MaxPlayer che gli ha assegnato
   if (path.startsWith('/mxp/')) { need('mxp', 'Non puoi usare il Pannello MaxPlayer: chiedilo a chi ti gestisce'); const r = await mxpRoutes(req, env, path, who, ip, WOLF_H, { id: A.id }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
   // Pannello WOLF: con il permesso del titolare, sul proprio account reseller WOLF (sue linee e suoi crediti)
@@ -5170,14 +5233,14 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   if (path === '/apps3/lists' && m === 'GET') {
     need('appsOp'); const sc = await scope();
     const days = Math.max(7, Math.min(365, parseInt(url.searchParams.get('days'), 10) || 60));
-    return json({ days, lists: (await thirdLists(env, days)).filter((x) => sc.has(x.id)).map(({ ownerId, ...x }) => x) });
+    return json({ days, lists: (await thirdLists(env, days)).filter((x) => sc.has(x.id)).map(({ ownerId, ...x }) => ({ ...x, dns: /^(orbix|max)$/.test(x.app) ? agentDnsLabel(x.dns, x.app === 'max' ? 0 : +x.dnsIdx || 0, x.app === 'max' ? `DNS ${x.dom || 1}` : `DNS ${(+x.dnsIdx || 0) + 1}`) : x.dns })) });
   }
   const REQ_PERM = { report: 'reports', content: 'contentReq', addon: 'addonReq', ai: 'ai' };
   // «Online ora» e «Salute delle app» sono del titolare: mostrano tutti i clienti del pannello (totali, più visti, app da aggiornare)
   if ((path === '/presence' && m === 'GET') || ['/health', '/health/hide', '/health/unhide'].includes(path)) throw new HttpErr(403, '«Online ora» e «Salute delle app» sono riservate al titolare');
   // Linee collegate: solo le sue (e dei sotto-agenti, se li vede); gli host delle attivazioni automatiche restano nascosti
   if (path === '/line-notes') { const r = await linkedLinesRoutes(req, env, path, who, ip, { id: A.id, tree: ctree }); if (r) return r; } // note KAIROS sulle linee (Armada, MirkoTeam, MaxPlayer, OrbixPlay)
-  if (path === '/linked-lines' || path.startsWith('/linked-lines/')) { need('lines', 'Non puoi usare le linee collegate'); const r = await linkedLinesRoutes(req, env, path, who, ip, { id: A.id, tree: ctree, hideHosts: !((await getSettings(env)).playersCfg || {}).showDnsAgents }); if (r) return r; throw new HttpErr(404, 'Non trovato'); }
+  if (path === '/linked-lines' || path.startsWith('/linked-lines/')) { need('lines', 'Non puoi usare le linee collegate'); const r = await linkedLinesRoutes(req, env, path, who, ip, { id: A.id, tree: ctree, hideHosts: !((await getSettings(env)).playersCfg || {}).showDnsAgents, dnsHosts: servers.map((x) => x.host) }); if (r) return r; throw new HttpErr(404, 'Non trovato'); }
   // Errori dell'applicazione
   if (path === '/app-errors' && m === 'GET') {
     need('errors'); const sc = await scope(), j = await viaOwner(await adminErrors(req, env, path, url, who, ip));
@@ -5298,8 +5361,10 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const meOut = meArr[0];
     const { password: _pw, ...meSafe } = meOut;
     const sNames = canAg ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
+    const activationCatalog = await activationApps(env, s);
     return stateJson(req, { role: 'agent', user: A.username, me: { ...meSafe, storeCode: await sellerAgentCode(env, A), perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: agList,
+      activationApps: activationCatalog.filter((x) => P.actApps.includes(x.key)).map(({ key, name, link }) => ({ key, name, enabled: !!s.actApps[key], link: link ? link.url : '' })),
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { ...x, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
       // codici Downloader e link delle app Kairos: solo quelli che il titolare gli concede (kAllow)
@@ -5425,31 +5490,34 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (!ses && API_DENY.test(path)) throw new HttpErr(403, 'Funzione disponibile solo dal pannello');
   if (path === '/api-keys' || path.startsWith('/api-keys/') || path === '/webhook' || path.startsWith('/webhook/')) return apiAdmin(req, env, path, who, ip, ctx);
   if (path === '/orcp/agents') {
-    if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può assegnare l’app MirkoTeam');
+    if (!ses || ses.agent || ses.assist) throw new HttpErr(403, 'Solo il titolare può assegnare l’app MirkoTeam');
     if (m !== 'PUT') throw new HttpErr(405, 'Metodo non consentito');
-    const b = await readJSON(req, 131072), dl = String(b && b.dl != null ? b.dl : '');
+    const b = await readJSON(req, 131072);
+    if (!b || typeof b !== 'object' || Array.isArray(b) || Object.keys(b).some((k) => !['dl', 'agents'].includes(k))) throw new HttpErr(400, 'Impostazioni MirkoTeam non valide');
+    const dl = str(b.dl, 12).trim();
     if (!/^\d{1,12}$/.test(dl)) throw new HttpErr(400, 'Codice Downloader non valido: usa da 1 a 12 cifre');
     if (!Array.isArray(b.agents) || b.agents.length > 1000) throw new HttpErr(400, 'Elenco agenti non valido');
     const all = await agentsAll(env), byId = new Map(all.map((a) => [a.id, a])), seen = new Set(), updates = [];
     for (const row of b.agents) {
-      if (!row || !Number.isInteger(row.id) || row.id < 1 || seen.has(row.id) || typeof row.on !== 'boolean') throw new HttpErr(400, 'Agente non valido');
+      if (!row || typeof row !== 'object' || Array.isArray(row) || Object.keys(row).some((k) => !['id', 'on', 'srv'].includes(k)) || !Number.isInteger(row.id) || row.id < 1 || seen.has(row.id) || typeof row.on !== 'boolean') throw new HttpErr(400, 'Agente non valido');
       seen.add(row.id);
       const srv = checkedOrcpServers(row.srv);
       if (!byId.has(row.id)) throw new HttpErr(400, `Agente ${row.id} non trovato`);
-      updates.push({ id: row.id, on: row.on, srv, username: byId.get(row.id).username });
+      const A = byId.get(row.id), parent = A.parent_id ? byId.get(A.parent_id) : null;
+      const perms = agentPerms(A.perms);
+      perms.orcpApp = row.on; perms.orcpSrv = srv;
+      updates.push({ id: row.id, perms: agentPermsWithin(perms, parent ? agentPerms(parent.perms) : null), username: A.username });
     }
-    const cfg = await setOrcpDownloader(env, dl);
+    await setOrcpDownloader(env, dl);
     for (let i = 0; i < updates.length; i += 100) {
       const batch = updates.slice(i, i + 100).map((row) => {
-        const perms = agentPerms(byId.get(row.id).perms);
-        perms.orcpApp = row.on; perms.orcpSrv = row.srv;
-        return env.DB.prepare("UPDATE admins SET perms = ? WHERE id = ? AND role = 'agent'").bind(JSON.stringify(perms), row.id);
+        return env.DB.prepare("UPDATE admins SET perms = ? WHERE id = ? AND role = 'agent'").bind(JSON.stringify(row.perms), row.id);
       });
       await env.DB.batch(batch);
     }
     if (updates.length) memoDrop(env, 'ags');
     await log(env, 'edit', `${who}: aggiornati i permessi App MirkoTeam di ${updates.length} agenti`, ip).catch(() => {});
-    return json({ ok: true, cfg, agents: updates.map(({ id, on, srv }) => ({ id, perms: { orcpApp: on, orcpSrv: srv } })) });
+    return json({ ok: true, updated: updates.length });
   }
   if (path.startsWith('/oxp/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello OrbixPlay'); const r = await oxpRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
   if (path.startsWith('/atx/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello Atlantix'); const r = await atxRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
@@ -5624,7 +5692,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: orbixDnsList(settings.playersCfg.orbix, dnslOwner), max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents, codes: settings.playersCfg.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(settings.playersCfg) },
       dlCodes: dlCodesOf(settings),
       storeOwnerCode: await sellerOwnerCode(env),
-      storeAppNames: sAppNames, maintAg: Object.entries(settings.maintAg || {}).filter(([, x]) => x && x.on).map(([id]) => +id),
+      storeAppNames: sAppNames, activationApps: (await activationApps(env, settings)).map(({ key, name, link }) => ({ key, name, enabled: !!settings.actApps[key], link: link ? link.url : '' })), maintAg: Object.entries(settings.maintAg || {}).filter(([, x]) => x && x.on).map(([id]) => +id),
       counts: { ...nCounts, online: onl }, permKeys: PERM_KEYS, addonCat: addonCfg(settings), role: 'owner', ...(ses ? { agents: await agentsOut(env, agAll) } : {}),
     });
   }
@@ -6154,6 +6222,12 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       s.storeOwnerCode = c;
     }
     if (b.appLinks !== undefined) s.appLinks = cleanAppLinks(b.appLinks);
+    if (b.actApps !== undefined) {
+      if (!b.actApps || typeof b.actApps !== 'object' || Array.isArray(b.actApps)) throw new HttpErr(400, 'Impostazioni app da attivare non valide');
+      const known = await activationApps(env, s);
+      if (known.some((x) => Object.hasOwn(b.actApps, x.key) && typeof b.actApps[x.key] !== 'boolean')) throw new HttpErr(400, 'Ogni app da attivare deve essere Sì o No');
+      s.actApps = Object.fromEntries(known.map((x) => [x.key, b.actApps[x.key] === true]));
+    }
     let pendNow = 0;
     if (b.codeOnly !== undefined) {
       if (!ses || ses.agent || ses.assist) throw new HttpErr(403, 'Impostazione riservata al titolare');
