@@ -896,7 +896,8 @@ async function onlineRoute(req) {
 }
 
 /* ---------------- link puliti: /get/<app>.apk e /store/ (proxy delle release GitHub e di GitHub Pages) ----------------
-   Il link che il cliente vede è quello del pannello (es. https://panel-kairos.com/get/store.apk): l'account GitHub resta qui. */
+   Il link che il cliente vede è quello del pannello (es. https://panel-kairos.com/get/store.apk): l'account GitHub resta qui.
+   Se GitHub non risponde, /get rimanda direttamente all'asset. */
 const GH_OWNER = 'mariopiccolo8562-lang';
 const GET_APK = {
   store: ['kairos-store/releases/latest/download/KairosStore.apk', 'KairosStore.apk'],
@@ -910,13 +911,26 @@ const GET_APK = {
   'nova-arm32': ['Lairos-nova/releases/download/latest/KairosNova-arm32.apk', 'kairos-nova-arm32.apk'],
 };
 const STORE_PAGES = `https://${GH_OWNER}.github.io/kairos-store/`;
+async function ghFetch(u, method, ms = 8000) {
+  const ac = new AbortController(), timer = setTimeout(() => ac.abort(), ms);
+  try { return await fetch(u, { method, redirect: 'follow', cf: { cacheTtl: 600, cacheEverything: true }, signal: ac.signal }); }
+  finally { clearTimeout(timer); }
+}
 async function cleanLinks(req, url, path) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return new Response('Metodo non consentito', { status: 405 });
   const m = path.match(/^\/get\/([a-z0-9-]{1,24})\.apk$/);
   if (m) {
     const e = GET_APK[m[1]]; if (!e) return new Response('Non trovato', { status: 404 });
-    const up = await fetch(`https://github.com/${GH_OWNER}/${e[0]}`, { method: req.method === 'HEAD' ? 'HEAD' : 'GET', redirect: 'follow', cf: { cacheTtl: 600, cacheEverything: true } });
-    if (!up.ok) return new Response('App non disponibile al momento, riprova tra poco', { status: 502 });
+    const target = `https://github.com/${GH_OWNER}/${e[0]}`, method = req.method === 'HEAD' ? 'HEAD' : 'GET';
+    let up = null;
+    for (let n = 0; n < 2; n++) {
+      try {
+        up = await ghFetch(target, method, 8000);
+        if (up.status !== 429 && up.status < 500) break;
+      } catch { up = null; }
+    }
+    if (up && up.status === 404) return new Response('App non disponibile al momento, riprova tra poco', { status: 502 });
+    if (!up || !up.ok) return new Response(null, { status: 302, headers: { Location: target, 'Cache-Control': 'no-store' } });
     const h = new Headers();
     h.set('Content-Type', 'application/vnd.android.package-archive');
     h.set('Content-Disposition', `attachment; filename="${e[1]}"`);
