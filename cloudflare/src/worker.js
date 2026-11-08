@@ -1957,7 +1957,7 @@ function playerInput(v) {
    Ogni campo assente resta com'è; lettore: '' = lo sceglie il cliente nell'app. Il lettore vale anche per le connessioni
    collegate «indipendenti» (hanno il loro); permessi, VPN e visioni stanno sul cliente principale. L'app si riallinea al battito. */
 const MASS_MAX = 5000;
-const MASS_RC = ['lite', 'posters', 'intro']; // voci del Controllo remoto cambiabili in massa
+const MASS_RC = ['lite', 'posters', 'intro', 'mergeVar']; // voci del Controllo remoto cambiabili in massa
 function massInput(b) {
   if (!b || typeof b !== 'object') throw new HttpErr(400, 'Richiesta non valida');
   const o = {};

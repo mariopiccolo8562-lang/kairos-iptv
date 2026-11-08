@@ -48,6 +48,7 @@
     ['lite', 'Modalità leggera', 'Tutte le app · «Spenta» non la riaccende nemmeno «Risolvi»', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['max', 'Leggerissima'], ['off', 'Spenta']]],
     ['posters', 'Locandine', 'Solo Kairos Pro · «Sempre nitide» usa più memoria sulle chiavette da 1 GB', [['auto', 'Automatiche'], ['hi', 'Sempre nitide']]],
     ['intro', 'Animazione d\'avvio', 'Solo Kairos Pro · vale dall\'apertura successiva', [['auto', 'Automatica'], ['simple', 'Semplice'], ['off', 'Spenta']]],
+    ['mergeVar', 'Versioni dello stesso canale in una voce sola', 'Solo Kairos Pro · 4K/FHD/HD/SD in una voce con la versione giusta per la linea (spenta di serie)', [['off', 'No: ogni versione ha la sua voce'], ['on', 'Sì: una voce, con la versione giusta per la linea']]],
   ];
   let M = null, ids0 = [], after = null;
   // sezione dei Clienti (I miei / degli agenti / un agente): le scelte «solo questa sezione» vengono prima
