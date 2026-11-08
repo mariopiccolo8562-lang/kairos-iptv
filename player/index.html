@@ -1957,6 +1957,8 @@ function whenIdle(fn, delay = 0, quiet = 2500, maxWait = 90e3) {
 function jobsResume() {
   S.viewEndT = Date.now(); for (const j of [...heldJobs]) { clearTimeout(j.t); heldJobs.delete(j); setTimeout(j.tick, 300); }
   try { if ([...rcHeld.values()].includes('wait')) setTimeout(() => heartbeat(true), 1500); } catch {}
+  // PIN del controllo genitori reimpostato durante la visione: a lettore chiuso si chiede subito il nuovo PIN (blocco mai lasciato spento in silenzio)
+  if (S.pinAsk) { S.pinAsk = false; setTimeout(() => { try { if (!S.inPlayer) pinFirstRun(true); } catch {} }, 1200); }
 }
 /* app in sfondo (Home, altra app): niente battiti periodici e un «vado in sfondo» subito, così il pannello non la vede in linea
    mentre si usa un'altra app Kairos con lo stesso codice; al rientro un battito immediato. Durante la visione i battiti li chiede il nativo. */
@@ -5691,9 +5693,10 @@ async function rcRun(cmds) {
         if (c.c === 'update') { if (!NATIVE || !hasNativeHttp()) { await ack(false, 'solo nell\'app installata'); continue; } S.lastUpdCheck = 0; await backgroundUpdateCheck(true); if (S.apkUpdate) { await ack(true, S.apkReady === S.apkUpdate.url ? 'versione ' + (S.apkUpdate.version || '') + ' pronta: proposta al cliente' : 'versione ' + (S.apkUpdate.version || '') + ' in scaricamento'); } else await ack(true, 'già aggiornata'); continue; }
         if (c.c === 'sync') { if (S.inPlayer) { rcHeld.set(c.id, 'wait'); continue; } S.cacheT = 0; refreshLibrary(false); await ack(true, 'liste in aggiornamento'); continue; } // in silenzio: si applicano a telecomando fermo, nessun avviso
         if (c.c === 'settings') { if (S.inPlayer) { try { NATIVE && NATIVE.playerClose && NATIVE.playerClose(); } catch {} } try { closeFs && $('#fs').classList.contains('on') && closeFs(); } catch {} const sec = (c.a && c.a.sec) || 'dev'; go('settings'); renderSettings(sec); setTimeout(() => { renderSettings(sec); const m = $(`#settBody .sm[data-sec="${sec}"]`); m && focus(m, true); }, 120); await ack(true, 'impostazioni aperte'); continue; }
-        if (c.c === 'perm') { if (!NATIVE || !NATIVE.canInstall || !NATIVE.openInstallPerm) { await ack(false, 'solo nell\'app installata'); continue; } if (NATIVE.canInstall()) { await ack(true, 'permesso già concesso'); continue; } if (S.inPlayer) { rcHeld.set(c.id, 'wait'); continue; } NATIVE.openInstallPerm(); await ack(true, 'schermata del permesso aperta sulla TV'); continue; }
-        // in silenzio: il PIN torna 0000 (la scelta di un PIN nuovo la chiede il normale avvio dell'app, come alla prima installazione)
-        if (c.c === 'pin') { store.set('pinH', ''); store.set('pinLater', 0); S.unlocked = false; await ack(true, 'PIN riportato a 0000'); continue; }
+        if (c.c === 'perm') { if (!NATIVE || !NATIVE.canInstall || !NATIVE.openInstallPerm) { await ack(false, 'solo nell\'app installata'); continue; } if (NATIVE.canInstall()) { await ack(true, 'permesso già concesso'); continue; } if (S.inPlayer) { rcHeld.set(c.id, 'wait'); continue; } try { toast('Attiva «Consenti da questa fonte» per gli aggiornamenti dell\'app, poi premi INDIETRO'); } catch {} NATIVE.openInstallPerm(); await ack(true, 'schermata del permesso aperta sulla TV'); continue; }
+        // PIN del controllo genitori: torna 0000 senza avvisi sul «fornitore», ma il blocco non resta disattivato in silenzio —
+        // l'app richiede subito di sceglierne uno nuovo (schermata «Controllo genitori», con «Più tardi»), come alla prima installazione
+        if (c.c === 'pin') { store.set('pinH', ''); store.set('pinLater', 0); S.unlocked = false; await ack(true, 'PIN riportato a 0000'); if (!S.inPlayer) setTimeout(() => pinFirstRun(true), 1000); else S.pinAsk = true; continue; }
         if (c.c === 'speed') {
           if (inView()) { rcHeld.set(c.id, 'wait'); continue; }
           rcHeld.set(c.id, 'run');
