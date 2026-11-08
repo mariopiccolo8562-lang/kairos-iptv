@@ -1187,52 +1187,340 @@ async function getSettings(env) {
 }
 const publicSettings = (s) => ({ brand: s.brand, tagline: s.tagline, accent: s.accent, announcement: s.announcement, supportContact: s.supportContact, allowLocalPlaylists: !!s.allowLocalPlaylists, serverUrl: s.serverUrl || '', showFootball: s.showFootball !== false, price: typeof s.price === 'string' ? s.price : DEFAULT_SETTINGS.price, privacy: typeof s.privacy === 'string' ? s.privacy : '' });
 
-/* ---------------- eventi di calcio (calendario pubblico ESPN, in cache 15 minuti) ---------------- */
+/* ---------------- eventi sportivi (calendari pubblici ESPN, in cache su D1) ---------------- */
 const LEAGUES = [
   ['ita.1', 'Serie A'], ['uefa.champions', 'Champions League'], ['uefa.europa', 'Europa League'], ['uefa.europa.conf', 'Conference League'],
   ['ita.coppa_italia', 'Coppa Italia'], ['eng.1', 'Premier League'], ['esp.1', 'LaLiga'], ['ger.1', 'Bundesliga'], ['fra.1', 'Ligue 1'],
 ];
 const ymd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
-/* Eventi di calcio da ESPN.
-   ESPN rifiuta gli intervalli di date: si chiede un giorno alla volta per ogni campionato.
-   Ogni "campionato+giorno" viene salvato in D1 (la cache di Cloudflare non funziona su workers.dev)
-   e riscaricato solo quando è vecchio, restando sotto il limite di 50 richieste del piano gratuito. */
-let evMem = { t: 0, body: null };
-async function espnDay(code, label, day) {
-  const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${code}/scoreboard?dates=${day}`, { headers: { 'User-Agent': 'Mozilla/5.0 KairosPanel' } });
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  const j = await r.json();
-  return (j.events || []).map((e) => {
-    const c = (e.competitions || [])[0] || {};
-    const team = (side) => { const t = ((c.competitors || []).find((x) => x.homeAway === side) || {}).team || {}; return { name: t.shortDisplayName || t.displayName || '', logo: t.logo || '' }; };
-    const score = (side) => ((c.competitors || []).find((x) => x.homeAway === side) || {}).score;
-    const state = (e.status && e.status.type && e.status.type.state) || 'pre';
-    return { id: String(e.id), league: label, start: e.date, home: { ...team('home'), score: score('home') }, away: { ...team('away'), score: score('away') }, venue: (c.venue && c.venue.fullName) || '', live: state === 'in', state, clock: (e.status && e.status.type && e.status.type.shortDetail) || '' };
-  }).filter((e) => e.home.name && e.away.name);
+/* Fonti: «site API» pubblica di ESPN, senza chiavi: https://site.api.espn.com/apis/site/v2/sports/<percorso>/scoreboard
+   tipo  'team'   due squadre (calcio, basket, NFL, rugby)
+         'race'   un Gran Premio con le sue sessioni (F1: Libere, Qualifiche, Sprint, Gara)
+         'tennis' tornei → tabelloni (singolare, doppio…) → partite
+         'mma'    serate (UFC 310…) → incontri
+   giorni: una richiesta per giorno da oggi (ESPN rifiuta gli intervalli di date). 0 = calendario corrente, senza data:
+   per la F1 ESPN dà in una sola richiesta il weekend di gara in corso (o il prossimo) con tutte le sessioni.
+   Il calcio resta com'era (8 giorni, stesse righe di cache «ev:<campionato>:<giorno>»); gli altri sport meno giorni,
+   così ogni giro resta sotto il limite di 50 richieste del piano gratuito di Cloudflare.
+   Mancano MotoGP, Eurolega, volley e ciclismo: ESPN non li ha. Per MotoGP ed Eurolega esistono solo le API interne dei
+   siti ufficiali (non documentate, senza garanzie per chi le usa da fuori); per volley italiano e ciclismo nessuna fonte
+   pubblica gratuita senza chiavi: andrebbero lette le pagine dei siti, cosa che qui non si fa. */
+const EV_SRC = [
+  ...LEAGUES.map(([code, label]) => ({ sport: 'calcio', key: code, path: 'soccer/' + code, label, kind: 'team', days: 8 })),
+  { sport: 'f1', key: 'racing/f1', label: 'Formula 1', kind: 'race', days: 0 },
+  { sport: 'tennis', key: 'tennis/atp', label: 'ATP', kind: 'tennis', days: 2 },
+  { sport: 'tennis', key: 'tennis/wta', label: 'WTA', kind: 'tennis', days: 2 },
+  { sport: 'basket', key: 'basketball/nba', label: 'NBA', kind: 'team', days: 2 },
+  { sport: 'nfl', key: 'football/nfl', label: 'NFL', kind: 'team', days: 3 },
+  { sport: 'ufc', key: 'mma/ufc', label: 'UFC', kind: 'mma', days: 3 },
+  { sport: 'rugby', key: 'rugby/180659', label: 'Sei Nazioni', kind: 'team', days: 3 },
+  { sport: 'rugby', key: 'rugby/17567', label: 'Nations Championship', kind: 'team', days: 3 },
+  { sport: 'rugby', key: 'rugby/270557', label: 'URC', kind: 'team', days: 3 },
+  { sport: 'rugby', key: 'rugby/271937', label: 'Champions Cup', kind: 'team', days: 3 },
+  { sport: 'rugby', key: 'rugby/289234', label: 'Test match', kind: 'team', days: 3 },
+];
+for (const s of EV_SRC) if (!s.path) s.path = s.key;
+/** sport che il titolare accende e spegne dal pannello (impostazione «sports»; non impostata = tutti) */
+const SPORTS = ['calcio', 'f1', 'tennis', 'basket', 'nfl', 'ufc', 'rugby'];
+const sportsOf = (s) => (s.showFootball === false ? [] : Array.isArray(s.sports) ? SPORTS.filter((k) => s.sports.includes(k)) : SPORTS.slice());
+const EV_FETCH_MAX = 40;   // richieste a ESPN per giro (il piano gratuito ne permette 50 in tutto)
+const EV_MAX = 30;         // eventi nella risposta v2
+const EV_MIN = 2;          // posti garantiti a ogni sport presente
+const EV_CAP = { f1: 5, tennis: 6, basket: 4, nfl: 4, ufc: 2, rugby: 5 }; // al massimo per sport (il calcio riempie il resto)
+
+/* lettura difensiva: un campo mancante o di tipo sbagliato fa scartare l'evento, mai un'eccezione */
+const evArr = (x) => (Array.isArray(x) ? x : []);
+const evObj = (x) => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
+const evS = (x, max = 120) => (typeof x === 'string' ? x.trim().slice(0, max) : typeof x === 'number' && isFinite(x) ? String(x) : '');
+const evUrl = (x) => { const u = evS(x, 400); return /^https:\/\/[^\s"'<>]+$/.test(u) ? u : ''; };
+const evDate = (x) => (typeof x === 'string' && isFinite(Date.parse(x)) ? x : '');
+const evNorm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const evLogo = (j) => evUrl(evObj(evArr(evObj(evArr(evObj(j).leagues)[0]).logos)[0]).href);
+function evSt(st) {
+  const o = evObj(st), ty = evObj(o.type);
+  const state = ['pre', 'in', 'post'].includes(ty.state) ? ty.state : ty.completed === true ? 'post' : 'pre';
+  return { state, sd: evS(ty.shortDetail, 60), short: evS(ty.shortDetail, 40) || evS(ty.detail, 40), name: evS(ty.name, 40), period: Math.max(0, parseInt(o.period, 10) || 0), dclock: evS(o.displayClock, 12) };
 }
-async function footballEvents(env, ctx) {
-  if (evMem.body && now() - evMem.t < 3 * 60e3) return evMem.body;
-  const days = [...Array(8)].map((_, i) => ymd(new Date(now() + i * 86400e3)));
+/** orologio in italiano per gli sport diversi dal calcio (il calcio tiene quello di ESPN: «67'», «HT») */
+function evClock(sport, st) {
+  if (st.state !== 'in') return '';
+  if (/HALF/i.test(st.name) || /^(half|halftime|ht)\b/i.test(st.short)) return 'Intervallo';
+  if (sport === 'basket' || sport === 'nfl') return st.period ? (st.period > 4 ? 'Suppl.' : `${st.period}° quarto`) + (st.dclock && st.dclock !== '0:00' ? ' · ' + st.dclock : '') : '';
+  return st.short;
+}
+/* nazionali di rugby: ESPN le dà in inglese, nella guida TV italiana sono in italiano */
+const RUGBY_IT = { Italy: 'Italia', England: 'Inghilterra', France: 'Francia', Ireland: 'Irlanda', Scotland: 'Scozia', Wales: 'Galles', 'South Africa': 'Sudafrica', 'New Zealand': 'Nuova Zelanda', Japan: 'Giappone', Fiji: 'Figi', Chile: 'Cile', Portugal: 'Portogallo', Spain: 'Spagna', 'United States': 'Stati Uniti', USA: 'Stati Uniti', Netherlands: 'Paesi Bassi', Germany: 'Germania', Belgium: 'Belgio', Russia: 'Russia', Uruguay: 'Uruguay', Georgia: 'Georgia', Romania: 'Romania', Samoa: 'Samoa', Tonga: 'Tonga', Namibia: 'Namibia', Canada: 'Canada', Argentina: 'Argentina', Australia: 'Australia' };
+
+/* due squadre: calcio (stessa forma di prima), basket NBA, NFL, rugby */
+function evTeam(j, src) {
+  const out = [], lg = src.sport === 'calcio' ? '' : evLogo(j);
+  for (const e of evArr(evObj(j).events)) {
+    try {
+      const c = evObj(evArr(e.competitions)[0]), cs = evArr(c.competitors);
+      const side = (h) => {
+        const x = evObj(cs.find((k) => k && k.homeAway === h)), t = evObj(x.team);
+        let name = evS(t.shortDisplayName) || evS(t.displayName);
+        if (src.sport === 'rugby') name = RUGBY_IT[evS(t.displayName)] || RUGBY_IT[name] || name;
+        const sc = x.score; // stringa («2») come la dà ESPN
+        return { name, logo: evUrl(t.logo), score: typeof sc === 'string' || typeof sc === 'number' ? sc : undefined };
+      };
+      const st = evSt(e.status), home = side('home'), away = side('away'), start = evDate(e.date);
+      if (!home.name || !away.name || !start) continue;
+      const ev = { id: evS(e.id, 40), league: src.label, start, home, away, venue: evS(evObj(c.venue).fullName, 120), live: st.state === 'in', state: st.state, clock: src.sport === 'calcio' ? st.sd : evClock(src.sport, st), sport: src.sport };
+      if (!ev.id) continue;
+      if (src.sport === 'nfl' && evObj(e.week).number) ev.round = `Settimana ${parseInt(e.week.number, 10) || ''}`.trim();
+      if (lg) ev.logo = lg;
+      out.push(ev);
+    } catch {}
+  }
+  return out;
+}
+
+/* F1: ogni sessione del Gran Premio è un evento («GP del Brasile · Gara»), senza due lati */
+const F1_SES = { fp1: 'Libere 1', fp2: 'Libere 2', fp3: 'Libere 3', p1: 'Libere 1', p2: 'Libere 2', p3: 'Libere 3', qual: 'Qualifiche', q: 'Qualifiche', qualifying: 'Qualifiche', ss: 'Qualifiche Sprint', sq: 'Qualifiche Sprint', sprintqualifying: 'Qualifiche Sprint', sprintshootout: 'Qualifiche Sprint', sr: 'Sprint', sprint: 'Sprint', sprintrace: 'Sprint', race: 'Gara', r: 'Gara' };
+// prima il nome del circuito, la città e il paese (senza sponsor), poi il nome dell'evento; Qatar per ultimo («Qatar Airways» sponsorizza altri GP)
+const GP_IT = [
+  [/miami/, 'GP di Miami'], [/las vegas/, 'GP di Las Vegas'], [/sao paulo|interlagos|brazil|brasil/, 'GP del Brasile'], [/mexic/, 'GP del Messico'],
+  [/united states|austin|americas/, 'GP degli Stati Uniti'], [/abu dhabi|yas marina/, 'GP di Abu Dhabi'], [/bahrain|sakhir/, 'GP del Bahrein'],
+  [/jeddah|saudi/, "GP dell'Arabia Saudita"], [/melbourne|albert park|australia/, "GP d'Australia"], [/shanghai|china|chinese/, 'GP della Cina'],
+  [/suzuka|japan/, 'GP del Giappone'], [/monaco|monte carlo/, 'GP di Monaco'], [/montreal|villeneuve|canad/, 'GP del Canada'],
+  [/barcelona|catalunya|catalonia/, 'GP di Barcellona'], [/madrid|madring|spain|spanish|espana/, 'GP di Spagna'], [/spielberg|red bull ring|austria/, "GP d'Austria"],
+  [/silverstone|brit/, 'GP di Gran Bretagna'], [/spa francorchamps|belgi/, 'GP del Belgio'], [/hungaroring|budapest|hungar/, "GP d'Ungheria"],
+  [/zandvoort|netherlands|dutch/, "GP d'Olanda"], [/imola|emilia/, "GP dell'Emilia-Romagna"], [/monza|ital/, "GP d'Italia"],
+  [/baku|azerbaijan/, "GP dell'Azerbaigian"], [/marina bay|singapore/, 'GP di Singapore'], [/lusail|qatar/, 'GP del Qatar'],
+];
+function gpIt(e) {
+  const ci = evObj(e.circuit), ad = evObj(ci.address);
+  for (const h of [evNorm([ci.fullName, ad.city, ad.country].map((x) => evS(x)).join(' ')), evNorm(evS(e.shortName) + ' ' + evS(e.name))]) {
+    if (!h) continue;
+    const m = GP_IT.find(([re]) => re.test(h)); if (m) return m[1];
+  }
+  const n = (evS(e.shortName) || evS(e.name)).replace(/\bformula\s*(1|one)\b/ig, '').replace(/\b(19|20)\d\d\b/g, '').replace(/\b(grand prix|gran premio|grande pr[eê]mio)\b/ig, 'GP').replace(/\s+/g, ' ').trim();
+  return n.slice(0, 60);
+}
+function evRace(j, src) {
+  const out = [], lg = evLogo(j);
+  for (const e of evArr(evObj(j).events)) {
+    try {
+      const gp = gpIt(e), ci = evObj(e.circuit), venue = evS(ci.fullName, 80) || evS(evObj(evObj(evArr(e.competitions)[0]).venue).fullName, 80);
+      if (!gp) continue;
+      for (const c of evArr(e.competitions)) {
+        try {
+          const ty = evObj(c.type), ab = evS(ty.abbreviation, 30) || evS(ty.text, 30) || evS(ty.name, 30);
+          const ses = F1_SES[ab.toLowerCase().replace(/[^a-z0-9]/g, '')] || ab, start = evDate(c.date) || evDate(c.startDate);
+          if (!ses || !start) continue;
+          const st = evSt(c.status), id = evS(c.id, 40) || (evS(e.id, 40) && `${evS(e.id, 40)}-${ab}`);
+          if (!id) continue;
+          const ev = { id, sport: src.sport, league: src.label, start, live: st.state === 'in', state: st.state, clock: st.state === 'in' && /^(Gara|Sprint)$/.test(ses) && st.period ? `Giro ${st.period}` : '', title: `${gp} · ${ses}`, gp, session: ses, venue, round: ses };
+          if (st.state !== 'pre') {
+            // in corso o finita: i primi tre (ordine di ESPN = posizione)
+            const top = evArr(c.competitors).map((x) => { const a = evObj(evObj(x).athlete); return { o: parseInt(evObj(x).order, 10) || 99, name: evS(a.shortName, 40) || evS(a.displayName, 40), flag: evUrl(evObj(a.flag).href) }; })
+              .filter((x) => x.name).sort((a, b) => a.o - b.o).slice(0, 3).map(({ name, flag }) => ({ name, flag }));
+            if (top.length) ev.top = top;
+          }
+          if (lg) ev.logo = lg;
+          out.push(ev);
+        } catch {}
+      }
+    } catch {}
+  }
+  return out;
+}
+
+/* tennis: solo il tabellone principale di singolare (niente doppi, qualificazioni, juniores) */
+const TN_ROUND = [[/^finals?$/i, 'Finale', 6], [/semi/i, 'Semifinale', 5], [/quarter/i, 'Quarti di finale', 4], [/round robin/i, 'Round robin', 4],
+  [/round of 16|4th round|fourth round/i, 'Ottavi di finale', 3], [/round of 32/i, 'Sedicesimi di finale', 2], [/round of 64/i, 'Trentaduesimi di finale', 1],
+  [/round of 128|first round/i, '1° turno', 1], [/second round/i, '2° turno', 1], [/third round/i, '3° turno', 2], [/(\d)\s*(?:st|nd|rd|th)?\s*round|round\s*(\d)/i, null, 1]];
+function tnRound(s) {
+  for (const [re, it, w] of TN_ROUND) { const m = s.match(re); if (m) return [it || `${m[1] || m[2]}° turno`, w]; }
+  return [s, 1];
+}
+function evTennis(j, src) {
+  const out = [], lg = evLogo(j);
+  for (const e of evArr(evObj(j).events)) {
+    try {
+      const tn = evS(e.shortName, 60) || evS(e.name, 60);
+      if (!tn) continue;
+      const league = new RegExp('\\b' + src.label + '\\b', 'i').test(tn) ? tn : `${src.label} · ${tn}`;
+      // peso del torneo: Slam, Finals, Masters 1000
+      const tier = e.major === true || /australian open|roland|garros|wimbledon|us open|finals|masters|1000/i.test(tn) ? 2 : 0;
+      const groups = evArr(e.groupings).length ? evArr(e.groupings) : [{ grouping: {}, competitions: e.competitions }];
+      for (const g of groups) {
+        const gg = evObj(evObj(g).grouping), gn = (evS(gg.slug) + ' ' + evS(gg.displayName)).toLowerCase();
+        if (gn.trim() && (!/singles|singolare/.test(gn) || /doubles|doppio|qualif|junior|boys|girls|wheelchair|legend|mixed/.test(gn))) continue;
+        for (const c of evArr(evObj(g).competitions)) {
+          try {
+            const ty = evObj(c.type), tt = (evS(ty.slug) + ' ' + evS(ty.text) + ' ' + evS(ty.name)).toLowerCase(), rr = evS(evObj(c.round).displayName, 40) || evS(evObj(c.round).name, 40);
+            if (/doubles|qualif|mixed/.test(tt) || /qualif/i.test(rr)) continue;
+            const cs = evArr(c.competitors).filter((x) => x && typeof x === 'object');
+            if (cs.length !== 2) continue;
+            const pl = (x) => {
+              const a = evObj(x.athlete), fl = evObj(a.flag), full = evS(a.displayName, 60) || evS(a.fullName, 60);
+              const ls = evArr(x.linescores).map(evObj);
+              const seed = parseInt(x.tournamentSeed, 10) || parseInt(evObj(x.curatedRank).current, 10) || 0;
+              return { name: evS(a.shortName, 40) || full, full, logo: evUrl(fl.href), it: /^ital/i.test(evS(fl.alt)) || /\/ita\.png$/i.test(evS(fl.href)), seed: seed > 0 && seed < 99 ? seed : 0,
+                ls, sets: ls.map((l) => (l.value === '' || l.value == null || !isFinite(+l.value) ? null : +l.value)).filter((v) => v !== null), home: x.homeAway === 'home', order: parseInt(x.order, 10) || 9 };
+            };
+            let [h, a] = cs.map(pl);
+            if (a.home && !h.home || (!h.home && !a.home && a.order < h.order)) [h, a] = [a, h];
+            if (!h.name || !a.name || [h.name, a.name, h.full, a.full].some((n) => /^tbd$|^bye$/i.test(n))) continue;
+            const st = evSt(c.status), start = evDate(c.date) || evDate(c.startDate), id = evS(c.id, 40);
+            if (!start || !id) continue;
+            // set vinti: quelli che ESPN segna come vinti, altrimenti i set finiti (6-4, 7-5, 7-6…)
+            const won = (p, q) => p.ls.reduce((n, l, i) => { const g = +l.value, o = +evObj(q.ls[i]).value; if (l.winner === true) return n + 1; if (p.ls.some((y) => y.winner !== undefined)) return n; return n + (isFinite(g) && isFinite(o) && ((g >= 6 && g - o >= 2) || (g === 7 && o === 6)) ? 1 : 0); }, 0);
+            const [rd, rw] = tnRound(rr);
+            const side = (p, q) => ({ name: p.name, logo: p.logo, score: st.state === 'pre' ? undefined : String(won(p, q)), sets: p.sets, ...(p.seed ? { seed: p.seed } : {}), ...(p.it ? { it: true } : {}) });
+            const best = Math.min(h.seed || 99, a.seed || 99);
+            out.push({ id, sport: src.sport, league, start, live: st.state === 'in', state: st.state, clock: st.state === 'in' ? (st.period ? `${st.period}° set` : 'In corso') : '',
+              home: side(h, a), away: side(a, h), venue: evS(evObj(c.venue).court, 60) || evS(evObj(c.venue).fullName, 60) || evS(evObj(e.venue).fullName, 60), round: rd,
+              // importanza per la scelta (non esce nella risposta): italiani, teste di serie, turno, torneo
+              imp: (h.it || a.it ? 50 : 0) + (best < 99 ? Math.max(0, 33 - best) / 2 : 0) + rw * 4 + tier * 5, ...(lg ? { logo: lg } : {}) });
+          } catch {}
+        }
+      }
+    } catch {}
+  }
+  return out;
+}
+
+/* UFC: una serata è un evento («UFC 310»), con i due lottatori dell'incontro principale */
+function evMma(j, src) {
+  const out = [], lg = evLogo(j);
+  for (const e of evArr(evObj(j).events)) {
+    try {
+      const name = evS(e.name, 160), title = (name.split(':')[0] || '').trim() || evS(e.shortName, 60) || src.label, id = evS(e.id, 40);
+      const all = evArr(e.competitions).map(evObj), fights = all.filter((c) => evArr(c.competitors).filter((x) => x && x.athlete).length === 2);
+      const sts = all.map((c) => evSt(c.status)), live = sts.find((s) => s.state === 'in');
+      const start = evDate(e.date) || evDate((all[0] || {}).date);
+      if (!id || !start || !title) continue;
+      // serata in corso: un incontro in corso, oppure già iniziata con incontri finiti e altri da fare
+      // (prima dell'inizio un incontro «finito» è uno annullato: la serata non è in diretta)
+      const state = live ? 'in' : sts.length ? (sts.every((s) => s.state === 'post') ? 'post' : sts.some((s) => s.state === 'post') && Date.parse(start) <= now() ? 'in' : 'pre') : evSt(e.status).state;
+      // incontro principale: quello dei due nomi nel titolo («… : Pantoja vs. Asakura»), altrimenti l'ultimo in programma
+      const names = (c) => evArr(c.competitors).map((x) => evNorm(evS(evObj(evObj(x).athlete).displayName)));
+      const vs = evNorm(name.split(':').slice(1).join(' ')).split(/\s+vs\s+/).map((s) => s.split(' ').pop()).filter(Boolean);
+      let main = vs.length === 2 ? fights.find((c) => { const n = names(c).join('|'); return vs.every((v) => n.includes(v)); }) : null;
+      if (!main && fights.length) main = fights.reduce((b, c) => ((Date.parse(c.date) || 0) >= (Date.parse(b.date) || 0) ? c : b));
+      const ev = { id, sport: src.sport, league: src.label, start, live: state === 'in', state, clock: live && live.period ? `${live.period}° round` : '', title, venue: evS(evObj(evArr(e.venues)[0]).fullName, 80) || evS(evObj(evObj(all[0]).venue).fullName, 80) };
+      if (main) {
+        const cs = evArr(main.competitors).map(evObj).sort((a, b) => (parseInt(a.order, 10) || 9) - (parseInt(b.order, 10) || 9));
+        const f = (x) => { const a = evObj(x.athlete); return { name: evS(a.shortName, 40) || evS(a.displayName, 40), logo: evUrl(evObj(a.flag).href) }; };
+        const [h, a] = cs.map(f);
+        if (h && a && h.name && a.name) { ev.home = h; ev.away = a; ev.round = 'Incontro principale'; }
+      }
+      if (lg) ev.logo = lg;
+      out.push(ev);
+    } catch {}
+  }
+  return out;
+}
+const EV_PARSE = { team: evTeam, race: evRace, tennis: evTennis, mma: evMma };
+async function espnBoard(src, day) {
+  const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${src.path}/scoreboard${day ? '?dates=' + day : ''}`, { headers: { 'User-Agent': 'Mozilla/5.0 KairosPanel' } });
+  if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status });
+  return EV_PARSE[src.kind](await r.json(), src);
+}
+/** validità di una riga di cache: oggi 5 minuti (risultati in diretta), domani 1 ora, gli altri giorni 6 ore.
+    Giorno senza eventi: oggi 30 minuti, domani 2 ore. Calendario corrente (F1): 5 minuti se c'è una sessione entro 36 ore.
+    Errore: oggi si riprova tra 15 minuti, gli altri giorni tra un'ora; fonte rifiutata da ESPN (400/404) tra 6 ore */
+function evTtl(src, di, v) {
+  if (v && v.err) return v.err >= 400 && v.err < 500 && v.err !== 429 ? 6 * 3600e3 : di === 0 ? 15 * 60e3 : 3600e3;
+  const ev = (v && v.ev) || [];
+  if (!src.days) { const t = now(); return ev.some((e) => e.live || Math.abs(Date.parse(e.start) - t) < 36 * 3600e3) ? 5 * 60e3 : 3600e3; }
+  if (di === 0) return ev.length ? 5 * 60e3 : 30 * 60e3;
+  if (di === 1) return ev.length ? 3600e3 : 2 * 3600e3;
+  return 6 * 3600e3;
+}
+/** righe di cache volute per gli sport accesi: il calcio a giorni come prima (UTC), gli altri sul giorno di ESPN
+    (orario della costa est USA: le partite NBA/NFL della notte italiana restano nel giorno giusto) */
+function evWanted(on, t = now()) {
+  const out = [];
+  for (const src of EV_SRC) {
+    if (!on.includes(src.sport)) continue;
+    if (!src.days) { out.push({ k: `ev:${src.key}:cur`, src, day: '', di: 0 }); continue; }
+    for (let i = 0; i < src.days; i++) {
+      const day = ymd(new Date(t + (src.sport === 'calcio' ? 0 : -5 * 3600e3) + i * 86400e3));
+      out.push({ k: `ev:${src.key}:${day}`, src, day, di: i });
+    }
+  }
+  return out;
+}
+/* ESPN si interroga un giorno alla volta per ogni fonte; ogni «fonte+giorno» viene salvato in D1 (la cache di Cloudflare
+   non funziona su workers.dev) e riscaricato solo quando è vecchio, prima oggi, al massimo EV_FETCH_MAX richieste per giro */
+let evMem = { t: 0, sig: '', have: null, out: {} };
+async function evData(env, ctx, on) {
+  const sig = on.join();
+  if (evMem.have && evMem.sig === sig && now() - evMem.t < 3 * 60e3) return evMem;
   const rows = ((await env.DB.prepare("SELECT k, v FROM settings WHERE k LIKE 'ev:%'").all()).results) || [];
   const have = new Map(rows.map((r) => { try { return [r.k, JSON.parse(r.v)]; } catch { return [r.k, null]; } }));
-  // validità: oggi 5 minuti (risultati in diretta), domani 1 ora, gli altri giorni 6 ore
-  const ttl = (di) => (di === 0 ? 5 * 60e3 : di === 1 ? 3600e3 : 6 * 3600e3);
-  const todo = [];
-  days.forEach((day, di) => LEAGUES.forEach(([code, label]) => { const k = `ev:${code}:${day}`, h = have.get(k); if (!h || now() - h.t > ttl(di)) todo.push({ k, code, label, day, di }); }));
-  todo.sort((a, b) => a.di - b.di);
-  const batch = todo.slice(0, 40);
-  const got = await Promise.all(batch.map(async (x) => { try { return { ...x, ev: await espnDay(x.code, x.label, x.day) }; } catch { return null; } }));
-  const writes = [];
-  for (const g of got) if (g) { const v = { t: now(), ev: g.ev }; have.set(g.k, v); writes.push(env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(g.k, JSON.stringify(v))); }
-  const old = [...have.keys()].filter((k) => !days.includes(k.split(':')[2]));
-  for (const k of old) { writes.push(env.DB.prepare('DELETE FROM settings WHERE k = ?').bind(k)); have.delete(k); }
+  const wanted = evWanted(on);
+  const todo = wanted.filter((w) => { const h = have.get(w.k); return !h || now() - (+h.t || 0) > evTtl(w.src, w.di, h); }).sort((a, b) => a.di - b.di);
+  const got = await Promise.all(todo.slice(0, EV_FETCH_MAX).map(async (w) => { try { return { ...w, ev: await espnBoard(w.src, w.day) }; } catch (e) { return { ...w, err: +(e && e.status) || 1 }; } }));
+  const writes = [], put = (k, v) => env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(k, JSON.stringify(v));
+  for (const g of got) {
+    // errore (ESPN giù, campionato sparito): si tengono gli eventi di prima e si riprova più tardi, senza insistere a ogni giro
+    const old = have.get(g.k), v = g.err ? { t: now(), ev: (old && old.ev) || [], err: g.err } : { t: now(), ev: g.ev };
+    have.set(g.k, v); writes.push(put(g.k, v));
+  }
+  // via le righe che non servono più: giorni passati, sport spenti dal pannello
+  const want = new Set(wanted.map((w) => w.k));
+  for (const k of [...have.keys()]) if (!want.has(k)) { writes.push(env.DB.prepare('DELETE FROM settings WHERE k = ?').bind(k)); have.delete(k); }
   if (writes.length) { const w = env.DB.batch(writes).catch(() => {}); ctx && ctx.waitUntil ? ctx.waitUntil(w) : await w; }
-  const seen = new Set(), t = now();
-  const events = [...have.values()].flatMap((v) => (v && v.ev) || [])
-    .filter((e) => { if (seen.has(e.id)) return false; seen.add(e.id); return e.state !== 'post' && +new Date(e.start) > t - 4 * 3600e3; })
-    .sort((a, b) => (+b.live - +a.live) || (new Date(a.start) - new Date(b.start))).slice(0, 40);
-  const body = { events, updated: t };
-  evMem = { t, body };
+  evMem = { t: now(), sig, have, out: {} };
+  return evMem;
+}
+const evOrd = (a, b) => (+!!b.live - +!!a.live) || (Date.parse(a.start) - Date.parse(b.start));
+/** scelta degli eventi della risposta v2: prima quelli in diretta, poi i più vicini; qualche posto garantito a ogni sport
+    e un massimo per gli sport con tante partite. Tennis: in corso, poi italiani, teste di serie e turni avanzati */
+function evPick(list) {
+  const by = new Map();
+  for (const e of list) { if (!by.has(e.sport)) by.set(e.sport, []); by.get(e.sport).push(e); }
+  for (const [sp, a] of by) {
+    a.sort(sp === 'tennis' ? (x, y) => (+!!y.live - +!!x.live) || ((y.imp || 0) - (x.imp || 0)) || (Date.parse(x.start) - Date.parse(y.start)) : evOrd);
+    if (EV_CAP[sp] && a.length > EV_CAP[sp]) a.length = EV_CAP[sp];
+  }
+  const pick = new Set();
+  for (const a of by.values()) a.slice(0, EV_MIN).forEach((e) => pick.add(e));
+  for (const e of [...by.values()].flat().sort(evOrd)) { if (pick.size >= EV_MAX) break; pick.add(e); }
+  return [...pick].sort(evOrd);
+}
+const evSide = (s) => { const o = { name: s.name, logo: s.logo || '' }; for (const k of ['score', 'sets', 'seed', 'it']) if (s[k] !== undefined) o[k] = s[k]; return o; };
+/** evento normalizzato della risposta v2 */
+function evOut(e) {
+  const o = { id: `${e.sport}:${e.id}`, sport: e.sport, league: e.league, start: e.start, live: !!e.live, state: e.state, clock: e.clock || '' };
+  if (e.title) o.title = e.title;
+  if (e.home && e.away) { o.home = evSide(e.home); o.away = evSide(e.away); }
+  o.venue = e.venue || ''; o.round = e.round || '';
+  for (const k of ['gp', 'session', 'top', 'logo']) if (e[k]) o[k] = e[k];
+  return o;
+}
+/** /api/player/events — senza ?v=2 solo calcio e la stessa forma di sempre (le interfacce vecchie leggono home/away);
+    con ?v=2 tutti gli sport accesi dal pannello, nel formato nuovo */
+async function sportsEvents(env, ctx, v = 1) {
+  const s = await getSettings(env), on = sportsOf(s);
+  const t = now(), use = v === 2 ? on : on.filter((k) => k === 'calcio');
+  if (!use.length) return v === 2 ? { v: 2, events: [], sports: [], updated: t } : { events: [], updated: t };
+  const mem = await evData(env, ctx, on);
+  const key = v + '|' + use.join();
+  if (mem.out[key]) return mem.out[key];
+  const seen = new Set(), all = [];
+  for (const val of mem.have.values()) for (const e of (val && val.ev) || []) {
+    const sp = e.sport || 'calcio'; // righe salvate prima degli altri sport: sono di calcio
+    if (!use.includes(sp) || seen.has(sp + ':' + e.id)) continue;
+    seen.add(sp + ':' + e.id); all.push(sp === e.sport ? e : { ...e, sport: sp });
+  }
+  let body;
+  if (v === 2) {
+    // in corso (anche da molte ore: tennis, UFC) oppure da giocare entro 8 giorni, come il calcio
+    const ok = all.filter((e) => { const st = Date.parse(e.start); return st < t + 8 * 86400e3 && ((e.live && st > t - 12 * 3600e3) || (e.state !== 'post' && st > t - 4 * 3600e3)); });
+    body = { v: 2, events: evPick(ok).map(evOut), sports: on, updated: t };
+  } else {
+    const events = all.filter((e) => e.state !== 'post' && +new Date(e.start) > t - 4 * 3600e3)
+      .sort((a, b) => (+b.live - +a.live) || (new Date(a.start) - new Date(b.start))).slice(0, 40)
+      .map((e) => ({ id: e.id, league: e.league, start: e.start, home: { name: e.home.name, logo: e.home.logo, score: e.home.score }, away: { name: e.away.name, logo: e.away.logo, score: e.away.score }, venue: e.venue, live: e.live, state: e.state, clock: e.clock }));
+    body = { events, updated: t };
+  }
+  mem.out[key] = body;
   return body;
 }
 async function log(env, type, text, ip = '') {
@@ -3178,7 +3466,7 @@ async function route(req, env, ctx) {
     if (path === '/api/player/ping' && req.method === 'GET') return json({ ok: true, service: 'kairos', time: now() });
     if (path === '/api/player/events' && req.method === 'GET') {
       if (await limited(env.RL_DEVICE, 'ev:' + ip)) return json({ events: [] }, 429);
-      return json(await footballEvents(env, ctx));
+      return json(await sportsEvents(env, ctx, url.searchParams.get('v') === '2' ? 2 : 1));
     }
     if (path === '/api/player/update' && req.method === 'GET') {
       if (await limited(env.RL_DEVICE, 'up:' + ip)) return json({ ui: null, apk: null }, 429);
@@ -4735,6 +5023,10 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (typeof b.liteApkUrl === 'string') { const u = str(b.liteApkUrl, 500); if (u && !/^https:\/\//.test(u)) throw new HttpErr(400, 'Il link di Kairos Lite deve iniziare con https://'); s.liteApkUrl = u; }
     if (typeof b.allowLocalPlaylists === 'boolean') s.allowLocalPlaylists = b.allowLocalPlaylists;
     if (typeof b.showFootball === 'boolean') s.showFootball = b.showFootball;
+    if (b.sports !== undefined) { // sport da mostrare nella Home (vale con «Eventi sportivi nella Home» acceso)
+      if (!Array.isArray(b.sports)) throw new HttpErr(400, 'Sport non validi');
+      s.sports = SPORTS.filter((k) => b.sports.includes(k));
+    }
     if (typeof b.aiOff === 'boolean') s.aiOff = b.aiOff; // interruttore rapido: assistente IA spento per tutti
     if (b.aiDaily !== undefined) { const n = parseInt(b.aiDaily, 10); if (!(n >= 0 && n <= 1000)) throw new HttpErr(400, 'Domande al giorno: da 0 a 1000'); s.aiDaily = n; }
     if (b.aiProvider !== undefined) { if (!AI_PROVIDERS.includes(b.aiProvider)) throw new HttpErr(400, 'Servizio non valido'); s.aiProvider = b.aiProvider; }

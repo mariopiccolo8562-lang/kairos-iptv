@@ -589,6 +589,21 @@ img{display:block}
 .nc.ev .evs i img{width:100%;height:100%;object-fit:contain}
 .nc.ev .evs b{font-size:clamp(11px,1.9vh,15px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .nc.ev .vs{font-family:'Bebas Neue',Orbitron;font-size:clamp(14px,2.6vh,22px);color:var(--a1);flex:none}
+/* tutti gli sport: icona dello sport, card «gara/sessione» (F1) e card del tennis (due righe con i set) */
+.nc.ev .evi{width:1.25em;height:1.25em;vertical-align:-.27em;margin-right:.4em;color:var(--a1)}
+.nc.ev .evsub{display:block;color:#9a9aa6;font-size:clamp(9px,1.5vh,12px);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nc.ev.evrc .evrt{flex:1;display:flex;flex-direction:column;justify-content:center;gap:clamp(2px,.5vh,5px);min-width:0}
+.nc.ev.evrc .evrt b{font-size:clamp(14px,2.4vh,20px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nc.ev.evrc .evss{font-family:'Bebas Neue',Orbitron;font-size:clamp(14px,2.6vh,22px);letter-spacing:.08em;color:var(--a1);line-height:1}
+.nc.ev.evtn .evps{flex:1;display:flex;flex-direction:column;justify-content:center;gap:clamp(4px,.9vh,9px)}
+.nc.ev .evp{display:flex;align-items:center;gap:8px;min-width:0}
+.nc.ev .evp i{width:clamp(18px,2.7vh,26px);height:clamp(12px,1.8vh,17px);flex:none;display:grid;place-items:center;overflow:hidden;border-radius:2px;font-style:normal;font-size:9px;font-weight:800;color:#ccc;background:rgba(255,255,255,.06)}
+.nc.ev .evp i img{width:100%;height:100%;object-fit:cover}
+.nc.ev .evp b{flex:1;min-width:0;font-size:clamp(11px,1.9vh,15px);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nc.ev .evp.win b{font-weight:800}
+.nc.ev .evp .sd{flex:none;font-size:clamp(8px,1.3vh,11px);color:#8a8a96}
+.nc.ev .evp em{flex:none;display:flex;gap:clamp(5px,.7vw,9px);font-style:normal;font-family:Orbitron;font-size:clamp(11px,1.9vh,15px);color:#fff}
+.nc.ev .evp em u{text-decoration:none;min-width:.75em;text-align:center}
 /* ---------- anteprima nativa ---------- */
 .screen-box.loading .spinner{display:block}
 /* ---------- speed test / aggiornamento ---------- */
@@ -1045,6 +1060,18 @@ h5.fh{margin-top:16px}
 .evgo{opacity:0;color:var(--a1)}
 .evch.focused{background:rgba(255,255,255,.12)}.evch.focused .evgo{opacity:1}
 .evmodal .sbtn{margin-top:14px}
+.evmodal .evl .evi{width:1.2em;height:1.2em;vertical-align:-.22em;margin-right:.45em;color:var(--a1)}
+.evrace{text-align:center;margin:16px 0 6px}.evrace b{display:block;font-size:clamp(20px,2.4vw,30px)}
+.evrace span{display:block;font-family:Orbitron;letter-spacing:.2em;text-transform:uppercase;color:var(--a1);margin-top:6px;font-size:clamp(12px,1.3vw,16px)}
+.evrace small{display:block;color:var(--mut);margin-top:6px;font-size:13px}
+.evtop{display:flex;justify-content:center;flex-wrap:wrap;gap:8px 18px;margin-top:10px;font-weight:600}.evtop span{display:flex;align-items:center;gap:6px}
+.evtop i{font-style:normal;color:var(--a1);font-family:Orbitron}.evtop img{width:20px;height:14px;object-fit:cover;border-radius:2px}
+.evtn2{margin:14px auto 6px;width:min(520px,100%);display:flex;flex-direction:column;gap:8px}.evtp{display:flex;align-items:center;gap:12px}
+.evtp i{width:30px;height:20px;flex:none;display:grid;place-items:center;font-style:normal;font-size:11px;font-weight:800;overflow:hidden;border-radius:3px;background:rgba(255,255,255,.06)}.evtp i img{width:100%;height:100%;object-fit:cover}
+.evtp b{flex:1;min-width:0;font-size:clamp(16px,1.8vw,22px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.evtp b small{color:var(--mut);font-size:.7em}
+.evtp em{font-style:normal;display:flex;gap:12px;font-family:Orbitron;font-size:clamp(16px,1.8vw,22px);color:var(--mut)}.evtp em u{text-decoration:none;min-width:1em;text-align:center}
+.evtp.win em{color:#fff}.evtn2>small{color:var(--mut);text-align:center;margin-top:4px}
+.evufc{text-align:center;font-family:Orbitron;letter-spacing:.14em;color:var(--mut);margin-top:12px;font-size:13px;text-transform:uppercase}
 /* ===== privacy, prezzo ===== */
 .privstep{display:flex;flex-direction:column;align-items:center;gap:14px}
 .privstep h2{font-size:clamp(24px,3.4vh,34px)}
@@ -4091,7 +4118,7 @@ $('#vodGrid').addEventListener('klong', (e) => { const el = e.target.closest('.p
 function openItem(x) {
   if (!x) return;
   if (x.folder) return openFolder(x);
-  if (x.home && x.away) return openEvent(x);
+  if (isEv(x) || (x.home && x.away)) return openEvent(x);
   if (x.k === 'r') return playRec(x.rec);
   if (isLiveItem(x)) { S.liveCat = 'all'; renderLive(); show('live'); setTimeout(() => focusChannel(x, true), 80); return; }
   openDetail(x);
@@ -4267,6 +4294,55 @@ function homeOrder(cats) {
   for (const c of cats) { const r = catHome(c.name); if (r[1]) low.push(c); else if (r[0] >= 0) top.push([r[0], c]); else mid.push(c); }
   top.sort((a, b) => a[0] - b[0]); // sort stabile: a parità resta l'ordine di prima
   return [...top.map((x) => x[1]), ...mid, ...low];
+}
+/* ---------- eventi sportivi: tutti gli sport (calcio, F1, tennis, basket, NFL, UFC, rugby) ---------- */
+const EV_SP = { calcio: 'Calcio', f1: 'Formula 1', tennis: 'Tennis', basket: 'Basket', nfl: 'NFL', ufc: 'UFC', rugby: 'Rugby', motogp: 'MotoGP' };
+const EV_IC = {
+  calcio: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5l4.2 3-1.6 5h-5.2l-1.6-5z"/>',
+  f1: '<path d="M5 21V4h13l-2.5 4 2.5 4H5"/>',
+  tennis: '<circle cx="12" cy="12" r="9"/><path d="M6 5.6c3.2 3.4 3.2 9.4 0 12.8M18 5.6c-3.2 3.4-3.2 9.4 0 12.8"/>',
+  basket: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.7 5.7c3.6 3.6 3.6 9 0 12.6M18.3 5.7c-3.6 3.6-3.6 9 0 12.6"/>',
+  nfl: '<ellipse cx="12" cy="12" rx="10" ry="5.8" transform="rotate(-40 12 12)"/><path d="M9.2 14.8l5.6-5.6M10.4 11.4l2.2 2.2M12 9.8l2.2 2.2"/>',
+  ufc: '<path d="M8.3 3h7.4L21 8.3v7.4L15.7 21H8.3L3 15.7V8.3z"/>',
+  rugby: '<ellipse cx="12" cy="12" rx="10" ry="6.3"/><path d="M7.5 12h9M9.5 10.4v3.2M12 10.4v3.2M14.5 10.4v3.2"/>',
+  motogp: '<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16l4-6h4l4 6M10 10l-1-3H7"/>',
+};
+const evIcon = (sp) => `<svg class="evi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${EV_IC[sp] || EV_IC.calcio}</svg>`;
+/** evento del server (v2, o v1 da un server non aggiornato) o della demo → una forma sola; null se non c'è niente da mostrare.
+    Due lati (squadre, giocatori, lottatori) oppure un titolo (gara o sessione: «GP del Brasile · Gara») */
+function normEv(e) {
+  if (!e || typeof e !== 'object') return null;
+  if (e._ev) return e;
+  const t = typeof e.start === 'number' ? e.start : Date.parse(e.start);
+  if (!isFinite(t)) return null;
+  const txt = (v, n = 80) => (typeof v === 'string' ? v.slice(0, n) : typeof v === 'number' && isFinite(v) ? String(v) : '');
+  const img = (v) => (typeof v === 'string' && /^(https?:|data:image\/)/.test(v) ? v : '');
+  const side = (x) => {
+    if (!x || typeof x !== 'object' || !txt(x.name)) return null;
+    const o = { name: txt(x.name, 60), logo: img(x.logo) };
+    if (x.score != null && x.score !== '') o.score = txt(x.score, 8);
+    if (Array.isArray(x.sets)) o.sets = x.sets.filter((v) => typeof v === 'number' && isFinite(v)).slice(0, 5);
+    if (+x.seed > 0) o.seed = +x.seed;
+    if (x.it) o.it = true;
+    return o;
+  };
+  const home = side(e.home), away = side(e.away), two = !!(home && away);
+  const x = { _ev: 1, id: txt(e.id, 60) || 'ev' + t, sport: EV_SP[e.sport] ? e.sport : 'calcio', league: txt(e.league, 60), start: new Date(t).toISOString(), live: !!e.live, state: txt(e.state, 8) || 'pre', clock: txt(e.clock, 30),
+    title: txt(e.title, 90), gp: txt(e.gp, 60), session: txt(e.session, 40), venue: txt(e.venue, 80), round: txt(e.round, 40), logo: img(e.logo), home: two ? home : null, away: two ? away : null,
+    top: Array.isArray(e.top) ? e.top.filter((p) => p && txt(p.name)).slice(0, 3).map((p) => ({ name: txt(p.name, 40), flag: img(p.flag) })) : [] };
+  return two || x.title ? x : null;
+}
+const isEv = (x) => !!(x && x._ev);
+/** etichetta della card, del riquadro grande e della finestra */
+const evHead = (e) => (e.sport === 'ufc' ? e.title || e.league || 'UFC' : e.sport === 'f1' ? EV_SP.f1 : e.league || EV_SP[e.sport]);
+const evKind = (e) => (e.sport === 'calcio' ? e.league : e.sport === 'ufc' ? e.title || 'UFC' : e.sport === 'f1' || !e.league || e.league === EV_SP[e.sport] ? EV_SP[e.sport] : `${EV_SP[e.sport]} · ${e.league}`);
+const evTitle = (e) => (e.home ? `${e.home.name} – ${e.away.name}` : e.title);
+function evMeta(e) {
+  const m = [];
+  if (e.round && e.round !== e.session) m.push(e.round);
+  if (e.venue) m.push(e.venue);
+  if (e.live && e.top.length) m.push(e.top.map((p, i) => `${i + 1}. ${p.name}`).join('  '));
+  return m;
 }
 function upcomingEvents() {
   const t = Date.now();
@@ -4508,12 +4584,24 @@ function evWhen(e) {
   if (diff === 1) return 'Domani · ' + hm;
   return d.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + hm;
 }
-const teamLogo = (t) => t.logo ? `<img loading="lazy" decoding="async" src="${esc(t.logo)}" data-t="${esc(t.name.slice(0, 3).toUpperCase())}" onerror="kxImgTxt(this,'')">` : esc(t.name.slice(0, 3).toUpperCase());
-function cardHTML(type, x, k, i) {
-  if (type === 'ev') {
-    return `<div class="nc ev ${x.live ? 'live' : ''}" data-f data-k="${k}"><div class="evh"><span class="evl">${esc(x.league)}</span><span class="evt">${esc(evWhen(x))}</span></div>
-      <div class="evm"><div class="evs"><i>${teamLogo(x.home)}</i><b>${esc(x.home.name)}</b></div><span class="vs">${x.live && x.home.score != null ? `<em class="sc">${esc(x.home.score)} - ${esc(x.away.score)}</em>` : 'VS'}</span><div class="evs"><i>${teamLogo(x.away)}</i><b>${esc(x.away.name)}</b></div></div></div>`;
+/** logo della squadra o bandiera; senza immagine le prime lettere (del cognome, per «J. Sinner») */
+const teamLogo = (t) => { const ini = esc(String((t && t.name) || '').replace(/^(\p{Lu}\.\s*)+/u, '').slice(0, 3).toUpperCase()); return t && t.logo ? `<img loading="lazy" decoding="async" src="${esc(t.logo)}" data-t="${ini}" onerror="kxImgTxt(this,'')">` : ini; };
+function evCard(x0, k) {
+  const x = normEv(x0); if (!x) return '';
+  const cls = `nc ev sp-${x.sport}${x.live ? ' live' : ''}`;
+  const head = `<div class="evh"><span class="evl">${evIcon(x.sport)}${esc(evHead(x))}</span><span class="evt">${esc(evWhen(x))}</span></div>`;
+  // gara o sessione (F1), serata senza incontro principale: titolo, sessione, orario
+  if (!x.home) return `<div class="${cls} evrc" data-f data-k="${k}">${head}<div class="evrt"><b>${esc(x.gp || x.title)}</b>${x.session ? `<span class="evss">${esc(x.session)}</span>` : ''}</div><small class="evsub">${esc(x.live && x.top.length ? x.top.map((p, i) => `${i + 1}. ${p.name}`).join('  ') : x.venue || x.round)}</small></div>`;
+  // tennis: due righe come un tabellone (bandiera, giocatore, testa di serie, giochi di ogni set)
+  if (x.sport === 'tennis') {
+    const row = (p, q) => `<div class="evp${p.score != null && q.score != null && +p.score > +q.score ? ' win' : ''}"><i>${teamLogo(p)}</i><b>${esc(p.name)}</b>${p.seed ? `<span class="sd">${p.seed}</span>` : ''}<em>${(p.sets || []).map((g) => `<u>${g}</u>`).join('')}</em></div>`;
+    return `<div class="${cls} evtn" data-f data-k="${k}">${head}<div class="evps">${row(x.home, x.away)}${row(x.away, x.home)}</div>${x.round ? `<small class="evsub">${esc(x.round)}</small>` : ''}</div>`;
   }
+  return `<div class="${cls}" data-f data-k="${k}">${head}
+      <div class="evm"><div class="evs"><i>${teamLogo(x.home)}</i><b>${esc(x.home.name)}</b></div><span class="vs">${x.live && x.home.score != null ? `<em class="sc">${esc(x.home.score)} - ${esc(x.away.score)}</em>` : 'VS'}</span><div class="evs"><i>${teamLogo(x.away)}</i><b>${esc(x.away.name)}</b></div></div></div>`;
+}
+function cardHTML(type, x, k, i) {
+  if (type === 'ev') return evCard(x, k);
   if (type === 'fold') {
     const h = hueOf(x.name);
     return `<div class="nc f" data-f data-k="${k}" style="--h:${h};--h2:${(h + 50) % 360}"><span class="fk">${x.kind === 'live' ? 'LIVE TV' : x.kind === 'movies' ? 'FILM' : 'SERIE TV'}</span><span class="fsv">${FOLD_IC[x.kind]}</span><b>${esc(x.name)}</b><small>${x.count.toLocaleString('it')} ${x.kind === 'live' ? 'canali' : 'titoli'}</small></div>`;
@@ -4636,9 +4724,9 @@ function buildBrowse(scr, kind) {
     const c = e.target.closest('[data-k]');
     if (c) { const [ri, ii] = c.dataset.k.split(':'); const r = scr._rows[+ri]; if (ii === 'more') return r.more.go ? go(r.more.go) : r.more.fold ? openFolder(r.more.fold) : openVod(r.more.kind, r.more.cat); if (r.queue) return playQueue(r.items[+ii]); return openItem(r.items[+ii]); }
     if (e.target.closest('[data-hplay]')) return heroPlay(scr);
-    if (e.target.closest('[data-hinfo]')) { const x = scr._hero; if (x) x.folder ? openFolder(x) : x.home ? openEvent(x) : isLiveItem(x) ? openItem(x) : openDetail(x); }
+    if (e.target.closest('[data-hinfo]')) { const x = scr._hero; if (x) x.folder ? openFolder(x) : isEv(x) || x.home ? openEvent(x) : isLiveItem(x) ? openItem(x) : openDetail(x); }
   });
-  scr.addEventListener('klong', (e) => { const c = e.target.closest('[data-k]'); if (c) { const x = item(c.dataset.k); if (x && x.k === 'r') return recMenu(x.rec); x && !x.folder && !x.home && itemMenu(x, c); } });
+  scr.addEventListener('klong', (e) => { const c = e.target.closest('[data-k]'); if (c) { const x = item(c.dataset.k); if (x && x.k === 'r') return recMenu(x.rec); x && !x.folder && !x.home && !isEv(x) && itemMenu(x, c); } });
   scr.addEventListener('kfocus', (e) => {
     const t = e.target, mouse = e.detail && e.detail.mouse;
     const c = t.closest('[data-k]'), rows = scr.querySelector('.rows');
@@ -4721,7 +4809,7 @@ let heroT;
 function heroQueue(scr, x) { clearTimeout(heroT); heroT = setTimeout(() => setHero(scr, x), fastMove ? 360 : 180); }
 function setHero(scr, x, instant) {
   if (x && x.folder) return setFolderHero(scr, x, instant);
-  if (x && x.home && x.away) return setEventHero(scr, x, instant);
+  if (x && (isEv(x) || (x.home && x.away))) { const e = normEv(x); if (e) return setEventHero(scr, e, instant); }
   const info = scr.querySelector('.hinfo'), hero = scr.querySelector('.hero');
   if (!x) { info.style.visibility = 'hidden'; return; }
   info.style.visibility = '';
@@ -4779,12 +4867,16 @@ function setEventHero(scr, e, instant) {
   if (scr._hero === e && !instant) return;
   scr._hero = e;
   const info = scr.querySelector('.hinfo'), hero = scr.querySelector('.hero');
-  heroImg(hero, e.home.logo || e.away.logo || '', 'lv', true);
+  info.style.visibility = '';
+  // squadre: il loro logo; tennis, UFC e F1: il logo della competizione (o la bandiera)
+  const two = e.home && !/^(tennis|ufc)$/.test(e.sport);
+  heroImg(hero, (two ? e.home.logo || e.away.logo : '') || e.logo || (e.home ? e.home.logo || e.away.logo : '') || '', 'lv', true);
   const apply = () => {
-    scr.querySelector('.hkind').innerHTML = `<i class="kb">K</i>${e.live ? 'IN CORSO · ' : ''}${esc(e.league.toUpperCase())}`;
-    scr.querySelector('.htitle').textContent = `${e.home.name} – ${e.away.name}`;
-    scr.querySelector('.hmeta').innerHTML = `<span class="m">${esc(evWhen(e))}</span>${e.venue ? `<span>${esc(e.venue)}</span>` : ''}`;
+    scr.querySelector('.hkind').innerHTML = `<i class="kb">K</i>${e.live ? 'IN CORSO · ' : ''}${esc(evKind(e).toUpperCase())}`;
+    scr.querySelector('.htitle').textContent = evTitle(e);
+    scr.querySelector('.hmeta').innerHTML = [`<span class="m">${esc(evWhen(e))}</span>`, ...evMeta(e).map((t) => `<span>${esc(t)}</span>`)].join('<i>|</i>');
     scr.querySelector('.hrate').innerHTML = '';
+    const ha = scr.querySelector('.hage'); if (ha) { ha.innerHTML = ''; ha.classList.remove('on'); } // niente età del titolo di prima
     scr.querySelector('.hplot').textContent = TOUCH ? 'Tocca «Dove vederla» per scegliere il canale che la trasmette.' : 'Premi OK su «Dove vederla» per scegliere il canale che la trasmette.';
     scr.querySelector('[data-hplay] span').textContent = 'Dove vederla';
     info.classList.remove('sw');
@@ -4795,10 +4887,12 @@ async function loadEvents() {
   if (S.demo) { S.events = demoEvents(); return; }
   if (!baseServer() || S.settings.showFootball === false) return;
   try {
-    const url = baseServer() + '/api/player/events';
+    // v=2: tutti gli sport accesi dal pannello (senza, il server risponde solo calcio nella forma vecchia)
+    const url = baseServer() + '/api/player/events?v=2';
     const text = hasNativeHttp() ? (await nativeFetch(url)).text : await (await fetch(url)).text();
     const j = JSON.parse(text);
-    const evs = (j.events || []).slice(0, 30), sig = evs.map((e) => e.id + (e.live ? 'L' : '')).join();
+    const evs = (Array.isArray(j.events) ? j.events : []).slice(0, 40).map(normEv).filter(Boolean);
+    const sig = evs.map((e) => e.id + (e.live ? 'L' + (e.home ? e.home.score + '-' + e.away.score : e.clock) : '')).join();
     if (sig !== S.evSig) { S.evSig = sig; S.events = evs; onEventsChanged(); }
   } catch {}
 }
@@ -4814,9 +4908,21 @@ function onEventsChanged() {
 }
 setInterval(() => { if (!S.demo && !S.inPlayer) loadEvents(); }, 10 * 60e3);
 function demoEvents() {
-  const T = [['Inter', 'Milan', 'Serie A'], ['Juventus', 'Napoli', 'Serie A'], ['Real Madrid', 'Bayern', 'Champions League'], ['Roma', 'Lazio', 'Serie A'], ['Atalanta', 'Arsenal', 'Champions League'], ['Fiorentina', 'Bologna', 'Serie A']];
   const base = new Date(); base.setMinutes(0, 0, 0);
-  return T.map(([h, a, l], i) => ({ id: 'dev' + i, league: l, start: new Date(+base + (i * 26 + 3) * 3600e3).toISOString(), home: { name: h, logo: art(h, 0, 0, i) }, away: { name: a, logo: art(a, 0, 0, i + 3) }, venue: '', live: i === 0 }));
+  const at = (h) => new Date(+base + h * 3600e3).toISOString(), lg = (n, i) => art(n, 0, 0, i);
+  const tm = (n, i, more) => ({ name: n, logo: lg(n, i), ...more });
+  return [
+    { id: 'dev0', sport: 'calcio', league: 'Serie A', start: at(3), live: true, clock: "67'", home: tm('Inter', 0, { score: '2' }), away: tm('Milan', 3, { score: '1' }) },
+    { id: 'dev1', sport: 'tennis', league: 'Nitto ATP Finals', start: at(1), live: true, clock: '2° set', round: 'Round robin', venue: 'Centrale', home: tm('J. Sinner', 2, { sets: [6, 3], score: '1', seed: 1, it: true }), away: tm('A. Zverev', 4, { sets: [4, 2], score: '0', seed: 3 }) },
+    { id: 'dev2', sport: 'f1', league: 'Formula 1', start: at(4), title: 'GP del Brasile · Gara', gp: 'GP del Brasile', session: 'Gara', round: 'Gara', venue: 'Interlagos' },
+    { id: 'dev3', sport: 'calcio', league: 'Serie A', start: at(6), home: tm('Juventus', 1), away: tm('Napoli', 4) },
+    { id: 'dev4', sport: 'basket', league: 'NBA', start: at(21), home: tm('Lakers', 5), away: tm('Celtics', 2) },
+    { id: 'dev5', sport: 'calcio', league: 'Champions League', start: at(29), home: tm('Real Madrid', 2), away: tm('Bayern', 5) },
+    { id: 'dev6', sport: 'rugby', league: 'Nations Championship', start: at(32), home: tm('Italia', 0), away: tm('Australia', 3) },
+    { id: 'dev7', sport: 'nfl', league: 'NFL', start: at(37), round: 'Settimana 10', home: tm('Chiefs', 3), away: tm('Bills', 1) },
+    { id: 'dev8', sport: 'ufc', league: 'UFC', title: 'UFC 320', start: at(50), round: 'Incontro principale', home: tm('M. Ankalaev', 1), away: tm('A. Pereira', 2) },
+    { id: 'dev9', sport: 'calcio', league: 'Serie A', start: at(55), home: tm('Roma', 3), away: tm('Lazio', 0) },
+  ].map(normEv).filter(Boolean);
 }
 /* età consigliata: «T», «6+», «14+», «18+» (fasce italiane); da Xtream (mpaa/age) o dal server (TMDB) */
 const US_AGE = { G: 'T', 'TV-Y': 'T', 'TV-G': 'T', 'TV-Y7': '6+', PG: '6+', 'TV-PG': '6+', 'PG-13': '14+', 'TV-14': '14+', R: '14+', 'NC-17': '18+', 'TV-MA': '18+' };
@@ -4862,7 +4968,7 @@ async function fetchInfo(x) {
 function heroPlay(scr) {
   const x = scr._hero; if (!x) return;
   if (x.folder) return openFolder(x);
-  if (x.home && x.away) return openEvent(x);
+  if (isEv(x) || (x.home && x.away)) return openEvent(x);
   if (x.k === 'r') return playRec(x.rec); // registrazione: non ha un url proprio né va in "Continua a guardare"
   if (isLiveItem(x)) { S.liveIndex = visLive(S.lib.live); addRecent(x, 'live'); return openFs(x, 'live'); } // senza i canali nascosti
   if (isSeriesItem(x)) return openDetail(x);
@@ -5171,7 +5277,7 @@ async function pinFirstRun(force) {
 
 /* ---------------- menu del tasto OK tenuto premuto ---------------- */
 function itemMenu(x, el) {
-  if (!x || x.folder || x.home || $('#menuM')) return;
+  if (!x || x.folder || x.home || isEv(x) || $('#menuM')) return;
   const live = isLiveItem(x), fav = S.favs.has(x.id), hid = S.hidden.has(x.id), lk = S.locked.has(x.id);
   const acts = [['fav', fav ? '✕  Rimuovi dalla mia lista' : '★  Aggiungi alla mia lista']];
   if (live) acts.push(['hide', hid ? '👁  Mostra di nuovo il canale' : '⊘  Nascondi canale']);
@@ -6135,14 +6241,35 @@ const BROAD = [
   [/ligue/i, ['dazn', 'ligue']],
   [/serie b/i, ['dazn', 'sky sport', 'serie b']],
   [/coppa italia/i, ['mediaset', 'canale 5', 'italia 1', 'coppa italia']],
+  // altri sport: per sport (emittenti italiane del 2026; si cercano nel nome del canale e nel gruppo)
+  ['f1', ['sky sport f1', 'tv8', 'formula 1']],
+  ['motogp', ['sky sport motogp', 'tv8', 'motogp']],
+  ['tennis', ['sky sport tennis', 'supertennis', 'tennis']],
+  ['basket', ['sky sport nba', 'nba']],
+  ['nfl', ['dazn', 'nfl']],
+  ['ufc', ['dazn', 'ufc']],
+  ['rugby', ['sky sport', 'rugby']],
 ];
+/** emittenti: il calcio per competizione, gli altri sport per sport */
+const broadOf = (e) => (e.sport && e.sport !== 'calcio' ? BROAD.find(([k]) => k === e.sport) : BROAD.find(([k]) => k instanceof RegExp && k.test(e.league)));
+/** parole per la guida TV: squadre, cognomi di giocatori e lottatori, Gran Premio */
+function evWords(e) {
+  const toks = (s) => normT(s).split(' ').filter((w) => w.length >= 4 && !/^(calcio|club|city|united|real|sport|team|rugby|basket)$/.test(w));
+  const surname = (n) => String(n || '').replace(/^(\p{Lu}\.\s*)+/u, '');
+  if (e.sport === 'f1') return [...new Set(['formula 1', 'f1', ...toks(e.gp || e.title).filter((w) => !/^(gran|premio|grand|prix)$/.test(w))])];
+  if (!e.home) return [...new Set(toks(e.title))];
+  if (e.sport === 'tennis' || e.sport === 'ufc') return [...new Set([...toks(surname(e.home.name)), ...toks(surname(e.away.name)), ...(e.sport === 'ufc' ? ['ufc'] : [])])];
+  return [...new Set([e.home.name, e.away.name].map(normT).join(' ').split(' ').filter((w) => w.length >= 4 && !/^(calcio|club|city|united|real|sport|team|fc)$/.test(w)))];
+}
+/** parola corta (f1, tv8, nba…): solo come parola intera, non dentro altre parole */
+const kwHit = (k) => (k.length < 4 ? ((re) => (s) => re.test(s))(new RegExp('(^|[^a-z0-9])' + k.replace(/[^a-z0-9 ]/g, '') + '($|[^a-z0-9])')) : (s) => s.includes(k));
 function eventChannels(e) {
   const out = [], seen = new Set();
   const push = (ch, why, epg) => { if (seen.has(ch.id) || out.length >= 40) return; seen.add(ch.id); out.push({ ch, why, epg }); };
-  const words = [e.home.name, e.away.name].map(normT).join(' ').split(' ').filter((w) => w.length >= 4 && !/^(calcio|club|city|united|real|sport|team|fc)$/.test(w));
+  const words = evWords(e), wHit = words.map(kwHit);
   const t0 = Date.parse(e.start) || Date.now(), from = t0 - 30 * 60e3, to = t0 + 150 * 60e3, sh = (+opt('epgShift') || 0) * 3600e3;
   const pool = visLive(S.lib.live);
-  const hitTitle = (title) => { const tl = normT(title); return words.some((w) => tl.includes(w)); };
+  const hitTitle = (title) => { const tl = normT(title); return wHit.some((f) => f(tl)); };
   // 1) guida TV completa: programmi intorno all'orario della partita che citano le squadre
   if (S.xepg && words.length) {
     const hit = new Set();
@@ -6152,27 +6279,41 @@ function eventChannels(e) {
   }
   // 2) guida breve già scaricata
   for (const [id, c] of S.epg) { const ch = S.byId && S.byId.get(id); if (ch && c.items.some((p) => p.end >= from && p.start <= to && hitTitle(p.title))) push(ch, 'Trasmessa secondo la guida TV', true); }
-  // 3) canali delle emittenti della competizione (prima FHD/HD)
-  const kw = [...((BROAD.find(([re]) => re.test(e.league)) || [, ['sport']])[1]), normT(e.league)].filter((k) => k && k.length > 2);
+  // 3) canali delle emittenti della competizione o dello sport (prima FHD/HD)
+  const kw = [...new Set([...((broadOf(e) || [, ['sport']])[1]), normT(e.league)])].filter((k) => k && k.length > 2), kHit = kw.map(kwHit);
   const q = (ch) => (/\b(4k|uhd)\b/i.test(ch.name) ? 0 : /\bfhd\b/i.test(ch.name) ? 1 : /\bhd\b/i.test(ch.name) ? 2 : 3);
-  pool.filter((ch) => { const n = normT(ch.name) + ' ' + (ch.group || '').toLowerCase(); return kw.some((k) => n.includes(k)); }).sort((a, b) => q(a) - q(b)).forEach((ch) => push(ch, ch.group || 'Canale sportivo', false));
+  pool.filter((ch) => { const n = normT(ch.name) + ' ' + (ch.group || '').toLowerCase(); return kHit.some((f) => f(n)); }).sort((a, b) => q(a) - q(b)).forEach((ch) => push(ch, ch.group || 'Canale sportivo', false));
   return out;
 }
 /* evento: dopo la visione di un canale (anche se era quello sbagliato) si torna alla lista «Dove vederla» */
 let evBack = null;
 function evReturn() { if (!evBack) return false; const b = evBack; evBack = null; setTimeout(() => openEvent(b.e, b.i), 120); return true; }
-function openEvent(e, fi) {
-  const list = eventChannels(e);
+/** parte centrale della finestra: squadre, tabellone del tennis, oppure gara/sessione */
+function evMid(e) {
+  if (!e.home) return `<div class="evrace"><b>${esc(e.gp || e.title)}</b>${e.session ? `<span>${esc(e.session)}</span>` : ''}${e.venue ? `<small>${esc(e.venue)}</small>` : ''}${e.live && e.top.length ? `<div class="evtop">${e.top.map((p, i) => `<span><i>${i + 1}</i>${p.flag ? `<img src="${esc(p.flag)}" alt="" onerror="this.remove()">` : ''}${esc(p.name)}</span>`).join('')}</div>` : ''}</div>`;
+  if (e.sport === 'tennis') {
+    const row = (p, q) => `<div class="evtp${p.score != null && q.score != null && +p.score > +q.score ? ' win' : ''}"><i>${teamLogo(p)}</i><b>${esc(p.name)}${p.seed ? ` <small>(${p.seed})</small>` : ''}</b><em>${(p.sets || []).map((g) => `<u>${g}</u>`).join('')}</em></div>`;
+    const sub = [e.round, e.venue].filter(Boolean).join(' · ');
+    return `<div class="evtn2">${row(e.home, e.away)}${row(e.away, e.home)}${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
+  }
   const sc = e.live && e.home.score != null ? `<em class="sc">${esc(e.home.score)} - ${esc(e.away.score)}</em>` : '<em>VS</em>';
-  kxModal('evM', `<div class="evhd"><span class="evl">${esc(e.league)}</span><span class="evw ${e.live ? 'live' : ''}">${e.live ? '● IN DIRETTA' : esc(evWhen(e))}</span></div>
-    <div class="evteams"><div><i>${teamLogo(e.home)}</i><b>${esc(e.home.name)}</b></div>${sc}<div><i>${teamLogo(e.away)}</i><b>${esc(e.away.name)}</b></div></div>
+  return `${e.sport === 'ufc' && e.round ? `<div class="evufc">${esc(e.round)}</div>` : ''}<div class="evteams"><div><i>${teamLogo(e.home)}</i><b>${esc(e.home.name)}</b></div>${sc}<div><i>${teamLogo(e.away)}</i><b>${esc(e.away.name)}</b></div></div>`;
+}
+/** «Cerca tra tutti i canali»: il calcio con il nome della competizione, gli altri sport con quello dello sport */
+const EV_Q = { f1: 'F1', motogp: 'MotoGP', tennis: 'Tennis', basket: 'NBA', nfl: 'NFL', ufc: 'UFC', rugby: 'Rugby' };
+const evQuery = (e) => (e.sport !== 'calcio' && EV_Q[e.sport]) || e.league.replace(/League|LaLiga/i, '').trim() || (e.home ? e.home.name : e.title);
+function openEvent(e0, fi) {
+  const e = normEv(e0); if (!e) return;
+  const list = eventChannels(e);
+  kxModal('evM', `<div class="evhd"><span class="evl">${evIcon(e.sport)}${esc(evKind(e))}</span><span class="evw ${e.live ? 'live' : ''}">${e.live ? '● IN DIRETTA' : esc(evWhen(e))}</span></div>
+    ${evMid(e)}
     <h5 class="evh5">DOVE VEDERLA</h5>
     <div class="evlist">${list.map((c, i) => { const n = nowOf(c.ch); return `<div class="evch" data-f data-ei="${i}"><div class="lg">${logoHTML(c.ch)}</div><div class="nm"><b>${esc(c.ch.name)}</b><small>${esc(n ? n.title : c.why)}</small></div>${c.epg ? '<span class="evtag">IN GUIDA</span>' : ''}<span class="evgo">▶</span></div>`; }).join('') || '<div class="noepg"><b>Nessun canale trovato automaticamente</b>Cerca tra tutti i canali qui sotto.</div>'}</div>
     <div class="sbtn"><button class="btn" data-f id="evSearch">🔍 Cerca tra tutti i canali</button><button class="btn" data-f id="evNo">Chiudi</button></div>`, null, 'evmodal');
   setTimeout(() => focus((fi != null && $(`#evM [data-ei="${fi}"]`)) || $('#evM .evch') || $('#evSearch'), true), 60);
   $$('#evM .evch').forEach((el) => (el.onclick = () => { const ch = list[+el.dataset.ei].ch; evBack = { e, i: +el.dataset.ei }; kxClose('evM'); openFs(ch, 'live'); }));
   $('#evNo').onclick = () => kxClose('evM');
-  $('#evSearch').onclick = () => { kxClose('evM'); show('search'); $('#q').value = e.league.replace(/League|LaLiga/i, '').trim() || e.home.name; doSearch(); };
+  $('#evSearch').onclick = () => { kxClose('evM'); show('search'); $('#q').value = evQuery(e); doSearch(); };
 }
 
 /* ---------------- ricerca: canali, film e serie separati (niente card che si accavallano) ---------------- */

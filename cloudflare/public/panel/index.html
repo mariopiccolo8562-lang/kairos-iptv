@@ -169,6 +169,8 @@ canvas{display:block;width:100%}
 .tog i{width:48px;height:28px;border-radius:99px;background:rgba(255,255,255,.12);position:relative;transition:.25s;flex:none}
 .tog i::after{content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:.25s}
 .tog.on i{background:linear-gradient(90deg,var(--a1),var(--a2));box-shadow:0 0 16px -2px var(--a1)}.tog.on i::after{left:23px}
+.st-sports{padding:2px 18px 16px}.st-sports>b{display:block;font-size:14px}.st-sports>small{display:block;color:var(--mut);font-size:12px;margin:2px 0 10px}.st-sports.off{opacity:.45}
+.sp-ck{display:flex;flex-wrap:wrap;gap:8px}.sp-ck label{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);cursor:pointer;font-size:13.5px}.sp-ck input{width:16px;height:16px;margin:0;accent-color:var(--a1)}
 .pl{padding:14px;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.025);margin-bottom:10px;animation:vin .35s}
 .pl .ph{display:flex;gap:8px;align-items:center;margin-bottom:10px}
 .pl .ph .inp{flex:1}
@@ -360,7 +362,8 @@ canvas{display:block;width:100%}
       <div class="st-pane" data-pane="app">
         <div class="card glass"><div class="hd"><h3>Funzioni dell'app<small>Valgono per tutti i clienti. Per il singolo cliente usa i <b>Permessi</b> nella sua scheda.</small></h3></div>
           <div class="tog st-tog" id="sLocal"><div><b>Playlist personali</b><small>I clienti possono aggiungere una loro lista M3U o Xtream dall'app (oltre a quelle che assegni tu)</small></div><i></i></div>
-          <div class="tog st-tog" id="sFoot"><div><b>Eventi sportivi nella home</b><small>Le prossime partite (Serie A, Champions, coppe e campionati europei) con «Dove vederla»</small></div><i></i></div>
+          <div class="tog st-tog" id="sFoot"><div><b>Eventi sportivi nella Home</b><small>Calcio, F1, tennis, basket e altri sport in evidenza nell'app, con «Dove vederla»</small></div><i></i></div>
+          <div class="st-sports" id="sSports"><b>Sport da mostrare</b><small>Valgono con «Eventi sportivi nella Home» acceso: gli sport senza spunta non compaiono nell'app. Si salvano con «Salva».</small><div class="sp-ck" id="sSpCk"></div></div>
         </div>
       </div>
 

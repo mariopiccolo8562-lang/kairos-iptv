@@ -153,7 +153,7 @@
     ['maint', 'Manutenzione', 'App ferma per i clienti (tranne gli esclusi)', () => window.KXMaint && KXMaint.on(), async () => { await KXMaint.quick(); return 'done'; }],
     ['store', 'Approvazione download store', 'Ogni download dello store aspetta il tuo sì', () => storeAppr, async (on) => { await api('PUT', '/admin/store/settings', { approval: on }); storeAppr = on; }, () => storeAppr === null],
     ['local', 'Playlist personali dei clienti', 'Possono aggiungere playlist loro nell\'app', () => !!S().allowLocalPlaylists, (on) => api('PUT', '/admin/settings', { allowLocalPlaylists: on })],
-    ['foot', 'Eventi sportivi nella home', 'Partite di calcio in evidenza nell\'app', () => !!S().showFootball, (on) => api('PUT', '/admin/settings', { showFootball: on })],
+    ['foot', 'Eventi sportivi nella Home', 'Calcio, F1, tennis, basket e altri sport in evidenza nell\'app', () => S().showFootball !== false, (on) => api('PUT', '/admin/settings', { showFootball: on })],
     ['ai', 'Assistente IA', 'Spento: il pulsante sparisce dall\'app per tutti', () => !S().aiOff, (on) => api('PUT', '/admin/settings', { aiOff: !on })],
     ['clean', 'Pulizia automatica app terzi', 'Ogni notte toglie le liste inattive da OrbixPlay e MaxPlayer', () => !!PC().autoClean, (on) => putPC('autoClean', on)],
     ['dnsag', 'Gli agenti vedono i DNS', 'Spento: vedono solo il nome dei DNS', () => !!PC().showDnsAgents, (on) => putPC('showDnsAgents', on)],

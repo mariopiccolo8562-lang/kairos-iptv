@@ -451,6 +451,27 @@ Kairos TV è l'app **nativa** stile Netflix per chiavette datate (veloce come la
 - Cestino su ogni richiesta (tabella e schede) ed **«Elimina tutte (N)»** nella barra delle richieste: tolgono solo dispositivi mai attivati (`POST /api/admin/devices/pending/delete { ids }`, solo titolare, senza cestino). Se l'app è ancora aperta su quel dispositivo, la richiesta ricompare da sola con lo stesso codice.
 - **«Se non le accetti si annullano dopo…»**: 1 ora, 6 ore, 24 ore, 3 giorni, 7 giorni o 30 giorni (predefinito, come prima). Impostazione `pendTtl` (ore). Si conta dalla richiesta, mai mentre l'app mostra il codice (vista negli ultimi 10 minuti); restano quelle a cui hai dato un nome o una nota. Controllo all'apertura del pannello (al più ogni 5 minuti), nella pulizia notturna e subito quando scegli il tempo.
 
+## 29. Eventi sportivi di tutti gli sport (Kairos Pro)
+
+Nella Home della Pro la riga **«In corso e prossimi eventi sportivi»** e il riquadro grande non mostrano più solo il calcio:
+
+| Sport | Cosa compare | Fonte ESPN (`site.api.espn.com/apis/site/v2/sports/…/scoreboard`) | Giorni chiesti |
+|---|---|---|---|
+| Calcio | Serie A, Champions, Europa e Conference League, Coppa Italia, Premier, LaLiga, Bundesliga, Ligue 1 | `soccer/<campionato>` | oggi + 7 (come prima) |
+| Formula 1 | ogni sessione del weekend: Libere, Qualifiche, Qualifiche Sprint, Sprint, Gara («GP del Brasile · Gara»), con i primi tre durante la sessione | `racing/f1` (senza data: il weekend in corso o il prossimo) | — |
+| Tennis | ATP e WTA, solo tabellone principale di singolare, con bandiere, teste di serie e set | `tennis/atp`, `tennis/wta` | oggi + 1 |
+| Basket | NBA | `basketball/nba` | oggi + 1 |
+| Football americano | NFL | `football/nfl` | oggi + 2 |
+| UFC | la serata («UFC 320») con l'incontro principale | `mma/ufc` | oggi + 2 |
+| Rugby | Sei Nazioni, Nations Championship, URC, Champions Cup, test match (nazionali in italiano) | `rugby/180659`, `17567`, `270557`, `271937`, `289234` | oggi + 2 |
+
+- **Scelta degli eventi** (al massimo 30, entro 8 giorni): prima quelli in diretta, poi i più vicini; ogni sport presente ha 2 posti garantiti e un massimo (F1 5, tennis 6, NBA 4, NFL 4, UFC 2, rugby 5; il calcio riempie il resto). **Tennis**: con tante partite in contemporanea si tengono quelle in corso, poi quelle con italiani, poi teste di serie, turni avanzati e tornei maggiori (Slam, Finals, Masters 1000); doppi, qualificazioni, juniores e «TBD» non entrano.
+- **Pannello → Impostazioni → Funzioni dell'app**: «Eventi sportivi nella Home» resta l'interruttore generale (anche tra gli Interruttori rapidi della Panoramica); sotto, **«Sport da mostrare»** con una casella per sport, di base tutte attive, salvate con «Salva». Impostazione `sports` (`['calcio','f1','tennis','basket','nfl','ufc','rugby']`; non impostata = tutti). Gli sport spenti non vengono nemmeno scaricati.
+- **API**: `GET /api/player/events` senza parametri risponde **come prima** (solo calcio, stessa forma `{ events, updated }`: le interfacce vecchie leggono `home`/`away`). Con **`?v=2`** (la Pro aggiornata): `{ v: 2, events, sports, updated }`, ogni evento con `id` (`<sport>:<id ESPN>`), `sport`, `league`, `start`, `live`, `state`, `clock`, `venue`, `round`; `home`/`away` quando ci sono due lati (`name`, `logo` o bandiera, `score`; nel tennis anche `sets`, `seed`), altrimenti `title` (gare e sessioni, con `gp`, `session` e `top`).
+- **Cache**: in D1 (tabella `settings`), una riga per «fonte + giorno» (`ev:<fonte>:<giorno>`; il calcio con le stesse chiavi di prima). Validità: oggi 5 minuti, domani 1 ora, gli altri giorni 6 ore; giorni senza eventi oggi 30 minuti e domani 2 ore; F1 5 minuti nel weekend di gara, 1 ora negli altri giorni; una fonte in errore si riprova dopo 15 minuti (oggi) o 1 ora, una fonte rifiutata da ESPN dopo 6 ore. Al massimo **40 richieste a ESPN per giro** (prima oggi), sotto il limite di 50 del piano gratuito: a cache vuota servono 3 giri per riempirla tutta (100 righe). Ritardo dei risultati in diretta: fino a circa 8 minuti (5 di cache più 3 di memoria del Worker), più i 10 minuti tra un aggiornamento e l'altro dell'app.
+- **«Dove vederla»** per ogni sport: guida TV intorno all'orario con i nomi delle squadre, i cognomi di giocatori e lottatori o il Gran Premio (le parole corte come «F1» solo come parola intera), poi i canali delle emittenti: F1 *Sky Sport F1, TV8*; MotoGP *Sky Sport MotoGP, TV8*; tennis *Sky Sport Tennis, SuperTennis*; NBA *Sky Sport NBA*; NFL e UFC *DAZN*; rugby *Sky Sport* (Sei Nazioni e Nations Championship 2026 sono in esclusiva Sky). «Cerca tra tutti i canali» cerca il nome dello sport (F1, Tennis, NBA…).
+- **Non disponibili**: MotoGP, Eurolega, volley e ciclismo. ESPN non li ha; per MotoGP ed Eurolega esistono solo le API interne dei siti ufficiali (non documentate e senza garanzie per chi le usa da fuori), per il volley italiano e il ciclismo nessuna fonte pubblica gratuita senza chiavi (servirebbe leggere le pagine dei siti, cosa che il pannello non fa).
+
 ## Struttura
 
 ```
