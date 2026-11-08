@@ -356,6 +356,7 @@
 
   /* ---------- menu e pagine ---------- */
   const IC = {
+    buff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 10c2-3 4-3 6 0s4 3 6 0 4-3 6 0"/><path d="M3 16c2-3 4-3 6 0s4 3 6 0 4-3 6 0"/></svg>',
     live: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="2.5"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></svg>',
     reports: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg>',
     creq: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 9v6M9 12h6"/></svg>',
@@ -365,7 +366,7 @@
     apperr: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4M12 8v4M12 14.5h.01"/></svg>',
   };
   const dash = $('.nav[data-v="dash"]');
-  const navs = [['live', 'Online ora Kairos'], ['apperr', 'Errori applicazione'], ['reports', 'Segnalazioni'], ['creq', 'Richieste contenuti'], ['vod', 'Videoteca'], ['dns', 'Server DNS e VPN'], ['api', 'API e integrazioni']];
+  const navs = [['live', 'Online ora Kairos'], ['apperr', 'Errori applicazione'], ['buff', 'Buffering'], ['reports', 'Segnalazioni'], ['creq', 'Richieste contenuti'], ['vod', 'Videoteca'], ['dns', 'Server DNS e VPN'], ['api', 'API e integrazioni']];
   let after = dash;
   for (const [v, l] of navs) {
     const b = document.createElement('button'); b.className = 'nav'; b.dataset.v = v;
@@ -377,7 +378,7 @@
   }
   // all'apertura di una pagina si caricano i suoi dati
   const origView = view;
-  window.view = view = function (v) { origView(v); if (v === 'live') liveLoad(); if (v === 'reports') reqLoad('report'); if (v === 'creq') reqLoad('content'); if (v === 'vod') vodInit(); if (v === 'dns') dnsLoad(); if (v === 'api') apiLoad(); if (v === 'apperr') errLoad(); };
+  window.view = view = function (v) { origView(v); if (v === 'live') liveLoad(); if (v === 'reports') reqLoad('report'); if (v === 'creq') reqLoad('content'); if (v === 'vod') vodInit(); if (v === 'dns') dnsLoad(); if (v === 'api') apiLoad(); if (v === 'apperr') errLoad(); if (v === 'buff') buffLoad(); };
 
   /* ---------- Online ora ---------- */
   const STATE_L = { live: 'In diretta', movie: 'Film', series: 'Serie TV', rec: 'Registrazione', idle: 'Nell\'app' };
@@ -532,6 +533,54 @@
     $$('[data-eq]', V).forEach((b) => (b.onclick = () => { F.q = b.dataset.eq; errRender(); }));
     $$('[data-eopen]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.eopen); d ? openQuick(d) : toast('Dispositivo non trovato', 1); }));
     const c = $('#eClr'); if (c) c.onclick = async () => { if (!(await askDanger('Svuotare gli errori?', 'Tutti gli errori registrati verranno cancellati. Quelli nuovi continueranno ad arrivare.', 'SVUOTA', 'Svuota', false))) return; try { await kapi('DELETE', '/admin/app-errors'); errLoad(); } catch (e) { toast(e.message, 1); } };
+  }
+
+  /* ---------- Buffering: dove si blocca la visione (canale, pannello/server, cliente, ora) ---------- */
+  const PANEL_N = { wolf: 'WOLF', armada: 'Armada', storm: 'Storm', atx: 'Atlantix', ro: 'Realott', slt: 'SLT', orcp: 'MirkoTeam', mxp: 'MaxPlayer', oxp: 'OrbixPlay', ora: 'ORA' };
+  KC.buffH = 168;
+  async function buffLoad() {
+    const V = $('#v-buff');
+    if (!KC.errs) V.innerHTML = '<div class="card glass"><p class="mut">Caricamento…</p></div>';
+    try {
+      if (!KC.errs || KC.errF.hours !== KC.buffH) { KC.errF.hours = KC.buffH; KC.errs = await kapi('GET', '/admin/app-errors?hours=' + KC.buffH); errBadge(); }
+    } catch (e) { V.innerHTML = `<div class="card glass"><p class="mut">${esc(e.message)}</p></div>`; return; }
+    buffRender();
+  }
+  function buffRender() {
+    const V = $('#v-buff'), E = KC.errs || { items: [] };
+    const all = E.items.filter((x) => x.problem === 'stall' || x.problem === 'freeze');
+    const devs = new Set(all.map((x) => x.deviceId)), fixed = all.filter((x) => x.outcome === 'risolto').length;
+    const hourOf = (t) => +new Date(t).toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: 'Europe/Rome' }) % 24;
+    const H = Array(24).fill(0); for (const x of all) H[hourOf(x.t)]++;
+    const hmax = Math.max(1, ...H), peak = H.indexOf(Math.max(...H));
+    const grp = (key) => { const mp = new Map(); for (const x of all) { const k = key(x); if (!k) continue; const o = mp.get(k) || { key: k, n: 0, devs: new Set(), titles: new Set(), x }; o.n++; o.devs.add(x.deviceId); o.titles.add(x.title); mp.set(k, o); } return [...mp.values()].sort((a, b) => b.n - a.n); };
+    const srvOf = (x) => !x.srv ? '' : x.srv.split(',').map((s) => { const [src, name, host] = s.split('|'); return (PANEL_N[src] || src || 'Linea') + (name || host ? ' · ' + (name || String(host).replace(/^https?:\/\//, '')) : ''); }).join(', ');
+    const chans = grp((x) => x.title).slice(0, 12), srvs = D.role === 'agent' ? [] : grp(srvOf).slice(0, 10), clients = grp((x) => x.deviceId).slice(0, 15);
+    const pct = (n) => (all.length ? Math.round(n / all.length * 100) : 0);
+    const verdictC = (o) => o.devs.size >= 3 ? ['canale o server', 'bad'] : o.devs.size === 2 ? ['da osservare', ''] : ['un solo cliente', 'ok'];
+    const verdictD = (o) => { const x = o.x, many = o.titles.size >= 3, weak = x.net === 'wifi' && x.rssi && x.rssi < -70, slow = (x.speedDl && x.speedDl < 8) || x.line === 'weak'; if (many && (weak || slow)) return ['rete del cliente', 'bad']; if (many) return ['probabile rete del cliente', '']; return ['canale o server', 'ok']; };
+    const netL = (x) => [NET_L[x.net] || '', x.net === 'wifi' && x.rssi ? bars(x.rssi) : '', x.speedDl ? mbps(x.speedDl) : '', x.vpn === 'on' ? 'VPN accesa' : x.vpn === 'off' ? 'VPN spenta' : ''].filter(Boolean).join(' · ');
+    const card = (t, v, sub, col) => `<div class="card glass kc-kp"><small>${t}</small><b style="color:${col}">${v}</b><span>${sub}</span></div>`;
+    const per = KC.buffH >= 168 ? '7 giorni' : KC.buffH >= 24 ? KC.buffH / 24 + ' giorni' : KC.buffH + ' ore';
+    const cl = (n) => `${n} client${n === 1 ? 'e' : 'i'}`;
+    V.innerHTML = `<div class="kc-k">${card('Blocchi', all.length, 'negli ultimi ' + per, 'var(--txt)')}${card('Clienti coinvolti', devs.size, D.devices ? 'su ' + D.devices.length : '', 'var(--txt)')}${card('Risolti da soli', all.length ? pct(fixed) + '%' : '—', 'dall\'app, senza intervento', '#2ecc71')}${card('Ora di punta', all.length ? peak + ':00' : '—', 'quando si blocca di più', '#f5a623')}</div>
+      <div class="card glass"><div class="hd" style="flex-wrap:wrap;gap:10px"><h3>Buffering<small>Blocchi («caricamento continuo») e immagine ferma segnalati dalle app: capisci se è il canale, il server o la rete del cliente</small></h3>
+        <div style="display:flex;gap:8px"><select class="inp" id="bH" style="width:auto;margin:0">${[[24, 'Ultime 24 ore'], [72, 'Ultimi 3 giorni'], [168, 'Ultimi 7 giorni']].map(([h, l]) => `<option value="${h}" ${KC.buffH === h ? 'selected' : ''}>${l}</option>`).join('')}</select><button class="btn sm" id="bR">Aggiorna</button></div></div>
+        ${all.length ? `<div class="mut" style="font-size:12.5px;margin-bottom:6px">Quando si blocca (ora italiana)</div>
+          <div style="display:grid;grid-template-columns:repeat(24,1fr);gap:3px;align-items:end;height:70px">${H.map((n, h) => `<div title="${h}:00 · ${n} blocchi" style="background:${n === hmax ? '#e0524f' : '#2f7fd6'};opacity:${n ? 1 : .18};height:${Math.max(4, Math.round(n / hmax * 64))}px;border-radius:3px"></div>`).join('')}</div>
+          <div style="display:grid;grid-template-columns:repeat(24,1fr);gap:3px;font-size:10px;color:#9aa4b2;margin-top:3px">${H.map((_, h) => `<div style="text-align:center">${h % 3 === 0 ? h : ''}</div>`).join('')}</div>` : '<p class="mut">Nessun blocco nel periodo: le app non hanno segnalato buffering.</p>'}
+      </div>
+      <div class="g2b" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-top:14px">
+        <div class="card glass"><div class="hd"><h3>Canali<small>Tanti clienti diversi sullo stesso canale = problema del canale o del server</small></h3></div>
+          ${chans.length ? chans.map((o) => { const [v, c] = verdictC(o); return `<div class="kc-erank"><span>${esc(o.key)}<small>${o.n} blocchi · ${cl(o.devs.size)} · ${pct(o.n)}%</small></span><span class="kc-tag ${c}" style="white-space:nowrap;flex:none">${v}</span></div>`; }).join('') : '<p class="mut">—</p>'}</div>
+        ${D.role === 'agent' ? '' : `<div class="card glass"><div class="hd"><h3>Pannelli e server<small>Dalle linee collegate ai clienti: se un server concentra i blocchi, cambia DNS o pannello a quei clienti</small></h3></div>
+          ${srvs.length ? srvs.map((o) => `<div class="kc-erank"><span>${esc(o.key)}<small>${o.n} blocchi · ${cl(o.devs.size)} · ${o.titles.size} canal${o.titles.size === 1 ? 'e' : 'i'}</small></span><b>${pct(o.n)}%</b></div>`).join('') : '<p class="mut">Nessun blocco su clienti con una linea collegata in KAIROS: collega le linee dai Pannelli IPTV per vedere qui il server.</p>'}</div>`}
+        <div class="card glass"><div class="hd"><h3>Clienti<small>Blocchi su tanti canali diversi = rete o dispositivo del cliente: VPN o Wi-Fi migliore</small></h3></div>
+          ${clients.length ? clients.map((o) => { const x = o.x, [v, c] = verdictD(o); return `<div class="kc-erank"><span>${esc(x.name || x.code || 'Dispositivo')} <span class="mono">${esc(x.code || '')}</span><small>${o.n} blocchi · ${o.titles.size} canal${o.titles.size === 1 ? 'e' : 'i'} · ${esc(x.model || '')}${netL(x) ? '<br>' + netL(x) : ''}</small></span><span style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none"><span class="kc-tag ${c}" style="white-space:nowrap">${v}</span>${x.deviceId ? `<button class="btn sm" data-bopen="${esc(x.deviceId)}">Scheda</button>` : ''}</span></div>`; }).join('') : '<p class="mut">—</p>'}</div>
+      </div>`;
+    $('#bH').onchange = (e) => { KC.buffH = +e.target.value; buffLoad(); };
+    $('#bR').onclick = () => { KC.errs = null; buffLoad(); };
+    $$('[data-bopen]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.bopen); d ? openQuick(d) : toast('Dispositivo non trovato', 1); }));
   }
 
   /* ---------- Segnalazioni e Richieste contenuti ---------- */

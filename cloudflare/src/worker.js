@@ -1993,9 +1993,11 @@ async function adminErrors(req, env, path, url, who, ip) {
   const m = req.method;
   if (path === '/app-errors' && m === 'GET') {
     const t = now(), since = t - Math.min(ERR_KEEP_MS, Math.max(3600e3, (+url.searchParams.get('hours') || 168) * 3600e3));
-    const rows = ((await env.DB.prepare('SELECT e.*, d.name, d.code, d.parent, d.owner_id AS oid, p.owner_id AS poid FROM app_errors e LEFT JOIN devices d ON d.id = e.device_id LEFT JOIN devices p ON p.id = d.parent WHERE e.t > ? ORDER BY e.t DESC LIMIT 2000').bind(since).all()).results) || [];
+    const rows = ((await env.DB.prepare('SELECT e.*, d.name, d.code, d.parent, d.owner_id AS oid, p.owner_id AS poid, pr.net, pr.rssi, pr.vpn, pr.speed_dl, pr.line AS pline, (SELECT GROUP_CONCAT(DISTINCT ll.source || \'|\' || ll.dns_name || \'|\' || ll.dns) FROM linked_lines ll WHERE ll.device_id = e.device_id) AS srv, (SELECT COUNT(*) FROM wolf_links wl WHERE wl.device_id = e.device_id) AS wolf FROM app_errors e LEFT JOIN devices d ON d.id = e.device_id LEFT JOIN devices p ON p.id = d.parent LEFT JOIN presence pr ON pr.device_id = e.device_id WHERE e.t > ? ORDER BY e.t DESC LIMIT 2000').bind(since).all()).results) || [];
     const seen = +((await env.DB.prepare("SELECT v FROM settings WHERE k = 'errSeen'").first()) || { v: 0 }).v || 0;
-    const items = rows.map((r) => ({ id: r.id, t: r.t, deviceId: r.device_id, name: r.name || '', code: r.code || '', problem: r.problem, action: r.action, outcome: r.outcome, err: r.err, title: r.title, itemId: r.item_id, kind: r.kind, engine: r.engine, codec: r.codec, dec: r.dec, res: r.res, variant: r.variant, model: r.model, ver: r.ver, ownerId: +(r.parent ? r.poid : r.oid) || 0, isNew: r.t > seen }));
+    const items = rows.map((r) => ({ id: r.id, t: r.t, deviceId: r.device_id, name: r.name || '', code: r.code || '', problem: r.problem, action: r.action, outcome: r.outcome, err: r.err, title: r.title, itemId: r.item_id, kind: r.kind, engine: r.engine, codec: r.codec, dec: r.dec, res: r.res, variant: r.variant, model: r.model, ver: r.ver, ownerId: +(r.parent ? r.poid : r.oid) || 0, isNew: r.t > seen,
+      // pagina «Buffering»: rete del cliente (dall'ultima presenza) e pannello/DNS delle sue linee collegate (solo titolare)
+      net: r.net || '', rssi: +r.rssi || 0, vpn: r.vpn || '', speedDl: +r.speed_dl || 0, line: r.pline || '', srv: [r.wolf ? 'wolf||' : '', r.srv || ''].filter(Boolean).join(',') }));
     // riepiloghi: un canale con problemi su tanti dispositivi diversi è un problema del canale
     const by = (key) => {
       const mp = new Map();
@@ -3778,7 +3780,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   // Errori dell'applicazione
   if (path === '/app-errors' && m === 'GET') {
     need('errors'); const sc = await scope(), j = await viaOwner(await adminErrors(req, env, path, url, who, ip));
-    const items = j.items.filter((x) => sc.has(x.deviceId));
+    const items = j.items.filter((x) => sc.has(x.deviceId)).map((x) => ({ ...x, srv: '' })); // pannelli e DNS: solo il titolare
     const by = (key) => { const mp = new Map(); for (const x of items) { const k = key(x); if (!k) continue; const o = mp.get(k) || { key: k, n: 0, unresolved: 0, devs: new Set(), titles: new Set() }; o.n++; if (x.outcome === 'non risolto') o.unresolved++; o.devs.add(x.deviceId); o.titles.add(x.title); mp.set(k, o); } return [...mp.values()].sort((a, b) => b.n - a.n).slice(0, 10).map((o) => ({ key: o.key, n: o.n, unresolved: o.unresolved, devices: o.devs.size, titles: o.titles.size })); };
     return json({ items, topTitles: by((x) => x.title), topDevices: by((x) => x.deviceId).map((o) => { const x = items.find((i) => i.deviceId === o.key) || {}; return { ...o, name: x.name, code: x.code, model: x.model }; }), newCount: items.filter((x) => x.isNew).length });
   }
