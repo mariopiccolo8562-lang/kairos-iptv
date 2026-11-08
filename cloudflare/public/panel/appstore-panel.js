@@ -23,11 +23,12 @@
 .al-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:10px;margin-top:12px}
 .al-c{display:flex;flex-direction:column;gap:8px;background:#1a1d22;border:1px solid var(--line);border-radius:10px;padding:12px 14px}
 .al-c b{font-size:14.5px}
+.app-warn{display:inline-flex;align-items:center;gap:4px;width:max-content;max-width:100%;padding:3px 8px;border:1px solid rgba(245,176,65,.48);border-radius:999px;background:rgba(245,176,65,.14);color:#f2c46c;font-size:11.5px;font-weight:600;line-height:1.35}
 .al-u{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:7px;background:var(--glass);border:1px solid var(--line);font-size:12.5px}
 .al-u a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8fb3ff;text-decoration:none;font-family:'JetBrains Mono',monospace}
 .al-u .nourl{flex:1;color:var(--mut)}
 .al-act{display:flex;gap:6px;flex-wrap:wrap}.al-act a.btn{color:#eef1f8!important;text-decoration:none!important}.al-act .al-go{background:linear-gradient(135deg,#22c55e,#16a34a)!important;border-color:transparent!important;color:#fff!important;font-weight:700}.al-c .al-hint{font-size:12px;color:var(--mut);line-height:1.45}
-.al-e{display:grid;grid-template-columns:150px 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
+.al-e{display:grid;grid-template-columns:150px 1fr 1fr auto;gap:8px;align-items:center;margin-bottom:8px}
 .al-e .inp{margin:0}
 @media (max-width:760px){.al-e{grid-template-columns:1fr}}`;
   document.head.appendChild(css);
@@ -39,6 +40,7 @@
 
   const isOwner = () => D.role !== 'agent';
   const copy = (t) => navigator.clipboard.writeText(t).then(() => toast('Link copiato'), () => toast('Copia non consentita dal browser', 1));
+  const warning = (x) => x.warn ? `<span class="app-warn">⚠ ${esc(x.warn)}</span>` : '';
   // titolare: la sua lista (o i default); agente: solo le app che il titolare gli ha consentito (dal payload, sola lettura)
   const links = () => isOwner() ? (() => { const a = D.settings && D.settings.appLinks; return Array.isArray(a) ? a : DEF; })() : (Array.isArray(D.appLinks) ? D.appLinks : []);
   let editing = null, busy = false;
@@ -65,10 +67,10 @@
     const k = playerOf(x.name), viaPanel = panelOk(k);
     if (!isOwner()) {
       // agente: niente indirizzi (non li vede né li copia); OrbixPlay/MaxPlayer solo dal pannello
-      if (k) return `<div class="al-c"><b>${esc(x.name)}</b>${viaPanel ? `<div class="al-hint">Si attiva da qui: scegli il cliente e la lista va su ${esc(x.name)}.</div><div class="al-act"><button class="btn sm al-go" data-algo="${i}">⚡ Attiva dal pannello</button></div>` : '<div class="al-hint">Per attivarla dal pannello chiedi al titolare il permesso «Inviare le linee a OrbixPlay e MaxPlayer».</div>'}</div>`;
-      return `<div class="al-c"><b>${esc(x.name)}</b><div class="al-hint">Aprila, incolla il codice del cliente e carica la lista.</div><div class="al-act">${x.url ? `<a class="btn sm pri" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">Apri ↗</a>` : '<span class="nourl">— non disponibile —</span>'}</div></div>`;
+      if (k) return `<div class="al-c"><b>${esc(x.name)}</b>${warning(x)}${viaPanel ? `<div class="al-hint">Si attiva da qui: scegli il cliente e la lista va su ${esc(x.name)}.</div><div class="al-act"><button class="btn sm al-go" data-algo="${i}">⚡ Attiva dal pannello</button></div>` : '<div class="al-hint">Per attivarla dal pannello chiedi al titolare il permesso «Inviare le linee a OrbixPlay e MaxPlayer».</div>'}</div>`;
+      return `<div class="al-c"><b>${esc(x.name)}</b>${warning(x)}<div class="al-hint">Aprila, incolla il codice del cliente e carica la lista.</div><div class="al-act">${x.url ? `<a class="btn sm pri" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">Apri ↗</a>` : '<span class="nourl">— non disponibile —</span>'}</div></div>`;
     }
-    return `<div class="al-c"><b>${esc(x.name)}</b>
+    return `<div class="al-c"><b>${esc(x.name)}</b>${warning(x)}
         <div class="al-u">${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.url.replace(/^https?:\/\//, ''))}</a>` : '<span class="nourl">— nessun link —</span>'}</div>
         <div class="al-act">${viaPanel ? `<button class="btn sm al-go" data-algo="${i}">⚡ Attiva dal pannello</button>` : ''}${x.url ? `<button class="btn sm ${viaPanel ? '' : 'pri'}" data-alc="${i}">Copia link</button><a class="btn sm" href="${esc(x.url)}" target="_blank" rel="noopener">Apri ↗</a>` : ''}</div></div>`;
   }).join('');
@@ -119,13 +121,13 @@
   }
 
   function readEdit(card) {
-    editing = $$('.al-e', card).map((r) => ({ name: $('[data-k="name"]', r).value.trim(), url: $('[data-k="url"]', r).value.trim() }));
+    editing = $$('.al-e', card).map((r) => ({ name: $('[data-k="name"]', r).value.trim(), url: $('[data-k="url"]', r).value.trim(), warn: $('[data-k="warn"]', r).value.trim() }));
   }
   function renderEdit(card) {
     card.innerHTML = `<div class="hd"><h3>Attiva app — modifica<small>Nome dell'app e link di gestione dispositivo. Trascina non serve: l'ordine è quello della lista.</small></h3></div>
       <div class="al-head"><button class="btn sm" id="alAdd">+ Aggiungi app</button><span class="sp"></span><button class="btn sm" id="alNo">Annulla</button><button class="btn sm pri" id="alOk">Salva</button></div>
-      <div style="margin-top:12px">${editing.map((x, i) => `<div class="al-e"><input class="inp" data-k="name" maxlength="60" placeholder="Nome app (es. OraPlayers)" value="${esc(x.name || '')}"><input class="inp mono" data-k="url" maxlength="300" placeholder="https://euser.esempio.com/manage-device" value="${esc(x.url || '')}"><button class="icb" data-aldel="${i}" title="Togli">✕</button></div>`).join('')}</div>`;
-    $('#alAdd').onclick = () => { readEdit(card); editing.push({ name: '', url: '' }); render(); };
+      <div style="margin-top:12px">${editing.map((x, i) => `<div class="al-e"><input class="inp" data-k="name" maxlength="60" placeholder="Nome app (es. OraPlayers)" value="${esc(x.name || '')}"><input class="inp mono" data-k="url" maxlength="300" placeholder="https://euser.esempio.com/manage-device" value="${esc(x.url || '')}"><input class="inp" data-k="warn" maxlength="120" placeholder="Avviso (facoltativo)" value="${esc(x.warn || '')}"><button class="icb" data-aldel="${i}" title="Togli">✕</button></div>`).join('')}</div>`;
+    $('#alAdd').onclick = () => { readEdit(card); editing.push({ name: '', url: '', warn: '' }); render(); };
     $('#alNo').onclick = () => { editing = null; render(); };
     $$('[data-aldel]', card).forEach((b) => (b.onclick = () => { readEdit(card); editing.splice(+b.dataset.aldel, 1); render(); }));
     $('#alOk').onclick = () => { readEdit(card); save(editing.filter((x) => x.name || x.url)); };

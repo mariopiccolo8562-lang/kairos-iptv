@@ -9,6 +9,7 @@
 .dlc-c{background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 .dlc-h{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap}.dlc-h b{font-size:15px;white-space:nowrap}.dlc-tag{font-size:11px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(224,164,49,.16);color:#ecc06f}
 .dlc-tag.new{background:rgba(52,199,123,.15);color:#6ee3a6}
+.dlc-warn,.app-warn{display:inline-flex;align-items:center;gap:4px;width:max-content;max-width:100%;padding:3px 8px;border:1px solid rgba(245,176,65,.48);border-radius:999px;background:rgba(245,176,65,.14);color:#f2c46c;font-size:11.5px;font-weight:600;line-height:1.35}
 .dlc-code{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.dlc-code .n{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;letter-spacing:.06em;flex:1;min-width:120px}
 .dlc-code small{display:block;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--mut);font-weight:400;letter-spacing:0;margin-top:2px;word-break:break-all}
 .dlc-l{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:7px;background:#1a1d22;border:1px solid var(--line);font-size:12.5px}
@@ -34,7 +35,7 @@
 
   function card(x, i) {
     const l = linkOf(x), nw = /^nuova$/i.test(x.note);
-    return `<div class="dlc-c"><div class="dlc-h"><b>${esc(x.name)}</b>${x.note ? `<span class="dlc-tag ${nw ? 'new' : ''}">${esc(x.note)}</span>` : ''}</div>
+    return `<div class="dlc-c"><div class="dlc-h"><b>${esc(x.name)}</b>${x.note ? `<span class="dlc-tag ${nw ? 'new' : ''}">${esc(x.note)}</span>` : ''}</div>${x.warn ? `<span class="dlc-warn">⚠ ${esc(x.warn)}</span>` : ''}
       ${x.code ? `<div class="dlc-code"><div class="n">${esc(x.code)}<small>${esc(l.replace(/^https?:\/\//, ''))}</small></div><button class="btn sm pri" data-cc="${i}">Copia codice</button><button class="btn sm" data-cl="${i}">Copia link</button></div>` : ''}
       ${(x.links || []).map((k, j) => `<div class="dlc-l"><span>${esc(k.label)}</span><a href="${esc(k.url)}" target="_blank" rel="noopener">${esc(k.url.replace(/^https?:\/\//, ''))}</a><button class="btn sm" data-ck="${i}:${j}">Copia</button></div>`).join('')}</div>`;
   }
@@ -56,15 +57,16 @@
   function readEdit() {
     editing = $$('#v-dlc .dlc-e').map((r) => {
       const v = (k) => $(`[data-k="${k}"]`, r).value.trim();
-      return { group: v('group'), name: v('name'), code: v('code'), note: v('note'), link: v('link'), links: v('links').split('\n').map((s) => s.trim()).filter(Boolean).map((s) => { const k = s.indexOf('|'); return k < 0 ? { label: 'Link', url: s } : { label: s.slice(0, k).trim(), url: s.slice(k + 1).trim() }; }) };
+      return { group: v('group'), name: v('name'), code: v('code'), note: v('note'), warn: v('warn'), link: v('link'), links: v('links').split('\n').map((s) => s.trim()).filter(Boolean).map((s) => { const k = s.indexOf('|'); return k < 0 ? { label: 'Link', url: s } : { label: s.slice(0, k).trim(), url: s.slice(k + 1).trim() }; }) };
     });
   }
   function renderEdit(el) {
     el.innerHTML = `<div class="dlc-top"><b style="flex:1">Modifica elenco</b><button class="btn" id="dlcAdd">+ Aggiungi app</button><button class="btn" id="dlcNo">Annulla</button><button class="btn pri" id="dlcOk">Salva</button></div>
-      <p class="mut" style="font-size:12.5px;margin:-6px 0 14px">Per ogni app: gruppo, nome, codice downloader, etichetta (es. «Nuova»), link del codice (vuoto = aftv.news/codice) e, sotto, gli altri link uno per riga nel formato <span class="mono">Etichetta | https://…</span></p>`
+      <p class="mut" style="font-size:12.5px;margin:-6px 0 14px">Per ogni app: gruppo, nome, codice downloader, etichetta (es. «Nuova»), avviso facoltativo, link del codice (vuoto = aftv.news/codice) e, sotto, gli altri link uno per riga nel formato <span class="mono">Etichetta | https://…</span></p>`
       + editing.map((x, i) => `<div class="dlc-e"><input class="inp" data-k="group" placeholder="Gruppo" value="${esc(x.group || '')}"><input class="inp" data-k="name" placeholder="Nome app" value="${esc(x.name)}"><input class="inp mono" data-k="code" placeholder="Codice" value="${esc(x.code || '')}"><input class="inp" data-k="note" placeholder="Etichetta (facoltativa)" value="${esc(x.note || '')}"><button class="icb" data-del="${i}" title="Togli">✕</button>
+        <input class="inp" data-k="warn" maxlength="120" placeholder="Avviso (facoltativo)" value="${esc(x.warn || '')}" style="grid-column:1/5">
         <input class="inp mono" data-k="link" placeholder="Link del codice (vuoto = aftv.news/codice)" value="${esc(x.link || '')}" style="grid-column:2/5"><span></span><textarea class="inp" data-k="links" placeholder="Sito | https://…">${esc(linksTxt(x))}</textarea></div>`).join('');
-    $('#dlcAdd').onclick = () => { readEdit(); editing.unshift({ group: (editing[0] || {}).group || '', name: '', code: '', note: '', link: '', links: [] }); render(); };
+    $('#dlcAdd').onclick = () => { readEdit(); editing.unshift({ group: (editing[0] || {}).group || '', name: '', code: '', note: '', warn: '', link: '', links: [] }); render(); };
     $('#dlcNo').onclick = () => { editing = null; render(); };
     $$('[data-del]', el).forEach((b) => (b.onclick = () => { readEdit(); editing.splice(+b.dataset.del, 1); render(); }));
     $('#dlcOk').onclick = async () => {

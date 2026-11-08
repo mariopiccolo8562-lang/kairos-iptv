@@ -729,7 +729,7 @@ function cleanDlCodes(v) {
     const name = str(x && x.name, 60); if (!name) throw new HttpErr(400, `App n. ${i + 1}: manca il nome`);
     const code = str(x.code, 12).replace(/\s+/g, ''); if (code && !/^\d{3,10}$/.test(code)) throw new HttpErr(400, `${name}: il codice downloader è fatto solo di numeri`);
     const links = (Array.isArray(x.links) ? x.links : []).slice(0, 10).map((l) => ({ label: str(l && l.label, 30) || 'Link', url: url(l && l.url, name) })).filter((l) => l.url);
-    return { group: str(x.group, 40), name, code, note: str(x.note, 120), link: url(x.link, name), links };
+    return { group: str(x.group, 40), name, code, note: str(x.note, 120), warn: str(x.warn, 120), link: url(x.link, name), links };
   });
 }
 
@@ -761,7 +761,7 @@ function cleanAppLinks(v) {
     const name = str(x && x.name, 60); if (!name) throw new HttpErr(400, `App n. ${i + 1}: scrivi il nome`);
     const url = str(x && x.url, 300).trim().replace(/\/+$/, '');
     if (url && !/^https?:\/\/[^\s]+$/i.test(url)) throw new HttpErr(400, `${name}: il link deve iniziare con http:// o https://`);
-    return { name, url };
+    return { name, url, warn: str(x && x.warn, 120) };
   });
 }
 
@@ -4899,7 +4899,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const sNames = canAg ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
     return stateJson(req, { role: 'agent', user: A.username, me: { ...meSafe, storeCode: await sellerAgentCode(env, A), perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: agList,
-      appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { name: x.name, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
+      appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { ...x, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
       // codici Downloader e link delle app Kairos: solo quelli che il titolare gli concede (kAllow)
       settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', plusDownloaderCode: ok('plus') ? s.plusDownloaderCode || '' : '', premDownloaderCode: ok('prem') ? s.premDownloaderCode || '' : '', novaDownloaderCode: ok('nova') ? s.novaDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),
