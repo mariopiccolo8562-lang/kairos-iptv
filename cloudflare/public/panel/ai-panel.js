@@ -1,5 +1,6 @@
-/* KAIROS Control 2.4 — pagina «Assistente IA»: stato di Cloudflare Workers AI, consumo del giorno, domande al giorno
-   per cliente, richieste di altre domande (con +10 / +25 / +50). Usa le funzioni di app.js ($, $$, esc, api, toast, ago, D, view, load…). */
+/* KAIROS Control 2.4 — pagina «Assistente IA»: stato di Claude e Gemini, consumo del giorno, domande al giorno
+   per cliente, richieste di altre domande (con +10 / +25 / +50). Nella scheda del cliente: «Assistente IA: Gemini
+   (predefinito) | Claude | Spento» e domande al giorno. Usa le funzioni di app.js ($, $$, esc, api, toast, ago, D, view, load…). */
 (() => {
   const css = document.createElement('style');
   css.textContent = `
@@ -17,6 +18,7 @@
 .ai-days{display:flex;align-items:flex-end;gap:4px;height:90px;margin-top:10px}.ai-days i{flex:1;background:rgba(61,124,245,.55);border-radius:3px 3px 0 0;min-height:2px;position:relative}
 .ai-days i span{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--mut);font-style:normal}
 .ai-help{font-size:13px;color:var(--mut);line-height:1.55}.ai-help b{color:var(--txt)}
+#ds-perm .tog.ai-hid{display:none!important}
 @media (max-width:1100px){.ai-g{grid-template-columns:1fr}}`;
   document.head.appendChild(css);
 
@@ -36,7 +38,7 @@
     const t = Date.now(), day = (k) => new Date(t - k * 864e5).toISOString().slice(0, 10);
     const clients = ds.slice(0, 7).map((d, i) => ({ id: d.id, name: d.name, code: d.code, n: [20, 14, 9, 6, 4, 2, 1][i], cl: i === 1 ? 14 : 0, gm: i === 1 ? 0 : [20, 14, 9, 6, 4, 2, 1][i], limit: i === 1 ? 30 : 20, own: i === 1, extra: i === 0 ? 5 : 0, provider: i === 1 ? 'claude' : '' }));
     return { status: { gemini: true, claude: true }, today: { day: day(0), n: 56, gm: 42, cl: 14, usd: 0.003 }, month: { n: 640, cl: 210, usd: 0.04 },
-      days: Array.from({ length: 14 }, (_, k) => ({ day: day(13 - k), n: [12, 18, 25, 22, 30, 41, 38, 35, 44, 52, 48, 61, 49, 56][k] })), clients, settings: { aiDaily: 20, aiProvider: 'gm', aiClaude: 'haiku', aiGemini: 'flash' },
+      days: Array.from({ length: 14 }, (_, k) => ({ day: day(13 - k), n: [12, 18, 25, 22, 30, 41, 38, 35, 44, 52, 48, 61, 49, 56][k] })), clients, settings: { aiDaily: 20, aiProvider: 'gm', aiClaude: 'haiku', aiGemini: 'flash', proAi: '' },
       claudeModels: [{ id: 'haiku', name: 'Claude Haiku 5.5 (veloce, costa pochissimo)' }, { id: 'sonnet', name: 'Claude Sonnet 5.5 (più preciso, costa circa 20 volte di più)' }],
       geminiModels: [{ id: 'flash', name: 'Gemini 3.8 Flash (risposte migliori)' }, { id: 'lite', name: 'Gemini 3.5 Flash-Lite (più veloce)' }] };
   }
@@ -94,7 +96,8 @@
           <div class="ac">${r.status !== 'done' ? `${[10, 25, 50].map((n) => `<button class="btn sm ${n === 10 ? 'pri' : ''}" data-aig="${r.id}:${n}">+${n}</button>`).join('')}<button class="btn sm" data-aino="${r.id}">Rifiuta</button>` : ''}<button class="icb" data-aidel="${r.id}" title="Elimina">✕</button></div></div>`).join('')
         : '<div class="emptyc">Nessuna richiesta.</div>'}
       </div>
-      <div class="card glass"><div class="hd"><h3>Impostazioni<small>Valgono per tutti i clienti; nella scheda del singolo cliente puoi scegliere un'altra IA e un altro numero di domande</small></h3></div>
+      <div class="card glass"><div class="hd"><h3>Impostazioni<small>Valgono per tutti i clienti. Per tutti i clienti di Kairos Pro: Controllo remoto → profilo Kairos Pro → «Assistente IA». Per il singolo cliente: nella sua scheda (Permessi), che vince su tutto</small></h3></div>
+        ${S.proAi ? `<p class="ai-help" style="margin:0 0 8px">Profilo Kairos Pro (Controllo remoto): <b>${esc(S.proAi === 'off' ? 'Spento' : PROV[S.proAi] || S.proAi)}</b> per i clienti con «predefinito» nella scheda.</p>` : ''}
         <label class="lbl">Intelligenza artificiale predefinita</label><div class="seg" id="aiProv" style="display:flex">${[['claude', 'Claude · a pagamento, preciso'], ['gm', 'Gemini · gratis']].map(([k, l]) => `<button data-prov="${k}" class="${def === k ? 'on' : ''}" style="flex:1">${l}${on(k) ? '' : ' ⚠'}</button>`).join('')}</div>
         <p class="ai-help" style="margin-top:6px">Se quella scelta non risponde (credito finito, limite, chiave sbagliata) risponde l'altra, se è collegata. ⚠ = non ancora collegata.</p>
         <div class="row"><div><label class="lbl">Modello Claude</label><select class="inp" id="aiClaude">${x.claudeModels.map((m) => `<option value="${m.id}" ${S.aiClaude === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></div>
@@ -102,6 +105,7 @@
         <label class="lbl">Domande al giorno per cliente</label><input class="inp" type="number" id="aiDaily" min="0" max="1000" value="${S.aiDaily}" style="max-width:200px">
         <div><button class="btn pri" id="aiSave" style="margin-top:12px">Salva</button></div>
         <p class="ai-help" style="margin-top:12px">Prezzi di Claude: <b>Haiku 5.5</b> circa 0,17 $ ogni 1.000 domande, <b>Sonnet 5.5</b> circa 3,30 $ ogni 1.000 domande (stime per risposte brevi). Gemini è gratis.</p>
+        <p class="ai-help" style="margin-top:8px">Nell'app Kairos Pro l'assistente serve per: <b>domande</b> sul titolo aperto o libere, <b>ricerca con le frasi</b> (anche a voce, es. «film d'azione anni 90 con Stallone») e <b>«Cosa guardo stasera?»</b>. Ogni richiesta usa una domanda del giorno. All'IA va solo la domanda con il minimo dei titoli, mai nome o codice del cliente. Spenta o con le domande finite, la ricerca per nome e «Cosa guardo stasera?» funzionano lo stesso, senza IA.</p>
         <label class="lbl">Ultimi 14 giorni</label><div class="ai-days">${x.days.map((d) => `<i style="height:${Math.round((d.n / max) * 100)}%" title="${esc(d.day)}: ${d.n} domande (${d.cl || 0} Claude, ${d.gm || 0} Gemini)"><span>${esc(d.day.slice(8))}</span></i>`).join('')}</div><div style="height:16px"></div>
       </div>
     </div>
@@ -144,17 +148,41 @@
   setInterval(() => { if (!document.hidden && $('#app').classList.contains('on') && D.role !== 'agent') aiLoad(true).catch(() => {}); }, 30000);
   const t0 = setInterval(() => { if ($('#app').classList.contains('on') && D.devices) { clearInterval(t0); aiLoad(true).catch(() => {}); } }, 700);
 
-  /* ---------- scheda cliente: domande al giorno ---------- */
+  /* ---------- scheda cliente: «Assistente IA: Gemini (predefinito) | Claude | Spento» e domande al giorno ----------
+     «Spento» = permesso «Assistente IA» spento (stesso dato del permesso, che qui viene sostituito da questa tendina).
+     «Predefinito» = vale il profilo di Kairos Pro nel Controllo remoto, se c'è, altrimenti l'IA scelta qui sopra per tutti. */
+  const NM = { gm: 'Gemini', claude: 'Claude', off: 'Spento' };
   const rdw = renderDrawer;
   window.renderDrawer = renderDrawer = function () {
     rdw();
     if (!edit || edit.parent || D.role === 'agent') return;
     const sec = $('#ds-perm') || $('#ds-note'); if (!sec || $('#eAiLim')) return;
-    const v = edit.aiLimitIn !== undefined ? edit.aiLimitIn : edit.aiLimit ?? -1, def = (A.data && A.data.settings.aiDaily) ?? (D.settings.aiDaily ?? 20);
+    const S0 = (A.data && A.data.settings) || {}, DS = D.settings || {};
+    const glob = (S0.aiProvider || DS.aiProvider) === 'claude' ? 'claude' : 'gm';
+    const pro = String(DS.rcApp ? ((DS.rcApp.tv || {}).ai || '') : S0.proAi || ''); // profilo Kairos Pro (Controllo remoto)
+    const inh = NM[pro] ? pro : glob, why = NM[pro] ? 'profilo Kairos Pro nel Controllo remoto' : 'pagina Assistente IA'; // cosa vale con «predefinito»
+    const tog = sec.querySelector('[data-perm="ai"]'); if (tog) tog.classList.add('ai-hid'); // sostituito dalla tendina (anche dopo gli altri moduli)
     const pv = edit.aiProviderIn !== undefined ? edit.aiProviderIn : edit.aiProvider || '';
-    sec.insertAdjacentHTML('beforeend', `<label class="lbl">Assistente IA: quale intelligenza artificiale</label><select class="inp" id="eAiProv"><option value="">Quella predefinita (Assistente IA nel menu)</option><option value="claude" ${pv === 'claude' ? 'selected' : ''}>Claude · a pagamento, più preciso</option><option value="gm" ${pv === 'gm' ? 'selected' : ''}>Gemini · gratis</option></select>`);
-    $('#eAiProv').onchange = (e) => { edit.aiProviderIn = e.target.value; };
-    sec.insertAdjacentHTML('beforeend', `<label class="lbl">Assistente IA: domande al giorno</label><div class="row"><input class="inp" type="number" id="eAiLim" min="0" max="1000" placeholder="Predefinito (${def})" value="${v >= 0 ? v : ''}"><span class="mut" style="font-size:12px;align-self:center">Vuoto = ${def} come tutti · 0 = niente assistente${edit.aiExtra ? ` · ${edit.aiExtra} domande extra disponibili` : ''}</span></div>`);
-    $('#eAiLim').oninput = (e) => { const s = e.target.value.trim(); edit.aiLimitIn = s === '' ? -1 : Math.max(0, Math.min(1000, parseInt(s, 10) || 0)); };
+    const opts = [['', `${NM[inh]} (predefinito)`], ...['gm', 'claude'].filter((k) => k !== inh).map((k) => [k, NM[k]]), ...(inh === 'off' ? [] : [['off', 'Spento']])];
+    const cur = edit.perms && edit.perms.ai === false ? 'off' : pv === inh ? '' : pv;
+    const val = opts.some((o) => o[0] === cur) ? cur : '';
+    const def = (A.data && A.data.settings.aiDaily) ?? (DS.aiDaily ?? 20), lim = edit.aiLimitIn !== undefined ? edit.aiLimitIn : edit.aiLimit ?? -1;
+    sec.insertAdjacentHTML('beforeend', `<label class="lbl">Assistente IA</label><select class="inp" id="eAiProv">${opts.map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+      <small class="mut" id="eAiHint" style="display:block;margin-top:-4px;font-size:12px"></small>
+      <label class="lbl">Assistente IA: domande al giorno</label><div class="row"><input class="inp" type="number" id="eAiLim" min="0" max="1000" placeholder="Predefinito (${def})" value="${lim >= 0 ? lim : ''}"><span class="mut" style="font-size:12px;align-self:center">Vuoto = ${def} come tutti · 0 = niente assistente${edit.aiExtra ? ` · ${edit.aiExtra} domande extra disponibili` : ''}</span></div>`);
+    const hint = () => {
+      const v = $('#eAiProv').value, eff = v === '' ? inh : v;
+      $('#eAiHint').textContent = (DS.aiOff ? 'Ora l\'assistente è spento per tutti (Panoramica → Interruttori rapidi): questa scelta vale quando lo riaccendi. ' : '') + (v === '' ? `Predefinito = ${NM[inh]} (${why}). ` : '') + (eff === 'off' ? 'Nell\'app spariscono ricerca con le frasi, assistente e motivi di «Cosa guardo stasera?» (che resta, senza IA).' : eff === 'claude' ? 'Claude è a pagamento (lo paghi tu): vale il limite di domande al giorno qui sotto.' : 'Gemini è gratis, con un limite giornaliero di Google.');
+    };
+    $('#eAiProv').onchange = (e) => {
+      const v = e.target.value;
+      edit.perms = { ...(edit.perms || {}) };
+      if (v === 'off') edit.perms.ai = false;
+      else { delete edit.perms.ai; edit.aiProviderIn = v; }
+      if (tog) tog.classList.toggle('on', v !== 'off');
+      hint();
+    };
+    hint();
+    $('#eAiLim').oninput = (e) => { const t = e.target.value.trim(); edit.aiLimitIn = t === '' ? -1 : Math.max(0, Math.min(1000, parseInt(t, 10) || 0)); };
   };
 })();

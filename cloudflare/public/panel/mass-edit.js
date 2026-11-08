@@ -1,5 +1,6 @@
 /* KAIROS Control — «Modifica in massa»: cambia a tanti clienti insieme lettore (ExoPlayer, VLC, automatico),
-   permessi, VPN e visioni contemporanee, e toglie le impostazioni del Controllo remoto imposte solo a loro.
+   permessi, assistente IA (Gemini, Claude, spento), VPN e visioni contemporanee, e toglie le impostazioni del Controllo
+   remoto imposte solo a loro.
    Si apre da Dispositivi: pulsante in alto (tutti i clienti) o dalla barra della selezione in vista Tabella.
    Solo titolare. Le app si riallineano da sole al battito successivo (entro un minuto se sono aperte). */
 (() => {
@@ -33,7 +34,11 @@
   const ENG_O = [['', 'Non cambiare'], ['-', 'Lo sceglie il cliente nell\'app'], ['auto', 'Automatico'], ['exo', 'ExoPlayer'], ['vlc', 'VLC']];
   const ENG_N = { '-': 'scelto dal cliente', auto: 'automatico', exo: 'ExoPlayer', vlc: 'VLC' };
   const VPN_O = [['', 'Non cambiare'], ['0', 'Disattivata'], ['1', 'Consentita (la accende il cliente)'], ['2', 'Sempre attiva']];
-  const perms = () => (typeof PERM_L !== 'undefined' ? PERM_L : []);
+  // l'assistente IA ha la sua riga (Gemini | Claude | Spento), come nella scheda del cliente: tra i permessi non si ripete
+  const perms = () => (typeof PERM_L !== 'undefined' ? PERM_L : []).filter((p) => p[0] !== 'ai');
+  const AIN = { gm: 'Gemini', claude: 'Claude' };
+  const aiDef = () => (((D.settings || {}).aiProvider) === 'claude' ? 'claude' : 'gm');
+  const AI_O = () => [['', 'Non cambiare'], ['def', `${AIN[aiDef()]} (predefinito)`], ...Object.keys(AIN).filter((k) => k !== aiDef()).map((k) => [k, AIN[k]]), ['off', 'Spento']];
   const prim = () => (D.devices || []).filter((d) => !d.parent);
   const nActive = () => prim().filter((d) => d.status === 'active').length;
   const nAll = () => prim().filter((d) => d.status !== 'pending').length;
@@ -55,6 +60,7 @@
     const pl = {}; for (const [k] of ENG) { const x = v('eng.' + k); if (x) pl[k] = x === '-' ? '' : x; }
     if (Object.keys(pl).length) b.player = pl;
     const pm = {}; for (const [k] of perms()) { const x = v('perm.' + k); if (x) pm[k] = x === '1'; }
+    const ai = v('ai'); if (ai === 'off') pm.ai = false; else if (ai) { pm.ai = true; b.aiProvider = ai === 'def' ? '' : ai; }
     if (Object.keys(pm).length) b.perms = pm;
     if (v('vpn') !== '') b.vpn = +v('vpn');
     const ms = M.querySelector('[data-ms="streams"]'); if (ms && ms.value.trim() !== '') b.maxStreams = Math.max(0, parseInt(ms.value, 10) || 0);
@@ -66,7 +72,9 @@
   function summary(b) {
     const out = [];
     if (b.player) out.push('lettore: ' + Object.entries(b.player).map(([k, x]) => `${(ENG.find((e) => e[0] === k) || [k, k])[1]} → ${ENG_N[x === '' ? '-' : x]}`).join(', '));
-    if (b.perms) { const on = Object.keys(b.perms).filter((k) => b.perms[k]), off = Object.keys(b.perms).filter((k) => !b.perms[k]); const nm = (k) => (perms().find((p) => p[0] === k) || [k, k])[1]; if (on.length) out.push('consenti: ' + on.map(nm).join(', ')); if (off.length) out.push('blocca: ' + off.map(nm).join(', ')); }
+    if (b.perms) { const ks = Object.keys(b.perms).filter((k) => k !== 'ai'), on = ks.filter((k) => b.perms[k]), off = ks.filter((k) => !b.perms[k]); const nm = (k) => (perms().find((p) => p[0] === k) || [k, k])[1]; if (on.length) out.push('consenti: ' + on.map(nm).join(', ')); if (off.length) out.push('blocca: ' + off.map(nm).join(', ')); }
+    if (b.perms && b.perms.ai === false) out.push('assistente IA: spento');
+    else if (b.aiProvider !== undefined) out.push('assistente IA: ' + (b.aiProvider ? AIN[b.aiProvider] : AIN[aiDef()] + ' (predefinito)'));
     if (b.vpn !== undefined) out.push('VPN: ' + VPN_O.find((o) => o[0] === String(b.vpn))[1].toLowerCase());
     if (b.maxStreams !== undefined) out.push('visioni contemporanee: ' + (b.maxStreams || 'illimitate'));
     if (b.rcClear) out.push('tolte le impostazioni imposte solo a loro');
@@ -106,6 +114,7 @@
       <div class="ms-h">Permessi <button class="btn sm" type="button" id="msAllOn">Consenti tutto</button></div>
       ${perms().map(([k, l, d]) => `<div class="ms-r"><div><b>${esc(l)}</b><small>${esc(d)}</small></div>${sel('perm.' + k, [['', 'Non cambiare'], ['1', 'Consenti'], ['0', 'Blocca']])}</div>`).join('')}
       <div class="ms-h">Altro</div>
+      <div class="ms-r"><div><b>Assistente IA</b><small>Come nella scheda del cliente · Claude è a pagamento: valgono le domande al giorno</small></div>${sel('ai', AI_O())}</div>
       <div class="ms-r"><div><b>VPN</b><small>Come nella scheda del cliente</small></div>${sel('vpn', VPN_O)}</div>
       <div class="ms-r"><div><b>Visioni contemporanee</b><small>Vuoto = non cambiare · 0 = senza limite</small></div><input class="inp" type="number" min="0" max="20" data-ms="streams" placeholder="Non cambiare"></div>
       <div class="ms-h">Controllo remoto · solo per questi clienti</div>
@@ -154,15 +163,16 @@
       const list = b.scope === 'ids' ? all.filter((d) => (b.ids || []).includes(d.id)) : all.filter((d) => (b.scope === 'active' ? stOf(d) === 'active' : stOf(d) !== 'pending'));
       let changed = 0;
       for (const d of list) {
-        const before = JSON.stringify([d.player, d.perms, d.vpn, d.maxStreams]);
+        const before = JSON.stringify([d.player, d.perms, d.vpn, d.maxStreams, d.aiProvider || '']);
         if (b.player) { d.player = { ...(d.player || {}) }; for (const [k, v] of Object.entries(b.player)) { if (v === '') delete d.player[k]; else d.player[k] = v; } }
         if (b.perms) d.perms = { ...(d.perms || {}), ...b.perms };
+        if (b.aiProvider !== undefined) d.aiProvider = b.aiProvider;
         if (b.vpn !== undefined) d.vpn = b.vpn;
         if (b.maxStreams !== undefined) d.maxStreams = b.maxStreams;
         const ov = (DEMO.rctl && DEMO.rctl.over) || null, rc0 = JSON.stringify((ov && ov[d.id]) || {});
         if (b.rcClear && ov) delete ov[d.id];
         if (b.rcSet && ov) { const o = { ...(ov[d.id] || {}) }; for (const [k, v] of Object.entries(b.rcSet)) { if (v === '') delete o[k]; else o[k] = v; } if (Object.keys(o).length) ov[d.id] = o; else delete ov[d.id]; }
-        if (JSON.stringify([d.player, d.perms, d.vpn, d.maxStreams]) !== before || JSON.stringify((ov && ov[d.id]) || {}) !== rc0) changed++;
+        if (JSON.stringify([d.player, d.perms, d.vpn, d.maxStreams, d.aiProvider || '']) !== before || JSON.stringify((ov && ov[d.id]) || {}) !== rc0) changed++;
       }
       return { changed, total: list.length, kids: 0 };
     };

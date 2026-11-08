@@ -58,6 +58,7 @@
     k = 0; $$('#dBody .dsec').forEach((sec) => { const i = $('.dsh i', sec); if (i && sec.style.display !== 'none') i.textContent = ++k; });
     $$('#ds-perm [data-perm]').forEach((t) => { t.style.display = (plus && !PLUS_PERMS.has(t.dataset.perm)) || ((on || ktv) && !LITE_PERMS.has(t.dataset.perm)) ? 'none' : ''; });
     for (const sel of ['#eAiProv', '#eAiLim']) { const el = $(sel); if (!el) continue; const box = sel === '#eAiLim' ? el.parentElement : el; box.style.display = on || ktv || plus ? 'none' : ''; const lb = box.previousElementSibling; if (lb && lb.classList.contains('lbl')) lb.style.display = on || ktv || plus ? 'none' : ''; }
+    { const hn = $('#eAiHint'); if (hn) hn.style.display = on || ktv || plus ? 'none' : ''; } // spiegazione sotto «Assistente IA»: solo Kairos Pro ha l'assistente
     const note = $('#dBody .lite-note'); if (note) note.style.display = on ? '' : 'none';
     const kn = $('#dBody .ktv-note'); if (kn) kn.style.display = ktv && !xc && !isPrem(edit) ? '' : 'none';
     const xn = $('#dBody .xc-note'); if (xn) xn.style.display = xc ? '' : 'none';

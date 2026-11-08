@@ -153,7 +153,7 @@
     ['maint', 'Manutenzione', 'App ferma per i clienti (tranne gli esclusi)', () => window.KXMaint && KXMaint.on(), async () => { await KXMaint.quick(); return 'done'; }],
     ['local', 'Playlist personali dei clienti', 'Possono aggiungere playlist loro nell\'app', () => !!S().allowLocalPlaylists, (on) => api('PUT', '/admin/settings', { allowLocalPlaylists: on })],
     ['foot', 'Eventi sportivi nella Home', 'Calcio, F1, tennis, basket e altri sport in evidenza nell\'app', () => S().showFootball !== false, (on) => api('PUT', '/admin/settings', { showFootball: on })],
-    ['ai', 'Assistente IA', 'Spento: il pulsante sparisce dall\'app per tutti', () => !S().aiOff, (on) => api('PUT', '/admin/settings', { aiOff: !on })],
+    ['ai', 'Assistente IA', 'Spento: le funzioni IA (ricerca con le frasi, domande, motivi di «Cosa guardo stasera?») spariscono dall\'app per tutti', () => !S().aiOff, (on) => api('PUT', '/admin/settings', { aiOff: !on })],
     ['clean', 'Pulizia automatica app terzi', 'Ogni notte toglie le liste inattive da OrbixPlay e MaxPlayer', () => !!PC().autoClean, (on) => putPC('autoClean', on)],
     ['dnsag', 'Gli agenti vedono i DNS', 'Spento: vedono solo il nome dei DNS', () => !!PC().showDnsAgents, (on) => putPC('showDnsAgents', on)],
     ['agmaint', 'Manutenzione pannello agenti', 'Gli agenti vedono «Pannello in manutenzione» e non possono lavorare (tu sì, anche in assistenza)', () => !!(S().agMaint && S().agMaint.on), async (on) => {
