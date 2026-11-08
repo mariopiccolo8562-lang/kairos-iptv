@@ -40,7 +40,7 @@
       r.channel || r.ip ? `${r.channel ? `<b>${esc(r.channel)}</b>` : ''}<div class="mut" style="font-size:11.5px">${esc([r.country, r.ip].filter(Boolean).join(' · '))}</div>` : mut,
       r.reseller ? esc(r.reseller) : mut,
       `<button class="btn sm" data-a="note" data-i="${i}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.notes ? esc(r.notes) : '+ nota'}</button>`,
-      `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('edit', i, 'Modifica')}${btn('renew', i, 'Rinnova')}${window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="atx" data-ref="${esc(r.id)}" data-label="${esc(r.username)}" data-auto-line="${esc(r.id)}">💰 Pagamento</button>` : ''}${Number(r.enabled) === 0 ? btn('on', i, 'Attiva') : btn('off', i, 'Disattiva')}${m3u(r) ? btn('m3u', i, 'M3U') : ''}${window.KXMxpNew ? btn('mxp', i, 'MaxPlayer') : ''}${window.KXOxpNew ? btn('oxp', i, 'OrbixPlay') : ''}${window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : ''}${btn('del', i, 'Elimina')}</div>`
+      `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('edit', i, 'Modifica')}${btn('renew', i, 'Rinnova')}${window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="atx" data-ref="${esc(r.id)}" data-label="${esc(r.username)}" data-auto-line="${esc(r.id)}">💰 Pagamento</button>` : ''}${Number(r.enabled) === 0 ? btn('on', i, 'Attiva') : btn('off', i, 'Disattiva')}${m3u(r) ? btn('m3u', i, 'M3U') : ''}${window.KXMxpNew && (!window.KXMxpCan || KXMxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('mxp', i, 'MaxPlayer') : ''}${window.KXOxpNew && (!window.KXOxpCan || KXOxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('oxp', i, 'OrbixPlay') : ''}${window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : ''}${btn('del', i, 'Elimina')}</div>`
     ])));
   }
   function subsHtml(rows) {
@@ -159,7 +159,11 @@
       if (a === 'cp') return copy(r.password, 'Password');
       if (a === 'm3u') return copy(m3u(r), 'Link M3U');
       if (a === 'orcp') return KXOrcpNew({ user: r.username, pass: r.password, name: r.username, note: 'Atlantix #' + r.id, panel: 'atx' });
-      if (a === 'mxp' || a === 'oxp') { const pre = { user: r.username, pass: r.password, name: r.username, note: 'Atlantix #' + r.id }; return a === 'mxp' ? KXMxpNew(pre) : KXOxpNew(pre); }
+      if (a === 'mxp' || a === 'oxp') {
+        const target = a === 'mxp' ? 'max' : 'orbix', pre = { user: r.username, pass: r.password, name: r.username, note: 'Atlantix #' + r.id };
+        const line = { p: 'atx', tag: 'ATLANTIX', username: r.username, password: r.password, exp: r.exp_date || r.exp, note: r.notes || r.note };
+        return window.KXOpenLineTarget ? window.KXOpenLineTarget(target, line, pre) : target === 'max' ? KXMxpNew(pre) : KXOxpNew(pre);
+      }
       if (a === 'lc') { const d = await api('GET', '/admin/atx/line/conns?id=' + r.id); const c = rowsOf(d); return ask('Connessi su ' + u, c.length ? c.map((x) => `<p style="margin:6px 0"><b>${esc(x.channel || 'canale ?')}</b><br><span class="mut" style="font-size:12.5px">${esc([x.user_ip || x.ip, x.city, x.geoip_country_code, x.isp].filter(Boolean).join(' · '))}</span></p>`).join('') : '<p class="mut">Nessuna connessione adesso.</p>', 'OK'); }
       if (a === 'renew') {
         if (!(await ask('Rinnovare ' + u + '?', `<p>Scade il <b>${day(r.exp_date)}</b>. Il rinnovo usa i crediti del tuo account Atlantix.</p><label>Durata<select class="inp" id="axM">${[1, 2, 3, 6, 12].map((n) => `<option value="${n}"${n === 12 ? ' selected' : ''}>${n} ${n === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select></label><label style="display:block;margin-top:10px">Nota (nome del cliente, telefono…)<textarea class="inp" id="axRN" rows="2" maxlength="300" placeholder="es. Mario Rossi · 333 1234567">${esc(r.notes || '')}</textarea></label>`, 'Rinnova'))) return;

@@ -1094,19 +1094,23 @@ body.agent .foot{display:none}
     };
     page.classList.add('on'); $('#agB').scrollTop = 0;
   }
-  function openWizard() {
+  function openWizard(preset) {
+    preset = preset || {};
     const agent = isAgent(), P = me().perms || {}, players = () => D.players || {};
     const servers = Array.isArray(D.servers) ? D.servers : [];
     const maxC = agent ? Math.max(1, P.maxConn || 1) : 20;
+    const showKairos = !agent || can('create');
+    const showMax = !agent || (!!players().max && can('players'));
+    const showOrbix = !agent || (!!players().orbix && can('players'));
+    const availableTargets = new Set([...(showKairos ? ['kairos'] : []), ...(showMax ? ['max'] : []), ...(showOrbix ? ['orbix'] : [])]);
+    const initialTargets = Array.isArray(preset.targets) ? preset.targets.filter((k) => availableTargets.has(k)) : ['kairos'];
     const st = {
-      targets: new Set(['kairos']), code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1), payDue: false, payMonths: 1, payAmount: '',
+      targets: new Set(initialTargets), code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1), payDue: false, payMonths: 1, payAmount: '',
       durationMode: 'months', durationN: '', durationUnit: 'd',
-      pl: { serverId: (servers[0] || {}).id || '', username: '', password: '', host: '', ref: '', note: '', panel: '' }, expSource: '',
+      pl: { serverId: (servers[0] || {}).id || '', username: '', password: '', host: '', ref: '', note: '', panel: '', picked: null }, expSource: '',
       name: '', maxConn: 1, mxDomain: '', orbixId: '', oxDns: '0', busy: false, running: '', results: [],
     };
     const showLinePick = canLoadLines(P);
-    const showMax = !agent || (!!players().max && can('players'));
-    const showOrbix = !agent || (!!players().orbix && can('players'));
     const APPS_W = [['tv', 'Kairos Pro'], ['prem', 'Kairos Premium'], ['ktv', 'Kairos TV'], ['plus', 'Kairos Plus'], ['xc', 'Kairos XC'], ['lite', 'Kairos Lite'], ['nova', 'Kairos Nova']];
     const TARGETS = [['kairos', 'App Kairos'], ['max', 'MaxPlayer'], ['orbix', 'OrbixPlay']];
     const targetNames = { kairos: 'App Kairos', max: 'MaxPlayer', orbix: 'OrbixPlay' };
@@ -1126,6 +1130,23 @@ body.agent .foot{display:none}
       (!has('orbix') || (!!String(st.orbixId || '').trim() && !!orbDns.length && !!orbDns[+st.oxDns]));
     const ago = (t) => { if (!t) return ''; const s = Math.max(0, (Date.now() - t) / 1000); return s < 90 ? 'adesso' : s < 3600 ? Math.round(s / 60) + ' min fa' : s < 86400 ? Math.round(s / 3600) + ' ore fa' : Math.round(s / 86400) + ' giorni fa'; };
     const dateIt = (iso) => { try { return new Date(iso + 'T12:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return iso; } };
+    const paintAgentExpiry = (warning = '') => {
+      const date = $('#wzExpT'), source = $('#wzExpSource'), hint = $('#wzExpHint'), warn = $('#wzExpWarn');
+      if (date) date.textContent = dateIt(st.expires);
+      if (source) source.textContent = st.expSource ? ` · come la linea ${st.expSource}` : '';
+      if (hint) hint.style.display = warning || st.expSource ? 'none' : '';
+      if (warn) warn.innerHTML = warning ? `<div class="wz-st warn">${esc(warning)}</div>` : '';
+    };
+    const resetAgentExpiry = () => {
+      st.expires = addMonths('', 1); st.months = 1; st.durationMode = 'months'; st.durationN = ''; st.expSource = '';
+      paintAgentExpiry();
+    };
+    const detachChangedLine = () => {
+      const picked = st.pl.picked;
+      if (!agent || !picked || st.pl.username === picked.username && st.pl.password === picked.password) return;
+      st.pl.panel = ''; st.pl.picked = null;
+      resetAgentExpiry();
+    };
     const codeStatus = () => {
       if (!has('kairos')) return '';
       const L = st.look;
@@ -1190,8 +1211,8 @@ body.agent .foot{display:none}
       const n = Number(count.value);
       if (Number.isInteger(n) && n >= 1 && n <= 999) {
         st.expires = addPeriod('', n, unit.value);
-        $('#wzExpT').textContent = dateIt(st.expires);
-        $('#wzExp').value = st.expires;
+        if ($('#wzExpT')) $('#wzExpT').textContent = dateIt(st.expires);
+        if ($('#wzExp')) $('#wzExp').value = st.expires;
       }
       foot();
     };
@@ -1214,18 +1235,29 @@ body.agent .foot{display:none}
     };
     const bindOpen = () => $$('[data-wzopen]').forEach((b) => (b.onclick = () => { const x = (D.devices || []).find((y) => y.id === b.dataset.wzopen); if (x) openClient(x); }));
     const fillLine = async (r, label) => {
-      const sv = agent ? await matchLineServer(r.host, servers, r.p) : null;
+      const sv = agent && has('kairos') ? await matchLineServer(r.host, servers, r.p) : null;
       st.pl.username = r.username || '';
       st.pl.password = r.password || '';
       st.pl.ref = label || r.tag || 'Linea';
       st.pl.note = r.note || '';
       st.pl.panel = r.p || '';
-      if (agent) { if (sv) st.pl.serverId = sv.id; }
+      if (agent) {
+        if (sv) st.pl.serverId = sv.id;
+        st.pl.picked = r.p ? { username: st.pl.username, password: st.pl.password } : null;
+        resetAgentExpiry();
+      }
       else st.pl.host = r.host || '';
       const dnsFallback = $('#wzLineDns');
       if (dnsFallback) dnsFallback.innerHTML = '';
       const today = new Date(); today.setHours(0, 0, 0, 0);
-      if ((!agent || P.renew) && r.exp && new Date(r.exp + 'T00:00:00') > today) {
+      let expiryWarning = '';
+      if (agent && r.p) {
+        const expDate = typeof r.exp === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.exp) ? new Date(r.exp + 'T00:00:00') : null;
+        if (expDate && !Number.isNaN(expDate.getTime()) && expDate > today) {
+          st.expires = r.exp; st.durationMode = 'date'; st.durationN = ''; st.months = 0; st.expSource = r.tag || ({ wolf: 'WOLF', armada: 'ARMADA', storm: 'STORM', ro: 'REALOTT', slt: 'SLT' })[r.p] || String(r.p).toUpperCase();
+        } else expiryWarning = expDate && !Number.isNaN(expDate.getTime()) ? 'La linea è scaduta: rinnovala prima sul pannello' : 'Il pannello non indica la scadenza di questa linea: resta 1 mese';
+        paintAgentExpiry(expiryWarning);
+      } else if (!agent && r.exp && new Date(r.exp + 'T00:00:00') > today) {
         st.expires = r.exp; st.durationMode = 'date'; st.durationN = ''; st.months = 0; st.expSource = ({ wolf: 'WOLF', armada: 'Armada', storm: 'Storm', ro: 'Realott', slt: 'SLT' })[r.p] || String(r.p || '').toUpperCase();
         if ($('#wzExp')) $('#wzExp').value = st.expires;
         if ($('#wzExpT')) $('#wzExpT').textContent = dateIt(st.expires);
@@ -1233,7 +1265,7 @@ body.agent .foot{display:none}
         if ($('#wzDurN')) $('#wzDurN').value = '';
         $$('[data-wzm]').forEach((x) => x.classList.remove('on'));
       }
-      if (!st.name.trim() && r.note) st.name = r.note.slice(0, 60);
+      if (!st.name.trim() && (r.name || r.note)) st.name = (r.name || r.note).slice(0, 60);
       if ($('#wzUser')) $('#wzUser').value = st.pl.username;
       if ($('#wzPass')) $('#wzPass').value = st.pl.password;
       if ($('#wzSrv')) $('#wzSrv').value = st.pl.serverId;
@@ -1244,7 +1276,7 @@ body.agent .foot{display:none}
       const user = esc(st.pl.username), chosen = label ? `Linea scelta · ${esc(label)} · ` : 'Linea riconosciuta · ';
       const msg = $('#wzPasteSt');
       if (msg) msg.innerHTML = where ? `<div class="wz-st good">✓ ${chosen}${agent ? 'server' : 'DNS'} <b>${esc(where)}</b> · utente <b>${user}</b></div>` : `<div class="wz-st warn">✓ Utente <b>${user}</b> inserito · ${agent ? 'scegli il server qui sotto' : r.p ? 'scegli il DNS nel menu qui sopra' : 'completa il campo DNS qui sotto'}</div>`;
-      if (agent && !sv) toast('Scegli il server', 1);
+      if (agent && has('kairos') && !sv) toast('Scegli il server', 1);
       if (!agent && !r.host && r.p && dnsFallback && window.KXLinePick && window.KXLinePick.mountDns) {
         await window.KXLinePick.mountDns(dnsFallback, r.p, r.tag, async (host) => {
           st.pl.host = host;
@@ -1261,7 +1293,7 @@ body.agent .foot{display:none}
       await fillLine(r, '');
     };
     const body = () => {
-      const targetButtons = TARGETS.filter(([k]) => k === 'kairos' || (k === 'max' ? showMax : showOrbix)).map(([k, label]) =>
+      const targetButtons = TARGETS.filter(([k]) => k === 'kairos' ? showKairos : k === 'max' ? showMax : showOrbix).map(([k, label]) =>
         `<button type="button" class="wz-target${has(k) ? ' on' : ''}" data-wztarget="${k}" aria-pressed="${has(k)}"><i>✓</i><span>${label}</span></button>`).join('');
       const kairos = has('kairos') ? `<div class="wz-st"><b>Codice della TV</b><p class="wz-help">Il cliente apre l’app Kairos e ti manda una foto. Scrivi il codice: maiuscole e trattino li metto io.</p>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input class="inp wz-code" id="wzCode" placeholder="KXAB-12CD" maxlength="9" autocomplete="off" spellcheck="false" value="${esc(st.code)}"><button type="button" class="btn sm" id="wzCheck">Controlla codice</button></div>
@@ -1283,11 +1315,14 @@ body.agent .foot{display:none}
       const extra = `<div class="wz-s" id="wzS3"><span class="n">3</span><div><h4>Nome del cliente</h4>
         <p class="hint">Facoltativo: se lo lasci vuoto userò il nome utente della linea.</p>
         <input class="inp" id="wzName" maxlength="60" placeholder="es. Mario Rossi" value="${esc(st.name)}" style="margin:0">
-        ${has('kairos') ? `<p class="hint" style="margin-top:14px">Durata e visioni contemporanee valgono solo per l’app Kairos.</p>
+        ${has('kairos') ? `${agent
+          ? `<div class="wz-exp">Scade il <b id="wzExpT">${esc(dateIt(st.expires))}</b><span id="wzExpSource">${st.expSource ? ` · come la linea ${esc(st.expSource)}` : ''}</span></div>
+            <p class="wz-help" id="wzExpHint">La scadenza la prende dalla linea del pannello IPTV che scegli qui sopra (se scrivi la linea a mano: 1 mese).</p><div id="wzExpWarn"></div>`
+          : `<p class="hint" style="margin-top:14px">Durata e visioni contemporanee valgono solo per l’app Kairos.</p>
           <div class="wz-dur">${[1, 3, 6, 12].map((n) => `<button type="button" class="btn${st.durationMode === 'months' && st.months === n ? ' on' : ''}" data-wzm="${n}">${n} ${n === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>
           <div class="wz-custom-duration"><span>Oppure scegli tu:</span><input class="inp" type="number" id="wzDurN" min="1" max="999" step="1" placeholder="es. 45" value="${esc(st.durationN)}"><select class="inp" id="wzDurUnit"><option value="d"${st.durationUnit === 'd' ? ' selected' : ''}>giorni</option><option value="m"${st.durationUnit === 'm' ? ' selected' : ''}>mesi</option><option value="y"${st.durationUnit === 'y' ? ' selected' : ''}>anni</option></select></div>
-          <div class="wz-exp">Scade il <b id="wzExpT">${esc(dateIt(st.expires))}</b><span id="wzExpSource">${st.expSource ? ` · come la linea ${esc(st.expSource)}` : ''}</span> · <a href="#" id="wzExpOther">scegli un’altra data</a><input class="inp" type="date" id="wzExp" value="${esc(st.expires)}" style="display:none;max-width:200px;margin:8px 0 0"></div>
-          <label class="lbl" style="margin-top:12px">Visioni contemporanee (massimo ${maxC})</label><input class="inp" type="number" id="wzConn" min="1" max="${maxC}" value="${st.maxConn}" style="max-width:180px;margin:0">
+          <div class="wz-exp">Scade il <b id="wzExpT">${esc(dateIt(st.expires))}</b><span id="wzExpSource">${st.expSource ? ` · come la linea ${esc(st.expSource)}` : ''}</span> · <a href="#" id="wzExpOther">scegli un’altra data</a><input class="inp" type="date" id="wzExp" value="${esc(st.expires)}" style="display:none;max-width:200px;margin:8px 0 0"></div>`
+        }<label class="lbl" style="margin-top:12px">Visioni contemporanee (massimo ${maxC})</label><input class="inp" type="number" id="wzConn" min="1" max="${maxC}" value="${st.maxConn}" style="max-width:180px;margin:0">
           ${(!agent || can('payments')) ? `<label class="ck" style="margin-top:14px"><input type="checkbox" id="wzPayDue"${st.payDue ? ' checked' : ''}><span>Non ha ancora pagato</span></label><div class="wz-fields" id="wzPayFields" style="${st.payDue ? '' : 'display:none'}"><input class="inp" type="number" id="wzPayMonths" min="0" max="120" value="${st.payMonths}" placeholder="Mesi"><input class="inp" type="number" id="wzPayAmount" min="0" max="100000" step="0.01" value="${esc(st.payAmount)}" placeholder="Importo € (facoltativo)"></div>` : ''}` : ''}</div></div>`;
       return `<div class="wz">
         <div class="wz-s${targetsOk() ? ' ok' : ''}" id="wzS1"><span class="n">${targetsOk() ? '✓' : '1'}</span><div><h4>Dove lo attivi</h4><p class="hint">Puoi attivare il cliente in una o più app. Scegli almeno un’app.</p>
@@ -1326,7 +1361,7 @@ body.agent .foot{display:none}
       ['wzDurN', 'wzDurUnit', 'wzSrv', 'wzHost', 'wzUser', 'wzPass', 'wzName', 'wzConn', 'wzMxDom', 'wzOrbixId', 'wzOxDns'].forEach((id) => {
         const el = $('#' + id);
         if (el && id === 'wzDurN') el.addEventListener('input', updateDuration);
-        else if (el && id !== 'wzDurUnit') el.addEventListener('input', () => { syncForm(); foot(); });
+        else if (el && id !== 'wzDurUnit') el.addEventListener('input', () => { syncForm(); if (id === 'wzUser' || id === 'wzPass') detachChangedLine(); foot(); });
         if (el && el.tagName === 'SELECT') el.addEventListener('change', () => {
           if (id === 'wzDurUnit') updateDuration();
           else { syncForm(); foot(); }
@@ -1341,12 +1376,14 @@ body.agent .foot{display:none}
         st.expSource = ''; if ($('#wzExpSource')) $('#wzExpSource').textContent = '';
         if ($('#wzDurN')) $('#wzDurN').value = '';
         $$('[data-wzm]').forEach((x) => x.classList.toggle('on', x === b));
-        $('#wzExpT').textContent = dateIt(st.expires); $('#wzExp').value = st.expires; foot();
+        if ($('#wzExpT')) $('#wzExpT').textContent = dateIt(st.expires);
+        if ($('#wzExp')) $('#wzExp').value = st.expires;
+        foot();
       }));
       const expOther = $('#wzExpOther');
-      if (expOther) expOther.onclick = (e) => { e.preventDefault(); const x = $('#wzExp'); x.style.display = x.style.display === 'none' ? '' : 'none'; };
+      if (expOther) expOther.onclick = (e) => { e.preventDefault(); const x = $('#wzExp'); if (x) x.style.display = x.style.display === 'none' ? '' : 'none'; };
       const exp = $('#wzExp');
-      if (exp) exp.onchange = () => { if (exp.value) { st.durationMode = 'date'; st.durationN = ''; st.expires = exp.value; st.months = 0; st.expSource = ''; if ($('#wzExpSource')) $('#wzExpSource').textContent = ''; if ($('#wzDurN')) $('#wzDurN').value = ''; $$('[data-wzm]').forEach((x) => x.classList.remove('on')); $('#wzExpT').textContent = dateIt(st.expires); foot(); } };
+      if (exp) exp.onchange = () => { if (exp.value) { st.durationMode = 'date'; st.durationN = ''; st.expires = exp.value; st.months = 0; st.expSource = ''; if ($('#wzExpSource')) $('#wzExpSource').textContent = ''; if ($('#wzDurN')) $('#wzDurN').value = ''; $$('[data-wzm]').forEach((x) => x.classList.remove('on')); if ($('#wzExpT')) $('#wzExpT').textContent = dateIt(st.expires); foot(); } };
       const full = $('#wzFull');
       if (full) full.onclick = (e) => { e.preventDefault(); alive = false; closePage(); origOpen(null); };
       bindOpen(); foot();
@@ -1384,7 +1421,7 @@ body.agent .foot{display:none}
           : { id: 'p' + Date.now(), name: plName, type: 'xtream', url: '', host: st.pl.host.trim(), username, password: st.pl.password };
         const created = await api('POST', '/admin/devices', { code: st.code, name, notes: note, expires: st.expires, playlists: [playlist], active: true, maxConn: st.maxConn, app: st.app });
         let linkWarning = '';
-        if ((!agent || P.renew) && st.pl.panel) {
+        if ((!agent || P.create || P.renew) && st.pl.panel) {
           try { await api('PUT', '/admin/line-sync', { deviceId: created.id, panel: st.pl.panel, username }); }
           catch (e) { linkWarning = `allineamento non attivato: ${e.message}`; }
         }
@@ -1426,8 +1463,29 @@ body.agent .foot{display:none}
     $('#wzGo').onclick = startActivation;
     draw(true);
     page.classList.add('on'); $('#agB').scrollTop = 0;
+    if (preset.line && preset.line.username) fillLine(preset.line, preset.line.tag || '');
     loadOptions();
   }
+  window.KXNewClient = (preset) => {
+    const targets = preset && Array.isArray(preset.targets) ? preset.targets : ['kairos'];
+    if (isAgent() && (!targets.length || targets.some((k) => k === 'kairos' ? !can('create') : !['max', 'orbix'].includes(k) || !can('players')))) {
+      return toast('Non hai il permesso per attivare questi target', 1);
+    }
+    return openWizard(preset);
+  };
+  window.KXOpenLineTarget = (target, line, pre) => {
+    const panelCan = target === 'orbix' ? (!window.KXOxpCan || KXOxpCan()) : (!window.KXMxpCan || KXMxpCan());
+    if (isAgent() && !panelCan && can('players')) {
+      const expiry = window.KXLinePick && window.KXLinePick.expiryDate;
+      return window.KXNewClient({ targets: [target], line: {
+        p: line.p, tag: line.tag, username: line.username || '', password: line.password || '',
+        exp: expiry ? expiry(line.exp || line.exp_date || line.expire_date || line.expTxt) : line.exp,
+        note: line.note || '', name: pre && pre.name || line.name || '', host: '',
+      } });
+    }
+    const params = pre || { user: line.username, pass: line.password, name: line.note || line.username, note: `${line.tag || ''} ${line.username || ''}`.trim() };
+    return target === 'orbix' ? window.KXOxpNew(params) : window.KXMxpNew(params);
+  };
   const origOpen = openDrawer, origQuick = openQuick;
   window.openDrawer = openDrawer = function (d, act) {
     if (isAgent()) return !d && can('create') ? openWizard() : openClient(d);
