@@ -207,6 +207,21 @@ body.agent .foot{display:none}
   const isAgent = () => D.role === 'agent';
   const me = () => D.me || {};
   const can = (k) => !isAgent() || !!(me().perms || {})[k];
+  const linePanels = ['wolf', 'armada', 'storm', 'ro', 'slt'];
+  const canLoadLines = (perms = me().perms || {}) => !!window.KXLinePick && (!isAgent() || linePanels.some((k) => !!perms[k]));
+  const matchLineServer = async (host, servers) => {
+    if (!host) return null;
+    let server = null;
+    try {
+      const match = await api('POST', '/admin/match-server', { host });
+      if (match && match.server) server = servers.find((s) => s.id === match.server.id) || null;
+    } catch {}
+    if (!server) {
+      const value = String(host).replace(/^https?:\/\//, '').toLowerCase();
+      server = servers.find((s) => value && String(s.name).length >= 2 && value.includes(String(s.name).toLowerCase())) || null;
+    }
+    return server;
+  };
 
   /* ---------- menu a gruppi ---------- */
   const side = $('#side');
@@ -798,11 +813,13 @@ body.agent .foot{display:none}
     let appSet = false;
     const adCat = (D.addonCat || []).filter((x) => x.mode === 'some');
     const roPl = !isNew && !P.playlists, roExp = !isNew && !P.renew;
+    const showLinePick = !roPl && canLoadLines(P);
     const plRow = (p, i) => `<div class="pl" data-i="${i}"><div class="row3" style="grid-template-columns:1fr 1fr 1fr auto"><select class="inp" data-k="serverId" ${roPl ? 'disabled' : ''}>${D.servers.map((s) => `<option value="${esc(s.id)}" ${p.serverId === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}${p.serverId || isNew ? '' : '<option value="" selected>' + esc(p.serverName || 'Altro server') + '</option>'}</select>
-      <input class="inp" data-k="username" placeholder="Utente" value="${esc(p.username)}" ${roPl ? 'readonly' : ''} autocomplete="off"><input class="inp" data-k="password" type="password" placeholder="${isNew ? 'Password' : 'Password (vuota = invariata)'}" value="" ${roPl ? 'readonly' : ''} autocomplete="new-password">
+      <input class="inp" data-k="username" placeholder="Utente" value="${esc(p.username)}" ${roPl ? 'readonly' : ''} autocomplete="off"><input class="inp" data-k="password" type="password" placeholder="${isNew ? 'Password' : 'Password (vuota = invariata)'}" value="${esc(p._linePickPassword || '')}" ${roPl ? 'readonly' : ''} autocomplete="new-password">
       ${roPl ? '' : `<button class="icb" data-rm="${i}" title="Togli">✕</button>`}</div></div>`;
     $('#agT').innerHTML = isNew ? 'Nuovo cliente' : `${esc(e.name || e.code)} <span class="code" style="margin-left:6px">${esc(e.code)}</span>`;
     const lineaCard = () => `<div class="ag-c" style="grid-column:1/-1"><h4>Linea</h4><small>${linked ? 'Le linee di questa TV (gestione indipendente)' : 'Scegli il server e scrivi utente e password della linea del cliente'}</small>
+        ${showLinePick ? `<div style="margin:10px 0"><b style="display:block;margin-bottom:6px">🔎 Cerca una linea già creata</b><div class="line-pick-controls"><div id="cLinePick" data-placeholder="🔎 Cerca una linea sui pannelli disponibili"></div>${e.playlists.length > 1 ? `<label class="line-pick-dest"><span>Metti in:</span><select class="inp line-pick-target" id="cLineTarget" aria-label="Playlist di destinazione">${e.playlists.map((_, i) => `<option value="${i}">Playlist ${i + 1}</option>`).join('')}${e.playlists.length < 10 ? '<option value="new">Nuova playlist</option>' : ''}</select></label>` : ''}</div></div>` : ''}
         ${!roPl && window.KXPaste ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><textarea class="inp mono" id="cPaste" rows="2" style="flex:1;min-width:220px;font-size:12.5px" placeholder="📋 Incolla linea: link M3U o utente e password — riempie utente e password qui sotto"></textarea><button class="btn sm" id="cPasteGo" type="button">Riconosci</button><span id="cPasteMsg" class="mut" style="font-size:12px;width:100%"></span></div>` : ''}
         <div id="cPls">${e.playlists.map(plRow).join('')}</div>${roPl || e.playlists.length >= 10 ? '' : '<button class="btn sm" id="cAddPl">+ Aggiungi linea</button>'}</div>`;
     // TV collegata a un cliente: di base usa le sue linee; con «Gestione indipendente» ha linee sue (resta collegata)
@@ -838,6 +855,20 @@ body.agent .foot{display:none}
     const draw = () => {
       const code = $('#cCode') ? $('#cCode').value : '';
       $('#agB').innerHTML = body(); if ($('#cCode')) $('#cCode').value = code;
+      if (showLinePick) window.KXLinePick.mount($('#cLinePick'), async (line) => {
+        sync();
+        const target = $('#cLineTarget') ? $('#cLineTarget').value : '0';
+        const index = target === 'new' ? e.playlists.length : Math.max(0, +target || 0);
+        if (target === 'new') e.playlists.push({ id: 'p' + Date.now(), serverId: (D.servers[0] || {}).id || '', username: '', password: '' });
+        const playlist = e.playlists[index] || (e.playlists[index] = { serverId: (D.servers[0] || {}).id || '', username: '', password: '' });
+        playlist.username = line.username || '';
+        playlist.password = line.password || '';
+        playlist._linePickPassword = line.password || '';
+        const server = await matchLineServer(line.host, D.servers || []);
+        if (server) playlist.serverId = server.id;
+        draw();
+        if (!server) toast('Scegli il server', 1);
+      });
       $('#cApp') && ($('#cApp').onchange = () => { sync(); e.app = $('#cApp').value; appSet = true; draw(); });
       $('#cOth') && KXPlayers.bind($('#cOth'), e, () => { const x = D.devices.find((y) => y.id === e.id); if (x) e.orbix = x.orbix; sync(); draw(); });
       $('#cAct') && ($('#cAct').onclick = () => { e.active = !e.active; $('#cAct').classList.toggle('on', e.active); });
@@ -913,16 +944,14 @@ body.agent .foot{display:none}
       pl: { serverId: (servers[0] || {}).id || '', username: '', password: '', host: '', ref: '', note: '' },
       name: '', maxConn: 1, mxDomain: '', orbixId: '', oxDns: '0', busy: false, running: '', results: [],
     };
-    const linePanels = ['wolf', 'armada', 'storm', 'ro', 'slt'];
-    const canLoadLines = !!window.KXLinePick && (!agent || linePanels.some((k) => !!P[k]));
+    const showLinePick = canLoadLines(P);
     const showMax = !agent || (!!players().max && can('players'));
     const showOrbix = !agent || (!!players().orbix && can('players'));
-    const showLinePick = canLoadLines;
     const APPS_W = [['tv', 'Kairos Pro'], ['prem', 'Kairos Premium'], ['ktv', 'Kairos TV'], ['plus', 'Kairos Plus'], ['xc', 'Kairos XC'], ['lite', 'Kairos Lite'], ['nova', 'Kairos Nova']];
     const TARGETS = [['kairos', 'App Kairos'], ['max', 'MaxPlayer'], ['orbix', 'OrbixPlay']];
     const targetNames = { kairos: 'App Kairos', max: 'MaxPlayer', orbix: 'OrbixPlay' };
     const orbDns = (players().dns && players().dns.orbix) || [];
-    let pickLines = [], pickLoaded = !canLoadLines, mxDomains = null, mxError = '', mxLoading = showMax, dnsSaved = [], alive = true, drawPick = () => {};
+    let mxDomains = null, mxError = '', mxLoading = showMax, dnsSaved = [], alive = true;
     let lkT = 0, lkN = 0;
     const has = (k) => st.targets.has(k);
     const fmtCode = (v) => { let c = String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); if (c.length === 6 && !c.startsWith('KX')) c = 'KX' + c; return c.length > 4 ? c.slice(0, 4) + '-' + c.slice(4) : c; };
@@ -1023,11 +1052,7 @@ body.agent .foot{display:none}
     };
     const bindOpen = () => $$('[data-wzopen]').forEach((b) => (b.onclick = () => { const x = (D.devices || []).find((y) => y.id === b.dataset.wzopen); if (x) openClient(x); }));
     const fillLine = async (r, label) => {
-      let sv = null;
-      if (agent && r.host) {
-        try { const mm = await api('POST', '/admin/match-server', { host: r.host }); if (mm && mm.server) sv = servers.find((x) => x.id === mm.server.id) || null; } catch {}
-        if (!sv) { const host = (r.host || '').replace(/^https?:\/\//, '').toLowerCase(); sv = servers.find((x) => host && String(x.name).length >= 2 && host.includes(String(x.name).toLowerCase())) || null; }
-      }
+      const sv = agent ? await matchLineServer(r.host, servers) : null;
       st.pl.username = r.username || '';
       st.pl.password = r.password || '';
       st.pl.ref = label || r.tag || 'Linea';
@@ -1052,25 +1077,6 @@ body.agent .foot{display:none}
       if (!r || !r.username) { if (!quiet) toast('Incolla il link M3U o il messaggio con utente e password', 1); return; }
       await fillLine(r, '');
     };
-    drawPick = (show) => {
-      const list = $('#wzFindL'), input = $('#wzFind');
-      if (!list) return;
-      if (!show) { list.classList.remove('on'); return; }
-      list.classList.add('on');
-      if (!pickLoaded) { list.innerHTML = '<div class="wz-fp-empty">Carico le tue linee…</div>'; return; }
-      if (!pickLines.length) { list.innerHTML = '<div class="wz-fp-empty">Nessuna linea trovata sui pannelli disponibili</div>'; return; }
-      const rows = window.KXLinePick.find(pickLines, input ? input.value : '');
-      if (!rows.length) { list.innerHTML = '<div class="wz-fp-empty">Nessuna linea corrisponde alla ricerca</div>'; return; }
-      list.innerHTML = rows.map((line, i) => {
-        const used = (D.devices || []).find((d) => (d.playlists || []).some((p) => String(p.username || '').toLowerCase() === String(line.username).toLowerCase()));
-        return `<button type="button" class="wz-fp-item" data-wzline="${i}"><span class="wz-fp-head"><i class="wz-fp-tag">${esc(line.tag)}</i><b>${esc(line.username)}</b>${line.status ? `<em class="wz-fp-status">${esc(line.status)}</em>` : ''}</span>${line.note ? `<span class="wz-fp-note">${esc(line.note)}</span>` : ''}${used ? `<span class="wz-fp-used">già su ${esc(used.name || used.code || 'cliente')}</span>` : ''}</button>`;
-      }).join('');
-      $$('[data-wzline]', list).forEach((b) => (b.onclick = async () => {
-        const line = rows[+b.dataset.wzline];
-        list.classList.remove('on');
-        if (line) await fillLine(line, line.tag);
-      }));
-    };
     const body = () => {
       const targetButtons = TARGETS.filter(([k]) => k === 'kairos' || (k === 'max' ? showMax : showOrbix)).map(([k, label]) =>
         `<button type="button" class="wz-target${has(k) ? ' on' : ''}" data-wztarget="${k}" aria-pressed="${has(k)}"><i>✓</i><span>${label}</span></button>`).join('');
@@ -1085,7 +1091,7 @@ body.agent .foot{display:none}
         <div class="wz-fields"><input class="inp" id="wzOrbixId" data-mac placeholder="Codice dispositivo OrbixPlay" autocomplete="off" value="${esc(st.orbixId)}">
         <select class="inp" id="wzOxDns" ${orbDns.length ? '' : 'disabled'}><option value="">Scegli il DNS OrbixPlay…</option>${orbDns.map((x, i) => `<option value="${i}"${String(st.oxDns) === String(i) ? ' selected' : ''}>${esc(x.name || 'DNS ' + (i + 1))}${!agent && x.host ? ' — ' + esc(x.host) : ''}</option>`).join('')}</select></div>
         ${!orbDns.length ? '<div class="wz-st warn">Non hai DNS OrbixPlay disponibili per il tuo account.</div>' : ''}</div>` : '';
-      const picker = showLinePick ? '<div class="wz-fp-wrap"><input class="inp" id="wzFind" placeholder="🔎 Cerca una linea sui pannelli disponibili" autocomplete="off"><div id="wzFindL"></div></div>' : '';
+      const picker = showLinePick ? '<div id="wzLinePick" data-placeholder="🔎 Cerca una linea sui pannelli disponibili"></div>' : '';
       const paste = window.KXPaste ? '<textarea class="inp mono" id="wzPaste" rows="2" style="font-size:12.5px;margin-top:8px" placeholder="📋 Incolla un link M3U o il messaggio con server, utente e password"></textarea>' : '';
       const lineFields = agent
         ? `<select class="inp" id="wzSrv" title="Server"><option value="">Scegli il server…</option>${servers.map((x) => `<option value="${esc(x.id)}"${st.pl.serverId === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`
@@ -1113,6 +1119,7 @@ body.agent .foot{display:none}
     };
     const draw = (focus = false) => {
       $('#agB').innerHTML = body();
+      if (showLinePick) window.KXLinePick.mount($('#wzLinePick'), (line) => fillLine(line, line.tag));
       $$('[data-wztarget]').forEach((b) => (b.onclick = () => {
         syncForm();
         const k = b.dataset.wztarget;
@@ -1131,8 +1138,6 @@ body.agent .foot{display:none}
       }
       const paste = $('#wzPaste');
       if (paste) { paste.addEventListener('paste', () => setTimeout(() => pasteGo(true), 0)); paste.oninput = () => { if (/\S{6,}/.test(paste.value)) pasteGo(true); }; }
-      const find = $('#wzFind');
-      if (find) { find.onfocus = () => drawPick(true); find.oninput = () => drawPick(true); find.onblur = () => setTimeout(() => drawPick(false), 160); }
       ['wzDurN', 'wzDurUnit', 'wzSrv', 'wzHost', 'wzUser', 'wzPass', 'wzName', 'wzConn', 'wzMxDom', 'wzOrbixId', 'wzOxDns'].forEach((id) => {
         const el = $('#' + id);
         if (el && id === 'wzDurN') el.addEventListener('input', updateDuration);
@@ -1222,13 +1227,6 @@ body.agent .foot{display:none}
     $('#wzGo').onclick = startActivation;
     draw(true);
     page.classList.add('on'); $('#agB').scrollTop = 0;
-    if (canLoadLines) window.KXLinePick.load().then((items) => {
-      pickLines = items || []; pickLoaded = true;
-      const list = $('#wzFindL'); drawPick(!!(list && list.classList.contains('on')));
-    }).catch(() => {
-      pickLines = []; pickLoaded = true;
-      const list = $('#wzFindL'); drawPick(!!(list && list.classList.contains('on')));
-    });
     loadOptions();
   }
   const origOpen = openDrawer, origQuick = openQuick;
