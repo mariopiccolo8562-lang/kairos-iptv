@@ -46,7 +46,7 @@ async function agDevices(env, tree) {
 export async function oxpRoutes(req, env, path, who, ip, H, ag = null) {
   const m = req.method, { HttpErr, json, str } = H;
   const row = async () => ((await env.DB.prepare("SELECT v FROM settings WHERE k = 'oxp:email'").first()) || {}).v || '';
-  if (path === '/oxp/state' && m === 'GET') return json({ connected: !!env.ORBIX_KEY, email: ag ? '' : await row(), agent: !!ag });
+  if (path === '/oxp/state' && m === 'GET') return json({ connected: !!env.ORBIX_KEY, email: ag ? '' : await row(), agent: !!ag, servers: ag ? (ag.orbDns || []).map((x) => ({ name: x.name || 'DNS OrbixPlay' })) : [] });
   if (ag && (path === '/oxp/email' || path === '/oxp/slots' || path === '/oxp/dns' || (path === '/oxp/playlists' && m === 'POST' && !ag.canNew))) throw new HttpErr(403, 'Funzione riservata al titolare');
   if (path === '/oxp/email' && m === 'PUT') {
     const b = await H.readJSON(req, 512), e = str(b.email, 120);
@@ -67,10 +67,11 @@ export async function oxpRoutes(req, env, path, who, ip, H, ag = null) {
   }
   if (path === '/oxp/playlists' && m === 'POST') {
     const b = await H.readJSON(req, 2048);
-    const q = { deviceid: macNorm(str(b.device, 64)), playlistName: str(b.name, 40) || 'Kairos', username: str(b.user, 120), password: typeof b.pass === 'string' ? b.pass.slice(0, 200) : '', host: str(b.host, 300), hostUrl: str(b.hostUrl, 300), notes: str(b.notes, 60) };
+    const dns = ag ? (ag.orbDns || [])[Math.max(0, Math.min((ag.orbDns || []).length - 1, parseInt(b.dns, 10) || 0))] : null;
+    const q = { deviceid: macNorm(str(b.device, 64)), playlistName: str(b.name, 40) || 'Kairos', username: str(b.user, 120), password: typeof b.pass === 'string' ? b.pass.slice(0, 200) : '', host: ag ? dns && (dns.code || dns.host) || '' : str(b.host, 300), hostUrl: ag ? dns && dns.code ? dns.host : '' : str(b.hostUrl, 300), notes: str(b.notes, 60) };
     if (!/^[A-Za-z0-9:._-]{4,64}$/.test(q.deviceid)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
     if (macShort(q.deviceid)) throw new HttpErr(400, `ID incompleto: ${q.deviceid} ha ${q.deviceid.split(/[:.-]/).length} coppie, un ID OrbixPlay ne ha 6 (es. 00:1A:79:AA:BB:CC). Controllalo nell'app OrbixPlay`);
-    if (!q.username || !q.password || !q.host) throw new HttpErr(400, 'Scrivi DNS, utente e password della linea');
+    if (!q.username || !q.password || !q.host) throw new HttpErr(400, ag ? 'Scegli un DNS OrbixPlay assegnato' : 'Scrivi DNS, utente e password della linea');
     // agente: niente playlist su un dispositivo OrbixPlay che ha già liste di clienti non suoi (lo vedrebbe tutto)
     if (ag && !(await agDevices(env, ag.tree)).has(q.deviceid)) {
       const cur = ((await call(env, H, '/list-playlists', {})).playlists || []).map(plOut);
@@ -78,7 +79,7 @@ export async function oxpRoutes(req, env, path, who, ip, H, ag = null) {
     }
     const j = await call(env, H, '/add-playlist', q);
     if (ag) await env.DB.prepare('INSERT INTO ext_lists (id, owner_id, app, name, ref, ext, username, pass_seal, dns, note, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(H.pid(), ag.id, 'orbix', q.playlistName, q.deviceid, s(j.playlist_id, 64), q.username, await H.seal(env, q.password), q.host.slice(0, 80), q.notes, Date.now(), Date.now()).run().catch(() => {});
+      .bind(H.pid(), ag.id, 'orbix', q.playlistName, q.deviceid, s(j.playlist_id, 64), q.username, await H.seal(env, q.password), (dns && dns.name) || 'DNS OrbixPlay', q.notes, Date.now(), Date.now()).run().catch(() => {});
     await H.note(env, { src: 'oxp', app: 'OrbixPlay', owner: ag ? ag.id : 0, username: q.username, password: q.password, dns: q.host, mac: q.deviceid, note: q.notes || q.playlistName });
     await H.log(env, 'new', `${who}: Pannello OrbixPlay — playlist ${q.playlistName} aggiunta al dispositivo ${q.deviceid}`, ip);
     return json({ ok: true, id: s(j.playlist_id, 64) });

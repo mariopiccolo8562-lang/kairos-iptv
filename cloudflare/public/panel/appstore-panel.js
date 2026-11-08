@@ -52,6 +52,27 @@
     card.className = 'card glass'; card.id = 'appLinksCard';
     pane.insertAdjacentElement('afterbegin', card);
   }
+  if (pane && !$('#activationAppsCard')) {
+    const card = document.createElement('div');
+    card.className = 'card glass'; card.id = 'activationAppsCard';
+    pane.insertBefore(card, $('#appLinksCard'));
+  }
+
+  const saveActivation = async (next) => {
+    try { await api('PUT', '/admin/settings', { actApps: next }); await load(); toast('App da attivare aggiornate'); }
+    catch (e) { toast(e.message, 1); }
+  };
+  const renderActivation = () => {
+    const card = $('#activationAppsCard'); if (!card) return;
+    if (!isOwner()) { card.style.display = 'none'; return; }
+    const apps = Array.isArray(D.activationApps) ? D.activationApps : [];
+    card.style.display = '';
+    card.innerHTML = `<div class="hd"><h3>App da attivare in Nuovo cliente<small>Decidi quali app possono comparire nel wizard. Le puoi assegnare agli agenti nella loro scheda.</small></h3></div>
+      <div class="al-head"><span class="mut" style="font-size:12.5px">${apps.filter((x) => x.enabled).length} attive · ${apps.length} disponibili</span><span class="sp"></span><button class="btn sm" data-act-all="on">Accendi tutte</button><button class="btn sm" data-act-all="off">Spegni tutte</button></div>
+      ${apps.length ? `<div class="al-grid">${apps.map((x) => `<label class="al-c" style="flex-direction:row;align-items:center;justify-content:space-between"><b>${esc(x.name)}</b><input type="checkbox" data-act-key="${esc(x.key)}"${x.enabled ? ' checked' : ''} aria-label="Attiva ${esc(x.name)}"></label>`).join('')}</div>` : '<div class="emptyc" style="padding:18px">Aggiungi app allo store o a «Attiva app» per configurarle qui.</div>'}`;
+    card.querySelectorAll('[data-act-key]').forEach((input) => { input.onchange = () => { const next = Object.fromEntries(apps.map((x) => [x.key, x.enabled])); next[input.dataset.actKey] = input.checked; saveActivation(next); }; });
+    card.querySelectorAll('[data-act-all]').forEach((button) => { button.onclick = () => saveActivation(Object.fromEntries(apps.map((x) => [x.key, button.dataset.actAll === 'on']))); });
+  };
 
   const save = async (list) => {
     if (busy) return; busy = true;
@@ -140,7 +161,7 @@
     // per l'agente: la voce APP Store compare solo se il titolare gli ha consentito almeno un'app; la pagina mostra solo «Attiva app» (sola lettura)
     const nav = $('.nav[data-v="apps3"]');
     if (nav && !isOwner()) nav.style.display = (Array.isArray(D.appLinks) && D.appLinks.length) ? '' : 'none';
-    render();
+    render(); renderActivation();
   };
 
   if (typeof DEMO !== 'undefined' && DEMO.settings && !DEMO.settings.appLinks) {

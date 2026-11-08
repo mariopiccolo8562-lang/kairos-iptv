@@ -262,7 +262,7 @@
     if (!R.st) await state();
     if (!cfgP) cfgP = api('GET', '/admin/orcp/cfg').then((r) => { R.st.servers = r.servers || []; R.st.cfg = r.cfg || R.st.cfg; return r; }).catch(() => null);
     const r = await cfgP;
-    return r ? { name: r.cfg.name || name(), map: r.cfg.map || {}, servers: (r.cfg.portalNames || []).map((x) => x.name).filter(Boolean), dl: r.cfg.dl, apk: r.cfg.apk } : cfg();
+    return r ? { name: r.cfg.name || name(), map: r.cfg.map || {}, portalNames: r.cfg.portalNames || [], servers: (r.cfg.portalNames || []).map((x) => x.name).filter(Boolean), dl: r.cfg.dl, apk: r.cfg.apk } : cfg();
   };
   window.KXOrcpText = (o) => [`• ${o.app}: apri l'app, scegli il server «${o.server || 'indicato'}» ed entra con utente e password qui sopra.`].join('\n');
   async function openAgentApp() {

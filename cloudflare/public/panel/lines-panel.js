@@ -19,6 +19,7 @@
 .ll-v button{background:none;border:0;color:var(--mut);cursor:pointer;padding:2px 4px;border-radius:5px;font-size:12px}.ll-v button:hover{color:var(--txt,#fff);background:#ffffff14}
 .ll-app{font-weight:700}.ll-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:5px;margin-top:3px;background:rgba(52,199,123,.15);color:#6ee3a6}
 .ll-tag.ag{background:rgba(224,164,49,.16);color:#ecc06f}
+.ll-tag.pending{background:rgba(239,68,68,.18);color:#ff8f8f}
 .ll-act{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
 @media (max-width:1000px){.ll-f{grid-template-columns:1fr 1fr}.ll-row{grid-template-columns:1fr 1fr}.ll-act{grid-column:1/-1;justify-content:flex-start}}
 @media (max-width:560px){.ll-f{grid-template-columns:1fr}}`;
@@ -34,7 +35,7 @@
 
   const isOwner = () => D.role !== 'agent';
   const mineId = () => (isOwner() ? 0 : +((D.me || {}).id || 0));
-  let items = null, busy = false, F = { app: '', q: '', ow: '' }, form = null, show = new Set();
+  let items = null, busy = false, F = { app: '', q: '', ow: '', pending: false }, form = null, show = new Set();
   const blank = () => ({ id: 0, app: '', username: '', password: '', dns: '', mac: '', client: '', note: '' });
   const appList = () => {
     const src = isOwner() ? ((D.settings && D.settings.appLinks) || []) : (D.appLinks || []);
@@ -79,22 +80,23 @@
     const apps = [...new Set(base.map((x) => x.app))].sort((a, b) => a.localeCompare(b));
     if (F.app && !apps.includes(F.app)) F.app = '';
     const q = F.q.toLowerCase().trim();
-    const list = base.filter((x) => (!F.app || x.app === F.app) && (!q || [x.app, x.username, x.dns, x.dnsName, x.mac, x.deviceName, x.deviceCode, x.note, agName(x.ownerId)].join(' ').toLowerCase().includes(q)));
+    const list = base.filter((x) => (!F.app || x.app === F.app) && (!F.pending || /\bDA ATTIVARE\b/i.test(x.note || '')) && (!q || [x.app, x.username, x.dns, x.dnsName, x.mac, x.deviceName, x.deviceCode, x.note, agName(x.ownerId)].join(' ').toLowerCase().includes(q)));
     const nOf = (id) => items.filter((x) => (x.ownerId || 0) === id).length;
     const owSel = AG.length ? `<select class="inp" id="llOw" style="width:auto"><option value="">Tutte (${items.length})</option><option value="0" ${F.ow === '0' ? 'selected' : ''}>Le mie (${nOf(0)})</option>${AG.map((a) => `<option value="${a.id}" ${F.ow === String(a.id) ? 'selected' : ''}>Agente ${esc(a.username)} (${nOf(a.id)})</option>`).join('')}</select>` : '';
     const row = (x) => {
       const vis = show.has(x.id), url = appUrl(x.app), dnsTxt = x.dns || (x.dnsName ? x.dnsName : '—'), cl = x.deviceId ? (x.deviceGone ? '<span class="mut">cliente eliminato</span>' : `<a href="#" data-llopen="${esc(x.deviceId)}">${esc(x.deviceName || 'Cliente')}</a> <span class="mono mut">${esc(x.deviceCode)}</span>`) : '<span class="mut">—</span>';
+      const pending = /\bDA ATTIVARE\b/i.test(x.note || ''), note = String(x.note || '').replace(/\s*·?\s*DA ATTIVARE\b/ig, '').trim();
       return `<div class="ll-row">
-        <div><span class="ll-app">${esc(x.app)}</span><br>${x.source ? `<span class="ll-tag">${x.source.startsWith('p-') ? 'dal pannello' : 'dalla scheda'}</span> ` : ''}${agName(x.ownerId) ? `<span class="ll-tag ag">${esc(agName(x.ownerId))}</span>` : ''}</div>
+        <div><span class="ll-app">${esc(x.app)}</span><br>${pending ? `<span class="ll-tag pending">Da attivare${agName(x.ownerId) ? ` · agente ${esc(agName(x.ownerId))}` : ''}</span> ` : ''}${x.source ? `<span class="ll-tag">${x.source.startsWith('p-') ? 'dal pannello' : 'dalla scheda'}</span> ` : ''}${agName(x.ownerId) ? `<span class="ll-tag ag">${esc(agName(x.ownerId))}</span>` : ''}</div>
         <div><span class="k">Utente</span><div class="ll-v"><span class="mono">${esc(x.username)}</span><button data-llcu="${x.id}" title="Copia">⧉</button></div>
              <span class="k" style="margin-top:4px">Password</span><div class="ll-v"><span class="mono">${x.password ? (vis ? esc(x.password) : '••••••••') : '—'}</span>${x.password ? `<button data-lleye="${x.id}" title="Mostra / nascondi">👁</button><button data-llcp="${x.id}" title="Copia">⧉</button>` : ''}</div></div>
         <div><span class="k">DNS</span><div class="ll-v"><span class="mono" title="${esc(x.dns)}">${esc(dnsTxt.replace(/^https?:\/\//, ''))}</span>${x.dns ? `<button data-llcd="${x.id}" title="Copia">⧉</button>` : ''}</div>${x.mac ? `<span class="k" style="margin-top:4px">MAC / ID</span><div class="ll-v"><span class="mono">${esc(x.mac)}</span><button data-llcm="${x.id}" title="Copia">⧉</button></div>` : ''}</div>
-        <div><span class="k">Cliente</span>${cl}${x.note ? `<span class="k" style="margin-top:4px">Nota</span><span>${esc(x.note)}</span>` : ''}</div>
+        <div><span class="k">Cliente</span>${cl}${note ? `<span class="k" style="margin-top:4px">Nota</span><span>${esc(note)}</span>` : ''}</div>
         <div><span class="k">Aggiornata</span>${esc(typeof ago === 'function' ? ago(x.updated) : new Date(x.updated).toLocaleString('it-IT'))}</div>
-        <div class="ll-act">${url ? `<a class="btn sm" href="${esc(url)}" target="_blank" rel="noopener">Apri app ↗</a>` : ''}${x.source === 'orbix' || x.source === 'max' ? '' : `<button class="btn sm" data-lled="${x.id}">Modifica</button>`}<button class="btn sm danger" data-lldel="${x.id}">Togli</button></div></div>`;
+        <div class="ll-act">${pending && isOwner() ? `<button class="btn sm" data-lldone="${x.id}">Fatto</button>` : ''}${url ? `<a class="btn sm" href="${esc(url)}" target="_blank" rel="noopener">Apri app ↗</a>` : ''}${x.source === 'orbix' || x.source === 'max' ? '' : `<button class="btn sm" data-lled="${x.id}">Modifica</button>`}<button class="btn sm danger" data-lldel="${x.id}">Togli</button></div></div>`;
     };
     return `<div class="ll-top"><input class="inp" id="llQ" placeholder="Cerca utente, cliente, MAC, DNS, nota…" value="${esc(F.q)}" style="flex:1;min-width:220px">${owSel}</div>
-      <div class="filters" style="margin:0 0 6px">${[['', 'Tutte le app', base.length], ...apps.map((a) => [a, a, base.filter((x) => x.app === a).length])].map(([k, l, n]) => `<button class="fchip ${F.app === k ? 'on' : ''}" data-llf="${esc(k)}">${esc(l)}<span>${n}</span></button>`).join('')}</div>
+      <div class="filters" style="margin:0 0 6px">${[['', 'Tutte le app', base.length], ...apps.map((a) => [a, a, base.filter((x) => x.app === a).length])].map(([k, l, n]) => `<button class="fchip ${F.app === k ? 'on' : ''}" data-llf="${esc(k)}">${esc(l)}<span>${n}</span></button>`).join('')}${isOwner() ? `<button class="fchip ${F.pending ? 'on' : ''}" data-llpending>Da attivare<span>${base.filter((x) => /\bDA ATTIVARE\b/i.test(x.note || '')).length}</span></button>` : ''}</div>
       ${list.length ? list.slice(0, 500).map(row).join('') : `<p class="mut" style="padding:12px 0">${items.length ? 'Nessuna linea con questi filtri.' : 'Nessun appunto ancora: ogni attivazione da WOLF, Armada, Atlantix, MaxPlayer, OrbixPlay o dalla scheda del cliente compare qui da sola. Puoi anche incollarne una qui sopra.'}</p>`}
       ${list.length > 500 ? `<p class="mut">Mostrate 500 su ${list.length}: usa la ricerca.</p>` : ''}`;
   }
@@ -146,6 +148,7 @@
     const qi = $('#llQ'); if (qi) qi.oninput = () => { F.q = qi.value; const pos = qi.selectionStart; render(); const n = $('#llQ'); n.focus(); n.setSelectionRange(pos, pos); };
     $('#llOw') && ($('#llOw').onchange = (e) => { F.ow = e.target.value; render(); });
     $$('[data-llf]', V).forEach((b) => (b.onclick = () => { F.app = b.dataset.llf; render(); }));
+    $('[data-llpending]', V) && ($('[data-llpending]', V).onclick = () => { F.pending = !F.pending; render(); });
     const byId = (id) => items.find((x) => x.id === +id) || {};
     $$('[data-llcu]', V).forEach((b) => (b.onclick = () => copy(byId(b.dataset.llcu).username, 'Nome utente')));
     $$('[data-llcp]', V).forEach((b) => (b.onclick = () => copy(byId(b.dataset.llcp).password, 'Password')));
@@ -154,6 +157,7 @@
     $$('[data-lleye]', V).forEach((b) => (b.onclick = () => { const id = +b.dataset.lleye; show.has(id) ? show.delete(id) : show.add(id); render(); }));
     $$('[data-llopen]', V).forEach((a) => (a.onclick = (e) => { e.preventDefault(); const d = (D.devices || []).find((x) => x.id === a.dataset.llopen); d ? openQuick(d) : toast('Cliente non trovato', 1); }));
     $$('[data-lled]', V).forEach((b) => (b.onclick = () => { const x = byId(b.dataset.lled); const d = (D.devices || []).find((y) => y.id === x.deviceId); manual = true; form = { id: x.id, app: x.app, username: x.username, password: x.password, dns: x.dns, mac: x.mac, client: d ? clientLabel(d) : '', note: x.note }; render(); const f = $('#llForm'); if (f) f.scrollIntoView({ behavior: 'smooth' }); }));
+    $$('[data-lldone]', V).forEach((b) => (b.onclick = async () => { const x = byId(b.dataset.lldone); if (!(await askDanger('Segnare come attivata?', `${esc(x.username)} · ${esc(x.app)}`, 'FATTO', 'Fatto'))) return; try { await api('POST', `/admin/linked-lines/${x.id}/done`, {}); toast('Richiesta completata'); await loadItems(); } catch (e) { toast(e.message, 1); } }));
     $$('[data-lldel]', V).forEach((b) => (b.onclick = async () => {
       const x = byId(b.dataset.lldel);
       if (!(await askDanger('Togliere la linea dal registro?', `${esc(x.username)} su ${esc(x.app)}. ${x.source && x.source.startsWith('p-') ? 'È solo un appunto: la linea sul pannello e sull\'app non cambia.' : x.source ? 'È registrata dall\'attivazione: l\'app resta attiva finché non la togli dalla scheda del cliente.' : 'La linea sul pannello IPTV e sull\'app non cambia: sparisce solo da qui.'}`, 'ELIMINA', 'Togli'))) return;
