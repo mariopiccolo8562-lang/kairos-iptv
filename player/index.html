@@ -161,6 +161,9 @@ img{display:block}
 .ch .lg img{width:100%;height:100%;object-fit:contain;padding:4px}
 .ch .nm{flex:1;min-width:0;font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ch .nm small{display:block;font-weight:400;color:var(--mut);font-size:12px;margin-top:2px;overflow:hidden;text-overflow:ellipsis}
+.ch.dead{opacity:.55}.ch .dl{color:#f87171;font-weight:700;margin-right:6px} /* autopilota: canale che non funziona per nessuno */
+.nc.nfl{display:grid;place-items:center;background:radial-gradient(circle at 50% 40%,#2c2c33,#141418)}.nc.nfl img{width:72%;height:42%;object-fit:contain;filter:drop-shadow(0 6px 18px rgba(0,0,0,.6))}
+.nc.nfl .lini{font-family:'Bebas Neue';font-size:40px;color:#fff;opacity:.85}.nc.p.nfl .ft{display:flex;background:linear-gradient(transparent 55%,rgba(0,0,0,.85))}.nc.p.nfl .tg{left:auto;right:8px;top:8px;bottom:auto}
 .ch.playing{background:linear-gradient(100deg,var(--a2-30),transparent)}
 .ch.playing .n{color:var(--a1)}
 .star{width:18px;flex:none;color:var(--warn);opacity:0}.star.on{opacity:1}
@@ -1282,6 +1285,8 @@ h5.fh{margin-top:16px}
   window.kxNs = ns; if (ns) h.add('sp-native');
   var v = 'auto'; try { v = JSON.parse(localStorage.getItem('kx_rcIntro') || '""') || 'auto'; } catch (e) {}
   if (v !== 'simple' && v !== 'off') v = 'auto'; window.kxIntro = v; if (v !== 'auto') h.add('sp-' + v);
+  // autopilota: avvii lenti misurati sul dispositivo → con «Automatica» l'animazione diventa semplice; molto lenti → leggerissima
+  try { var sl = window.KairosNative ? +JSON.parse(localStorage.getItem('kx_slowBoot') || '0') || 0 : 0; if (sl && v === 'auto') { h.add('sp-simple'); h.add('sp-lo'); } if (sl >= 2 && lv !== 'off') document.body.classList.add('xlite'); } catch (e) {}
 })();</script>
     <div class="sp-bg"></div>
     <div class="sp-floor"><i></i></div>
@@ -3154,7 +3159,7 @@ const recentLive = () => S.recent.filter((r) => r.kind === 'live').map((r) => S.
 /* preferiti nell'ordine scelto (si può riordinare in Impostazioni › Organizza) */
 const favItems = (k) => (S.byId ? [...S.favs].map((id) => S.byId.get(id)).filter((x) => x && (k ? x.k === k : true)) : []);
 const tagItems = (t) => (S.byId ? (S.tags[t] || []).map((id) => S.byId.get(id)).filter(Boolean) : []);
-function chanList(c) {
+function chanList0(c) {
   if (c === 'recent') return visLive(recentLive());
   if (c === 'fav') { const f = visLive(favItems('l')); return opt('sortCh') === 'pl' ? f : sortChannels(f); }
   if (String(c).startsWith('tag:')) return sortChannels(visLive(tagItems(c.slice(4)).filter((x) => x.k === 'l')));
@@ -3279,7 +3284,9 @@ function startVariant(c, lc, bw, quality) {
   else { if (quality === '1080') cap = Math.min(cap, 3); else if (quality === '720') cap = Math.min(cap, 2); else if (quality === '480') cap = Math.min(cap, 1); if (liteSeen(c.id)) cap = Math.min(cap, r - 1); }
   // la più pesante entro il tetto, altrimenti la più leggera che c'è; mai più pesante del canale scelto
   const ok = g.filter((x) => varRankOf(x) <= Math.min(cap, r));
-  const pick = ok.length ? ok[0] : g[g.length - 1];
+  // autopilota: fra quelle entro il tetto, la più pesante che il dispositivo regge (decoder e schermo); «Massima» resta piena
+  const okDev = quality === 'max' ? ok : ok.filter(devCanPlay);
+  const pick = okDev.length ? okDev[0] : ok.length ? ok[0] : (quality === 'max' ? null : g.filter(devCanPlay).pop()) || g[g.length - 1];
   const pr = varRankOf(pick);
   return { c: pick, v: g.filter((x) => x !== pick && varRankOf(x) < pr).slice(0, 3) };
 }
@@ -3351,7 +3358,7 @@ function epgMapDialog(ch) {
 const nowOf = (ch) => { const it = epgOf(ch); if (!it) return null; const t = Date.now(); return it.find((x) => x.start <= t && x.end > t) || null; };
 function chHTML(ch, i) {
   const n = nowOf(ch);
-  return `<div class="ch ${S.previewing && S.previewing.id === ch.id ? 'playing' : ''}${isLocked(ch) ? ' lk' : ''}${S.hidden.has(ch.id) ? ' hid' : ''}${recFor(ch.id) ? ' recing' : ''}" data-f data-i="${i}"><div class="lg" data-lg="${esc(ch.id)}">${logoHTML(ch)}</div><div class="nm"><b>${esc(ch.name)}</b><small>${plBadge(ch)}${qBadge(ch)}<span data-now="${esc(ch.id)}">${esc(n ? n.title : ch.group || '')}</span></small></div><span class="cn">${ch.num}</span><svg class="star ${S.favs.has(ch.id) ? 'on' : ''}" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></div>`;
+  return `<div class="ch ${S.previewing && S.previewing.id === ch.id ? 'playing' : ''}${isLocked(ch) ? ' lk' : ''}${S.hidden.has(ch.id) ? ' hid' : ''}${recFor(ch.id) ? ' recing' : ''}${isDeadCh(ch) ? ' dead' : ''}" data-f data-i="${i}"><div class="lg" data-lg="${esc(ch.id)}">${logoHTML(ch)}</div><div class="nm"><b>${esc(ch.name)}</b><small>${deadTag(ch)}${plBadge(ch)}${qBadge(ch)}<span data-now="${esc(ch.id)}">${esc(n ? n.title : ch.group || '')}</span></small></div><span class="cn">${ch.num}</span><svg class="star ${S.favs.has(ch.id) ? 'on' : ''}" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg></div>`;
 }
 // righe di canali tenute nel DOM (con i loro loghi): metà sulle chiavette con poca memoria
 const CH_MAX = 480, chMax = () => (lowMem() ? 240 : CH_MAX);
@@ -3859,7 +3866,7 @@ function nativePlay(item, kind, fromSec, extra) {
   let srv = null;
   if (portalPl && portalAlts.length) {
     const main = plOrigin(portalPl.type === 'xtream' ? portalPl.host : portalPl.url);
-    if (main) srv = { id: portalPl.id, main, alts: portalAlts, mode: portalPl.mode || 'auto', bad: Array.isArray(S.sat) ? S.sat : [] };
+    if (main) srv = { id: portalPl.id, main, alts: portalAlts, mode: portalPl.mode || 'auto', bad: [...(Array.isArray(S.sat) ? S.sat : []), ...ACK.bad] }; // ACK.bad: server principale trovato giù dagli auto-controlli
   }
   const stored = kind === 'live' ? 0 : store.get('pos', {})[item.id] || 0;
   const start = fromSec != null ? fromSec : stored;
@@ -3868,6 +3875,9 @@ function nativePlay(item, kind, fromSec, extra) {
       quality: P.quality, buffer: P.buffer, aspect: P.aspect, brand: S.settings.brand || 'KAIROS',
       hw: opt('hw'), sub: opt('subSize'), res: perm('resInd') && !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list), adapt: !!opt('adaptQ'), drain: !!opt('drainQ'), pip: false,
       line: lc, ...(bw != null ? { bw } : {}), // Kairos Adaptive: "weak" | "normal" | "good" e banda nota in Mbps (assente se sconosciuta)
+      // autopilota: il lettore impara il motore migliore solo se la scelta è «Automatico» (mai contro pannello o cliente);
+      // connessioni libere della linea (auto-controllo recente) per preparare in anticipo il canale successivo
+      engLearn: opt(engineKey) === 'auto', ...(ACK.free != null && Date.now() - ACK.freeT < 15 * 60e3 ? { pre: { free: ACK.free } } : {}),
       ...(srv ? { srv } : {}),
       ...(extra && extra.parent ? { introKey: String(extra.parent.id), intro: store.get('intro', {})[extra.parent.id] || [], introAuto: !!opt('introAuto') } : {}) }));
   } catch (e) { return false; }
@@ -5026,6 +5036,7 @@ function renameCats(k) {
 }
 function makeRows(kind) {
   const L = S.lib, R = [];
+  if (kind === 'all') { try { const nf = nowForYou(); if (nf) R.push(nf); } catch {} } // autopilota: «Adesso per te», cambia con l'ora
   // eventi sportivi sempre per primi nella Home
   const ev = kind === 'all' && S.settings.showFootball !== false ? upcomingEvents() : [];
   if (ev.length) R.push({ title: ev.some((e) => e.live) ? '● In corso e prossimi eventi sportivi' : 'Prossimi eventi sportivi', type: 'ev', items: ev });
@@ -5135,6 +5146,7 @@ function evCard(x0, k) {
       <div class="evm"><div class="evs"><i>${teamLogo(x.home)}</i><b>${esc(x.home.name)}</b></div><span class="vs">${x.live && x.home.score != null ? `<em class="sc">${esc(x.home.score)} - ${esc(x.away.score)}</em>` : 'VS'}</span><div class="evs"><i>${teamLogo(x.away)}</i><b>${esc(x.away.name)}</b></div></div></div>`;
 }
 function cardHTML(type, x, k, i) {
+  if (type === 'nfy') { if (isLiveItem(x)) return nfyCard(x, k); type = 'poster'; } // autopilota: riga «Adesso per te» (canali e titoli)
   if (type === 'ev') return evCard(x, k);
   if (type === 'tonight') return tnCard(k);
   if (type === 'fold') {
@@ -5606,6 +5618,7 @@ const OPT = {
   textSize: ['Dimensione testi', [['s', 'Piccola'], ['m', 'Media'], ['l', 'Grande'], ['xl', 'Molto grande']], 'm', (v) => applyTextSize(v)],
   orient: ['Layout orizzontale (telefoni e tablet)', [['auto', 'Automatico'], ['land', 'Sempre orizzontale']], 'auto', (v) => applyOrient(v)],
   lockAdult: ['Blocca contenuti per adulti', YN, true],
+  autoRem: ['Promemoria automatici', YN, true],
 };
 /* lettore scelto dal fornitore nel pannello per questo cliente (vince sulla scelta fatta nell'app) */
 const ENG_KIND = { engLive: 'live', engMovie: 'movie', engSeries: 'series' };
@@ -5958,7 +5971,7 @@ function renderSettings(sec) {
       const m = store.get('epgMeta', {}), src = epgSources();
       const st = S.epgRunning ? 'In aggiornamento…' : S.xepg ? `Attiva · ${(m.n || 0).toLocaleString('it')} programmi · aggiornata alle ${new Date(m.t || S.xepg.t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : NATIVE && NATIVE.epgBuild ? 'Non ancora scaricata' : 'Guida breve (aggiorna l\'app alla 1.5 per la guida completa)';
       return `<h3>TV in diretta e guida TV</h3>${optRow('liveFmt')}${kv('Guida TV (EPG)', `<span id="eStat">${esc(st)}</span>`)}${kv('Sorgenti', src.length ? src.length + (src.length > 1 ? ' trovate' : ' trovata') : 'nessuna')}
-      <div class="sbtns"><button class="btn pri" data-f id="eUpd">↻ Forza aggiornamento guida TV</button></div>${optRow('epgShift')}
+      <div class="sbtns"><button class="btn pri" data-f id="eUpd">↻ Forza aggiornamento guida TV</button></div>${optRow('epgShift')}${optRow('autoRem')}<div class="snote" style="margin:-4px 0 10px">L'app ti avvisa poco prima dei programmi e delle partite che guardi spesso, con «Guarda» per andare subito sul canale.</div>
       <div class="snote">La guida viene presa dal tuo server (Xtream) o dall'indirizzo indicato nella lista M3U, e si aggiorna da sola ogni 3 ore. Se il tuo fornitore ti ha dato un link EPG diverso, inseriscilo qui:</div>
       ${perm('epgUrl') ? `<input class="inp" data-f id="eUrl" placeholder="Indirizzo EPG (XMLTV), es. http://server/epg.xml.gz" value="${esc(store.get('epgUrl', ''))}"><button class="btn" data-f id="eSave">Salva indirizzo EPG</button>` : ''}
       <h3 style="margin-top:26px">Canali nascosti</h3>${kv('Canali nascosti', `<span id="hCount">${S.hidden.size}</span>`)}${optRow('showHidden')}
@@ -6121,7 +6134,7 @@ const fmtDur = (ms) => { const m = Math.max(0, Math.round(ms / 60000)), h = Math
 const dayTime = (t) => { const d = new Date(t), td = new Date(); const day = d.toDateString() === td.toDateString() ? 'Oggi' : d.toDateString() === new Date(+td + 864e5).toDateString() ? 'Domani' : d.toDateString() === new Date(+td - 864e5).toDateString() ? 'Ieri' : d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }); return day + ' ' + hhmm(t); };
 
 /* ---------- controllo remoto dal pannello: impostazioni imposte (rc) e comandi (cmds) ---------- */
-const RC_CFG_KEYS = ['startScr', 'hw', 'adaptQ', 'liveFmt', 'autoNext', 'introAuto', 'resInd', 'subSize', 'textSize', 'sfx', 'epgShift', 'sortCats', 'sortCh', 'sortVod', 'lockAdult', 'engLive', 'engMovie', 'engSeries', 'showHidden', 'orient'];
+const RC_CFG_KEYS = ['startScr', 'hw', 'adaptQ', 'liveFmt', 'autoNext', 'introAuto', 'resInd', 'subSize', 'textSize', 'sfx', 'epgShift', 'sortCats', 'sortCh', 'sortVod', 'lockAdult', 'engLive', 'engMovie', 'engSeries', 'showHidden', 'orient', 'autoRem'];
 /** chiavetta con poca memoria (classe D: ~1 GB, Fire TV Stick/Lite): profilo «poca memoria» da solo */
 const lowMem = () => !!NATIVE && devClass() === 'D';
 function rcLiteApply() {
@@ -6201,7 +6214,7 @@ function updFirstSeen(a) { const fs = store.get('apkFirst', {}); if (fs.v !== a.
 function updMust() { const a = S.apkUpdate, d = updForceDays(); if (!a || d == null || S.apkReady !== a.url) return false; return Date.now() - updFirstSeen(a) >= d * 86400e3; }
 function bgUpdOn() { const v = rcGet('bgupd'); return v != null ? v !== 'off' : store.get('bgUpd', true) !== false; }
 function rcSnapshot() {
-  const o = { bgupd: bgUpdOn() ? 'on' : 'off', lite: document.body.classList.contains('xlite') ? 'max' : document.body.classList.contains('lite') ? 'on' : 'off', theme: rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema', adult: showAdult() ? 'on' : 'off', logos: autoLogoOn() ? 'on' : 'off', posters: rcGet('posters') === 'hi' ? 'hi' : 'auto', intro: window.kxIntro || 'auto' };
+  const o = { bgupd: bgUpdOn() ? 'on' : 'off', lite: document.body.classList.contains('xlite') ? 'max' : document.body.classList.contains('lite') ? 'on' : 'off', theme: rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema', adult: showAdult() ? 'on' : 'off', logos: autoLogoOn() ? 'on' : 'off', posters: rcGet('posters') === 'hi' ? 'hi' : 'auto', intro: window.kxIntro || 'auto', mergeVar: rcGet('mergeVar') === 'on' ? 'on' : 'off' };
   try { for (const k of RC_CFG_KEYS) if (OPT[k]) o['o.' + k] = opt(k); } catch {}
   try { const P = playPrefs(); for (const k of ['quality', 'buffer', 'aspect']) o['p.' + k] = P[k]; } catch {}
   return o;
@@ -7350,7 +7363,7 @@ async function afterActive() {
   await sleep(200);
   enterApp();
   if (S.fromCache) whenIdle(() => refreshLibrary(), 3000);
-  whenIdle(() => loadTrending(), 6000);
+  whenIdle(() => loadTrending(), slowLv() ? 15000 : 6000);
 }
 /* Aggiornamenti automatici: interfaccia (subito, senza reinstallare) e APK (proposto all'utente) */
 async function fetchUpdateInfo() {
@@ -7533,6 +7546,7 @@ async function sendPlayEvents() {
   try {
     const r = NATIVE && NATIVE.playEvents && NATIVE.playEvents();
     if (r) for (const e of JSON.parse(r)) {
+      try { if (e && e.k === 'live' && e.id && !e.ck) { const k = ckOf(S.byId && S.byId.get(String(e.id))); if (k) e.ck = k; } } catch {} // autopilota
       pendEvts.push(e);
       // Kairos Adaptive: gli stalli e le riduzioni di qualità del lettore alimentano la classe della linea e i canali «alleggeriti»
       try { if (e && e.id && e.k !== 'vod') { if (e.problem === 'stall' && e.action !== 'qualità ridotta in anticipo') noteStall(e.id, e.t); if (isLiteVar(e.var) || /^qualità ridotta/.test(e.action || '')) noteLite(e.id); } } catch {}
@@ -7548,6 +7562,7 @@ async function sendPlayEvents() {
   finally { evSending = false; }
 }
 async function heartbeat(force) {
+  try { habitTick(); } catch {} // autopilota: abitudini (anche quando il battito non parte)
   if (S.demo || !baseServer() || S.status !== 'active' || $('#activate').classList.contains('on')) return;
   if (document.hidden && !S.inPlayer && !force) return; // in sfondo: niente battiti (il pannello l'ha già vista andare in sfondo)
   if (!document.hidden || S.inPlayer) hbHidden = false;
@@ -7571,9 +7586,10 @@ async function heartbeat(force) {
   const sp = speedLast && isFinite(speedLast.mbps) ? { dl: +(+speedLast.mbps).toFixed(1), ul: speedLast.ul != null && speedLast.ul >= 0 ? +speedLast.ul.toFixed(1) : null, ping: Math.round(speedLast.ping || 0), jitter: Math.round(speedLast.jitter || 0), t: speedLast.t } : null;
   const body = { state, title: it ? (it.k === 'l' ? (n ? n.title : '') : it.name) : '', ch: it && it.k === 'l' ? it.name : '', chId: it ? it.id : '', group: it ? it.group || '' : '', pl: it ? it.pl || '' : '', prof: S.prof ? S.prof.name : '',
     ver: (NATIVE && NATIVE.version && NATIVE.version()) || 'web', ui: (NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || '', model: (NATIVE && NATIVE.model && NATIVE.model()) || 'browser', screen: ($('.screen.on') || {}).id || '',
-    net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off', cfg: rcSnapshot(), rcv: S.rcv || '', vis: !document.hidden || !!S.inPlayer, ...(S.kickAck ? { kickAck: S.kickAck } : {}) };
+    net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off', cfg: rcSnapshot(), rcv: S.rcv || '', vis: !document.hidden || !!S.inPlayer, ...(S.kickAck ? { kickAck: S.kickAck } : {}), ...hbExtra(it) };
   try {
-    const j = await apiPost('/api/player/heartbeat', body); if (!j) return;
+    const hbT0 = Date.now(), j = await apiPost('/api/player/heartbeat', body); if (!j) return;
+    try { hbResp(j, hbT0); } catch {} // autopilota: canali non funzionanti, esito dei controlli consegnato, orologio
     S.sat = Array.isArray(j.sat) ? j.sat : [];
     sendPlayEvents();
     if (typeof j.rc === 'string') { try { rcApply(JSON.parse(j.rc), j.rcv || ''); } catch {} } // impostazioni imposte dal pannello
@@ -7631,6 +7647,341 @@ setInterval(async () => {
   vpnApply(); loadTrending();
   showNotices();
 }, 20 * 60e3);
+
+/* =====================================================================
+   KAIROS PRO «INTELLIGENTE» (autopilota)
+   - si adatta da sola al dispositivo (decoder e schermo, NATIVE.caps) e sceglie la versione del canale che regge
+   - controlla da sola, in silenzio, che tutto funzioni (server, linea, guida TV, spazio, orologio) e ripara quando può:
+     l'esito va al pannello nel battito («chk»); al cliente solo un avviso neutro quando serve una sua azione
+   - avvio più leggero se il dispositivo risulta lento (tempi misurati a ogni apertura)
+   - impara le abitudini (per profilo, solo sul dispositivo): riga «Adesso per te» e promemoria automatici
+   - canali che non funzionano per nessuno (elenco dal pannello): in fondo alla lista con «non disponibile»
+   Mai lavoro durante la visione; sulle chiavette da 1 GB solo controlli leggeri.
+   ===================================================================== */
+/* ---- dispositivo: cosa sa decodificare (dall'APK nuovo; senza, nessun cambiamento) ---- */
+let capMemo;
+function devCaps() {
+  if (capMemo !== undefined) return capMemo;
+  let c = null; try { c = NATIVE && NATIVE.caps ? JSON.parse(NATIVE.caps() || 'null') : null; } catch {}
+  return (capMemo = c && typeof c === 'object' ? c : null);
+}
+const RX_HEVC_N = /\b(HEVC|H\.?265|X265)\b/i, RX_HDR_N = /\b(HDR(10)?|10 ?BIT|DOLBY ?VISION)\b/i, RX_HFR_N = /\b(50|60) ?FPS\b/i;
+/** il dispositivo regge questa versione del canale? 4K solo con decoder 2160p e schermo almeno 1440p; HEVC, HDR/10 bit e
+    50/60 fps solo se il decoder li ha. Senza informazioni dall'app: sì (come prima) */
+function devCanPlay(c) {
+  const k = devCaps(); if (!k || !c) return true;
+  const n = String(c.name || ''), r = varRankOf(c);
+  if (r >= 4 && (k.uhd === false || (+k.disp > 0 && +k.disp < 1440))) return false;
+  if (k.hevc === false && RX_HEVC_N.test(n)) return false;
+  if (k.b10 === false && RX_HDR_N.test(n)) return false;
+  if (k.fps60 === false && r >= 3 && RX_HFR_N.test(n)) return false;
+  return true;
+}
+const capTxt = () => { const k = devCaps(); if (!k) return ''; return [k.hevc ? 'hevc' : k.hevc === false ? 'nohevc' : '', k.uhd ? 'uhd' : k.uhd === false ? 'nouhd' : '', k.b10 ? 'b10' : '', k.fps60 ? 'fps60' : ''].filter(Boolean).join(','); };
+
+/* ---- canali che non funzionano per nessuno (dal pannello, nel battito): in fondo con «non disponibile» ---- */
+const CKM = new WeakMap();
+/** chiave del canale come la conosce il pannello: «host[:porta]|numero del flusso» ('' se non si ricava) */
+function ckOf(c) {
+  if (!c || c.k !== 'l') return '';
+  let v = CKM.get(c); if (v !== undefined) return v;
+  v = '';
+  try { const u = new URL(c.url), sid = String(c.sid || c.sidc || (u.pathname.match(/\/(\d{1,12})(?:\.[a-z0-9]+)?$/i) || [])[1] || ''); if (/^\d{1,12}$/.test(sid) && /^https?:$/.test(u.protocol)) v = u.host.toLowerCase() + '|' + sid; } catch {}
+  CKM.set(c, v); return v;
+}
+let deadV = '', deadSet = new Set(), deadGen = 0;
+{ const d = store.get('deadCh', null); if (d && Array.isArray(d.l)) { deadV = String(d.v || ''); deadSet = new Set(d.l); } }
+const isDeadCh = (c) => deadSet.size > 0 && deadSet.has(ckOf(c));
+function deadApply(d) {
+  if (!d || typeof d !== 'object') return;
+  const l = Array.isArray(d.l) ? d.l.filter((x) => typeof x === 'string').slice(0, 300) : [];
+  deadV = String(d.v || ''); deadSet = new Set(l); deadGen++;
+  store.set('deadCh', { v: deadV, l });
+}
+const deadTag = (c) => (isDeadCh(c) ? '<span class="dl">non disponibile</span>' : '');
+/** ordine delle liste dei canali: quelli non funzionanti in fondo; con «Versioni in una voce sola» (pannello, spenta di
+    serie) una voce per canale con la versione giusta per linea e dispositivo */
+const ordMemo = new WeakMap();
+function autoChans(list) {
+  const merge = rcGet('mergeVar') === 'on';
+  if ((!deadSet.size && !merge) || !list || list.length < 2) return list;
+  const lc = merge ? lineClass() : '', q = merge ? playPrefs().quality : '', key = deadGen + '|' + merge + '|' + lc + '|' + q + '|' + libGen;
+  const c = ordMemo.get(list); if (c && c.k === key) return c.out;
+  let out = list;
+  if (merge) {
+    const inL = new Set(list), seen = new Set(), bw = bwKnown(), m = [];
+    for (const x of list) {
+      const g = varGroup(x); if (!g) { m.push(x); continue; }
+      const k = varKey(x); if (seen.has(k)) continue; seen.add(k);
+      const mine = g.filter((y) => inL.has(y)), heavy = mine[0] || x, rep = startVariant(heavy, lc, bw, q).c;
+      m.push(inL.has(rep) ? rep : heavy);
+    }
+    out = m;
+  }
+  if (deadSet.size) { const ok = [], dead = []; for (const x of out) (isDeadCh(x) ? dead : ok).push(x); if (dead.length) out = ok.concat(dead); }
+  ordMemo.set(list, { k: key, out });
+  return out;
+}
+function chanList(c) { return autoChans(chanList0(c)); }
+
+/* ---- auto-controlli silenziosi (all'avvio e ogni 30 minuti, mai durante la visione) ---- */
+const ACK = { busy: false, res: (store.get('autoChk', null) || {}).r || null, sent: '', sentT: 0, sending: '', bad: [], free: null, freeT: 0, msgT: 0 };
+const AC_EVERY = 30 * 60e3;
+function acPlaylists() { return activePlaylists().map((p) => ({ p, c: xtCreds(p) })).filter((x) => x.c).slice(0, 2); }
+async function acJson(url, ms) { try { return await Promise.race([getJSON(url), sleep(ms).then(() => null)]); } catch { return null; } }
+const xtApi = (host, c) => `${String(host).replace(/\/+$/, '')}/player_api.php?username=${encodeURIComponent(c.username)}&password=${encodeURIComponent(c.password)}`;
+async function autoCheck(why) {
+  if (ACK.busy || S.demo || !NATIVE || !baseServer() || S.status !== 'active') return;
+  if (inView() || bootOn()) { whenIdle(() => autoCheck(why), 5000, 3000, 10 * 60e3); return; } // mai durante la visione
+  ACK.busy = true;
+  const r = {}, fix = [];
+  try {
+    /* 1. server e linea Xtream: una sola richiesta piccola (player_api senza azione) per lista */
+    const bad = [];
+    for (const { p, c } of acPlaylists()) {
+      let j = await acJson(xtApi(c.host, c), 7000), u = j && j.user_info;
+      if (!u) {
+        // server principale giù: se il pannello ha messo un server di riserva (modalità automatica) si prova quello
+        const alts = p.mode && p.mode !== 'auto' ? [] : (Array.isArray(p.alts) ? p.alts : []).slice(0, 3);
+        let alt = null;
+        for (const a of alts) { const k = await acJson(xtApi(a, c), 7000); if (k && k.user_info && +k.user_info.auth !== 0) { alt = a; j = k; u = k.user_info; break; } }
+        if (alt) { bad.push(plOrigin(c.host)); r.srv = 'alt'; fix.push('srv'); }
+        else { r.srv = r.srv === 'alt' ? 'alt' : 'down'; continue; }
+      } else if (!r.srv) r.srv = 'ok';
+      if (+u.auth === 0) { r.srv = 'auth'; continue; }
+      const st = String(u.status || '').toLowerCase(), exp = +u.exp_date ? +u.exp_date * 1000 : 0;
+      if (exp) r.exp = Math.floor((exp - Date.now()) / 864e5);
+      const a = parseInt(u.active_cons, 10) || 0, m = parseInt(u.max_connections, 10) || 0;
+      if (m) { r.con = a + '/' + m; ACK.free = Math.max(0, m - a); ACK.freeT = Date.now(); }
+      r.acc = (exp && exp < Date.now()) || st === 'expired' ? 'exp' : st && st !== 'active' ? 'off' : m && a >= m ? 'full' : r.acc || 'ok';
+      // orologio: se il pannello non l'ha già detto, l'ora del server della lista
+      const sn = j.server_info && +j.server_info.timestamp_now;
+      if (sn > 1e9 && ACK.skew == null) ACK.skewX = Math.round((Date.now() - sn * 1000) / 60e3);
+    }
+    ACK.bad = bad;
+    /* 2. orologio: differenza con l'ora del pannello (misurata nel battito), altrimenti con il server della lista */
+    const sk = ACK.skew != null ? ACK.skew : ACK.skewX;
+    if (sk != null) r.clk = sk;
+    /* 3. guida TV: vecchia → si riscarica da sola (una guida illeggibile è una cache rovinata: idem) */
+    if (NATIVE.epgBuild && S.lib.live.length) {
+      const src = epgSources(), m = store.get('epgMeta', {}), path = NATIVE.epgPath && NATIVE.epgPath();
+      if (!src.length) r.epg = 'none';
+      else {
+        let old = !m.t || Date.now() - m.t > 12 * 3600e3, broken = false;
+        // file della guida salvato ma illeggibile (cache rovinata): si riscarica (non sulle chiavette da 1 GB, dove si rilegge da sola)
+        if (!old && path && !S.xepg && +m.n > 0 && !lowMem()) { try { broken = !(await loadXepgFile(path)); } catch { broken = true; } }
+        if (!old && S.xepg) { // copertura: dei canali con la guida (fra i primi 400), quanti hanno ancora programmi fra 2 ore
+          let n = 0, ok = 0; const t2 = Date.now() + 2 * 3600e3, L = S.lib.live;
+          for (let i = 0; i < L.length && i < 400 && n < 60; i++) { const it = xepgItems(L[i]); if (!it || !it.length) continue; n++; if (it[it.length - 1].end > t2) ok++; }
+          if (n >= 5 && ok / n < 0.5) old = true;
+        }
+        if (old || broken) {
+          const b = inView() ? null : await buildXmltv(true);
+          r.epg = b && b.ok ? 'fix' : 'err'; if (b && b.ok) fix.push(broken ? 'cache' : 'epg');
+        } else r.epg = 'ok';
+      }
+    }
+    /* 4. spazio libero: poco → pulizia delle cache (APK nuovo) */
+    if (NATIVE.storage) {
+      let d = null; try { d = JSON.parse(NATIVE.storage() || 'null'); } catch {}
+      if (d && +d.free >= 0) {
+        r.mb = Math.round(+d.free); r.dsk = r.mb < 300 ? 'low' : 'ok';
+        if (r.dsk === 'low' && NATIVE.trimDisk) {
+          try { NATIVE.trimDisk(); } catch {}
+          await sleep(1500);
+          try { const e = JSON.parse(NATIVE.storage() || 'null'); if (e && +e.free >= 0) { r.mb = Math.round(+e.free); if (r.mb >= 300) { r.dsk = 'fix'; fix.push('disk'); } } } catch {}
+        }
+      }
+    }
+    /* 5. lettore imparato, decodifica del dispositivo, avvio */
+    try { const e = NATIVE.engMemo && NATIVE.engMemo(); if (e) r.eng = String(e).slice(0, 40); } catch {}
+    const cp = capTxt(); if (cp) r.cap = cp;
+    const bp = store.get('bootPerf', null); if (bp && bp.med) { r.boot = Math.round(bp.med); r.slow = +store.get('slowBoot', 0) || 0; }
+    if (fix.length) r.fix = [...new Set(fix)].join(',');
+    ACK.res = r; store.set('autoChk', { r, t: Date.now() });
+    acTell(r);
+  } catch (e) { uiErr((e && e.message) || 'auto-controllo', 'autoCheck'); }
+  finally { ACK.busy = false; }
+}
+/** al cliente solo quando serve una sua azione, con parole neutre: linea scaduta (al più una volta al giorno) e orologio sbagliato */
+function acTell(r) {
+  const now = Date.now();
+  if ((r.acc === 'exp' || r.acc === 'off') && now - (+store.get('acExpSeen', 0) || 0) > 864e5 && !S.inPlayer) {
+    const dt = typeof r.exp === 'number' && r.exp < 0 ? new Date(now + r.exp * 864e5).toLocaleDateString('it-IT') : '';
+    setTimeout(() => { if (!S.inPlayer && !$('#updM') && !bootOn() && noticeModal('Abbonamento da rinnovare', r.acc === 'exp' ? `La linea dei canali risulta scaduta${dt ? ' dal ' + dt : ''}. Per continuare a guardare va rinnovata.` : 'La linea dei canali risulta sospesa. Per continuare a guardare va riattivata.', 'warn')) store.set('acExpSeen', Date.now()); }, 1200);
+  }
+  if (typeof r.clk === 'number' && Math.abs(r.clk) >= 15 && now - (+store.get('acClkSeen', 0) || 0) > 3 * 864e5) {
+    store.set('acClkSeen', now);
+    setTimeout(() => toast('La data o l\'ora del dispositivo non sono giuste: correggile nelle impostazioni del dispositivo (la guida TV sarebbe sfasata)', 7000), 4000);
+  }
+}
+/** campi in più del battito: impronta dei canali non funzionanti, canale in onda (per «funziona di nuovo»), esito dei controlli */
+function hbExtra(it) {
+  const o = { dv: deadV };
+  if (it && it.k === 'l') { const k = ckOf(it); if (k) o.ck = k; }
+  if (ACK.res) { const s = JSON.stringify(ACK.res); if (s !== ACK.sent || Date.now() - ACK.sentT > 15 * 60e3) { o.chk = ACK.res; ACK.sending = s; } }
+  return o;
+}
+function hbResp(j, t0) {
+  if (!j) return;
+  if (ACK.sending) { ACK.sent = ACK.sending; ACK.sentT = Date.now(); ACK.sending = ''; }
+  if (j.dead) deadApply(j.dead);
+  // orologio: istante del pannello a metà del viaggio della richiesta (minuti di differenza)
+  if (+j.ts > 1e12 && Date.now() - t0 < 10e3) ACK.skew = Math.round(((t0 + Date.now()) / 2 - +j.ts) / 60e3);
+}
+setInterval(() => whenIdle(() => autoCheck('periodico'), 1000, 5000, 20 * 60e3), AC_EVERY);
+
+/* ---- avvio più veloce sui dispositivi lenti (tempi misurati: mediana delle ultime aperture dalla memoria) ---- */
+const KX_IN0 = lastInput; // nessun tasto premuto finora: l'avvio misurato è quello «senza mani»
+function bootMeasure() {
+  if (!NATIVE || !S.fromCache || lastInput !== KX_IN0) return; // solo aperture dalla memoria e senza tasti premuti (profilo, PIN): la rete e le persone non contano
+  const ms = Math.round(performance.now());
+  let n = 0, long = 0, last = performance.now();
+  const t0 = last;
+  (function f(t) { n++; if (t - last > 50) long++; last = t; if (t - t0 < 1500) requestAnimationFrame(f); else done(); })(t0);
+  function done() {
+    const bp = store.get('bootPerf', null) || {}, a = (Array.isArray(bp.a) ? bp.a : []).concat(ms).slice(-5), j = (Array.isArray(bp.j) ? bp.j : []).concat(n ? long / n : 0).slice(-5);
+    const med = (x) => x.slice().sort((p, q) => p - q)[Math.floor(x.length / 2)];
+    const m = med(a), jk = med(j), cur = +store.get('slowBoot', 0) || 0;
+    let lv = m > 15000 || jk > 0.5 ? 2 : m > 8000 || jk > 0.25 ? 1 : 0;
+    if (lv < cur && (m > (cur === 2 ? 12000 : 6500) || jk > (cur === 2 ? 0.4 : 0.2))) lv = cur; // per scendere serve un margine
+    if (a.length < 2) lv = cur; // una misura sola non basta
+    store.set('bootPerf', { a, j, med: m });
+    if (lv !== cur) store.set('slowBoot', lv);
+  }
+}
+const slowLv = () => (NATIVE ? +store.get('slowBoot', 0) || 0 : 0);
+
+/* ---- abitudini (per profilo, solo sul dispositivo): canali e generi per fascia oraria e giorno ---- */
+const slotOf = (t) => { const d = new Date(t), w = d.getDay(); return (w === 0 ? 2 : w === 6 ? 1 : 0) * 24 + d.getHours(); };
+function habits() { const h = store.get('habits', null); return h && typeof h === 'object' && h.v === 1 && h.c && h.g ? h : { v: 1, c: {}, g: {} }; }
+function habBump(map, key, sl, now, extra, max) {
+  const e = map[key] || (map[key] = { s: {}, t: 0 });
+  e.s[sl] = (e.s[sl] || 0) + 1; e.t = now; if (extra) Object.assign(e, extra);
+  const ks = Object.keys(map); if (ks.length > max) { ks.sort((a, b) => map[a].t - map[b].t); for (const k of ks.slice(0, ks.length - max)) delete map[k]; }
+}
+/** quanto è abituale adesso: stessa ora (peso 1), ora vicina (0,5); stesso tipo di giorno (feriale/sabato/domenica) o un altro (0,35); dimezza ogni 3 settimane */
+function habScore(e, now) {
+  const sl = slotOf(now), day = Math.floor(sl / 24), hr = sl % 24;
+  let s = 0;
+  for (const k in e.s) { const d = Math.floor(+k / 24), h = +k % 24, dh = Math.min(Math.abs(h - hr), 24 - Math.abs(h - hr)), w = dh === 0 ? 1 : dh === 1 ? 0.5 : 0; if (w) s += e.s[k] * w * (d === day ? 1 : 0.35); }
+  return s * Math.pow(0.5, (now - (+e.t || 0)) / (21 * 864e5));
+}
+const HB = { id: '', acc: 0, last: 0, done: new Set() };
+/** dal battito (ogni 20 s in visione): 3 minuti di fila sullo stesso canale (5 per film e serie) = un'abitudine di quell'ora */
+function habitTick() {
+  const now = Date.now(), dt = HB.last ? Math.min(60e3, now - HB.last) : 0; HB.last = now;
+  const [st, it] = hbState();
+  if (!it || st === 'idle' || S.demo) { HB.id = ''; HB.acc = 0; return; }
+  if (it.id !== HB.id) { HB.id = it.id; HB.acc = 0; return; }
+  HB.acc += dt;
+  const sl = slotOf(now), key = it.id + '@' + sl + '@' + new Date(now).toDateString();
+  if (HB.acc < (it.k === 'l' ? 180e3 : 300e3) || HB.done.has(key)) return;
+  HB.done.add(key); HB.acc = 0;
+  try { habitRec(it, now, sl); } catch {}
+}
+const RX_SPORT_CH = /sport|calcio|dazn|eurosport|serie ?a\b|football|formula ?1|\bf1\b|motogp|tennis|\bnba\b|\bufc\b|golf|basket|rugby/i;
+function habitRec(it, now, sl) {
+  const h = habits();
+  if (it.k === 'l') {
+    habBump(h.c, it.id, sl, now, RX_SPORT_CH.test((it.group || '') + ' ' + it.name) ? { sp: 1 } : null, 150);
+    remLearn(it, now);
+  } else {
+    const g = String(it.group || '').slice(0, 60); if (!g) { store.set('habits', h); return; }
+    habBump(h.g, (it.ep || it.k === 's' ? 's' : 'm') + '|' + g, sl, now, null, 60);
+  }
+  store.set('habits', h);
+}
+const FASCIA = (hr) => (hr < 5 ? 'notte' : hr < 12 ? 'mattina' : hr < 14 ? 'ora di pranzo' : hr < 19 ? 'pomeriggio' : hr < 23 ? 'sera' : 'notte');
+let nfySlot = -1;
+/** riga «Adesso per te» in cima alla Home: canali aperti di solito a quest'ora, sport se è la sua abitudine (la domenica,
+    la sera…) con l'evento in corso, titoli nuovi dei generi visti in questa fascia. Almeno 3 contenuti, altrimenti niente */
+function nowForYou() {
+  if (S.demo || !S.byId) return null;
+  const now = Date.now(), sl = slotOf(now), h = habits(), out = [], seen = new Set();
+  nfySlot = sl;
+  const add = (x) => { if (x && !seen.has(x.id) && !isLocked(x) && homeOk(x) && !isDeadCh(x) && !(x.k === 'l' && S.hidden.has(x.id))) { seen.add(x.id); out.push(x); } };
+  const ch = Object.entries(h.c).map(([id, e]) => [id, habScore(e, now), e.sp]).filter((x) => x[1] >= 1.5).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  // sport: se a quest'ora di solito guarda canali sportivi e c'è un evento in corso, prima il suo canale
+  if (!lowMem() && ch.some((x) => x[2]) && S.lib.live.length) {
+    for (const e of upcomingEvents().filter((x) => x.live).slice(0, 2)) { try { const c = eventChannels(e)[0]; if (c) add(c.ch); } catch {} }
+  }
+  for (const [id] of ch) add(S.byId.get(id));
+  const g = Object.entries(h.g).map(([k, e]) => [k, habScore(e, now)]).filter((x) => x[1] >= 1.5).sort((a, b) => b[1] - a[1]).slice(0, 2);
+  if (g.length && S.byGroup) {
+    const seenV = new Set([...S.watched, ...S.recent.map((r) => r.id)]);
+    for (const [k] of g) {
+      const kind = k[0], grp = k.slice(2);
+      // serie già iniziate di quel genere, poi titoli nuovi del genere (i più votati e recenti)
+      for (const r of S.recent) { const x = S.byId.get(r.id); if (x && x.k === kind && x.group === grp) add(x); }
+      const arr = (S.byGroup.get(kind + grp) || []).filter((x) => !seenV.has(x.id));
+      for (const x of topBy(arr.slice(0, 1500), 6, (y) => (+y.rating || 0) + (+y.year >= new Date().getFullYear() - 2 ? 1.5 : 0))) add(x);
+    }
+  }
+  if (out.length < 3) return null;
+  const day = Math.floor(sl / 24);
+  return { title: 'Adesso per te', sub: `quello che guardi di solito ${['nei giorni feriali', 'il sabato', 'la domenica'][day]} ${day ? '' : 'di '}${FASCIA(sl % 24)}`.replace(/\s+/g, ' '), type: 'nfy', items: safe(out).slice(0, 24) };
+}
+/** card di un canale nella riga «Adesso per te»: stessa forma delle locandine (riga uniforme), logo al centro, LIVE in alto */
+function nfyCard(x, k) {
+  return `<div class="nc p nfl${isLocked(x) ? ' lk' : ''}" data-f data-k="${k}"><span class="tg">LIVE</span>${x.logo ? `<img loading="lazy" decoding="async" src="${esc(x.logo)}" data-t="${esc(x.name.slice(0, 2).toUpperCase())}" onerror="kxImgTxt(this,'lini')">` : `<span class="lini">${esc(x.name.slice(0, 2).toUpperCase())}</span>`}<div class="ft">${esc(x.name)}</div>${plBadge(x)}</div>`;
+}
+// la riga cambia con l'ora: Home visibile, telecomando fermo e fascia cambiata → la Home si ridisegna (senza perdere il punto)
+setInterval(() => {
+  if (nfySlot < 0 || slotOf(Date.now()) === nfySlot || S.inPlayer || bootOn() || !$('#home').classList.contains('on') || $('.speedm.on') || $('#drawer.on') || Date.now() - lastInput < 60e3) return;
+  try { rebuildBrowse($('#home'), 'all', cur); } catch {}
+}, 5 * 60e3);
+
+/* ---- promemoria automatici: programmi e squadre seguiti spesso (dalle visioni), avviso poco prima con «Guarda» ---- */
+const RX_GENERIC = /^(nessuna informazione|no information|programmazione|to be announced|tba|fine trasmissioni|in onda|diretta|live|film|telefilm|news)$/;
+function normProg(t) {
+  let s = normT(t).replace(/\b(ep|episodio|puntata|stagione|st|parte|part)\s*\d+\b/g, ' ').replace(/\bs\d{1,2}\s?e\d{1,3}\b/g, ' ').replace(/\b(replica|prima tv|in diretta|live|r)\b/g, ' ').replace(/\b\d+\b/g, ' ').replace(/\s+/g, ' ').trim();
+  return s.length >= 4 && !RX_GENERIC.test(s) ? s.slice(0, 60) : '';
+}
+const normTeam = (n) => normT(n).replace(/\b(ac|fc|as|ss|us|ssc|afc|cf|sc|calcio|club)\b/g, ' ').replace(/\s+/g, ' ').trim();
+function autoRemDb() { const a = store.get('autoRem', null); return a && typeof a === 'object' && a.p && a.tm ? a : { p: {}, tm: {}, off: {}, shown: {} }; }
+const dayKey = (t) => new Date(t).toDateString();
+function remLearn(ch, now) {
+  const a = autoRemDb(), today = dayKey(now), push = (o, k, n, extra) => { const e = o[k] || (o[k] = { n, d: [], t: 0 }); if (!e.d.includes(today)) e.d = e.d.concat(today).slice(-8); e.t = now; if (extra) extra(e); };
+  const pr = nowOf(ch), pk = pr && normProg(pr.title);
+  if (pk) push(a.p, pk, String(pr.title).slice(0, 80), (e) => { e.ch = [ch.id, ...(e.ch || []).filter((x) => x !== ch.id)].slice(0, 3); });
+  // squadre: l'evento da cui si è partiti, oppure un evento di adesso con le due squadre nel titolo del programma
+  const evs = [];
+  if (evBack && evBack.e && evBack.e.home) evs.push(evBack.e);
+  if (pr) { const tl = normT(pr.title); for (const e of (S.events || []).slice(0, 40)) if (e && e.home && e.away && tl.includes(normTeam(e.home.name)) && tl.includes(normTeam(e.away.name))) evs.push(e); }
+  for (const e of evs.slice(0, 2)) for (const tm of [e.home, e.away]) { const k = normTeam(tm.name); if (k.length >= 3) push(a.tm, k, tm.name); }
+  for (const o of [a.p, a.tm]) { const ks = Object.keys(o); if (ks.length > 80) { ks.sort((x, y) => o[x].t - o[y].t); for (const k of ks.slice(0, ks.length - 80)) delete o[k]; } }
+  store.set('autoRem', a);
+}
+function autoRemCheck() {
+  if (!opt('autoRem') || S.demo || S.inPlayer || document.hidden || bootOn() || $('.speedm.on') || $('#drawer.on') || !S.byId) return;
+  const a = autoRemDb(), now = Date.now(), cand = [];
+  for (const [k, e] of Object.entries(a.p)) {
+    if ((e.d || []).length < 2 || a.off[k]) continue; // seguito: visto in almeno 2 giorni diversi
+    for (const id of e.ch || []) {
+      const ch = S.byId.get(id); if (!ch || isLocked(ch)) continue;
+      for (const p of epgOf(ch) || []) if (p.start - now <= 10 * 60e3 && now - p.start < 5 * 60e3 && normProg(p.title) === k) cand.push({ k: 'p:' + k + '@' + p.start, off: k, title: p.title, ch, start: p.start });
+    }
+  }
+  for (const e0 of upcomingEvents()) {
+    const e = normEv(e0); if (!e || !e.home) continue;
+    const t = Date.parse(e.start); if (!(t - now <= 15 * 60e3 && now - t < 5 * 60e3)) continue;
+    for (const tm of [e.home, e.away]) { const k = normTeam(tm.name), f = a.tm[k]; if (f && (f.d || []).length >= 2 && !a.off['t:' + k]) { cand.push({ k: 'e:' + e.id, off: 't:' + k, title: evTitle(e), e, start: t }); break; } }
+  }
+  const c = cand.find((x) => !a.shown[x.k] && !(x.ch && S.reminders.some((r) => r.ch === x.ch.id && r.start === x.start)));
+  if (!c) return;
+  a.shown[c.k] = now; const ks = Object.keys(a.shown); if (ks.length > 120) for (const k of ks.slice(0, ks.length - 120)) delete a.shown[k];
+  store.set('autoRem', a);
+  const go = c.ch || (c.e && (() => { try { const x = eventChannels(c.e)[0]; return x && x.ch; } catch { return null; } })());
+  fx('ok');
+  kxModal('arM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">🔔 ${c.start > now ? 'TRA POCO' : 'È APPENA INIZIATO'}</div><h2>${esc(c.title)}</h2><p class="mut">${c.start > now ? 'Inizia alle ' : 'Iniziato alle '}${hhmm(c.start)}${go ? ' su ' + esc(go.name) : ''} · te lo proponiamo perché lo guardi spesso</p>
+    <div class="sbtn"><button class="btn pri" data-f id="arGo">▶ Guarda</button><button class="btn" data-f id="arNo">Ignora</button><button class="btn" data-f id="arOff">Non avvisarmi più</button></div>`);
+  $('#arGo').onclick = () => { back(); if (go) openFs(go, 'live'); else if (c.e) openEvent(c.e); };
+  $('#arNo').onclick = () => back();
+  $('#arOff').onclick = () => { const b = autoRemDb(); b.off[c.off] = 1; store.set('autoRem', b); back(); toast('Non ti avviseremo più per questo'); };
+  setTimeout(() => focus($('#arGo'), true), 40);
+}
+setInterval(() => { try { autoRemCheck(); } catch {} }, 60e3);
 
 /* ---------------- segnala un problema ---------------- */
 function reportDialog(preset) {
@@ -7754,9 +8105,12 @@ async function enterHome() {
   warpStop && warpStop();
   if (S.apkUpdate) setTimeout(() => updOfferWhenFree(), 900); // nel lettore aspetta il ritorno in un menu
   setTimeout(showNotices, S.apkUpdate ? 2500 : 1600);
-  whenIdle(autoLogos, S.fromCache ? 9000 : 5000);
-  whenIdle(() => buildXmltv(), S.fromCache ? 2500 : 4000);
+  const slow = slowLv(); // autopilota: dispositivo lento (tempi misurati) → loghi e guida più tardi
+  whenIdle(autoLogos, (S.fromCache ? 9000 : 5000) * (slow ? 2 : 1));
+  whenIdle(() => buildXmltv(), (S.fromCache ? 2500 : 4000) * (slow ? 3 : 1));
   setTimeout(() => heartbeat(true), 2000);
+  try { bootMeasure(); } catch {}
+  whenIdle(() => autoCheck('avvio'), slow ? 90e3 : 45e3, 5000, 10 * 60e3); // auto-controlli silenziosi, mai durante la visione
 }
 function startDemo() {
   S.demo = true; clearInterval(pollT);
@@ -7772,7 +8126,7 @@ async function boot() {
   const t = store.get('theme'); applyTheme(t || 'cinema');
   fx('boot');
   requestAnimationFrame(() => bootBar(.3));
-  const anim = sleep(1450); // durata dell'animazione del logo
+  const anim = sleep(slowLv() ? 600 : 1450); // durata dell'animazione del logo (dispositivo lento: si aspetta meno)
   let ok = false;
   if (baseServer()) { try { await register(); ok = true; } catch {} }
   if (t) applyTheme(t);
@@ -7796,7 +8150,7 @@ async function boot() {
   enterApp();
   // avvio istantaneo dalla memoria: la lista viene riscaricata in sottofondo
   if (S.fromCache) whenIdle(() => refreshLibrary(), 3000);
-  whenIdle(() => loadTrending(), 6000);
+  whenIdle(() => loadTrending(), slowLv() ? 15000 : 6000);
 }
 async function loadOrCache() {
   S.fromCache = false;
