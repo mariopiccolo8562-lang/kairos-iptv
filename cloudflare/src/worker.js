@@ -5211,6 +5211,20 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     return json({ ok: true });
   }
 
+  if (path === '/devices/lookup' && m === 'GET') {
+    if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può cercare codici');
+    const code = codeNorm(url.searchParams.get('code'));
+    if (!CODE_RE.test(code)) return json({ ok: false, error: 'Il codice è come KXAB-12CD: KX e altre 6 lettere o cifre' });
+    const d = await env.DB.prepare('SELECT id, owner_id, parent, active, playlists, name, notes, expires, app, model, created_at FROM devices WHERE code = ?').bind(code).first();
+    if (!d) return json({ ok: true, code, found: false });
+    const p = await env.DB.prepare('SELECT ver, t FROM presence WHERE device_id = ?').bind(d.id).first().catch(() => null);
+    const app = appOfVer(p && p.ver, d.app);
+    const info = { app, appName: APP_NAME[app] || 'Kairos', model: str(d.model, 60), seen: +(p && p.t) || +d.created_at || 0 };
+    const free = await env.DB.prepare(`SELECT 1 AS x FROM devices WHERE id = ? AND ${FREE_DEV}`).bind(d.id).first();
+    if (free) return json({ ok: true, code, found: true, free: true, ...info });
+    if (!+d.owner_id) return json({ ok: true, code, found: true, mine: true, id: d.id, name: d.name, ...info });
+    return json({ ok: true, code, found: true, taken: true });
+  }
   if (path === '/devices' && m === 'POST') {
     const b = await readJSON(req);
     let code = str(b.code, 20).toUpperCase();
