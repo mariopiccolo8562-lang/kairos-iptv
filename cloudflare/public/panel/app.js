@@ -288,13 +288,15 @@ addEventListener('resize', () => drawChart());
 function renderDevices() {
   // vista a schede/tabella nuova (kc.js): la vecchia tabella è nascosta, inutile ridisegnarla (era la parte più lenta)
   { const V = $('#v-devices'); if (V && V.classList.contains('dv-cardsview')) return; }
+  const codeOnly = D.role !== 'agent' && !window.__assist && !!(D.settings || {}).codeOnly;
+  const untouchedPending = (d) => !d.parent && !+d.active && !(d.playlists || []).length && !d.name && !d.notes && !d.expires;
   const soon = (d) => d.status === 'active' && !d.parent && daysLeft(d) !== null && daysLeft(d) <= 14;
   const fit = (d, s) => s === 'all' || (s === 'soon' ? soon(d) : d.status === s);
   const cnt = (s) => D.devices.filter((d) => fit(d, s)).length;
-  $('#filters').innerHTML = ['all', 'active', 'soon', 'pending', 'expired', 'disabled'].map((s) => `<button class="fchip ${D.filter === s ? 'on' : ''}" data-fl="${s}">${s === 'all' ? 'Tutti' : s === 'soon' ? 'In scadenza' : STL[s]}<span>${cnt(s)}</span></button>`).join('');
+  $('#filters').innerHTML = ['all', 'active', 'soon', 'pending', 'expired', 'disabled'].map((s) => `<button class="fchip ${D.filter === s && !(codeOnly && s === 'pending') ? 'on' : ''}" data-fl="${s}">${s === 'all' ? 'Tutti' : s === 'soon' ? 'In scadenza' : STL[s]}<span>${cnt(s)}</span></button>`).join('');
   $$('[data-fl]').forEach((b) => (b.onclick = () => { D.filter = b.dataset.fl; renderDevices(); }));
   const hay = (d) => { const p = parentOf(d); return [d.code, d.name, d.notes, d.model, p ? p.name + ' ' + p.code : ''].join(' ').toLowerCase(); };
-  const list = D.devices.filter((d) => fit(d, D.filter || 'all') && (!D.q || hay(d).includes(D.q)));
+  const list = D.devices.filter((d) => !(codeOnly && untouchedPending(d)) && fit(d, D.filter || 'all') && (!D.q || hay(d).includes(D.q)));
   // le connessioni collegate compaiono subito sotto il loro cliente principale
   const inList = new Set(list.map((d) => d.id)), ordered = [];
   const kidsIn = new Map(); for (const k of list) if (k.parent) { const x = kidsIn.get(k.parent); x ? x.push(k) : kidsIn.set(k.parent, [k]); }
@@ -513,7 +515,7 @@ function renderDrawer() {
     ${isNew ? '' : `<label class="lbl">Collegare un altro dispositivo</label><button class="btn" id="eLinkCode" style="width:100%">🔗 Genera codice di collegamento (6 cifre)</button><small class="mut" style="display:block;margin-top:6px;font-size:12px">Sulla nuova TV il cliente sceglie «Ho già un abbonamento» e scrive il codice. Vale 10 minuti.</small>`}`;
   // scheda a sezioni numerate, con un menu rapido in alto per saltare alla sezione
   const sec = (id, n, t, sub, html) => html.trim() ? `<section class="dsec" id="ds-${id}"><div class="dsh"><i>${n}</i><div><b>${t}</b>${sub ? `<small>${sub}</small>` : ''}</div></div>${html}</section>` : '';
-  const S1 = `${isNew ? `<label class="lbl">Codice dispositivo</label><input class="inp mono" id="eCode" placeholder="Vuoto = generato, oppure quello mostrato dall'app (KXAB-12CD)" value="${esc(edit.code)}">` : `<div class="tog" style="cursor:default"><div><b>${edit.bound ? '🔒 Collegato al dispositivo' : '🔓 Non ancora collegato'}</b><small>${edit.bound ? 'Il codice funziona solo sul dispositivo che l\'ha generato. Se il cliente cambia TV o reinstalla l\'app, sblocca il collegamento.' : 'Il primo dispositivo che usa questo codice verrà collegato.'}</small></div>${edit.bound ? '<button class="btn sm" id="eReset">Sblocca</button>' : ''}</div>`}
+  const S1 = `${isNew ? `<label class="lbl">Codice dispositivo</label><input class="inp mono" id="eCode" placeholder="Scrivi il codice che il cliente vede sull'app (KXAB-12CD)" value="${esc(edit.code)}">` : `<div class="tog" style="cursor:default"><div><b>${edit.bound ? '🔒 Collegato al dispositivo' : '🔓 Non ancora collegato'}</b><small>${edit.bound ? 'Il codice funziona solo sul dispositivo che l\'ha generato. Se il cliente cambia TV o reinstalla l\'app, sblocca il collegamento.' : 'Il primo dispositivo che usa questo codice verrà collegato.'}</small></div>${edit.bound ? '<button class="btn sm" id="eReset">Sblocca</button>' : ''}</div>`}
     ${linkedBox}${linkBox}${moveBox}
     <label class="lbl">${linked ? 'Nome del dispositivo' : 'Nome cliente'}</label><input class="inp" id="eName" placeholder="${linked ? 'es. Camera da letto' : 'es. Mario Rossi'}" value="${esc(edit.name)}">
     ${!linked && D.role !== 'agent' && (D.agents || []).length ? `<label class="lbl">Responsabile</label><select class="inp" id="eOwner"><option value="0">Tu (nessun agente)</option>${D.agents.map((a) => `<option value="${a.id}" ${+edit.ownerId === a.id ? 'selected' : ''}>${esc(a.username)}${a.active ? '' : ' (disattivato)'}</option>`).join('')}</select><small class="mut" style="display:block;margin-top:6px;font-size:12px">L'agente scelto vede e gestisce questo cliente dal suo pannello.</small>` : ''}`;
@@ -719,8 +721,13 @@ function renderSettings() {
   renderAddonCfg();
   // l'aggiornamento automatico ogni 20 s non deve cancellare quello che si sta scrivendo: i campi modificati restano
   const s = D.settings, setv = (sel, v) => { const el = $(sel); if (el && el.dataset.dirty !== '1') el.value = v; }, sett = (sel, on) => { const el = $(sel); if (el && el.dataset.dirty !== '1') el.classList.toggle('on', on); };
+  const codeOnlyCard = $('#codeOnlyCard');
+  if (codeOnlyCard) codeOnlyCard.style.display = D.role !== 'agent' && !window.__assist ? '' : 'none';
+  const codeOnlyHint = $('#codeOnlyNewHint');
+  if (codeOnlyHint) codeOnlyHint.style.display = D.role !== 'agent' && !window.__assist && !!s.codeOnly ? '' : 'none';
   if ($('#themes').dataset.dirty !== '1') tmpAccent = s.accent || 'cinema';
   setv('#sBrand', s.brand || ''); setv('#sTag', s.tagline || ''); setv('#sAnn', s.announcement || ''); setv('#sSup', s.supportContact || '');
+  sett('#sCodeOnly', !!s.codeOnly); $('#sCodeOnly').setAttribute('aria-pressed', String(!!s.codeOnly));
   sett('#sLocal', !!s.allowLocalPlaylists); setv('#sApk', s.apkUrl || ''); setv('#sDl', s.downloaderCode || ''); setv('#sDlStore', s.storeDownloaderCode || '');
   sett('#sFoot', s.showFootball !== false); renderSports(s); setv('#sSrv', s.serverUrl || ''); setv('#sVer', s.apkVersion || '');
   setv('#sPrice', typeof s.price === 'string' ? s.price : ''); setv('#sPriv', s.privacy || '');
@@ -762,6 +769,17 @@ function preview() { const c = THEMES[tmpAccent]; $('#tvA').style.background = `
 ['#sBrand', '#sAnn'].forEach((s) => $(s).addEventListener('input', preview));
 $('#sLocal').onclick = () => { $('#sLocal').classList.toggle('on'); $('#sLocal').dataset.dirty = '1'; };
 $('#sFoot').onclick = () => { $('#sFoot').classList.toggle('on'); $('#sFoot').dataset.dirty = '1'; $('#sSports').classList.toggle('off', !$('#sFoot').classList.contains('on')); };
+$('#sCodeOnly').onclick = async () => {
+  if (D.role === 'agent' || window.__assist) return;
+  const toggle = $('#sCodeOnly'), codeOnly = !toggle.classList.contains('on');
+  toggle.classList.toggle('on', codeOnly); toggle.setAttribute('aria-pressed', String(codeOnly)); toggle.disabled = true;
+  try {
+    const r = await api('PUT', '/admin/settings', { codeOnly });
+    D.settings = r.settings || { ...D.settings, codeOnly };
+    await load(); toast(codeOnly ? 'Attivazione solo con codice attiva' : 'Attivazione solo con codice disattivata');
+  } catch (e) { toast(e.message, 1); renderSettings(); }
+  finally { toggle.disabled = false; }
+};
 $('#sSave').onclick = async () => {
   const wg = $('#sWg').value.trim();
   try { const r = await api('PUT', '/admin/settings', { brand: $('#sBrand').value.trim() || 'KAIROS', tagline: $('#sTag').value, accent: tmpAccent, announcement: $('#sAnn').value, supportContact: $('#sSup').value, allowLocalPlaylists: $('#sLocal').classList.contains('on'), apkUrl: $('#sApk').value.trim(), downloaderCode: $('#sDl').value.trim(), storeDownloaderCode: $('#sDlStore').value.trim(), showFootball: $('#sFoot').classList.contains('on'), ...($('#sSpCk') && $('#sSpCk').dataset.dirty === '1' ? { sports: sportsSel() } : {}), serverUrl: $('#sSrv').value.trim(), apkVersionCode: $('#sVer').value.trim(), price: $('#sPrice').value.trim(), privacy: $('#sPriv').value, ...(wg ? { wgConf: wg } : {}) }); D.settings = r.settings; $('#sWg').value = ''; clearDirty(); await load(); toast('Impostazioni salvate — le app si aggiornano da sole'); if (window.stDirtyUpd) stDirtyUpd(); } catch (e) { toast(e.message, 1); }

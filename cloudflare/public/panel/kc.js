@@ -259,6 +259,9 @@
 #dvSort{width:auto;margin:0;flex:0 0 220px}
 #v-devices.dv-cardsview #filters,#v-devices.dv-cardsview .tbl,#v-devices.dv-cardsview #noRows{display:none!important}
 .dv-pend{margin-bottom:18px}.dv-pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.dvp-codeonly{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:1px solid rgba(255,194,61,.35);border-radius:12px;background:linear-gradient(135deg,rgba(255,194,61,.08),rgba(255,255,255,.02));font-size:13.5px}
+.dvp-codeonly button{flex:none}
+.dv-pend:has(.dv-pgrid) .dvp-codeonly{margin-bottom:12px}
 .dv-pc{display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:14px;border:1px solid rgba(255,194,61,.35);background:linear-gradient(135deg,rgba(255,194,61,.08),rgba(255,255,255,.02))}
 .dv-pc .code.big{font-size:17px;padding:5px 10px}.dv-pc small{display:block;color:var(--mut);font-size:12px;margin-top:6px}
 .dvp-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
@@ -961,7 +964,7 @@
         <select class="inp" id="dvSort"><option value="exp">Scadenza più vicina</option><option value="name">Nome A–Z</option><option value="seen">Ultimo accesso</option><option value="new">Aggiunti di recente</option></select>
         <button class="btn" id="dvMass" type="button" title="Cambia lettore, permessi, VPN… a tanti clienti insieme" style="display:none">⚙ Modifica in massa</button><div class="seg" id="dvView"><button data-dv="cards" title="Schede grandi: comode con pochi clienti">Schede</button><button data-dv="table" title="Tabella compatta con azioni rapide e selezione multipla: comoda con tanti clienti">Tabella</button><button data-dv="list" title="Elenco semplice di prima">Elenco</button></div></div>
       <div id="dvPend"></div><div class="dv-grid" id="dvCards"></div><div id="dvBulk" class="dvt-bulk"></div><div id="dvTbl"></div><div id="dvMore"></div>`);
-    const st = { view: 'cards', sort: 'exp', limit: 60, sel: new Set() };
+    const st = { view: 'cards', sort: 'exp', limit: 60, sel: new Set(), pendOpen: false };
     try { st.view = localStorage.getItem('kc_dv') || 'cards'; st.sort = localStorage.getItem('kc_dvs') || 'exp'; } catch {}
     $('#dvSort').value = st.sort;
     const TILES = [
@@ -999,10 +1002,13 @@
     /* richieste «da attivare»: eliminarle (una o tutte) e farle annullare da sole se non le accetti entro un tempo (solo titolare) */
     const PTTL = [[0, '30 giorni (predefinito)'], [1, '1 ora'], [6, '6 ore'], [24, '24 ore'], [72, '3 giorni'], [168, '7 giorni']];
     const pendOwner = () => D.role !== 'agent' && !window.__assist;
+    const codeOnlyMode = () => pendOwner() && !!(D.settings || {}).codeOnly;
     function pendTools(pend) {
       if (!pendOwner()) return '';
-      const cur = +((D.settings || {}).pendTtl || 0);
-      return `<div class="dvp-tools"><label title="Si conta dalla richiesta. Mai mentre il cliente ha l'app aperta sul codice; se la riapre, la richiesta ricompare con lo stesso codice.">Se non le accetti si annullano dopo <select class="inp" data-pendttl>${PTTL.map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${pend.length ? `<button type="button" class="btn sm danger" data-pendall>🗑 ${pend.length === 1 ? 'Elimina la richiesta' : 'Elimina tutte (' + pend.length + ')'}</button>` : ''}</div>`;
+      const codeOnly = codeOnlyMode(), raw = +((D.settings || {}).pendTtl || 0);
+      const cur = codeOnly ? (raw ? Math.min(raw, 24) : 0) : raw;
+      const options = codeOnly ? PTTL.filter(([v]) => v <= 24).map(([v, l]) => [v, v === 0 ? '24 ore (predefinito)' : l]) : PTTL;
+      return `<div class="dvp-tools"><label title="Si conta dalla richiesta. Mai mentre il cliente ha l'app aperta sul codice; se la riapre, la richiesta ricompare con lo stesso codice.">Se non le accetti si annullano dopo <select class="inp" data-pendttl>${options.map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${pend.length ? `<button type="button" class="btn sm danger" data-pendall>🗑 ${pend.length === 1 ? 'Elimina la richiesta' : 'Elimina tutte (' + pend.length + ')'}</button>` : ''}</div>`;
     }
     async function delPend(list) {
       list = (list || []).filter((d) => d && !d.parent && d.status === 'pending');
@@ -1022,7 +1028,9 @@
         const r = await api('PUT', '/admin/settings', { pendTtl: v });
         if (r && r.settings) D.settings = r.settings; else (D.settings || (D.settings = {})).pendTtl = v;
         const n = (r && r.pendDeleted) || 0;
-        toast(v ? `Le richieste non accettate entro ${PTTL.find((x) => x[0] === v)[1]} si annullano da sole${n ? ` · tolte subito ${n === 1 ? '1 richiesta vecchia' : n + ' richieste vecchie'}` : ''}` : 'Le richieste da attivare restano fino a 30 giorni senza contatti');
+        const effective = codeOnlyMode() ? (v ? Math.min(v, 24) : 24) : v;
+        const label = PTTL.find((x) => x[0] === effective)?.[1] || '24 ore';
+        toast(effective ? `Le richieste non accettate entro ${label} si annullano da sole${n ? ` · tolte subito ${n === 1 ? '1 richiesta vecchia' : n + ' richieste vecchie'}` : ''}` : 'Le richieste da attivare restano fino a 30 giorni senza contatti');
         await load();
       } catch (e) { toast(e.message, 1); renderDevices(); }
     }
@@ -1104,22 +1112,29 @@
     }
     function render() {
       const f = D.filter || 'all', q = ($('#dvQ').value || D.q || '').toLowerCase().trim();
-      $('#dvTiles').innerHTML = TILES.map(([k, l, ic, sub]) => `<button class="dv-tile ${k} ${f === k ? 'on' : ''}" data-fl2="${k}"><span><b>${D.devices.filter((d) => fit(d, k)).length}</b><em>${l}</em><small>${sub}</small></span></button>`).join('');
-      $$('#dvView [data-dv]').forEach((b) => b.classList.toggle('on', b.dataset.dv === st.view));
-      V.classList.toggle('dv-cardsview', st.view !== 'list');
-      if (st.view === 'list') { $('#dvPend').innerHTML = $('#dvCards').innerHTML = $('#dvMore').innerHTML = $('#dvTbl').innerHTML = ''; bulkBar(); return; }
+      const codeOnly = codeOnlyMode(), untouchedPending = (d) => !d.parent && !+d.active && !(d.playlists || []).length && !d.name && !d.notes && !d.expires;
       const hay = (d) => [d.code, d.name, d.notes, d.model].join(' ').toLowerCase();
       const pend = D.devices.filter((d) => d.status === 'pending' && !d.parent && (f === 'all' || f === 'pending') && (!q || hay(d).includes(q)));
       st.pend = pend; // per «Elimina tutte»: quelle mostrate (sezione, app e ricerca)
-      $('#dvPend').innerHTML = pend.length ? `<div class="card glass dv-pend"><div class="hd"><h3>🆕 Da attivare <span class="cnt">${pend.length}</span><small>Il cliente apre l'app e ti legge il codice: premi <b>Attiva</b>, scegli durata e playlist. Se è una TV in più di un cliente che hai già, usa <b>Collega a un cliente</b>.</small></h3>${pendTools(pend)}</div><div class="dv-pgrid">${pend.slice(0, 24).map(pendCard).join('')}</div></div>` : '';
+      const pendingTitle = `📵 ${pend.length} app aperte non attivate · si cancellano da sole dopo 24 ore`;
+      const expandedPend = `<div class="dvp-codeonly"><span>${pendingTitle}</span><button type="button" class="btn sm" data-pendtoggle aria-expanded="true">Nascondi</button></div><div class="hd"><h3>🆕 Da attivare <span class="cnt">${pend.length}</span><small>Il cliente apre l'app e ti legge il codice: premi <b>Attiva</b>, scegli durata e playlist. Se è una TV in più di un cliente che hai già, usa <b>Collega a un cliente</b>.</small></h3>${pendTools(pend)}</div><div class="dv-pgrid">${pend.slice(0, 24).map(pendCard).join('')}</div>`;
+      const pendingHtml = !pend.length ? '' : codeOnly
+        ? `<div class="card glass dv-pend">${st.pendOpen ? expandedPend : `<div class="dvp-codeonly"><span>${pendingTitle}</span><button type="button" class="btn sm pri" data-pendtoggle aria-expanded="false">Mostra</button></div>`}</div>`
+        : `<div class="card glass dv-pend"><div class="hd"><h3>🆕 Da attivare <span class="cnt">${pend.length}</span><small>Il cliente apre l'app e ti legge il codice: premi <b>Attiva</b>, scegli durata e playlist. Se è una TV in più di un cliente che hai già, usa <b>Collega a un cliente</b>.</small></h3>${pendTools(pend)}</div><div class="dv-pgrid">${pend.slice(0, 24).map(pendCard).join('')}</div></div>`;
+      $('#dvPend').innerHTML = pendingHtml;
+      $('#dvTiles').innerHTML = TILES.map(([k, l, ic, sub]) => `<button class="dv-tile ${k} ${f === k && !(codeOnly && k === 'pending') ? 'on' : ''}" data-fl2="${k}"><span><b>${D.devices.filter((d) => fit(d, k)).length}</b><em>${l}</em><small>${sub}</small></span></button>`).join('');
+      $$('#dvView [data-dv]').forEach((b) => b.classList.toggle('on', b.dataset.dv === st.view));
+      V.classList.toggle('dv-cardsview', st.view !== 'list');
+      if (st.view === 'list') { if (!codeOnly) $('#dvPend').innerHTML = ''; $('#dvCards').innerHTML = $('#dvMore').innerHTML = $('#dvTbl').innerHTML = ''; bulkBar(); return; }
       let list = D.devices.filter((d) => !d.parent && d.status !== 'pending' && fit(d, f) && (!q || hay(d).includes(q) || kidsOf(d.id).some((k) => hay(k).includes(q))));
       // connessioni che corrispondono alla ricerca ma il cui cliente principale non c'è (o è eliminato)
       const orphans = D.devices.filter((d) => d.parent && !parentOf(d) && (!q || hay(d).includes(q)) && f === 'all');
       const by = { exp: (a, b) => (daysLeft(a) ?? 1e9) - (daysLeft(b) ?? 1e9), name: (a, b) => String(a.name || a.code).localeCompare(String(b.name || b.code), 'it'), seen: (a, b) => (b.lastSeen || 0) - (a.lastSeen || 0), new: (a, b) => (b.createdAt || 0) - (a.createdAt || 0) }[st.sort];
       list = list.sort(by);
       if (st.view === 'table') {
-        $('#dvPend').innerHTML = $('#dvCards').innerHTML = '';
-        renderTable(list, pend, q);
+        if (!codeOnly) $('#dvPend').innerHTML = '';
+        $('#dvCards').innerHTML = '';
+        renderTable(list, codeOnly ? pend.filter((d) => !untouchedPending(d)) : pend, q);
         $('#dvMore').innerHTML = list.length > st.limit ? `<button class="btn" id="dvMoreB" style="width:100%;margin-top:14px">Mostra altri ${Math.min(100, list.length - st.limit)} (${list.length - st.limit} rimanenti)</button>` : '';
         $('#dvMoreB') && ($('#dvMoreB').onclick = () => { st.limit += 100; renderDevices(); });
         return;
@@ -1132,6 +1147,7 @@
       $('#dvMoreB') && ($('#dvMoreB').onclick = () => { st.limit += 60; renderDevices(); });
     }
     V.addEventListener('click', async (e) => {
+      const pToggle = e.target.closest('[data-pendtoggle]'); if (pToggle) { st.pendOpen = !st.pendOpen; return renderDevices(); }
       const t = e.target.closest('[data-fl2]'); if (t) { D.filter = t.dataset.fl2; st.limit = st.view === 'table' ? 100 : 60; return renderDevices(); }
       const v = e.target.closest('[data-dv]'); if (v) { st.view = v.dataset.dv; st.limit = st.view === 'table' ? 100 : 60; try { localStorage.setItem('kc_dv', st.view); } catch {} V.classList.toggle('dv-cardsview', st.view !== 'list'); return renderDevices(); }
       const o = e.target.closest('[data-open]'); if (o) { const k = D.devices.find((x) => x.id === o.dataset.open); if (k) openQuick(k); return; }

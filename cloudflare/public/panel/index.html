@@ -286,6 +286,7 @@ canvas{display:block;width:100%}
       <div class="sp"></div>
       <div class="search glass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="gq" placeholder="Cerca codice, nome, note…"></div>
       <button class="btn pri" id="newDev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Nuovo</button>
+      <small id="codeOnlyNewHint" class="mut" style="display:none;max-width:180px;font-size:11px;line-height:1.25">Scrivi il codice che il cliente ti manda in foto</small>
       <div class="avatar" id="av">A</div>
     </div>
 
@@ -346,6 +347,9 @@ canvas{display:block;width:100%}
 
       <div class="st-pane on" data-pane="look">
         <div class="st-g">
+          <div class="card glass" id="codeOnlyCard"><div class="hd"><h3>Attivazione dei clienti<small>Il cliente apre l'app e ti manda il codice: lo scrivi in Nuovo cliente. Le app aperte e non attivate non riempiono più il pannello: niente elenco, avvisi o righe in Attività; si cancellano da sole dopo 24 ore.</small></h3></div>
+            <div class="st-row"><div class="st-l"><b>Attivazione solo con codice (tipo IBO)</b></div><div class="st-c"><button type="button" class="tog" id="sCodeOnly" aria-label="Attivazione solo con codice (tipo IBO)" aria-pressed="false"><i></i></button></div></div>
+          </div>
           <div class="card glass"><div class="hd"><h3>Aspetto dell'app<small>Quello che vedono i tuoi clienti nel player. L'anteprima a destra cambia mentre scrivi.</small></h3></div>
             <div class="st-row"><div class="st-l"><b>Nome dell'app</b><small>Il marchio in alto e all'avvio</small></div><div class="st-c"><input class="inp" id="sBrand" maxlength="20"></div></div>
             <div class="st-row"><div class="st-l"><b>Slogan</b><small>Frase breve sotto il nome</small></div><div class="st-c"><input class="inp" id="sTag" maxlength="60"></div></div>
