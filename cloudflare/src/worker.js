@@ -1176,7 +1176,7 @@ async function agentArmada(req, env, url, path, who, ip, ctx, X, pv = 'armada') 
     Ogni chiamata restituisce oggetti nuovi (JSON riletto), quindi chi li modifica non tocca gli altri */
 const cfgRows = (env) => reqMemo(env, 'cfg', async () => {
   const o = {};
-  for (const r of ((await env.DB.prepare("SELECT k, v FROM settings WHERE k IN ('app', 'dnsl')").all()).results) || []) o[r.k] = r.v;
+  for (const r of ((await env.DB.prepare("SELECT k, v FROM settings WHERE k IN ('app', 'dnsl', 'dnsSat')").all()).results) || []) o[r.k] = r.v;
   return o;
 });
 const cfgDirty = (env) => memoDrop(env, 'cfg');
@@ -1449,7 +1449,13 @@ async function massEdit(env, b, who, ip) {
 async function dnsList(env) {
   const v = (await cfgRows(env)).dnsl;
   let l = []; try { l = v ? JSON.parse(v) : []; } catch {}
-  return Array.isArray(l) ? l.filter((x) => x && typeof x.host === 'string' && typeof x.id === 'string') : [];
+  if (!Array.isArray(l)) return [];
+  const ids = new Set(l.filter((x) => x && typeof x.host === 'string' && typeof x.id === 'string').map((x) => x.id));
+  return l.filter((x) => x && typeof x.host === 'string' && typeof x.id === 'string').map((x) => ({
+    ...x,
+    alts: [...new Set((Array.isArray(x.alts) ? x.alts : []).filter((id) => typeof id === 'string' && id !== x.id && ids.has(id)))].slice(0, 4),
+    mode: ['auto', 'main', 'alt'].includes(x.mode) ? x.mode : 'auto',
+  }));
 }
 async function dnsSave(env, list) {
   await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('dnsl', JSON.stringify(list.slice(0, 100))).run();
@@ -1459,6 +1465,33 @@ async function dnsSave(env, list) {
    Così nella scheda del cliente si sceglie tra TUTTI i propri DNS, non uno solo. Dedup per host, l'ordine resta stabile
    (prima i DNS Orbix, così gli indici già salvati sui dispositivi non cambiano). */
 const hostKey = (h) => String(h || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
+async function portalsOf(env, pls) {
+  const saved = await dnsList(env), byHost = new Map(saved.map((x) => [hostKey(x.host), x]));
+  const byId = new Map(saved.map((x) => [x.id, x]));
+  return pls.map((p) => {
+    const main = byHost.get(hostKey(hostOf(p)));
+    const alts = main ? main.alts.map((id) => byId.get(id)).filter((x) => x && x.id !== main.id) : [];
+    return alts.length ? { ...p, alts: alts.map((x) => x.host), altNames: alts.map((x) => x.name), mainName: main.name, mode: main.mode } : p;
+  });
+}
+async function dnsSatOf(env) {
+  let sat = {};
+  try { sat = JSON.parse((await cfgRows(env)).dnsSat || '{}'); } catch {}
+  return sat && typeof sat === 'object' && !Array.isArray(sat) ? sat : {};
+}
+async function saturatedHosts(env, pls, portalPls, t = now()) {
+  const sat = await dnsSatOf(env), candidates = new Map();
+  for (let i = 0; i < pls.length; i++) {
+    const main = hostOf(pls[i]);
+    if (main) candidates.set(hostKey(main), main);
+    for (const alt of (portalPls[i] && portalPls[i].alts) || []) if (alt) candidates.set(hostKey(alt), alt);
+  }
+  return [...candidates].filter(([key]) => +((sat[key] || {}).until) > t).map(([, origin]) => origin);
+}
+async function saturationList(env, knownHosts, t = now()) {
+  const sat = await dnsSatOf(env), origins = new Map((knownHosts || []).filter(Boolean).map((x) => [hostKey(x), x]));
+  return Object.entries(sat).filter(([, v]) => +((v || {}).until) > t).map(([key, v]) => ({ host: origins.get(key) || key, until: +v.until }));
+}
 function orbixDnsList(orbixCfg, dnsl) {
   const base = (Array.isArray(orbixCfg) ? orbixCfg : []).map((x) => ({ ...x }));
   const seen = new Set(base.map((x) => hostKey(x.host)));
@@ -2004,6 +2037,20 @@ async function playerErrors(req, env, ip, ctx) {
       .bind(at, d.id, problem, nameClean(x.action, 60), outcome, str(x.err, 120), nameClean(x.title, 120), str(x.id, 60), x.k === 'live' ? 'live' : x.k ? 'vod' : '', str(x.engine, 12), str(x.codec, 16), x.dec === 'sw' ? 'sw' : x.dec === 'hw' ? 'hw' : '', str(x.res, 12), str(x.var, 12), model, ver));
   }
   if (stmts.length) await env.DB.batch(stmts);
+  const abandoned = items.filter((x) => x && x.action === 'server di riserva' && typeof x.srv === 'string').map((x) => {
+    try { return hostKey(cleanHost(x.srv)); } catch { return ''; }
+  }).filter(Boolean);
+  if (abandoned.length) {
+    const sat = await dnsSatOf(env);
+    for (const key of abandoned) {
+      const prev = sat[key] && typeof sat[key] === 'object' ? sat[key] : {};
+      const ev = [...(Array.isArray(prev.ev) ? prev.ev : []).filter((x) => Array.isArray(x) && +x[0] > t - 10 * 60e3), [t, d.id]];
+      const until = new Set(ev.map((x) => String(x[1]))).size >= 3 ? t + 30 * 60e3 : (+prev.until > t ? +prev.until : 0);
+      sat[key] = { ev, until };
+    }
+    await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('dnsSat', JSON.stringify(sat)).run();
+    cfgDirty(env);
+  }
   // «Risolvi da solo»: al massimo ogni 6 ore per dispositivo, solo correzioni che non interrompono la visione
   if (t - (+d.fix_t || 0) > 6 * 3600e3) ctx.waitUntil((async () => { const S = await getSettings(env); if (S.health && S.health.on && S.health.autoFix) await fixDevice(env, S, d, 'Pannello', true); })().catch(() => {}));
   // pulizia: ogni tanto si tolgono quelli più vecchi di 7 giorni
@@ -2121,7 +2168,9 @@ async function playerHeartbeat(req, env, ip, ctx) {
   const { C, pls } = P ? await effOf(env, d, P, pls0) : { C: null, pls: [] }; // connessione indipendente: le sue playlist e il suo lettore
   const vm = P ? (+P.vpn === 2 ? 'force' : +P.vpn === 1 ? 'allow' : 'off') : 'off';
   // impronta dei server delle playlist: se cambia (DNS cambiato dal pannello) l'app aggiorna gli indirizzi senza ricaricare la lista
-  const pv = pls.length ? (await sha256(pls.map((p) => p.id + '|' + hostOf(p) + '|' + (p.username || '')).join(','))).slice(0, 12) : '';
+  const portalPls = await portalsOf(env, pls);
+  const pv = pls.length ? (await sha256(pls.map((p, i) => p.id + '|' + hostOf(p) + '|' + (p.username || '') + '|' + JSON.stringify([(portalPls[i] && portalPls[i].mode) || 'auto', (portalPls[i] && portalPls[i].alts) || []])).join(','))).slice(0, 12) : '';
+  const sat = await saturatedHosts(env, pls, portalPls, t);
   // "Disconnetti" dal pannello: l'ordine resta valido 3 minuti; l'app lo conferma (kickAck) e viene azzerato
   let kick = 0;
   if (+d.kick_t > 0) {
@@ -2136,7 +2185,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
     const apu = appOfVer(f.ver, d.app); if (RC_APPS.includes(apu)) try { const lp = latestFor(env, S0, apu); ctx.waitUntil(lp.catch(() => {})); const L = await Promise.race([lp, new Promise((r) => setTimeout(() => r(null), 800))]); if (L && verBehind(f.ver, L.version)) upd = L.versionCode || 1; } catch {}
   }
   const eff = rcEffective(S0, d, appOfVer(f.ver, d.app)), cmds = await cmdP;
-  return json({ ok: true, mt, ...(upd ? { upd } : {}), rc: JSON.stringify(eff.rc), rcv: eff.rcv, ...(cmds.length ? { cmds } : {}), unseen: await unP, ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', af: await acctFp(P), ...(kick ? { kick } : {}) });
+  return json({ ok: true, mt, ...(upd ? { upd } : {}), rc: JSON.stringify(eff.rc), rcv: eff.rcv, ...(cmds.length ? { cmds } : {}), unseen: await unP, ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', af: await acctFp(P), ...(sat.length ? { sat } : {}), ...(kick ? { kick } : {}) });
 }
 /* ---------------- dati del cliente e salute delle app ---------------- */
 const verNum = (v) => { const m = String(v || '').match(/(\d{1,3})\.(\d{1,3})(?:\.(\d{1,3}))?/); return m ? +m[1] * 1e6 + +m[2] * 1e3 + +(m[3] || 0) : 0; };
@@ -3287,7 +3336,7 @@ async function playerRegister(req, env, ip, ctx) {
   const { C, pls } = status === 'active' ? await effOf(env, d, P, Ppls) : { C: P, pls: [] };
   if (status === 'active' && maintFor(s, P)) status = 'maintenance';
   const eff = rcEffective(s, d, appFrom(req, b) || appOfVer('', d.app));
-  const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? pls : [], messages: await msgP, rc: eff.rc, rcv: eff.rcv };
+  const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? await portalsOf(env, pls) : [], messages: await msgP, rc: eff.rc, rcv: eff.rcv };
   if (status === 'active') {
     [out.account, out.vpn, out.af] = await Promise.all([accountOf(env, P, d, pls, C), vpnOf(env, P, d), acctFp(P)]);
     out.perms = permsOf(P); // i collegati ereditano i permessi del principale
@@ -4464,7 +4513,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const hosts = [...new Set([...count.keys(), ...saved.map((x) => x.host)])]
       .map((host) => ({ host, devices: count.get(host) || 0, name: names.get(host) ? names.get(host).name : '', savedId: names.get(host) ? names.get(host).id : '' }))
       .sort((a, b) => b.devices - a.devices || a.host.localeCompare(b.host));
-    return json({ saved, hosts, byDev });
+    const sat = await saturationList(env, [...saved.map((x) => x.host), ...count.keys()]);
+    return json({ saved, hosts, byDev, sat });
   }
   if (path === '/dns/saved' && m === 'POST') {
     const b = await readJSON(req, 4096);
@@ -4472,7 +4522,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const list = await dnsList(env);
     if (list.some((x) => x.host === host)) throw new HttpErr(400, 'Questo DNS è già salvato');
     if (list.length >= 100) throw new HttpErr(400, 'Puoi salvare al massimo 100 DNS');
-    const item = { id: b64url(rand(6)), name, host };
+    const item = { id: b64url(rand(6)), name, host, alts: [], mode: 'auto' };
     list.push(item); await dnsSave(env, list);
     await log(env, 'settings', `${who}: DNS salvato · ${name} (${host})`, ip);
     return json(item);
@@ -4481,10 +4531,12 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (dsm && (m === 'PUT' || m === 'DELETE')) {
     const list = await dnsList(env), i = list.findIndex((x) => x.id === dsm[1]);
     if (i < 0) throw new HttpErr(404, 'DNS non trovato');
-    if (m === 'DELETE') { const [x] = list.splice(i, 1); await trashPut(env, 'dns', x.id, `${x.name} (${x.host})`, x, null, who); await dnsSave(env, list); await log(env, 'settings', `${who}: DNS tolto dall'elenco · ${x.name} (i clienti non cambiano)`, ip); return json({ ok: true }); }
+    if (m === 'DELETE') { const [x] = list.splice(i, 1); for (const item of list) item.alts = (item.alts || []).filter((id) => id !== x.id); await trashPut(env, 'dns', x.id, `${x.name} (${x.host})`, x, null, who); await dnsSave(env, list); await log(env, 'settings', `${who}: DNS tolto dall'elenco · ${x.name} (i clienti non cambiano)`, ip); return json({ ok: true }); }
     const b = await readJSON(req, 4096);
     if (typeof b.name === 'string') list[i].name = nameClean(b.name, 40) || list[i].name;
     if (typeof b.host === 'string') { const h = cleanHost(b.host); if (list.some((x, j) => j !== i && x.host === h)) throw new HttpErr(400, 'Questo DNS è già salvato'); list[i].host = h; }
+    if (b.alts !== undefined) list[i].alts = [...new Set((Array.isArray(b.alts) ? b.alts : []).filter((id) => typeof id === 'string' && id !== list[i].id && list.some((x) => x.id === id)))].slice(0, 4);
+    if (b.mode !== undefined) list[i].mode = ['auto', 'main', 'alt'].includes(b.mode) ? b.mode : 'auto';
     await dnsSave(env, list);
     return json(list[i]);
   }
