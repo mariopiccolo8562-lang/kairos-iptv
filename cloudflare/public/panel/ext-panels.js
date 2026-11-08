@@ -176,7 +176,7 @@
         const pkgId = $('#exM').value, notes = $('#exN').value.trim();
         const rr = await api('POST', `/admin/${k}/lines/action`, { action: 'renew', id: r.id, username: r.username, package_id: pkgId });
         if (notes !== String(r.notes || '').trim()) await api('POST', `/admin/${k}/lines/action`, { action: 'notes', id: r.id, username: r.username, notes }).catch((e) => toast('Rinnovata, ma la nota non è stata salvata: ' + e.message, 1));
-        toast(`${u} rinnovata` + (rr.balance != null ? ` · crediti: ${rr.balance}` : '')); return load(k);
+        toast(`${u} rinnovata` + (rr.balance != null ? ` · crediti: ${rr.balance}` : '')); return load(k, true);
       }
       if (a === 'on' || a === 'off') { const en = a === 'on'; if (!(await ask((en ? 'Attivare ' : 'Disattivare ') + u + '?', `La linea ${U} viene ${en ? 'attivata' : 'disattivata'} subito su ${esc(P.name)}.`, en ? 'Attiva' : 'Disattiva'))) return; return await lineAct(k, { action: 'toggle', id: r.id, username: r.username, enabled: en }, `${u} ${en ? 'attivata' : 'disattivata'}`); }
       if (a === 'kill') { if (!(await ask('Disconnettere ' + u + '?', 'Chiude le connessioni aperte adesso su questa linea. Il cliente potrà ricollegarsi.', 'Disconnetti'))) return; return await lineAct(k, { action: 'kill', id: r.id, username: r.username }, `${u}: connessioni chiuse`); }
@@ -184,9 +184,9 @@
       if (a === 'stog') { if (!(await ask((r.enabled ? 'Disattivare ' : 'Riattivare ') + u + '?', `Il sub-reseller ${U} viene ${r.enabled ? 'disattivato' : 'riattivato'} su ${esc(P.name)}.`, r.enabled ? 'Disattiva' : 'Riattiva'))) return; await api('POST', `/admin/${k}/subs/action`, { op: 'toggle', id: r.id }); toast('Fatto'); return load(k); }
     } catch (e) { toast(e.message, 1); }
   }
-  async function load(k) {
+  async function load(k, afterRenew = false) {
     const A = ST[k]; A.busy = true; A.err = ''; show(k);
-    try { A.data = await api('GET', `/admin/${k}/${A.tab}`); if (A.tab === 'overview') A.ov = A.data; if (A.tab === 'lines' && Array.isArray(A.data.rows)) A.rows = A.data.rows; } catch (e) { A.err = e.message; A.data = null; }
+    try { A.data = await api('GET', `/admin/${k}/${A.tab}`); if (A.tab === 'overview') A.ov = A.data; if (A.tab === 'lines' && Array.isArray(A.data.rows)) { A.rows = A.data.rows; if (window.KXLineSync) KXLineSync.apply(k, A.rows, afterRenew, api); } } catch (e) { A.err = e.message; A.data = null; }
     A.busy = false; show(k);
   }
   function show(k) { try { render(k); } catch (e) { const V = $('#v-' + k); if (V) V.innerHTML = `<div class="card glass"><p style="color:#ff8f8f">Errore nella sezione ${esc(PANELS[k].name)}: ${esc(e.message || String(e))}</p></div>`; } }

@@ -1,10 +1,22 @@
 (() => {
   const cache = { t: 0, items: [], busy: null };
   const can = (k) => D.role !== 'agent' || !!(((D.me || {}).perms || {})[k]);
-  const expiredAt = (v) => {
+  const expiryTime = (v) => {
     if (v == null || v === '') return false;
     const n = Number(v), t = Number.isFinite(n) && n > 0 ? (n < 1e12 ? n * 1000 : n) : Date.parse(String(v));
-    return Number.isFinite(t) && t > 0 && t < Date.now();
+    return Number.isFinite(t) && t > 0 ? t : 0;
+  };
+  const expiryDate = (v) => { const t = expiryTime(v), d = t ? new Date(t) : null; return d && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : ''; };
+  const expiredAt = (v) => { const t = expiryTime(v); return !!t && t < Date.now(); };
+  const lastSync = new Map();
+  const syncExpiries = async (panel, rows, force, send) => {
+    const t = Date.now();
+    if (!force && t - (lastSync.get(panel) || 0) < 60000) return;
+    if (!Array.isArray(rows) || !send) return;
+    lastSync.set(panel, t);
+    const lines = rows.slice(0, 5000).map((l) => ({ username: String(l.username || '').trim(), exp: expiryDate(l.exp || l.exp_date || l.expire_date || l.expTxt) })).filter((l) => l.username && l.exp);
+    if (!lines.length) return;
+    try { await send('POST', '/admin/line-sync/apply', { panel, lines }); } catch {}
   };
   const statusOf = (l) => {
     const s = String(l.status || '').toLowerCase();
@@ -15,7 +27,7 @@
   const add = (out, p, tag, l, host) => {
     const username = String(l.username || ''), password = String(l.password || '');
     if (!username.trim() || !password) return;
-    out.push({ p, tag, username, password, host: String(host || ''), note: String(l.note || l.notes || ''), status: statusOf(l) });
+    out.push({ p, tag, username, password, host: String(host || ''), exp: expiryDate(l.exp || l.exp_date || l.expire_date || l.expTxt), note: String(l.note || l.notes || ''), status: statusOf(l) });
   };
   function load() {
     if (cache.busy) return cache.busy;
@@ -90,5 +102,6 @@
       return items;
     });
   }
-  window.KXLinePick = { load, find, mount };
+  window.KXLinePick = { load, find, mount, expiryDate };
+  window.KXLineSync = { apply: syncExpiries };
 })();

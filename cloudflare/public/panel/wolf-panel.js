@@ -43,10 +43,10 @@
   const m3u = (l) => { const h = (W.data && W.data.dns) || l.dns; return h ? `${h}/get.php?username=${encodeURIComponent(l.username)}&password=${encodeURIComponent(l.password)}&type=m3u_plus&output=ts` : ''; };
 
   async function loadCfg() { try { W.cfg = await api('GET', '/admin/wolf/config'); W.err = ''; } catch (e) { W.cfg = { set: false }; W.err = e.message; } }
-  async function loadLines(fresh) {
+  async function loadLines(fresh, afterRenew = false) {
     if (!W.cfg || !W.cfg.set) return;
     W.busy = true; render();
-    try { W.data = await api('GET', '/admin/wolf/lines' + (fresh ? '?fresh=1' : '')); W.err = ''; if (W.data.synced) toast(`${W.data.synced} playlist aggiornate da WOLF`); }
+    try { W.data = await api('GET', '/admin/wolf/lines' + (fresh ? '?fresh=1' : '')); W.err = ''; if (W.data.synced) toast(`${W.data.synced} playlist aggiornate da WOLF`); if (window.KXLineSync) KXLineSync.apply('wolf', W.data.lines || W.data.rows, afterRenew, api); }
     catch (e) { W.err = e.message; }
     W.busy = false; show();
   }
@@ -170,7 +170,7 @@
     const pkg = $('#wbK').value, c = cost();
     if (cr !== null && c > cr) return toast(`Servono ${c} crediti, ne hai ${cr}`, 1);
     await KXTools.run(S, (l) => api('POST', `/admin/wolf/lines/${l.id}/extend`, { package: pkg }), 'Rinnovo');
-    W.sel.clear(); loadLines(true);
+    W.sel.clear(); loadLines(true, true);
   }
   async function bulkTgl(on) {
     const S = selOf().filter((l) => !!l.enabled !== on);
@@ -308,7 +308,7 @@
         const pkg = $('#wxK').value, note = $('#wxN').value.trim();
         const r = await api('POST', `/admin/wolf/lines/${id}/extend`, { package: pkg });
         if (note !== String(l.note || '').trim()) await api('PUT', '/admin/wolf/lines/' + id, { note }).catch((e) => toast('Rinnovata, ma la nota non è stata salvata: ' + e.message, 1));
-        toast('Linea rinnovata su WOLF'); if (due) await KXPay.saveDue('line', 'wolf', id, l.username, +l.ownerId || +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Rinnovo riuscito, ma pagamento non registrato: ' + e.message, 1)); return loadLines(true);
+        toast('Linea rinnovata su WOLF'); if (due) await KXPay.saveDue('line', 'wolf', id, l.username, +l.ownerId || +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Rinnovo riuscito, ma pagamento non registrato: ' + e.message, 1)); return loadLines(true, true);
       }
       if (a === 'link') {
         const k = linkOf(id);

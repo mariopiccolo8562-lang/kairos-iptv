@@ -52,13 +52,13 @@ const mkArmadaLike = (cfg) => {
   const fmtC = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString('it-IT');
 
   async function loadState() { try { A.st = await api('GET', API + '/state'); } catch (e) { A.st = { connected: false, error: e.message }; } render(); }
-  const loadLines = () => A.pL || (A.pL = api('GET', API + '/lines').then((r) => { A.lines = r.lines || []; }).catch((e) => { A.lines = ldErr(e); }).finally(() => { A.pL = null; }));
-  async function loadTab(force) {
+  const loadLines = (afterRenew = false) => A.pL || (A.pL = api('GET', API + '/lines').then((r) => { A.lines = r.lines || []; if (window.KXLineSync) KXLineSync.apply(CFG.k, A.lines, afterRenew, api); }).catch((e) => { A.lines = ldErr(e); }).finally(() => { A.pL = null; }));
+  async function loadTab(force, afterRenew = false) {
     if (!A.st || !A.st.connected) return;
     const t = A.tab;
     try {
       if (t === 'new' && (!A.pk || force)) A.pk = (await api('GET', API + '/packages')).packages || [];
-      if (t === 'lines' && (!A.lines || force)) await loadLines();
+      if (t === 'lines' && (!A.lines || force)) { const pending = !!A.pL; await loadLines(afterRenew); if (afterRenew && pending && Array.isArray(A.lines) && window.KXLineSync) KXLineSync.apply(CFG.k, A.lines, true, api); }
       if (t === 'mags' && (!A.mags || force)) A.mags = (await api('GET', API + '/mags')).mags || [];
       if (t === 'res' && (!A.res || force)) A.res = (await api('GET', API + '/resellers')).resellers || [];
     } catch (e) { if (t === 'new') A.pk = ldErr(e); if (t === 'lines') A.lines = ldErr(e); if (t === 'mags') A.mags = ldErr(e); if (t === 'res') A.res = ldErr(e); }
@@ -241,7 +241,7 @@ const mkArmadaLike = (cfg) => {
       const bd = A.st && A.st.budget;
       if (!(await ask(`Rinnovare su ${N}?`, `<b>${esc(who)}</b> di <b>${sub} ${sub === 1 ? 'mese' : 'mesi'}</b>. ${bd ? `Usa i crediti del tuo tetto (ne restano ${fmtC(bd.left)} questo mese).` : `Usa i tuoi crediti ${N}.`}${k[0] === 'l' && window.KXPay ? KXPay.duePrompt('arPay', sub) : ''}`, 'Rinnova'))) return;
       const due = k[0] === 'l' && window.KXPay ? KXPay.readDuePrompt('arPay') : null; if (due === false) return;
-      try { const r = await api('POST', API + '/renew', k[0] === 'l' ? { type: 'm3u', username: x.username, password: x.password, sub } : { type: 'mag', mac: x.mac, sub }); if (r.exp) x.exp = r.exp; toast('Rinnovata' + (r.exp ? ' fino al ' + fmtD(r.exp) : '')); if (due) await KXPay.saveDue('line', CFG.k, x.username, x.username, +x.byAgent || +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Rinnovo riuscito, ma pagamento non registrato: ' + e.message, 1)); loadState(); loadTab(true); } catch (e) { toast(e.message, 1); }
+      try { const r = await api('POST', API + '/renew', k[0] === 'l' ? { type: 'm3u', username: x.username, password: x.password, sub } : { type: 'mag', mac: x.mac, sub }); if (r.exp) x.exp = r.exp; toast('Rinnovata' + (r.exp ? ' fino al ' + fmtD(r.exp) : '')); if (due) await KXPay.saveDue('line', CFG.k, x.username, x.username, +x.byAgent || +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Rinnovo riuscito, ma pagamento non registrato: ' + e.message, 1)); loadState(); loadTab(true, true); } catch (e) { toast(e.message, 1); }
     }));
     $$('[data-artog]', V).forEach((b) => (b.onclick = async () => {
       const x = find(b.dataset.artog), on = !x.enabled;
@@ -277,7 +277,7 @@ const mkArmadaLike = (cfg) => {
     if (!ok) return;
     const sub = +Q('#abS').value;
     await KXTools.run(S, async (x) => { const r = await api('POST', API + '/renew', x.mac && !x.username ? { type: 'mag', mac: x.mac, sub } : { type: 'm3u', username: x.username, password: x.password, sub }); if (r.exp) x.exp = r.exp; }, 'Rinnovo');
-    A.sel.clear(); loadState(); render();
+    A.sel.clear(); loadState(); await loadTab(true, true); render();
   }
   async function bulkTgl(on) {
     const S = selX().filter((x) => !!x.enabled !== on);
