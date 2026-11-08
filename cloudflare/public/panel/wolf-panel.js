@@ -87,7 +87,7 @@
     });
   }
   const filtered0 = filtered;
-  filtered = () => (window.KXSort ? KXSort.apply(filtered0(), W, { exp: (l) => +l.exp || 0, name: (l) => l.username, enabled: (l) => !!l.enabled, conns: (l) => l.conns, owner: (l) => l.owner, created: (l) => +l.created || 0 }) : filtered0());
+  filtered = () => (window.KXSort ? KXSort.apply(filtered0(), W, { exp: (l) => +l.exp || 0, name: (l) => l.username, enabled: (l) => !!l.enabled, conns: (l) => l.conns, owner: (l) => l.owner, created: (l) => +l.created || 0, payKey: (l) => ['wolf', l.id] }) : filtered0());
   const linkOf = (id) => ((W.data && W.data.links) || []).find((k) => k.line === id);
 
   function render() {
@@ -108,7 +108,7 @@
         ${W.err ? `<p style="color:#ff8f8f;margin:10px 0 0">${esc(W.err)}</p>` : ''}
         <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:13px">Impostazioni WOLF</summary>${cfgForm(W.cfg)}</details>
         <div class="wf-tabs"><button data-t="lines" class="${W.tab === 'lines' ? 'on' : ''}">Linee${d.lines ? ' · ' + d.lines.length : ''}</button><button data-t="rs" class="${W.tab === 'rs' ? 'on' : ''}">Reseller${W.rs ? ' · ' + W.rs.resellers.length : ''}</button></div></div>
-      ${W.tab !== 'rs' && d.lines && window.KXStats ? KXStats.strip(KXStats.tiles(KXStats.calc(d.lines))) : ''}
+      ${W.tab !== 'rs' && d.lines && window.KXStats ? KXStats.strip(KXStats.tiles(KXStats.calc(d.lines))) : ''}${W.tab !== 'rs' && window.KXPay ? KXPay.panelTile('wolf') : ''}
       ${W.tab === 'rs' ? rsHtml() : `<div class="card glass" style="margin-top:14px">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="inp" id="wfQ" placeholder="Cerca utente, ID o nota" value="${esc(W.q)}" style="max-width:280px;margin:0">
           <select class="inp" id="wfF" style="width:auto;margin:0">${FL.map(([k, t]) => `<option value="${k}"${W.f === k ? ' selected' : ''}>${t}</option>`).join('')}</select>${window.KXSort ? KXSort.ui(W, 'wf') : ''}
@@ -119,10 +119,10 @@
           const k = linkOf(l.id), sh = W.show.has(l.id);
           return `<div class="wf-row" data-id="${l.id}"><div><span class="k">${window.KXTools ? KXTools.ck('wf', l.id, W.sel.has(String(l.id))) : ''}ID</span>${l.id}</div>
             <div><span class="k">Utente / password</span><div class="wf-v"><b class="mono">${esc(l.username)}</b><button data-a="cu" title="Copia utente">⧉</button></div><div class="wf-v"><span class="mono">${sh ? esc(l.password) : '••••••'}</span><button data-a="eye" title="${sh ? 'Nascondi' : 'Mostra'} password">${sh ? 'Nascondi' : 'Mostra'}</button><button data-a="cp" title="Copia password">⧉</button></div></div>
-            <div><span class="k">Scadenza</span>${fmtD(l.exp)}<br><small class="mut">${left(l.exp)}</small></div>
+            <div><span class="k">Scadenza</span>${fmtD(l.exp)}<br><small class="mut">${left(l.exp)}</small>${window.KXPay ? KXPay.badge('line', 'wolf', l.id) : ''}</div>
             <div><span class="k">Stato</span>${window.KXOnline ? KXOnline.dot({ on: l.conns > 0, conns: l.conns, max: l.max }) + (l.conns > 0 && l.watching ? `<small class="mut" title="Sta guardando"> ▶ ${esc(l.watching)}</small>` : '') + '<br>' : ''}${status(l)}${l.trial ? '<span class="wf-tag g">Prova</span>' : ''}<br><small class="mut">${l.conns}/${l.max || '?'} conn.</small></div>
             <div><span class="k">Nota / cliente KAIROS</span><div class="mono">${esc(l.note) || '<span class="mut">—</span>'}</div>${k ? `<span class="wf-tag">↔ ${esc(k.name)}</span>` : ''}${l.owner && l.owner !== W.cfg.user ? `<span class="wf-tag g" title="Reseller">${esc(l.owner)}</span>` : ''}</div>
-            <div class="wf-act"><button class="btn sm" data-a="edit">Modifica</button><button class="btn sm" data-a="ext">Rinnova</button>${isAg() ? '' : `<button class="btn sm" data-a="link">${k ? 'Cliente' : 'Collega cliente'}</button>`}<button class="btn sm" data-a="m3u">M3U</button>${window.KXMxpNew ? '<button class="btn sm" data-a="mxp" title="Crea il cliente su MaxPlayer con questa linea">MaxPlayer</button>' : ''}${window.KXOxpNew ? '<button class="btn sm" data-a="oxp" title="Aggiungi questa linea a un dispositivo OrbixPlay">OrbixPlay</button>' : ''}${window.KXOrcpNew ? '<button class="btn sm" data-a="orcp" title="Segna la linea per l\'app e prepara il messaggio al cliente">' + esc(KXOrcpName()) + '</button>' : ''}<button class="btn sm ghost" data-a="tgl">${l.enabled ? 'Disattiva' : 'Attiva'}</button><button class="btn sm ghost" data-a="del" style="color:#ff8f8f">Elimina</button></div></div>`;
+            <div class="wf-act"><button class="btn sm" data-a="edit">Modifica</button><button class="btn sm" data-a="ext">Rinnova</button>${window.KXPay && KXPay.canEdit() ? `<button class="btn sm" data-kxpay-open data-kind="line" data-panel="wolf" data-ref="${esc(l.id)}" data-label="${esc(l.username)}" data-owner="${+l.ownerId || 0}">💰 Pagamento</button>` : ''}${isAg() ? '' : `<button class="btn sm" data-a="link">${k ? 'Cliente' : 'Collega cliente'}</button>`}<button class="btn sm" data-a="m3u">M3U</button>${window.KXMxpNew ? '<button class="btn sm" data-a="mxp" title="Crea il cliente su MaxPlayer con questa linea">MaxPlayer</button>' : ''}${window.KXOxpNew ? '<button class="btn sm" data-a="oxp" title="Aggiungi questa linea a un dispositivo OrbixPlay">OrbixPlay</button>' : ''}${window.KXOrcpNew ? '<button class="btn sm" data-a="orcp" title="Segna la linea per l\'app e prepara il messaggio al cliente">' + esc(KXOrcpName()) + '</button>' : ''}<button class="btn sm ghost" data-a="tgl">${l.enabled ? 'Disattiva' : 'Attiva'}</button><button class="btn sm ghost" data-a="del" style="color:#ff8f8f">Elimina</button></div></div>`;
         }).join('')}</div>
         ${list.length > shown.length ? `<div style="margin-top:10px"><button class="btn sm" id="wfMore">Mostra altre ${Math.min(100, list.length - shown.length)}</button></div>` : ''}</div>`}`;
     bindCfg();
@@ -272,11 +272,12 @@
       <label>Utente<input class="inp mono" id="wnU" value="${gen(10)}"></label><label>Password<input class="inp mono" id="wnP" value="${gen(10)}"></label>
       <label style="grid-column:1/-1">Pacchetto (usa crediti WOLF)<select class="inp" id="wnK">${pkOpts()}</select></label>
       <label style="grid-column:1/-1">Nota<input class="inp" id="wnN" maxlength="300"></label>
-      ${isAg() ? '' : `<label style="grid-column:1/-1">Collega a un cliente KAIROS (facoltativo)<select class="inp" id="wnD">${devOpts('')}</select></label>`}</div>
+      ${isAg() ? '' : `<label style="grid-column:1/-1">Collega a un cliente KAIROS (facoltativo)<select class="inp" id="wnD">${devOpts('')}</select></label>`}</div>${window.KXPay ? KXPay.duePrompt('wnPay') : ''}
       <p class="mut" style="font-size:12.5px;margin:10px 0 0">Crediti WOLF disponibili: <b>${(W.data && W.data.credits) ?? '—'}</b>. La linea compare subito anche su WOLF.</p>`, 'Crea linea');
     if (!ok) return;
+    const due = window.KXPay ? KXPay.readDuePrompt('wnPay') : null; if (due === false) return;
     const body = { username: $('#wnU').value, password: $('#wnP').value, package: $('#wnK').value, note: $('#wnN').value, deviceId: $('#wnD') ? $('#wnD').value : '' };
-    try { await api('POST', '/admin/wolf/lines', body); toast('Linea creata su WOLF'); await loadLines(true); } catch (e) { toast(e.message, 1); }
+    try { const r = await api('POST', '/admin/wolf/lines', body); toast('Linea creata su WOLF'); if (due && r.id) await KXPay.saveDue('line', 'wolf', r.id, body.username, +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Linea creata, ma pagamento non registrato: ' + e.message, 1)); await loadLines(true); } catch (e) { toast(e.message, 1); }
   }
 
   async function act(a, id) {
@@ -301,12 +302,13 @@
         await loadPk();
         const ok = await ask('Rinnova ' + l.username, `<label class="lbl">Pacchetto (usa crediti WOLF)</label><select class="inp" id="wxK">${pkOpts()}</select>
           <label class="lbl" style="margin-top:10px">Nota (nome del cliente, telefono…)</label><input class="inp" id="wxN" maxlength="300" value="${esc(l.note || '')}" placeholder="es. Mario Rossi · 333 1234567">
-          <p class="mut" style="font-size:12.5px;margin:10px 0 0">Scadenza attuale: <b>${fmtD(l.exp)}</b>. Crediti disponibili: <b>${(W.data && W.data.credits) ?? '—'}</b>.</p>`, 'Rinnova');
+          ${window.KXPay ? KXPay.duePrompt('wxPay') : ''}<p class="mut" style="font-size:12.5px;margin:10px 0 0">Scadenza attuale: <b>${fmtD(l.exp)}</b>. Crediti disponibili: <b>${(W.data && W.data.credits) ?? '—'}</b>.</p>`, 'Rinnova');
         if (!ok) return;
+        const due = window.KXPay ? KXPay.readDuePrompt('wxPay') : null; if (due === false) return;
         const pkg = $('#wxK').value, note = $('#wxN').value.trim();
-        await api('POST', `/admin/wolf/lines/${id}/extend`, { package: pkg });
+        const r = await api('POST', `/admin/wolf/lines/${id}/extend`, { package: pkg });
         if (note !== String(l.note || '').trim()) await api('PUT', '/admin/wolf/lines/' + id, { note }).catch((e) => toast('Rinnovata, ma la nota non è stata salvata: ' + e.message, 1));
-        toast('Linea rinnovata su WOLF'); return loadLines(true);
+        toast('Linea rinnovata su WOLF'); if (due) await KXPay.saveDue('line', 'wolf', id, l.username, +l.ownerId || +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Rinnovo riuscito, ma pagamento non registrato: ' + e.message, 1)); return loadLines(true);
       }
       if (a === 'link') {
         const k = linkOf(id);
@@ -340,4 +342,6 @@
   /* qualunque menu apra la sezione (anche quelli caricati dopo), la si riempie quando diventa visibile */
   const sec = $('#v-wolf');
   if (sec) new MutationObserver(() => { if (sec.classList.contains('on') && !sec.innerHTML.trim()) open(); }).observe(sec, { attributes: true, attributeFilter: ['class'] });
+  window.addEventListener('kxpay:filter', (e) => { if (e.detail.panel === 'wolf') { W.days = 'due'; W.limit = 100; show(); } });
+  window.addEventListener('kxpay:update', () => { if ($('#v-wolf')?.classList.contains('on')) show(); });
 })();

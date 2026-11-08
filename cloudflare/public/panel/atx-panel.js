@@ -34,12 +34,12 @@
       `<b>${esc(r.username || '')}</b> <button class="btn sm" data-a="cu" data-i="${i}" title="Copia utente" style="padding:2px 7px;font-size:11px">Copia</button><div class="mut" style="font-size:11.5px">#${esc(String(r.id))}${Number(r.auto_renew) ? ' · auto-rinnovo' : ''}</div>`,
       `<code>${esc(r.password || '')}</code> <button class="btn sm" data-a="cp" data-i="${i}" title="Copia password" style="padding:2px 7px;font-size:11px">Copia</button>`,
       lineState(r),
-      `<b>${day(r.exp_date)}</b>`,
+      `<b>${day(r.exp_date)}</b>${window.KXPay ? `<br>${KXPay.badge('line', 'atx', r.id)}` : ''}`,
       Number(r.online) > 0 ? `<button class="btn sm" data-a="lc" data-i="${i}" title="Vedi chi è connesso">🟢 ${Number(r.online)}/${Number(r.max_connections || 0)}</button>` : `<span class="mut">${Number(r.online) || 0}/${Number(r.max_connections || 0)}</span>`,
       r.channel || r.ip ? `${r.channel ? `<b>${esc(r.channel)}</b>` : ''}<div class="mut" style="font-size:11.5px">${esc([r.country, r.ip].filter(Boolean).join(' · '))}</div>` : mut,
       r.reseller ? esc(r.reseller) : mut,
       `<button class="btn sm" data-a="note" data-i="${i}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.notes ? esc(r.notes) : '+ nota'}</button>`,
-      `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('edit', i, 'Modifica')}${btn('renew', i, 'Rinnova')}${Number(r.enabled) === 0 ? btn('on', i, 'Attiva') : btn('off', i, 'Disattiva')}${m3u(r) ? btn('m3u', i, 'M3U') : ''}${window.KXMxpNew ? btn('mxp', i, 'MaxPlayer') : ''}${window.KXOxpNew ? btn('oxp', i, 'OrbixPlay') : ''}${window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : ''}${btn('del', i, 'Elimina', 'style="color:#ff8f8f"')}</div>`
+      `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('edit', i, 'Modifica')}${btn('renew', i, 'Rinnova')}${window.KXPay && KXPay.canEdit() ? `<button class="btn sm" data-kxpay-open data-kind="line" data-panel="atx" data-ref="${esc(r.id)}" data-label="${esc(r.username)}">💰 Pagamento</button>` : ''}${Number(r.enabled) === 0 ? btn('on', i, 'Attiva') : btn('off', i, 'Disattiva')}${m3u(r) ? btn('m3u', i, 'M3U') : ''}${window.KXMxpNew ? btn('mxp', i, 'MaxPlayer') : ''}${window.KXOxpNew ? btn('oxp', i, 'OrbixPlay') : ''}${window.KXOrcpNew ? btn('orcp', i, KXOrcpName()) : ''}${btn('del', i, 'Elimina', 'style="color:#ff8f8f"')}</div>`
     ])));
   }
   function subsHtml(rows) {
@@ -86,7 +86,7 @@
     if (A.tab === 'overview' || A.tab === 'conns') return '';
     const st = A.tab === 'lines' ? `<select class="inp" id="axS" style="max-width:160px">${[['', 'Tutti gli stati'], ['active', 'Attive'], ['expiring', 'In scadenza'], ['expired', 'Scadute'], ['disabled', 'Disattivate'], ['trial', 'Prove'], ['online', 'Online']].map(([v, t]) => `<option value="${v}"${A.status === v ? ' selected' : ''}>${t}</option>`).join('')}</select>` : '';
     const rs = A.tab === 'lines' && A.resellers.length ? `<select class="inp" id="axR" style="max-width:180px"><option value="">Tutti i reseller</option>${A.resellers.map((r) => `<option value="${esc(String(r.id))}"${String(A.reseller) === String(r.id) ? ' selected' : ''}>${esc(r.username || '#' + r.id)}</option>`).join('')}</select>` : '';
-    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto">${st}${rs}${A.tab === 'lines' && window.KXSort ? KXSort.ui(A, 'ax') : ''}<input class="inp" id="axQ" placeholder="Cerca utente…" value="${esc(A.q)}" style="max-width:200px">${A.tab === 'lines' ? '<button class="btn pri sm" data-o="new">+ Nuova linea</button>' + (window.KXQuick ? KXQuick.button('atx') : '') : ''}</div>`;
+    return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto">${st}${rs}${A.tab === 'lines' && window.KXSort ? KXSort.ui(A, 'ax') : ''}${A.tab === 'lines' && window.KXPay ? KXPay.panelTile('atx') : ''}<input class="inp" id="axQ" placeholder="Cerca utente…" value="${esc(A.q)}" style="max-width:200px">${A.tab === 'lines' ? '<button class="btn pri sm" data-o="new">+ Nuova linea</button>' + (window.KXQuick ? KXQuick.button('atx') : '') : ''}</div>`;
   }
   function render() {
     const V = $('#v-atx'); if (!V) return;
@@ -187,12 +187,12 @@
   async function load() {
     A.busy = true; A.err = ''; show();
     try {
-      const sorting = A.tab === 'lines' && window.KXSort && (A.sort || +A.days > 0);
+      const sorting = A.tab === 'lines' && window.KXSort && (A.sort || A.days === 'due' || +A.days > 0);
       const p = new URLSearchParams({ page: sorting ? 1 : A.page, q: A.q, status: A.status, reseller: A.reseller, ...(sorting ? { all: 1 } : {}) });
       A.data = await api('GET', `/admin/atx/${A.tab}?${p}`); if (A.tab === 'overview') A.ov = A.data;
       if (sorting && A.data) { // ordino/filtro dentro i dati, così gli indici dei pulsanti restano quelli giusti
         const key = ['rows', 'items', 'lines', 'users', 'list', 'data'].find((k) => Array.isArray(A.data[k]));
-        if (key) { A.data[key] = KXSort.apply(A.data[key], A, { exp: (r) => { const v = r.exp_date ?? r.exp; if (v == null || v === '') return 0; const n = Number(v); if (!isNaN(n)) return n > 1e12 ? n : n * 1000; const t = Date.parse(String(v).replace(' ', 'T')); return isNaN(t) ? 0 : t; }, name: (r) => r.username, enabled: (r) => !!+r.enabled, conns: (r) => +r.online || 0, owner: (r) => r.reseller, created: (r) => Date.parse(String(r.created_at || r.created || '').replace(' ', 'T')) || 0 }); A.data.total = A.data[key].length; }
+        if (key) { A.data[key] = KXSort.apply(A.data[key], A, { exp: (r) => { const v = r.exp_date ?? r.exp; if (v == null || v === '') return 0; const n = Number(v); if (!isNaN(n)) return n > 1e12 ? n : n * 1000; const t = Date.parse(String(v).replace(' ', 'T')); return isNaN(t) ? 0 : t; }, name: (r) => r.username, enabled: (r) => !!+r.enabled, conns: (r) => +r.online || 0, owner: (r) => r.reseller, created: (r) => Date.parse(String(r.created_at || r.created || '').replace(' ', 'T')) || 0, payKey: (r) => ['atx', String(r.id || r.username || '').toLowerCase()] }); A.data.total = A.data[key].length; }
       }
       if (A.tab === 'lines' && Array.isArray(A.data.resellers) && A.data.resellers.length) A.resellers = A.data.resellers;
     } catch (e) { A.err = e.message; A.data = null; }
@@ -204,6 +204,8 @@
     if (!A.st) { try { A.st = await api('GET', '/admin/atx/state'); } catch (e) { A.st = { connected: false }; A.err = e.message; } }
     show(); if (A.st.connected && A.data == null && !A.busy && !A.err) load();
   }
+  window.addEventListener('kxpay:filter', (e) => { if (e.detail.panel === 'atx') { A.days = 'due'; A.page = 1; load(); } });
+  window.addEventListener('kxpay:update', () => { if ($('#v-atx')?.classList.contains('on')) show(); });
   const v0 = view;
   window.view = view = function (v) { const r = v0.apply(this, arguments); if (v === 'atx') open(); return r; };
 })();

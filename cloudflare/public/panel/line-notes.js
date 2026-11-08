@@ -26,18 +26,45 @@
   async function tick() {
     for (const [p, s] of Object.entries(SRC)) {
       const v = document.getElementById(s.view); if (!v || !v.classList.contains('on')) continue;
+      if (window.KXPay) {
+        let tile = v.querySelector(':scope > .kxpay-tile-wrap');
+        if (!tile) { tile = document.createElement('div'); tile.className = 'kxpay-tile-wrap'; tile.style.cssText = 'margin:0 0 10px'; v.prepend(tile); }
+        tile.innerHTML = v.dataset.kxPayFiltered === '1' ? `<button type="button" class="pay-panel-tile" data-kxpay-filter="${p}">Mostra tutte le linee</button>` : KXPay.panelTile(p);
+      }
       const els = [...v.querySelectorAll(s.rows)]; if (!els.length) continue;
+      const payOnly = v.dataset.kxPayFiltered === '1';
+      for (const el of els) {
+        const ref = s.ref(el);
+        if (ref) el.style.display = !payOnly || window.KXPay && KXPay.get('line', p, ref)?.status === 'due' ? '' : 'none';
+      }
       const notes = await notesOf(p);
       for (const el of els) {
-        const slot = s.slot(el); if (!slot || slot.querySelector(':scope > .ln-box')) continue;
+        const slot = s.slot(el); if (!slot) continue;
         const ref = s.ref(el); if (!ref) continue;
         const n = notes[ref.toLowerCase()] || '';
+        const current = slot.querySelector(':scope > .ln-box');
+        if (current) {
+          const oldPay = current.querySelector('.pay-badge'), payHtml = window.KXPay ? KXPay.badge('line', p, ref) : '';
+          if (oldPay && !payHtml) oldPay.remove();
+          else if (oldPay && payHtml) oldPay.outerHTML = payHtml;
+          else if (payHtml) current.insertAdjacentHTML('afterbegin', payHtml);
+          continue;
+        }
         const box = document.createElement('div'); box.className = 'ln-box'; box.dataset.lnRef = ref.toLowerCase();
-        box.innerHTML = `${n ? `<span class="ln-t" title="${esc(n)}">📝 ${esc(n)}</span>` : ''}<button class="btn sm">${n ? 'Modifica nota' : '+ nota'}</button>`;
-        box.querySelector('button').onclick = (e) => { e.stopPropagation(); edit(p, ref, (s.label && s.label(el)) || ref); };
+        const label = (s.label && s.label(el)) || ref, pay = window.KXPay ? KXPay.badge('line', p, ref) : '';
+        box.innerHTML = `${pay}${n ? `<span class="ln-t" title="${esc(n)}">📝 ${esc(n)}</span>` : ''}${window.KXPay && KXPay.canEdit() ? `<button class="btn sm" data-kxpay-open data-kind="line" data-panel="${p}" data-ref="${esc(ref)}" data-label="${esc(label)}">💰 Pagamento</button>` : ''}<button class="btn sm">${n ? 'Modifica nota' : '+ nota'}</button>`;
+        const noteBtn = [...box.querySelectorAll('button')].find((b) => !b.hasAttribute('data-kxpay-open'));
+        if (noteBtn) noteBtn.onclick = (e) => { e.stopPropagation(); edit(p, ref, label); };
         slot.appendChild(box);
       }
     }
   }
   setInterval(() => { tick().catch(() => {}); }, 600);
+  window.addEventListener('kxpay:update', () => { tick().catch(() => {}); });
+  window.addEventListener('kxpay:filter', (e) => {
+    const v = SRC[e.detail.panel] && document.getElementById(SRC[e.detail.panel].view);
+    const select = v && v.querySelector('.kx-days');
+    if (select) { select.value = 'due'; select.dispatchEvent(new Event('change', { bubbles: true })); }
+    else if (v && SRC[e.detail.panel]) { v.dataset.kxPayFiltered = v.dataset.kxPayFiltered === '1' ? '0' : '1'; tick().catch(() => {}); }
+  });
 })();

@@ -802,6 +802,92 @@ async function llNote(env, o) {
   } catch (e) { console.error('llNote', e && e.message); }
 }
 const llAutoOff = (env, d, src) => env.DB.prepare('DELETE FROM linked_lines WHERE device_id = ? AND source = ?').bind(d.id, src).run();
+const PAY_PANELS = new Set(['wolf', 'armada', 'storm', 'atx', 'ora', 'ro', 'slt', 'orcp', 'mxp', 'oxp']);
+const paymentToday = () => new Date().toISOString().slice(0, 10);
+function paymentEffective(row, today = paymentToday()) {
+  if (row.status === 'paid' && row.paid_until && row.paid_until < today)
+    return { ...row, status: 'due', since: Date.parse(row.paid_until + 'T00:00:00Z') || +row.since || 0 };
+  return row;
+}
+function paymentAddMonths(months, base = paymentToday()) {
+  const d = new Date(base + 'T00:00:00Z');
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d.toISOString().slice(0, 10);
+}
+async function paymentDeviceOwner(env, id) {
+  const d = await env.DB.prepare('SELECT id, parent, owner_id FROM devices WHERE id = ?').bind(id).first();
+  if (!d) return null;
+  const root = d.parent ? await env.DB.prepare('SELECT owner_id FROM devices WHERE id = ?').bind(d.parent).first() : d;
+  return root ? (+root.owner_id || 0) : null;
+}
+async function paymentsRoutes(req, env, who, ip, ag) {
+  const m = req.method;
+  if (m === 'GET') {
+    const rows = ((await env.DB.prepare('SELECT * FROM payments ORDER BY updated DESC LIMIT 10000').all()).results) || [];
+    const visible = ag
+      ? rows.filter((r) => (['line', 'device'].includes(r.kind) && ag.tree.includes(+r.owner_id || 0)) || (r.kind === 'agent' && r.ref === String(ag.id)))
+      : rows;
+    return json({ rows: visible.map((r) => paymentEffective(r)) });
+  }
+  if (m !== 'PUT') throw new HttpErr(405, 'Metodo non consentito');
+  const b = await readJSON(req, 4096);
+  const kind = str(b.kind, 12), panel = kind === 'line' ? str(b.panel, 20).toLowerCase() : '';
+  const rawRef = str(b.ref, 120), ref = kind === 'line' ? rawRef.toLowerCase() : rawRef;
+  if (!['line', 'device', 'agent'].includes(kind) || !ref || (kind === 'line' && !PAY_PANELS.has(panel)) || (kind !== 'line' && b.panel && str(b.panel, 20)))
+    throw new HttpErr(400, 'Cliente o linea non validi');
+  if ((kind === 'device' && !/^[A-Za-z0-9_-]{6,20}$/.test(ref)) || (kind === 'agent' && !/^\d{1,9}$/.test(ref)))
+    throw new HttpErr(400, 'Riferimento non valido');
+  const old = await env.DB.prepare('SELECT * FROM payments WHERE kind = ? AND panel = ? AND ref = ?').bind(kind, panel, ref).first();
+  let ownerId = Number.isInteger(+b.ownerId) && +b.ownerId >= 0 ? +b.ownerId : 0;
+  if (kind === 'device') {
+    const deviceOwner = await paymentDeviceOwner(env, ref);
+    if (deviceOwner === null) throw new HttpErr(404, 'Cliente non trovato');
+    ownerId = deviceOwner;
+  }
+  if (ag) {
+    if (kind === 'agent') throw new HttpErr(403, 'Non puoi gestire i pagamenti degli agenti');
+    if (kind === 'device') {
+      if (!(await ag.own(ref))) throw new HttpErr(404, 'Cliente non trovato');
+      if (old && !ag.tree.includes(+old.owner_id || 0)) throw new HttpErr(403, 'Non puoi gestire i pagamenti di questo cliente');
+    } else {
+      if (old && !ag.tree.includes(+old.owner_id || 0)) throw new HttpErr(403, 'Non puoi gestire i pagamenti di questa linea');
+      ownerId = ag.id;
+    }
+  }
+  const status = b.status === '' ? '' : str(b.status, 8);
+  if (!['', 'due', 'paid'].includes(status)) throw new HttpErr(400, 'Stato del pagamento non valido');
+  if (!status) {
+    if (old) {
+      await env.DB.prepare('DELETE FROM payments WHERE kind = ? AND panel = ? AND ref = ?').bind(kind, panel, ref).run();
+      await log(env, 'edit', `${who}: promemoria di pagamento rimosso · ${old.label || ref}`, ip).catch(() => {});
+    }
+    return json({ ok: true, deleted: !!old });
+  }
+  if (b.months !== undefined && String(b.months).trim() === '') throw new HttpErr(400, 'I mesi devono essere da 0 a 120');
+  const months = b.months === undefined ? (+old?.months || 0) : Number(b.months);
+  if (!Number.isInteger(months) || months < 0 || months > 120) throw new HttpErr(400, 'I mesi devono essere da 0 a 120');
+  const amount = b.amount === undefined || b.amount === null || b.amount === '' ? null : Number(b.amount);
+  if (amount !== null && (!Number.isFinite(amount) || amount < 0 || amount > 100000)) throw new HttpErr(400, 'L’importo deve essere da 0 a 100000 euro');
+  if (b.note !== undefined && typeof b.note !== 'string') throw new HttpErr(400, 'Nota non valida');
+  const note = b.note === undefined ? old?.note || '' : b.note.trim();
+  if (note.length > 200) throw new HttpErr(400, 'La nota può contenere al massimo 200 caratteri');
+  let paidUntil = '';
+  if (status === 'paid') {
+    paidUntil = str(b.paidUntil, 10) || paymentAddMonths(months);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(paidUntil) || !DATE_RE.test(paidUntil)) throw new HttpErr(400, 'Data «Pagato fino al» non valida');
+  }
+  const label = str(b.label, 160) || (old && old.label) || ref;
+  const remind = b.remind === undefined ? (old ? +old.remind : 1) : (b.remind === true || b.remind === 1 ? 1 : 0);
+  const t = now();
+  await env.DB.prepare(`INSERT INTO payments (kind, panel, ref, owner_id, label, status, months, amount, note, since, paid_until, remind, updated)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(kind, panel, ref) DO UPDATE SET owner_id = excluded.owner_id, label = excluded.label, status = excluded.status,
+    months = excluded.months, amount = excluded.amount, note = excluded.note, since = excluded.since, paid_until = excluded.paid_until,
+    remind = excluded.remind, updated = excluded.updated`)
+    .bind(kind, panel, ref, ownerId, label, status, months, amount, note, t, paidUntil, remind, t).run();
+  await log(env, old ? 'edit' : 'new', `${who}: pagamento ${status === 'due' ? 'da riscuotere' : 'segnato pagato'} · ${label} (${panel || kind})`, ip).catch(() => {});
+  return json({ ok: true, row: paymentEffective({ kind, panel, ref, owner_id: ownerId, label, status, months, amount, note, since: t, paid_until: paidUntil, remind, updated: t }) });
+}
 /** ag: null = titolare (vede tutto) · { id, tree, hideHosts } = agente (solo le linee sue e dei sotto-agenti visibili) */
 async function linkedLinesRoutes(req, env, path, who, ip, ag) {
   const m = req.method;
@@ -3781,10 +3867,10 @@ async function adminInner(req, env, url, ip, ctx) {
    e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
    ====================================================================== */
 const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'account', 'ai',
-  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt'];
+  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'payments', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt'];
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, mxp: false, oxp: false, oxpNew: false, addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, payments: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, mxp: false, oxp: false, oxpNew: false, addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
@@ -4147,6 +4233,10 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const apv = path.match(/^\/addon-preview\/([a-z0-9-]{3,40})$/);
   if (apv && m === 'GET') { if (!allowedAddons.has(apv[1])) throw new HttpErr(404, 'Anteprima non disponibile'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
   const need = (k, msg) => { if (!P[k]) throw new HttpErr(403, msg || 'Funzione non consentita: chiedila a chi ti ha creato'); };
+  if (path === '/payments') {
+    if (m === 'PUT') need('payments', 'Non puoi gestire i pagamenti');
+    return paymentsRoutes(req, env, who, ip, { id: A.id, tree: ctree, own });
+  }
   // tutti i dispositivi dei suoi clienti (principali e collegati)
   let scopeMem = null;
   const scope = async () => {
@@ -4806,6 +4896,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   /* ---------- segnalazioni e richieste di contenuti ---------- */
   if (path === '/requests' || path.startsWith('/requests/')) { const r = await adminRequests(req, env, path, url, who, ip); if (r) return r; }
   if (path === '/app-errors' || path.startsWith('/app-errors/')) { const r = await adminErrors(req, env, path, url, who, ip); if (r) return r; }
+  if (path === '/payments') { if (!ses) throw new HttpErr(403, 'Funzione disponibile solo dal pannello'); return paymentsRoutes(req, env, who, ip, null); }
   // password delle linee e crediti Armada: solo dal pannello (mai dalle chiavi API di integrazione)
   if (path === '/linked-lines' || path.startsWith('/linked-lines/') || path === '/line-notes') { if (!ses) throw new HttpErr(403, 'Funzione disponibile solo dal pannello'); const r = await linkedLinesRoutes(req, env, path, who, ip, null); if (r) return r; }
   for (const pv of ARM_PVS) if (path.startsWith('/' + pv + '/')) { if (!ses || ses.agent) throw new HttpErr(403, `${armP(pv).name} è riservato al titolare, dal pannello`); const r = await armadaRoutes(req, env, url, path, who, ip, 0, pv); if (r) return r; }

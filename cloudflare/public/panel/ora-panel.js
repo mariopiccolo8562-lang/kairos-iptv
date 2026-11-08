@@ -11,7 +11,7 @@
   TITLES.ora = 'Pannello ORA';
   const isAg = () => D.role === 'agent';
   const TABS = [['devices', 'Dispositivi'], ['subs', 'Sub-reseller'], ['credits', 'Crediti'], ['history', 'Movimenti'], ['info', 'Il mio account']];
-  const R = { st: null, tab: 'devices', page: 0, q: '', data: null, total: null, path: '', err: '', busy: false };
+  const R = { st: null, tab: 'devices', page: 0, q: '', data: null, total: null, path: '', err: '', busy: false, payOnly: false };
   const BM = `javascript:(()=>{const S=[localStorage,sessionStorage];let t='';for(const s of S){t=s.getItem('accessToken')||s.getItem('access_token')||'';if(t)break}if(!t)for(const s of S)for(let i=0;i<s.length&&!t;i++){const m=/eyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+/.exec(s.getItem(s.key(i))||'');if(m)t=m[0]}t=t.replace(/^"|"$/g,'');if(!/oraplayers\\.com$/.test(location.hostname)){alert('Questo pulsante va cliccato quando sei dentro il pannello ORA (panel.oraplayers.com).');return}if(!t){alert('Prima entra su ORA con utente e password, poi clicca di nuovo KAIROS ORA.');return}const u='${location.origin}/panel/#ora='+encodeURIComponent(t);const w=window.open(u,'_blank');if(!w)location.href=u})()`;
 
   /* il pulsante nei Preferiti apre KAIROS con l'accesso nel «#»: lo prendo, lo tolgo dall'indirizzo e lo salvo appena sei dentro */
@@ -38,12 +38,25 @@
     return esc(s.length > 80 ? s.slice(0, 80) + '…' : s);
   };
   const rowsOf = (d) => (Array.isArray(d) ? d : d && typeof d === 'object' ? (['content', 'items', 'data', 'results', 'list', 'devices', 'resellers'].map((k) => d[k]).find(Array.isArray) || null) : null);
+  const payRef = (r) => {
+    for (const k of ['id', 'device_id', 'deviceId', 'mac', 'username', 'user', 'code']) {
+      const v = r && r[k]; if ((typeof v === 'string' || typeof v === 'number') && String(v).trim()) return String(v).trim();
+    }
+    return '';
+  };
   const HIDE = /password|passcode|pin|token|secret|hash/i;
   function table(rows) {
+    if (R.tab === 'devices' && R.payOnly && window.KXPay) rows = KXPay.filterDue(rows, (r) => ['ora', payRef(r)]);
     if (!rows.length) return '<p class="mut" style="margin:14px 0">Nessun elemento.</p>';
     const keys = []; for (const r of rows.slice(0, 30)) for (const k of Object.keys(r || {})) if (!keys.includes(k) && !HIDE.test(k)) keys.push(k);
     const ks = keys.slice(0, 14);
-    return `<div style="overflow:auto"><table class="tbl" style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>${ks.map((k) => `<th style="text-align:left;padding:8px;border-bottom:1px solid var(--line,#333);white-space:nowrap">${esc(k)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${ks.map((k) => `<td style="padding:8px;border-bottom:1px solid var(--line,#222);vertical-align:top">${cell(r && r[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    const payCol = R.tab === 'devices' && window.KXPay;
+    return `<div style="overflow:auto"><table class="tbl" style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>${ks.map((k) => `<th style="text-align:left;padding:8px;border-bottom:1px solid var(--line,#333);white-space:nowrap">${esc(k)}</th>`).join('')}${payCol ? '<th style="text-align:left;padding:8px;border-bottom:1px solid var(--line,#333);white-space:nowrap">Pagamento</th>' : ''}</tr></thead><tbody>${rows.map((r) => {
+      const ref = payRef(r), label = r && (r.name || r.username || r.user || r.device_name || r.label) || ref;
+      const pay = payCol && ref ? KXPay.badge('line', 'ora', ref) : '';
+      const btn = payCol && ref && KXPay.canEdit() ? `<button class="btn sm" data-kxpay-open data-kind="line" data-panel="ora" data-ref="${esc(ref)}" data-label="${esc(label)}">💰 Pagamento</button>` : '';
+      return `<tr>${ks.map((k) => `<td style="padding:8px;border-bottom:1px solid var(--line,#222);vertical-align:top">${cell(r && r[k])}</td>`).join('')}${payCol ? `<td style="padding:8px;border-bottom:1px solid var(--line,#222);vertical-align:top">${pay}${btn ? `${pay ? '<br>' : ''}${btn}` : ''}</td>` : ''}</tr>`;
+    }).join('')}</tbody></table></div>`;
   }
   function body() {
     if (R.busy) return '<p class="mut" style="margin:14px 0">Carico da ORA…</p>';
@@ -81,10 +94,11 @@
           <li>Quando vedi il pannello ORA aperto, clicca <b>KAIROS ORA</b> nella barra dei Preferiti: si apre KAIROS con «ORA collegato».</li>
         </ol>
         <p class="mut" style="font-size:12.5px;margin:8px 0 0">Quando ORA fa scadere l'accesso, ripeti solo i passi 2 e 3. Utente e password di ORA non passano mai da KAIROS.</p></details></div>
-      ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.map(([k, n]) => `<button class="btn sm${R.tab === k ? ' pri' : ''}" data-t="${k}">${n}</button>`).join('')}
+        ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.map(([k, n]) => `<button class="btn sm${R.tab === k ? ' pri' : ''}" data-t="${k}">${n}</button>`).join('')}
+        ${R.tab === 'devices' && window.KXPay ? R.payOnly ? '<button type="button" class="pay-panel-tile" data-kxpay-filter="ora">Mostra tutte le linee</button>' : KXPay.panelTile('ora') : ''}
         ${R.tab === 'devices' || R.tab === 'subs' ? `<input class="inp" id="oraQ" placeholder="Cerca…" value="${esc(R.q)}" style="max-width:240px;margin-left:auto">` : ''}</div>${body()}</div>` : ''}`;
     const bm = $('#oraBm'); if (bm) { bm.setAttribute('href', BM); bm.onclick = (e) => { e.preventDefault(); toast('Non cliccarlo qui: usa «Copia il pulsante» oppure trascinalo nella barra dei Preferiti', 1); }; }
-    $$('[data-t]', V).forEach((b) => (b.onclick = () => { R.tab = b.dataset.t; R.page = 0; R.q = ''; load(); }));
+    $$('[data-t]', V).forEach((b) => (b.onclick = () => { R.tab = b.dataset.t; R.page = 0; R.q = ''; R.payOnly = false; load(); }));
     $$('[data-o]', V).forEach((b) => (b.onclick = async () => {
       const o = b.dataset.o;
       if (o === 'cpbm') return navigator.clipboard.writeText(BM).then(() => toast('Pulsante copiato: ora incollalo nei Preferiti come URL'), () => toast('Il browser non permette di copiare: trascina il pulsante KAIROS ORA', 1));
@@ -108,4 +122,11 @@
   }
   const v0 = view;
   window.view = view = function (v) { const r = v0.apply(this, arguments); if (v === 'ora') open(); return r; };
+  window.addEventListener('kxpay:filter', (e) => {
+    if (e.detail.panel !== 'ora') return;
+    const wasDevices = R.tab === 'devices';
+    R.tab = 'devices'; R.page = 0; R.payOnly = !R.payOnly;
+    if (!wasDevices || R.data == null) load(); else show();
+  });
+  window.addEventListener('kxpay:update', () => { if ($('#v-ora')?.classList.contains('on')) show(); });
 })();
