@@ -1579,6 +1579,10 @@ async function effOf(env, d, P, Ppls) {
   const pls = await unseal(env, d.playlists).catch(() => []);
   return pls.length ? { C: d, pls } : { C: P, pls: Ppls }; // per sicurezza: senza playlist sue usa quelle del principale
 }
+/** impronta dell'account (profili e loro PIN, numero massimo di profili, blocco dei profili, intestatario, connessioni):
+    il battito la manda come `af` e l'app, se cambia, ricarica lo stato. Così profili, PIN e utenti creati dal pannello
+    arrivano entro un battito anche senza riaprire l'app (prima arrivavano solo alla riapertura). */
+const acctFp = async (P) => (P ? (await sha256(JSON.stringify([P.profiles || '', P.max_profiles ?? 3, P.lock_profiles ? 1 : 0, P.name || '', P.max_conn ?? 1]))).slice(0, 12) : '');
 async function accountOf(env, P, me, pls, C = P) {
   const conns = [P, ...(await linkedOf(env, P.id))].map((x) => ({ name: x.name || '', model: x.model || '', seen: x.id === me.id ? now() : +x.last_seen || 0, me: x.id === me.id }));
   return { primary: me.id === P.id, owner: P.name || '', maxConn: P.max_conn ?? 1, conns, maxProfiles: P.max_profiles ?? 3, profiles: readProfiles(P, pls.map((p) => p.id)), canEdit: !P.lock_profiles, maxStreams: +P.max_streams || 0, plMode: C.pl_mode === 'split' ? 'split' : 'merge', plDefault: pls.some((p) => p.id === C.pl_default) ? C.pl_default : '', player: playerParse(C.player) };
@@ -2109,7 +2113,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
     const apu = appOfVer(f.ver, d.app); if (RC_APPS.includes(apu)) try { const lp = latestFor(env, S0, apu); ctx.waitUntil(lp.catch(() => {})); const L = await Promise.race([lp, new Promise((r) => setTimeout(() => r(null), 800))]); if (L && verBehind(f.ver, L.version)) upd = L.versionCode || 1; } catch {}
   }
   const eff = rcEffective(S0, d, appOfVer(f.ver, d.app)), cmds = await cmdP;
-  return json({ ok: true, mt, ...(upd ? { upd } : {}), rc: JSON.stringify(eff.rc), rcv: eff.rcv, ...(cmds.length ? { cmds } : {}), unseen: await unP, ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', ...(kick ? { kick } : {}) });
+  return json({ ok: true, mt, ...(upd ? { upd } : {}), rc: JSON.stringify(eff.rc), rcv: eff.rcv, ...(cmds.length ? { cmds } : {}), unseen: await unP, ts: t, vm, ph: P ? permsJson(permsParse(P.perms)) : '', ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', af: await acctFp(P), ...(kick ? { kick } : {}) });
 }
 /* ---------------- dati del cliente e salute delle app ---------------- */
 const verNum = (v) => { const m = String(v || '').match(/(\d{1,3})\.(\d{1,3})(?:\.(\d{1,3}))?/); return m ? +m[1] * 1e6 + +m[2] * 1e3 + +(m[3] || 0) : 0; };
@@ -3250,7 +3254,7 @@ async function playerRegister(req, env, ip, ctx) {
   const eff = rcEffective(s, d, appFrom(req, b) || appOfVer('', d.app));
   const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? pls : [], messages: await msgP, rc: eff.rc, rcv: eff.rcv };
   if (status === 'active') {
-    [out.account, out.vpn] = await Promise.all([accountOf(env, P, d, pls, C), vpnOf(env, P, d)]);
+    [out.account, out.vpn, out.af] = await Promise.all([accountOf(env, P, d, pls, C), vpnOf(env, P, d), acctFp(P)]);
     out.perms = permsOf(P); // i collegati ereditano i permessi del principale
     if (s.aiOff) out.perms.ai = false; // assistente spento dal pannello
     out.addons = addonsFor(s, P); out.adg = P.addons || ''; // add-on (i collegati usano quelli del principale)
