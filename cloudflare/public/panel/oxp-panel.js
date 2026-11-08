@@ -53,7 +53,7 @@
       <div style="margin-top:8px">${!O.pls ? `<p class="mut">${O.busy ? 'Carico le playlist da OrbixPlay…' : 'Nessun dato'}</p>` : shown.map((p) => { const sh = O.show.has(p.id); return `<div class="wf-row ox-row" data-id="${esc(p.id)}"><div><span class="k">${window.KXTools ? KXTools.ck('ox', p.id, O.sel.has(String(p.id))) : ''}ID playlist</span><span class="oxid">${esc(p.id)}</span></div>
         <div><span class="k">Dispositivo</span><b class="mono">${esc(p.device)}</b>${p.notes ? `<br><small class="mut">${esc(p.notes)}</small>` : ''}</div>
         <div><span class="k">Playlist</span>${esc(p.name) || '—'}<br><small class="mut mono">${esc(p.host)}</small></div>
-        <div>${window.KXOnline ? KXOnline.slot(p.host, p.user, p.pass) : ''}${window.KXWatch ? KXWatch.slot('oxp', p.user) : ''}<span class="k">Utente / password</span><div class="wf-v"><b class="mono">${esc(p.user)}</b><button data-a="cu">⧉</button></div><div class="wf-v"><span class="mono">${sh ? esc(p.pass) : '••••••'}</span><button data-a="eye">${sh ? 'Nascondi' : 'Mostra'}</button><button data-a="cp">⧉</button></div></div>
+        <div>${window.KXOnline ? KXOnline.slot(p.host, p.user, p.pass) : ''}${window.KXWatch ? KXWatch.slot('oxp', p.user) : ''}<span class="k">Utente / password</span><div class="wf-v"><b class="mono">${esc(p.user)}</b><button data-a="cu" title="Copia utente">⧉</button></div><div class="wf-v"><span class="mono">${sh ? esc(p.pass) : '••••••'}</span><button data-a="eye" title="${sh ? 'Nascondi' : 'Mostra'} password">${sh ? 'Nascondi' : 'Mostra'}</button><button data-a="cp" title="Copia password">⧉</button></div></div>
         <div class="wf-act"><button class="btn sm" data-a="edit">Modifica</button><button class="btn sm ghost" data-a="del" style="color:#ff8f8f">Elimina</button></div></div>`; }).join('')}</div>
       ${list.length > shown.length ? `<div style="margin-top:10px"><button class="btn sm" id="oxMore">Mostra altre ${Math.min(100, list.length - shown.length)}</button></div>` : ''}</div>`;
     $('#oxRe').onclick = load;
@@ -104,7 +104,14 @@
     });
     const ok = await prompt;
     if (!ok) return;
-    try { await api('POST', '/admin/oxp/playlists', { device: $('#onD').value, user: $('#onU').value, pass: $('#onP').value, host: $('#onH').value, hostUrl: ($('#onH').selectedOptions && $('#onH').selectedOptions[0] && $('#onH').selectedOptions[0].dataset.h) || '', name: $('#onN').value, notes: $('#onT').value }); toast('Playlist aggiunta su OrbixPlay'); load(); } catch (e) { toast(e.message, 1); }
+    try {
+      const device = $('#onD').value, user = $('#onU').value, pass = $('#onP').value;
+      await api('POST', '/admin/oxp/playlists', { device, user, pass, host: $('#onH').value, hostUrl: ($('#onH').selectedOptions && $('#onH').selectedOptions[0] && $('#onH').selectedOptions[0].dataset.h) || '', name: $('#onN').value, notes: $('#onT').value });
+      const refresh = load();
+      if (window.KXCreds) await KXCreds.show('✅ Playlist aggiunta su OrbixPlay', [['ID dispositivo', device], ['Utente della linea', user], ['Password della linea', pass]]);
+      else toast('Playlist aggiunta su OrbixPlay');
+      await refresh;
+    } catch (e) { toast(e.message, 1); }
   }
   async function chDns() {
     const hosts = [...new Set((O.pls || []).map((p) => p.host).filter(Boolean))];

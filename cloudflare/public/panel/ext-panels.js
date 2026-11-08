@@ -139,8 +139,10 @@
     const vals = {}; fields.forEach((f, i) => { const el = $('#exF' + i); if (el) vals[f.name] = f.type === 'checkbox' ? el.checked : el.value; });
     const miss = fields.find((f) => f.required && f.type !== 'checkbox' && !String(vals[f.name] || '').trim()); if (miss) return toast('Compila «' + miss.label + '»', 1);
     const r = await api('POST', `/admin/${k}/lines/create`, { fields: vals });
-    await ask('Linea creata', `<p>Utente: <b>${esc(r.username)}</b><br>Password: <b>${esc(r.password)}</b></p><p class="mut" style="font-size:12.5px">È già segnata in Appunti App.</p>`, 'OK');
-    return load(k);
+    const refresh = load(k);
+    if (window.KXCreds) await KXCreds.show(`✅ Linea creata su ${P.name}`, [['Utente', r.username], ['Password', r.password]], 'È già segnata in Appunti App.');
+    else toast(`Linea creata su ${P.name}`);
+    return refresh;
   }
   async function op(k, o) {
     const A = ST[k], P = PANELS[k];

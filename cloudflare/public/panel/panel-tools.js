@@ -10,7 +10,9 @@
 .kt-st div{border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:#ffffff06}.kt-st small{display:block;color:var(--mut);font-size:11.5px}
 .kt-st span{font-size:20px;font-weight:800}.kt-st .g{color:#6ee3a6}.kt-st .w{color:#ecc06f}.kt-st .b{color:#ff8f8f}
 .kt-top{margin-top:10px;font-size:12.5px;color:var(--mut)}.kt-top b{color:var(--txt,#fff)}
-.kt-ck{width:16px;height:16px;accent-color:#22c55e;vertical-align:middle;margin:0 6px 0 0;cursor:pointer}`;
+.kt-ck{width:16px;height:16px;accent-color:#22c55e;vertical-align:middle;margin:0 6px 0 0;cursor:pointer}
+.kx-creds{display:grid;gap:9px}.kx-creds-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px;background:#ffffff06}
+.kx-creds-row small{display:block;color:var(--mut);font-size:11.5px;margin-bottom:3px}.kx-creds-row .mono{display:block;overflow-wrap:anywhere;white-space:pre-wrap}`;
   document.head.appendChild(css);
 
   const cell = (v) => { const s = v === null || v === undefined ? '' : String(v); return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
@@ -64,6 +66,28 @@
     try { const r = await api('POST', '/admin/messages', b); toast(`Messaggio inviato a ${(r && r.sent) || ids.length} clienti`); } catch (e) { toast(e.message, 1); }
   }
 
+  function showCredentials(title, rows, note) {
+    const items = (Array.isArray(rows) ? rows : []).filter((row) => Array.isArray(row) && row.length > 1 && String(row[1] ?? '').trim() !== '')
+      .map(([label, value]) => [String(label), String(value)]);
+    const body = `<div class="kx-creds">${items.map(([label, value], i) => `<div class="kx-creds-row"><div><small>${esc(label)}</small><span class="mono">${esc(value)}</span></div><button type="button" class="btn sm" data-kx-creds-copy="${i}" title="Copia ${esc(label)}">Copia</button></div>`).join('')}
+      ${note ? `<p class="mut" style="font-size:12.5px;margin:0">${esc(note)}</p>` : ''}
+      <button type="button" class="btn" id="kxCredsCopyAll">Copia tutto</button></div>`;
+    const prompt = ask(title, body, 'Chiudi');
+    const copy = (value, label) => {
+      if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') return toast('Copia non consentita dal browser', 1);
+      navigator.clipboard.writeText(value).then(() => toast(`${label} copiato`), () => toast('Copia non consentita dal browser', 1));
+    };
+    $$('[data-kx-creds-copy]').forEach((button) => {
+      button.onclick = () => {
+        const row = items[+button.dataset.kxCredsCopy];
+        if (row) copy(row[1], row[0]);
+      };
+    });
+    const all = $('#kxCredsCopyAll');
+    if (all) all.onclick = () => copy(items.map(([label, value]) => `${label}: ${value}`).join('\n'), 'Dati');
+    return prompt;
+  }
+
   /* barra sopra l'elenco: export, statistiche e, con linee selezionate, le azioni multiple */
   function bar(p, n, total, acts) {
     return `<div class="kt-bar"><label style="display:flex;align-items:center;cursor:pointer"><input type="checkbox" class="kt-ck" data-kt="${p}all"${n && n === total ? ' checked' : ''}>Seleziona tutte (${total})</label>
@@ -83,4 +107,5 @@
   }
 
   window.KXTools = { csv, day, stats, count, run, devsFor, msg, bar, ck, bind };
+  window.KXCreds = { show: showCredentials };
 })();

@@ -85,8 +85,8 @@
       ${window.KXTools ? KXTools.bar('mx', list.filter((u) => M.sel.has(String(u.id))).length, list.length, [['msg', 'Messaggio ai clienti']]) + (M.stOn ? statsHtml() : '') : ''}
       <div style="margin-top:8px">${shown.map((u) => `<div class="mx-row" data-id="${esc(u.id)}">
         <div><span class="k">${window.KXTools ? KXTools.ck('mx', u.id, M.sel.has(String(u.id))) : ''}ID</span>${esc(u.id)}</div>
-        <div><span class="k">Utente app</span><b class="mono">${esc(u.username) || '—'}</b>${u.email ? `<br><small class="mut">${esc(u.email)}</small>` : ''}</div>
-        <div><span class="k">Liste</span>${u.lists.length ? u.lists.map((l) => { const k = u.id + '|' + l.id, sh = M.show.has(k); return `<div class="mx-l" data-l="${esc(l.id)}">${window.KXOnline ? KXOnline.slot((l.ssl ? 'https://' : 'http://') + l.fqdn + (l.port ? ':' + l.port : ''), l.user, l.pass) : ''}${window.KXWatch ? KXWatch.slot('mxp', l.user) : ''}<span class="wf-tag g">${esc(l.name || 'Lista')}</span><span class="mono" title="${esc(l.fqdn)}">${esc(domName(l.dom) || l.fqdn)}</span><span class="mono"><b>${esc(l.user)}</b></span><span class="mono">${sh ? esc(l.pass) : '••••••'}</span><button data-a="eye">${sh ? 'Nascondi' : 'Mostra'}</button><button data-a="cp">⧉</button><button data-a="le">Modifica</button><button data-a="ld" style="color:#ff8f8f">Togli</button></div>`; }).join('') : '<span class="mut">nessuna lista</span>'}</div>
+        <div><span class="k">Utente app</span><b class="mono">${esc(u.username) || '—'}</b> <button data-a="cua" title="Copia utente">⧉</button>${u.email ? `<br><small class="mut">${esc(u.email)}</small>` : ''}</div>
+        <div><span class="k">Liste</span>${u.lists.length ? u.lists.map((l) => { const k = u.id + '|' + l.id, sh = M.show.has(k); return `<div class="mx-l" data-l="${esc(l.id)}">${window.KXOnline ? KXOnline.slot((l.ssl ? 'https://' : 'http://') + l.fqdn + (l.port ? ':' + l.port : ''), l.user, l.pass) : ''}${window.KXWatch ? KXWatch.slot('mxp', l.user) : ''}<span class="wf-tag g">${esc(l.name || 'Lista')}</span><span class="mono" title="${esc(l.fqdn)}">${esc(domName(l.dom) || l.fqdn)}</span><span class="mono"><b>${esc(l.user)}</b></span> <button data-a="cu" title="Copia utente">⧉</button><span class="mono">${sh ? esc(l.pass) : '••••••'}</span><button data-a="eye">${sh ? 'Nascondi' : 'Mostra'}</button><button data-a="cp" title="Copia password">⧉</button><button data-a="le">Modifica</button><button data-a="ld" style="color:#ff8f8f">Togli</button></div>`; }).join('') : '<span class="mut">nessuna lista</span>'}</div>
         <div class="wf-act"><button class="btn sm" data-a="la">+ Lista</button><button class="btn sm" data-a="dv">Dispositivi</button><button class="btn sm" data-a="pw">Password app</button><button class="btn sm ghost" data-a="del" style="color:#ff8f8f">Elimina</button></div></div>`).join('')}</div>
       ${list.length > shown.length ? `<div style="margin-top:10px"><button class="btn sm" id="mxMore">Mostra altri ${Math.min(100, list.length - shown.length)}</button></div>` : ''}`;
   }
@@ -184,7 +184,14 @@
     });
     const ok = await prompt;
     if (!ok) return;
-    try { await api('POST', P('/users'), { user: $('#mnU').value, pass: $('#mnP').value, domain: $('#mnD').value, name: $('#mnN').value, devices: $('#mnX').value }); toast('Cliente creato su MaxPlayer'); await loadAll(true); } catch (e) { toast(e.message, 1); }
+    try {
+      const user = $('#mnU').value, pass = $('#mnP').value;
+      await api('POST', P('/users'), { user, pass, domain: $('#mnD').value, name: $('#mnN').value, devices: $('#mnX').value });
+      const refresh = loadAll(true);
+      if (window.KXCreds) await KXCreds.show('✅ Cliente creato su MaxPlayer', [['Utente della linea', user], ['Password della linea', pass]]);
+      else toast('Cliente creato su MaxPlayer');
+      await refresh;
+    } catch (e) { toast(e.message, 1); }
   }
   async function domEdit(id) {
     const d = (M.doms || []).find((x) => x.id === id), url = d ? `${d.https ? 'https' : 'http'}://${d.domain}${d.port && !['80', '443'].includes(d.port) ? ':' + d.port : ''}` : '';
@@ -198,6 +205,8 @@
     const l = u.lists.find((x) => x.id === lid);
     try {
       if (a === 'eye' && l) { const k = id + '|' + lid; M.show.has(k) ? M.show.delete(k) : M.show.add(k); return render(); }
+      if (a === 'cua') return copy(u.username, 'Utente app');
+      if (a === 'cu' && l) return copy(l.user, 'Utente');
       if (a === 'cp' && l) return copy(l.pass, 'Password');
       if (a === 'le' && l) {
         const ok = await ask('Modifica lista di ' + (u.username || id), `<div class="wf-f" style="grid-template-columns:1fr 1fr">
