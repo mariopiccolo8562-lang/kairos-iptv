@@ -952,11 +952,7 @@ async function agentLedgerSummary(env) {
     last: row.last,
   }));
 }
-async function addAgentLedgerEntry(req, env, who, ip) {
-  const b = await readJSON(req, 4096);
-  const agentId = Number(b.agent);
-  if (!Number.isInteger(agentId) || agentId < 1 || agentId > 999999999 || !(await env.DB.prepare("SELECT id FROM admins WHERE id = ? AND role = 'agent'").bind(agentId).first()))
-    throw new HttpErr(400, 'Agente non valido');
+function cleanAgentLedgerEntry(b) {
   if (!['debt', 'pay'].includes(b.type)) throw new HttpErr(400, 'Tipo di movimento non valido');
   const amount = (value, max, label) => {
     if (value === undefined || value === null || value === '') return 0;
@@ -970,11 +966,26 @@ async function addAgentLedgerEntry(req, env, who, ip) {
   if (!LEDGER_PANELS.has(panel)) throw new HttpErr(400, 'Pannello non valido');
   if (b.note !== undefined && (typeof b.note !== 'string' || b.note.length > 200)) throw new HttpErr(400, 'Nota non valida');
   const note = typeof b.note === 'string' ? b.note.trim() : '';
-  const t = now();
+  const date = b.date === undefined ? new Date(now()).toISOString().slice(0, 10) : b.date;
+  if (typeof date !== 'string' || !DATE_RE.test(date) || date < '2020-01-01') throw new HttpErr(400, 'Data non valida: scegli una data dal 2020 in poi');
+  const today = new Date(now()).toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.parse(`${today}T12:00:00Z`) + 864e5).toISOString().slice(0, 10);
+  if (date > tomorrow) throw new HttpErr(400, 'La data non può essere oltre domani');
+  return { type: b.type, eur, credits, panel, note, date, t: Date.parse(`${date}T12:00:00Z`) };
+}
+function agentLedgerAudit(e) {
+  return `${e.type === 'debt' ? 'debito' : 'pagamento'} · ${new Date(+e.t).toISOString().slice(0, 10)} · ${e.eur} € · ${e.credits} crediti ${e.panel || 'generici'}${e.note ? ` · ${e.note}` : ''}`;
+}
+async function addAgentLedgerEntry(req, env, who, ip) {
+  const b = await readJSON(req, 4096);
+  const agentId = Number(b.agent);
+  if (!Number.isInteger(agentId) || agentId < 1 || agentId > 999999999 || !(await env.DB.prepare("SELECT id FROM admins WHERE id = ? AND role = 'agent'").bind(agentId).first()))
+    throw new HttpErr(400, 'Agente non valido');
+  const entry = cleanAgentLedgerEntry(b);
   const result = await env.DB.prepare('INSERT INTO agent_ledger (agent_id, t, type, eur, credits, panel, note, "by") VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(agentId, t, b.type, eur, credits, panel, note, who).run();
+    .bind(agentId, entry.t, entry.type, entry.eur, entry.credits, entry.panel, entry.note, who).run();
   const id = result.meta && result.meta.last_row_id;
-  await log(env, 'edit', `${who}: ${b.type === 'debt' ? 'debito' : 'pagamento'} agente · ${agentId} · ${eur ? `${eur} €` : ''}${credits ? ` ${credits} crediti ${panel || 'generici'}` : ''}${note ? ` · ${note}` : ''}`, ip);
+  await log(env, 'edit', `${who}: ${agentLedgerAudit({ ...entry, t: entry.t })} agente · ${agentId}`, ip);
   return { ok: true, id };
 }
 async function generalHealthCheck(env, fresh = false) {
@@ -5947,6 +5958,18 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     }
     if (path === '/agent-ledger' && m === 'POST') return json(await addAgentLedgerEntry(req, env, who, ip));
     const ledgerDelete = path.match(/^\/agent-ledger\/(\d{1,12})$/);
+    if (ledgerDelete && m === 'PUT') {
+      const row = await env.DB.prepare('SELECT * FROM agent_ledger WHERE id = ?').bind(+ledgerDelete[1]).first();
+      if (!row) throw new HttpErr(404, 'Movimento non trovato');
+      const entry = cleanAgentLedgerEntry(await readJSON(req, 4096));
+      const date = new Date(+row.t).toISOString().slice(0, 10);
+      const t = date === entry.date ? +row.t : entry.t;
+      const updated = { ...row, ...entry, t };
+      await env.DB.prepare('UPDATE agent_ledger SET t = ?, type = ?, eur = ?, credits = ?, panel = ?, note = ? WHERE id = ?')
+        .bind(updated.t, updated.type, updated.eur, updated.credits, updated.panel, updated.note, +ledgerDelete[1]).run();
+      await log(env, 'edit', `${who}: movimento del registro agente ${row.agent_id} modificato · ${agentLedgerAudit(row)} → ${agentLedgerAudit(updated)}`, ip);
+      return json({ ok: true });
+    }
     if (ledgerDelete && m === 'DELETE') {
       const row = await env.DB.prepare('SELECT agent_id, type, eur, credits, panel, note FROM agent_ledger WHERE id = ?').bind(+ledgerDelete[1]).first();
       if (!row) throw new HttpErr(404, 'Movimento non trovato');

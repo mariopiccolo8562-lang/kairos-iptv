@@ -548,9 +548,17 @@ body.agent .foot{display:none}
       if (!summary || !history || !$('#agLedgerBox')) return;
       summary.className = (+data.balance.eur > 0 || Object.values(data.balance.credits || {}).some((x) => +x > 0)) ? 'pay-badge due' : 'mut';
       summary.textContent = ledgerBalanceText(data.balance);
-      history.innerHTML = data.entries.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Data</th><th>Tipo</th><th>€</th><th>Crediti</th><th>Nota</th><th></th></tr></thead><tbody>${data.entries.map((e) => `<tr><td>${new Date(+e.t).toLocaleDateString('it-IT')}</td><td style="color:${e.type === 'debt' ? '#ff8f8f' : '#6ee3a6'}">${e.type === 'debt' ? 'Debito' : 'Pagamento'}</td><td>${+e.eur ? ledgerNum(e.eur) : '—'}</td><td>${+e.credits ? `${ledgerNum(e.credits)} cr${e.panel ? ' · ' + esc(ledgerPanel(e.panel)) : ''}` : '—'}</td><td>${esc(e.note || '')}</td><td><button class="btn sm danger" data-ledger-delete="${e.id}" title="Elimina movimento">🗑</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="mut">Nessun movimento registrato.</p>';
+      const credits = $('#agLedgerCredits');
+      if (credits) credits.innerHTML = window.KXPay?.ledgerCreditsSummary?.(data.entries) || '';
+      history.innerHTML = data.entries.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Data</th><th>Tipo</th><th>€</th><th>Crediti</th><th>Nota</th><th></th></tr></thead><tbody>${data.entries.map((e) => `<tr><td>${new Date(+e.t).toLocaleDateString('it-IT')}</td><td style="color:${e.type === 'debt' ? '#ff8f8f' : '#6ee3a6'}">${e.type === 'debt' ? 'Debito' : 'Pagamento'}</td><td>${+e.eur ? ledgerNum(e.eur) : '—'}</td><td>${+e.credits ? `${ledgerNum(e.credits)} cr${e.panel ? ' · ' + esc(ledgerPanel(e.panel)) : ''}` : '—'}</td><td>${esc(e.note || '')}</td><td><button class="btn sm" data-ledger-edit="${e.id}" title="Modifica movimento">✏️ Modifica</button> <button class="btn sm danger" data-ledger-delete="${e.id}" title="Elimina movimento">🗑</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="mut">Nessun movimento registrato.</p>';
       box.querySelectorAll('[data-ledger-add]').forEach((button) => {
         button.onclick = () => promptAgentLedger(agent, button.dataset.ledgerAdd);
+      });
+      box.querySelectorAll('[data-ledger-edit]').forEach((button) => {
+        button.onclick = () => {
+          const entry = data.entries.find((x) => String(x.id) === button.dataset.ledgerEdit);
+          if (entry) promptAgentLedger(agent, entry.type, entry);
+        };
       });
       box.querySelectorAll('[data-ledger-delete]').forEach((button) => {
         button.onclick = async () => {
@@ -566,18 +574,26 @@ body.agent .foot{display:none}
       const summary = $('#agLedgerSummary'); if (summary) summary.textContent = e.message;
     }
   }
-  function promptAgentLedger(agent, type) {
-    const title = type === 'debt' ? 'Aggiungi debito' : 'Registra pagamento';
-    ask(title, `<label class="lbl">Euro</label><input class="inp" id="agLedgerEur" type="number" min="0" max="100000" step="0.01"><label class="lbl">Crediti</label><div style="display:flex;gap:8px"><input class="inp" id="agLedgerCredits" type="number" min="0" max="1000000" step="0.01" style="flex:1"><select class="inp" id="agLedgerPanel"><option value="">Generico</option><option value="wolf">WOLF</option><option value="armada">Armada</option><option value="storm">Storm</option><option value="atx">Atlantix</option><option value="ro">Realott</option><option value="slt">SLT</option></select></div><label class="lbl">Nota</label><input class="inp" id="agLedgerNote" maxlength="200">`, 'Salva').then(async (ok) => {
+  function promptAgentLedger(agent, type, entry = null) {
+    const date = entry ? new Date(+entry.t).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const title = entry ? 'Modifica movimento' : type === 'debt' ? 'Aggiungi debito' : 'Registra pagamento';
+    return ask(title, `<label class="lbl">Tipo</label><select class="inp" id="agLedgerType"><option value="debt"${(entry?.type || type) === 'debt' ? ' selected' : ''}>Debito</option><option value="pay"${(entry?.type || type) === 'pay' ? ' selected' : ''}>Pagamento</option></select><label class="lbl">Data</label><input class="inp" id="agLedgerDate" type="date" value="${date}"><label class="lbl">Euro</label><input class="inp" id="agLedgerEur" type="number" min="0" max="100000" step="0.01" value="${entry?.eur ?? ''}"><label class="lbl">Crediti</label><div style="display:flex;gap:8px"><input class="inp" id="agLedgerCredits" type="number" min="0" max="1000000" step="0.01" style="flex:1" value="${entry?.credits ?? ''}"><select class="inp" id="agLedgerPanel"><option value="">Generico</option><option value="wolf"${entry?.panel === 'wolf' ? ' selected' : ''}>WOLF</option><option value="armada"${entry?.panel === 'armada' ? ' selected' : ''}>Armada</option><option value="storm"${entry?.panel === 'storm' ? ' selected' : ''}>Storm</option><option value="atx"${entry?.panel === 'atx' ? ' selected' : ''}>Atlantix</option><option value="ro"${entry?.panel === 'ro' ? ' selected' : ''}>Realott</option><option value="slt"${entry?.panel === 'slt' ? ' selected' : ''}>SLT</option></select></div><label class="lbl">Nota</label><input class="inp" id="agLedgerNote" maxlength="200" value="${esc(entry?.note || '')}">`, 'Salva').then(async (ok) => {
       if (!ok) return;
       const eur = Number($('#agLedgerEur').value), credits = Number($('#agLedgerCredits').value), note = $('#agLedgerNote').value.trim();
       if (!Number.isFinite(eur) || eur < 0 || eur > 100000 || !Number.isFinite(credits) || credits < 0 || credits > 1000000 || !(eur > 0 || credits > 0) || note.length > 200) return toast('Controlla importi e nota', 1);
       try {
-        await api('POST', '/admin/agent-ledger', { agent: agent.id, type, eur, credits, panel: $('#agLedgerPanel').value, note });
-        ledgerSummaryAt = 0; await loadAgentLedger(agent); loadLedgerSummary(); toast(type === 'debt' ? 'Debito aggiunto' : 'Pagamento registrato');
+        const typeValue = $('#agLedgerType').value;
+        const body = { type: typeValue, eur, credits, panel: $('#agLedgerPanel').value, note, date: $('#agLedgerDate').value };
+        if (entry) await api('PUT', `/admin/agent-ledger/${entry.id}`, body);
+        else await api('POST', '/admin/agent-ledger', { agent: agent.id, ...body });
+        ledgerSummaryAt = 0; await loadAgentLedger(agent); loadLedgerSummary();
+        window.dispatchEvent(new CustomEvent('kxledger:update'));
+        await window.KXPay?.loadLedger?.(true);
+        toast(entry ? 'Movimento modificato' : typeValue === 'debt' ? 'Debito aggiunto' : 'Pagamento registrato');
       } catch (e) { toast(e.message, 1); }
     });
   }
+  window.KXAgentLedger = { prompt: promptAgentLedger };
   /** riepilogo dei DNS dell'agente: server delle linee, OrbixPlay e MaxPlayer, ognuno col suo colore */
   function dnsSum(a) {
     const p = a.perms || {};
@@ -755,6 +771,17 @@ body.agent .foot{display:none}
     const agents = D.agents || [], lists = bulkListDefs();
     const selected = new Set(), state = { step: 1, search: '', flags: {}, lists: {} };
     const appLabel = (key, value) => value === '*' ? lists.find((x) => x.key === key)?.all || 'Tutti' : lists.find((x) => x.key === key)?.items.find((x) => String(x[0]).toLowerCase() === String(value).toLowerCase())?.[1] || value;
+    const listAll = (agent, key) => {
+      const value = (agent.perms || {})[key];
+      if (key === 'actApps') {
+        const enabled = (D.activationApps || []).filter((x) => x.enabled).map((x) => x.key);
+        return Array.isArray(value) && enabled.length > 0 && enabled.every((x) => value.includes(x));
+      }
+      return !Array.isArray(value) || value.includes('*');
+    };
+    const listHas = (agent, key, value) => value === '*' ? listAll(agent, key) : listAll(agent, key) || ((agent.perms || {})[key] || []).some((x) => String(x).toLowerCase() === String(value).toLowerCase());
+    const agentNames = (agentsWith) => agentsWith.map((a) => a.username || `Agente ${a.id}`);
+    const shortNames = (names) => `${names.slice(0, 6).map(esc).join(', ')}${names.length > 6 ? ` +${names.length - 6} altri` : ''}`;
     const hasChanges = () => Object.keys(state.flags).length > 0 || Object.keys(state.lists).length > 0;
     const captureChanges = () => {
       state.flags = Object.fromEntries($$('#mB [data-bulk-flag]').filter((x) => x.value !== '').map((x) => [x.dataset.bulkFlag, x.value === '1']));
@@ -768,10 +795,18 @@ body.agent .foot{display:none}
       const step = state.step, steps = ['Cosa cambiare', 'A quali agenti', 'Riepilogo'];
       const head = `<div class="ag-bulk-steps">${steps.map((x, i) => `<span class="ag-bulk-step ${step === i + 1 ? 'on' : ''}">${i + 1}. ${x}</span>`).join('')}</div>`;
       if (step === 1) {
-        const perms = bulkFlagGroups.map(([title, entries]) => `<section class="ag-bulk-group"><h4>${esc(title)}</h4><div class="ag-bulk-perms">${entries.map(([k, label, help]) => `<label class="ag-bulk-perm"><span>${esc(label)}${help ? `<small>${esc(help)}</small>` : ''}</span><select class="inp" data-bulk-flag="${esc(k)}"><option value="">Non cambiare</option><option value="1"${state.flags[k] === true ? ' selected' : ''}>Sì</option><option value="0"${state.flags[k] === false && Object.hasOwn(state.flags, k) ? ' selected' : ''}>No</option></select></label>`).join('')}</div></section>`).join('');
+        const perms = bulkFlagGroups.map(([title, entries]) => `<section class="ag-bulk-group"><h4>${esc(title)}</h4><div class="ag-bulk-perms">${entries.map(([k, label, help]) => {
+          const assigned = agents.filter((a) => !!(a.perms || {})[k]), names = agentNames(assigned), active = assigned.length > 0;
+          return `<label class="ag-bulk-perm"${active ? ' style="background:rgba(34,197,94,.08);outline:1px solid rgba(34,197,94,.18)"' : ''}><span>${esc(label)}${help ? `<small>${esc(help)}</small>` : ''}<small style="display:block;margin-top:4px;color:${active ? '#6ee7a1' : '#9ca3af'}">${active ? `✅ Già acceso a: ${shortNames(names)} (${assigned.length} su ${agents.length})` : 'Nessun agente'}</small></span><select class="inp" data-bulk-flag="${esc(k)}"><option value="">Non cambiare</option><option value="1"${state.flags[k] === true ? ' selected' : ''}>Sì</option><option value="0"${state.flags[k] === false && Object.hasOwn(state.flags, k) ? ' selected' : ''}>No</option></select></label>`;
+        }).join('')}</div></section>`).join('');
         const listHtml = lists.map((def) => {
           const cur = state.lists[def.key], selectedItems = new Set((cur?.items || []).map((x) => String(x).toLowerCase()));
-          const items = [['*', def.all], ...def.items].map(([value, label]) => `<label><input type="checkbox" data-bulk-list="${esc(def.key)}" data-bulk-value="${esc(value)}"${selectedItems.has(String(value).toLowerCase()) ? ' checked' : ''}> ${esc(label)}</label>`).join('');
+          const items = [['*', def.all], ...def.items].map(([value, label]) => {
+            const assigned = agents.filter((a) => listHas(a, def.key, value)), names = agentNames(assigned);
+            const count = value === '*' ? agents.filter((a) => listAll(a, def.key)) : assigned;
+            const tip = names.length ? ` title="${esc(names.join(', '))}"` : '';
+            return `<label style="${assigned.length ? 'color:#86efac' : 'color:#a1a1aa'}"><input type="checkbox" data-bulk-list="${esc(def.key)}" data-bulk-value="${esc(value)}"${selectedItems.has(String(value).toLowerCase()) ? ' checked' : ''}> ${esc(label)} <small${tip} style="display:inline;margin:0 0 0 3px;color:${assigned.length ? '#6ee7a1' : '#9ca3af'}">${value === '*' ? `Tutti: ${count.length}` : `(${assigned.length})`}</small></label>`;
+          }).join('');
           return `<section class="ag-bulk-list"><h5>${esc(def.title)}</h5><select class="inp" data-bulk-mode="${esc(def.key)}"><option value="add"${!cur || cur.mode === 'add' ? ' selected' : ''}>Aggiungi</option><option value="remove"${cur?.mode === 'remove' ? ' selected' : ''}>Togli</option><option value="set"${cur?.mode === 'set' ? ' selected' : ''}>Sostituisci</option></select><div class="ag-chk">${items || '<small>Nessuna voce disponibile.</small>'}</div><small>Nessuna spunta = nessuna modifica. «Tutti» (*) include anche le voci future; con «Togli», un elenco già impostato su tutti resta tutti.</small></section>`;
         }).join('');
         $('#mB').innerHTML = `${head}<div class="ag-bulk-wrap"><p class="mut">Scegli solo le voci da cambiare: tutto il resto resta com'è. ${isAgent() ? 'I permessi non concessi a te saranno tolti automaticamente.' : ''}</p>${perms}<section class="ag-bulk-group"><h4>Elenchi consentiti</h4><div class="ag-bulk-lists">${listHtml}</div></section></div>`;
@@ -781,7 +816,19 @@ body.agent .foot{display:none}
       } else if (step === 2) {
         const q = state.search.toLowerCase(), visible = agents.filter((a) => !q || [a.username, a.email, a.id].join(' ').toLowerCase().includes(q));
         const allVisible = visible.length > 0 && visible.every((a) => selected.has(a.id));
-        $('#mB').innerHTML = `${head}<div class="ag-bulk-wrap"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><input class="inp" id="agBulkQ" placeholder="Cerca agente per nome o email" value="${esc(state.search)}" style="margin:0;flex:1;min-width:180px"><label><input type="checkbox" id="agBulkAll"${allVisible ? ' checked' : ''}> Seleziona tutti</label></div><small class="mut" style="display:block;margin:0 0 8px">Puoi selezionare fino a 200 agenti. Se sei un sotto-agente, qui compaiono solo i tuoi sotto-agenti.</small><div class="ag-bulk-agents">${visible.map((a) => `<label class="ag-bulk-agent"><input type="checkbox" data-bulk-agent="${a.id}"${selected.has(a.id) ? ' checked' : ''}><span><b>${esc(a.username)}</b><small>ID ${a.id}${a.email ? ' · ' + esc(a.email) : ''}</small></span></label>`).join('') || '<div class="emptyc">Nessun agente trovato.</div>'}</div><p class="mut" style="margin:8px 0 0">Selezionati: <b id="agBulkCount">${selected.size}</b></p></div>`;
+        const chips = (a) => {
+          const out = Object.entries(state.flags).map(([k, wanted]) => {
+            const has = !!(a.perms || {})[k] === wanted;
+            const label = bulkFlagGroups.flatMap(([, rows]) => rows).find((x) => x[0] === k)?.[1] || k;
+            return `<small style="display:inline-block;margin:3px 4px 0 0;padding:3px 6px;border-radius:8px;background:${has ? '#14532d' : '#7f1d1d'};color:${has ? '#bbf7d0' : '#fecaca'}">${has ? '✓ ha già' : '↗ non ha'} ${esc(label)}: ${wanted ? 'Sì' : 'No'}</small>`;
+          });
+          for (const [key, op] of Object.entries(state.lists)) for (const value of op.items) {
+            const has = listHas(a, key, value), label = appLabel(key, value), removing = op.mode === 'remove' && has;
+            out.push(`<small style="display:inline-block;margin:3px 4px 0 0;padding:3px 6px;border-radius:8px;background:${removing ? '#713f12' : has ? '#14532d' : '#7f1d1d'};color:${removing ? '#fde68a' : has ? '#bbf7d0' : '#fecaca'}">${has ? '✓ ha già' : '↗ non ha'} ${esc(label)}${removing ? ' · verrà tolto' : ''}</small>`);
+          }
+          return out.join('');
+        };
+        $('#mB').innerHTML = `${head}<div class="ag-bulk-wrap"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><input class="inp" id="agBulkQ" placeholder="Cerca agente per nome o email" value="${esc(state.search)}" style="margin:0;flex:1;min-width:180px"><label><input type="checkbox" id="agBulkAll"${allVisible ? ' checked' : ''}> Seleziona tutti</label></div><small class="mut" style="display:block;margin:0 0 8px">Puoi selezionare fino a 200 agenti. Se sei un sotto-agente, qui compaiono solo i tuoi sotto-agenti.</small><div class="ag-bulk-agents">${visible.map((a) => `<label class="ag-bulk-agent"><input type="checkbox" data-bulk-agent="${a.id}"${selected.has(a.id) ? ' checked' : ''}><span><b>${esc(a.username)}</b><small>ID ${a.id}${a.email ? ' · ' + esc(a.email) : ''}</small><span style="display:block">${chips(a)}</span></span></label>`).join('') || '<div class="emptyc">Nessun agente trovato.</div>'}</div><p class="mut" style="margin:8px 0 0">Selezionati: <b id="agBulkCount">${selected.size}</b></p></div>`;
         $('#agBulkQ').oninput = (e) => { state.search = e.target.value; render(); $('#agBulkQ').focus(); $('#agBulkQ').setSelectionRange(state.search.length, state.search.length); };
         const updateSelection = () => {
           const checks = $$('#mB [data-bulk-agent]');
@@ -1012,7 +1059,7 @@ body.agent .foot{display:none}
     if (orcpAll) orcpAll.onchange = () => $$('#agOrcpSrv [data-orcp-srv]').forEach((x) => { x.checked = orcpAll.checked; });
     $('#agSaAdd').onclick = () => { const n = $('#agSaN').value.trim(); if (!n) return; if (!$$('#agSa [data-sapp]').some((i) => i.dataset.sapp.toLowerCase() === n.toLowerCase())) $('#agSa').insertAdjacentHTML('beforeend', chk('sapp', n, esc(n), true, false, '')); else $$('#agSa [data-sapp]').forEach((i) => { if (i.dataset.sapp.toLowerCase() === n.toLowerCase()) i.checked = true; }); const all = $('#agSa [data-sapp="*"]'); if (all) all.checked = false; $('#agSaN').value = ''; saSync(); };
     if (!sub && a) {
-      $('#agB').insertAdjacentHTML('beforeend', `<div class="ag-c" id="agLedgerBox" style="margin:0 28px 18px"><h4>💰 Debito</h4><div id="agLedgerSummary" class="mut">Carico il registro…</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><button type="button" class="btn sm" data-ledger-add="debt">➕ Aggiungi debito</button><button type="button" class="btn sm pri" data-ledger-add="pay">✅ Registra pagamento</button></div><div id="agLedgerHistory"></div></div>`);
+      $('#agB').insertAdjacentHTML('beforeend', `<div class="ag-c" id="agLedgerBox" style="margin:0 28px 18px"><h4>💰 Debito</h4><div id="agLedgerSummary" class="mut">Carico il registro…</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><button type="button" class="btn sm" data-ledger-add="debt">➕ Aggiungi debito</button><button type="button" class="btn sm pri" data-ledger-add="pay">✅ Registra pagamento</button></div><div id="agLedgerCredits"></div><div id="agLedgerHistory"></div></div>`);
       loadAgentLedger(a);
     }
     $('#agPwEye') && ($('#agPwEye').onclick = () => { const i = $('#agPwNow'); i.type = i.type === 'password' ? 'text' : 'password'; });
