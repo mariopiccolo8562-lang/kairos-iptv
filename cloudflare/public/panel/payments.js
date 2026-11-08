@@ -144,7 +144,7 @@
     $('#kxPayClose').onclick = () => b.remove();
     try { localStorage.setItem(k, String(Date.now())); } catch {}
   }
-  function typeText(r) { return r.kind === 'device' ? 'Cliente KAIROS' : r.kind === 'agent' ? 'Debito verso fornitore' : (r.panel || '').toUpperCase(); }
+  function typeText(r) { return r.kind === 'device' ? 'Cliente KAIROS' : r.kind === 'agent' ? 'Ti deve' : (r.panel || '').toUpperCase(); }
   function rowFromKey(key) { const [kind, panel, ...rest] = String(key).split('|'); return get(kind, panel, rest.join('|')); }
   function table(list, due) {
     if (!list.length) return '<div class="mut" style="padding:18px 4px">Nessun pagamento in questa scheda.</div>';
@@ -160,18 +160,24 @@
     const agents = (D.agents || []).filter((a) => a.active !== 0);
     return `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Agente</th><th>Importo</th><th>Nota</th><th>Stato</th><th></th></tr></thead><tbody>${agents.map((a) => {
       const r = list.find((x) => x.ref === String(a.id)), label = escP(a.username);
-      return `<tr><td><b>${label}</b></td><td>${r ? amountText(r.amount) || '—' : '—'}</td><td>${escP(r && r.note || '')}</td><td>${r ? r.status === 'due' ? '<span class="pay-badge due">Deve pagare</span>' : '<span class="pay-badge paid">Pagato fino al ' + escP(dateText(r.paid_until)) + '</span>' : '—'}</td><td><button class="btn sm" data-agentpay="${a.id}">${r ? 'Gestisci' : 'Aggiungi'}</button>${r && r.status === 'due' ? ` <button class="btn sm pri" data-agentpaid="${a.id}">Ha pagato</button>` : ''}</td></tr>`;
+      return `<tr><td><b>${label}</b></td><td>${r ? amountText(r.amount) || '—' : '—'}</td><td>${escP(r && r.note || '')}</td><td>${r ? r.status === 'due' ? '<span class="pay-badge due">Ti deve</span>' : '<span class="pay-badge paid">Ha pagato' + (r.paid_until ? ' · fino al ' + escP(dateText(r.paid_until)) : '') + '</span>' : '—'}</td><td><button class="btn sm" data-agentpay="${a.id}">${r ? 'Gestisci' : 'Aggiungi'}</button>${r && r.status === 'due' ? ` <button class="btn sm pri" data-agentpaid="${a.id}">Ha pagato</button>` : ''}</td></tr>`;
     }).join('')}</tbody></table></div>`;
   }
   let pageTab = 'due';
   function renderPage() {
     const V = $('#v-payments'); if (!V || !V.classList.contains('on')) return;
-    const all = rows(), due = all.filter((r) => r.status === 'due'), paid = all.filter((r) => r.status === 'paid');
+    const all = rows(), clients = all.filter((r) => r.kind !== 'agent');
+    const due = clients.filter((r) => r.status === 'due'), paid = clients.filter((r) => r.status === 'paid');
     const master = !isAgent(), total = due.reduce((a, r) => a + (+r.amount || 0), 0);
+    const agentDebts = all.filter((r) => r.kind === 'agent');
+    const agentDue = agentDebts.filter((r) => r.status === 'due');
+    const agentTotal = agentDue.reduce((a, r) => a + (+r.amount || 0), 0);
+    const ownDebt = master ? null : agentDebts.find((r) => r.ref === String(agentId()) && r.status === 'due');
+    const debtBox = ownDebt ? `<div style="margin-bottom:14px;padding:12px 14px;border-radius:12px;background:rgba(220,38,38,.16);border:1px solid rgba(239,68,68,.45);color:#ffd2d2"><b>Devi pagare ${escP(amountText(ownDebt.amount) || '—')} al tuo fornitore</b>${ownDebt.note ? `<small style="display:block;margin-top:4px">${escP(ownDebt.note)}</small>` : ''}</div>` : '';
     if (pageTab === 'agents' && !master) pageTab = 'due';
-    V.innerHTML = `<div class="card glass"><div class="hd"><h3>💰 Pagamenti<small>Così sai sempre chi deve pagare e chi ha già pagato</small></h3>${pageTab === 'agents' ? '<button class="btn pri" id="payAddAgent">+ Aggiungi debito</button>' : ''}</div>
+    V.innerHTML = `${debtBox}<div class="card glass"><div class="hd"><h3>💰 Pagamenti<small>Così sai sempre chi deve pagare e chi ha già pagato</small></h3>${pageTab === 'agents' ? '<button class="btn pri" id="payAddAgent">+ Aggiungi debito</button>' : ''}</div>
       <div class="filters"><button class="fchip ${pageTab === 'due' ? 'on' : ''}" data-pt="due">Da pagare <span>${due.length}</span></button><button class="fchip ${pageTab === 'paid' ? 'on' : ''}" data-pt="paid">Pagati <span>${paid.length}</span></button>${master ? `<button class="fchip ${pageTab === 'agents' ? 'on' : ''}" data-pt="agents">Agenti <span>${all.filter((r) => r.kind === 'agent').length}</span></button>` : ''}</div>
-      ${pageTab === 'due' ? `<div style="margin:8px 0 12px"><b>Totale da riscuotere: ${amountText(total) || '0 €'}</b></div>${table(due, true)}` : pageTab === 'paid' ? table(paid, false) : agentRows(all.filter((r) => r.kind === 'agent'))}</div>`;
+      ${pageTab === 'due' ? `<div style="margin:8px 0 12px"><b>Totale da riscuotere: ${amountText(total) || '0 €'}</b></div>${table(due, true)}` : pageTab === 'paid' ? table(paid, false) : `<div style="margin:8px 0 12px"><b>Gli agenti ti devono: ${amountText(agentTotal) || '0 €'}</b></div>${agentRows(agentDebts)}`}</div>`;
     $$('[data-pt]', V).forEach((b) => { b.onclick = () => { pageTab = b.dataset.pt; renderPage(); }; });
     $$('[data-paid]', V).forEach((b) => { b.onclick = () => { const r = rowFromKey(b.dataset.paid); if (r) open(r.kind, r.panel, r.ref, r.label, r.owner_id, 'paid'); }; });
     $$('[data-edit]', V).forEach((b) => { b.onclick = () => { const r = rowFromKey(b.dataset.edit); if (r) open(r.kind, r.panel, r.ref, r.label, r.owner_id); }; });
