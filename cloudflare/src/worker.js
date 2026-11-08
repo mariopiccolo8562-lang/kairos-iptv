@@ -823,22 +823,171 @@ async function paymentDeviceOwner(env, id) {
   const root = d.parent ? await env.DB.prepare('SELECT owner_id FROM devices WHERE id = ?').bind(d.parent).first() : d;
   return root ? (+root.owner_id || 0) : null;
 }
+const LEDGER_PANELS = new Set(['', 'wolf', 'armada', 'storm', 'atx', 'ro', 'slt']);
+async function agentLedgerDetail(env, agentId, includeBy = true) {
+  const [eur, credits, rows] = await Promise.all([
+    env.DB.prepare("SELECT SUM(CASE WHEN type = 'debt' THEN eur ELSE -eur END) AS eur FROM agent_ledger WHERE agent_id = ?").bind(agentId).first(),
+    env.DB.prepare("SELECT panel, SUM(CASE WHEN type = 'debt' THEN credits ELSE -credits END) AS credits FROM agent_ledger WHERE agent_id = ? GROUP BY panel").bind(agentId).all(),
+    env.DB.prepare('SELECT * FROM agent_ledger WHERE agent_id = ? ORDER BY t DESC, id DESC LIMIT 500').bind(agentId).all(),
+  ]);
+  const rounded = (n) => Math.round(((+n || 0) + Number.EPSILON) * 100) / 100;
+  const balance = {
+    eur: rounded(eur && eur.eur),
+    credits: Object.fromEntries(((credits && credits.results) || []).filter((x) => +x.credits).map((x) => [x.panel || '', rounded(x.credits)])),
+  };
+  const entries = (rows && rows.results) || [];
+  return { balance, entries: includeBy ? entries : entries.map(({ by, ...row }) => row) };
+}
+async function agentLedgerSummary(env) {
+  const totals = ((await env.DB.prepare(`SELECT agent_id, SUM(CASE WHEN type = 'debt' THEN eur ELSE -eur END) AS eur, MAX(t) AS last
+    FROM agent_ledger GROUP BY agent_id`).all()).results) || [];
+  const credits = ((await env.DB.prepare(`SELECT agent_id, panel, SUM(CASE WHEN type = 'debt' THEN credits ELSE -credits END) AS credits
+    FROM agent_ledger GROUP BY agent_id, panel`).all()).results) || [];
+  const names = new Map((await agentsAll(env)).map((a) => [a.id, a.username]));
+  const byId = new Map();
+  for (const row of credits) {
+    const item = byId.get(row.agent_id) || {};
+    if (+row.credits) item[row.panel || ''] = Math.round((+row.credits + Number.EPSILON) * 100) / 100;
+    byId.set(row.agent_id, item);
+  }
+  return totals.map((row) => ({
+    agentId: row.agent_id,
+    username: names.get(row.agent_id) || '',
+    eur: Math.round((+row.eur + Number.EPSILON) * 100) / 100,
+    credits: byId.get(row.agent_id) || {},
+    last: row.last,
+  }));
+}
+async function addAgentLedgerEntry(req, env, who, ip) {
+  const b = await readJSON(req, 4096);
+  const agentId = Number(b.agent);
+  if (!Number.isInteger(agentId) || agentId < 1 || agentId > 999999999 || !(await env.DB.prepare("SELECT id FROM admins WHERE id = ? AND role = 'agent'").bind(agentId).first()))
+    throw new HttpErr(400, 'Agente non valido');
+  if (!['debt', 'pay'].includes(b.type)) throw new HttpErr(400, 'Tipo di movimento non valido');
+  const amount = (value, max, label) => {
+    if (value === undefined || value === null || value === '') return 0;
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0 || n > max) throw new HttpErr(400, `${label} non valido`);
+    return n;
+  };
+  const eur = amount(b.eur, 100000, 'Importo in euro'), credits = amount(b.credits, 1000000, 'Crediti');
+  if (!(eur > 0 || credits > 0)) throw new HttpErr(400, 'Indica un importo in euro o crediti');
+  const panel = str(b.panel, 20).toLowerCase();
+  if (!LEDGER_PANELS.has(panel)) throw new HttpErr(400, 'Pannello non valido');
+  if (b.note !== undefined && (typeof b.note !== 'string' || b.note.length > 200)) throw new HttpErr(400, 'Nota non valida');
+  const note = typeof b.note === 'string' ? b.note.trim() : '';
+  const t = now();
+  const result = await env.DB.prepare('INSERT INTO agent_ledger (agent_id, t, type, eur, credits, panel, note, "by") VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(agentId, t, b.type, eur, credits, panel, note, who).run();
+  const id = result.meta && result.meta.last_row_id;
+  await log(env, 'edit', `${who}: ${b.type === 'debt' ? 'debito' : 'pagamento'} agente · ${agentId} · ${eur ? `${eur} €` : ''}${credits ? ` ${credits} crediti ${panel || 'generici'}` : ''}${note ? ` · ${note}` : ''}`, ip);
+  return { ok: true, id };
+}
+async function generalHealthCheck(env, fresh = false) {
+  const all = await agentsAll(env), owner = { issues: [] };
+  const agents = all.map((a) => ({ id: a.id, username: a.username, active: !!a.active, issues: [] }));
+  const byId = new Map(agents.map((a) => [a.id, a]));
+  const target = (id) => +id ? byId.get(+id) : owner;
+  const addIssue = (id, level, area, text, n = 1) => { const x = target(id); if (x) x.issues.push({ level, area, text, n }); };
+  const emptyDns = (value) => Array.isArray(value) && !value.length;
+  for (const a of all) {
+    const p = agentPerms(a.perms);
+    if (p.players && emptyDns(p.orbDns)) addIssue(a.id, 'amber', 'OrbixPlay', 'Permesso acceso ma nessun DNS OrbixPlay assegnato');
+    if ((p.players || p.mxp) && emptyDns(p.mxDns)) addIssue(a.id, 'amber', 'MaxPlayer', 'Permesso acceso ma nessun DNS MaxPlayer assegnato');
+    if (p.oxp && !p.oxpNew) addIssue(a.id, 'amber', 'OrbixPlay', 'Pannello OrbixPlay acceso senza «Può creare playlist»');
+  }
+
+  const sources = await catalogSources(env);
+  const checked = await catalogCheck(env, [...sources.values()], (s) => `${s.host.replace(/^https?:\/\//, '')} · ${s.user}`, fresh);
+  const lineStatus = { expired: 'Scaduta', disabled: 'Disattivata', auth: 'Utente o password errati', timeout: 'Il server non risponde', down: 'Server non raggiungibile' };
+  for (const result of checked) {
+    if (result.status === 'ok') continue;
+    const source = sources.get(result.key);
+    const state = result.status === 'http' ? `Errore ${result.code || ''}`.trim() : lineStatus[result.status] || 'Stato non riconosciuto';
+    for (const id of source ? source.owners : []) {
+      const n = source.ownerDevices && source.ownerDevices.get(id) || result.devices || 0;
+      addIssue(id, 'red', 'Linee IPTV', `Linea ${source.user} (${n} clienti): ${state}`, n);
+    }
+  }
+
+  const missing = ((await env.DB.prepare("SELECT owner_id, COUNT(*) AS n FROM devices WHERE parent = '' AND playlists = '' GROUP BY owner_id").all()).results) || [];
+  for (const x of missing) addIssue(x.owner_id, 'amber', 'Clienti', `${x.n} clienti senza playlist`, x.n);
+  const expRows = ((await env.DB.prepare("SELECT owner_id, active, expires FROM devices WHERE parent = '' AND active <> 0 AND expires <> ''").all()).results) || [];
+  const expired = new Map();
+  for (const d of expRows) if (statusOf(d, []) === 'expired') expired.set(+d.owner_id || 0, (expired.get(+d.owner_id || 0) || 0) + 1);
+  for (const [id, n] of expired) addIssue(id, 'amber', 'Clienti', `${n} clienti scaduti`, n);
+
+  const t = now(), due = ((await env.DB.prepare("SELECT owner_id, COUNT(*) AS n FROM payments WHERE kind <> 'agent' AND status = 'due' AND (CASE WHEN since > 0 THEN since ELSE updated END) < ? GROUP BY owner_id").bind(t - 30 * 864e5).all()).results) || [];
+  for (const x of due) addIssue(x.owner_id, 'amber', 'Pagamenti', `${x.n} pagamenti in sospeso da oltre 30 giorni`, x.n);
+  const failures = ((await env.DB.prepare("SELECT owner_id, label, last_result FROM payments WHERE kind <> 'agent' AND updated > ?").bind(t - 48 * 3600e3).all()).results) || [];
+  for (const x of failures) if (String(x.last_result || '').startsWith('Errore')) addIssue(x.owner_id, 'red', 'Rinnovo automatico', `${x.label || 'Rinnovo'}: ${x.last_result}`, 1);
+
+  const errors = ((await env.DB.prepare("SELECT d.owner_id, COUNT(*) AS n FROM app_errors e JOIN devices d ON d.id = e.device_id WHERE e.t > ? AND e.outcome = 'non risolto' GROUP BY d.owner_id").bind(t - 24 * 3600e3).all()).results) || [];
+  for (const x of errors) if (+x.n >= 5) addIssue(x.owner_id, 'amber', 'Errori app', `${x.n} errori dell'app non risolti nelle ultime 24 ore`, x.n);
+  const stalls = ((await env.DB.prepare('SELECT d.owner_id, COUNT(DISTINCT p.device_id) AS n FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.stalls_h > 3 AND p.t > ? GROUP BY d.owner_id').bind(t - 3600e3).all()).results) || [];
+  for (const x of stalls) addIssue(x.owner_id, 'amber', 'Buffering', `${x.n} clienti con buffering nell'ultima ora`, x.n);
+
+  const ledgerRows = ((await env.DB.prepare('SELECT agent_id, t, type, eur, credits, panel FROM agent_ledger ORDER BY agent_id, t, id').all()).results) || [];
+  const queues = new Map(), debtForAgent = new Map(), cutoff = t - 30 * 864e5;
+  const applyLedger = (key, value, isDebt, time) => {
+    if (!(value > 0)) return;
+    const state = queues.get(key) || { credit: 0, debts: [] };
+    let rest = value;
+    if (isDebt) {
+      const used = Math.min(rest, state.credit); state.credit -= used; rest -= used;
+      if (rest > 0) state.debts.push({ t: time, amount: rest });
+    } else {
+      while (rest > 0 && state.debts.length) {
+        const first = state.debts[0], used = Math.min(rest, first.amount);
+        first.amount -= used; rest -= used;
+        if (first.amount <= 0.000001) state.debts.shift();
+      }
+      if (rest > 0) state.credit += rest;
+    }
+    queues.set(key, state);
+  };
+  for (const row of ledgerRows) {
+    const agentId = +row.agent_id || 0, debt = row.type === 'debt', time = +row.t || 0;
+    applyLedger(`${agentId}|eur`, +row.eur || 0, debt, time);
+    applyLedger(`${agentId}|cr|${row.panel || ''}`, +row.credits || 0, debt, time);
+  }
+  for (const [key, state] of queues) {
+    const [id, type, panel] = key.split('|');
+    for (const debt of state.debts) {
+      if (!(debt.amount > 0)) continue;
+      const item = debtForAgent.get(+id) || { eur: 0, credits: {}, oldest: Infinity };
+      if (type === 'eur') item.eur += debt.amount;
+      else item.credits[panel] = (item.credits[panel] || 0) + debt.amount;
+      item.oldest = Math.min(item.oldest, debt.t);
+      debtForAgent.set(+id, item);
+    }
+  }
+  for (const [id, balance] of debtForAgent) {
+    if (balance.oldest >= cutoff) continue;
+    const amounts = [balance.eur > 0 ? `${balance.eur.toLocaleString('it-IT', { maximumFractionDigits: 2 })} €` : '', ...Object.entries(balance.credits).filter(([, n]) => n > 0).map(([panel, n]) => `${n.toLocaleString('it-IT', { maximumFractionDigits: 2 })} crediti${panel ? ' ' + panel.toUpperCase() : ''}`)].filter(Boolean).join(' · ');
+    const date = new Date(balance.oldest).toISOString().slice(0, 10);
+    addIssue(id, 'amber', 'Debito agente', `Debito: ${amounts} · il più vecchio dal ${date}`, 1);
+  }
+  return { t, owner, agents };
+}
 async function paymentsRoutes(req, env, who, ip, ag) {
   const m = req.method;
   if (m === 'GET') {
     const rows = ((await env.DB.prepare('SELECT * FROM payments ORDER BY updated DESC LIMIT 10000').all()).results) || [];
     const visible = ag
-      ? rows.filter((r) => (['line', 'device'].includes(r.kind) && ag.tree.includes(+r.owner_id || 0)) || (r.kind === 'agent' && r.ref === String(ag.id)))
-      : rows;
+      ? rows.filter((r) => ['line', 'device'].includes(r.kind) && ag.tree.includes(+r.owner_id || 0))
+      : rows.filter((r) => r.kind !== 'agent');
     return json({ rows: visible.map((r) => paymentEffective(r)) });
   }
   if (m !== 'PUT') throw new HttpErr(405, 'Metodo non consentito');
   const b = await readJSON(req, 4096);
-  const kind = str(b.kind, 12), panel = kind === 'line' ? str(b.panel, 20).toLowerCase() : '';
+  const kind = str(b.kind, 12);
+  if (kind === 'agent') throw new HttpErr(400, 'Usa Debito agente');
+  const panel = kind === 'line' ? str(b.panel, 20).toLowerCase() : '';
   const rawRef = str(b.ref, 120), ref = kind === 'line' ? rawRef.toLowerCase() : rawRef;
-  if (!['line', 'device', 'agent'].includes(kind) || !ref || (kind === 'line' && !PAY_PANELS.has(panel)) || (kind !== 'line' && b.panel && str(b.panel, 20)))
+  if (!['line', 'device'].includes(kind) || !ref || (kind === 'line' && !PAY_PANELS.has(panel)) || (kind !== 'line' && b.panel && str(b.panel, 20)))
     throw new HttpErr(400, 'Cliente o linea non validi');
-  if ((kind === 'device' && !/^[A-Za-z0-9_-]{6,20}$/.test(ref)) || (kind === 'agent' && !/^\d{1,9}$/.test(ref)))
+  if (kind === 'device' && !/^[A-Za-z0-9_-]{6,20}$/.test(ref))
     throw new HttpErr(400, 'Riferimento non valido');
   const old = await env.DB.prepare('SELECT * FROM payments WHERE kind = ? AND panel = ? AND ref = ?').bind(kind, panel, ref).first();
   let ownerId = Number.isInteger(+b.ownerId) && +b.ownerId >= 0 ? +b.ownerId : 0;
@@ -848,7 +997,6 @@ async function paymentsRoutes(req, env, who, ip, ag) {
     ownerId = deviceOwner;
   }
   if (ag) {
-    if (kind === 'agent') throw new HttpErr(403, 'Non puoi gestire i pagamenti degli agenti');
     if (kind === 'device') {
       if (!(await ag.own(ref))) throw new HttpErr(404, 'Cliente non trovato');
       if (old && !ag.tree.includes(+old.owner_id || 0)) throw new HttpErr(403, 'Non puoi gestire i pagamenti di questo cliente');
@@ -3958,8 +4106,9 @@ async function catalogSources(env) {
       const host = hostOf(p); if (!host) continue;
       const key = (await sha256(`src:${host}|${p.username}|${p.password}`)).slice(0, 16);
       if (seen.has(key)) continue; seen.add(key);
-      const e = map.get(key) || { key, host, user: p.username, pass: p.password, devices: 0, owners: new Set() };
-      e.devices++; e.owners.add(+d.owner_id || 0); map.set(key, e);
+      const owner = +d.owner_id || 0;
+      const e = map.get(key) || { key, host, user: p.username, pass: p.password, devices: 0, owners: new Set(), ownerDevices: new Map() };
+      e.devices++; e.owners.add(owner); e.ownerDevices.set(owner, (e.ownerDevices.get(owner) || 0) + 1); map.set(key, e);
     }
   }
   srcMem = { t: now(), map };
@@ -4401,7 +4550,10 @@ async function adminInner(req, env, url, ip, ctx) {
   // la sessione e, nello stesso viaggio, impostazioni e agenti (servono quasi a ogni richiesta del pannello)
   const pre = cookieOf(req) ? Promise.all([cfgRows(env), agentsAll(env)]).catch(() => {}) : null;
   const ses = await getSession(req, env);
-  if (!ses) throw new HttpErr(401, 'Sessione scaduta');
+  if (!ses) {
+    if (path === '/health-check' && m === 'GET') throw new HttpErr(403, 'Il controllo generale è riservato al titolare');
+    throw new HttpErr(401, 'Sessione scaduta');
+  }
   await pre;
   // rinnovo automatico: chi usa il pannello resta collegato (al massimo un aggiornamento ogni 6 ore; in sottofondo)
   if (ses.expires - now() < SESSION_TTL * 1000 - 6 * 3600e3 && path !== '/logout') {
@@ -4851,6 +5003,12 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const apv = path.match(/^\/addon-preview\/([a-z0-9-]{3,40})$/);
   if (apv && m === 'GET') { if (!allowedAddons.has(apv[1])) throw new HttpErr(404, 'Anteprima non disponibile'); return adminRoutes(req, env, url, path, who, ip, ctx, aSes); }
   const need = (k, msg) => { if (!P[k]) throw new HttpErr(403, msg || 'Funzione non consentita: chiedila a chi ti ha creato'); };
+  if (path === '/agent/agent-ledger') {
+    if (m !== 'GET') throw new HttpErr(403, 'Il registro debiti è di sola lettura');
+    return json(await agentLedgerDetail(env, A.id, false));
+  }
+  if (path === '/agent-ledger' || path.startsWith('/agent-ledger/')) throw new HttpErr(403, 'Il registro debiti è riservato al titolare');
+  if (path === '/health-check' && m === 'GET') throw new HttpErr(403, 'Il controllo generale è riservato al titolare');
   if (path === '/payments') {
     if (m === 'PUT') need('payments', 'Non puoi gestire i pagamenti');
     return paymentsRoutes(req, env, who, ip, { id: A.id, tree: ctree, own, autoRenew: !!P.autoRenew });
@@ -5538,6 +5696,26 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   /* ---------- segnalazioni e richieste di contenuti ---------- */
   if (path === '/requests' || path.startsWith('/requests/')) { const r = await adminRequests(req, env, path, url, who, ip); if (r) return r; }
   if (path === '/app-errors' || path.startsWith('/app-errors/')) { const r = await adminErrors(req, env, path, url, who, ip); if (r) return r; }
+  if (path === '/agent-ledger' || path.startsWith('/agent-ledger/')) {
+    if (!ses || ses.agent) throw new HttpErr(403, 'Il registro debiti è riservato al titolare');
+    if (path === '/agent-ledger' && m === 'GET') {
+      const id = url.searchParams.get('agent');
+      if (!id) return json({ agents: await agentLedgerSummary(env) });
+      if (!/^\d{1,9}$/.test(id)) throw new HttpErr(400, 'Agente non valido');
+      if (!(await env.DB.prepare("SELECT id FROM admins WHERE id = ? AND role = 'agent'").bind(+id).first())) throw new HttpErr(404, 'Agente non trovato');
+      return json(await agentLedgerDetail(env, +id));
+    }
+    if (path === '/agent-ledger' && m === 'POST') return json(await addAgentLedgerEntry(req, env, who, ip));
+    const ledgerDelete = path.match(/^\/agent-ledger\/(\d{1,12})$/);
+    if (ledgerDelete && m === 'DELETE') {
+      const row = await env.DB.prepare('SELECT agent_id, type, eur, credits, panel, note FROM agent_ledger WHERE id = ?').bind(+ledgerDelete[1]).first();
+      if (!row) throw new HttpErr(404, 'Movimento non trovato');
+      await env.DB.prepare('DELETE FROM agent_ledger WHERE id = ?').bind(+ledgerDelete[1]).run();
+      await log(env, 'edit', `${who}: movimento del registro agente ${row.agent_id} eliminato · ${row.type} · ${row.eur} € · ${row.credits} crediti`, ip);
+      return json({ ok: true });
+    }
+    throw new HttpErr(405, 'Metodo non consentito');
+  }
   if (path === '/payments') { if (!ses) throw new HttpErr(403, 'Funzione disponibile solo dal pannello'); return paymentsRoutes(req, env, who, ip, null); }
   if (path === '/line-sync' || path.startsWith('/line-sync/')) { if (!ses) throw new HttpErr(403, 'Funzione disponibile solo dal pannello'); return lineSyncRoutes(req, env, path, who, ip, null, ses.id === 'auto-renew' ? 0 : undefined); }
   // password delle linee e crediti Armada: solo dal pannello (mai dalle chiavi API di integrazione)
@@ -5700,6 +5878,10 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   }
 
   /* ---------- videoteca ---------- */
+  if (path === '/health-check' && m === 'GET') {
+    if (!ses || ses.agent) throw new HttpErr(403, 'Il controllo generale è riservato al titolare');
+    return json(await generalHealthCheck(env, url.searchParams.get('fresh') === '1'));
+  }
   if (path === '/catalog/sources' && m === 'GET') {
     const srcs = await catalogSources(env);
     return json([...srcs.values()].map((s) => ({ key: s.key, label: `${s.host.replace(/^https?:\/\//, '')} · ${s.user}`, host: s.host, devices: s.devices })).sort((a, b) => b.devices - a.devices || a.label.localeCompare(b.label)));

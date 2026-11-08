@@ -301,7 +301,7 @@ body.agent .foot{display:none}
   const agDenied = (m, p) => { if (!isAgent() || !D.me || !D.me.perms || m !== 'GET') return false; const x = AG_NEED.find(([re]) => re.test(p)); return !!x && !D.me.perms[x[1]]; };
   const origApi = api;
   window.api = api = async function (m, p, b) {
-    if (isAgent() && !AG_OK.test(p)) throw new Error('Funzione non disponibile per gli agenti');
+    if (isAgent() && !AG_OK.test(p) && p !== '/admin/agent/agent-ledger') throw new Error('Funzione non disponibile per gli agenti');
     if (agDenied(m, p)) throw new Error('Funzione non consentita: chiedila a chi ti ha creato');
     const asAt = window.__assist || null;
     const r = await origApi(m, p, b);
@@ -347,7 +347,7 @@ body.agent .foot{display:none}
   }
   window.addEventListener('kxpay:update', () => { if (isAgent()) { applyMode(); layoutMenu(); } });
   const origRenderAll = renderAll;
-  window.renderAll = renderAll = function () { applyMode(); origRenderAll(); renderAgents(); if (window.KXPay) KXPay.load(); };
+  window.renderAll = renderAll = function () { applyMode(); origRenderAll(); renderAgents(); if (window.KXPay) { KXPay.load(); KXPay.loadLedger?.(); } };
   const origMsgs = renderMsgs;
   window.renderMsgs = renderMsgs = function () { origMsgs(); if (isAgent()) { const o = $('#mTo option[value="all"]'); if (o) o.remove(); $$('#mTo option').forEach((x) => { const d = D.devices.find((y) => y.id === x.value); if (d && d.parent) x.remove(); }); } };
   const origSec = renderSecurity;
@@ -497,6 +497,76 @@ body.agent .foot{display:none}
     mxNamesBusy = true;
     try { const r = await api('GET', '/admin/maxplayer/domains'); mxNames = new Map((r.domains || []).map((x) => [String(x.id), x.label || 'DNS ' + x.id])); mxNamesT = Date.now(); if ($('#v-agents.on')) renderAgents(); } catch { mxNames = mxNames || new Map(); mxNamesT = Date.now(); } finally { mxNamesBusy = false; }
   }
+  let ledgerSummary = new Map(), ledgerSummaryAt = 0, ledgerSummaryBusy = false;
+  const ledgerNum = (n) => (+n || 0).toLocaleString('it-IT', { maximumFractionDigits: 2 });
+  const ledgerPanel = (p) => ({ '': 'Generico', wolf: 'WOLF', armada: 'Armada', storm: 'Storm', atx: 'Atlantix', ro: 'Realott', slt: 'SLT' }[p || ''] || p);
+  function ledgerBadge(s) {
+    if (!s) return '';
+    const credits = Object.values(s.credits || {}).reduce((n, x) => n + Math.max(0, +x || 0), 0);
+    const parts = [];
+    if (+s.eur > 0) parts.push(`${ledgerNum(s.eur)} €`);
+    if (credits > 0) parts.push(`${ledgerNum(credits)} cr`);
+    return parts.length ? `<span class="chip r" style="margin-left:6px">${parts.join(' · ')}</span>` : '';
+  }
+  function loadLedgerSummary() {
+    if (isAgent() || ledgerSummaryBusy || ledgerSummaryAt && Date.now() - ledgerSummaryAt < 60000) return;
+    ledgerSummaryBusy = true;
+    api('GET', '/admin/agent-ledger').then((r) => {
+      ledgerSummary = new Map((r.agents || []).map((x) => [+x.agentId, x]));
+      ledgerSummaryAt = Date.now();
+      if ($('#v-agents')) renderAgents();
+    }).catch(() => {}).finally(() => { ledgerSummaryBusy = false; });
+  }
+  window.addEventListener('kxledger:update', () => { ledgerSummaryAt = 0; loadLedgerSummary(); });
+  function ledgerBalanceText(balance) {
+    const positive = [], negative = [], eur = +balance.eur || 0;
+    if (eur > 0) positive.push(`${ledgerNum(eur)} €`);
+    else if (eur < 0) negative.push(`${ledgerNum(Math.abs(eur))} €`);
+    for (const [panel, amount] of Object.entries(balance.credits || {})) {
+      const n = +amount || 0;
+      if (n > 0) positive.push(`${ledgerNum(n)} crediti${panel ? ' ' + ledgerPanel(panel) : ''}`);
+      else if (n < 0) negative.push(`${ledgerNum(Math.abs(n))} crediti${panel ? ' ' + ledgerPanel(panel) : ''}`);
+    }
+    return [positive.length ? `Ti deve: ${positive.join(' · ')}` : '', negative.length ? `A suo favore: ${negative.join(' · ')}` : ''].filter(Boolean).join(' · ') || 'Nessun debito';
+  }
+  async function loadAgentLedger(agent) {
+    const box = $('#agLedgerBox'); if (!box) return;
+    try {
+      const data = await api('GET', `/admin/agent-ledger?agent=${agent.id}`);
+      const summary = $('#agLedgerSummary'), history = $('#agLedgerHistory');
+      if (!summary || !history || !$('#agLedgerBox')) return;
+      summary.className = (+data.balance.eur > 0 || Object.values(data.balance.credits || {}).some((x) => +x > 0)) ? 'pay-badge due' : 'mut';
+      summary.textContent = ledgerBalanceText(data.balance);
+      history.innerHTML = data.entries.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Data</th><th>Tipo</th><th>€</th><th>Crediti</th><th>Nota</th><th></th></tr></thead><tbody>${data.entries.map((e) => `<tr><td>${new Date(+e.t).toLocaleDateString('it-IT')}</td><td style="color:${e.type === 'debt' ? '#ff8f8f' : '#6ee3a6'}">${e.type === 'debt' ? 'Debito' : 'Pagamento'}</td><td>${+e.eur ? ledgerNum(e.eur) : '—'}</td><td>${+e.credits ? `${ledgerNum(e.credits)} cr${e.panel ? ' · ' + esc(ledgerPanel(e.panel)) : ''}` : '—'}</td><td>${esc(e.note || '')}</td><td><button class="btn sm danger" data-ledger-delete="${e.id}" title="Elimina movimento">🗑</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="mut">Nessun movimento registrato.</p>';
+      box.querySelectorAll('[data-ledger-add]').forEach((button) => {
+        button.onclick = () => promptAgentLedger(agent, button.dataset.ledgerAdd);
+      });
+      box.querySelectorAll('[data-ledger-delete]').forEach((button) => {
+        button.onclick = async () => {
+          const entry = data.entries.find((x) => String(x.id) === button.dataset.ledgerDelete);
+          if (!entry || !(await ask('Eliminare questo movimento?', `${entry.type === 'debt' ? 'Debito' : 'Pagamento'} · ${ledgerNum(entry.eur)} € · ${ledgerNum(entry.credits)} crediti${entry.note ? ' · ' + esc(entry.note) : ''}`, 'Elimina'))) return;
+          try {
+            await api('DELETE', `/admin/agent-ledger/${entry.id}`);
+            ledgerSummaryAt = 0; await loadAgentLedger(agent); loadLedgerSummary(); toast('Movimento eliminato');
+          } catch (e) { toast(e.message, 1); }
+        };
+      });
+    } catch (e) {
+      const summary = $('#agLedgerSummary'); if (summary) summary.textContent = e.message;
+    }
+  }
+  function promptAgentLedger(agent, type) {
+    const title = type === 'debt' ? 'Aggiungi debito' : 'Registra pagamento';
+    ask(title, `<label class="lbl">Euro</label><input class="inp" id="agLedgerEur" type="number" min="0" max="100000" step="0.01"><label class="lbl">Crediti</label><div style="display:flex;gap:8px"><input class="inp" id="agLedgerCredits" type="number" min="0" max="1000000" step="0.01" style="flex:1"><select class="inp" id="agLedgerPanel"><option value="">Generico</option><option value="wolf">WOLF</option><option value="armada">Armada</option><option value="storm">Storm</option><option value="atx">Atlantix</option><option value="ro">Realott</option><option value="slt">SLT</option></select></div><label class="lbl">Nota</label><input class="inp" id="agLedgerNote" maxlength="200">`, 'Salva').then(async (ok) => {
+      if (!ok) return;
+      const eur = Number($('#agLedgerEur').value), credits = Number($('#agLedgerCredits').value), note = $('#agLedgerNote').value.trim();
+      if (!Number.isFinite(eur) || eur < 0 || eur > 100000 || !Number.isFinite(credits) || credits < 0 || credits > 1000000 || !(eur > 0 || credits > 0) || note.length > 200) return toast('Controlla importi e nota', 1);
+      try {
+        await api('POST', '/admin/agent-ledger', { agent: agent.id, type, eur, credits, panel: $('#agLedgerPanel').value, note });
+        ledgerSummaryAt = 0; await loadAgentLedger(agent); loadLedgerSummary(); toast(type === 'debt' ? 'Debito aggiunto' : 'Pagamento registrato');
+      } catch (e) { toast(e.message, 1); }
+    });
+  }
   /** riepilogo dei DNS dell'agente: server delle linee, OrbixPlay e MaxPlayer, ognuno col suo colore */
   function dnsSum(a) {
     const p = a.perms || {};
@@ -506,6 +576,7 @@ body.agent .foot{display:none}
   }
   function renderAgents() {
     const V = $('#v-agents'); if (!V) return;
+    loadLedgerSummary();
     loadMxNames();
     const L = D.agents || [];
     const sub = isAgent();
@@ -519,11 +590,11 @@ body.agent .foot{display:none}
       <p class="ag-hnote">Il dominio deve essere tuo su Cloudflare e collegato al pannello (dominio personalizzato del Worker <b>kairos-panel</b>). Da quell'indirizzo tu non entri (risulta «credenziali errate»), così nessuno capisce che è anche il tuo pannello. L'assistenza agli agenti la fai sempre dal tuo.</p></div>`;
     V.innerHTML = `${hostCard}<div class="ag-bar"><input class="inp" id="agQ" placeholder="Cerca agente per nome, email o note" value="${esc(st.q)}">
       <div class="seg" id="agF">${[['all', 'Tutti'], ['on', 'Attivi'], ['off', 'Disattivati']].map(([k, l]) => `<button data-f="${k}" class="${st.f === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-      ${!sub || me().canAgents ? '<button class="btn" id="agBulk">👥 Applica a più agenti</button>' : ''}<button class="btn pri" id="agNew">+ Nuovo ${sub ? 'sotto-agente' : 'agente'}</button></div>
+      ${!sub && !window.__assist ? '<button class="btn" id="agHealth">🩺 Controllo generale</button>' : ''}${!sub || me().canAgents ? '<button class="btn" id="agBulk">👥 Applica a più agenti</button>' : ''}<button class="btn pri" id="agNew">+ Nuovo ${sub ? 'sotto-agente' : 'agente'}</button></div>
       <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th><th>Link accesso</th><th>DNS</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
       ${list.map((a) => { const pct = a.maxClients ? Math.min(100, Math.round((a.clients / a.maxClients) * 100)) : 100; const up = a.parentId && byId.get(a.parentId);
         return `<tr data-ag="${a.id}"><td class="num">${a.id}</td>
-        <td><b>${esc(a.username)}</b><small>${esc(a.email || '—')}${up ? ' · sotto ' + esc(up.username) : ''}</small></td>
+        <td><b>${esc(a.username)}</b>${ledgerBadge(ledgerSummary.get(a.id))}<small>${esc(a.email || '—')}${up ? ' · sotto ' + esc(up.username) : ''}</small></td>
         <td><b>${a.clients}</b><small>Limite: ${a.maxClients}</small><div class="ag-bar2"><s style="width:${pct}%"></s></div><button type="button" class="btn sm ag-cl" data-agcl="${a.id}" title="Apre Clienti con solo i clienti di ${esc(a.username)}">👥 Vedi i suoi clienti</button></td>
         <td class="hm">${a.subAgents}</td>
         <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span>${(a.perms || {}).armada ? '<br><span class="chip" style="margin-top:4px">Armada</span>' : ''}${(a.perms || {}).storm ? '<br><span class="chip" style="margin-top:4px">Storm</span>' : ''}${(a.perms || {}).wolf ? '<br><span class="chip" style="margin-top:4px">WOLF</span>' : ''}${(a.perms || {}).mxp ? '<br><span class="chip" style="margin-top:4px">MaxPlayer</span>' : ''}${(a.perms || {}).oxp ? '<br><span class="chip" style="margin-top:4px">OrbixPlay</span>' : ''}</td>
@@ -545,11 +616,56 @@ body.agent .foot{display:none}
         saveHost({ agentHostOnly: on }, on ? 'Agenti solo dal loro indirizzo' : 'Gli agenti possono entrare da entrambi');
       };
     }
+    $('#agHealth') && ($('#agHealth').onclick = openHealthCheck);
     $('#agBulk') && ($('#agBulk').onclick = openBulkAgents);
     $('#agNew').onclick = () => openAgent(null);
     $$('[data-ag]', V).forEach((r) => (r.onclick = () => openAgent(L.find((a) => a.id === +r.dataset.ag))));
     $$('[data-aglink]', V).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); linkBox(L.find((a) => a.id === +b.dataset.aglink)); }));
     $$('[data-agcl]', V).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); window.KXOwn.show(b.dataset.agcl); }));
+  }
+
+  function openHealthCheck() {
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;z-index:12000;background:#000b;display:grid;place-items:center;padding:12px';
+    modal.innerHTML = `<div class="glass" style="width:min(900px,100%);max-height:92vh;overflow:auto;padding:16px;border-radius:16px"><div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0;flex:1">🩺 Controllo generale</h3><button class="btn sm" id="agHealthRefresh">Ricontrolla</button><button class="icb" id="agHealthClose" aria-label="Chiudi">×</button></div><div id="agHealthContent" style="margin-top:12px">Controllo in corso…</div></div>`;
+    document.body.appendChild(modal);
+    const content = modal.querySelector('#agHealthContent');
+    let onKey;
+    const close = () => { modal.remove(); if (onKey) removeEventListener('keydown', onKey); };
+    modal.querySelector('#agHealthClose').onclick = close;
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    onKey = (e) => { if (e.key === 'Escape' && document.body.contains(modal)) close(); };
+    addEventListener('keydown', onKey);
+    const issueHtml = (issue) => `<div style="padding:8px 10px;margin-top:7px;border-radius:10px;background:rgba(255,255,255,.045);border-left:3px solid ${issue.level === 'red' ? '#ff7777' : '#ecc06f'}"><b>${esc(issue.area)}</b><div>${esc(issue.text)}</div></div>`;
+    const problems = (issues) => (issues || []).map(issueHtml).join('') || '<span class="mut">Nessun problema rilevato.</span>';
+    const render = (data) => {
+      const ownerIssues = data.owner?.issues || [];
+      const troubled = (data.agents || []).filter((a) => (a.issues || []).length).sort((a, b) => {
+        const red = (x) => x.issues.filter((i) => i.level === 'red').length;
+        return red(b) - red(a) || b.issues.length - a.issues.length || a.username.localeCompare(b.username);
+      });
+      const clear = (data.agents || []).filter((a) => !(a.issues || []).length).sort((a, b) => a.username.localeCompare(b.username));
+      const n = ownerIssues.length + troubled.reduce((sum, a) => sum + a.issues.length, 0);
+      const sections = ownerIssues.length ? `<section style="margin:12px 0"><h4 style="margin:0">I tuoi clienti</h4>${problems(ownerIssues)}</section>` : '';
+      const rows = troubled.map((a) => {
+        const red = a.issues.some((i) => i.level === 'red');
+        return `<section style="margin:12px 0;padding:10px;border:1px solid var(--line);border-radius:12px"><div style="display:flex;align-items:center;gap:8px"><span style="color:${red ? '#ff7777' : '#ecc06f'}">●</span><b style="flex:1">${esc(a.username)}</b><button class="btn sm" data-health-agent="${a.id}">Apri agente</button></div>${problems(a.issues)}</section>`;
+      }).join('');
+      content.innerHTML = `<div style="padding:9px 11px;border-radius:10px;background:rgba(255,255,255,.06)">${n ? `${n} problemi · ${ownerIssues.length ? 'clienti tuoi · ' : ''}${troubled.length} agenti da controllare` : 'Tutto a posto: nessun problema rilevato.'}</div>${sections}${rows}${clear.length ? `<details style="margin-top:12px"><summary style="cursor:pointer">✅ Tutto a posto (${clear.length})</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:6px;margin-top:8px">${clear.map((a) => `<span class="chip">${esc(a.username)}</span>`).join('')}</div></details>` : ''}`;
+      content.querySelectorAll('[data-health-agent]').forEach((button) => {
+        button.onclick = () => { const a = (D.agents || []).find((x) => +x.id === +button.dataset.healthAgent); close(); if (a) openAgent(a); };
+      });
+    };
+    const refresh = async (fresh) => {
+      const button = modal.querySelector('#agHealthRefresh');
+      button.disabled = true; button.textContent = 'Controllo in corso…';
+      if (!content.dataset.loaded) content.textContent = 'Controllo in corso… (può servire fino a un minuto)';
+      try { const data = await api('GET', '/admin/health-check' + (fresh ? '?fresh=1' : '')); render(data); content.dataset.loaded = '1'; }
+      catch (e) { content.innerHTML = `<div class="st warn">${esc(e.message)}</div>`; }
+      finally { if (document.body.contains(modal)) { button.disabled = false; button.textContent = 'Ricontrolla'; } }
+    };
+    modal.querySelector('#agHealthRefresh').onclick = () => refresh(true);
+    refresh(false);
   }
 
   /* ---------- pagina intera: crea / modifica agente ---------- */
@@ -864,12 +980,9 @@ body.agent .foot{display:none}
     }
     const saSync = () => SYNC.agSa && SYNC.agSa();
     $('#agSaAdd').onclick = () => { const n = $('#agSaN').value.trim(); if (!n) return; if (!$$('#agSa [data-sapp]').some((i) => i.dataset.sapp.toLowerCase() === n.toLowerCase())) $('#agSa').insertAdjacentHTML('beforeend', chk('sapp', n, esc(n), true, false, '')); else $$('#agSa [data-sapp]').forEach((i) => { if (i.dataset.sapp.toLowerCase() === n.toLowerCase()) i.checked = true; }); const all = $('#agSa [data-sapp="*"]'); if (all) all.checked = false; $('#agSaN').value = ''; saSync(); };
-    if (!sub && a && window.KXPay) {
-      const pay = KXPay.get('agent', '', a.id);
-      $('#agB').insertAdjacentHTML('beforeend', `<div class="ag-c" id="agPayBox" style="margin:0 28px 18px"><h4>💰 Mi deve pagare</h4><p class="mut" id="agPayInfo">${pay ? `${esc(KXPay.amountText(pay.amount) || 'Importo non indicato')}${pay.note ? ' · ' + esc(pay.note) : ''}` : 'Nessun debito registrato.'}</p>
-        <button type="button" class="btn sm" data-kxpay-open data-kind="agent" data-panel="" data-ref="${a.id}" data-label="${esc(a.username)}" data-owner="0">Importo e nota</button>
-        <button type="button" class="btn sm pri" data-kxpay-open data-kind="agent" data-panel="" data-ref="${a.id}" data-label="${esc(a.username)}" data-owner="0" data-status="paid">Ha pagato</button>
-        <button type="button" class="btn sm danger" data-kxpay-delete data-kind="agent" data-panel="" data-ref="${a.id}">Togli</button></div>`);
+    if (!sub && a) {
+      $('#agB').insertAdjacentHTML('beforeend', `<div class="ag-c" id="agLedgerBox" style="margin:0 28px 18px"><h4>💰 Debito</h4><div id="agLedgerSummary" class="mut">Carico il registro…</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><button type="button" class="btn sm" data-ledger-add="debt">➕ Aggiungi debito</button><button type="button" class="btn sm pri" data-ledger-add="pay">✅ Registra pagamento</button></div><div id="agLedgerHistory"></div></div>`);
+      loadAgentLedger(a);
     }
     $('#agPwEye') && ($('#agPwEye').onclick = () => { const i = $('#agPwNow'); i.type = i.type === 'password' ? 'text' : 'password'; });
     $('#agPwCp') && ($('#agPwCp').onclick = () => navigator.clipboard.writeText(a.password).then(() => toast('Password copiata'), () => toast('Copia non consentita', 1)));
