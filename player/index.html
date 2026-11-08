@@ -4209,7 +4209,7 @@ function makeRows(kind) {
   { const rc = hk(recommended(kind)); if (rc.length >= 4) R.push({ title: 'Consigliati per te', sub: 'in base a cosa guardi', type: 'poster', items: rc }); }
   for (const t of Object.keys(S.tags || {}).sort((a, b) => a.localeCompare(b, 'it')).slice(0, 8)) { const it = safe(tagItems(t).filter(inK)); if (it.length) R.push({ title: '🏷 ' + t, type: 'poster', items: it }); }
   const catRows = (arr, cats, label, k) => cats.filter((c) => !featCats.has(k + '|' + c.name)).forEach((c) => R.push({ title: (label ? label + ' · ' : '') + c.name, type: 'poster', items: catItems(arr, c, k), more: { kind: k, cat: c.name } }));
-  const recent = (arr) => { arr = hk(safe(arr)); return (arr.some((x) => x.added) ? [...arr].sort((a, b) => (b.added || 0) - (a.added || 0)) : arr.slice().reverse()).slice(0, 40); };
+  const recent = recentOf; // (stessi titoli di prima, senza ordinare tutta la libreria a ogni ritorno alla Home)
   if (kind === 'all') {
     if (L.movies.length) R.push({ title: 'Film aggiunti di recente', type: 'poster', items: recent(L.movies), more: { kind: 'movies', cat: 'all' } });
     if (L.series.length) R.push({ title: 'Serie aggiunte di recente', type: 'poster', items: recent(L.series), more: { kind: 'series', cat: 'all' } });
@@ -4679,6 +4679,42 @@ const byName = (a, b) => COLL.compare(String(a.name || a.label || ''), String(b.
 const sortMemo = new WeakMap(); // lista → { m: criterio, out: lista ordinata }
 let libGen = 0; // cambia a ogni nuova libreria (anche dopo una modifica di nomi o informazioni)
 const memoSort = (list, m, f) => { m += '|' + libGen; const c = sortMemo.get(list); if (c && c.m === m) return c.out; const out = f(); sortMemo.set(list, { m, out }); return out; };
+/* I primi n per chiave decrescente, a parità nell'ordine di partenza: stesso risultato di un sort stabile + slice(0, n),
+   ma in una sola passata (le righe della Home chiedono 40 titoli fra decine di migliaia) */
+function topBy(arr, n, key) {
+  const out = [], ks = [];
+  for (let i = 0; i < arr.length; i++) {
+    const x = arr[i], k = key(x);
+    if (out.length === n && !(k > ks[n - 1])) continue;
+    let lo = 0, hi = out.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (ks[m] >= k) lo = m + 1; else hi = m; }
+    out.splice(lo, 0, x); ks.splice(lo, 0, k);
+    if (out.length > n) { out.pop(); ks.pop(); }
+  }
+  return out;
+}
+const addedOf = (x) => +x.added || 0;
+const byAddedDesc = (a, b) => addedOf(b) - addedOf(a);
+/** = arr.slice().sort(byAddedDesc).slice(0, n): si ordina solo la parte che serve (soglia trovata ordinando i numeri) */
+function recentN(arr, n) {
+  if (arr.length <= n) return arr.slice().sort(byAddedDesc);
+  const ks = new Float64Array(arr.length); for (let i = 0; i < arr.length; i++) ks[i] = addedOf(arr[i]);
+  const T = ks.slice().sort()[arr.length - n]; let eq = n;
+  for (let i = 0; i < ks.length; i++) if (ks[i] > T) eq--;
+  const out = [];
+  for (let i = 0; i < arr.length; i++) { const k = ks[i]; if (k > T || (k === T && eq-- > 0)) out.push(arr[i]); }
+  return out.sort(byAddedDesc);
+}
+/* «aggiunti di recente» di una lista (Home, Film, Serie): calcolati una volta per libreria e impostazioni, non a ogni ritorno alla Home */
+const recentMemo = new WeakMap();
+function recentOf(arr) {
+  const m = libGen + '|' + arr.length + '|' + showAdult() + '|' + homePats().key, c = recentMemo.get(arr);
+  if (c && c.m === m) return c.out;
+  const HP = homePats(), a = safe(arr), b = HP.hide.length ? a.filter(homeOk) : a;
+  const out = b.some((x) => x.added) ? topBy(b, 40, addedOf) : b.slice(-40).reverse();
+  recentMemo.set(arr, { m, out });
+  return out;
+}
 const catKindOf = (cats) => (cats === S.lib.liveCats ? 'l' : cats === S.lib.movieCats ? 'm' : cats === S.lib.seriesCats ? 's' : '');
 function sortCats(cats, kind) {
   const m = opt('sortCats'); if (m === 'pl') return cats;
@@ -5760,8 +5796,8 @@ function trendLists() {
     if (tIdx && chart) for (const c of chart) { const x = tIdx.m.get(pfx + normT(c.t)); if (x && !used.has(x) && (showAdult() || !isAdult(x))) { used.add(x); hits.push(x); } }
     // dalla playlist: titoli con copertina, valutazione alta e aggiunti da poco (al massimo 6000 candidati, i più recenti)
     let pool = arr.filter((x) => x.poster && !used.has(x));
-    if (pool.length > 6000) pool = pool.some((x) => x.added) ? pool.slice().sort((a, b) => (b.added || 0) - (a.added || 0)).slice(0, 6000) : pool.slice(-6000);
-    pool = safe(pool).map((x) => [score(x), x]).sort((a, b) => b[0] - a[0]).map((p) => p[1]);
+    if (pool.length > 6000) pool = pool.some((x) => x.added) ? recentN(pool, 6000) : pool.slice(-6000);
+    pool = topBy(safe(pool), 40, score); // servono solo i primi 40 (10 in classifica + 30 di tendenza)
     const top = [...hits.slice(0, 10), ...pool].slice(0, 10), inTop = new Set(top);
     const hot = [...hits.slice(10), ...pool].filter((x) => !inTop.has(x)).slice(0, 30);
     return { top, hot, chart: hits.length >= 5 };
