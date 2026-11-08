@@ -196,7 +196,7 @@ body.agent .foot{display:none}
   const FL = [['create', 'Attivare clienti nuovi', 'Con il codice che il cliente vede sulla TV'], ['renew', 'Rinnovare e cambiare la scadenza', ''], ['disable', 'Attivare e disattivare il servizio', ''],
     ['playlists', 'Cambiare server, utente e password', 'Solo tra i server che gli assegni'], ['kick', 'Disconnettere il cliente', 'Interrompe la visione in corso'], ['delete', 'Eliminare clienti', ''],
     ['clientPerms', 'Cambiare i permessi dell\'app', 'Cosa può fare il cliente nell\'app'], ['vpn', 'Cambiare la VPN del cliente', ''],
-    ['link', 'Collegare altri dispositivi', 'Codice a 6 cifre, sblocca, scollega'], ['subClients', 'Vedere i clienti dei suoi sotto-agenti', 'Se spento vede e gestisce solo i clienti attivati da lui'], ['players', 'Inviare le linee a OrbixPlay e MaxPlayer', 'Solo per i suoi clienti, con le tue chiavi (che non vede)'], ['account', 'Profili, lettore e visioni contemporanee', 'Entro le connessioni che gli concedi'], ['ai', 'Assistente IA dei clienti', 'Quale IA, domande al giorno, domande extra']];
+    ['link', 'Collegare altri dispositivi', 'Codice a 6 cifre, sblocca, scollega'], ['subClients', 'Vedere i clienti dei suoi sotto-agenti', 'Se spento vede e gestisce solo i clienti attivati da lui'], ['players', 'Inviare le linee a OrbixPlay e MaxPlayer', 'Solo per i suoi clienti, con le tue chiavi (che non vede)'], ['payments', 'Gestire i pagamenti dei clienti', 'Segnare chi deve pagare e chi ha pagato, solo sui suoi clienti'], ['account', 'Profili, lettore e visioni contemporanee', 'Entro le connessioni che gli concedi'], ['ai', 'Assistente IA dei clienti', 'Quale IA, domande al giorno, domande extra']];
   // pagine del pannello: sempre e solo con i dati dei suoi clienti
   const FP = [['dash', 'Dashboard', 'Riepilogo dei suoi clienti', 'dash'], ['errors', 'Errori applicazione', 'Dei suoi clienti', 'apperr'],
     ['reports', 'Segnalazioni', 'Dei suoi clienti', 'reports'], ['contentReq', 'Richieste contenuti', 'Dei suoi clienti', 'creq'], ['addonReq', 'Richieste temi', 'Assegna solo gli add-on che gli concedi', 'areq'],
@@ -204,6 +204,7 @@ body.agent .foot{display:none}
     ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['dlcodes', 'Codici downloader', 'Le app da far installare ai clienti (solo da copiare)', 'dlc'], ['appstore', 'APP Store', 'Le app per caricare le liste: solo quelle che scegli qui sotto, in sola lettura', 'apps3'], ['appsOp', 'OrbixPlay e MaxPlayer', 'Codici cliente e liste create dei suoi clienti', 'agop'], ['appk', 'App Kairos', 'Link e codici Downloader delle app Kairos che scegli', 'agk'], ['lines', 'Linee collegate', 'Il registro delle linee collegate alle app: solo le sue', 'lines'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', ''], ['armada', 'Pannello Armada', 'Con i tuoi crediti, entro il tetto mensile', 'armada'], ['storm', 'Pannello Storm', 'Con i tuoi crediti Storm, entro il tetto che decidi', 'storm']];
   FP.push(['wolf', 'Pannello WOLF', 'Con il suo account reseller WOLF: sue linee e suoi crediti', 'wolf'], ['mxp', 'Pannello MaxPlayer', 'Solo i clienti del suo agente MaxPlayer', 'mxp'], ['oxp', 'Pannello OrbixPlay', 'Solo le playlist dei suoi clienti', 'oxp'], ['ro', 'Pannello Realott', 'Con il suo account sub-reseller Realott: sue linee e suoi crediti', 'ro'], ['slt', 'Pannello SLT', 'Con il suo account sub-reseller SLT: sue linee e suoi crediti', 'slt']);
   const PERM_VIEW = Object.fromEntries(FP.map(([k, , , v]) => [v, k]));
+  PERM_VIEW.payments = 'payments';
   const isAgent = () => D.role === 'agent';
   const me = () => D.me || {};
   const can = (k) => !isAgent() || !!(me().perms || {})[k];
@@ -238,7 +239,7 @@ body.agent .foot{display:none}
   // menu 3.2: una voce per ogni pagina, in sezioni chiare (prima molte pagine erano schede dentro poche voci).
   // Le voci che un agente non può usare restano nascoste; una sezione senza voci non compare.
   const GROUPS = [
-    ['', ['dash', 'devices', 'live', 'agents', 'msgs']],
+    ['', ['dash', 'devices', 'payments', 'live', 'agents', 'msgs']],
     ['Linee e pannelli', ['conn', 'lmap', 'lines', 'dns', 'armada', 'storm', 'wolf', 'ro', 'slt', 'orcp', 'mxp', 'oxp', 'ora', 'atx']],
     ['App e Store', ['store', 'apps3', 'apps3op', 'agop', 'xlist', 'dlc', 'appk', 'agk']],
     ['Richieste e controllo', ['reports', 'creq', 'areq', 'reqai', 'rctl', 'apperr', 'activity', 'trash', 'vod']],
@@ -288,7 +289,7 @@ body.agent .foot{display:none}
   { const vw = view; window.view = view = function (v) { const r = vw.apply(this, arguments); const b = nav(v), sec = b && b.dataset.sec; if (sec) { const st = closedSet(); if (st.has(sec)) { st.delete(sec); saveClosed(st); layoutMenu(); } } return r; }; }
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
-  const AG_OK = /^\/admin\/(line-notes(\?.*)?|online|insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/(upd|fix)|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|armada\/(state|packages|lines|mags|new|renew|toggle)|storm\/(state|lines)|oxp\/(state|playlists(\/[A-Za-z0-9_-]+)?)|mxp\/(accounts|a\/[a-z0-9]{2,20}\/(overview|domains|agents(\/\d+\/(enable|disable))?|users(\/\d+(\/password|\/devices|\/lists(\/[A-Za-z0-9%-]+)?)?)?(\?fresh=1)?))|guide(?:\/read)?|(ro|slt)\/[A-Za-z0-9_\/%.-]+(\?.*)?|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
+  const AG_OK = /^\/admin\/(payments|line-notes(\?.*)?|online|insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/(upd|fix)|apps3\/lists(\?.*)?|ext-lists(\/[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke))?|catalog(\/sources)?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|armada\/(state|packages|lines|mags|new|renew|toggle)|storm\/(state|lines)|oxp\/(state|playlists(\/[A-Za-z0-9_-]+)?)|mxp\/(accounts|a\/[a-z0-9]{2,20}\/(overview|domains|agents(\/\d+\/(enable|disable))?|users(\/\d+(\/password|\/devices|\/lists(\/[A-Za-z0-9%-]+)?)?)?(\?fresh=1)?))|guide(?:\/read)?|(ro|slt)\/[A-Za-z0-9_\/%.-]+(\?.*)?|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+)?|addon-preview\/[a-z0-9-]+)$/;
   // agente: le pagine senza permesso non chiamano nemmeno il server (prima ogni 20-30 s partivano richieste destinate al «non consentito»)
   const AG_NEED = [[/^\/admin\/requests.*[?&]kind=content/, 'contentReq'], [/^\/admin\/requests.*[?&]kind=addon/, 'addonReq'], [/^\/admin\/requests.*[?&]kind=ai/, 'ai'],
     [/^\/admin\/requests(\?(?!.*kind=)|\?.*kind=report|$)/, 'reports'], [/^\/admin\/app-errors/, 'errors'], [/^\/admin\/presence/, 'online'], [/^\/admin\/catalog/, 'vod'], [/^\/admin\/apps3\/lists/, 'appsOp'],
@@ -312,8 +313,8 @@ body.agent .foot{display:none}
 
   /* ---------- modalità agente ---------- */
   // «Online ora» e «Riepilogo store» sono solo del titolare (lo store è aperto: agli agenti non resta nulla da approvare)
-  const agentCan = (v) => v !== 'live' && v !== 'store' && !!PERM_VIEW[v] && can(PERM_VIEW[v]);
-  const OWNER_ONLY = ['dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'storesum', 'dns', 'apps3', 'lines', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity', 'ora', 'atx', 'ro', 'slt', 'orcp']; // ora/atx/ro/slt/orcp: solo titolare (il server risponde 403 agli agenti)
+  const agentCan = (v) => v === 'payments' ? (can('payments') || !!(window.KXPay && KXPay.hasRows())) : v !== 'live' && v !== 'store' && !!PERM_VIEW[v] && can(PERM_VIEW[v]);
+  const OWNER_ONLY = ['dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'storesum', 'dns', 'apps3', 'lines', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity', 'ora', 'atx', 'ro', 'slt', 'orcp', 'payments']; // ora/atx/ro/slt/orcp: solo titolare (il server risponde 403 agli agenti)
   let modeSet = '';
   function applyMode() {
     const ag = isAgent();
@@ -340,8 +341,9 @@ body.agent .foot{display:none}
       const m = me(); lim.innerHTML = `Clienti <b>${m.clientsUsed ?? 0}</b> / ${m.maxClients ?? 0}`;
     } else if (lim) lim.remove();
   }
+  window.addEventListener('kxpay:update', () => { if (isAgent()) { applyMode(); layoutMenu(); } });
   const origRenderAll = renderAll;
-  window.renderAll = renderAll = function () { applyMode(); origRenderAll(); renderAgents(); };
+  window.renderAll = renderAll = function () { applyMode(); origRenderAll(); renderAgents(); if (window.KXPay) KXPay.load(); };
   const origMsgs = renderMsgs;
   window.renderMsgs = renderMsgs = function () { origMsgs(); if (isAgent()) { const o = $('#mTo option[value="all"]'); if (o) o.remove(); $$('#mTo option').forEach((x) => { const d = D.devices.find((y) => y.id === x.value); if (d && d.parent) x.remove(); }); } };
   const origSec = renderSecurity;
@@ -749,6 +751,13 @@ body.agent .foot{display:none}
     }
     const saSync = () => SYNC.agSa && SYNC.agSa();
     $('#agSaAdd').onclick = () => { const n = $('#agSaN').value.trim(); if (!n) return; if (!$$('#agSa [data-sapp]').some((i) => i.dataset.sapp.toLowerCase() === n.toLowerCase())) $('#agSa').insertAdjacentHTML('beforeend', chk('sapp', n, esc(n), true, false, '')); else $$('#agSa [data-sapp]').forEach((i) => { if (i.dataset.sapp.toLowerCase() === n.toLowerCase()) i.checked = true; }); const all = $('#agSa [data-sapp="*"]'); if (all) all.checked = false; $('#agSaN').value = ''; saSync(); };
+    if (!sub && a && window.KXPay) {
+      const pay = KXPay.get('agent', '', a.id);
+      $('#agB').insertAdjacentHTML('beforeend', `<div class="ag-c" id="agPayBox" style="margin:0 28px 18px"><h4>💰 Mi deve pagare</h4><p class="mut" id="agPayInfo">${pay ? `${esc(KXPay.amountText(pay.amount) || 'Importo non indicato')}${pay.note ? ' · ' + esc(pay.note) : ''}` : 'Nessun debito registrato.'}</p>
+        <button type="button" class="btn sm" data-kxpay-open data-kind="agent" data-panel="" data-ref="${a.id}" data-label="${esc(a.username)}" data-owner="0">Importo e nota</button>
+        <button type="button" class="btn sm pri" data-kxpay-open data-kind="agent" data-panel="" data-ref="${a.id}" data-label="${esc(a.username)}" data-owner="0" data-status="paid">Ha pagato</button>
+        <button type="button" class="btn sm danger" data-kxpay-delete data-kind="agent" data-panel="" data-ref="${a.id}">Togli</button></div>`);
+    }
     $('#agPwEye') && ($('#agPwEye').onclick = () => { const i = $('#agPwNow'); i.type = i.type === 'password' ? 'text' : 'password'; });
     $('#agPwCp') && ($('#agPwCp').onclick = () => navigator.clipboard.writeText(a.password).then(() => toast('Password copiata'), () => toast('Copia non consentita', 1)));
     $('#agScCp') && ($('#agScCp').onclick = () => navigator.clipboard.writeText($('#agSc').value.trim().toUpperCase()).then(() => toast('Codice venditore copiato'), () => toast('Copia non consentita', 1)));
@@ -821,7 +830,8 @@ body.agent .foot{display:none}
     const lineaCard = () => `<div class="ag-c" style="grid-column:1/-1"><h4>Linea</h4><small>${linked ? 'Le linee di questa TV (gestione indipendente)' : 'Scegli il server e scrivi utente e password della linea del cliente'}</small>
         ${showLinePick ? `<div style="margin:10px 0"><b style="display:block;margin-bottom:6px">🔎 Cerca una linea già creata</b><div class="line-pick-controls"><div id="cLinePick" data-placeholder="🔎 Cerca una linea sui pannelli disponibili"></div>${e.playlists.length > 1 ? `<label class="line-pick-dest"><span>Metti in:</span><select class="inp line-pick-target" id="cLineTarget" aria-label="Playlist di destinazione">${e.playlists.map((_, i) => `<option value="${i}">Playlist ${i + 1}</option>`).join('')}${e.playlists.length < 10 ? '<option value="new">Nuova playlist</option>' : ''}</select></label>` : ''}</div></div>` : ''}
         ${!roPl && window.KXPaste ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><textarea class="inp mono" id="cPaste" rows="2" style="flex:1;min-width:220px;font-size:12.5px" placeholder="📋 Incolla linea: link M3U o utente e password — riempie utente e password qui sotto"></textarea><button class="btn sm" id="cPasteGo" type="button">Riconosci</button><span id="cPasteMsg" class="mut" style="font-size:12px;width:100%"></span></div>` : ''}
-        <div id="cPls">${e.playlists.map(plRow).join('')}</div>${roPl || e.playlists.length >= 10 ? '' : '<button class="btn sm" id="cAddPl">+ Aggiungi linea</button>'}</div>`;
+        <div id="cPls">${e.playlists.map(plRow).join('')}</div>${roPl || e.playlists.length >= 10 ? '' : '<button class="btn sm" id="cAddPl">+ Aggiungi linea</button>'}</div>
+        ${!isNew && window.KXPay ? `<div class="ag-c" style="grid-column:1/-1"><h4>💰 Pagamento</h4><div id="cPayBadge">${KXPay.badge('device', '', e.id)}</div>${P.payments ? `<button class="btn sm" type="button" data-kxpay-open data-kind="device" data-panel="" data-ref="${esc(e.id)}" data-label="${esc(e.name || e.code)}" data-owner="${+e.ownerId || 0}" style="margin-top:8px">💰 Gestisci pagamento</button>` : ''}</div>` : ''}`;
     // TV collegata a un cliente: di base usa le sue linee; con «Gestione indipendente» ha linee sue (resta collegata)
     const ownCard = () => !linked || !P.playlists ? '' : `<div class="ag-c"><h4>Gestione indipendente</h4><small>Linee proprie per questa TV, restando collegata al cliente</small>
         <div class="tog ${e.own ? 'on' : ''}" id="cOwn"><div><b>${e.own ? 'Linee proprie' : 'Usa le linee del cliente'}</b><small>${e.own ? 'Scadenza, profili e connessioni restano quelli del cliente principale' : 'Accendi per dare a questa TV un\'altra linea (es. un\'altra app)'}</small></div><i></i></div></div>${e.own ? lineaCard() : ''}${e.own && d && d.own && P.players && window.KXPlayers ? `<div class="ag-c" style="grid-column:1/-1" id="cOth"><h4>Altre app</h4><small>Manda le linee di questa TV anche alle altre app</small>${KXPlayers.box(e)}</div>` : ''}`;
@@ -939,7 +949,7 @@ body.agent .foot{display:none}
     const servers = Array.isArray(D.servers) ? D.servers : [];
     const maxC = agent ? Math.max(1, P.maxConn || 1) : 20;
     const st = {
-      targets: new Set(['kairos']), code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1),
+      targets: new Set(['kairos']), code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1), payDue: false, payMonths: 1, payAmount: '',
       durationMode: 'months', durationN: '', durationUnit: 'd',
       pl: { serverId: (servers[0] || {}).id || '', username: '', password: '', host: '', ref: '', note: '' },
       name: '', maxConn: 1, mxDomain: '', orbixId: '', oxDns: '0', busy: false, running: '', results: [],
@@ -1103,7 +1113,8 @@ body.agent .foot{display:none}
           <div class="wz-dur">${[1, 3, 6, 12].map((n) => `<button type="button" class="btn${st.durationMode === 'months' && st.months === n ? ' on' : ''}" data-wzm="${n}">${n} ${n === 1 ? 'mese' : 'mesi'}</button>`).join('')}</div>
           <div class="wz-custom-duration"><span>Oppure scegli tu:</span><input class="inp" type="number" id="wzDurN" min="1" max="999" step="1" placeholder="es. 45" value="${esc(st.durationN)}"><select class="inp" id="wzDurUnit"><option value="d"${st.durationUnit === 'd' ? ' selected' : ''}>giorni</option><option value="m"${st.durationUnit === 'm' ? ' selected' : ''}>mesi</option><option value="y"${st.durationUnit === 'y' ? ' selected' : ''}>anni</option></select></div>
           <div class="wz-exp">Scade il <b id="wzExpT">${esc(dateIt(st.expires))}</b> · <a href="#" id="wzExpOther">scegli un’altra data</a><input class="inp" type="date" id="wzExp" value="${esc(st.expires)}" style="display:none;max-width:200px;margin:8px 0 0"></div>
-          <label class="lbl" style="margin-top:12px">Visioni contemporanee (massimo ${maxC})</label><input class="inp" type="number" id="wzConn" min="1" max="${maxC}" value="${st.maxConn}" style="max-width:180px;margin:0">` : ''}</div></div>`;
+          <label class="lbl" style="margin-top:12px">Visioni contemporanee (massimo ${maxC})</label><input class="inp" type="number" id="wzConn" min="1" max="${maxC}" value="${st.maxConn}" style="max-width:180px;margin:0">
+          ${(!agent || can('payments')) ? `<label class="ck" style="margin-top:14px"><input type="checkbox" id="wzPayDue"${st.payDue ? ' checked' : ''}><span>Non ha ancora pagato</span></label><div class="wz-fields" id="wzPayFields" style="${st.payDue ? '' : 'display:none'}"><input class="inp" type="number" id="wzPayMonths" min="0" max="120" value="${st.payMonths}" placeholder="Mesi"><input class="inp" type="number" id="wzPayAmount" min="0" max="100000" step="0.01" value="${esc(st.payAmount)}" placeholder="Importo € (facoltativo)"></div>` : ''}` : ''}</div></div>`;
       return `<div class="wz">
         <div class="wz-s${targetsOk() ? ' ok' : ''}" id="wzS1"><span class="n">${targetsOk() ? '✓' : '1'}</span><div><h4>Dove lo attivi</h4><p class="hint">Puoi attivare il cliente in una o più app. Scegli almeno un’app.</p>
           <div class="wz-targets">${targetButtons}</div>${kairos}${max}${orbix}</div></div>
@@ -1147,6 +1158,10 @@ body.agent .foot{display:none}
           else { syncForm(); foot(); }
         });
       });
+      const payDue = $('#wzPayDue');
+      if (payDue) payDue.onchange = () => { st.payDue = payDue.checked; $('#wzPayFields').style.display = st.payDue ? '' : 'none'; };
+      $('#wzPayMonths') && ($('#wzPayMonths').oninput = () => { st.payMonths = +$('#wzPayMonths').value; });
+      $('#wzPayAmount') && ($('#wzPayAmount').oninput = () => { st.payAmount = $('#wzPayAmount').value; });
       $$('[data-wzm]').forEach((b) => (b.onclick = () => {
         st.durationMode = 'months'; st.durationN = ''; st.months = +b.dataset.wzm; st.expires = addMonths('', st.months);
         if ($('#wzDurN')) $('#wzDurN').value = '';
@@ -1192,7 +1207,11 @@ body.agent .foot{display:none}
         const playlist = agent
           ? { serverId: st.pl.serverId, name: plName, username, password: st.pl.password }
           : { id: 'p' + Date.now(), name: plName, type: 'xtream', url: '', host: st.pl.host.trim(), username, password: st.pl.password };
-        await api('POST', '/admin/devices', { code: st.code, name, notes: note, expires: st.expires, playlists: [playlist], active: true, maxConn: st.maxConn, app: st.app });
+        const created = await api('POST', '/admin/devices', { code: st.code, name, notes: note, expires: st.expires, playlists: [playlist], active: true, maxConn: st.maxConn, app: st.app });
+        if (st.payDue && window.KXPay) {
+          try { await KXPay.saveDue('device', '', created.id, name, agent ? me().id : 0, +$('#wzPayMonths').value || 0, $('#wzPayAmount').value === '' ? null : +$('#wzPayAmount').value, ''); }
+          catch (e) { return `Cliente ${st.code} attivato · pagamento non registrato: ${e.message}`; }
+        }
         return `Cliente ${st.code} attivato`;
       }
       if (k === 'max') {

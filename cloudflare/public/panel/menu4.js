@@ -9,6 +9,7 @@
   const HUBS = [
     ['dash', 'Panoramica', '#4f8cff', S('<rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/>'), ['dash', 'live', 'conn']],
     ['cli', 'Clienti', '#22c55e', S('<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>'), ['devices', 'lmap', 'lines', 'msgs', 'trash']],
+    ['pay', '💰 Pagamenti', '#ef4444', S('<circle cx="12" cy="12" r="9"/><path d="M16 8.5c-.8-1-2-1.5-3.7-1.5-1.8 0-3.1.9-3.1 2.2 0 3.4 6.9 1.3 6.9 5 0 1.5-1.4 2.6-3.5 2.6-1.7 0-3.1-.6-4-1.7M12 5v14"/>'), ['payments']],
     ['pan', 'Pannelli IPTV', '#2dd4bf', S('<rect x="3" y="3" width="18" height="6" rx="2"/><rect x="3" y="15" width="18" height="6" rx="2"/><path d="M7 6h.01M7 18h.01M12 9v6"/>'), ['wolf', 'armada', 'storm', 'atx', 'ora', 'ro', 'slt', 'orcp', 'mxp', 'oxp', 'dns']],
     ['ag', 'Agenti', '#38bdf8', S('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14a5 5 0 0 1 3 6"/>'), ['agents']],
     ['app', 'App e Store', '#a78bfa', S('<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M17.5 14v7M14 17.5h7"/>'), ['store', 'apps3', 'apps3op', 'agop', 'xlist', 'dlc', 'appk', 'agk', 'vod']],

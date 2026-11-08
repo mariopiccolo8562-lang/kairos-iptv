@@ -997,6 +997,7 @@
       return `<div class="dv-card ${d.status}" data-id="${esc(d.id)}">
         <div class="dv-top"><div class="dv-n"><b>${liveDot(d)}${esc(name)}</b><span class="code">${esc(d.code)}</span></div>${stPill(d.status)}</div>
         <div class="dv-exp ${tone}"><span>${d.expires ? 'Scade il <b>' + esc(fmtD(d.expires)) + '</b>' : '<b>Senza scadenza</b>'}</span><em>${dl === null ? '' : dl < 0 ? 'scaduto da ' + -dl + ' giorni' : dl === 0 ? 'scade oggi' : dl === 1 ? 'domani' : 'tra ' + dl + ' giorni'}</em></div>
+        ${window.KXPay ? KXPay.badge('device', '', d.id) : ''}
         <div class="dv-meta">${info.map(esc).join(' · ')}</div>
         ${kids.length ? `<div class="dv-kids">${kids.map((k) => `<button data-open="${esc(k.id)}" title="${esc(k.code)}${k.own ? ' · gestione indipendente (playlist sue)' : ''}">${liveDot(k)}↳ ${esc(k.name || k.model || k.code)}${k.own ? ' · <em>playlist sue</em>' : ''}</button>`).join('')}</div>` : ''}
         ${d.notes ? `<div class="dv-note">${esc(d.notes.slice(0, 90))}</div>` : ''}
@@ -1067,7 +1068,7 @@
         <td class="c">${sub ? '' : `<input type="checkbox" data-sel="${esc(d.id)}" ${st.sel.has(d.id) ? 'checked' : ''}>`}</td>
         <td><div class="dvt-u">${sub ? '<span class="dvt-sub">↳</span>' : ''}<div><b>${liveDot(d)}${esc(d.name || (sub ? d.model || 'Dispositivo' : '') || '— senza nome —')}</b><span class="dvt-code" data-copy="${esc(d.code)}" title="Copia il codice">${esc(d.code)} ${IC.copy}</span></div></div></td>
         <td>${stPill(d.status)}</td>
-        <td class="dvt-exp">${exp}</td>
+        <td class="dvt-exp">${exp}${window.KXPay ? KXPay.badge('device', '', base.id) : ''}</td>
         <td class="c mono">${sub || d.status === 'pending' ? '—' : `${1 + kids.length}/${esc(d.maxConn || 1)}`}</td>
         <td class="dvt-dev"><b>${esc(d.model || '—')}</b><small${d.live ? ' class="dvt-on"' : ''}>${esc(d.live ? 'collegato adesso' : ago(d.lastSeen))}</small></td>
         <td class="dvt-pl">${pls}</td>
