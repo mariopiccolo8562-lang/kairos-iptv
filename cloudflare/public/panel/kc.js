@@ -347,6 +347,7 @@
 .kc-step>i{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:800;background:linear-gradient(135deg,#ff7a45,#ff2a3d);color:#fff;box-shadow:0 0 16px rgba(255,60,60,.4)}
 .kc-step b{display:block;font-size:15px;margin:4px 0 10px}.kc-step select.inp{max-width:640px}.kc-step small{display:block;margin-top:6px;font-size:12px}
 .kc-tools{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}.kc-tools .inp{flex:1;min-width:180px;margin:0}
+.kc-app-filters{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:8px 0 10px}.kc-app-filters .mut{font-size:12px;font-weight:700}.kc-app-filters .btn{margin:0}
 .kc-devs small .hl{color:#fff;background:rgba(255,60,60,.25);border-radius:5px;padding:1px 6px}
 .kc-sum{margin-top:14px;padding:14px;border-radius:12px;background:rgba(255,255,255,.04);border:1px dashed var(--line);font-size:14px;line-height:1.5}
 .kc-devs{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:6px}
@@ -709,12 +710,18 @@
     let dd;
     try { [dd, KC.vpnLocs] = await Promise.all([kapi('GET', '/admin/dns'), kapi('GET', '/admin/vpn-locs')]); } catch (e) { V.innerHTML = `<div class="card glass"><p class="mut">${esc(e.message)}</p></div>`; return; }
     KC.dns = dd;
-    const W = (KC.dnsW = KC.dnsW || { from: '', sel: new Set(), to: '', other: '', q: '' });
+    const W = (KC.dnsW = KC.dnsW || { from: '', sel: new Set(), to: '', other: '', q: '', apps: new Set() });
+    if (!(W.apps instanceof Set)) W.apps = new Set();
     const hosts = dd.hosts, byDev = dd.byDev || {};
     const dnsKey = (h) => String(h || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
     if (W.from && W.from !== '*' && !hosts.some((h) => h.host === W.from)) W.from = '';
     if (!W.from) W.from = (hosts.find((h) => h.devices) || { host: '*' }).host;
     const devs = D.devices.filter((d) => !d.parent && (byDev[d.id] || []).length);
+    const appNames = { tv: 'Kairos Pro', ktv: 'Kairos TV', xc: 'Kairos XC', lite: 'Kairos Lite', prem: 'Kairos Premium', plus: 'Kairos Plus', nova: 'Kairos Nova', pro: 'Kairos Pro' };
+    const appOrder = ['tv', 'ktv', 'xc', 'lite', 'prem', 'plus', 'nova', 'pro'];
+    const appKey = (d) => String(d.app || '').trim().toLowerCase();
+    const appLabel = (app) => appNames[app] || (app ? app.replace(/[_-]+/g, ' ').replace(/\b[a-z]/g, (x) => x.toUpperCase()) : 'Non rilevata');
+    const sortApps = (a, b) => (appOrder.indexOf(a) < 0 ? appOrder.length : appOrder.indexOf(a)) - (appOrder.indexOf(b) < 0 ? appOrder.length : appOrder.indexOf(b)) || appLabel(a).localeCompare(appLabel(b), 'it');
     const label = (h) => { const x = hosts.find((y) => y.host === h); return x && x.name ? `${x.name} · ${h}` : h; };
     const nm = (x) => x.name || (x.code || '');
     V.innerHTML = `
@@ -745,7 +752,8 @@
         <div class="kc-step"><i>1</i><div><b>Quale DNS vuoi sostituire?</b>
           <select class="inp" id="wFrom">${hosts.filter((h) => h.devices).map((h) => `<option value="${esc(h.host)}" ${W.from === h.host ? 'selected' : ''}>${esc(label(h.host))} — ${h.devices} ${h.devices === 1 ? 'cliente' : 'clienti'}</option>`).join('')}<option value="*" ${W.from === '*' ? 'selected' : ''}>Tutti i DNS dei clienti scelti</option></select>
           <small class="mut">Se un cliente ha più playlist su server diversi, cambia solo quella su questo DNS.</small></div></div>
-        <div class="kc-step"><i>2</i><div style="flex:1;min-width:0"><b>Quali clienti? <span class="cnt" id="wCnt">0</span></b>
+        <div class="kc-step"><i>2</i><div style="flex:1;min-width:0"><b>Quali clienti? <span class="cnt" id="wCnt">0/0</span></b>
+          <div class="kc-app-filters" id="wApps" aria-label="Filtra per app"></div>
           <div class="kc-tools"><input class="inp" id="wQ" placeholder="Cerca nome o codice" value="${esc(W.q)}"><button class="btn sm" id="wAll">Seleziona tutti</button><button class="btn sm" id="wNone">Nessuno</button></div>
           <div class="kc-devs" id="wDevs"></div></div></div>
         <div class="kc-step"><i>3</i><div style="flex:1"><b>Nuovo DNS</b>
@@ -763,28 +771,38 @@
       </div>`;
     const target = () => (W.to === '+' ? W.other.trim() : W.to);
     const pool = () => devs.filter((d) => W.from === '*' || (byDev[d.id] || []).includes(W.from));
+    const appPool = () => pool().filter((d) => !W.apps.size || W.apps.has(appKey(d)));
     const sum = () => {
-      const n = [...W.sel].filter((id) => pool().some((d) => d.id === id)).length, to = target();
-      $('#wCnt').textContent = n;
-      $('#wSum').innerHTML = !n ? '<span class="mut">Scegli i clienti al punto 2.</span>' : !to ? '<span class="mut">Scegli il nuovo DNS al punto 3.</span>'
-        : `Sposti <b>${n} ${n === 1 ? 'cliente' : 'clienti'}</b> da <b class="mono">${esc(W.from === '*' ? 'qualsiasi DNS' : label(W.from))}</b> a <b class="mono">${esc(to === '+' ? '' : label(to))}</b>`;
+      const visible = KC.dnsVisible || [], n = visible.filter((d) => W.sel.has(d.id)).length, to = target();
+      const apps = W.apps.size ? [...W.apps].sort(sortApps).map(appLabel).join(', ') : 'Tutte';
+      $('#wCnt').textContent = `${n}/${visible.length}`;
+      const appText = `<small class="mut">App: ${esc(apps)}</small>`;
+      $('#wSum').innerHTML = !n ? `<span class="mut">Scegli i clienti al punto 2.</span><br>${appText}` : !to ? `<span class="mut">Scegli il nuovo DNS al punto 3.</span><br>${appText}`
+        : `Sposti <b>${n} ${n === 1 ? 'cliente' : 'clienti'}</b> da <b class="mono">${esc(W.from === '*' ? 'qualsiasi DNS' : label(W.from))}</b> a <b class="mono">${esc(to === '+' ? '' : label(to))}</b><br>${appText}`;
+    };
+    const drawApps = () => {
+      const apps = [...new Set(pool().map(appKey))].sort(sortApps);
+      $('#wApps').innerHTML = `<b class="mut">App:</b><button type="button" class="btn sm ${W.apps.size ? '' : 'pri'}" data-app-all aria-pressed="${!W.apps.size}">Tutte</button>${apps.map((app) => `<button type="button" class="btn sm ${W.apps.has(app) ? 'pri' : ''}" data-app-code="${esc(app)}" aria-pressed="${W.apps.has(app)}">${esc(appLabel(app))}</button>`).join('')}`;
+      $('#wApps [data-app-all]').onclick = () => { W.apps.clear(); drawDevs(); };
+      $$('#wApps [data-app-code]').forEach((b) => (b.onclick = () => { const app = b.dataset.appCode; W.apps.has(app) ? W.apps.delete(app) : W.apps.add(app); drawDevs(); }));
     };
     const drawDevs = () => {
       const q = W.q.toLowerCase();
-      const list = pool().filter((d) => !q || [d.name, d.code, d.notes].join(' ').toLowerCase().includes(q));
+      drawApps();
+      const list = appPool().filter((d) => !q || [d.name, d.code, d.notes].join(' ').toLowerCase().includes(q));
       $('#wDevs').innerHTML = list.map((d) => `<label><input type="checkbox" data-did="${esc(d.id)}" ${W.sel.has(d.id) ? 'checked' : ''}><span><b style="font-size:14px">${esc(nm(d))}</b> <span class="mut mono" style="font-size:12px">${esc(d.code)}</span></span><small>${(byDev[d.id] || []).map((h) => `<span class="${h === W.from ? 'hl' : ''}">${esc(label(h))}</span>`).join(' ')}</small></label>`).join('') || '<p class="mut" style="padding:10px">Nessun cliente usa questo DNS.</p>';
       $$('#wDevs [data-did]').forEach((c) => (c.onchange = () => { c.checked ? W.sel.add(c.dataset.did) : W.sel.delete(c.dataset.did); sum(); }));
       KC.dnsVisible = list; sum();
     };
     drawDevs();
-    $('#wFrom').onchange = (e) => { W.from = e.target.value; W.sel = new Set(pool().map((d) => d.id)); drawDevs(); };
+    $('#wFrom').onchange = (e) => { W.from = e.target.value; W.sel = new Set(appPool().map((d) => d.id)); drawDevs(); };
     $('#wQ').oninput = (e) => { W.q = e.target.value; drawDevs(); };
     $('#wAll').onclick = () => { for (const d of KC.dnsVisible || []) W.sel.add(d.id); drawDevs(); };
-    $('#wNone').onclick = () => { W.sel.clear(); drawDevs(); };
+    $('#wNone').onclick = () => { for (const d of KC.dnsVisible || []) W.sel.delete(d.id); drawDevs(); };
     $('#wTo').onchange = (e) => { W.to = e.target.value; $('#wOther').style.display = W.to === '+' ? 'block' : 'none'; if (W.to === '+') $('#wOther').focus(); sum(); };
     $('#wOther').oninput = (e) => { W.other = e.target.value; sum(); };
     $('#wGo').onclick = async () => {
-      const ids = [...W.sel].filter((id) => pool().some((d) => d.id === id)), to = target();
+      const ids = (KC.dnsVisible || []).filter((d) => W.sel.has(d.id)).map((d) => d.id), to = target();
       if (!ids.length) return toast('Scegli almeno un cliente (punto 2)', 1);
       if (!to || to === '+') return toast('Scegli il nuovo DNS (punto 3)', 1);
       const body = { ids, host: to, from: W.from === '*' ? '' : W.from };
@@ -794,7 +812,7 @@
       if (!(await ask('Confermi il cambio DNS?', `<b>${pv.changed} ${pv.changed === 1 ? 'cliente' : 'clienti'}</b> passano a <b class="mono">${esc(pv.host)}</b>${pv.from ? ` (al posto di <span class="mono">${esc(pv.from)}</span>)` : ''}.<br><span class="mut">${names}</span><br><br>Nome utente, password e playlist non cambiano.`, 'Cambia DNS'))) return;
       try { const r = await kapi('POST', '/admin/devices/dns', body); toast(`✓ DNS cambiato su ${r.changed} ${r.changed === 1 ? 'cliente' : 'clienti'}`); W.sel.clear(); await load(); dnsLoad(); } catch (e) { toast(e.message, 1); }
     };
-    $$('[data-dfrom]', V).forEach((b) => (b.onclick = () => { W.from = b.dataset.dfrom; W.sel = new Set(devs.filter((d) => (byDev[d.id] || []).includes(W.from)).map((d) => d.id)); W.q = ''; dnsLoad().then(() => $('.kc-wiz').scrollIntoView({ behavior: 'smooth', block: 'start' })); }));
+    $$('[data-dfrom]', V).forEach((b) => (b.onclick = () => { W.from = b.dataset.dfrom; W.sel = new Set(devs.filter((d) => (byDev[d.id] || []).includes(W.from) && (!W.apps.size || W.apps.has(appKey(d)))).map((d) => d.id)); W.q = ''; dnsLoad().then(() => $('.kc-wiz').scrollIntoView({ behavior: 'smooth', block: 'start' })); }));
     $('#dnAdd').onclick = async () => {
       const reserveId = $('#dnReserve').value;
       const reserve = dd.saved.find((x) => x.id === reserveId);
