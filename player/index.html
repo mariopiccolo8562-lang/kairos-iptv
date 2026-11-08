@@ -557,6 +557,11 @@ img{display:block}
 .sp-off .sp-logo .lo,.sp-off .sp-word .sl,.sp-off .sp-tag,.sp-off .sp-tv,.sp-off .sp-glow{opacity:1!important;transform:none!important}
 .sp-off .sp-rays,.sp-off .sp-floor,.sp-off .sp-wave,.sp-off .sp-orbit,.sp-off .sp-logo .lo-scan,.sp-off .sp-word .sfl{display:none}
 .kx-boot .aurora{display:none} /* sfondo animato della Home: dietro lo splash non si vede, non si disegna */
+/* splash nativo dell'app davanti (chiavetta da 1 GB): sotto, quello della pagina resta fermo e vuoto */
+.sp-native #boot>:not(.sp-bg){display:none!important}
+.sp-native #boot,.sp-native #boot *{animation:none!important;transition:none!important}
+/* chiavetta da 1 GB: niente sfondo animato della Home, sempre (anche con «Modalità leggera: Spenta») */
+.sp-d .aurora{display:none!important}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
 /* ===== marchio con carattere vettoriale KAIROS (cromato, neon) ===== */
 .kxw{height:1em;width:auto;display:block;overflow:visible}
@@ -1237,6 +1242,9 @@ h5.fh{margin-top:16px}
   try { mb = +(JSON.parse((window.KairosNative && KairosNative.memInfo && KairosNative.memInfo()) || '{}').totalMb) || 0; if (mb && mb < 1800) h.add('sp-lo'); if (mb && mb <= 1200) h.add('sp-d'); } catch (e) {}
   // leggerissima (scelta, imposta dal pannello o automatica sulle chiavette da 1 GB): splash fermo dal primo fotogramma
   var lv = j('kx_rcLite', '') || j('kx_o_liteUi', 'auto'); if (window.KairosNative && (lv === 'max' || (mb && mb <= 1200 && lv !== 'off'))) document.body.classList.add('xlite');
+  // app nuova sulla chiavetta da 1 GB: splash nativo (Android) davanti → qui sotto niente da animare né da disegnare
+  var ns = false; try { ns = !!(window.KairosNative && KairosNative.nativeSplash && KairosNative.nativeSplash()); } catch (e) {}
+  window.kxNs = ns; if (ns) h.add('sp-native');
   var v = 'auto'; try { v = JSON.parse(localStorage.getItem('kx_rcIntro') || '""') || 'auto'; } catch (e) {}
   if (v !== 'simple' && v !== 'off') v = 'auto'; window.kxIntro = v; if (v !== 'auto') h.add('sp-' + v);
 })();</script>
@@ -1642,6 +1650,17 @@ if (!S.secret) {
   store.set('secret', S.secret);
 }
 const NATIVE = window.KairosNative || null;
+/** splash nativo dell'app (chiavetta da 1 GB): via una volta sola, quando la Home è disegnata o prima di qualunque cosa il
+    cliente debba vedere (attivazione, «Chi guarda?», PIN, aggiornamento, avvisi, errori). [keep]: la classe sp-native la toglie chi chiama */
+let nsDone = false;
+function splashOff(keep) {
+  if (!window.kxNs || nsDone) return;
+  nsDone = true;
+  try { NATIVE && NATIVE.splashDone && NATIVE.splashDone(); } catch {}
+  if (!keep) document.documentElement.classList.remove('sp-native');
+}
+/* lo splash nativo è andato via da solo (tempo di sicurezza, errore): si vede quello della pagina */
+window.kxSplashGone = () => { nsDone = true; document.documentElement.classList.remove('sp-native'); };
 const HAS_PLAYER = !!(NATIVE && NATIVE.play);
 // all'avvio, prima della risposta del pannello: l'ultima modalità imposta dal pannello (rcLite) o quella scelta nell'app; «Spenta» resta spenta
 { const v0 = store.get('rcLite', '') || store.get('o_liteUi', 'auto');
@@ -1742,7 +1761,7 @@ function introSound() {
 
 /* ---------------- toast / orologio ---------------- */
 let toastT;
-function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms); }
+function toast(msg, ms = 2600) { if (window.kxNs && !nsDone && /\b(on|hold)\b/.test($('#boot').className)) splashOff(); const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), ms); }
 const FMT_HM = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' }), FMT_DD = new Intl.DateTimeFormat('it-IT', { weekday: 'short', day: '2-digit', month: 'short' });
 let tickLast = '';
 function tick(force) {
@@ -2436,6 +2455,8 @@ function applyBrand() {
   { const bt = $('#bootTitle'); if (bt.dataset.b !== brandU) { bt.innerHTML = kxLetters(brandU); bt.dataset.b = brandU; bt.setAttribute('aria-label', brandU); } }
   document.title = (S.settings.brand || 'KAIROS') + ' Player';
   $$('.annc .mq').forEach((e) => (e.textContent = S.settings.announcement || ''));
+  // marchio e colore del tema per lo splash nativo della prossima apertura (app nuova)
+  try { if (NATIVE && NATIVE.splashBrand) NATIVE.splashBrand(brandU, (document.documentElement.style.getPropertyValue('--a1') || '#e5202b').trim()); } catch {}
 }
 
 /* ---------------- parser M3U veloce (nessuna RegExp creata per riga) ---------------- */
@@ -5166,6 +5187,7 @@ function sortVod(list) {
 
 /* l'anteprima nativa è disegnata sopra la pagina: si mette in pausa mentre una finestra è aperta */
 function modalPause() {
+  splashOff(); // finestre (PIN, aggiornamento, avvisi, menu): mai sotto lo splash nativo
   if (HAS_PREVIEW && S.previewing && ($('#live').classList.contains('on') || $('#guide').classList.contains('on'))) { try { NATIVE.previewStop(); } catch {} S.exitPv = S.previewing; }
 }
 function modalResume() {
@@ -5266,6 +5288,7 @@ async function setNewPin() {
 async function pinFirstRun(force) {
   if (!parentalOn() || !pinIsDefault() || $('#pinM') || $('#pinFM') || $('#updM') || S.inPlayer) return; // mai sopra la finestra dell'aggiornamento
   if (!force && Date.now() - store.get('pinLater', 0) < 86400e3) return;
+  splashOff();
   fx('ok');
   document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="pinFM"><div class="sbox exitbox"><div class="orb mut" style="font-size:12px;letter-spacing:.35em">CONTROLLO GENITORI</div><h2>Scegli il tuo PIN</h2><p class="mut">Il controllo genitori è attivo: i contenuti per adulti e quelli che bloccherai chiedono un PIN. Ora il PIN è <b>0000</b>: scegline uno tuo di 4 cifre.</p>
     <div class="sbtn"><button class="btn" data-f id="pfLater">Più tardi</button><button class="btn pri" data-f id="pfGo">Scegli il PIN</button></div></div></div>`);
@@ -5817,6 +5840,7 @@ async function kidsGate() {
   return checkPin('PIN per uscire dal profilo bambini');
 }
 function showProfiles(after) {
+  splashOff();
   const l = profList(), canAdd = profCanEdit() && l.length < profMax();
   const scr = $('#profiles');
   if (after) scr.classList.remove('manage'); // apertura nuova: si parte dalla scelta, non dalla modifica
@@ -6683,6 +6707,7 @@ const bootOn = () => { const b = $('#boot'); return !!b && (b.classList.contains
 function bootBar(f) { const b = $('#bootBar'); if (b) b.style.transform = 'scaleX(' + f + ')'; }
 let pollT;
 function showActivate(serverMode) {
+  splashOff();
   const box = $('#codeBox');
   box.innerHTML = S.code.split('').map((c, i) => `<span class="${c === '-' ? 'sep' : ''}" style="animation:letter .5s ${i * .06}s both">${c}</span>`).join('');
   const msgs = {
@@ -7147,9 +7172,11 @@ async function enterHome() {
     // la schermata è già sotto il logo: la sua dissolvenza d'ingresso (nascosta) si salta
     try { const sc = $('.screen.on'); if (sc && sc.getAnimations) for (const a of sc.getAnimations({ subtree: true })) if (a.effect && a.effect.getTiming().iterations !== Infinity) a.finish(); } catch {}
     await Promise.race([new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))), sleep(250)]); // disegnata dietro lo splash
+    const ns = document.documentElement.classList.contains('sp-native');
+    if (ns) splashOff(true); // splash nativo: dissolvenza sopra la Home già pronta
     b.classList.add('out');
-    await sleep(document.body.classList.contains('xlite') || document.documentElement.classList.contains('sp-off') ? 0 : 560);
-    b.classList.remove('out', 'hold'); document.documentElement.classList.remove('kx-hold', 'kx-boot');
+    await sleep(ns || document.body.classList.contains('xlite') || document.documentElement.classList.contains('sp-off') ? 0 : 560);
+    b.classList.remove('out', 'hold'); document.documentElement.classList.remove('kx-hold', 'kx-boot', 'sp-native');
     try { heroRefresh(); } catch {} // copertina rimandata durante l'uscita
   } else b.classList.remove('out');
   warpStop && warpStop();
