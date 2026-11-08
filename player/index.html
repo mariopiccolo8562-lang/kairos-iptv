@@ -4357,11 +4357,13 @@ async function tonightDialog(more) {
   $$('#tnM [data-tn]').forEach((b) => (b.onclick = () => aiOpen(picks[+b.dataset.tn].c)));
   if (!cur || !M.contains(cur) || cur.id === 'tnNo') focus($('#tnM [data-tn]'), true);
 }
-/* riga «Cosa guardo stasera?» nella Home (seconda riga): una card sola, apre le proposte */
+/* riga «Cosa guardo stasera?» nella Home: una card sola, apre le proposte. Va dopo «Adesso per te» e gli eventi sportivi
+   (se ci sono), altrimenti seconda: mai prima riga (non prende la selezione all'apertura della Home) */
 const TN_ITEM = { id: 'ai:tonight', k: 'x', tonight: true, name: 'Cosa guardo stasera?' };
 function tnHomeRow(R) {
   if (!S.lib.movies.length && !S.lib.series.length && !S.lib.live.length) return;
-  R.splice(Math.min(1, R.length), 0, { title: '✦ Cosa guardo stasera?', type: 'tonight', items: [TN_ITEM] });
+  let i = 0; while (i < R.length && i < 2 && (R[i].type === 'nfy' || R[i].type === 'ev')) i++;
+  R.splice(i || Math.min(1, R.length), 0, { title: '✦ Cosa guardo stasera?', type: 'tonight', items: [TN_ITEM] });
 }
 const tnCard = (k) => `<div class="nc ai2" data-f data-k="${k}"><i>✦</i><b>Cosa guardo stasera?</b><small>3–5 proposte per te, con il perché</small></div>`;
 function tnHero(scr, instant) {
@@ -5109,7 +5111,7 @@ function makeRows(kind) {
     const sc = homeOrder(sortCats(cats, kind === 'movies' ? 'm' : 's'));
     catRows(arr, [...safeCats(sc), ...(showAdult() ? [] : sc.filter((c) => RX_ADULT_G.test(c.name)))].filter((c, i, a) => a.indexOf(c) === i), '', kind);
   }
-  if (kind === 'all') tnHomeRow(R); // «Cosa guardo stasera?»: seconda riga della Home
+  if (kind === 'all') tnHomeRow(R); // «Cosa guardo stasera?»: dopo «Adesso per te» e gli eventi sportivi
   return R.filter((r) => r.items.length);
 }
 let featMemo = null;
