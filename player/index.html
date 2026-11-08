@@ -2297,6 +2297,16 @@ function readLocal(path) {
     x.send();
   });
 }
+/** come readLocal, ma come Blob: i byte restano fuori dal thread dell'interfaccia (il testo lo ricava il thread di lavoro) */
+function readLocalBlob(path) {
+  return new Promise((res, rej) => {
+    const x = new XMLHttpRequest();
+    x.open('GET', path); x.responseType = 'blob';
+    x.onload = () => (x.response && x.response.size ? res(x.response) : readLocal(path).then(res, rej));
+    x.onerror = () => readLocal(path).then(res, rej);
+    x.send();
+  });
+}
 function nativeFile(url) {
   return new Promise((res, rej) => {
     const id = 'f' + (++fseq) + '_' + Date.now();
@@ -2320,6 +2330,24 @@ async function getText(url) {
   }
 }
 async function getJSON(url) { return JSON.parse(await getText(url)); }
+/** playlist: come getText ma, dove si può, un Blob invece del testo: i byte (decine di MB) non passano dal thread
+    dell'interfaccia, né per la decodifica né per la copia; il testo lo ricava il thread di lavoro (o asText qui) */
+async function getBuf(url) {
+  if (hasFileHttp()) {
+    const r = await nativeFile(url);
+    if (r.status >= 400) throw new Error('HTTP ' + r.status);
+    try { return await readLocalBlob(r.path); } finally { try { NATIVE.dropFile(r.path); } catch {} }
+  }
+  try { const r = await fetch(viaProxy(url)); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.blob(); }
+  catch (e) {
+    if (!hasNativeHttp()) throw e;
+    const r = await nativeFetch(url);
+    if (r.status >= 400) throw new Error('HTTP ' + r.status);
+    return r.text;
+  }
+}
+/** testo di quello che ha restituito getBuf (senza thread di lavoro) */
+const asText = async (b) => (typeof b === 'string' ? b : b && b.size ? new Response(b).text() : '');
 
 async function register() {
   const url = baseServer() + '/api/player/register';
@@ -2462,14 +2490,15 @@ function libFinish(out) {
 }
 async function loadXtream(p, known) {
   const h = p.host.replace(/\/+$/, ''), q = xtBase(p);
-  const get = async (a) => { try { return await getText(`${q}&action=${a}`); } catch { return ''; } };
+  const ACT = ['get_live_categories', 'get_vod_categories', 'get_series_categories', 'get_live_streams', 'get_vod_streams', 'get_series'];
+  const get = async (a) => { try { return await getBuf(`${q}&action=${a}`); } catch { return ''; } };
   // tutte e 6 le richieste partono insieme
-  const texts = await Promise.all(['get_live_categories', 'get_vod_categories', 'get_series_categories', 'get_live_streams', 'get_vod_streams', 'get_series'].map(get));
+  const texts = await Promise.all(ACT.map(get));
   const pl = { id: p.id, host: h, U: encodeURIComponent(p.username), P: encodeURIComponent(p.password) };
   let out = null;
-  try { out = await libWork('xtream', { texts, pl, known }); } catch {}
+  try { out = await libWork('xtream', { texts, pl, known, chunk: LIB_CHUNK }); } catch {}
   if (out && out.same) return out; // uguale alla lista in uso (vedi fetchLibrary)
-  if (!out) { const [lc, vc, sc, ls, vs, ss] = texts.map(xtArr); out = libFinish(xtreamMap({ lc, vc, sc, ls, vs, ss }, pl)); }
+  if (!out) { const [lc, vc, sc, ls, vs, ss] = (await Promise.all(texts.map(asText))).map(xtArr); out = libFinish(xtreamMap({ lc, vc, sc, ls, vs, ss }, pl)); } // senza thread di lavoro: qui
   if (!out.live.length && !out.movies.length && !out.series.length) throw new Error('nessun contenuto: controlla server, utente e password');
   return out;
 }
@@ -2482,20 +2511,40 @@ function libWorker() {
     const src = [
       `const RX_SE = ${RX_SE}, RX_SE2 = ${RX_SE2}, RX_VOD = ${RX_VOD}, RX_SEP = ${RX_SEP}, CC3 = ${JSON.stringify(CC3)}, RX_CC = ${RX_CC}, RX_QUAL = ${RX_QUAL}, RX_ADULT_G = ${RX_ADULT_G}, RX_ADULT_N = ${RX_ADULT_N};`,
       m3uAttr, parseM3U, `const isSepCh = ${isSepCh};`, logoKey, libSig, xtreamMap, `const xtArr = ${xtArr};`, libFinish,
-      `self.onmessage = (e) => { const { id, op, data } = e.data; try {
+      `const txt = async (t) => (typeof t === 'string' ? t : !t || !t.size ? '' : typeof FileReaderSync !== 'undefined' ? new FileReaderSync().readAsText(t, 'utf-8') : new Response(t).text());
+      const KEEP = new Map(), KEYS = ['live', 'movies', 'series'];
+      /* un pezzo del risultato (si consegna a pezzi: un unico clone da decine di MB fermerebbe l'interfaccia per secoli) */
+      const piece = (id) => { const k = KEEP.get(id); if (!k) return postMessage({ id, error: 'risultato non trovato' });
+        while (k.ki < 3 && k.i >= k.out[KEYS[k.ki]].length) { k.ki++; k.i = 0; }
+        if (k.ki >= 3) { KEEP.delete(id); return postMessage({ id, done: 1 }); }
+        const key = KEYS[k.ki], items = k.out[key].slice(k.i, k.i + k.n); k.i += k.n; postMessage({ id, key, items }); };
+      self.onmessage = async (e) => { const { id, op, data } = e.data; if (op === 'more') return piece(id); try {
         let out = null;
-        if (op === 'm3u') out = libFinish(parseM3U(data.text, data.plId));
-        else if (op === 'xtream') { const [lc, vc, sc, ls, vs, ss] = data.texts.map(xtArr); out = libFinish(xtreamMap({ lc, vc, sc, ls, vs, ss }, data.pl)); }
-        postMessage({ id, out: data.known && out.sig === data.known ? { same: 1, sig: out.sig } : out });
+        if (op === 'm3u') out = libFinish(parseM3U(await txt(data.text), data.plId));
+        else if (op === 'xtream') { const tt = []; for (const t of data.texts) tt.push(xtArr(await txt(t))); const [lc, vc, sc, ls, vs, ss] = tt; out = libFinish(xtreamMap({ lc, vc, sc, ls, vs, ss }, data.pl)); }
+        if (data.known && out.sig === data.known) return postMessage({ id, out: { same: 1, sig: out.sig } });
+        if (!data.chunk || out.live.length + out.movies.length + out.series.length <= data.chunk) return postMessage({ id, out });
+        const head = {}; for (const k in out) if (!KEYS.includes(k)) head[k] = out[k]; for (const k of KEYS) head[k] = [];
+        KEEP.set(id, { out, ki: 0, i: 0, n: data.chunk }); postMessage({ id, head });
       } catch (err) { postMessage({ id, error: String(err && err.message || err) }); } };`,
     ].map(String).join('\n');
     libWk = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
-    libWk.onmessage = (e) => { const j = libWkJobs.get(e.data.id); if (!j) return; libWkJobs.delete(e.data.id); clearTimeout(j.t); e.data.error ? j.rej(new Error(e.data.error)) : j.res(e.data.out); };
+    libWk.onmessage = (e) => {
+      const d = e.data, j = libWkJobs.get(d.id); if (!j) return;
+      // risultato a pezzi: si chiede il pezzo seguente solo dopo aver ceduto il thread (tasti e fotogrammi passano in mezzo)
+      if (d.head) { j.out = d.head; return libWkMore(d.id); }
+      if (d.items) { const dst = j.out[d.key]; for (let i = 0; i < d.items.length; i++) dst.push(d.items[i]); return libWkMore(d.id); }
+      libWkJobs.delete(d.id); clearTimeout(j.t);
+      d.error ? j.rej(new Error(d.error)) : j.res(d.done ? j.out : d.out);
+    };
     libWk.onerror = (e) => { libWkBad = true; for (const j of libWkJobs.values()) { clearTimeout(j.t); j.rej(new Error(e.message || 'worker')); } libWkJobs.clear(); try { libWk.terminate(); } catch {} libWk = null; };
   } catch { libWkBad = true; libWk = null; }
   return libWk;
 }
-/** esegue un lavoro nel thread di lavoro; se non disponibile o in errore la promessa fallisce e si usa il thread principale */
+const LIB_CHUNK = 2500; // titoli per pezzo nel passaggio dal thread di lavoro all'interfaccia (≈ 30-50 ms ciascuno su una TV lenta)
+const libWkMore = (id) => setTimeout(() => { if (libWkJobs.has(id) && libWk) try { libWk.postMessage({ id, op: 'more' }); } catch {} }, 0);
+/** esegue un lavoro nel thread di lavoro; se non disponibile o in errore la promessa fallisce e si usa il thread principale.
+    Le playlist arrivano come Blob (passano per riferimento, senza copiare i byte) */
 function libWork(op, data) {
   const w = libWorker(); if (!w) return Promise.reject(new Error('no worker'));
   return new Promise((res, rej) => {
@@ -2506,8 +2555,8 @@ function libWork(op, data) {
   });
 }
 async function parseM3UAsync(text, plId, known) {
-  try { return await libWork('m3u', { text, plId, known }); } catch {}
-  return libFinish(parseM3U(text, plId));
+  try { return await libWork('m3u', { text, plId, known, chunk: LIB_CHUNK }); } catch {}
+  return libFinish(parseM3U(await asText(text), plId));
 }
 const localOk = () => S.settings.allowLocalPlaylists && perm('localPl');
 const allPlaylists = () => [...S.playlists, ...(localOk() ? S.local : [])].map((p) => ({ ...p, id: p.id || 'p' + hashStr((p.url || '') + (p.host || '') + (p.username || '')) }));
@@ -2594,7 +2643,7 @@ async function fetchLibrary(onMsg, quick) {
   const parts = await Promise.all(all.map(async (p) => {
     try {
       const k = known ? known[p.id] : undefined;
-      const part = p.type === 'xtream' ? await loadXtream({ ...p, host: fixUrl(p.host) }, k) : await parseM3UAsync(await getText(fixUrl(p.url)), p.id, k);
+      const part = p.type === 'xtream' ? await loadXtream({ ...p, host: fixUrl(p.host) }, k) : await parseM3UAsync(await getBuf(fixUrl(p.url)), p.id, k);
       onMsg && onMsg(++done, all.length);
       return part;
     } catch (e) { S.loadErrors.push(`${p.name}: ${e.message || 'errore'}`); return null; }
@@ -2662,13 +2711,18 @@ async function refreshLibrary(manual) {
       const prev = S.libSig;
       // la nuova libreria si applica quando il telecomando è fermo (setLib su 100.000 titoli non deve interrompere chi naviga);
       // a richiesta manuale si applica subito
-      const apply = () => {
-        if (S.libSig !== prev || S.inPlayer || gen !== libLoadGen) { if (S.libSig !== prev || gen !== libLoadGen) return; return whenIdle(apply, 2000, 2000, 120e3); }
-        setLib(r.lib); S.libSig = sig; S.partSig = r.psig || null;
-        whenIdle(() => S.fullLib && LibCache.save(S.fullLib), 1000, 2000, 60e3); // si salva quando il telecomando è fermo
+      // (solo a telecomando fermo da 1,5 s e fuori dal lettore: niente più applicazione forzata dopo 90 s di navigazione)
+      const apply = async () => {
+        if (S.libSig !== prev || S.inPlayer || gen !== libLoadGen) { if (S.libSig !== prev || gen !== libLoadGen) return; return whenIdle(apply, 2000, 2000, 1e12); }
+        const t0 = lastInput, g0 = libGen;
+        const still = () => lastInput === t0 && !S.inPlayer && libGen === g0 && S.libSig === prev && gen === libLoadGen;
+        if (manual) setLib(r.lib);
+        else if (!(await setLibAsync(r.lib, still))) { if (S.libSig === prev && gen === libLoadGen) whenIdle(apply, 1000, 1500, 1e12); return; } // si è ripreso a navigare: dopo
+        S.libSig = sig; S.partSig = r.psig || null;
+        whenIdle(() => S.fullLib && LibCache.save(S.fullLib), 1000, 2000, 1e12); // si salva quando il telecomando è fermo
         if (!manual) toast('Contenuti aggiornati');
       };
-      if (manual) apply(); else whenIdle(apply, 0, 1500, 90e3);
+      if (manual) apply(); else whenIdle(apply, 0, 1500, 1e12);
     }
   } finally { S.refreshing = false; }
 }
@@ -2736,29 +2790,32 @@ function applyUserEdits(lib) {
     }
   }
 }
-function setLib(lib) {
+/* libreria nuova: calcolo a passi (generatore) in variabili locali, poi tutto applicato insieme alla fine (mai metà vecchia e metà
+   nuova). setLib fa tutti i passi subito; setLibAsync cede il thread fra un passo e l'altro (aggiornamento in sottofondo) */
+function* setLibSteps(lib) {
   if (!lib.clean && lib.live.some(isSepCh)) lib = { ...lib, live: lib.live.filter((c) => !isSepCh(c)) };
-  S.fullLib = lib; trendCache = null; libGen++; featMemo = null;
-  { // contenuti di una cache vecchia senza la playlist d'origine
-    const ids = activePlaylists().map((p) => p.id);
-    if (ids.length > 1) for (const arr of [lib.live, lib.movies, lib.series]) for (const x of arr) if (!x.pl) { const id = ids.find((i) => String(x.id).endsWith(i)); if (id) x.pl = id; }
-    const pl = plList();
-    S.plTags = new Map(pl.map((p) => [p.id, p]));
-    S.plBadges = pl.length > 1 && plMode() === 'merge' && plSel() === 'all' && !(S.prof && S.prof.pl && S.prof.pl !== 'all');
-  }
+  const full = lib;
+  // contenuti di una cache vecchia senza la playlist d'origine
+  const ids = activePlaylists().map((p) => p.id);
+  if (ids.length > 1) for (const arr of [lib.live, lib.movies, lib.series]) for (const x of arr) if (!x.pl) { const id = ids.find((i) => String(x.id).endsWith(i)); if (id) x.pl = id; }
+  const pl = plList();
+  const plTags = new Map(pl.map((p) => [p.id, p]));
+  const plBadges = pl.length > 1 && plMode() === 'merge' && plSel() === 'all' && !(S.prof && S.prof.pl && S.prof.pl !== 'all');
   lib = plLockFilter(plFilter(profFilter(lib)));
   applyUserEdits(lib);
   lib.live.forEach((c, i) => { c.num = c.num || i + 1; c.k = 'l'; });
   lib.movies.forEach((x) => (x.k = 'm'));
   lib.series.forEach((x) => (x.k = 's'));
-  S.byGroup = new Map();
-  const cats = (arr, k) => { const m = new Map(); for (const x of arr) { let g = S.byGroup.get(k + x.group); if (!g) S.byGroup.set(k + x.group, (g = [])); g.push(x); m.set(x.group, (m.get(x.group) || 0) + 1); } return [...m].map(([name, count]) => ({ name, count })); };
-  S.lib = { live: lib.live, movies: lib.movies, series: lib.series, liveCats: cats(lib.live, 'l'), movieCats: cats(lib.movies, 'm'), seriesCats: cats(lib.series, 's') };
-  S.byId = new Map();
-  for (const arr of [lib.live, lib.movies, lib.series]) for (const x of arr) S.byId.set(x.id, x);
-  S.plMap = new Map(activePlaylists().map((p) => { const c = xtCreds(p); return [p.id, c ? { ...p, ...c } : { ...p, host: fixUrl(p.host) }]; }));
+  yield;
+  const byGroup = new Map();
+  const cats = (arr, k) => { const m = new Map(); for (const x of arr) { let g = byGroup.get(k + x.group); if (!g) byGroup.set(k + x.group, (g = [])); g.push(x); m.set(x.group, (m.get(x.group) || 0) + 1); } return [...m].map(([name, count]) => ({ name, count })); };
+  const L = { live: lib.live, movies: lib.movies, series: lib.series, liveCats: cats(lib.live, 'l'), movieCats: cats(lib.movies, 'm'), seriesCats: cats(lib.series, 's') };
+  yield;
+  const byId = new Map();
+  for (const arr of [lib.live, lib.movies, lib.series]) for (const x of arr) byId.set(x.id, x);
+  const plMap = new Map(activePlaylists().map((p) => { const c = xtCreds(p); return [p.id, c ? { ...p, ...c } : { ...p, host: fixUrl(p.host) }]; }));
   // canali di liste M3U che arrivano da un server Xtream: id del flusso per la guida breve
-  const plOk = new Set([...S.plMap.values()].filter((p) => p.username).map((p) => p.id));
+  const plOk = new Set([...plMap.values()].filter((p) => p.username).map((p) => p.id));
   for (const ch of lib.live) {
     if (ch.sid || !ch.url) continue;
     const plid = ch.pl || [...plOk].find((id) => ch.id.endsWith(id));
@@ -2767,7 +2824,21 @@ function setLib(lib) {
     if (sidc) { ch.sid = sidc; ch.pl = plid; }
   }
   applyLogos(lib.live);
-  if (S.trend) setTimeout(buildTrendIdx, 0); // S.libSig viene aggiornato subito dopo setLib
+  return () => {
+    S.fullLib = full; trendCache = null; libGen++; featMemo = null;
+    S.plTags = plTags; S.plBadges = plBadges; S.byGroup = byGroup; S.lib = L; S.byId = byId; S.plMap = plMap;
+    if (S.trend) setTimeout(buildTrendIdx, 0); // S.libSig viene aggiornato subito dopo setLib
+  };
+}
+function setLib(lib) { const g = setLibSteps(lib); let r = g.next(); while (!r.done) r = g.next(); r.value(); }
+/** cede il thread: passano tasti e fotogrammi in attesa (scheduler.yield dove c'è) */
+const yieldNow = () => new Promise((r) => { try { if (window.scheduler && scheduler.yield) return void scheduler.yield().then(r, r); } catch {} setTimeout(r, 0); });
+/** come setLib, ma a passi; ok() dice se si può ancora applicare (altrimenti si rinuncia e torna false) */
+async function setLibAsync(lib, ok) {
+  const g = setLibSteps(lib); let r = g.next();
+  while (!r.done) { await yieldNow(); if (ok && !ok()) return false; r = g.next(); }
+  if (ok && !ok()) return false;
+  r.value(); return true;
 }
 /* ---------------- loghi automatici dei canali (banca dati pubblica iptv-org) ---------------- */
 const LOGO_DB = 'https://iptv-org.github.io/api/';
