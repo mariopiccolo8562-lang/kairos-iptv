@@ -64,10 +64,10 @@
   const overviewHtml = (d, m, rows) => {
     d = d || {};
     if (Array.isArray(rows)) {
-      const now = Date.now(), DAY = 864e5, c = { total: rows.length, active: 0, soon: 0, expired: 0, off: 0, online: 0, conns: 0 };
+      const t = now(), c = { total: rows.length, active: 0, soon: 0, expired: 0, off: 0, online: 0, conns: 0 }; /* r.exp in secondi, come il filtro della lista */
       for (const r of rows) {
-        const ex = !!r.enabled && (r.expired || (r.exp && r.exp < now));
-        if (!r.enabled) c.off++; else if (ex) c.expired++; else { c.active++; if (r.exp && r.exp - now < 7 * DAY) c.soon++; }
+        const ex = !!r.enabled && (r.expired || (r.exp && r.exp < t));
+        if (!r.enabled) c.off++; else if (ex) c.expired++; else { c.active++; if (r.exp && r.exp - t < 7 * 86400) c.soon++; }
         if (r.conns > 0) { c.online++; c.conns += +r.conns || 0; }
       }
       const T = [['Crediti', d.credits, 'green'], ['Online ora', c.online, 'blue', 'online'], ['Abbonamenti attivi', c.active, 'red', 'active'], ['Linee totali', c.total, 'dark', ''],
