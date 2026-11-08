@@ -3,6 +3,12 @@
 -keepclassmembers class com.kairos.player.MainActivity$Bridge {
     @android.webkit.JavascriptInterface <methods>;
 }
+# ponte con la ricerca a voce (sottoclasse di Bridge, solo sui dispositivi con il riconoscimento vocale)
+-keep class com.kairos.player.MainActivity$Bridge
+-keep class com.kairos.player.MainActivity$VoiceBridge
+-keepclassmembers class com.kairos.player.MainActivity$VoiceBridge {
+    @android.webkit.JavascriptInterface <methods>;
+}
 
 # VLC usa codice nativo (JNI): le sue classi non vanno rinominate
 -keep class org.videolan.libvlc.** { *; }

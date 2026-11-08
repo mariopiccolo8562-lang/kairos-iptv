@@ -206,7 +206,8 @@ class MainActivity : ComponentActivity() {
         }
         web.isFocusable = true
         web.isFocusableInTouchMode = true
-        web.addJavascriptInterface(Bridge(), "KairosNative")
+        // con il riconoscimento vocale il ponte ha anche voiceStart (senza, la funzione non esiste e l'interfaccia non mostra il microfono)
+        web.addJavascriptInterface(if (voiceOk()) VoiceBridge() else Bridge(), "KairosNative")
         // il lettore nativo avvisa la pagina del canale in onda dopo lo zapping (window.kxNowPlaying)
         UiBridge.js = { code -> js(code) }
         web.webChromeClient = WebChromeClient()
@@ -963,6 +964,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         isResumed = false
+        if (voiceOn) { try { recognizer?.cancel() } catch (_: Throwable) {}; voiceErr("annullato") } // app in sfondo: niente ascolto
         stopPreview()
         if (webOk) web.onPause()
         ui.removeCallbacks(hbTick)
@@ -1018,6 +1020,9 @@ class MainActivity : ComponentActivity() {
             if (Handoff.host === handoffHost) Handoff.host = null
         }
         ui.removeCallbacksAndMessages(null)
+        try { recognizer?.destroy() } catch (_: Throwable) {}
+        recognizer = null
+        EngineMemo.flush(applicationContext); ZapMemo.flush(applicationContext)
         UiBridge.js = null
         previewEngine?.release()
         previewEngine = null
@@ -1026,8 +1031,86 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Ricerca a voce (SpeechRecognizer di Android, in italiano)            */
+    /* ------------------------------------------------------------------ */
+    private var recognizer: android.speech.SpeechRecognizer? = null
+    private var voiceOn = false
+    private val micLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok -> if (ok) voiceListen() else voiceErr("permesso negato") }
+    private fun voiceOk(): Boolean = try { android.speech.SpeechRecognizer.isRecognitionAvailable(this) } catch (_: Throwable) { false }
+    private fun voiceErr(why: String) { voiceOn = false; js("window.kxVoiceErr && kxVoiceErr(${JSONObject.quote(why)})") }
+    /** il permesso del microfono si chiede solo al primo uso; se il cliente lo nega non si richiede più (lo concede dalle impostazioni di Android) */
+    private fun voiceBegin() {
+        if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            if (prefs.getBoolean("mic_asked", false)) { voiceErr("permesso negato"); return }
+            prefs.edit().putBoolean("mic_asked", true).apply()
+            try { micLauncher.launch(android.Manifest.permission.RECORD_AUDIO) } catch (_: Exception) { voiceErr("permesso negato") }
+            return
+        }
+        voiceListen()
+    }
+    private fun voiceListen() {
+        try {
+            val r = recognizer ?: android.speech.SpeechRecognizer.createSpeechRecognizer(this).also { recognizer = it }
+            r.setRecognitionListener(object : android.speech.RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+                override fun onError(error: Int) {
+                    // codici di SpeechRecognizer: rete/server, annullato, niente parlato o non capito, occupato, permesso, audio, lingua
+                    voiceErr(when (error) { 1, 2, 4, 11 -> "rete"; 5 -> "annullato"; 6, 7 -> "non capito"; 8, 10 -> "occupato"; 9 -> "permesso negato"; 3 -> "audio"; 12, 13 -> "lingua non disponibile"; else -> "errore" })
+                }
+                override fun onResults(results: Bundle?) {
+                    voiceOn = false
+                    val t = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
+                    if (t.isEmpty()) voiceErr("non capito") else js("window.kxVoice && kxVoice(${JSONObject.quote(t.take(200))})")
+                }
+            })
+            r.cancel()
+            voiceOn = true
+            r.startListening(Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "it-IT")
+                .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "it-IT")
+                .putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                .putExtra(android.speech.RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                .putExtra(android.speech.RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName))
+        } catch (_: Throwable) { voiceErr("errore") }
+    }
+
+    /** autopilota: con «Automatico» il lettore parte con il motore che su questo dispositivo va meglio per il formato del canale */
+    private fun learnEngine(j: JSONObject) {
+        if (!j.optBoolean("engLearn")) return
+        try {
+            val it0 = j.optJSONArray("items")?.optJSONObject(j.optInt("index")) ?: return
+            val cur = j.optString("engine", "exo")
+            val allow = j.optJSONArray("engAllow")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() }
+            val best = EngineMemo.best(applicationContext, EngineMemo.key(it0.optString("u"), it0.optString("t")), allow)
+            j.put("engDef", cur)
+            if (best != null && best != cur) j.put("engine", best)
+        } catch (_: Exception) {}
+    }
+
+    /** ponte con la ricerca a voce: esiste solo se il dispositivo ha il riconoscimento vocale */
+    inner class VoiceBridge : Bridge() {
+        /** ascolta in italiano: risultato in window.kxVoice(testo), errore in window.kxVoiceErr(motivo) */
+        @JavascriptInterface fun voiceStart() { runOnUiThread { if (!isFinishing && !isDestroyed) voiceBegin() } }
+    }
+
     /** Funzioni esposte al player come window.KairosNative */
-    inner class Bridge {
+    open inner class Bridge {
+        /** autopilota: cosa sa decodificare il dispositivo (HEVC, 4K, 10 bit, 50/60 fps) e altezza massima dello schermo */
+        @JavascriptInterface fun caps(): String = DevCaps.json(applicationContext)
+        /** autopilota: formati in cui il lettore usa di base VLC perché su questo dispositivo ExoPlayer fallisce di più (es. "ts:vlc") */
+        @JavascriptInterface fun engMemo(): String = try { EngineMemo.summary(applicationContext) } catch (_: Throwable) { "" }
+        /** autopilota: spazio libero e totale (MB) */
+        @JavascriptInterface fun storage(): String = DiskCare.json(applicationContext)
+        /** autopilota: pulisce le cache dell'app (download e guide temporanei, APK vecchi, immagini della WebView) */
+        @JavascriptInterface fun trimDisk() { DiskCare.trim(applicationContext, apkBusy.get()); runOnUiThread { if (webOk) try { web.clearCache(true) } catch (_: Throwable) {} } }
         @JavascriptInterface fun version(): String = BuildConfig.VERSION_NAME
         /** chiusure anomale dell'app (errore, uccisa dal sistema, memoria scarsa): elenco JSON, poi azzerato */
         @JavascriptInterface fun deaths(): String = Watch.drain(prefs)
@@ -1110,6 +1193,7 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface fun play(payload: String) {
             // la lista (anche migliaia di canali) si analizza qui, sul thread del ponte JS: il thread dell'interfaccia non si blocca
             val j = try { JSONObject(payload) } catch (e: Exception) { return }
+            learnEngine(j) // autopilota: motore imparato (solo con «Automatico»)
             PlayerActivity.pendingJson = j
             PlayerActivity.pending = null
             // al thread dell'interfaccia servono solo tipo, motore e id del canale

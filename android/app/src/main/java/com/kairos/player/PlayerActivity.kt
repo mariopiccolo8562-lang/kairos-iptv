@@ -228,6 +228,19 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     /** errore arrivato durante il cooldown di un recupero: rimandato alla fine del cooldown, non scartato */
     private var deferredErr: Runnable? = null
     private fun curClass(): String = NetMem.effectiveClass(this, uiLine)
+    /* ---- autopilota: motore imparato per formato e zapping ---- */
+    /** l'interfaccia dice che la scelta del lettore è «Automatico» (mai contro il pannello o il cliente) e qual era il motore di base */
+    private var engLearn = false
+    private var engDef = ""
+    /** motore lasciato dal recupero e formato del contenuto: se con l'altro il problema si risolve, quello lasciato ha fallito */
+    private var engLeft = ""
+    private var engLeftKey = ""
+    /** questa visione è già stata contata come riuscita per il suo motore */
+    private var engOkDone = false
+    /** verso dell'ultimo CH+/CH− e quando: serve a indovinare il canale successivo */
+    private var zapDir = 0
+    private var zapDirAt = 0L
+    private val itemIds by lazy { items.map { it.id } }
 
     private fun liteOf(a: org.json.JSONArray?): List<Pair<String, String>> {
         if (a == null) return emptyList()
@@ -239,7 +252,35 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private fun closeEvt(outcome: String) {
         val e = pendingEvt ?: return
         pendingEvt = null
+        if (outcome == "risolto") engResolved()
         try { e.put("outcome", outcome); PlayStats.event(e) } catch (_: Exception) {}
+    }
+
+    /** problema risolto dopo un cambio di motore: per questo formato il motore lasciato ha fallito e quello in uso è riuscito */
+    private fun engResolved() {
+        val left = engLeft; engLeft = ""
+        if (left.isEmpty() || left == engineName || engLeftKey.isEmpty()) return
+        try { EngineMemo.fail(this, left, engLeftKey); EngineMemo.ok(this, engineName, engLeftKey) } catch (_: Throwable) {}
+        engOkDone = true
+    }
+
+    /** con «Automatico»: ogni canale parte con il motore che su questo dispositivo va meglio per il suo formato (o con quello di base) */
+    private fun autoEngine() {
+        val learned = try { EngineMemo.best(this, EngineMemo.key(item.url, item.title), engAllow) } catch (_: Throwable) { null }
+        val want = learned ?: engDef
+        if ((want != "exo" && want != "vlc") || want == engineName) return
+        val allow = engAllow
+        if (allow != null && want !in allow && "auto" !in allow) return
+        startEngine(want)
+        baseEngine = engineName
+    }
+
+    /** dopo un cambio di canale: il canale successivo più probabile (sequenze imparate o verso dello zapping) risolve il DNS in anticipo */
+    private val warmRun = Runnable {
+        if (closing || stopped || !isLive || items.size < 2) return@Runnable
+        val dir = if (System.currentTimeMillis() - zapDirAt < 30_000L) zapDir else 0
+        val i = try { ZapMemo.predict(this, itemIds, index, dir) } catch (_: Throwable) { -1 }
+        if (i in items.indices && i != index) { val u = items[i].url; ZapMemo.warm(portal?.let { Portals.re(this, it, u) } ?: u) }
     }
 
     private fun newEvt(problem: String, action: String, err: String, srv: String = "") {
@@ -257,6 +298,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
 
     private fun resetRecovery() {
         closeEvt("chiuso")
+        engLeft = ""; engOkDone = false
         recDone.clear(); recCooldownUntil = 0L; varIdx = -1; stayDown = false; upAt = 0L
         readyOnce = false; isBuffering = false; bufferingSince = 0L; stallTimes.clear(); stallCounted = false
         drainSamples.clear()
@@ -420,6 +462,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             "engine" -> {
                 triedFallback = true; recEngineChanged = true
                 val other = if (engineName == "vlc") "exo" else "vlc"
+                engLeft = engineName; engLeftKey = EngineMemo.key(currentUrl, item.title, PlayStats.codec) // autopilota
                 newEvt(problem, "passato a ${engineLabel(other)}", err)
                 PlayStats.recovery = "$what → ${engineLabel(other)}"
                 toast("Problema di riproduzione: provo con ${engineLabel(other)}…")
@@ -541,6 +584,11 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         val fine = readyOnce && !isBuffering && freezeSec == 0
         if (fine) { if (okSince == 0L) okSince = now } else okSince = 0L
         if (fine && pendingEvt != null && now - okSince > 25_000L) closeEvt("risolto")
+        // autopilota: un minuto di visione regolare (mezzo minuto senza problemi) = riuscita di questo motore per questo formato
+        if (fine && !engOkDone && pendingEvt == null && okSince > 0 && now - okSince > 30_000L && now - startAt > 60_000L) {
+            engOkDone = true
+            try { EngineMemo.ok(this, engineName, EngineMemo.key(currentUrl, item.title, PlayStats.codec)) } catch (_: Throwable) {}
+        }
         if (fine && recDone.isNotEmpty() && now - lastActionAt > 120_000L && now - okSince > 60_000L && varIdx < 0) recDone.clear()
         // qualità ridotta: dopo 6 minuti senza blocchi si riprova quella piena (una volta; se torna a bloccarsi resta ridotta)
         if (fine && varIdx >= 0 && !stayDown && now - lastActionAt > 6 * 60_000L && stallTimes.isEmpty() && now - okSince > 6 * 60_000L) {
@@ -637,6 +685,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             introAuto = j.optBoolean("introAuto", false)
             j.optJSONArray("intro")?.let { a -> if (a.length() == 2 && a.optLong(1) > a.optLong(0)) intro = longArrayOf(a.optLong(0) * 1000, a.optLong(1) * 1000) }
             engineKey = j.optString("engineKey", "")
+            engLearn = j.optBoolean("engLearn", false)
+            engDef = j.optString("engDef", engineName)
             baseEngine = engineName
             resumeMs = j.optLong("start", 0L)
             val arr = j.getJSONArray("items")
@@ -1114,12 +1164,17 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private fun listChanged() { if (::listPanel.isInitialized) listAdapter.notifyDataSetChanged() }
 
     private fun playCurrent(startMs: Long) {
+        val fromId = if (isLive && playingIndex in items.indices && playingIndex != index) items[playingIndex].id else ""
         markPlaying()
         triedAlt = false; triedFallback = false; retries = 0; endRetries = 0; endTimes.clear()
         lastGoodPos = if (isLive) 0L else startMs
         resetRecovery()
         // il recupero aveva cambiato lettore o decodifica per il contenuto precedente: il nuovo riparte con quelli scelti
         if (recEngineChanged && !userChangedEngine && baseEngine.isNotEmpty()) { recEngineChanged = false; hwOff = false; startEngine(baseEngine) }
+        // autopilota: motore imparato per il formato di questo canale (solo con «Automatico» e se il cliente non l'ha cambiato qui)
+        if (engLearn && !userChangedEngine && !closing) autoEngine()
+        if (fromId.isNotEmpty()) try { ZapMemo.learn(this, fromId, item.id) } catch (_: Throwable) {}
+        ui.removeCallbacks(warmRun); if (isLive) ui.postDelayed(warmRun, 1500)
         ui.removeCallbacks(watchRunnable); ui.postDelayed(watchRunnable, 1000)
         // l'interfaccia web (e quindi il pannello) vede il canale in onda anche dopo lo zapping dentro il lettore
         PlayStats.nowId = item.id
@@ -1160,6 +1215,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private val zapPlay = Runnable { zapPending = false; playCurrent(0) }
     private fun zap(delta: Int) {
         if (items.size < 2) return
+        zapDir = if (delta > 0) 1 else -1; zapDirAt = System.currentTimeMillis()
         index = (index + delta + items.size) % items.size
         listChanged()
         veil.animate().cancel()
@@ -2027,6 +2083,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         if (logosLazy.isInitialized()) logos.shutdown()
         engine?.release()
         engine = null
+        try { EngineMemo.flush(this); ZapMemo.flush(this) } catch (_: Throwable) {}
         super.onDestroy()
     }
 }

@@ -14,6 +14,15 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- avvio puntuale delle registrazioni programmate (se non concesso si usa una sveglia non esatta) -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- ricerca a voce (SpeechRecognizer): il permesso del microfono si chiede solo al primo uso -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <!-- Android 11+: senza questa dichiarazione l'app non vede il servizio di riconoscimento vocale del sistema -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 
     <!-- funziona su TV (Fire TV, Android TV, Google TV) e su telefoni/tablet -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
