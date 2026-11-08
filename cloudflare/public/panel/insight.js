@@ -55,7 +55,7 @@
     if (L('epg', c.epg)) out.push(row('Guida TV', esc(L('epg', c.epg)[0]), L('epg', c.epg)[1]));
     if (L('dsk', c.dsk)) out.push(row('Spazio libero', esc(L('dsk', c.dsk)[0] + (typeof c.mb === 'number' ? ' · ' + c.mb + ' MB' : '')), L('dsk', c.dsk)[1]));
     if (typeof c.clk === 'number') out.push(row('Orologio', Math.abs(c.clk) >= 10 ? `sbagliato di ${Math.abs(c.clk)} min` : '✓ giusto', Math.abs(c.clk) >= 10 ? 'warn' : 'ok'));
-    if (typeof c.boot === 'number' && c.boot > 0) out.push(row('Avvio', `${(c.boot / 1000).toFixed(1)} s${c.slow ? (c.slow >= 2 ? ' · molto lento: interfaccia leggerissima' : ' · lento: animazioni e lavoro all\'avvio ridotti') : ''}`, c.slow ? 'warn' : 'ok'));
+    if (typeof c.boot === 'number' && c.boot > 0) out.push(row('Avvio (lavoro del dispositivo)', `${(c.boot / 1000).toFixed(1)} s${c.slow ? (c.slow >= 2 ? ' · molto lento: interfaccia leggerissima' : ' · lento: animazioni e lavoro all\'avvio ridotti') : ''}`, c.slow ? 'warn' : 'ok'));
     if (c.eng) out.push(row('Lettore imparato', esc(c.eng.split(',').map((x) => { const [f, e] = x.split(':'); return `${String(f).replace(/hevc$/, ' hevc').toUpperCase()} → ${ENG_N[e] || e}`; }).join(' · ')), ''));
     if (c.cap) out.push(row('Decodifica del dispositivo', esc(c.cap.split(',').map((x) => CAP_N[x] || x).join(' · ')), ''));
     if (c.fix) out.push(row('Riparato da solo', esc(c.fix.split(',').map((x) => FIX_N[x] || x).join(' · ')), 'ok'));

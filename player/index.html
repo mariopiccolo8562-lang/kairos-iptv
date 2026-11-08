@@ -7852,9 +7852,13 @@ setInterval(() => whenIdle(() => autoCheck('periodico'), 1000, 5000, 20 * 60e3),
 
 /* ---- avvio più veloce sui dispositivi lenti (tempi misurati: mediana delle ultime aperture dalla memoria) ---- */
 const KX_IN0 = lastInput; // nessun tasto premuto finora: l'avvio misurato è quello «senza mani»
+/* lettura della libreria dalla memoria del dispositivo: tempo misurato (lavoro del dispositivo, non della rete) */
+{ const ld = LibCache.load; LibCache.load = async function () { const t0 = performance.now(); try { return await ld.apply(this, arguments); } finally { S.cacheMs = performance.now() - t0; } }; }
+/** avvio dalla memoria senza tasti premuti: lettura della libreria + costruzione della Home (niente rete) e scatti nei primi 1,5 s
+    → livello 0 normale, 1 lento (oltre 2,5 s o scatti oltre il 25%), 2 molto lento (oltre 6 s o scatti oltre il 50%) */
 function bootMeasure() {
-  if (!NATIVE || !S.fromCache || lastInput !== KX_IN0) return; // solo aperture dalla memoria e senza tasti premuti (profilo, PIN): la rete e le persone non contano
-  const ms = Math.round(performance.now());
+  if (!NATIVE || !S.fromCache || lastInput !== KX_IN0) return;
+  const ms = Math.round((+S.cacheMs || 0) + (+S.homeMs || 0));
   let n = 0, long = 0, last = performance.now();
   const t0 = last;
   (function f(t) { n++; if (t - last > 50) long++; last = t; if (t - t0 < 1500) requestAnimationFrame(f); else done(); })(t0);
@@ -7862,8 +7866,8 @@ function bootMeasure() {
     const bp = store.get('bootPerf', null) || {}, a = (Array.isArray(bp.a) ? bp.a : []).concat(ms).slice(-5), j = (Array.isArray(bp.j) ? bp.j : []).concat(n ? long / n : 0).slice(-5);
     const med = (x) => x.slice().sort((p, q) => p - q)[Math.floor(x.length / 2)];
     const m = med(a), jk = med(j), cur = +store.get('slowBoot', 0) || 0;
-    let lv = m > 15000 || jk > 0.5 ? 2 : m > 8000 || jk > 0.25 ? 1 : 0;
-    if (lv < cur && (m > (cur === 2 ? 12000 : 6500) || jk > (cur === 2 ? 0.4 : 0.2))) lv = cur; // per scendere serve un margine
+    let lv = m > 6000 || jk > 0.5 ? 2 : m > 2500 || jk > 0.25 ? 1 : 0;
+    if (lv < cur && (m > (cur === 2 ? 5000 : 2000) || jk > (cur === 2 ? 0.4 : 0.2))) lv = cur; // per scendere serve un margine
     if (a.length < 2) lv = cur; // una misura sola non basta
     store.set('bootPerf', { a, j, med: m });
     if (lv !== cur) store.set('slowBoot', lv);
@@ -8090,7 +8094,7 @@ function startWarp() {
 async function enterHome() {
   clearInterval(pollT);
   try { NATIVE && NATIVE.uiReady && NATIVE.uiReady(); } catch {}
-  buildBrowse($('#home'), 'all');
+  { const t0 = performance.now(); buildBrowse($('#home'), 'all'); S.homeMs = performance.now() - t0; } // autopilota: lavoro del dispositivo all'avvio
   tick(true); S.stack = [];
   // lo splash resta sopra (hold) mentre sotto si mostra e si disegna la schermata iniziale; poi esce aprendosi su di lei
   const b = $('#boot'), fromBoot = b.classList.contains('on');
