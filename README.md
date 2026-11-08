@@ -484,6 +484,14 @@ Riusa quello che c'era già (classe del dispositivo D/N/O, modalità leggera aut
 - I canali non funzionanti si riconoscono dal numero del flusso: funziona con Xtream e con le liste M3U di tipo Xtream (`/live/utente/password/numero.ts`); per le altre M3U il canale non viene mai segnalato.
 - «Adesso per te» e i promemoria hanno bisogno di qualche giorno di visioni per comparire; il motore imparato di qualche cambio di motore riuscito.
 
+## 32. Kairos XC «intelligente» (interruttore «Funzioni intelligenti»)
+
+- **Controllo remoto › Kairos XC › «Funzioni intelligenti»: Accese | Spente** (profilo di tutti i clienti XC o singolo cliente, che vince sul profilo). **Spente di serie**: Kairos XC fa quello che faceva prima.
+- Accese, Kairos XC porta le funzioni della Kairos Pro (§30 e §31) in versione leggera per le chiavette da 1 GB: lettore imparato per formato (solo con «Automatico»), auto-controlli silenziosi nei menu con l'esito nel battito (`chk`: «Salute delle app» e «Dati» › Auto-controlli), DNS del canale successivo, promemoria dei programmi e delle squadre seguiti, pagine «Per te» e «Stasera» (due pulsanti discreti nella Home), assistente IA in Cerca (frasi, domande libere) e ricerca a voce.
+- Sempre attive anche con l'interruttore spento (non costano nulla e correggono soltanto): **decoder del dispositivo** (letti una volta: 4K → FHD, HEVC → H.264 fra le versioni dello stesso canale) e **canali non funzionanti** (stesso contratto della Pro: `ck` negli errori, anche da VLC, `dv`/`dead` nel battito; il canale va in fondo alla lista con «non disponibile»).
+- **Assistente IA** per i clienti XC: stessi endpoint della Pro (`/api/player/ai`); il motore lo sceglie il titolare come per la Pro: scheda del cliente, poi **profilo Kairos XC › «Assistente IA»** (nuova voce, solo profilo), poi la pagina Assistente IA (Gemini di serie); stesse domande al giorno e «Chiedi altre domande».
+- Arriva ai clienti con il **prossimo APK di Kairos XC** (repo `kairos-xc`); il pannello è già pronto.
+
 ## Struttura
 
 ```
