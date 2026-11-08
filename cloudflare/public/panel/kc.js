@@ -333,10 +333,10 @@
 .tog.fixed{opacity:.6;cursor:default}
 @media (max-width:900px){.dvt th:nth-child(6),.dvt td:nth-child(6),.dvt th:nth-child(7),.dvt td:nth-child(7),.dvt th:nth-child(8),.dvt td:nth-child(8){display:none}}
 .kc-dns-table{margin-top:16px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.kc-dns-row{display:grid;grid-template-columns:minmax(80px,.85fr) minmax(115px,1.3fr) 45px minmax(85px,.95fr) minmax(100px,1fr) minmax(115px,1.05fr) 124px;gap:8px;align-items:center;padding:11px 10px;border-top:1px solid var(--line);font-size:13px}
+.kc-dns-row{display:grid;grid-template-columns:minmax(80px,.75fr) minmax(115px,1.1fr) 45px minmax(85px,.85fr) minmax(100px,.9fr) minmax(115px,.95fr) minmax(226px,1.9fr);gap:8px;align-items:center;padding:11px 10px;border-top:1px solid var(--line);font-size:13px}
 .kc-dns-row:first-child{border-top:0}.kc-dns-row.head{background:rgba(255,255,255,.04);font-size:11px;font-weight:800;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
 .kc-dns-row .mono{display:block;overflow-wrap:anywhere;color:#cdd2ee;font-size:12px}.kc-dns-row .mut{font-size:12px}.kc-dns-row .status-sat{color:#ffb28a}
-.kc-dns-actions{display:flex;align-items:center;gap:6px}.kc-dns-actions .btn{white-space:nowrap;flex:none}
+.kc-dns-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.kc-dns-actions .btn{white-space:nowrap;flex:none}
 .kc-dns-add{display:grid;grid-template-columns:minmax(150px,1fr) minmax(190px,1.3fr) minmax(180px,1fr) auto;gap:10px;align-items:center;margin-top:14px}
 .kc-dns-add .inp{min-width:0;margin:0}.kc-dns-other{margin-top:18px;padding-top:12px;border-top:1px solid var(--line)}
 .kc-dns-other h4{margin:0 0 8px;font-size:13px}.kc-dns-unsaved{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
@@ -356,7 +356,7 @@
 .perms{display:grid;grid-template-columns:1fr 1fr;gap:8px}.perms .tog{margin:0}
 .kpi.go{cursor:pointer;transition:transform .15s}.kpi.go:hover{transform:translateY(-3px)}
 @media (max-width:1100px){.kc-row{grid-template-columns:1fr 1fr}.kc-acts{justify-content:flex-start}.kc-k{grid-template-columns:1fr 1fr}.kc-vc{grid-template-columns:1fr}.perms{grid-template-columns:1fr}}
-@media (max-width:900px){.kc-dns-row.head{display:none}.kc-dns-row{grid-template-columns:1fr 1fr;align-items:start}.kc-dns-cell{display:flex;gap:12px;align-items:flex-start}.kc-dns-cell:before{content:attr(data-label);flex:0 0 82px;font-size:11px;color:var(--mut);font-weight:800;text-transform:uppercase}.kc-dns-actions{justify-content:flex-end}}
+@media (max-width:1100px){.kc-dns-row.head{display:none}.kc-dns-row{grid-template-columns:1fr 1fr;align-items:start}.kc-dns-cell{display:flex;gap:12px;align-items:flex-start}.kc-dns-cell:before{content:attr(data-label);flex:0 0 82px;font-size:11px;color:var(--mut);font-weight:800;text-transform:uppercase}.kc-dns-actions{justify-content:flex-start}}
 @media (max-width:520px){.kc-dns-add{grid-template-columns:1fr}.kc-dns-add .btn{width:100%}.kc-dns-row{grid-template-columns:1fr;gap:9px;padding:12px}.kc-dns-cell:before{flex-basis:76px}.kc-dns-actions{justify-content:flex-start}}
 `;
   document.head.appendChild(css);
@@ -735,7 +735,7 @@
               <span class="kc-dns-cell" data-label="Riserve">${altNames.length ? esc(altNames.join(', ')) : '—'}</span>
               <span class="kc-dns-cell" data-label="Modalità">${modeName}</span>
               <span class="kc-dns-cell" data-label="Stato"><span class="${saturated ? 'status-sat' : 'mut'}">${saturated ? `⚠ saturo fino alle ${until}` : '✓ ok'}</span></span>
-              <span class="kc-dns-cell kc-dns-actions" data-label="Azioni"><button class="btn sm" data-dedit="${esc(x.id)}">Modifica</button><button class="icb" title="Elimina" aria-label="Elimina" data-ddel="${esc(x.id)}">🗑</button></span>
+              <span class="kc-dns-cell kc-dns-actions" data-label="Azioni">${h.devices ? `<button class="btn sm pri" data-dfrom="${esc(x.host)}">Cambia DNS…</button>` : ''}<button class="btn sm" data-dedit="${esc(x.id)}">Modifica</button><button class="icb" title="Elimina" aria-label="Elimina" data-ddel="${esc(x.id)}">✕</button></span>
             </div>`;
           }).join('') || '<p class="mut" style="padding:12px">Nessun DNS salvato.</p>'}
         </div>
@@ -811,6 +811,7 @@
     $$('[data-dsave]', V).forEach((b) => (b.onclick = async () => { const n = prompt('Nome per questo DNS:', ''); if (n === null) return; try { await kapi('POST', '/admin/dns/saved', { name: n, host: b.dataset.dsave }); toast('DNS salvato'); dnsLoad(); } catch (e) { toast(e.message, 1); } }));
     $$('[data-dedit]', V).forEach((b) => (b.onclick = async () => {
       const x = dd.saved.find((y) => y.id === b.dataset.dedit); if (!x) return;
+      const hasClients = (hosts.find((y) => y.savedId === x.id)?.devices || 0) > 0;
       const order = (x.alts || []).filter((id, i, a) => id !== x.id && a.indexOf(id) === i && dd.saved.some((y) => y.id === id));
       let mode = ['auto', 'main', 'alt'].includes(x.mode) ? x.mode : 'auto';
       const drawAlts = () => {
@@ -822,7 +823,8 @@
           return `<div class="kc-host"><label style="display:flex;align-items:center;gap:8px;flex:1"><input type="checkbox" data-alt="${esc(y.id)}" ${checked ? 'checked' : ''} ${!checked && order.length >= 4 ? 'disabled' : ''}><span><b>${esc(y.name)}</b><small class="mono" style="display:block">${esc(y.host)}</small></span></label>${checked ? `<span class="mut">${i + 1}</span><button class="btn sm" data-move="-1" data-id="${esc(y.id)}" ${i === 0 ? 'disabled' : ''}>↑</button><button class="btn sm" data-move="1" data-id="${esc(y.id)}" ${i === order.length - 1 ? 'disabled' : ''}>↓</button>` : ''}</div>`;
         }).join('') || '<p class="mut">Aggiunga altri DNS prima di scegliere una riserva.</p>';
       };
-      const done = ask('Modifica DNS', `<label class="lbl" for="dnsName">Nome</label><input class="inp" id="dnsName" maxlength="40" value="${esc(x.name)}"><label class="lbl" for="dnsHost" style="margin-top:12px">Indirizzo</label><input class="inp mono" id="dnsHost" value="${esc(x.host)}"><label class="lbl" style="margin-top:12px">Riserve (massimo 4)</label><p class="mut">Vale per l'app Kairos XC: se il server si blocca l'app passa da sola alla riserva.</p><div id="dnsAltList"></div><label class="lbl" for="dnsMode" style="margin-top:12px">Modalità</label><select class="inp" id="dnsMode"><option value="auto">Automatico</option><option value="main">Sempre il principale</option><option value="alt">Sempre la riserva</option></select>`, 'Salva');
+      const hostNote = hasClients ? '<small class="mut">Per spostare i clienti su un altro indirizzo usa "Cambia DNS ai clienti"</small>' : '';
+      const done = ask('Modifica DNS', `<label class="lbl" for="dnsName">Nome</label><input class="inp" id="dnsName" maxlength="40" value="${esc(x.name)}"><label class="lbl" for="dnsHost" style="margin-top:12px">Indirizzo</label><input class="inp mono" id="dnsHost" value="${esc(x.host)}" ${hasClients ? 'readonly' : ''}>${hostNote}<label class="lbl" style="margin-top:12px">Riserve (massimo 4)</label><p class="mut">Vale per l'app Kairos XC: se il server si blocca l'app passa da sola alla riserva.</p><div id="dnsAltList"></div><label class="lbl" for="dnsMode" style="margin-top:12px">Modalità</label><select class="inp" id="dnsMode"><option value="auto">Automatico</option><option value="main">Sempre il principale</option><option value="alt">Sempre la riserva</option></select>`, 'Salva');
       const modal = $('#mB');
       modal.onchange = (e) => {
         if (e.target.id === 'dnsMode') mode = e.target.value;
@@ -843,7 +845,9 @@
       $('#dnsMode').value = mode;
       if (!(await done)) { modal.onchange = modal.onclick = null; return; }
       modal.onchange = modal.onclick = null;
-      try { await kapi('PUT', '/admin/dns/saved/' + x.id, { name: $('#dnsName').value, host: $('#dnsHost').value, alts: order, mode }); toast('DNS aggiornato'); await dnsLoad(); } catch (e) { toast(e.message, 1); }
+      const update = { name: $('#dnsName').value, alts: order, mode };
+      if (!hasClients) update.host = $('#dnsHost').value;
+      try { await kapi('PUT', '/admin/dns/saved/' + x.id, update); toast('DNS aggiornato'); await dnsLoad(); } catch (e) { toast(e.message, 1); }
     }));
     $$('[data-ddel]', V).forEach((b) => (b.onclick = async () => { if (!(await askDanger('Eliminare il DNS?', 'I clienti che lo usano non cambiano; il DNS viene tolto anche dalle riserve.', 'ELIMINA', 'Elimina'))) return; try { await kapi('DELETE', '/admin/dns/saved/' + b.dataset.ddel); toast('DNS eliminato'); await dnsLoad(); } catch (e) { toast(e.message, 1); } }));
     $('#locAdd').onclick = async () => {
