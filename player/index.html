@@ -663,6 +663,17 @@ img{display:block}
 .tnav .tann{max-width:28vw;overflow:hidden;white-space:nowrap;color:#bbb;font-size:13px}
 .tnav .tann .mq{display:inline-block;padding-left:100%;animation:mq 26s linear infinite}
 @media (max-width:1100px){.tnav .tann{display:none}}
+/* barra in alto che non ci sta (testi grandi, tante icone, TV con schermo «stretto»): si stringe a gradini (navFit), mai elementi sovrapposti */
+.tnav.n1{gap:clamp(8px,1vw,16px)}.tnav.n1 .ttabs{gap:2px}.tnav.n1 .ticons{gap:3px}
+.tnav.n1 .ttabs .tt{padding-left:clamp(8px,1vw,14px);padding-right:clamp(8px,1vw,14px)}
+.tnav.n1 .texp .texd,.tnav.n1 .tt.tpl span{display:none!important}
+.tnav.n2 .tdate{display:none}.tnav.n2 .ticons{gap:2px;padding:3px}
+.tnav.n2 .ti{width:clamp(34px,5.4vh,48px);height:clamp(34px,5.4vh,48px)}
+.tnav.n3 .ttabs .tt{font-size:calc(clamp(15px,2.7vh,25px) * var(--ts,1) * .86);padding-left:clamp(6px,.8vw,10px);padding-right:clamp(6px,.8vw,10px)}
+.tnav.n3 .tlogo{width:clamp(30px,5vh,46px);height:clamp(30px,5vh,46px)}
+.tnav.n4 .tmeta{display:none}.tnav.n4 .ttabs .tt{font-size:calc(clamp(15px,2.7vh,25px) * var(--ts,1) * .74);padding-left:6px;padding-right:6px}
+.tnav.n4 .ti{width:clamp(30px,4.8vh,40px);height:clamp(30px,4.8vh,40px)}
+.tnav.n5 .ttabs{justify-content:flex-start;overflow-x:auto;scrollbar-width:none}.tnav.n5 .ttabs::-webkit-scrollbar{display:none}
 #guide{padding-top:calc(var(--navh) + 2px)!important;padding-left:var(--padx)!important;padding-right:var(--padx)!important;padding-bottom:12px!important}
 #live,#search,#settings{padding-top:calc(var(--navh) + 4px)!important;padding-left:var(--padx)!important;padding-right:var(--padx)!important}
 /* copertina */
@@ -1986,6 +1997,29 @@ function navHTML(curKey) {
     <div class="ttabs">${TABS.map(([k, l]) => `<div class="tt ${k === curKey ? 'cur' : ''}" data-f data-go="${k}">${l}</div>`).join('')}${plBtnHTML()}</div>
     <div class="ticons">${['refresh', 'search', 'favs', 'settings'].map((k) => `<div class="ti ${k === curKey ? 'cur' : ''}${k === 'refresh' && S.refreshing ? ' spin' : ''}" data-f data-go="${k}" title="${{ refresh: 'Aggiorna contenuti', search: 'Cerca', favs: 'La mia lista', settings: 'Impostazioni' }[k]}">${NAV_IC[k]}</div>`).join('')}${!S.demo && perm('request') && baseServer() ? `<div class="ti" data-f data-go="request" title="Richiedi un contenuto">${NAV_IC.req}</div>` : ''}<div class="ti tbell${unseenMsgs().length ? ' new' : ''}" data-f data-go="messages" title="Messaggi del fornitore">${NAV_IC.bell}${unseenMsgs().length ? `<b class="nb">${unseenMsgs().length}</b>` : ''}</div>${vpnShieldHTML()}${S.prof && profList().length > 1 ? `<div class="ti tprof" data-f data-go="profiles" title="Cambia profilo">${avatarSVG(S.prof.avatar, S.prof.name)}</div>` : ''}</div></nav>`;
 }
+/* barra in alto: se non ci sta (testi grandi, tante icone, schermo stretto) si stringe a gradini n1…n5 finché nessun elemento
+   si sovrappone; l'ultimo gradino fa scorrere le schede. Sotto i 900 px la barra ha già il suo schema (schede scorrevoli). */
+const NAV_LV = ['n1', 'n2', 'n3', 'n4', 'n5'], navNarrow = matchMedia('(max-width:900px)');
+function navFits(nav) {
+  if (nav.scrollWidth > nav.clientWidth + 1) return false;
+  let prev = null;
+  for (const e of nav.children) {
+    const r = e.getBoundingClientRect(); if (!r.width || !r.height) continue;
+    if (e.scrollWidth > e.clientWidth + 1) return false; // contenuto che esce dal suo riquadro (schede o icone)
+    if (prev && r.left < prev.right - 1) return false;
+    prev = r;
+  }
+  return true;
+}
+function navFit(nav) {
+  if (!nav || !nav.isConnected) return;
+  nav.classList.remove(...NAV_LV);
+  if (navNarrow.matches || !nav.offsetWidth) return; // schermata nascosta: si misura quando compare (fillNav)
+  for (const c of NAV_LV) { if (navFits(nav)) return; nav.classList.add(c); }
+}
+function navRefit() { try { navFit($('.screen.on .tnav')); } catch {} }
+addEventListener('resize', navRefit);
+try { document.fonts && document.fonts.ready.then(navRefit); } catch {}
 /* scudo VPN nella barra: compare solo se il fornitore lo ha permesso dal pannello (VPN «Consentita» + permesso «Accendere/spegnere la VPN»);
    con «Sempre attiva» è un indicatore acceso che non si tocca; negli altri casi non c'è */
 function vpnShieldHTML() {
@@ -2035,6 +2069,7 @@ function plRerender() {
 function fillNav(id) {
   const slot = $('#' + id + ' .navslot'); if (!slot) return;
   slot.innerHTML = navHTML(id === 'cat' ? $('#cat')._kind : id); tick(true);
+  navFit(slot.querySelector('.tnav'));
 }
 
 /* ---------------- pulsante "Aggiorna contenuti" ---------------- */
@@ -4464,6 +4499,7 @@ function buildBrowse(scr, kind) {
   scr._feat = featured(kind); scr._fi = 0;
   setHero(scr, scr._rows.length ? scr._rows[0].items[0] : scr._feat[0], true);
   tick(true);
+  navFit(scr.querySelector('.tnav'));
   // la riga delle righe viene ricreata a ogni costruzione: l'ascoltatore va agganciato ogni volta
   scr.querySelector('.rows').addEventListener('scroll', (e) => { const l = e.target; if (l.scrollTop + l.clientHeight > l.scrollHeight - 500 && scr._rendered < scr._rows.length) moreRows(scr, 3); if (scr._parked && !scr._nearRaf) scr._nearRaf = requestAnimationFrame(() => { scr._nearRaf = 0; rowsNear(scr); }); });
   if (scr._wired) return;
@@ -4822,7 +4858,7 @@ document.addEventListener('click', async (e) => {
   cycleOpt(r.dataset.opt, r); if (r.dataset.opt === 'lockAdult') focus(r, true);
 });
 const TS = { s: 0.9, m: 1, l: 1.15, xl: 1.3 };
-function applyTextSize(v) { document.documentElement.style.setProperty('--ts', TS[v] || 1); }
+function applyTextSize(v) { document.documentElement.style.setProperty('--ts', TS[v] || 1); navRefit(); }
 function applyOrient(v) { try { NATIVE && NATIVE.setOrientation && NATIVE.setOrientation(v); } catch {} }
 
 /* ---------------- ordinamento ---------------- */
