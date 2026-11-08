@@ -1,5 +1,6 @@
 (() => {
   const cache = { t: 0, items: [], busy: null };
+  const dnsCache = { t: 0, rows: [] };
   const can = (k) => D.role !== 'agent' || !!(((D.me || {}).perms || {})[k]);
   const expiryTime = (v) => {
     if (v == null || v === '') return false;
@@ -37,7 +38,7 @@
       if (can('wolf')) tasks.push(api('GET', '/admin/wolf/lines').then((r) => (r.lines || []).forEach((l) => add(out, 'wolf', 'WOLF', l, l.dns || r.dns))).catch(() => {}));
       for (const [p, tag] of [['armada', 'ARMADA'], ['storm', 'STORM']]) if (can(p)) {
         tasks.push(Promise.all([api('GET', `/admin/${p}/lines`).catch(() => null), api('GET', `/admin/${p}/state`).catch(() => null)]).then(([r, s]) => {
-          (r && Array.isArray(r.lines) ? r.lines : []).filter((l) => D.role !== 'agent' || l.self === true).forEach((l) => add(out, p, tag, l, s && s.dns));
+          (r && Array.isArray(r.lines) ? r.lines : []).filter((l) => D.role !== 'agent' || l.self === true).forEach((l) => add(out, p, tag, l, l.dns || l.host || (r && r.dns) || (s && s.dns)));
         }).catch(() => {}));
       }
       for (const [p, tag] of [['ro', 'REALOTT'], ['slt', 'SLT']]) if (can(p)) tasks.push(api('GET', `/admin/${p}/lines`).then((r) => (r.rows || []).forEach((l) => add(out, p, tag, l, r.dns))).catch(() => {}));
@@ -102,6 +103,38 @@
       return items;
     });
   }
-  window.KXLinePick = { load, find, mount, expiryDate };
+  async function mountDns(wrapEl, panel, tag, onPick) {
+    if (!wrapEl) return;
+    wrapEl.innerHTML = `<div class="kx-line-dns"><label>DNS di ${esc(tag || panel)} non ancora impostato: sceglilo<select class="inp" data-kx-line-dns><option value="">Carico i DNS salvati…</option></select></label></div>`;
+    const select = wrapEl.querySelector('[data-kx-line-dns]');
+    try {
+      if (Date.now() - dnsCache.t >= 60000) {
+        const data = await api('GET', '/admin/dns');
+        dnsCache.rows = (data.saved || []).filter((x) => x && x.host);
+        dnsCache.t = Date.now();
+      }
+      const rows = dnsCache.rows;
+      select.innerHTML = `<option value="">${rows.length ? 'Scegli un DNS…' : 'Nessun DNS salvato'}</option>${rows.map((x) => `<option value="${esc(x.host)}">${esc(x.name || x.host)}${x.name ? ' — ' + esc(x.host) : ''}</option>`).join('')}`;
+      select.disabled = !rows.length;
+    } catch {
+      select.innerHTML = '<option value="">Elenco DNS non disponibile</option>';
+      select.disabled = true;
+    }
+    select.onchange = async () => {
+      const host = select.value;
+      if (!host) return;
+      let saveError = '';
+      const setting = panel === 'armada' ? 'armadaDns' : panel === 'storm' ? 'stormDns' : '';
+      if (setting) {
+        try { await api('PUT', '/admin/settings', { [setting]: host }); }
+        catch (e) { saveError = e.message || 'impostazione non salvata'; }
+      }
+      try { if (onPick) await onPick(host); } catch (e) { toast(e.message || 'DNS non applicato', 1); }
+      if (saveError) toast(`DNS inserito ma non salvato nelle impostazioni: ${saveError}`, 1);
+    };
+  }
+  const linePickStyle = document.getElementById('kx-line-pick-style');
+  if (linePickStyle) linePickStyle.textContent += '.kx-line-dns{margin:8px 0;padding:10px 12px;border:1px solid #705c32;border-radius:10px;background:#211d15}.kx-line-dns label{display:block;color:#f0c36a;font-size:12px;font-weight:600}.kx-line-dns .inp{margin-top:6px}';
+  window.KXLinePick = { load, find, mount, mountDns, expiryDate };
   window.KXLineSync = { apply: syncExpiries };
 })();

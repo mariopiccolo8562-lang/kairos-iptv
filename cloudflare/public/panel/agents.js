@@ -210,14 +210,14 @@ body.agent .foot{display:none}
   const can = (k) => !isAgent() || !!(me().perms || {})[k];
   const linePanels = ['wolf', 'armada', 'storm', 'ro', 'slt'];
   const canLoadLines = (perms = me().perms || {}) => !!window.KXLinePick && (!isAgent() || linePanels.some((k) => !!perms[k]));
-  const matchLineServer = async (host, servers) => {
-    if (!host) return null;
+  const matchLineServer = async (host, servers, panel) => {
+    if (!host && !panel) return null;
     let server = null;
     try {
-      const match = await api('POST', '/admin/match-server', { host });
+      const match = await api('POST', '/admin/match-server', { host: host || '', ...(panel ? { panel } : {}) });
       if (match && match.server) server = servers.find((s) => s.id === match.server.id) || null;
     } catch {}
-    if (!server) {
+    if (!server && host) {
       const value = String(host).replace(/^https?:\/\//, '').toLowerCase();
       server = servers.find((s) => value && String(s.name).length >= 2 && value.includes(String(s.name).toLowerCase())) || null;
     }
@@ -888,7 +888,7 @@ body.agent .foot{display:none}
         playlist.username = line.username || '';
         playlist.password = line.password || '';
         playlist._linePickPassword = line.password || '';
-        const server = await matchLineServer(line.host, D.servers || []);
+        const server = await matchLineServer(line.host, D.servers || [], line.p);
         if (server) playlist.serverId = server.id;
         if (canLineSync) {
           e.expires = line.exp || '';
@@ -1101,7 +1101,7 @@ body.agent .foot{display:none}
     };
     const bindOpen = () => $$('[data-wzopen]').forEach((b) => (b.onclick = () => { const x = (D.devices || []).find((y) => y.id === b.dataset.wzopen); if (x) openClient(x); }));
     const fillLine = async (r, label) => {
-      const sv = agent ? await matchLineServer(r.host, servers) : null;
+      const sv = agent ? await matchLineServer(r.host, servers, r.p) : null;
       st.pl.username = r.username || '';
       st.pl.password = r.password || '';
       st.pl.ref = label || r.tag || 'Linea';
@@ -1109,6 +1109,8 @@ body.agent .foot{display:none}
       st.pl.panel = r.p || '';
       if (agent) { if (sv) st.pl.serverId = sv.id; }
       else st.pl.host = r.host || '';
+      const dnsFallback = $('#wzLineDns');
+      if (dnsFallback) dnsFallback.innerHTML = '';
       const today = new Date(); today.setHours(0, 0, 0, 0);
       if ((!agent || P.renew) && r.exp && new Date(r.exp + 'T00:00:00') > today) {
         st.expires = r.exp; st.durationMode = 'date'; st.durationN = ''; st.months = 0; st.expSource = ({ wolf: 'WOLF', armada: 'Armada', storm: 'Storm', ro: 'Realott', slt: 'SLT' })[r.p] || String(r.p || '').toUpperCase();
@@ -1128,7 +1130,16 @@ body.agent .foot{display:none}
       const where = agent ? server && server.name : st.pl.host;
       const user = esc(st.pl.username), chosen = label ? `Linea scelta · ${esc(label)} · ` : 'Linea riconosciuta · ';
       const msg = $('#wzPasteSt');
-      if (msg) msg.innerHTML = where ? `<div class="wz-st good">✓ ${chosen}${agent ? 'server' : 'DNS'} <b>${esc(where)}</b> · utente <b>${user}</b></div>` : `<div class="wz-st warn">✓ Utente <b>${user}</b> inserito · completa i campi ${agent ? 'server' : 'DNS'} qui sotto</div>`;
+      if (msg) msg.innerHTML = where ? `<div class="wz-st good">✓ ${chosen}${agent ? 'server' : 'DNS'} <b>${esc(where)}</b> · utente <b>${user}</b></div>` : `<div class="wz-st warn">✓ Utente <b>${user}</b> inserito · ${agent ? 'scegli il server qui sotto' : r.p ? 'scegli il DNS nel menu qui sopra' : 'completa il campo DNS qui sotto'}</div>`;
+      if (agent && !sv) toast('Scegli il server', 1);
+      if (!agent && !r.host && r.p && dnsFallback && window.KXLinePick && window.KXLinePick.mountDns) {
+        await window.KXLinePick.mountDns(dnsFallback, r.p, r.tag, async (host) => {
+          st.pl.host = host;
+          if ($('#wzHost')) $('#wzHost').value = host;
+          if (msg) msg.innerHTML = `<div class="wz-st good">✓ ${chosen}DNS <b>${esc(host)}</b> · utente <b>${user}</b></div>`;
+          foot();
+        });
+      }
       foot();
     };
     const pasteGo = async (quiet) => {
@@ -1151,6 +1162,7 @@ body.agent .foot{display:none}
         <select class="inp" id="wzOxDns" ${orbDns.length ? '' : 'disabled'}><option value="">Scegli il DNS OrbixPlay…</option>${orbDns.map((x, i) => `<option value="${i}"${String(st.oxDns) === String(i) ? ' selected' : ''}>${esc(x.name || 'DNS ' + (i + 1))}${!agent && x.host ? ' — ' + esc(x.host) : ''}</option>`).join('')}</select></div>
         ${!orbDns.length ? '<div class="wz-st warn">Non hai DNS OrbixPlay disponibili per il tuo account.</div>' : ''}</div>` : '';
       const picker = showLinePick ? '<div id="wzLinePick" data-placeholder="🔎 Cerca una linea sui pannelli disponibili"></div>' : '';
+      const dnsFallback = !agent && showLinePick ? '<div id="wzLineDns"></div>' : '';
       const paste = window.KXPaste ? '<textarea class="inp mono" id="wzPaste" rows="2" style="font-size:12.5px;margin-top:8px" placeholder="📋 Incolla un link M3U o il messaggio con server, utente e password"></textarea>' : '';
       const lineFields = agent
         ? `<select class="inp" id="wzSrv" title="Server"><option value="">Scegli il server…</option>${servers.map((x) => `<option value="${esc(x.id)}"${st.pl.serverId === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`
@@ -1169,7 +1181,7 @@ body.agent .foot{display:none}
           <div class="wz-targets">${targetButtons}</div>${kairos}${max}${orbix}</div></div>
         <div class="wz-s${lineOk() ? ' ok' : ''}" id="wzS2"><span class="n">${lineOk() ? '✓' : '2'}</span><div><h4>Linea del cliente</h4>
           <p class="hint">Scegli una linea già creata, incollala oppure inserisci i dati a mano. Utente e password servono per tutte le app.</p>
-          ${picker}${paste}<div id="wzPasteSt"></div>
+          ${picker}${dnsFallback}${paste}<div id="wzPasteSt"></div>
           <div class="wz-pl">${lineFields}<input class="inp" id="wzUser" placeholder="Utente" autocomplete="off" value="${esc(st.pl.username)}"><input class="inp" id="wzPass" placeholder="Password" autocomplete="off" value="${esc(st.pl.password)}"></div>
           <p class="wz-help">${agent ? 'Scegli il server solo tra quelli assegnati a te; non vedrai i DNS del titolare.' : 'Il DNS della linea si compila dalla linea scelta o si può selezionare dall’elenco salvato.'}</p>
           ${agent && !servers.length ? '<div class="wz-st warn">Non hai server assegnati. Chiedi al titolare di assegnartene uno per attivare App Kairos.</div>' : ''}</div></div>

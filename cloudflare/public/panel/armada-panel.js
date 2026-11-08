@@ -192,7 +192,7 @@ const mkArmadaLike = (cfg) => {
   function bind(V) {
     if (!V.dataset.bound) { V.dataset.bound = '1'; for (const ev of ['input', 'change']) V.addEventListener(ev, (e) => e.stopPropagation()); } // non conta tra le «modifiche non salvate»
     $('#arRe') && ($('#arRe').onclick = () => loadState());
-    $('#arCfg') && ($('#arCfg').onclick = async () => { try { await api('PUT', '/admin/settings', { armadaUrl: $('#arUrl').value.trim(), armadaDns: $('#arDns').value.trim() }); toast('Indirizzi salvati'); A.pk = A.lines = A.mags = A.res = null; await loadState(); loadTab(); } catch (e) { toast(e.message, 1); } });
+    $('#arCfg') && ($('#arCfg').onclick = async () => { try { await api('PUT', '/admin/settings', { [`${K}Url`]: $('#arUrl').value.trim(), [`${K}Dns`]: $('#arDns').value.trim() }); toast('Indirizzi salvati'); A.pk = A.lines = A.mags = A.res = null; await loadState(); loadTab(); } catch (e) { toast(e.message, 1); } });
     $$('[data-artab]', V).forEach((b) => (b.onclick = () => { readForm(); A.tab = b.dataset.artab; A.F = { q: '', f: '' }; A.sel.clear(); A.limit = 100; render(); loadTab(); }));
     $('#arReT') && ($('#arReT').onclick = () => loadTab(true));
     // nuova linea
