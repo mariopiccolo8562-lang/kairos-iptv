@@ -55,7 +55,8 @@
       const ref = payRef(r), label = r && (r.name || r.username || r.user || r.device_name || r.label) || ref;
       const pay = payCol && ref ? KXPay.badge('line', 'ora', ref) : '';
       const btn = payCol && ref && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="ora" data-ref="${esc(ref)}" data-label="${esc(label)}">💰 Pagamento</button>` : '';
-      return `<tr>${ks.map((k) => `<td style="padding:8px;border-bottom:1px solid var(--line,#222);vertical-align:top">${cell(r && r[k])}</td>`).join('')}${payCol ? `<td style="padding:8px;border-bottom:1px solid var(--line,#222);vertical-align:top">${pay}${btn ? `${pay ? '<br>' : ''}${btn}` : ''}</td>` : ''}</tr>`;
+      const noteAttrs = R.tab === 'devices' && ref ? `data-kx-line-note-ref="${esc(ref)}" data-kx-line-note-label="${esc(label)}"` : '';
+      return `<tr ${noteAttrs}>${ks.map((k) => `<td style="padding:8px;border-bottom:1px solid var(--line,#222);vertical-align:top">${cell(r && r[k])}</td>`).join('')}${payCol ? `<td style="padding:8px;border-bottom:1px solid var(--line,#222);vertical-align:top">${pay}${btn ? `${pay ? '<br>' : ''}${btn}` : ''}</td>` : ''}</tr>`;
     }).join('')}</tbody></table></div>`;
   }
   function body() {

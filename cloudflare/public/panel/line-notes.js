@@ -1,5 +1,5 @@
-/* KAIROS Control — note sulle linee dei pannelli che non hanno un campo nota proprio: Armada, MirkoTeam (ORCP), MaxPlayer,
-   OrbixPlay. WOLF, Atlantix, Realott e SLT usano la nota del loro pannello. Le note stanno in KAIROS (tabella line_notes),
+/* KAIROS Control — note sulle linee dei pannelli che non hanno un campo nota proprio: Armada, Storm, ORA, MirkoTeam (ORCP),
+   MaxPlayer, OrbixPlay. WOLF, Atlantix, Realott e SLT usano la nota del loro pannello. Le note stanno in KAIROS (tabella line_notes),
    si vedono nella riga e si modificano con «+ nota / Modifica». Va dopo i pannelli. */
 (() => {
   const css = document.createElement('style');
@@ -19,6 +19,7 @@
   const SRC = {
     armada: { view: 'v-armada', rows: '.ar-row', ref: (r) => { const m = r.querySelector('.ar-v .mono'); return m ? m.textContent.trim() : ''; }, slot: (r) => r.querySelector('.ar-v') && r.querySelector('.ar-v').parentElement },
     storm: { view: 'v-storm', rows: '.ar-row', ref: (r) => { const m = r.querySelector('.ar-v .mono'); return m ? m.textContent.trim() : ''; }, slot: (r) => r.querySelector('.ar-v') && r.querySelector('.ar-v').parentElement },
+    ora: { view: 'v-ora', rows: 'tr[data-kx-line-note-ref]', ref: (r) => r.dataset.kxLineNoteRef || '', label: (r) => r.dataset.kxLineNoteLabel || '', slot: (r) => r.lastElementChild },
     orcp: { view: 'v-orcp', rows: '[data-ormsg]', ref: (b) => b.dataset.ormsg || '', slot: (b) => { const tr = b.closest('tr'); return tr ? tr.firstElementChild : b.closest('.card'); } },
     mxp: { view: 'v-mxp', rows: '.mx-row', ref: (r) => r.dataset.id || '', label: (r) => { const m = r.querySelector('.mono'); return m ? m.textContent.trim() : ''; }, slot: (r) => r.firstElementChild },
     oxp: { view: 'v-oxp', rows: '#v-oxp b.mono', ref: (m) => m.textContent.trim(), slot: (m) => m.parentElement },
@@ -26,7 +27,7 @@
   async function tick() {
     for (const [p, s] of Object.entries(SRC)) {
       const v = document.getElementById(s.view); if (!v || !v.classList.contains('on')) continue;
-      if (window.KXPay) {
+      if (window.KXPay && p !== 'ora') {
         let tile = v.querySelector(':scope > .kxpay-tile-wrap');
         if (!tile) { tile = document.createElement('div'); tile.className = 'kxpay-tile-wrap'; tile.style.cssText = 'margin:0 0 10px'; v.prepend(tile); }
         tile.innerHTML = v.dataset.kxPayFiltered === '1' ? `<button type="button" class="pay-panel-tile" data-kxpay-filter="${p}">Mostra tutte le linee</button>` : KXPay.panelTile(p);
@@ -44,15 +45,20 @@
         const n = notes[ref.toLowerCase()] || '';
         const current = slot.querySelector(':scope > .ln-box');
         if (current) {
-          const oldPay = current.querySelector('.pay-badge'), payHtml = window.KXPay ? KXPay.badge('line', p, ref) : '';
+          const oldPay = current.querySelector('.pay-badge'), payHtml = window.KXPay && p !== 'ora' ? KXPay.badge('line', p, ref) : '';
           if (oldPay && !payHtml) oldPay.remove();
           else if (oldPay && payHtml) oldPay.outerHTML = payHtml;
           else if (payHtml) current.insertAdjacentHTML('afterbegin', payHtml);
+          const oldNote = current.querySelector('.ln-t');
+          if (n && oldNote) { oldNote.textContent = '📝 ' + n; oldNote.title = n; }
+          else if (n) current.insertAdjacentHTML('afterbegin', `<span class="ln-t" title="${esc(n)}">📝 ${esc(n)}</span>`);
+          else oldNote?.remove();
+          const payButton = current.querySelector('[data-kxpay-open]'); if (payButton) payButton.dataset.panelNote = n;
           continue;
         }
         const box = document.createElement('div'); box.className = 'ln-box'; box.dataset.lnRef = ref.toLowerCase();
-        const label = (s.label && s.label(el)) || ref, pay = window.KXPay ? KXPay.badge('line', p, ref) : '';
-        box.innerHTML = `${pay}${n ? `<span class="ln-t" title="${esc(n)}">📝 ${esc(n)}</span>` : ''}${window.KXPay && KXPay.canEdit() ? `<button class="btn sm" data-kxpay-open data-kind="line" data-panel="${p}" data-ref="${esc(ref)}" data-label="${esc(label)}" data-auto-line="${esc(el.dataset.kxAutoLine || '')}">💰 Pagamento</button>` : ''}<button class="btn sm">${n ? 'Modifica nota' : '+ nota'}</button>`;
+        const label = (s.label && s.label(el)) || ref, pay = window.KXPay && p !== 'ora' ? KXPay.badge('line', p, ref) : '';
+        box.innerHTML = `${pay}${n ? `<span class="ln-t" title="${esc(n)}">📝 ${esc(n)}</span>` : ''}${window.KXPay && KXPay.canEdit() && p !== 'ora' ? `<button class="btn sm" data-kxpay-open data-kind="line" data-panel="${p}" data-ref="${esc(ref)}" data-label="${esc(label)}" data-owner="${+el.dataset.kxOwnerId || 0}" data-auto-line="${esc(el.dataset.kxAutoLine || '')}" data-panel-note="${esc(n)}">💰 Pagamento</button>` : ''}<button class="btn sm">${n ? 'Modifica nota' : '+ nota'}</button>`;
         const noteBtn = [...box.querySelectorAll('button')].find((b) => !b.hasAttribute('data-kxpay-open'));
         if (noteBtn) noteBtn.onclick = (e) => { e.stopPropagation(); edit(p, ref, label); };
         slot.appendChild(box);
@@ -60,7 +66,7 @@
     }
   }
   setInterval(() => { tick().catch(() => {}); }, 600);
-  window.addEventListener('kxpay:update', () => { tick().catch(() => {}); });
+  window.addEventListener('kxpay:update', () => { Object.values(C).forEach((c) => { c.t = 0; }); tick().catch(() => {}); });
   window.addEventListener('kxpay:filter', (e) => {
     const v = SRC[e.detail.panel] && document.getElementById(SRC[e.detail.panel].view);
     const select = v && v.querySelector('.kx-days');
