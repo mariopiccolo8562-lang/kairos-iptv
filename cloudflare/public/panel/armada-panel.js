@@ -135,7 +135,7 @@ const mkArmadaLike = (cfg) => {
     const TAG = { ok: ['Attiva', ''], soon: ['In scadenza', 'w'], exp: ['Scaduta', 'b'], trial: ['Prova', 'w'], off: ['Disattivata', 'g'] };
     const row = (x) => {
       const t = TAG[st(x)], id = kind === 'lines' ? 'l' + x.id : 'm' + x.id, vis = A.show.has(id), link = kind === 'lines' ? m3u(x.username, x.password) : '';
-      return `<div class="ar-row">
+      return `<div class="ar-row" data-kx-auto-line="${esc(JSON.stringify(kind === 'lines' ? { type: 'm3u', username: x.username } : { type: 'mag', mac: x.mac }))}">
         <div>${window.KXTools ? KXTools.ck(PRE, id, A.sel.has(id)) : ''}${kind === 'lines' ? `<span class="k">Utente</span><div class="ar-v"><span class="mono">${esc(x.username)}</span><button data-arc="u" data-ari="${x.id}" title="Copia">⧉</button></div><span class="k" style="margin-top:4px">Password</span><div class="ar-v"><span class="mono">${vis ? esc(x.password) : '••••••••'}</span><button data-areye="${id}" title="Mostra / nascondi">👁</button><button data-arc="p" data-ari="${x.id}" title="Copia">⧉</button></div>`
           : `<span class="k">MAC</span><div class="ar-v"><span class="mono">${esc(x.mac)}</span><button data-arc="m" data-ari="${x.id}" title="Copia">⧉</button></div>`}</div>
         <div><span class="k">Scadenza</span>${esc(fmtD(x.exp))}<br><span class="mut" style="font-size:12px">${esc(left(x.exp))}</span></div>

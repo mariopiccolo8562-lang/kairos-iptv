@@ -52,7 +52,7 @@
         }
         const box = document.createElement('div'); box.className = 'ln-box'; box.dataset.lnRef = ref.toLowerCase();
         const label = (s.label && s.label(el)) || ref, pay = window.KXPay ? KXPay.badge('line', p, ref) : '';
-        box.innerHTML = `${pay}${n ? `<span class="ln-t" title="${esc(n)}">📝 ${esc(n)}</span>` : ''}${window.KXPay && KXPay.canEdit() ? `<button class="btn sm" data-kxpay-open data-kind="line" data-panel="${p}" data-ref="${esc(ref)}" data-label="${esc(label)}">💰 Pagamento</button>` : ''}<button class="btn sm">${n ? 'Modifica nota' : '+ nota'}</button>`;
+        box.innerHTML = `${pay}${n ? `<span class="ln-t" title="${esc(n)}">📝 ${esc(n)}</span>` : ''}${window.KXPay && KXPay.canEdit() ? `<button class="btn sm" data-kxpay-open data-kind="line" data-panel="${p}" data-ref="${esc(ref)}" data-label="${esc(label)}" data-auto-line="${esc(el.dataset.kxAutoLine || '')}">💰 Pagamento</button>` : ''}<button class="btn sm">${n ? 'Modifica nota' : '+ nota'}</button>`;
         const noteBtn = [...box.querySelectorAll('button')].find((b) => !b.hasAttribute('data-kxpay-open'));
         if (noteBtn) noteBtn.onclick = (e) => { e.stopPropagation(); edit(p, ref, label); };
         slot.appendChild(box);
