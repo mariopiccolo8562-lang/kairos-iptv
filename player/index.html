@@ -3637,6 +3637,14 @@ function nativePlay(item, kind, fromSec, extra) {
     items = extra.list.map((e) => ({ id: e.id, t: e.name, u: e.url, a: '', n: 0, g: e.group || '' }));
     index = Math.max(0, extra.index || 0);
   } else items = [{ id: item.id, t: item.name, u: item.url, a: '', n: 0, g: item.group || '' }];
+  const portalId = String(item.pl || (extra && extra.parent && extra.parent.pl) || (extra && extra.list && extra.list[extra.index || 0] && extra.list[extra.index || 0].pl) || '');
+  const portalPl = portalId ? allPlaylists().find((p) => String(p.id) === portalId) : null;
+  const portalAlts = portalPl && Array.isArray(portalPl.alts) ? portalPl.alts : [];
+  let srv = null;
+  if (portalPl && portalAlts.length) {
+    const main = plOrigin(portalPl.type === 'xtream' ? portalPl.host : portalPl.url);
+    if (main) srv = { id: portalPl.id, main, alts: portalAlts, mode: portalPl.mode || 'auto', bad: Array.isArray(S.sat) ? S.sat : [] };
+  }
   const stored = kind === 'live' ? 0 : store.get('pos', {})[item.id] || 0;
   const start = fromSec != null ? fromSec : stored;
   try {
@@ -3644,6 +3652,7 @@ function nativePlay(item, kind, fromSec, extra) {
       quality: P.quality, buffer: P.buffer, aspect: P.aspect, brand: S.settings.brand || 'KAIROS',
       hw: opt('hw'), sub: opt('subSize'), res: perm('resInd') && !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list), adapt: !!opt('adaptQ'), pip: false,
       line: lc, ...(bw != null ? { bw } : {}), // Kairos Adaptive: "weak" | "normal" | "good" e banda nota in Mbps (assente se sconosciuta)
+      ...(srv ? { srv } : {}),
       ...(extra && extra.parent ? { introKey: String(extra.parent.id), intro: store.get('intro', {})[extra.parent.id] || [], introAuto: !!opt('introAuto') } : {}) }));
   } catch (e) { return false; }
   S.inPlayer = true; S.playT = Date.now(); S.lastStallsH = -1;
@@ -6665,7 +6674,7 @@ async function sendPlayEvents() {
     if (r) for (const e of JSON.parse(r)) {
       pendEvts.push(e);
       // Kairos Adaptive: gli stalli e le riduzioni di qualità del lettore alimentano la classe della linea e i canali «alleggeriti»
-      try { if (e && e.id && e.k !== 'vod') { if (e.problem === 'stall') noteStall(e.id, e.t); if (isLiteVar(e.var) || /^qualità ridotta/.test(e.action || '')) noteLite(e.id); } } catch {}
+      try { if (e && e.id && e.k !== 'vod') { if (e.problem === 'stall' && e.action !== 'qualità ridotta in anticipo') noteStall(e.id, e.t); if (isLiteVar(e.var) || /^qualità ridotta/.test(e.action || '')) noteLite(e.id); } } catch {}
     }
   } catch {}
   if (!pendEvts.length || S.demo || !baseServer() || evSending) return; // un invio alla volta: niente doppioni nel pannello
@@ -6704,6 +6713,7 @@ async function heartbeat(force) {
     net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off', cfg: rcSnapshot(), rcv: S.rcv || '', vis: !document.hidden || !!S.inPlayer, ...(S.kickAck ? { kickAck: S.kickAck } : {}) };
   try {
     const j = await apiPost('/api/player/heartbeat', body); if (!j) return;
+    S.sat = Array.isArray(j.sat) ? j.sat : [];
     sendPlayEvents();
     if (typeof j.rc === 'string') { try { rcApply(JSON.parse(j.rc), j.rcv || ''); } catch {} } // impostazioni imposte dal pannello
     if (Array.isArray(j.cmds) && j.cmds.length) rcRun(j.cmds);
