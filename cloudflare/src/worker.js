@@ -1345,6 +1345,7 @@ function playerInput(v) {
    Ogni campo assente resta com'è; lettore: '' = lo sceglie il cliente nell'app. Il lettore vale anche per le connessioni
    collegate «indipendenti» (hanno il loro); permessi, VPN e visioni stanno sul cliente principale. L'app si riallinea al battito. */
 const MASS_MAX = 5000;
+const MASS_RC = ['lite', 'posters', 'intro']; // voci del Controllo remoto cambiabili in massa
 function massInput(b) {
   if (!b || typeof b !== 'object') throw new HttpErr(400, 'Richiesta non valida');
   const o = {};
@@ -1363,12 +1364,23 @@ function massInput(b) {
   if (b.vpn !== undefined && b.vpn !== null && b.vpn !== '') { const v = Number(b.vpn); if (![0, 1, 2].includes(v)) throw new HttpErr(400, 'Modalità VPN non valida'); o.vpn = v; }
   if (b.maxStreams !== undefined && b.maxStreams !== null && b.maxStreams !== '') o.maxStreams = intIn(b.maxStreams, 0, MAX_CONN, 'Visioni contemporanee');
   if (b.rcClear === true) o.rcClear = true;
+  // voci del Controllo remoto solo per questi clienti: '' = tolta (vale il profilo dell'app)
+  if (b.rcSet !== undefined && b.rcSet !== null) {
+    if (typeof b.rcSet !== 'object' || Array.isArray(b.rcSet)) throw new HttpErr(400, 'Impostazioni non valide');
+    const r = {};
+    for (const [k, v] of Object.entries(b.rcSet)) {
+      const c = MASS_RC.includes(k) && rcCatByKey.get(k); if (!c) throw new HttpErr(400, `Voce sconosciuta: ${String(k).slice(0, 20)}`);
+      if (v !== '' && !c[3].some((x) => x[0] === v)) throw new HttpErr(400, `${c[1]}: valore non valido`);
+      r[k] = v;
+    }
+    if (Object.keys(r).length) o.rcSet = r;
+  }
   if (!Object.keys(o).length) throw new HttpErr(400, 'Non hai scelto niente da cambiare');
   return o;
 }
 async function massEdit(env, b, who, ip) {
   const ch = massInput(b), scope = ['ids', 'active', 'all'].includes(b.scope) ? b.scope : 'ids';
-  const cols = "id, name, code, parent, active, expires, (playlists <> '') AS has_pl, perms, player, vpn, max_streams, rc";
+  const cols = "id, name, code, parent, active, expires, (playlists <> '') AS has_pl, perms, player, vpn, max_streams, rc, app";
   let list;
   if (scope === 'ids') {
     if (!Array.isArray(b.ids) || !b.ids.length) throw new HttpErr(400, 'Scegli almeno un cliente');
@@ -1383,13 +1395,21 @@ async function massEdit(env, b, who, ip) {
   if (!list.length) return { changed: 0, total: 0 };
   // connessioni collegate indipendenti: hanno il loro lettore
   let kids = [];
-  if (ch.player || ch.rcClear) {
+  if (ch.player || ch.rcClear || ch.rcSet) {
     const ids = list.map((d) => d.id);
     for (let i = 0; i < ids.length; i += 90) {
       const part = ids.slice(i, i + 90);
-      kids.push(...((((await env.DB.prepare(`SELECT id, parent, own, player, rc FROM devices WHERE parent IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || [])));
+      kids.push(...((((await env.DB.prepare(`SELECT id, parent, own, player, rc, app FROM devices WHERE parent IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || [])));
     }
   }
+  // impostazioni imposte solo a lui: «togli tutte» e/o voci scelte (solo quelle che la sua app capisce)
+  const rcStr = (o) => (Object.keys(o).length ? JSON.stringify(o) : '');
+  const nextRc = (x) => {
+    const rc = ch.rcClear ? {} : rcDevOf(x);
+    for (const [k, v] of Object.entries(ch.rcSet || {})) { const c = rcCatByKey.get(k); if (x.app && c && !c[4].includes(x.app)) continue; if (v === '') delete rc[k]; else rc[k] = v; }
+    return rcStr(rc);
+  };
+  const rcChange = (x) => { if (!ch.rcClear && !ch.rcSet) return null; const v = nextRc(x); return v !== rcStr(rcDevOf(x)) || (ch.rcClear && (x.rc || '') && !v) ? v : null; };
   const nextPlayer = (cur) => { const p = playerParse(cur); for (const [k, v] of Object.entries(ch.player || {})) { if (v === '') delete p[k]; else p[k] = v; } return Object.keys(p).length ? JSON.stringify(p) : ''; };
   const stmts = [];
   let changed = 0;
@@ -1399,7 +1419,7 @@ async function massEdit(env, b, who, ip) {
     if (ch.perms) { const v = permsJson({ ...permsParse(d.perms), ...ch.perms }); if (v !== (d.perms || '')) set.perms = v; }
     if (ch.vpn !== undefined && ch.vpn !== (+d.vpn || 0)) set.vpn = ch.vpn;
     if (ch.maxStreams !== undefined && ch.maxStreams !== (+d.max_streams || 0)) set.max_streams = ch.maxStreams;
-    if (ch.rcClear && (d.rc || '')) set.rc = '';
+    { const v = rcChange(d); if (v !== null) set.rc = v; }
     const k = Object.keys(set);
     if (!k.length) continue;
     changed++;
@@ -1408,7 +1428,7 @@ async function massEdit(env, b, who, ip) {
   for (const x of kids) {
     const set = {};
     if (ch.player && +x.own) { const v = nextPlayer(x.player); if (v !== (x.player || '')) set.player = v; }
-    if (ch.rcClear && (x.rc || '')) set.rc = '';
+    { const v = rcChange(x); if (v !== null) set.rc = v; }
     const k = Object.keys(set);
     if (k.length) stmts.push(env.DB.prepare(`UPDATE devices SET ${k.map((c) => c + ' = ?').join(', ')} WHERE id = ?`).bind(...k.map((c) => set[c]), x.id));
   }
@@ -1420,6 +1440,7 @@ async function massEdit(env, b, who, ip) {
     ch.vpn !== undefined ? 'VPN ' + ['spenta', 'a scelta del cliente', 'sempre attiva'][ch.vpn] : '',
     ch.maxStreams !== undefined ? 'visioni ' + (ch.maxStreams || 'illimitate') : '',
     ch.rcClear ? 'tolte le voci imposte solo a loro' : '',
+    ch.rcSet ? 'Controllo remoto: ' + Object.entries(ch.rcSet).map(([k, v]) => { const c = rcCatByKey.get(k); return `${c[1]} ${v === '' ? 'come il profilo' : (c[3].find((x) => x[0] === v) || [v, v])[1]}`; }).join(', ') : '',
   ].filter(Boolean).join(' · ');
   await log(env, 'edit', `${who}: modifica in massa (${scope === 'ids' ? 'selezionati' : scope === 'active' ? 'tutti gli attivi' : 'tutti'}) — ${what} — ${changed} su ${list.length} clienti`, ip);
   return { changed, total: list.length, kids: kids.length };
@@ -2170,6 +2191,7 @@ const RC_CAT = [
   ['adult', 'Contenuti per adulti nella Home e nei consigliati', 'sel', [['on', 'Sì'], ['off', 'No']], KPRO, 'Riguarda solo Home e consigliati: le categorie restano raggiungibili (vedi «Blocca contenuti per adulti»)', '', 'Aspetto'],
   ['logos', 'Loghi dei canali automatici', 'sel', [['on', 'Sì'], ['off', 'No']], KPRO, 'Con «No» l\'app non cerca i loghi mancanti: meno rete e memoria', '', 'Aspetto'],
   ['posters', 'Locandine', 'sel', [['auto', 'Automatiche (più leggere sulle chiavette da 1 GB)'], ['hi', 'Sempre nitide']], KPRO, 'Automatiche: sulle chiavette da 1 GB (Fire TV Stick/Lite) locandine e sfondi si scaricano più piccoli, un po\' meno nitidi ma con meno memoria. «Sempre nitide»: come sugli altri dispositivi, usa più memoria', '', 'Aspetto'],
+  ['intro', 'Animazione d\'avvio', 'sel', [['auto', 'Automatica'], ['simple', 'Semplice'], ['off', 'Spenta']], KPRO, 'Automatica: completa sui dispositivi forti, senza gli effetti di sfondo pesanti su quelli deboli. Semplice: logo, scritta e barra, senza effetti di sfondo. Spenta: logo fermo e barra. Vale dall\'apertura successiva', '', 'Aspetto'],
   /* ---- Lettore ---- */
   ['o.engLive', 'Lettore TV in diretta', 'sel', ENG_OPTS, KPRO, 'Se nella scheda del cliente hai già scelto il lettore, vale quello', '', 'Lettore'],
   ['o.engMovie', 'Lettore film', 'sel', ENG_OPTS, KPRO, '', '', 'Lettore'],

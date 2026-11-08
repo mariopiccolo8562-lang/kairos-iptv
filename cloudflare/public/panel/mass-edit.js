@@ -38,6 +38,12 @@
   const nActive = () => prim().filter((d) => d.status === 'active').length;
   const nAll = () => prim().filter((d) => d.status !== 'pending').length;
   const sel = (name, opts) => `<select class="inp" data-ms="${name}">${opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`;
+  // voci del Controllo remoto che si possono imporre in massa (stesse etichette del catalogo del server)
+  const RCM = [
+    ['lite', 'Modalità leggera', 'Tutte le app · «Spenta» non la riaccende nemmeno «Risolvi»', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['max', 'Leggerissima'], ['off', 'Spenta']]],
+    ['posters', 'Locandine', 'Solo Kairos Pro · «Sempre nitide» usa più memoria sulle chiavette da 1 GB', [['auto', 'Automatiche'], ['hi', 'Sempre nitide']]],
+    ['intro', 'Animazione d\'avvio', 'Solo Kairos Pro · vale dall\'apertura successiva', [['auto', 'Automatica'], ['simple', 'Semplice'], ['off', 'Spenta']]],
+  ];
   let M = null, ids0 = [], after = null;
   // sezione dei Clienti (I miei / degli agenti / un agente): le scelte «solo questa sezione» vengono prima
   let sec = null, secA = [], secAll = [];
@@ -53,6 +59,8 @@
     if (v('vpn') !== '') b.vpn = +v('vpn');
     const ms = M.querySelector('[data-ms="streams"]'); if (ms && ms.value.trim() !== '') b.maxStreams = Math.max(0, parseInt(ms.value, 10) || 0);
     if (M.querySelector('[data-ms="rcClear"]').checked) b.rcClear = true;
+    const rs = {}; for (const [k] of RCM) { const x = v('rc.' + k); if (x) rs[k] = x === '-' ? '' : x; }
+    if (Object.keys(rs).length) b.rcSet = rs;
     return b;
   }
   function summary(b) {
@@ -62,6 +70,7 @@
     if (b.vpn !== undefined) out.push('VPN: ' + VPN_O.find((o) => o[0] === String(b.vpn))[1].toLowerCase());
     if (b.maxStreams !== undefined) out.push('visioni contemporanee: ' + (b.maxStreams || 'illimitate'));
     if (b.rcClear) out.push('tolte le impostazioni imposte solo a loro');
+    if (b.rcSet) out.push(Object.entries(b.rcSet).map(([k, x]) => { const r = RCM.find((e) => e[0] === k); return `${r[1]} → ${x === '' ? 'come il profilo' : (r[3].find((o) => o[0] === x) || [x, x])[1]}`; }).join(', '));
     return out;
   }
   const scopeOf = () => (M.querySelector('[name="msSc"]:checked') || {}).value || 'active';
@@ -99,6 +108,8 @@
       <div class="ms-h">Altro</div>
       <div class="ms-r"><div><b>VPN</b><small>Come nella scheda del cliente</small></div>${sel('vpn', VPN_O)}</div>
       <div class="ms-r"><div><b>Visioni contemporanee</b><small>Vuoto = non cambiare · 0 = senza limite</small></div><input class="inp" type="number" min="0" max="20" data-ms="streams" placeholder="Non cambiare"></div>
+      <div class="ms-h">Controllo remoto · solo per questi clienti</div>
+      ${RCM.map(([k, l, d, o]) => `<div class="ms-r"><div><b>${esc(l)}</b><small>${esc(d)}</small></div>${sel('rc.' + k, [['', 'Non cambiare'], ['-', 'Come il profilo (togli la voce)'], ...o])}</div>`).join('')}
       <label class="ms-ck"><input type="checkbox" data-ms="rcClear"><span><b>Togli le impostazioni del Controllo remoto imposte solo a loro</b><small>Torna a valere il profilo dell'app (Controllo remoto → profilo di ogni app)</small></span></label>
       <div class="ms-ft"><span class="ms-sum" id="msSum"></span><span class="sp"></span><button class="btn" type="button" id="msNo">Annulla</button><button class="btn pri" type="button" id="msGo" disabled>Applica</button></div></div>`;
     M.classList.add('on');
@@ -148,8 +159,10 @@
         if (b.perms) d.perms = { ...(d.perms || {}), ...b.perms };
         if (b.vpn !== undefined) d.vpn = b.vpn;
         if (b.maxStreams !== undefined) d.maxStreams = b.maxStreams;
-        if (b.rcClear && DEMO.rctl && DEMO.rctl.over) delete DEMO.rctl.over[d.id];
-        if (JSON.stringify([d.player, d.perms, d.vpn, d.maxStreams]) !== before || b.rcClear) changed++;
+        const ov = (DEMO.rctl && DEMO.rctl.over) || null, rc0 = JSON.stringify((ov && ov[d.id]) || {});
+        if (b.rcClear && ov) delete ov[d.id];
+        if (b.rcSet && ov) { const o = { ...(ov[d.id] || {}) }; for (const [k, v] of Object.entries(b.rcSet)) { if (v === '') delete o[k]; else o[k] = v; } if (Object.keys(o).length) ov[d.id] = o; else delete ov[d.id]; }
+        if (JSON.stringify([d.player, d.perms, d.vpn, d.maxStreams]) !== before || JSON.stringify((ov && ov[d.id]) || {}) !== rc0) changed++;
       }
       return { changed, total: list.length, kids: 0 };
     };
