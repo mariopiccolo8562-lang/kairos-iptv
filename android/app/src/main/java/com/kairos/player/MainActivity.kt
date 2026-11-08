@@ -53,6 +53,8 @@ class MainActivity : ComponentActivity() {
     private var lastBack = 0L
     @Volatile private var uiOk = false
     private var isResumed = false
+    /** splash nativo (chiavetta da 1 GB): sopra la WebView finché l'interfaccia non ha disegnato la Home */
+    @Volatile private var splash: SplashOverlay? = null
 
     companion object {
         private const val HOME = "file:///android_asset/www/index.html"
@@ -174,6 +176,9 @@ class MainActivity : ComponentActivity() {
         root.addView(previewBox, FrameLayout.LayoutParams(1, 1))
         setContentView(root)
         hideSystemUi()
+        // chiavetta da 1 GB (stessa soglia della classe D dell'interfaccia): splash nativo dal primo fotogramma, anche sopra
+        // lo schermo nero d'avvio della WebView; lo toglie l'interfaccia (splashDone) o, mai bloccati, un tempo di sicurezza
+        if (SplashOverlay.wanted(this)) splash = SplashOverlay(this, root, prefs) { js("window.kxSplashGone && kxSplashGone()") }.also { it.show() }
 
         // Android uccide il motore web per primo quando manca memoria (Fire Stick): con la priorità alta lo fa molto meno
         if (Build.VERSION.SDK_INT >= 26) try { web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false) } catch (_: Throwable) {}
@@ -225,6 +230,15 @@ class MainActivity : ComponentActivity() {
                 val accept = request.requestHeaders?.entries?.firstOrNull { it.key.equals("Accept", true) }?.value ?: return null
                 if (!accept.startsWith("text/html")) return null // immagini, script, XHR/fetch passano come sempre
                 return android.webkit.WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap<String, String>(), java.io.ByteArrayInputStream(ByteArray(0)))
+            }
+
+            /** la pagina dell'interfaccia non si carica: via lo splash nativo (si vede il messaggio della WebView) */
+            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
+                if (request.isForMainFrame) splash?.hide(true)
+            }
+            @Deprecated("Deprecated in Java")
+            override fun onReceivedError(view: WebView, errorCode: Int, description: String?, failingUrl: String?) {
+                if (failingUrl != null && failingUrl == view.url) splash?.hide(true)
             }
 
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
@@ -1044,7 +1058,13 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface fun exit() { runOnUiThread { finish() } }
 
         /** l'interfaccia è partita correttamente */
-        @JavascriptInterface fun uiReady() { uiOk = true; prefs.edit().putInt("ui_fail", 0).apply() }
+        @JavascriptInterface fun uiReady() { uiOk = true; prefs.edit().putInt("ui_fail", 0).apply(); runOnUiThread { splash?.onUiReady() } }
+        /** splash nativo davanti (chiavetta da 1 GB): true se è mostrato; da qui in poi lo toglie l'interfaccia con splashDone */
+        @JavascriptInterface fun nativeSplash(): Boolean { val s = splash ?: return false; s.asked = true; return s.shown }
+        /** l'interfaccia ha disegnato la Home (o deve mostrare qualcosa al cliente): dissolvenza e via */
+        @JavascriptInterface fun splashDone() { runOnUiThread { splash?.hide(false) } }
+        /** marchio e colore del tema per lo splash nativo della prossima apertura */
+        @JavascriptInterface fun splashBrand(name: String, accent: String) { prefs.edit().putString("sp_brand", name.trim().take(24)).putString("sp_accent", accent.trim().take(16)).apply() }
         @JavascriptInterface fun uiVersion(): String = prefs.getString("ui_ver", "") ?: ""
 
         /** installa una nuova versione dell'interfaccia scaricata dal pannello e la ricarica */

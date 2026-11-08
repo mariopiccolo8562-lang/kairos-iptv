@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- logo K fermo (splash nativo sotto API 25): stesse forme dell'SVG dell'interfaccia. Generato da ns-gen/gen.py -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="200dp" android:height="200dp" android:viewportWidth="200" android:viewportHeight="200">
+  <group android:name="logo">
+    <clip-path android:pathData="M100,0 A100,100 0 1,1 100,200 A100,100 0 1,1 100,0 Z"/>
+    <group android:name="ringG" android:rotation="-38" android:pivotX="100" android:pivotY="100">
+      <path android:name="ring" android:pathData="M184,100 A84,84 0 1,1 16,100 A84,84 0 1,1 184,100" android:strokeColor="#FFFF2A3D" android:strokeWidth="7" android:strokeLineCap="round" android:trimPathEnd="0.7579"/>
+    </group>
+    <path android:name="dots" android:pathData="M170.00,100.00 A70,70 0 0,1 169.94,103.00 M169.29,109.97 A70,70 0 0,1 168.80,112.93 M167.16,119.73 A70,70 0 0,1 166.26,122.59 M163.67,129.09 A70,70 0 0,1 162.36,131.79 M158.88,137.86 A70,70 0 0,1 157.20,140.35 M152.89,145.86 A70,70 0 0,1 150.88,148.08 M145.82,152.92 A70,70 0 0,1 143.51,154.83 M137.82,158.90 A70,70 0 0,1 135.26,160.47 M129.05,163.69 A70,70 0 0,1 126.29,164.87 M119.69,167.17 A70,70 0 0,1 116.79,167.96 M109.92,169.29 A70,70 0 0,1 106.94,169.65 M99.96,170.00 A70,70 0 0,1 96.96,169.93 M89.99,169.28 A70,70 0 0,1 87.03,168.79 M80.23,167.15 A70,70 0 0,1 77.37,166.24 M70.87,163.65 A70,70 0 0,1 68.17,162.34 M62.10,158.86 A70,70 0 0,1 59.62,157.18 M54.11,152.86 A70,70 0 0,1 51.89,150.85 M47.05,145.79 A70,70 0 0,1 45.14,143.48 M41.07,137.78 A70,70 0 0,1 39.51,135.22 M36.29,129.01 A70,70 0 0,1 35.11,126.25 M32.81,119.64 A70,70 0 0,1 32.03,116.75 M30.70,109.88 A70,70 0 0,1 30.34,106.90 M30.00,99.91 A70,70 0 0,1 30.07,96.91 M30.73,89.95 A70,70 0 0,1 31.22,86.99 M32.86,80.19 A70,70 0 0,1 33.77,77.33 M36.37,70.83 A70,70 0 0,1 37.68,68.13 M41.17,62.07 A70,70 0 0,1 42.85,59.58 M47.17,54.08 A70,70 0 0,1 49.18,51.86 M54.24,47.02 A70,70 0 0,1 56.56,45.11 M62.25,41.05 A70,70 0 0,1 64.81,39.49 M71.03,36.28 A70,70 0 0,1 73.79,35.09 M80.40,32.80 A70,70 0 0,1 83.30,32.02 M90.17,30.69 A70,70 0 0,1 93.14,30.34 M100.13,30.00 A70,70 0 0,1 103.13,30.07 M110.10,30.73 A70,70 0 0,1 113.06,31.23 M119.86,32.88 A70,70 0 0,1 122.71,33.79 M129.21,36.39 A70,70 0 0,1 131.91,37.70 M137.97,41.19 A70,70 0 0,1 140.45,42.87 M145.96,47.20 A70,70 0 0,1 148.18,49.22 M153.01,54.28 A70,70 0 0,1 154.92,56.59 M158.97,62.29 A70,70 0 0,1 160.54,64.85 M163.74,71.07 A70,70 0 0,1 164.92,73.83 M167.21,80.44 A70,70 0 0,1 167.99,83.34 M169.31,90.21 A70,70 0 0,1 169.67,93.19" android:strokeColor="#FFFFFFFF" android:strokeAlpha="0.14" android:strokeWidth="1.5"/>
+    <group android:name="kbG" android:translateY="0">
+      <path android:name="kb" android:pathData="M66,52 H80 A4,4 0 0,1 84,56 V144 A4,4 0 0,1 80,148 H66 A4,4 0 0,1 62,144 V56 A4,4 0 0,1 66,52 Z" android:fillColor="#FFFFFFFF" android:fillAlpha="1"/>
+    </group>
+    <group android:name="kuG" android:translateX="0" android:translateY="0">
+      <path android:name="ku" android:pathData="M90,104 L128,52 H156 L116,108 Z" android:fillColor="#FFFF2A3D" android:fillAlpha="1"/>
+    </group>
+    <group android:name="klG" android:translateX="0" android:translateY="0">
+      <path android:name="kl" android:pathData="M104,98 L122,92 L158,148 H130 Z" android:fillColor="#FFFFFFFF" android:fillAlpha="1"/>
+    </group>
+    <group android:name="satG" android:pivotX="100" android:pivotY="100">
+      <path android:name="sat" android:pathData="M164,62 A7,7 0 1,1 178,62 A7,7 0 1,1 164,62 Z" android:fillColor="#FFFFFFFF" android:fillAlpha="1"/>
+    </group>
+  </group>
+</vector>
