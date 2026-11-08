@@ -4130,13 +4130,14 @@ const AI_CUE = / (film|serie|partita|partite|stasera|oggi|domani|adesso|anni|con
 const AI_ASK_RX = /^ (chi|cosa|che cosa|cos e|quando|quanto|quanti|perche|come|quale|quali|dove|a che ora|che ora|mi consigli|consigliami|dimmi|spiegami|parlami) /;
 /** frase (non un nome): almeno 3 parole, oppure 2 con una parola tipica, oppure una domanda */
 const aiPhrase = (q) => { const n = aiN(q), w = n.trim().split(' ').filter(Boolean).length; return /\?\s*$/.test(q) || w >= 3 || (w >= 2 && AI_CUE.test(n)); };
-let aiQ = null; // { q, st: 'busy' | 'ok' | 'err', find, label, answer, res, msg, left }
+let aiQ = null, aiSeq = 0; // { q, st: 'busy' | 'ok' | 'err', find, label, answer, res, msg, left } · aiSeq: vale solo l'ultima richiesta
 async function aiSearch(q0) {
   const q = String(q0 || '').trim().slice(0, 200), key = q.toLowerCase();
   if (q.length < 2) return;
   if (!aiOn()) { aiQ = { q: key, st: 'err', msg: 'L\'assistente non è disponibile adesso: ecco i risultati per nome.' }; doSearch(); return; }
   if (aiQ && aiQ.q === key && aiQ.st === 'busy') return;
   const ask = AI_ASK_RX.test(aiN(q)) || /\?\s*$/.test(q);
+  const seq = ++aiSeq;
   aiQ = { q: key, st: 'busy' }; doSearch();
   if (!cur || !document.body.contains(cur)) focus($('#qAi'), true);
   let st;
@@ -4147,6 +4148,7 @@ async function aiSearch(q0) {
     if (ask && j.titles && j.titles.length) { const named = aiTitles(j.titles).filter((x) => !isLocked(x) && (showAdult() || !isAdult(x))); R.vod = [...named, ...R.vod.filter((x) => !named.includes(x))]; }
     st = { q: key, st: 'ok', find: f, label: j.label || '', answer: ask ? j.answer || '' : '', res: R, left: j.left };
   } catch (e) { st = { q: key, st: 'err', msg: aiErrTxt(e) + ' Ecco i risultati per nome.' }; }
+  if (seq !== aiSeq) return; // nel frattempo è partita un'altra frase
   aiQ = st;
   if ($('#q').value.trim().toLowerCase() !== key || !$('#search').classList.contains('on')) return;
   doSearch();
@@ -4329,8 +4331,9 @@ function aiOpen(c) {
     openItem(x);
   }, 60);
 }
-let tnShown = new Set();
+let tnShown = new Set(), tnTok = 0;
 async function tonightDialog(more) {
+  const tok = ++tnTok;
   if (!more) tnShown = new Set();
   const all = tnCands().filter((c) => !tnShown.has(c.key)), canAi = aiOn() && all.length >= 3;
   kxModal('tnM', `<div class="orb mut" style="font-size:12px;letter-spacing:.3em">✦ PER TE</div><h2>Cosa guardo stasera?</h2>
@@ -4350,7 +4353,7 @@ async function tonightDialog(more) {
       note = aiLeftTxt(j.left);
     } catch (e) { note = e && e.limit ? 'Le domande all\'assistente di oggi sono finite: proposte scelte in base ai tuoi gusti.' : ''; }
   }
-  const M = $('#tnM'); if (!M) return; // chiusa nel frattempo
+  const M = $('#tnM'); if (!M || tok !== tnTok) return; // chiusa (o riaperta) nel frattempo
   if (!picks || picks.length < 3) picks = tnLocal(all).map((c) => ({ c, why: c.w }));
   picks.forEach((p) => tnShown.add(p.c.key));
   $('#tnL').innerHTML = picks.map((p, i) => tnRow(p.c, i, p.why, 'data-tn')).join('');
@@ -4399,6 +4402,7 @@ function aiDialog(x, prog) {
     <div class="tagn"><input class="inp" data-f id="aiIn" maxlength="200" placeholder="${x ? 'Fai una domanda…' : 'Es. chi è l\'attore di Rambo? · a che ora c\'è la F1?'}">${hasVoice() ? '<button class="btn aimic" data-f id="aiMic" title="Parla">🎤</button>' : ''}<button class="btn pri" data-f id="aiGo">Chiedi</button></div>
     <div class="aians" id="aiA"></div><div class="sbtn"><button class="btn" data-f id="aiNo">Chiudi</button></div>`, null, 'aim');
   let busy = false, res = [];
+  const M0 = $('#aiM'), live0 = () => $('#aiM') === M0; // la risposta va solo in questa finestra (non in una riaperta dopo)
   const ask = async (q) => {
     q = String(q || '').trim(); if (!q || busy) return;
     if (!x && q === chips[0]) { $('#aiM') && $('#aiM').remove(); return tonightDialog(); }
@@ -4406,8 +4410,9 @@ function aiDialog(x, prog) {
     busy = true; $('#aiA').innerHTML = '<div class="mut">✦ Sto pensando…</div>';
     try {
       const j = await aiPost({ v: 2, q, ctx }, 20000);
-      if (!$('#aiM')) return;
+      if (!live0()) return;
       const f = j.find || null, people = f && f.people ? await aiPeople(f.people, f) : [];
+      if (!live0()) return;
       const R = f ? aiFindRun(f, people) : { vod: [], tv: [], ev: [], ch: [] };
       const named = aiTitles(j.titles).filter((y) => !isLocked(y) && (showAdult() || !isAdult(y)));
       R.vod = [...named, ...R.vod.filter((y) => !named.includes(y))].filter((y) => !x || y.id !== x.id);
@@ -4417,7 +4422,7 @@ function aiDialog(x, prog) {
       $$('#aiM [data-ar]').forEach((b) => (b.onclick = () => aiOpen(res[+b.dataset.ar])));
       const f1 = $('#aiM [data-ar]'); if (f1 && cur && (cur.id === 'aiGo' || cur.id === 'aiIn' || cur.hasAttribute('data-aq'))) focus(f1, true);
     } catch (e) {
-      if (!$('#aiM')) return;
+      if (!live0()) return;
       $('#aiA').innerHTML = `<div class="mut">${esc(aiErrTxt(e))}</div>${e && e.limit ? '<button class="btn pri" data-f id="aiMore" style="margin-top:1vh">Chiedi altre domande</button>' : ''}`;
       if ($('#aiMore')) { $('#aiMore').onclick = async () => { const bt = $('#aiMore'); bt.disabled = true; try { const r = await apiPost('/api/player/request', { ctype: 'ai' }); fx('ok'); bt.textContent = r && r.already ? 'Richiesta già inviata ✓' : 'Richiesta inviata ✓'; } catch (er) { if (/^In attesa/.test(er.message || '')) { bt.textContent = '⏳ Richiesta in attesa'; } else { bt.disabled = false; toast('Richiesta non inviata: riprova'); } } }; focus($('#aiMore'), true); }
     } finally { busy = false; }
