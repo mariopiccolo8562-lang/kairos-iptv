@@ -2317,14 +2317,24 @@ async function fixDevice(env, s, d, who, auto = false, soft = false) {
   const latest = auto ? null : await latestFor(env, s, app).catch(() => null);
   const iss = healthIssues(p, errs, latest, app);
   const rc = rcDevOf(d), rc0 = JSON.stringify(rc), cmds = new Set(), done = [], todo = [];
-  const set = (k, v, why) => { const c = rcCatByKey.get(k); if (!c || !(c[4] || []).includes(app) || rc[k] === v) return; rc[k] = v; done.push(why); };
+  /* voci già decise dal titolare (su questo cliente o sul profilo dell'app): «Risolvi» automatico non le cambia mai.
+     «Modalità leggera: Spenta» non la cambia nemmeno «Risolvi» premuto a mano (lo segnala soltanto), e la modalità leggera non scende mai */
+  const prof = rcProfiles(s)[app] || {}, LR = { auto: 1, on: 2, max: 3 };
+  const set = (k, v, why, keep) => {
+    const c = rcCatByKey.get(k); if (!c || !(c[4] || []).includes(app) || rc[k] === v) return;
+    const cur = rc[k] !== undefined ? rc[k] : prof[k];
+    if (k === 'lite' && cur === 'off') { if (!auto && keep) todo.push(keep); return; }
+    if (k === 'lite' && (LR[cur] || 0) >= (LR[v] || 0)) return;
+    if (auto && rc[k] !== undefined) return;
+    rc[k] = v; done.push(why);
+  };
   let upd = false;
   for (const i of iss) {
     if (i.key === 'upd') { upd = true; done.push(`Aggiornamento alla versione ${latest ? latest.version : 'nuova'} inviato`); }
-    else if (i.key === 'restart') { set('lite', 'max', 'Modalità leggerissima attivata: il dispositivo ha poca memoria'); cmds.add('cache'); }
+    else if (i.key === 'restart') { set('lite', 'max', 'Modalità leggerissima attivata: il dispositivo ha poca memoria', 'Si riavvia per poca memoria, ma la modalità leggera è «Spenta» per tua scelta: non la cambio. Per meno riavvii mettila su «Leggerissima» da Controllo remoto'); cmds.add('cache'); }
     else if (i.key === 'err') {
       cmds.add('cache');
-      if (errs.some((e) => /hevc|h\.?265/i.test(e.codec || ''))) { set('lite', 'on', 'Modalità leggera attivata: i canali HEVC pesano sul dispositivo'); todo.push('Canali HEVC/H.265: se la playlist ha la versione H.264 del canale, è più leggera'); }
+      if (errs.some((e) => /hevc|h\.?265/i.test(e.codec || ''))) { set('lite', 'on', 'Modalità leggera attivata: i canali HEVC pesano sul dispositivo', 'Canali HEVC pesanti, ma la modalità leggera è «Spenta» per tua scelta: non la cambio'); todo.push('Canali HEVC/H.265: se la playlist ha la versione H.264 del canale, è più leggera'); }
     } else if (i.key === 'dec') set('o.hw', 'on', 'Decodifica hardware attivata');
     else if (i.key === 'stall' || i.key === 'speed' || i.key === 'wifi') {
       set('o.adaptQ', true, 'Qualità adattiva attivata: con la rete lenta passa da sola alla versione più leggera del canale');
@@ -2354,12 +2364,12 @@ function healthIssues(p, errs, latest, app) {
   const pro = !app || RC_APPS.includes(app);
   if (p && latest && verBehind(p.ver, latest.version)) out.push({ sev: 'warn', key: 'upd', what: `App vecchia: ${APP_NAME[app || 'tv'] || ''} ${String(p.ver || '?').replace(/^(lite|tv|xc|plus)\s+/i, '').replace(/\s+premium$/i, '')} (ultima ${latest.version})`, fix: UPD_HOW[app || 'tv'] || 'Aggiorna l\'app del cliente', ...(pro ? { act: 'upd' } : {}) });
   const kd = errs.filter((e) => e.problem === 'killed').length, cr = errs.filter((e) => e.problem === 'crash').length;
-  if (kd >= 2) out.push({ sev: 'bad', key: 'killed', what: `Si è chiusa da sola ${kd} volte nelle ultime 24 ore: il sistema l'ha terminata per poca memoria${/fire|aft/i.test((p && p.model) || '') ? ' (tipico dei Fire Stick)' : ''}`, fix: 'L\'app è passata da sola alla modalità leggerissima. Fai chiudere le altre app sul dispositivo e riavviarlo; se continua, quel dispositivo ha troppo poca memoria per l\'app: serve un box o una stick con almeno 2 GB' });
+  if (kd >= 2) out.push({ sev: 'bad', key: 'killed', what: `Si è chiusa da sola ${kd} volte nelle ultime 24 ore: il sistema l'ha terminata per poca memoria${/fire|aft/i.test((p && p.model) || '') ? ' (tipico dei Fire Stick)' : ''}`, fix: 'L\'app passa da sola alla modalità leggerissima (salvo se l\'hai messa «Spenta»). Fai chiudere le altre app sul dispositivo e riavviarlo; se continua, quel dispositivo ha troppo poca memoria per l\'app: serve un box o una stick con almeno 2 GB' });
   const ue = errs.filter((e) => e.problem === 'uierr').length;
   if (ue >= 1) out.push({ sev: 'warn', key: 'uierr', what: `${ue} ${ue === 1 ? 'errore dell\'interfaccia' : 'errori dell\'interfaccia'} nelle ultime 24 ore`, fix: 'Il dettaglio (messaggio e riga) è in «Errori delle app»: mandalo allo sviluppatore' });
   if (cr >= 1) out.push({ sev: 'bad', key: 'crash', what: `${cr} ${cr === 1 ? 'chiusura improvvisa per errore interno' : 'chiusure improvvise per errore interno'} nelle ultime 24 ore`, fix: 'Guarda il dettaglio in «Errori delle app» e segnalalo: con quel testo si trova la causa' });
   const rs = errs.filter((e) => e.problem === 'restart').length;
-  if (rs >= 2) out.push({ sev: 'bad', key: 'restart', what: `Si è riavviata da sola ${rs} volte nelle ultime 24 ore: Android chiude il motore web per poca memoria${/fire|aft/i.test((p && p.model) || '') ? ' (tipico dei Fire Stick)' : ''}`, fix: 'L\'app è già passata da sola alla modalità leggerissima. Se continua: Controllo remoto → Modalità leggera «Leggerissima» per questo cliente, chiudi le altre app sul dispositivo e riavvialo; se ha ancora problemi serve un dispositivo con più memoria' });
+  if (rs >= 2) out.push({ sev: 'bad', key: 'restart', what: `Si è riavviata da sola ${rs} volte nelle ultime 24 ore: Android chiude il motore web per poca memoria${/fire|aft/i.test((p && p.model) || '') ? ' (tipico dei Fire Stick)' : ''}`, fix: 'L\'app passa da sola alla modalità leggerissima (salvo se l\'hai messa «Spenta»). Se continua: Controllo remoto → Modalità leggera «Leggerissima» per questo cliente, chiudi le altre app sul dispositivo e riavvialo; se ha ancora problemi serve un dispositivo con più memoria' });
   const nr = errs.filter((e) => e.outcome === 'non risolto' && !['restart', 'crash', 'killed', 'uierr'].includes(e.problem)).length, fr = errs.filter((e) => e.problem === 'freeze').length;
   if (nr >= 3) out.push({ sev: 'bad', key: 'err', what: `${nr} errori non risolti nelle ultime 24 ore`, fix: errs.some((e) => /hevc|h\.?265/i.test(e.codec || '')) ? 'Canali HEVC/H.265 su un dispositivo che fatica: usa la versione H.264 del canale o un dispositivo più recente' : 'Controlla il canale o la linea: se succede su più clienti è il server', ...(pro ? { act: 'upd' } : {}) });
   else if (errs.length >= 5) out.push({ sev: 'warn', key: 'err', what: `${errs.length} problemi di visione nelle ultime 24 ore (risolti da soli)`, fix: 'Tienilo d\'occhio: se aumentano controlla linea e dispositivo' });
