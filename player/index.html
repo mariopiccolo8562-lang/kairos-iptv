@@ -2887,7 +2887,7 @@ function imgSm(u, kind) {
   u = String(u || ''); const m = RX_TMDB.exec(u); if (!m) return u;
   const sz = m[2].toLowerCase(), cur = sz === 'original' ? 1e5 : +((/^w(\d+)(?:$|_and_h\d+)/.exec(sz) || [])[1] || 0);
   if (!cur) return u; // misura sconosciuta: indirizzo invariato
-  const want = (TMDB_KIND[kind] || TMDB_KIND.p)[devClass() === 'D' ? 0 : 1];
+  const want = (TMDB_KIND[kind] || TMDB_KIND.p)[devClass() === 'D' && rcGet('posters') !== 'hi' ? 0 : 1]; // «Locandine: Sempre nitide» dal pannello: misura piena anche sulle D
   return cur > want ? m[1] + 'w' + want + m[3] : u;
 }
 /** attributi src (+ data-o con l'originale se la misura è stata ridotta) per un <img> */
@@ -5365,7 +5365,7 @@ function updFirstSeen(a) { const fs = store.get('apkFirst', {}); if (fs.v !== a.
 function updMust() { const a = S.apkUpdate, d = updForceDays(); if (!a || d == null || S.apkReady !== a.url) return false; return Date.now() - updFirstSeen(a) >= d * 86400e3; }
 function bgUpdOn() { const v = rcGet('bgupd'); return v != null ? v !== 'off' : store.get('bgUpd', true) !== false; }
 function rcSnapshot() {
-  const o = { bgupd: bgUpdOn() ? 'on' : 'off', lite: document.body.classList.contains('xlite') ? 'max' : document.body.classList.contains('lite') ? 'on' : 'off', theme: rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema', adult: showAdult() ? 'on' : 'off', logos: autoLogoOn() ? 'on' : 'off' };
+  const o = { bgupd: bgUpdOn() ? 'on' : 'off', lite: document.body.classList.contains('xlite') ? 'max' : document.body.classList.contains('lite') ? 'on' : 'off', theme: rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema', adult: showAdult() ? 'on' : 'off', logos: autoLogoOn() ? 'on' : 'off', posters: rcGet('posters') === 'hi' ? 'hi' : 'auto' };
   try { for (const k of RC_CFG_KEYS) if (OPT[k]) o['o.' + k] = opt(k); } catch {}
   try { const P = playPrefs(); for (const k of ['quality', 'buffer', 'aspect']) o['p.' + k] = P[k]; } catch {}
   return o;

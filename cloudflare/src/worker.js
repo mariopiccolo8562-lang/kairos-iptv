@@ -2169,6 +2169,7 @@ const RC_CAT = [
   ['o.sfx', 'Effetti sonori', 'sel', [['classic', 'Classici'], ['soft', 'Morbidi'], ['futur', 'Futuristici'], ['retro', 'Retrò'], ['off', 'Disattivati']], KPRO, '', '', 'Aspetto'],
   ['adult', 'Contenuti per adulti nella Home e nei consigliati', 'sel', [['on', 'Sì'], ['off', 'No']], KPRO, 'Riguarda solo Home e consigliati: le categorie restano raggiungibili (vedi «Blocca contenuti per adulti»)', '', 'Aspetto'],
   ['logos', 'Loghi dei canali automatici', 'sel', [['on', 'Sì'], ['off', 'No']], KPRO, 'Con «No» l\'app non cerca i loghi mancanti: meno rete e memoria', '', 'Aspetto'],
+  ['posters', 'Locandine', 'sel', [['auto', 'Automatiche (più leggere sulle chiavette da 1 GB)'], ['hi', 'Sempre nitide']], KPRO, 'Automatiche: sulle chiavette da 1 GB (Fire TV Stick/Lite) locandine e sfondi si scaricano più piccoli, un po\' meno nitidi ma con meno memoria. «Sempre nitide»: come sugli altri dispositivi, usa più memoria', '', 'Aspetto'],
   /* ---- Lettore ---- */
   ['o.engLive', 'Lettore TV in diretta', 'sel', ENG_OPTS, KPRO, 'Se nella scheda del cliente hai già scelto il lettore, vale quello', '', 'Lettore'],
   ['o.engMovie', 'Lettore film', 'sel', ENG_OPTS, KPRO, '', '', 'Lettore'],
