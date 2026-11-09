@@ -5161,15 +5161,14 @@ async function agentsAdmin(req, env, path, who, ip, top) {
     if (typeof b.password !== 'string' || b.password.length < 10 || b.password.length > 200) throw new HttpErr(400, 'Password di almeno 10 caratteri');
     if (all.length >= 1000) throw new HttpErr(400, 'Hai raggiunto il massimo di 1000 agenti');
     const o = await clean({ maxClients: top ? Math.min(10, top.max_clients) : 10, perms: {}, servers: [], ...b }, null);
+    // codice venditore scelto dal titolare già alla creazione: controllato prima di creare l'agente
+    // (prima un codice non valido dava errore ma l'agente restava creato, e riprovando «Nome utente già usato»)
+    const wantSc = !top && b.storeCode !== undefined && String(b.storeCode).trim(), sc = wantSc ? sellerNorm(b.storeCode) : '';
+    if (wantSc && !SELLER_RE.test(sc)) throw new HttpErr(400, 'Codice venditore: da 3 a 8 lettere o cifre');
+    if (wantSc && (sc === ((await getSettings(env)).storeOwnerCode || '') || all.some((x) => x.store_code === sc))) throw new HttpErr(400, `Il codice ${sc} è già usato`);
     const r = await env.DB.prepare("INSERT INTO admins (username, pass_hash, created_at, role, parent_id, email, max_clients, can_agents, perms, servers, active, notes, pw_seal) VALUES (?, ?, ?, 'agent', ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")
       .bind(user, o.pass_hash, now(), top ? top.id : 0, o.email || '', o.max_clients ?? 10, o.can_agents || 0, o.perms || JSON.stringify(AGENT_DEF), o.servers || '', o.active ?? 1, o.notes || '', o.pw_seal || '').first();
-    // codice venditore scelto dal titolare già alla creazione
-    if (!top && b.storeCode !== undefined && String(b.storeCode).trim()) {
-      const c = sellerNorm(b.storeCode);
-      if (!SELLER_RE.test(c)) throw new HttpErr(400, 'Codice venditore: da 3 a 8 lettere o cifre');
-      if (c === ((await getSettings(env)).storeOwnerCode || '') || all.some((x) => x.store_code === c)) throw new HttpErr(400, `Il codice ${c} è già usato`);
-      await env.DB.prepare('UPDATE admins SET store_code = ? WHERE id = ?').bind(c, r.id).run();
-    }
+    if (wantSc) await env.DB.prepare('UPDATE admins SET store_code = ? WHERE id = ?').bind(sc, r.id).run();
     memoDrop(env, 'ags');
     await log(env, 'new', `${who}: creato l'agente ${user}${top ? ' (sotto-agente)' : ''}`, ip);
     return json({ ok: true, id: r.id });
