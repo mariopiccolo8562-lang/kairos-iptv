@@ -13,7 +13,7 @@
   const syncExpiries = async (panel, rows, force, send) => {
     const t = Date.now();
     if (!force && t - (lastSync.get(panel) || 0) < 60000) return;
-    if (!Array.isArray(rows) || !send) return;
+    if (!Array.isArray(rows) || !send || !can('renew')) return; // agente senza «Rinnovare»: il server la rifiuterebbe
     lastSync.set(panel, t);
     const lines = rows.slice(0, 5000).map((l) => ({ username: String(l.username || '').trim(), exp: expiryDate(l.exp || l.exp_date || l.expire_date || l.expTxt) })).filter((l) => l.username && l.exp);
     if (!lines.length) return;
