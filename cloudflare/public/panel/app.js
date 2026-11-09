@@ -376,12 +376,17 @@ $('#rows').addEventListener('click', async (e) => {
   if (act === 'open') return openDrawer(d, d.status === 'pending'); // «Modifica»: scheda completa
   openQuick(d);
 });
-function addMonths(base, m) { const b = base && new Date(base) > new Date() ? new Date(base) : new Date(); b.setMonth(b.getMonth() + m); return b.toISOString().slice(0, 10); }
+/** oggi a Roma (AAAA-MM-GG): le scadenze sono giorni del calendario italiano */
+function romeDay(t = Date.now()) { try { return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Rome' }).format(new Date(t)); } catch { return new Date(t).toISOString().slice(0, 10); } }
+function addMonths(base, m) { return addPeriod(base, m, 'm'); }
+/** scadenza + giorni/mesi/anni (da oggi se è già passata). Si conta sulle date in UTC: prima, con l'ora legale
+    (fine marzo) e tra mezzanotte e l'una, il rinnovo dava un giorno in meno */
 function addPeriod(base, n, unit) {
-  const b = base && new Date(base) > new Date() ? new Date(base) : new Date(), amount = Number(n);
-  if (unit === 'd') b.setDate(b.getDate() + amount);
-  else if (unit === 'm') b.setMonth(b.getMonth() + amount);
-  else if (unit === 'y') b.setFullYear(b.getFullYear() + amount);
+  const today = romeDay(), from = /^\d{4}-\d{2}-\d{2}$/.test(base || '') && base > today ? base : today;
+  const b = new Date(from + 'T00:00:00Z'), amount = Number(n);
+  if (unit === 'd') b.setUTCDate(b.getUTCDate() + amount);
+  else if (unit === 'm') b.setUTCMonth(b.getUTCMonth() + amount);
+  else if (unit === 'y') b.setUTCFullYear(b.getUTCFullYear() + amount);
   return b.toISOString().slice(0, 10);
 }
 function periodQuickRow(key) {
