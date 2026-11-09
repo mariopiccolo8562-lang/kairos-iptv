@@ -38,7 +38,8 @@
   const W = { cfg: null, data: null, pk: null, err: '', q: '', f: '', sort: '', days: 0, own: '', limit: 100, show: new Set(), busy: false, tab: 'lines', rs: null, rsBusy: false, rsErr: '', sel: new Set(), st: false };
   const isAg = () => D.role === 'agent';
   const DAY = 864e5, fmtD = (t) => (t ? new Date(t).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Illimitata');
-  const left = (t) => { if (!t) return ''; const d = Math.ceil((t - Date.now()) / DAY); return d < 0 ? `scaduta da ${-d} g` : d === 0 ? 'scade oggi' : `tra ${d} g`; };
+  // giorni di calendario (scade il 15, oggi è il 10 → «tra 5 g»), come nella pagina venditore
+  const left = (t) => { if (!t) return ''; const e = new Date(t), n = new Date(), d = Math.round((Date.UTC(e.getFullYear(), e.getMonth(), e.getDate()) - Date.UTC(n.getFullYear(), n.getMonth(), n.getDate())) / DAY); return d < 0 ? `scaduta da ${-d} g` : d === 0 ? (t < Date.now() ? 'scaduta oggi' : 'scade oggi') : `tra ${d} g`; };
   const copy = (t, w) => navigator.clipboard.writeText(t).then(() => toast(w + ' copiato'), () => toast('Copia non consentita dal browser', 1));
   const gen = (n) => { const a = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'; const r = crypto.getRandomValues(new Uint8Array(n)); return [...r].map((x) => a[x % a.length]).join(''); };
   const devs = () => (Array.isArray(D.devices) ? D.devices : []).filter((d) => d && d.id);
@@ -107,6 +108,40 @@
   filtered = () => (window.KXSort ? KXSort.apply(filtered0(), W, { exp: (l) => +l.exp || 0, name: (l) => l.username, enabled: (l) => !!l.enabled, conns: (l) => l.conns, owner: (l) => l.owner, created: (l) => +l.created || 0, payKey: (l) => ['wolf', l.id] }) : filtered0());
   const linkOf = (id) => ((W.data && W.data.links) || []).find((k) => k.line === id);
 
+  /* «pagina venditore» per gli agenti (seller.js): saluto, crediti WOLF, azioni rapide, collegati ora, abbonamenti,
+     vendite (oggi / mese), da gestire e prossime scadenze con «Rinnova». Calcolata dalle linee già lette da WOLF:
+     nessuna richiesta in più al pannello. Un clic apre le linee con il filtro giusto. */
+  const ms = (t) => { const n = Number(t) || 0; return n && n < 1e11 ? n * 1000 : n; };
+  function sellerHtml(d) {
+    const L = Array.isArray(d.lines) ? d.lines : null, now = Date.now(), wait = !L;
+    const cnt = (f) => (wait ? '…' : L.filter(f).length);
+    const t0 = new Date(); t0.setHours(0, 0, 0, 0); const day0 = t0.getTime(), mon0 = new Date(t0.getFullYear(), t0.getMonth(), 1).getTime();
+    const active = (l) => l.enabled && (!l.exp || ms(l.exp) > now);
+    const hasCreated = !wait && L.some((l) => ms(l.created));
+    const sold = (from) => (wait ? '…' : hasCreated ? L.filter((l) => ms(l.created) >= from).length : '—');
+    const trials = wait ? 0 : L.filter((l) => l.trial && active(l)).length;
+    W.sx = wait ? [] : L.filter((l) => l.enabled && ms(l.exp) > now && ms(l.exp) < now + 30 * DAY).sort((a, b) => ms(a.exp) - ms(b.exp)).slice(0, 6); // entro 30 giorni
+    return KXSeller.html({
+      user: W.cfg.user, sub: '✅ WOLF collegato · il tuo account',
+      credits: d.credits ?? (wait ? '…' : '—'),
+      actions: [['new', '⚡', 'Nuova linea', 'Attiva un nuovo abbonamento'], ['soon', '↻', 'Rinnova linea', 'Le linee in scadenza'], ['conn', '🔗', 'Collegate ora', 'Chi sta guardando adesso'], ...($('.nav[data-v="agk"]') ? [['agk', '📲', 'App Kairos', 'Link e codici per i clienti']] : [])],
+      tiles: [
+        { go: 'conn', label: 'Collegati ora', value: cnt((l) => l.conns > 0), color: '#3dffb0', note: 'linee collegate in questo momento' },
+        { go: 'on', label: 'Abbonamenti', value: cnt(active), note: wait ? 'linee attive' : `linee attive su ${L.length}${trials ? ' · ' + trials + ' prove' : ''}` },
+        { label: 'Vendite', two: [{ go: 'sold', value: sold(day0), note: 'linee oggi' }, { go: 'sold', value: sold(mon0), note: 'questo mese' }] },
+        { label: 'Da gestire', two: [{ go: 'soon', value: cnt((l) => l.enabled && ms(l.exp) > now && ms(l.exp) < now + 7 * DAY), color: '#ffb020', note: 'in scadenza (7 giorni)' }, { go: 'exp', value: cnt((l) => l.exp && ms(l.exp) < now), color: '#ff6b6b', note: 'scadute da rinnovare' }] },
+      ],
+      exp: wait ? null : W.sx.map((l) => ({ name: l.username, exp: ms(l.exp), note: l.note })), expMore: 'soon',
+    });
+  }
+  function sellerGo(k) {
+    if (k === 'new') return newLine();
+    if (k === 'agk') return typeof view === 'function' ? view('agk') : null;
+    W.tab = 'lines'; W.q = ''; W.own = ''; W.limit = 100;
+    if (k === 'sold') { W.f = ''; W.sort = 'new'; } else W.f = k;
+    render();
+    const q = $('#wfQ'); if (q && q.scrollIntoView) q.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
   function render() {
     const V = $('#v-wolf'); if (!V) return;
     if (!W.cfg) { V.innerHTML = '<div class="card glass"><p class="mut">Carico…</p></div>'; return; }
@@ -119,13 +154,14 @@
     }
     const d = W.data || {}, list = filtered(), shown = list.slice(0, W.limit);
     const FL = [['', 'Tutte'], ['on', 'Attive'], ['soon', 'In scadenza'], ['exp', 'Scadute'], ['off', 'Disattivate'], ['conn', 'Collegate ora'], ['disc', 'Scollegate'], ...(isAg() ? [] : [['link', 'Collegate a clienti']])];
-    V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">✅ Pannello WOLF collegato</b><small>${isAg() ? esc(W.cfg.user) : esc(W.cfg.url) + ' · ' + esc(W.cfg.user)}</small><small>Quello che fai qui succede subito anche su WOLF, e viceversa.</small></div>
-        <div><small>Crediti WOLF</small><span class="cr">${d.credits ?? '—'}</span></div><div><small>Linee</small><span class="cr">${d.lines ? d.lines.length : '—'}</span></div>
+    const seller = isAg() && !!window.KXSeller;
+    V.innerHTML = `${seller ? sellerHtml(d) : ''}<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">✅ Pannello WOLF collegato</b><small>${isAg() ? esc(W.cfg.user) : esc(W.cfg.url) + ' · ' + esc(W.cfg.user)}</small><small>Quello che fai qui succede subito anche su WOLF, e viceversa.</small></div>
+        ${seller ? '' : `<div><small>Crediti WOLF</small><span class="cr">${d.credits ?? '—'}</span></div><div><small>Linee</small><span class="cr">${d.lines ? d.lines.length : '—'}</span></div>`}
         <button class="btn sm" id="wfPw">Cambia password</button><button class="btn sm" id="wfRe">${W.busy || W.rsBusy ? 'Carico…' : 'Aggiorna'}</button>${W.tab === 'log' ? '' : `<button class="btn sm" id="wfNew">${W.tab === 'rs' ? '+ Nuovo reseller' : '+ Nuova linea'}</button>`}${W.tab === 'lines' && window.KXQuick ? KXQuick.button('wolf') : ''}</div>
         ${W.err ? `<p style="color:#ff8f8f;margin:10px 0 0">${esc(W.err)}</p>` : ''}
         <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:13px">Impostazioni WOLF</summary>${cfgForm(W.cfg)}</details>
         <div class="wf-tabs"><button data-t="lines" class="${W.tab === 'lines' ? 'on' : ''}">Linee${d.lines ? ' · ' + d.lines.length : ''}</button><button data-t="rs" class="${W.tab === 'rs' ? 'on' : ''}">Reseller${W.rs ? ' · ' + W.rs.resellers.length : ''}</button>${isAg() ? '' : `<button data-t="log" class="${W.tab === 'log' ? 'on' : ''}">📜 Registro</button>`}</div></div>
-      ${W.tab === 'lines' && d.lines && window.KXStats ? KXStats.strip(KXStats.tiles(KXStats.calc(d.lines))) : ''}${W.tab === 'lines' && window.KXPay ? KXPay.panelTile('wolf') : ''}
+      ${W.tab === 'lines' && d.lines && window.KXStats && !seller ? KXStats.strip(KXStats.tiles(KXStats.calc(d.lines))) : ''}${W.tab === 'lines' && window.KXPay ? KXPay.panelTile('wolf') : ''}
       ${W.tab === 'rs' ? rsHtml() : W.tab === 'log' ? '<div class="card glass" style="margin-top:14px"><div id="wfPanelLog"></div></div>' : `<div class="card glass" style="margin-top:14px">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="inp" id="wfQ" placeholder="Cerca utente, ID o nota" value="${esc(W.q)}" style="max-width:280px;margin:0">
           <select class="inp" id="wfF" style="width:auto;margin:0">${FL.map(([k, t]) => `<option value="${k}"${W.f === k ? ' selected' : ''}>${t}</option>`).join('')}</select>${window.KXSort ? KXSort.ui(W, 'wf') : ''}
@@ -143,6 +179,7 @@
         }).join('')}</div>
         ${list.length > shown.length ? `<div style="margin-top:10px"><button class="btn sm" id="wfMore">Mostra altre ${Math.min(100, list.length - shown.length)}</button></div>` : ''}</div>`}`;
     bindCfg();
+    if (seller) KXSeller.bind(V, sellerGo, (i) => { const l = (W.sx || [])[i]; if (l) act('ext', l.id); });
     if (W.tab === 'log' && window.KXTools) KXTools.panelLog($('#wfPanelLog'), 'wolf', '#e0524f');
     V.querySelectorAll('.wf-tabs [data-t]').forEach((b) => { b.onclick = () => { W.tab = b.dataset.t; render(); if (W.tab === 'rs' && !W.rs && !W.rsBusy) loadRs(); }; });
     $('#wfPw').onclick = changePw;
