@@ -29,8 +29,12 @@ function api(method, path, body) {
 }
 /* /admin/state: il server risponde { same: true } se non è cambiato niente dall'ultima volta (meno dati sulle connessioni lente) */
 const ST_MEM = { tag: '', txt: '' };
+// stato già scaricato all'avvio per controllare la sessione: lo usa la prima lettura invece di chiederlo di nuovo
+// (prima, aprendo il pannello, lo stato completo, la richiesta più pesante, partiva due volte di fila)
+let ST_BOOT = null;
 async function apiNet(method, path, body) {
   const st = method === 'GET' && path === '/admin/state' && !window.__assist;
+  if (st && ST_BOOT) { const b = ST_BOOT; ST_BOOT = null; if (Date.now() - b.at < 15e3) { try { const j = JSON.parse(b.txt); ST_MEM.tag = b.tag; ST_MEM.txt = b.tag ? b.txt : ''; return j; } catch {} } }
   const r = await fetch('/api' + path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Kairos': '1', ...(st && ST_MEM.tag ? { 'X-Kairos-Etag': ST_MEM.tag } : {}), ...(window.__assist ? { 'X-Assist': String(window.__assist) } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const txt = await r.text().catch(() => '');
   let j = {}; try { j = txt ? JSON.parse(txt) : {}; } catch {}
@@ -905,6 +909,9 @@ $('#aSave').onclick = async () => { try { await api('PUT', '/admin/password', { 
 
 /* ---------------- avvio ---------------- */
 (async () => {
+  // configurazione e controllo della sessione partono insieme (prima uno dopo l'altro: un viaggio in più all'apertura)
+  const stGet = () => fetch('/api/admin/state', { credentials: 'same-origin', headers: { 'X-Kairos': '1' }, cache: 'no-store' }).catch(() => null);
+  const st0 = location.protocol === 'file:' ? Promise.resolve(null) : stGet(); // file aperto dal disco: demo, nessun server
   // se non c'è un server Kairos dietro questa pagina → demo
   try {
     const c = await fetch('/api/public/config', { credentials: 'same-origin' });
@@ -913,8 +920,9 @@ $('#aSave').onclick = async () => { try { await api('PUT', '/admin/password', { 
   } catch { D.demo = true; $('#demoTag').style.display = 'block'; $('#lp').value = 'demo'; $('#lerr').innerHTML = '<span class="mut">Nessun server collegato: premi Accedi per esplorare la demo.</span>'; showLogin(); return; }
   // sessione ancora valida → si entra senza rifare l'accesso; un errore di rete o del server non fa uscire (si riprova)
   for (let i = 0; i < 4; i++) {
-    let r = null;
-    try { r = await fetch('/api/admin/state', { credentials: 'same-origin', headers: { 'X-Kairos': '1' }, cache: 'no-store' }); } catch {}
+    const r = await (i ? stGet() : st0);
+    // la risposta serve anche alla prima lettura dello stato (non in «Entra per assistenza»: lì lo stato è quello dell'agente)
+    if (r && r.ok && !window.__assist) { try { ST_BOOT = { txt: await r.text(), tag: r.headers.get('X-Kairos-Etag') || '', at: Date.now() }; } catch {} }
     if (r && r.ok) { try { return await enter(); } catch { break; } }
     if (r && r.status === 503) { const j = await r.json().catch(() => ({})); if (j.maint) { showLogin(); return agMaintScreen(j.error); } }
     if (r && r.status === 401) break;
