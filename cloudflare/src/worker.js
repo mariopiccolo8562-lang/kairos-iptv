@@ -2117,7 +2117,6 @@ async function armadaRoutes(req, env, url, path, who, ip, agentId = 0, pv = 'arm
     if (sub === 0 && b.htime !== undefined && b.htime !== '') { const h = parseInt(b.htime, 10); if (!(h >= 1 && h <= 24)) throw new HttpErr(400, 'Ore di prova: da 1 a 24'); params.htime = h; }
     const country = str(b.country, 3).toUpperCase(); if (country) { if (!/^([A-Z]{2}|ALL)$/.test(country)) throw new HttpErr(400, 'Paese: due lettere (es. IT) oppure ALL'); params.country = country; }
     const notes = nameClean(b.notes, 200); if (notes) params.notes = notes;
-    if (b.adult === true || b.adult === false) params.adult = b.adult ? 1 : 0;
     const x = armList(await call(params))[0] || {};
     const out = { type, userId: str(String(x.user_id ?? ''), 20), url: str(x.url, 500), mac: str(x.mac, 32) || params.user || '', message: str(x.message, 120), username: '', password: '', host: '' };
     if (type === 'm3u') { try { const u = new URL(out.url); out.username = u.searchParams.get('username') || ''; out.password = u.searchParams.get('password') || ''; out.host = u.origin; } catch {} }
