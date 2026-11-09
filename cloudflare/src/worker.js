@@ -2254,7 +2254,7 @@ function cleanPlaylists(list) {
   const okUrl = (u) => { if (!u) return ''; try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href.slice(0, 1000) : ''; } catch { return ''; } };
   const ids = new Set();
   const pid = (v) => { let id = str(v, 40); if (!/^[A-Za-z0-9_-]{1,40}$/.test(id) || ids.has(id)) id = b64url(rand(6)); ids.add(id); return id; };
-  return list.slice(0, 100).map((p) => ({ // fino a 100 playlist per cliente
+  return list.filter((p) => p && typeof p === 'object' && !Array.isArray(p)).slice(0, 100).map((p) => ({ // fino a 100 playlist per cliente (voci non valide ignorate: prima davano «Errore interno»)
     id: pid(p.id),
     name: str(p.name, 60) || 'Playlist',
     type: p.type === 'xtream' ? 'xtream' : 'm3u',
