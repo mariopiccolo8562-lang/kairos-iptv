@@ -5594,12 +5594,15 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
         if (b.expires !== undefined && b.expires !== d.expires) { if (!P.renew) throw new HttpErr(403, 'Non puoi cambiare la scadenza'); o.expires = okDate(str(b.expires, 10)); }
         if (typeof b.active === 'boolean' && b.active !== !!d.active) { if (!P.disable) throw new HttpErr(403, 'Non puoi attivare o disattivare'); o.active = b.active; }
         if (b.playlists !== undefined) { if (!P.playlists) throw new HttpErr(403, 'Non puoi cambiare le playlist'); o.playlists = plsFrom(b.playlists, await unseal(env, d.playlists).catch(() => [])); }
-        if (b.maxConn !== undefined) o.maxConn = Math.max(1, Math.min(P.maxConn, parseInt(b.maxConn, 10) || 1));
+        // connessioni e visioni contano solo se l'agente le cambia davvero (il suo modulo le rimanda sempre): oltre il suo tetto le ha
+        // decise il titolare e restano (prima a ogni salvataggio scendevano al tetto, o con più TV collegate il salvataggio falliva)
+        const capped = (v, cur, min, what) => { const n = Math.max(min, parseInt(v, 10) || min); if (n === cur) return undefined; if (cur > P.maxConn) throw new HttpErr(403, `${what} di questo cliente (${cur}) le ha decise il titolare: chiedile a lui`); return Math.min(P.maxConn, n); };
+        if (b.maxConn !== undefined) { const n = capped(b.maxConn, d.max_conn ?? 1, 1, 'Le connessioni'); if (n !== undefined) o.maxConn = n; }
         if (b.addons !== undefined) { if (!Array.isArray(b.addons)) throw new HttpErr(400, 'addons deve essere un elenco'); const keep = addonsList(d.addons).filter((x) => !allowedAddons.has(x)); o.addons = [...keep, ...addonsList(b.addons).filter((x) => allowedAddons.has(x))]; }
         if (b.perms !== undefined) { if (!P.clientPerms) throw new HttpErr(403, 'Non puoi cambiare i permessi dell\'app'); o.perms = b.perms; }
         if (b.vpn !== undefined) { if (!P.vpn) throw new HttpErr(403, 'Non puoi cambiare la VPN'); o.vpn = b.vpn; }
         for (const k of ['maxProfiles', 'lockProfiles', 'maxStreams', 'plMode', 'plDefault', 'player', 'profiles']) if (b[k] !== undefined) { if (!P.account) throw new HttpErr(403, 'Non puoi cambiare profili, lettore e visioni'); o[k] = b[k]; }
-        if (o.maxStreams !== undefined) o.maxStreams = Math.min(Math.max(0, parseInt(o.maxStreams, 10) || 0), P.maxConn);
+        if (o.maxStreams !== undefined) { const n = capped(o.maxStreams, +d.max_streams || 0, 0, 'Le visioni'); if (n === undefined) delete o.maxStreams; else o.maxStreams = n; }
         for (const k of ['aiLimit', 'aiProvider']) if (b[k] !== undefined) { if (!P.ai) throw new HttpErr(403, 'Non puoi cambiare l\'assistente IA'); o[k] = b[k]; }
       } else {
         // TV collegata: con il permesso «playlist» l'agente le dà linee sue (gestione indipendente), restando collegata al cliente
