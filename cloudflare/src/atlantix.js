@@ -14,7 +14,7 @@ const baseOf = (env) => {
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const K = 'atx';
 const mem = new Map();
-const stateOf = (k) => { if (!mem.has(k)) mem.set(k, { jar: null }); return mem.get(k); };
+const stateOf = (k) => { if (!mem.has(k)) mem.set(k, { jar: null, user: null }); return mem.get(k); };
 const privateAgentField = (k) => /dns|host|portal|provider|domain|url|m3u|reseller|^(owner|parent|master)(_|$)/i.test(String(k || ''));
 function agentSafe(data) {
   if (Array.isArray(data)) return data.map(agentSafe);
@@ -82,11 +82,14 @@ async function login(env, H, k, c, otp, otpMessage = 'Atlantix chiede il codice 
   }
   if (!r.j || !r.j.success) throw new H.HttpErr(400, 'Atlantix: ' + String((r.j && r.j.message) || `accesso non riuscito (${r.status})`).slice(0, 200));
   await saveJar(env, H, k, jar);
+  stateOf(k).user = c.user;
   return jar;
 }
 /** richiesta con la sessione salvata; se è scaduta rientra una volta da solo */
 async function ax(env, H, k, path, o = {}) {
   const c = await cfgOf(env, H, k); if (!c) throw new H.HttpErr(400, 'Atlantix non è collegato: inserisci utente, password e codice di accesso');
+  const state = stateOf(k);
+  if (state.user !== c.user) { state.jar = null; state.user = c.user; }
   for (let i = 0; i < 2; i++) {
     let jar = await loadJar(env, H, k);
     if (!Object.keys(jar).length) jar = await login(env, H, k, c);
@@ -202,7 +205,7 @@ export async function atxRoutes(req, env, path, who, ip, H, ag) {
     return json(ag ? agentSafe(d) : d);
   }
   if (path === '/atx/line/conns' && m === 'GET') { const d = await markConnData(env, (await ax(env, H, KK, '/api/lines/connections.php?' + qs({ user_id: n('id') }))).data || {}, H); return json(ag ? agentSafe(d) : d); }
-  if (path === '/atx/subs' && m === 'GET') { const d = (await ax(env, H, KK, '/api/subresellers/list.php?' + qs({ page, per_page: 50, q, owner: '', status: '' }))).data || {}; return json(ag ? agentSafe(d) : d); }
+  if (path === '/atx/subs' && m === 'GET') { const d = (await ax(env, H, KK, '/api/subresellers/list.php?' + qs({ page, per_page: 50, q, owner: '0', status: 'all' }))).data || {}; return json(ag ? agentSafe(d) : d); }
   if (path === '/atx/conns' && m === 'GET') { const d = await markConnData(env, (await ax(env, H, KK, '/api/connections/list.php?' + qs({ reseller_id: '' }))).data || {}, H); return json(ag ? agentSafe(d) : d); }
   if (path === '/atx/createform' && m === 'GET') return json({ fields: (await createForm(env, H, KK)).filter((f) => f.type !== 'hidden' && !(ag && privateAgentField(f.name))) });
   if (path === '/atx/lines/create' && m === 'POST') {
