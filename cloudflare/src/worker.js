@@ -4305,11 +4305,12 @@ const newCounts = async (env) => {
   } catch {}
   return out;
 };
-async function adminRequests(req, env, path, url, who, ip) {
+/** ids: dispositivi da guardare (un agente: i suoi clienti), filtrati nella query come per gli errori delle app */
+async function adminRequests(req, env, path, url, who, ip, ids = null) {
   const m = req.method;
   if (path === '/requests' && m === 'GET') {
     const kind = ['content', 'addon', 'ai'].includes(url.searchParams.get('kind')) ? url.searchParams.get('kind') : 'report';
-    const rows = ((await env.DB.prepare('SELECT r.id, r.device_id, r.kind, r.ctype, r.title, r.body, r.info, r.status, r.created, r.ip, r.note, d.name, d.code, d.model FROM requests r LEFT JOIN devices d ON d.id = r.device_id WHERE r.kind = ? ORDER BY r.id DESC LIMIT 300').bind(kind).all()).results) || [];
+    const rows = ((await env.DB.prepare('SELECT r.id, r.device_id, r.kind, r.ctype, r.title, r.body, r.info, r.status, r.created, r.ip, r.note, d.name, d.code, d.model FROM requests r LEFT JOIN devices d ON d.id = r.device_id WHERE r.kind = ?' + (ids ? ' AND r.device_id IN (SELECT value FROM json_each(?))' : '') + ' ORDER BY r.id DESC LIMIT 300').bind(kind, ...(ids ? [JSON.stringify([...ids])] : [])).all()).results) || [];
     return json({ kind, items: rows.map((r) => ({ id: r.id, deviceId: r.device_id, kind: r.kind, ctype: r.ctype, title: r.title, body: r.body, info: r.info, status: r.status, created: r.created, ip: r.ip, note: r.note, name: r.name || '', code: r.code || '', model: r.model || '' })) });
   }
   if (path === '/requests' && m === 'DELETE') {
@@ -5395,7 +5396,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   // Segnalazioni, richieste di contenuti, di temi e di domande all'assistente
   if (path === '/requests' && m === 'GET') {
     const kind = ['content', 'addon', 'ai'].includes(url.searchParams.get('kind')) ? url.searchParams.get('kind') : 'report';
-    need(REQ_PERM[kind]); const sc = await scope(), j = await viaOwner(await adminRequests(req, env, path, url, who, ip));
+    need(REQ_PERM[kind]); const sc = await scope(), j = await viaOwner(await adminRequests(req, env, path, url, who, ip, sc));
     return json({ ...j, items: j.items.filter((x) => sc.has(x.deviceId)) });
   }
   if (path === '/requests' && m === 'DELETE') {
