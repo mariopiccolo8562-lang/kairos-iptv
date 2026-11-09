@@ -454,6 +454,8 @@ button.ok{background:linear-gradient(100deg,#22e1ff,#7b5cff);color:#05060f;borde
 small{display:block;margin-top:16px;color:#8b93b8;font-size:13px}
 </style></head><body><main><div class="i">${sym}</div>${inner}</main></body></html>`, { status: code, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
+// data della richiesta nelle pagine dei link (era sparita con le email: le pagine davano «Errore interno»)
+const fmtTime = (t) => { try { return new Date(t).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' }); } catch { return new Date(t).toISOString(); } };
 const details = (r) => `<dl><dt>App</dt><dd><b>${esc(r.app)}</b></dd><dt>Dispositivo</dt><dd>${esc(r.device || '—')}</dd>${r.note ? `<dt>Nome</dt><dd>${esc(r.note)}</dd>` : ''}<dt>Richiesta</dt><dd>${esc(fmtTime(r.created))}</dd>${r.country ? `<dt>Paese</dt><dd>${esc(r.country)}</dd>` : ''}</dl>`;
 const DONE = {
   approved: ['Download già autorizzato', 'ok'], used: ['Download già effettuato', 'ok'],
