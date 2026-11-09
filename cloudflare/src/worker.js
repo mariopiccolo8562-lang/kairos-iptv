@@ -1217,12 +1217,14 @@ async function paymentsRoutes(req, env, who, ip, ag) {
   const label = str(b.label, 160) || (old && old.label) || ref;
   const remind = b.remind === undefined ? (old ? +old.remind : 1) : (b.remind === true || b.remind === 1 ? 1 : 0);
   const t = now();
+  // resta «deve pagare» (cambiano nota, importo o avviso): i giorni contano da quando deve pagare, non dall'ultima modifica
+  const was = old ? paymentEffective(old) : null, since = status === 'due' && was && was.status === 'due' && +was.since > 0 ? +was.since : t;
   await env.DB.prepare(`INSERT INTO payments (kind, panel, ref, owner_id, label, status, months, amount, note, since, paid_until, remind, updated, auto_months, auto_opt, auto_line)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(kind, panel, ref) DO UPDATE SET owner_id = excluded.owner_id, label = excluded.label, status = excluded.status,
     months = excluded.months, amount = excluded.amount, note = excluded.note, since = excluded.since, paid_until = excluded.paid_until,
     remind = excluded.remind, updated = excluded.updated, auto_months = excluded.auto_months, auto_opt = excluded.auto_opt, auto_line = excluded.auto_line`)
-    .bind(kind, panel, ref, ownerId, label, status, months, amount, note, t, paidUntil, remind, t, autoMonths, autoOpt, autoLine).run();
+    .bind(kind, panel, ref, ownerId, label, status, months, amount, note, since, paidUntil, remind, t, autoMonths, autoOpt, autoLine).run();
   let panelNote = null;
   if (kind === 'line') {
     const payment = { status, months, amount, note, paid_until: paidUntil, auto_months: autoMonths, auto_opt: autoOpt };
@@ -1230,7 +1232,7 @@ async function paymentsRoutes(req, env, who, ip, ag) {
   }
   const noteResult = panelNote ? ` · nota ${panelNote.ok ? panelNote.where === 'panel' ? 'scritta su ' + panelNote.panelName : 'salvata in KAIROS' : 'non scritta'}` : '';
   await log(env, 'edit', `${who}: pagamento ${status === 'due' ? 'da riscuotere' : 'segnato pagato'} (${panel || kind})${noteResult}`, ip).catch(() => {});
-  return json({ ok: true, row: paymentEffective({ kind, panel, ref, owner_id: ownerId, label, status, months, amount, note, since: t, paid_until: paidUntil, remind, updated: t, auto_months: autoMonths, auto_opt: autoOpt, auto_line: autoLine, last_renew: old?.last_renew || '', last_result: old?.last_result || '' }), ...(panelNote ? { panelNote } : {}) });
+  return json({ ok: true, row: paymentEffective({ kind, panel, ref, owner_id: ownerId, label, status, months, amount, note, since, paid_until: paidUntil, remind, updated: t, auto_months: autoMonths, auto_opt: autoOpt, auto_line: autoLine, last_renew: old?.last_renew || '', last_result: old?.last_result || '' }), ...(panelNote ? { panelNote } : {}) });
 }
 const LINE_SYNC_PANELS = new Set(['wolf', 'armada', 'storm', 'ro', 'slt']);
 function lineSyncDate(v) {
