@@ -83,8 +83,10 @@
   function list() {
     const box = $('#mList'); if (!box) return;
     const ag = isAg(), now = Date.now();
-    const devName = (id) => { const d = (D.devices || []).find((x) => x.id === id); return d ? d.name || d.code : 'cliente eliminato'; };
-    const agName = (id) => { const a = (D.agents || []).find((x) => String(x.id) === String(id)); return a ? a.username : 'agente eliminato'; };
+    // nomi cercati in una tabella fatta una volta (prima: tutto l'elenco dei clienti scorso per ogni messaggio)
+    let dm = null, am = null;
+    const devName = (id) => { if (!dm) { dm = new Map(); for (const x of D.devices || []) if (!dm.has(x.id)) dm.set(x.id, x); } const d = dm.get(id); return d ? d.name || d.code : 'cliente eliminato'; };
+    const agName = (id) => { if (!am) { am = new Map(); for (const x of D.agents || []) { const k = String(x.id); if (!am.has(k)) am.set(k, x); } } const a = am.get(String(id)); return a ? a.username : 'agente eliminato'; };
     const rows = (lt === 'ag' && !ag ? D.agentMsgs || [] : D.messages || []).filter((m) => !m.until || m.until > now);
     const to = (m) => lt === 'ag' && !ag ? (m.target === 'all' ? '<span class="ms-tag ag">Tutti gli agenti</span>' : m.target === 'group' ? `<span class="ms-tag ag">Gruppo · ${m.targets.length} agenti</span>${esc(m.targets.slice(0, 4).map(agName).join(', '))}${m.targets.length > 4 ? '…' : ''}` : `<span class="ms-tag ag">Agente</span>${esc(agName(m.target))}`)
       : (m.target === 'all' ? '<span class="ms-tag">Tutti i clienti</span>' : m.target === 'group' ? `<span class="ms-tag">Gruppo · ${m.targets.length} clienti</span>${esc(m.targets.slice(0, 4).map(devName).join(', '))}${m.targets.length > 4 ? '…' : ''}` : `<span class="ms-tag">Cliente</span>${esc(devName(m.target))}`);

@@ -32,13 +32,16 @@ const ST_MEM = { tag: '', txt: '' };
 // stato già scaricato all'avvio per controllare la sessione: lo usa la prima lettura invece di chiederlo di nuovo
 // (prima, aprendo il pannello, lo stato completo, la richiesta più pesante, partiva due volte di fila)
 let ST_BOOT = null;
+// impronta (ETag del server) di ogni stato ricevuto: all'aggiornamento automatico dice se è cambiato qualcosa
+// senza rifare JSON.stringify di tutto lo stato (con migliaia di clienti sono MB, a ogni giro)
+const ST_TAG = new WeakMap();
 async function apiNet(method, path, body) {
   const st = method === 'GET' && path === '/admin/state' && !window.__assist;
-  if (st && ST_BOOT) { const b = ST_BOOT; ST_BOOT = null; if (Date.now() - b.at < 15e3) { try { const j = JSON.parse(b.txt); ST_MEM.tag = b.tag; ST_MEM.txt = b.tag ? b.txt : ''; return j; } catch {} } }
+  if (st && ST_BOOT) { const b = ST_BOOT; ST_BOOT = null; if (Date.now() - b.at < 15e3) { try { const j = JSON.parse(b.txt); ST_MEM.tag = b.tag; ST_MEM.txt = b.tag ? b.txt : ''; if (b.tag && j && typeof j === 'object') ST_TAG.set(j, b.tag); return j; } catch {} } }
   const r = await fetch('/api' + path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-Kairos': '1', ...(st && ST_MEM.tag ? { 'X-Kairos-Etag': ST_MEM.tag } : {}), ...(window.__assist ? { 'X-Assist': String(window.__assist) } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const txt = await r.text().catch(() => '');
   let j = {}; try { j = txt ? JSON.parse(txt) : {}; } catch {}
-  if (st && r.ok) { if (j && j.same === true && ST_MEM.txt) j = JSON.parse(ST_MEM.txt); else { const t = r.headers.get('X-Kairos-Etag'); ST_MEM.tag = t || ''; ST_MEM.txt = t ? txt : ''; } }
+  if (st && r.ok) { if (j && j.same === true && ST_MEM.txt) j = JSON.parse(ST_MEM.txt); else { const t = r.headers.get('X-Kairos-Etag'); ST_MEM.tag = t || ''; ST_MEM.txt = t ? txt : ''; } if (ST_MEM.tag && j && typeof j === 'object') ST_TAG.set(j, ST_MEM.tag); }
   if (r.status === 503 && j.maint) { agMaintScreen(j.error); throw new Error(j.error || 'Pannello in manutenzione'); }
   if (r.status === 401 && path !== '/admin/login' && path !== '/admin/link-login') { showLogin(); throw new Error('Sessione scaduta, accedi di nuovo'); }
   if (!r.ok) throw new Error(j.error || 'Errore ' + r.status);
@@ -180,7 +183,7 @@ async function load(quiet) {
   const s = await api('GET', '/admin/state');
   // aggiornamento automatico (quiet): se non è cambiato niente non si ridisegna tutto il pannello
   // (al massimo una volta al minuto comunque, per i «5 min fa» e i giorni alla scadenza)
-  if (quiet === true) { const sig = JSON.stringify(s); if (sig === loadSig && Date.now() - loadT < 60e3) return false; loadSig = sig; } else loadSig = '';
+  if (quiet === true) { const tg = ST_TAG.get(s), sig = tg ? 'e:' + tg : JSON.stringify(s); if (sig === loadSig && Date.now() - loadT < 60e3) return false; loadSig = sig; } else loadSig = '';
   loadT = Date.now();
   D.settings = s.settings; D.devices = s.devices; D.activity = s.activity; D.user = s.user; D.security = s.security || {}; D.apk = s.apk || null; D.messages = s.messages || [];
   D.apkFeed = s.apkFeed || null; D.wgConf = !!s.wgConf;
@@ -225,7 +228,9 @@ const fmtD = (d) => { if (!d) return 'Illimitata'; let v = fmtMemo.get(d); if (v
 const stPill = (s) => `<span class="st ${s}"><i></i>${STL[s]}</span>`;
 function countUp(el, to) { const t0 = performance.now(), from = 0; const f = (t) => { const p = Math.min(1, (t - t0) / 900), e = 1 - Math.pow(1 - p, 3); el.textContent = Math.round(from + (to - from) * e); if (p < 1) requestAnimationFrame(f); }; requestAnimationFrame(f); }
 function spark(vals, color) { const max = Math.max(1, ...vals), w = 200, h = 60; const pts = vals.map((v, i) => [i * (w / (vals.length - 1 || 1)), h - 6 - (v / max) * (h - 16)]); const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' '); const id = 'sg' + Math.random().toString(36).slice(2, 7); return `<svg class="sl" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".45"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs><path d="${d} L${w} ${h} L0 ${h}Z" fill="url(#${id})"/><path d="${d}" fill="none" stroke="${color}" stroke-width="2"/></svg>`; }
-function series(days, pred) { const out = [], now = Date.now(); for (let i = days - 1; i >= 0; i--) { const end = now - i * 864e5; out.push(D.devices.filter((d) => d.createdAt <= end && pred(d)).length); } return out; }
+// clienti creati entro ognuno degli ultimi «days» giorni: una sola passata sui clienti invece di una per giorno
+// (con migliaia di clienti la Panoramica si ridisegna prima); stessi numeri di prima
+function series(days, pred) { const out = new Array(days).fill(0), now = Date.now(); for (const d of D.devices) { const k = Math.floor((now - d.createdAt) / 864e5); if (!(k >= 0) || !pred(d)) continue; out[Math.max(0, days - 1 - k)]++; } for (let j = 1; j < days; j++) out[j] += out[j - 1]; return out; }
 
 /* ---------------- dashboard ---------------- */
 function renderDash() {
