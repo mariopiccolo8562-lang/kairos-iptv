@@ -1,5 +1,5 @@
 /* Panoramica — riquadro «MirkoTeam: online ora» (solo titolare): chi ha l'app aperta adesso e chi è stato
-   collegato nelle ultime 24 ore (offline). La scheda completa resta in Pannelli IPTV → MirkoTeam. */
+   collegato nelle ultime 24 ore (offline). La scheda completa resta in Pannelli attivazione → MirkoTeam. */
 (() => {
   const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -36,7 +36,7 @@
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto">${S.st && S.st.connected ? `<input class="inp" data-oq placeholder="Cerca utente…" value="${esc(S.q)}" style="width:150px;padding:6px 10px;font-size:13px"><label class="mut" style="font-size:12.5px;display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" data-ooff ${S.off ? 'checked' : ''}> Anche offline</label><button class="btn sm" data-orel ${S.busy ? 'disabled' : ''}>${S.busy ? 'Aggiorno…' : '⟳'}</button>` : ''}<button class="btn sm" data-oopen>Apri ${esc(name())}</button></div></div>`;
     let body;
     if (!S.st) body = `<p class="mut" style="margin:6px 0 0">Controllo il collegamento con ${esc(name())}…</p>`;
-    else if (!S.st.connected) body = `<p class="mut" style="margin:6px 0 0">${esc(name())} non è collegato: vai in Pannelli IPTV → ${esc(name())} → Collega.</p>`;
+    else if (!S.st.connected) body = `<p class="mut" style="margin:6px 0 0">${esc(name())} non è collegato: vai in Pannelli attivazione → ${esc(name())} → Collega.</p>`;
     else if (S.err) body = `<p style="color:#ff8f8f;margin:6px 0 0">${esc(S.err)}</p>`;
     else if (!S.list) body = `<p class="mut" style="margin:6px 0 0">Carico le connessioni da ORCP (la prima volta ci vogliono 20-30 secondi)…</p>`;
     else if (!rows.length) body = `<p class="mut" style="margin:6px 0 0">${q ? 'Nessun utente corrisponde alla ricerca.' : S.off ? 'Nessuna connessione nelle ultime 24 ore.' : 'Nessuno online adesso.'}</p>`;
@@ -45,7 +45,7 @@
       body = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin-top:10px;max-height:340px;overflow:auto;padding-right:4px">${top.map((x) => `<div style="padding:9px 11px;border-radius:10px;background:rgba(255,255,255,${x.online ? '.06' : '.025'});border:1px solid ${x.online ? 'rgba(45,212,191,.25)' : 'transparent'};min-width:0">
         <div style="display:flex;align-items:center;gap:6px"><b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${dot(x.online)}${esc(x.user || '—')}</b><span class="mut" style="font-size:11.5px;white-space:nowrap">${x.online ? 'online' : when(x.last)}</span></div>
         <div class="mut" style="font-size:12px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.device || '')}${x.version ? ' · ' + esc(x.version) : ''}</div></div>`).join('')}</div>
-        ${rows.length > top.length ? `<p class="mut" style="font-size:12.5px;margin:10px 0 0">Mostro ${top.length} di ${rows.length}: l'elenco completo è in Pannelli IPTV → ${esc(name())}.</p>` : ''}`;
+        ${rows.length > top.length ? `<p class="mut" style="font-size:12.5px;margin:10px 0 0">Mostro ${top.length} di ${rows.length}: l'elenco completo è in Pannelli attivazione → ${esc(name())}.</p>` : ''}`;
     }
     c.innerHTML = head + body;
     const qi = $('[data-oq]', c); if (qi) { qi.oninput = () => { S.q = qi.value; const pos = qi.selectionStart; draw(); const n = $('[data-oq]', c); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch {} } }; }

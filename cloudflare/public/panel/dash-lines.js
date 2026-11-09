@@ -5,70 +5,117 @@
   card.id = 'kxDashLines';
   card.className = 'card glass';
   card.style.cssText = 'display:none;min-width:0;margin:14px 0';
-  card.innerHTML = '<div class="hd"><h3>📊 Linee attivate<small>Riepilogo dei pannelli IPTV e delle app collegate</small></h3><button class="btn sm" data-kx-dash-refresh>Aggiorna</button></div><div data-kx-dash-body><p class="mut">Carico…</p></div>';
-  (anchor || document.getElementById('kpis')).insertAdjacentElement(anchor ? 'afterend' : 'afterend', card);
-  const DAY = 864e5, PANEL = { wolf: 'WOLF IPTV', armada: 'Armada IPTV', storm: 'Storm IPTV', atx: 'Atlantix IPTV', ro: 'Realott IPTV', slt: 'SLT' };
+  card.innerHTML = '<div class="hd"><h3>📊 Linee attivate<small>Riepilogo dei pannelli IPTV</small></h3><button class="btn sm" data-kx-dash-refresh>Aggiorna</button></div><div data-kx-dash-body><p class="mut">Carico…</p></div>';
+  (anchor || document.getElementById('kpis')).insertAdjacentElement('afterend', card);
+
+  const side = document.getElementById('side');
+  let appNav = side.querySelector('.nav[data-v="appsum"]');
+  if (!appNav) {
+    appNav = document.createElement('button');
+    appNav.className = 'nav';
+    appNav.dataset.v = 'appsum';
+    appNav.style.display = 'none';
+    appNav.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" rx="1"/><rect x="13" y="8" width="3" height="10" rx="1"/><rect x="19" y="5" width="2" height="13" rx="1"/></svg>Riepilogo app';
+    appNav.onclick = () => view('appsum');
+    const navAnchor = side.querySelector('.nav[data-v="pan"]') || side.querySelector('.nav[data-v="wolf"]');
+    if (navAnchor) navAnchor.after(appNav); else side.appendChild(appNav);
+  }
+  let appView = document.getElementById('v-appsum');
+  if (!appView) {
+    appView = document.createElement('section');
+    appView.className = 'view';
+    appView.id = 'v-appsum';
+    root.after(appView);
+  }
+  appView.innerHTML = '<div class="card glass" style="min-width:0;margin:14px 0"><div class="hd"><h3>Riepilogo app<small>Linee attivate sulle app collegate</small></h3><button class="btn sm" data-kx-app-refresh>Aggiorna</button></div><div data-kx-app-body><p class="mut">Carico…</p></div></div>';
+  TITLES.appsum = 'Riepilogo app';
+
+  const PANEL = { wolf: 'WOLF IPTV', armada: 'Armada IPTV', storm: 'Storm IPTV', atx: 'Atlantix IPTV', ro: 'Realott IPTV', slt: 'SLT' };
   const PCOL = { wolf: '#e0524f', armada: '#2f7fd6', storm: '#7c4dff', atx: '#1fa0b6', ro: '#e08a1e', slt: '#2a9d5c' };
+  const APP_COL = { maxplayer: '#d6336c', orbixplay: '#6f42c1', mirkoteam: '#0ca678', oraplayer: '#e08a1e' };
   const ORDER = Object.keys(PANEL), canonical = { maxplayer: 'MaxPlayer', orbixplay: 'OrbixPlay', mirkoteam: 'MirkoTeam', oraplayer: 'Ora Player', iboone: 'Ibo One', iboplayer: 'Ibo Player', duplexpro: 'Duplex Pro' };
   const cache = { at: 0, panels: [], apps: [] };
   let busy = false;
   const nameKey = (s) => String(s || '').trim().toLowerCase().replace(/[\s._-]+/g, '');
-  const panelStats = (rows) => {
-    return KXStats.calc(rows, {
-      exp: (l) => l.exp || (l.expired ? 1 : 0),
-      enabled: (l) => !(l.enabled === false || l.enabled === 0 || l.enabled === '0' || l.enabled === 'false' || l.status === 'disattivata'),
-      conns: (l) => +l.conns || 0
-    });
-  };
+  const canSeeApps = () => D.role !== 'agent' || !!((D.me || {}).perms || {}).lines;
+  const panelStats = (rows) => KXStats.calc(rows, {
+    exp: (l) => l.exp || (l.expired ? 1 : 0),
+    enabled: (l) => !(l.enabled === false || l.enabled === 0 || l.enabled === '0' || l.enabled === 'false' || l.status === 'disattivata'),
+    conns: (l) => +l.conns || 0
+  });
   const label = (title, detail) => `${esc(title)}<small style="display:block;margin-top:3px;font-weight:500;line-height:1.35">${esc(detail)}</small>`;
-  function draw(loading) {
-    const body = card.querySelector('[data-kx-dash-body]');
-    if (loading) { card.style.display = ''; body.innerHTML = '<p class="mut">Carico…</p>'; return; }
-    const rows = cache.panels, apps = cache.apps;
-    const panelTiles = ORDER.filter((p) => rows.some((l) => l.p === p)).map((p) => {
-      const s = panelStats(rows.filter((l) => l.p === p));
+  const panelBody = card.querySelector('[data-kx-dash-body]');
+  const appBody = appView.querySelector('[data-kx-app-body]');
+
+  function panelTiles() {
+    return ORDER.filter((p) => cache.panels.some((l) => l.p === p)).map((p) => {
+      const s = panelStats(cache.panels.filter((l) => l.p === p));
       return { k: `panel-${p}`, v: s.active, c: PCOL[p] || 'red', label: label(`Linee attivate su ${PANEL[p]}`, `scadono 7 g: ${s.soon} · scadute: ${s.expired}`) };
     });
-    const all = panelStats(rows), groups = new Map();
-    for (const item of apps) {
+  }
+  function appTiles() {
+    const groups = new Map(), byUser = new Map();
+    for (const item of cache.apps) {
       const key = nameKey(item.app); if (!key) continue;
       if (!groups.has(key)) groups.set(key, { name: canonical[key] || String(item.app).trim(), items: [] });
       groups.get(key).items.push(item);
     }
-    const byUser = new Map();
-    for (const l of rows) { const k = String(l.username || '').trim().toLowerCase(); if (k) { const a = byUser.get(k) || []; a.push(l); byUser.set(k, a); } }
-    const appTiles = [...groups.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name)).map(([key, group], i) => {
+    for (const l of cache.panels) {
+      const k = String(l.username || '').trim().toLowerCase();
+      if (k) { const a = byUser.get(k) || []; a.push(l); byUser.set(k, a); }
+    }
+    return [...groups.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name)).map(([key, group], i) => {
       let soon = 0, expired = 0;
       for (const item of group.items) {
         const match = panelStats(byUser.get(String(item.username || '').trim().toLowerCase()) || []);
         if (match.expired) expired++;
         else if (match.soon) soon++;
       }
-      return { k: `app-${i}`, v: group.items.length, c: 'blue', label: label(`Linee attivate con ${group.name}`, `scadono 7 g: ${soon} · scadute: ${expired}`), hint: key };
+      return { k: `app-${i}`, v: group.items.length, c: APP_COL[key] || '#2f7fd6', label: label(`Linee attivate con ${group.name}`, `scadono 7 g: ${soon} · scadute: ${expired}`), hint: key };
     });
-    if (!panelTiles.length && !appTiles.length) { card.style.display = 'none'; return; }
-    card.style.display = '';
-    const overall = [{ label: 'Linee attive', v: all.active, c: 'red' }, { label: 'Scadono entro 7 giorni', v: all.soon, c: 'dark' }, { label: 'Scadute', v: all.expired, c: 'dark' }];
-    if (all.hasConns) overall.unshift({ label: 'Online ora', v: all.online, c: 'blue' });
-    body.innerHTML = `<b class="mut">Riepilogo</b>${KXStats.strip(overall)}${panelTiles.length ? `<b class="mut" style="display:block;margin-top:16px">Pannelli IPTV</b>${KXStats.strip(panelTiles)}` : ''}${appTiles.length ? `<b class="mut" style="display:block;margin-top:16px">App</b>${KXStats.strip(appTiles)}` : ''}`;
-    KXStats.bind(body, (k) => k.startsWith('panel-') ? view(k.slice(6)) : k.startsWith('app-') ? view('lines') : null);
+  }
+  function render(loading) {
+    if (loading) {
+      card.style.display = root.classList.contains('on') ? '' : 'none';
+      panelBody.innerHTML = '<p class="mut">Carico…</p>';
+      appBody.innerHTML = '<p class="mut">Carico…</p>';
+      return;
+    }
+    const panels = panelTiles(), all = panelStats(cache.panels);
+    if (!panels.length) card.style.display = 'none';
+    else {
+      card.style.display = '';
+      const overall = [{ label: 'Linee attive', v: all.active, c: 'red' }, { label: 'Scadono entro 7 giorni', v: all.soon, c: 'dark' }, { label: 'Scadute', v: all.expired, c: 'dark' }];
+      if (all.hasConns) overall.unshift({ label: 'Online ora', v: all.online, c: 'blue' });
+      panelBody.innerHTML = `<b class="mut">Riepilogo</b>${KXStats.strip(overall)}<b class="mut" style="display:block;margin-top:16px">Pannelli IPTV</b>${KXStats.strip(panels)}`;
+      KXStats.bind(panelBody, (k) => k.startsWith('panel-') ? view(k.slice(6)) : null);
+    }
+    const apps = appTiles();
+    appBody.innerHTML = apps.length ? KXStats.strip(apps) : '<p class="mut" style="margin:14px 0">Nessuna app collegata.</p>';
+    KXStats.bind(appBody, (k) => k.startsWith('app-') ? view('lines') : null);
+  }
+  function syncAccess() {
+    appNav.style.display = canSeeApps() ? '' : 'none';
+    if (!canSeeApps() && appView.classList.contains('on')) view('dash');
   }
   async function load(force = false) {
-    if (!document.getElementById('v-dash')?.classList.contains('on')) return;
+    const dashOn = root.classList.contains('on'), appOn = appView.classList.contains('on');
+    if (!dashOn && !appOn) return;
     if (busy) return;
-    if (!force && Date.now() - cache.at < 300e3) { draw(false); return; }
-    busy = true; draw(true);
-    const canLines = D.role !== 'agent' || !!((D.me || {}).perms || {}).lines;
+    if (!force && Date.now() - cache.at < 300e3) { render(false); return; }
+    busy = true; render(true);
     const [panels, apps] = await Promise.all([
       window.KXLinePick.load(force).catch(() => []),
-      canLines ? api('GET', '/admin/linked-lines').then((r) => r.items || []).catch(() => []) : Promise.resolve([])
+      canSeeApps() ? api('GET', '/admin/linked-lines').then((r) => r.items || []).catch(() => []) : Promise.resolve([])
     ]);
-    cache.panels = panels || []; cache.apps = apps || []; cache.at = Date.now(); busy = false; draw(false);
+    cache.panels = panels || []; cache.apps = apps || []; cache.at = Date.now(); busy = false; render(false);
   }
   card.querySelector('[data-kx-dash-refresh]').onclick = () => load(true);
+  appView.querySelector('[data-kx-app-refresh]').onclick = () => load(true);
   window.KXDashLines = { load };
   const oldView = view;
-  window.view = view = function (v) { const r = oldView.apply(this, arguments); if (v === 'dash') load(); return r; };
+  window.view = view = function (v) { const r = oldView.apply(this, arguments); if (v === 'dash' || v === 'appsum') load(); return r; };
   const oldRenderAll = renderAll;
-  window.renderAll = renderAll = function () { const r = oldRenderAll.apply(this, arguments); if (document.getElementById('v-dash')?.classList.contains('on')) load(); return r; };
+  window.renderAll = renderAll = function () { const r = oldRenderAll.apply(this, arguments); syncAccess(); if (root.classList.contains('on') || appView.classList.contains('on')) load(); return r; };
+  syncAccess();
 })();
