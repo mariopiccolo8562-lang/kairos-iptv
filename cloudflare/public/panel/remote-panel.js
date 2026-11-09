@@ -266,9 +266,10 @@
     const hist = async () => { const H = $('#rcHist'); if (!H) return; try { const r = await api('GET', '/admin/rctl/cmds/' + d.id); const cmdName = (k) => ((R.data.cmds || []).find((c) => c[0] === k) || [k, k])[1]; // in attesa: da quanto l'app non si collega (chiusa, in sfondo o senza rete); consegnati: in esecuzione (lo speed test dura ~30 s)
       const pv = ((R.data || {}).devs || {})[d.id] || {}, seenMin = pv.t ? Math.round((Date.now() - pv.t) / 60000) : -1;
       const waitTxt = (x) => (Date.now() - x.created > 120e3 && seenMin >= 2 ? `in attesa: l'app non si collega da ${seenMin} min (chiusa, in sfondo o senza rete): parte quando si ricollega` : 'in attesa del collegamento dell\'app');
-      H.innerHTML = r.items.length ? r.items.map((x) => `<div><b>${esc(cmdName(x.cmd))}</b> · ${new Date(x.created).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })} · ${x.done ? (x.ok ? '✓ eseguito' : '✗ ' + esc(x.info || 'non riuscito')) + (x.info && x.ok ? ' (' + esc(x.info) + ')' : '') : x.sent ? (x.cmd === 'speed' ? 'consegnato: speed test in corso…' : 'consegnato, in esecuzione') : esc(waitTxt(x))}</div>`).join('') : '<span>Nessun comando inviato</span>';
+      const expired = (x) => !x.done && Date.now() - x.created > 7 * 864e5; // non consegnato entro 7 giorni: il server non lo manda più
+      H.innerHTML = r.items.length ? r.items.map((x) => `<div><b>${esc(cmdName(x.cmd))}</b> · ${new Date(x.created).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })} · ${x.done ? (x.ok ? '✓ eseguito' : '✗ ' + esc(x.info || 'non riuscito')) + (x.info && x.ok ? ' (' + esc(x.info) + ')' : '') : expired(x) ? 'scaduto: l\'app non si è collegata entro 7 giorni (puoi inviarlo di nuovo)' : x.sent ? (x.cmd === 'speed' ? 'consegnato: speed test in corso…' : 'consegnato, in esecuzione') : esc(waitTxt(x))}</div>`).join('') : '<span>Nessun comando inviato</span>';
       // finché c'è qualcosa in attesa o in corso la cronologia si aggiorna da sola (il risultato compare senza riaprire)
-      clearTimeout(H._t); if (r.items.some((x) => !x.done) && document.body.contains(H)) H._t = setTimeout(hist, 8000); } catch (e) { H.textContent = e.message; } };
+      clearTimeout(H._t); if (r.items.some((x) => !x.done && !expired(x)) && document.body.contains(H)) H._t = setTimeout(hist, 8000); } catch (e) { H.textContent = e.message; } };
     hist();
   }
   window.KXRemote = { open: openDev };

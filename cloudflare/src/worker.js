@@ -3477,10 +3477,12 @@ function rcEffective(s, d, app) {
   let h = 0; for (let i = 0; i < flat.length; i++) h = (h * 31 + flat.charCodeAt(i)) >>> 0;
   return { rc, rcv: keys.length ? h.toString(36) : '' };
 }
+/** un comando non consegnato entro 7 giorni scade: non arriva più all'app (e non ne blocca uno nuovo uguale) */
+const RC_CMD_TTL = 7 * 864e5;
 /** comandi in attesa per un dispositivo (al massimo 5 per battito); si segnano come consegnati */
 async function rcPending(env, ctx, deviceId) {
   try {
-    const rows = ((await env.DB.prepare('SELECT id, cmd, args FROM remote_cmds WHERE device_id = ? AND done = 0 AND created > ? ORDER BY id LIMIT 5').bind(deviceId, now() - 7 * 864e5).all()).results) || [];
+    const rows = ((await env.DB.prepare('SELECT id, cmd, args FROM remote_cmds WHERE device_id = ? AND done = 0 AND created > ? ORDER BY id LIMIT 5').bind(deviceId, now() - RC_CMD_TTL).all()).results) || [];
     if (!rows.length) return [];
     const w = env.DB.prepare(`UPDATE remote_cmds SET sent = ? WHERE sent = 0 AND id IN (${rows.map(() => '?').join(',')})`).bind(now(), ...rows.map((r) => r.id)).run().catch(() => {});
     ctx && ctx.waitUntil ? ctx.waitUntil(w) : await w;
@@ -3586,7 +3588,7 @@ async function fixDevice(env, s, d, who, auto = false, soft = false) {
   if (JSON.stringify(rc) !== rc0) stmts.push(env.DB.prepare('UPDATE devices SET rc = ? WHERE id = ?').bind(JSON.stringify(rc), d.id));
   if (upd) stmts.push(env.DB.prepare('UPDATE devices SET upd_req = ? WHERE id = ? OR parent = ?').bind(t, d.id, d.id));
   for (const c of cmds) {
-    const have = await env.DB.prepare('SELECT 1 AS x FROM remote_cmds WHERE device_id = ? AND cmd = ? AND done = 0').bind(d.id, c).first();
+    const have = await env.DB.prepare('SELECT 1 AS x FROM remote_cmds WHERE device_id = ? AND cmd = ? AND done = 0 AND created > ?').bind(d.id, c, t - RC_CMD_TTL).first();
     if (!have) stmts.push(env.DB.prepare('INSERT INTO remote_cmds (device_id, cmd, args, created, by) VALUES (?, ?, ?, ?, ?)').bind(d.id, c, '', t, who));
   }
   if (cmds.has('cache')) done.push('Cache svuotata e app riavviata (appena l\'app si collega: entro 1 minuto se è aperta)');
@@ -5866,9 +5868,9 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       } else throw new HttpErr(400, 'Indica i clienti (ids) o l\'app');
       if (!ids.length) return json({ ok: true, queued: 0 });
       const args = b.args && typeof b.args === 'object' ? JSON.stringify(b.args).slice(0, 500) : '', t = now();
-      // un comando uguale già in attesa non si duplica
+      // un comando uguale già in attesa non si duplica (quelli scaduti, mai consegnati, non contano più)
       const have = new Set();
-      for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); for (const r of ((await env.DB.prepare(`SELECT device_id FROM remote_cmds WHERE done = 0 AND cmd = ? AND device_id IN (${part.map(() => '?').join(',')})`).bind(C[0], ...part).all()).results) || []) have.add(r.device_id); }
+      for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); for (const r of ((await env.DB.prepare(`SELECT device_id FROM remote_cmds WHERE done = 0 AND cmd = ? AND created > ? AND device_id IN (${part.map(() => '?').join(',')})`).bind(C[0], t - RC_CMD_TTL, ...part).all()).results) || []) have.add(r.device_id); }
       const todo = ids.filter((x) => !have.has(x));
       for (let i = 0; i < todo.length; i += 50) await env.DB.batch(todo.slice(i, i + 50).map((id) => env.DB.prepare('INSERT INTO remote_cmds (device_id, cmd, args, created, by) VALUES (?, ?, ?, ?, ?)').bind(id, C[0], args, t, who)));
       await log(env, 'edit', `${who}: controllo remoto — «${C[1]}» inviato a ${todo.length} ${todo.length === 1 ? 'dispositivo' : 'dispositivi'}${b.app ? ' (' + (b.app === 'all' ? 'tutte le app' : APP_NAME[b.app]) + ')' : ''}`, ip);
