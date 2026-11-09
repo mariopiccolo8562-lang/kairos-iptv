@@ -6515,7 +6515,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   }
   if (path === '/devices' && m === 'POST') {
     const b = await readJSON(req);
-    let code = str(b.code, 20).toUpperCase();
+    let code = codeNorm(str(b.code, 20)); // scritto a mano come viene (kxab12cd, AB12CD…): come «Controlla il codice» e gli agenti
     if (!code) { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', r = rand(6); const c = [...r].map((x) => A[x % A.length]); code = `KX${c[0]}${c[1]}-${c[2]}${c[3]}${c[4]}${c[5]}`; }
     if (!CODE_RE.test(code)) throw new HttpErr(400, 'Formato codice non valido (es. KXAB-12CD)');
     const existing = await env.DB.prepare('SELECT * FROM devices WHERE code = ?').bind(code).first();
