@@ -3255,7 +3255,13 @@ async function playerHeartbeat(req, env, ip, ctx) {
   };
   // autopilota: esito degli auto-controlli dell'app (arriva quando cambia e ogni 15 minuti), con l'istante del server
   { const ck0 = chkClean(b.chk); if (ck0) f.chk = ck0.slice(0, -1) + ',"at":' + t + '}'; }
-  if (sp) Object.assign(f, { speed_dl: num(sp.dl, 0, 1e5), speed_ul: num(sp.ul, 0, 1e5), speed_ping: num(sp.ping, 0, 1e5), speed_jit: num(sp.jitter, 0, 1e5), speed_t: Math.round(num(sp.t, 0, 1e13)) || t });
+  if (sp) {
+    // l'ora della misura arriva dall'orologio del dispositivo: se è sbagliato (nel futuro o più vecchio di un mese) vale quella
+    // già salvata per la stessa misura, altrimenti l'ora del server (prima «Online ora» mostrava «speed test» di anni fa)
+    const spDl = num(sp.dl, 0, 1e5), spUl = num(sp.ul, 0, 1e5), spPing = num(sp.ping, 0, 1e5), spT = Math.round(num(sp.t, 0, 1e13));
+    const spSame = old && +old.speed_t > 0 && +old.speed_dl === spDl && +old.speed_ul === spUl && +old.speed_ping === spPing;
+    Object.assign(f, { speed_dl: spDl, speed_ul: spUl, speed_ping: spPing, speed_jit: num(sp.jitter, 0, 1e5), speed_t: spT > t - 30 * 864e5 && spT <= t + 60e3 ? spT : spSame ? +old.speed_t : t });
+  }
   if (st) Object.assign(f, { res: str(st.res, 20), fps: num(st.fps, 0, 1e3), bitrate: num(st.bitrate, 0, 1e9), buffers: Math.round(num(st.buffers, 0, 1e6)), dropped: Math.round(num(st.dropped, 0, 1e9)), engine: str(st.engine, 20), codec: str(st.codec, 16), dec: st.dec === 'sw' ? 'sw' : st.dec === 'hw' ? 'hw' : '', stalls_h: Math.round(num(st.stallsH, 0, 1e4)), rec: nameClean(st.rec, 80), reduced: str(st.reduced, 12),
     // Kairos Adaptive: linea e lettore come li vede l'app (solo se l'app li manda)
     ...(st.bw !== undefined ? { bw: Math.round(num(st.bw, 0, 1e4) * 10) / 10 } : {}), ...(st.line ? { line: ['weak', 'normal', 'good'].includes(st.line) ? st.line : '' } : {}),
