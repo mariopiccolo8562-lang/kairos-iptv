@@ -52,7 +52,7 @@
   ];
   const BQ_ADULT = /xxx|adult|adulti|18\+|porn|hot\b|for adults/i;
   const BQ_ITALIAN = /\b(?:IT|ITA|ITALIA|ITALY|RAI|MEDIASET)\b|\b(?:SKY|DAZN)\s*IT\b/i;
-  const BQ_FOREIGN = /^(?:[A-Z]{2}[ |:-])|\b(?:UK|U\.?K\.?|USA|U\.?S\.?A\.?|US|DE|DEUTSCH|GERMAN|FR|FRENCH|ES|ESPANA|SPANISH|AL|ALBANIA|RO|ROMANIA|AR|ARAB|TURK|TURKEY|POLSKA|POLAND|RU|RUSSIA|UA|UKRAINE|PT|PORTUGAL|BRASIL|LATINO|GREEK|NL|NETHERLANDS|CZ|CZECH|BG|BULGARIA|SRB|SERBIA|HR|CROATIA|BA|BOSNIA|HU|HUNGARY)\b/i;
+  const BQ_FOREIGN = /\bSTRANIER[IOE]\b|^(?:[A-Z]{2}[ |:-])|\b(?:UK|U\.?K\.?|USA|U\.?S\.?A\.?|US|DE|DEUTSCH|GERMAN|FR|FRENCH|ES|ESPANA|SPANISH|AL|ALBANIA|RO|ROMANIA|AR|ARAB|TURK|TURKEY|POLSKA|POLAND|RU|RUSSIA|UA|UKRAINE|PT|PORTUGAL|BRASIL|LATINO|GREEK|NL|NETHERLANDS|CZ|CZECH|BG|BULGARIA|SRB|SERBIA|HR|CROATIA|BA|BOSNIA|HU|HUNGARY)\b/i;
   const bqIsAdult = (name) => BQ_ADULT.test(String(name || ''));
   const bqIsForeign = (name) => { const n = String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); return !BQ_ITALIAN.test(n) && BQ_FOREIGN.test(n); };
   const m3u = (l) => { const h = (W.data && W.data.dns) || l.dns; return h ? `${h}/get.php?username=${encodeURIComponent(l.username)}&password=${encodeURIComponent(l.password)}&type=m3u_plus&output=ts` : ''; };

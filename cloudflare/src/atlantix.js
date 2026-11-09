@@ -79,9 +79,9 @@ async function ax(env, H, path, o = {}) {
     const gone = r.status === 401 || (r.j && r.j.data && r.j.data.redirect === 'login') || (r.status >= 300 && r.status < 400 && /login/.test(r.loc));
     if (gone) { mem.jar = {}; await saveJar(env, H, {}); if (i === 0) continue; throw new H.HttpErr(502, 'Atlantix ha chiuso la sessione: riprova'); }
     await saveJar(env, H, jar);
-    if (o.html) return r.txt;
+    if (o.html) return { status: r.status, txt: r.txt };
     if (!r.j) throw new H.HttpErr(502, r.status === 404 ? 'Questa funzione non esiste su Atlantix' : `Risposta di Atlantix non valida (${r.status})`);
-    if (!(r.j.success || r.j.ok) || r.j.error) throw new H.HttpErr(400, 'Atlantix: ' + String(r.j.message || r.j.error || 'operazione non riuscita').slice(0, 200));
+    if (!(r.j.success || r.j.ok) || r.j.error) throw new H.HttpErr(400, `Atlantix (${r.status}): ` + String(r.j.message || r.j.error || 'operazione non riuscita').slice(0, 200));
     return r.j;
   }
 }
@@ -113,9 +113,9 @@ function parseForm(f) {
 }
 /** campi del modulo «Crea linea» di Atlantix (lines_users.php → #createLineForm), così KAIROS mostra le stesse opzioni */
 async function createForm(env, H) {
-  const h = await ax(env, H, '/lines_users.php', { html: true });
+  const page = await ax(env, H, '/lines_users.php', { html: true }), h = page.txt;
   const f = (h.match(/<form\b[^>]*id="createLineForm"[^>]*>([\s\S]*?)<\/form>/i) || [])[1];
-  if (!f) throw new H.HttpErr(502, 'Non trovo il modulo «Crea linea» su Atlantix');
+  if (!f) throw new H.HttpErr(502, `Atlantix (${page.status}): ${txtOf(h).slice(0, 200) || 'Non trovo il modulo «Crea linea»'}`);
   return parseForm(f);
 }
 const qs = (o) => new URLSearchParams({ ...o, _: Date.now() }).toString();
@@ -158,10 +158,10 @@ export async function atxRoutes(req, env, path, who, ip, H) {
       if (val != null && val !== '') form[f.name] = str(String(val), 500);
     }
     const j = await ax(env, H, '/api/users/create.php', { form });
-    const d = j.data || {};
-    await H.note(env, { src: 'atx', app: 'Atlantix', owner: 0, username: d.username || form.username || '', password: d.password || form.password || '' });
-    await H.log(env, 'edit', `${who}: Atlantix — linea ${str(d.username || form.username || '', 60)} creata`, ip).catch(() => {});
-    return json({ ok: true, username: d.username || '', password: d.password || '' });
+    const d = j.data || {}, username = str(d.username || j.username || form.username || '', 120), password = str(d.password || j.password || form.password || '', 200);
+    await H.note(env, { src: 'atx', app: 'Atlantix', owner: 0, username, password });
+    await H.log(env, 'edit', `${who}: Atlantix — linea ${username.slice(0, 60)} creata`, ip).catch(() => {});
+    return json({ ok: true, username, password });
   }
   if (path === '/atx/lines/action' && m === 'POST') {
     const b = await H.readJSON(req, 4096), id = parseInt(b.user_id, 10);

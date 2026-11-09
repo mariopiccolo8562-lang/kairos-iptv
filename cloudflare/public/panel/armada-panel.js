@@ -17,6 +17,7 @@ const mkArmadaLike = (cfg) => {
 .ar-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:16px 0 12px}
 .ar-f{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.ar-f .inp{margin:0}
 .ar-f label{display:flex;flex-direction:column;gap:5px;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mut)}
+.ar-f .ar-duration{grid-column:span 2}
 .ar-ch{display:flex;flex-wrap:wrap;gap:6px}.ar-ch button{border:1px solid var(--line);background:none;color:var(--txt,#fff);border-radius:999px;padding:6px 13px;font:inherit;font-size:13px;cursor:pointer}
 .ar-ch button.on{background:var(--acc,#3b82f6);border-color:transparent;color:#fff;font-weight:600}
 .ar-res{margin-top:16px;border:1px solid rgba(52,199,123,.4);background:rgba(52,199,123,.07);border-radius:12px;padding:14px 16px}
@@ -28,7 +29,7 @@ const mkArmadaLike = (cfg) => {
 .ar-tag.w{background:rgba(224,164,49,.16);color:#ecc06f}.ar-tag.b{background:rgba(255,107,107,.14);color:#ff8f8f}.ar-tag.g{background:#ffffff12;color:var(--mut)}
 .ar-act{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;align-items:center}.ar-act select{width:auto;margin:0;padding:5px 8px;font-size:12.5px}
 @media (max-width:1000px){.ar-f{grid-template-columns:1fr 1fr}.ar-row{grid-template-columns:1fr 1fr}.ar-act{grid-column:1/-1;justify-content:flex-start}}
-@media (max-width:560px){.ar-f{grid-template-columns:1fr}.ar-kv{grid-template-columns:80px minmax(0,1fr) auto}}`;
+@media (max-width:560px){.ar-f{grid-template-columns:1fr}.ar-f .ar-duration{grid-column:1/-1}.ar-kv{grid-template-columns:80px minmax(0,1fr) auto}}`;
   document.head.appendChild(css);
   }
 
@@ -41,7 +42,7 @@ const mkArmadaLike = (cfg) => {
   TITLES[K] = 'Pannello ' + N;
 
   const A = { st: null, tab: 'new', pk: null, lines: null, mags: null, res: null, F: { q: '', f: '', sort: '', days: 0 }, show: new Set(), last: null, sel: new Set(), vis: [], stOn: false, limit: 100,
-    form: { type: 'm3u', sub: 12, htime: 24, pack: '', mac: '', country: '', adult: false, notes: '' } };
+    form: { type: 'm3u', sub: 12, htime: 24, pack: '', mac: '', country: '', notes: '' } };
   const DAY = 864e5, fmtD = (t) => (t ? new Date(t).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
   const left = (t) => { if (!t) return ''; const d = Math.ceil((t - Date.now()) / DAY); return d < 0 ? `scaduta da ${-d} g` : d === 0 ? 'scade oggi' : `tra ${d} g`; };
   const copy = (t, w) => navigator.clipboard.writeText(t).then(() => toast(w + ' copiato'), () => toast('Copia non consentita dal browser', 1));
@@ -50,6 +51,9 @@ const mkArmadaLike = (cfg) => {
   const ldErr = (e) => ({ err: e.message });
   const isAg = () => D.role === 'agent';
   const fmtC = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString('it-IT');
+  const adultPack = /xxx|adult|adulti|18\+|\+18|porn/i;
+  const noAdultPack = /without adult|no adult|senza adult|no xxx|without xxx/i;
+  const packName = (name) => { const n = String(name || ''); return noAdultPack.test(n) ? `✅ ${n}` : adultPack.test(n) ? `🔞 ${n}` : n; };
 
   async function loadState() { try { A.st = await api('GET', API + '/state'); } catch (e) { A.st = { connected: false, error: e.message }; } render(); return A.st; }
   const loadLines = (afterRenew = false) => A.pL || (A.pL = api('GET', API + '/lines').then((r) => { A.lines = r.lines || []; if (window.KXLineSync) KXLineSync.apply(CFG.k, A.lines, afterRenew, api); }).catch((e) => { A.lines = ldErr(e); }).finally(() => { A.pL = null; }));
@@ -92,20 +96,19 @@ const mkArmadaLike = (cfg) => {
 
   function newHtml() {
     const f = A.form, pk = A.pk;
-    const packs = !pk ? '<option value="">Carico…</option>' : pk.err ? `<option value="">${esc(pk.err)}</option>` : `<option value="">Scegli…</option>${pk.map((x) => `<option value="${esc(x.id)}" ${String(f.pack) === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}`;
+    const packs = !pk ? '<option value="">Carico…</option>' : pk.err ? `<option value="">${esc(pk.err)}</option>` : `<option value="">Scegli…</option>${pk.map((x) => `<option value="${esc(x.id)}" ${String(f.pack) === x.id ? 'selected' : ''}>${esc(packName(x.name))}</option>`).join('')}`;
     const res = A.last ? resultHtml(A.last) : '';
     const bd = (A.st && A.st.budget) || null, subs = bd && !bd.trial ? SUBS.filter(([v]) => v) : SUBS;
     if (bd && !bd.trial && f.sub === 0) f.sub = 1;
     const noCr = bd && !bd.left && !bd.trial ? `<p class="mut" style="margin:0 0 12px">⚠️ Questo mese non hai più crediti ${N}: chiedi a chi ti gestisce di aumentarli.</p>` : '';
-    return `<div class="card glass"><div class="hd"><h3>Nuova linea<small>${bd ? `Si crea su ${N} con i crediti di chi ti gestisce (entro il tuo tetto del mese).` : `Si crea su ${N} con i tuoi crediti.`} Poi la aggiungi a un cliente${bd ? '' : ' o la registri in «Appunti App»'}.</small></h3>${window.KXQuick ? KXQuick.button(K) : ''}</div>${noCr}
+    return `<div class="card glass"><div class="hd"><h3>Nuova linea<small>${bd ? `Si crea su ${N} con i crediti di chi ti gestisce (entro il tuo tetto del mese).` : `Si crea su ${N} con i tuoi crediti.`} Poi la aggiungi a un cliente${bd ? '' : ' o la registri in «Appunti App»'}.</small>${f.type === 'm3u' ? '<small>Utente e password li crea il pannello: li vedi subito dopo la creazione.</small>' : ''}</h3>${window.KXQuick ? KXQuick.button(K) : ''}</div>${noCr}
       <div class="ar-f">
         <label>Tipo<div class="ar-ch" id="arType"><button type="button" data-t="m3u" class="${f.type === 'm3u' ? 'on' : ''}">Linea M3U / Xtream</button><button type="button" data-t="mag" class="${f.type === 'mag' ? 'on' : ''}">MAG</button></div></label>
-        <label style="grid-column:span 2">Durata<div class="ar-ch" id="arSub">${subs.map(([v, l]) => `<button type="button" data-s="${v}" class="${+f.sub === v ? 'on' : ''}">${l}</button>`).join('')}${+f.sub === 0 ? `<select class="inp" id="arH" style="width:auto;padding:5px 8px">${Array.from({ length: 24 }, (_, i) => i + 1).map((h) => `<option value="${h}" ${+f.htime === h ? 'selected' : ''}>${h} ${h === 1 ? 'ora' : 'ore'}</option>`).join('')}</select>` : ''}</div></label>
+        <label class="ar-duration">Durata<div class="ar-ch" id="arSub">${subs.map(([v, l]) => `<button type="button" data-s="${v}" class="${+f.sub === v ? 'on' : ''}">${l}</button>`).join('')}${+f.sub === 0 ? `<select class="inp" id="arH" style="width:auto;padding:5px 8px">${Array.from({ length: 24 }, (_, i) => i + 1).map((h) => `<option value="${h}" ${+f.htime === h ? 'selected' : ''}>${h} ${h === 1 ? 'ora' : 'ore'}</option>`).join('')}</select>` : ''}</div></label>
         ${f.type === 'mag' ? `<label>MAC del MAG<input class="inp mono" id="arMac" data-mac="strict" maxlength="17" autocomplete="off" value="${esc(f.mac)}" placeholder="00:1A:79:12:34:56"></label>` : ''}
-        <label>Pacchetto di canali<select class="inp" id="arPk">${packs}</select></label>
+        <label>Pacchetto di canali<select class="inp" id="arPk">${packs}</select><small class="mut" style="font-size:11px;text-transform:none;letter-spacing:0">Gli adulti dipendono dal pacchetto: scegli quello ✅ senza adulti.</small></label>
         <label>Paese (facoltativo)<input class="inp" id="arCo" maxlength="3" value="${esc(f.country)}" placeholder="IT, oppure ALL per la VPN"></label>
         <label>Note (facoltative)<input class="inp" id="arNo" maxlength="200" value="${esc(f.notes)}" placeholder="es. nome del cliente"></label>
-        <label>Contenuti per adulti<div class="tog ${f.adult ? 'on' : ''}" id="arAd" style="margin:0;padding:8px 10px"><div><b style="font-size:13px;text-transform:none;letter-spacing:0">${f.adult ? 'Attivi' : 'Spenti'}</b></div><i></i></div></label>
       </div>
       <div style="display:flex;gap:8px;margin-top:14px"><button class="btn pri" id="arGo">Crea ${f.type === 'mag' ? 'MAG' : 'linea'}</button></div>${res}</div>`;
   }
@@ -199,7 +202,6 @@ const mkArmadaLike = (cfg) => {
     // nuova linea
     $$('#arType [data-t]').forEach((b) => (b.onclick = () => { readForm(); A.form.type = b.dataset.t; render(); }));
     $$('#arSub [data-s]').forEach((b) => (b.onclick = () => { readForm(); A.form.sub = +b.dataset.s; render(); }));
-    $('#arAd') && ($('#arAd').onclick = () => { readForm(); A.form.adult = !A.form.adult; render(); });
     $('#arGo') && ($('#arGo').onclick = async () => {
       readForm(); const f = A.form;
       if (!f.pack) return toast('Scegli il pacchetto di canali', 1);
@@ -209,7 +211,7 @@ const mkArmadaLike = (cfg) => {
       if (!(await ask(`Creare ${f.type === 'mag' ? 'il MAG' : 'la linea'} su ${N}?`, `<b>${esc(dur)}</b> · pacchetto <b>${esc(pn)}</b>${f.type === 'mag' ? ` · MAC <span class="mono">${esc(f.mac)}</span>` : ''}.${f.sub ? (bd ? ' Usa i crediti di chi ti gestisce.' : ` Usa i tuoi crediti ${N}.`) : ''}${cr}`, 'Crea'))) return;
       const btn = $('#arGo'); btn.disabled = true; btn.textContent = 'Creo…';
       try {
-        A.last = await api('POST', API + '/new', { type: f.type, sub: f.sub, htime: f.sub ? undefined : f.htime, pack: f.pack, mac: f.type === 'mag' ? f.mac : undefined, country: f.country, adult: f.adult, notes: f.notes });
+        A.last = await api('POST', API + '/new', { type: f.type, sub: f.sub, htime: f.sub ? undefined : f.htime, pack: f.pack, mac: f.type === 'mag' ? f.mac : undefined, country: f.country, notes: f.notes });
         toast(f.type === 'mag' ? 'MAG creato' : 'Linea creata'); A.form.mac = ''; A.form.notes = ''; A.lines = A.mags = null; loadState();
       } catch (e) { toast(e.message, 1); }
       render();
