@@ -4367,6 +4367,7 @@ const TN_ITEM = { id: 'ai:tonight', k: 'x', tonight: true, name: 'Cosa guardo st
 function tnHomeRow(R) {
   if (!S.lib.movies.length && !S.lib.series.length && !S.lib.live.length) return;
   let i = 0; while (i < R.length && i < 2 && (R[i].type === 'nfy' || R[i].type === 'ev')) i++;
+  while (i < R.length && R[i].feat) i++; // categorie in primo piano decise dal pannello (home.top): restano tutte in cima, una dopo l'altra
   R.splice(i || Math.min(1, R.length), 0, { title: '✦ Cosa guardo stasera?', type: 'tonight', items: [TN_ITEM] });
 }
 const tnCard = (k) => `<div class="nc ai2" data-f data-k="${k}"><i>✦</i><b>Cosa guardo stasera?</b><small>3–5 proposte per te, con il perché</small></div>`;
@@ -5080,8 +5081,8 @@ function makeRows(kind) {
     for (const [, , c, k, lbl] of F.slice(0, 10)) {
       featCats.add(k + '|' + c.name);
       const title = (lbl ? lbl + ' · ' : '') + c.name;
-      if (k === 'live') R.push({ title, type: 'live', items: sortChannels(visLive((S.byGroup && S.byGroup.get('l' + c.name)) || L.live.filter((x) => x.group === c.name))), more: { fold: { kind: 'live', name: c.name } } });
-      else R.push({ title, type: 'poster', items: catItems(k === 'movies' ? L.movies : L.series, c, k), more: { kind: k, cat: c.name } });
+      if (k === 'live') R.push({ title, type: 'live', feat: true, items: sortChannels(visLive((S.byGroup && S.byGroup.get('l' + c.name)) || L.live.filter((x) => x.group === c.name))), more: { fold: { kind: 'live', name: c.name } } });
+      else R.push({ title, type: 'poster', feat: true, items: catItems(k === 'movies' ? L.movies : L.series, c, k), more: { kind: k, cat: c.name } });
     }
   }
   const TR = trendLists();
