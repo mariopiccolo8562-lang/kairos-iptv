@@ -253,8 +253,9 @@ function harden(res, req) {
     h.set('Cache-Control', 'no-store');
     h.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
   } else if (url.pathname.startsWith('/store/') || url.pathname.startsWith('/get/')) {
-    // pagina dello store (da GitHub Pages) e APK (dalle release): link senza nomi; la pagina ha script interni, niente CSP del pannello
-    if (url.pathname.endsWith('.html') || url.pathname.endsWith('/') || url.pathname.endsWith('.json')) h.set('Cache-Control', 'no-cache');
+    // pagina dello store (da GitHub Pages) e APK (dalle release): link senza nomi; la pagina ha script interni, niente CSP del pannello.
+    // I feed /get/<app>.json tengono la loro cache breve (5 minuti)
+    if (!url.pathname.startsWith('/get/') && (url.pathname.endsWith('.html') || url.pathname.endsWith('/') || url.pathname.endsWith('.json'))) h.set('Cache-Control', 'no-cache');
   } else if (url.pathname.startsWith('/app/') && url.searchParams.get('app') === 'vega') {
     // solo per l'app KAIROS delle Fire TV con Vega OS (WebView): la pagina ha script interni e si collega
     // ai server IPTV dei clienti, quindi la CSP del pannello la bloccherebbe. Tutto il resto resta com'era.
@@ -278,6 +279,12 @@ function harden(res, req) {
     h.set('Cross-Origin-Resource-Policy', 'cross-origin');
   } else {
     if (!url.pathname.startsWith('/app/')) h.set('Cross-Origin-Resource-Policy', 'same-origin');
+  }
+  if (url.pathname.startsWith('/get/') && url.pathname.endsWith('.json')) {
+    // feed degli aggiornamenti: li leggono le app e lo store (anche da un'altra origine)
+    h.set('Access-Control-Allow-Origin', '*');
+    h.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    h.set('Cross-Origin-Resource-Policy', 'cross-origin');
   }
   if (url.pathname.startsWith('/api/store/')) storeHeaders(h, url.pathname); // CORS per lo store + pagine dei link email
   if (url.pathname === '/privacy' || url.pathname === '/privacy/') {
@@ -361,7 +368,7 @@ async function apkFeed(env) {
   if (now() - feedMem.t < 5 * 60e3) return feedMem.v;
   let v = null;
   try {
-    const r = await fetch(env.APK_FEED, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
+    const r = await relFetch(env, env.APK_FEED, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
     if (r.ok) {
       const j = await r.json();
       const code = semverCode(j.version) || +j.versionCode;
@@ -375,13 +382,13 @@ async function apkFeed(env) {
    aggiornamenti da kairos-tv.json dell'ultima release, oppure dal link scritto nel pannello */
 const KTV_APK = 'https://github.com/mariopiccolo8562-lang/kairos-tv/releases/latest/download/kairos-tv.apk';
 let ktvMem = { t: 0, k: '', v: null };
-async function ktvFeed(s) {
+async function ktvFeed(s, env) {
   const apk = s.ktvApkUrl || KTV_APK, url = apk.replace(/\.apk(\?.*)?$/i, '.json');
   if (ktvMem.k === url && now() - ktvMem.t < 5 * 60e3) return ktvMem.v;
   let v = null;
   if (/^https:\/\/.+\.json$/i.test(url)) {
     try {
-      const r = await fetch(url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
+      const r = await relFetch(env, url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
       if (r.ok) {
         const j = await r.json();
         const code = semverCode(j.version) || +j.versionCode;
@@ -395,11 +402,11 @@ async function ktvFeed(s) {
 /* Kairos Premium (repository kairos-premium): aggiornamenti da kairos-premium.json dell'ultima release */
 const PREM_APK = 'https://github.com/mariopiccolo8562-lang/kairos-premium/releases/latest/download/kairos-premium.apk';
 let premMem = { t: 0, v: null };
-async function premFeed() {
+async function premFeed(env) {
   if (now() - premMem.t < 5 * 60e3) return premMem.v;
   let v = null;
   try {
-    const r = await fetch(PREM_APK.replace(/\.apk$/, '.json'), { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
+    const r = await relFetch(env, PREM_APK.replace(/\.apk$/, '.json'), { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
     if (r.ok) {
       const j = await r.json();
       const code = semverCode(j.version) || +j.versionCode;
@@ -412,13 +419,13 @@ async function premFeed() {
 /* Kairos XC (stile MirkoTeam, repository separato kairos-xc): stesso meccanismo di Kairos TV */
 const XC_APK = 'https://github.com/mariopiccolo8562-lang/kairos-xc/releases/latest/download/kairos-xc.apk';
 let xcMem = { t: 0, k: '', v: null };
-async function xcFeed(s) {
+async function xcFeed(s, env) {
   const apk = s.xcApkUrl || XC_APK, url = apk.replace(/\.apk(\?.*)?$/i, '.json');
   if (xcMem.k === url && now() - xcMem.t < 5 * 60e3) return xcMem.v;
   let v = null;
   if (/^https:\/\/.+\.json$/i.test(url)) {
     try {
-      const r = await fetch(url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
+      const r = await relFetch(env, url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
       if (r.ok) { const j = await r.json(); const code = semverCode(j.version) || +j.versionCode; if (code > 0) v = { versionCode: code, version: String(j.version || '').replace(/^v/i, '').slice(0, 20), url: /^https:\/\//.test(j.url || '') ? String(j.url).slice(0, 500) : apk, date: String(j.date || '').slice(0, 40) }; }
     } catch {}
   }
@@ -434,23 +441,23 @@ const NOVA_FEED = 'https://github.com/mariopiccolo8562-lang/Lairos-nova/releases
 const NOVA_APK = NOVA_FEED.replace('kairos-nova.json', 'KairosNova-arm32.apk');
 let novaMem = { t: 0, v: null };
 /** Kairos Nova: feed kairos-nova.json della release «latest» (versione, numero, link dell'APK arm64) */
-async function novaFeed() {
+async function novaFeed(env) {
   if (now() - novaMem.t < 5 * 60e3) return novaMem.v;
   let v = null;
   try {
-    const r = await fetch(NOVA_FEED, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
+    const r = await relFetch(env, NOVA_FEED, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
     if (r.ok) { const j = await r.json(); const ver = String(j.version || '').replace(/^v/i, '').slice(0, 20); if (ver) v = { versionCode: +j.versionCode || semverCode(ver), version: ver, url: /^https:\/\//.test(j.url || '') ? String(j.url) : '', date: j.date || '' }; }
   } catch {}
   novaMem = { t: now(), v };
   return v;
 }
-async function plusFeed(s) {
+async function plusFeed(s, env) {
   const apk = s.plusApkUrl || PLUS_APK, url = apk.replace(/\.apk(\?.*)?$/i, '.json');
   if (plusMem.k === url && now() - plusMem.t < 5 * 60e3) return plusMem.v;
   let v = null;
   if (/^https:\/\/.+\.json$/i.test(url)) {
     try {
-      const r = await fetch(url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
+      const r = await relFetch(env, url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
       if (r.ok) { const j = await r.json(); const ver = String(j.version || '').replace(/^v/i, '').slice(0, 20); if (ver) v = { versionCode: +j.versionCode || semverCode(ver), version: ver, url: /^https:\/\//.test(j.url || '') ? String(j.url).slice(0, 500) : apk, date: String(j.date || '').slice(0, 40) }; }
     } catch {}
   }
@@ -1518,9 +1525,13 @@ async function onlineRoute(req) {
   return json({ res });
 }
 
-/* ---------------- link puliti: /get/<app>.apk e /store/ (proxy delle release GitHub e di GitHub Pages) ----------------
+/* ---------------- link puliti: /get/<app>.apk, /get/<app>.json e /store/ (release GitHub e pagina dello store) ----------------
    Il link che il cliente vede è quello del pannello (es. https://panel-kairos.com/get/store.apk): l'account GitHub resta qui.
-   Se GitHub non risponde, /get rimanda direttamente all'asset. */
+   Il pannello è il punto unico di download (README §34): gli APK passano in streaming dal Worker (con Range: i download
+   interrotti riprendono), i feed degli aggiornamenti escono con i link del pannello, la pagina dello store pure.
+   Senza il segreto GH_TOKEN si usano i link pubblici delle release e GitHub Pages, come prima (nessun limite di richieste).
+   Con GH_TOKEN (token a grana fine, sola lettura di «Contents») l'API GitHub autenticata: funziona anche con i repository
+   privati. Il token resta nel Worker: mai nelle risposte, nei log o nei messaggi d'errore. */
 const GH_OWNER = 'mariopiccolo8562-lang';
 const GET_APK = {
   store: ['kairos-store/releases/latest/download/KairosStore.apk', 'KairosStore.apk'],
@@ -1533,64 +1544,373 @@ const GET_APK = {
   nova: ['Lairos-nova/releases/download/latest/KairosNova-arm64.apk', 'kairos-nova.apk'],
   'nova-arm32': ['Lairos-nova/releases/download/latest/KairosNova-arm32.apk', 'kairos-nova-arm32.apk'],
 };
+/** feed degli aggiornamenti (/get/<id>.json): file della stessa release dell'APK di GET_APK[id]. Lo store non ne ha uno:
+ *  si ricava dalla sua ultima release (tag v1.0.N con KairosStore.apk) */
+const GET_FEED = { tv: 'kairos-tv.json', premium: 'kairos-premium.json', lite: 'kairos-lite.json', xc: 'kairos-xc.json', plus: 'kairos-plus.json', nova: 'kairos-nova.json', pro: 'kairos-tv.json', store: '' };
 const STORE_PAGES = `https://${GH_OWNER}.github.io/kairos-store/`;
-async function ghFetch(u, method, ms = 8000) {
+const GH_UA = 'KairosPanel', GH_API = 'https://api.github.com', GH_V = '2022-11-28';
+const hasKey = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+/** token GitHub del Worker (segreto GH_TOKEN, facoltativo): '' se manca */
+const ghTok = (env) => { const t = String((env && env.GH_TOKEN) || '').trim(); return /^[\x21-\x7e]{20,255}$/.test(t) ? t : ''; };
+/** «repo/releases/latest/download/file» o «repo/releases/download/tag/file» → { repo, tag ('' = ultima release), file } */
+function ghRelOf(rel) {
+  const m = String(rel || '').match(/^([A-Za-z0-9._-]+)\/releases\/(?:latest\/download|download\/([A-Za-z0-9._-]+))\/([A-Za-z0-9._-]+)$/);
+  return m ? { repo: m[1], tag: m[2] || '', file: m[3] } : null;
+}
+/** link pubblico di un file di una release del titolare → { repo, tag, file }; null per tutti gli altri link */
+function ghRelUrl(u) {
+  const m = String(u || '').match(/^https:\/\/github\.com\/([A-Za-z0-9-]+)\/([^?#]+)(?:[?#].*)?$/);
+  return m && m[1].toLowerCase() === GH_OWNER.toLowerCase() ? ghRelOf(m[2]) : null;
+}
+const ghPub = (p) => `https://github.com/${GH_OWNER}/${p.repo}/releases/${p.tag ? 'download/' + p.tag : 'latest/download'}/${p.file}`;
+/** fetch con un tempo massimo per la risposta (le intestazioni): il corpo poi arriva con calma (APK grandi) */
+async function tfetch(u, init, ms = 8000) {
   const ac = new AbortController(), timer = setTimeout(() => ac.abort(), ms);
-  try { return await fetch(u, { method, redirect: 'follow', cf: { cacheTtl: 600, cacheEverything: true }, signal: ac.signal }); }
+  try { return await fetch(u, { ...init, signal: ac.signal }); }
   finally { clearTimeout(timer); }
 }
+async function ghFetch(u, method, ms = 8000, headers) {
+  return tfetch(u, { method, redirect: 'follow', cf: { cacheTtl: 600, cacheEverything: true }, ...(headers ? { headers } : {}) }, ms);
+}
+/* API GitHub (JSON). Con il token: autenticata, in memoria per [ttl] e poi riconvalidata con l'ETag (una risposta 304 non
+   consuma il limite di 5000 richieste all'ora); se GitHub non risponde resta buona l'ultima risposta. Senza token come
+   prima: senza autenticazione, con la cache di Cloudflare di 5 minuti. [pick] tiene solo ciò che serve */
+const ghMem = new Map(), ghWait = new Map();
+async function ghApi(env, path, pick, ttl = 300e3) {
+  const tok = ghTok(env), h = { Accept: 'application/vnd.github+json', 'User-Agent': GH_UA, 'X-GitHub-Api-Version': GH_V };
+  const take = async (r) => { const j = await r.json().catch(() => null); return j && pick ? pick(j) : j; };
+  if (!tok) {
+    try { const r = await fetch(GH_API + path, { headers: h, signal: AbortSignal.timeout(6000), cf: { cacheTtl: 300, cacheEverything: true } }); return r.ok ? await take(r) : null; } catch { return null; }
+  }
+  const c = ghMem.get(path);
+  if (c && now() - c.t < ttl) return c.v;
+  if (ghWait.has(path)) return ghWait.get(path);
+  const p = (async () => {
+    h.Authorization = 'Bearer ' + tok;
+    if (c && c.etag) h['If-None-Match'] = c.etag;
+    let v = null, etag = '', st = 0;
+    try {
+      const r = await fetch(GH_API + path, { headers: h, signal: AbortSignal.timeout(6000) });
+      st = r.status;
+      if (st === 304 && c) { c.t = now(); return c.v; }
+      if (r.ok) { v = await take(r); etag = r.headers.get('ETag') || ''; }
+    } catch {}
+    // GitHub non risponde (o limite raggiunto): resta l'ultima risposta buona e si riprova fra un minuto
+    if (v === null && c && c.v !== null && st !== 404) { c.t = now() - ttl + 60e3; return c.v; }
+    ghMem.set(path, { t: v === null ? now() - ttl + 60e3 : now(), etag: v === null ? '' : etag, v });
+    if (ghMem.size > 300) ghMem.delete(ghMem.keys().next().value);
+    return v;
+  })().finally(() => ghWait.delete(path));
+  ghWait.set(path, p);
+  return p;
+}
+/** release ridotta a ciò che serve (in memoria si tiene poco) */
+const relSlim = (x) => (x && typeof x === 'object' && !Array.isArray(x) ? {
+  tag_name: String(x.tag_name || ''), draft: !!x.draft, prerelease: !!x.prerelease, published_at: String(x.published_at || ''), created_at: String(x.created_at || ''),
+  assets: (Array.isArray(x.assets) ? x.assets : []).filter((a) => a && typeof a === 'object').slice(0, 60).map((a) => ({ id: +a.id || 0, name: String(a.name || ''), state: String(a.state || 'uploaded'), size: +a.size || 0, updated_at: String(a.updated_at || ''), browser_download_url: String(a.browser_download_url || '') })),
+} : null);
+const relsSlim = (v) => (Array.isArray(v) ? v.map(relSlim).filter(Boolean) : null);
+const relTime = (x) => Date.parse(x.published_at || x.created_at || '') || 0;
+const relFile = (x, file) => (x && Array.isArray(x.assets) && x.assets.find((f) => f && f.name === file && (f.state || 'uploaded') === 'uploaded')) || null;
+/** release pubblicate (né bozze né anteprime), dalla più recente */
+const relsByDate = (list) => (Array.isArray(list) ? list : []).filter((x) => x && !x.draft && !x.prerelease).sort((a, b) => relTime(b) - relTime(a));
 /** l'ultima release è stata creata senza il file (es. Kairos Premium 1.7.0 e 1.7.1, compilate senza la chiave di firma):
- *  link al file della release più recente che ce l'ha, così il download dallo store non resta rotto; '' se non c'è */
-async function ghOlderAsset(rel) {
+ *  link al file della release più recente che ce l'ha, così il download dallo store non resta rotto; '' se non c'è.
+ *  Con il token l'elenco delle release arriva dall'API autenticata */
+async function ghOlderAsset(env, rel) {
   const mm = rel.match(/^([A-Za-z0-9._-]+)\/releases\/latest\/download\/([A-Za-z0-9._-]+)$/); if (!mm) return '';
   const base = `https://github.com/${GH_OWNER}/${mm[1]}/releases/download/`;
-  try {
-    const r = await fetch(`https://api.github.com/repos/${GH_OWNER}/${mm[1]}/releases?per_page=20`, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(6000), cf: { cacheTtl: 300, cacheEverything: true } });
-    if (!r.ok) return '';
-    const list = (await r.json().catch(() => [])) || [];
-    const t = (x) => Date.parse(x.published_at || x.created_at || '') || 0;
-    for (const x of (Array.isArray(list) ? list : []).filter((x) => x && !x.draft && !x.prerelease).sort((a, b) => t(b) - t(a))) {
-      const a = (Array.isArray(x.assets) ? x.assets : []).find((f) => f && f.name === mm[2] && (f.state || 'uploaded') === 'uploaded');
-      if (a && typeof a.browser_download_url === 'string' && a.browser_download_url.startsWith(base)) return a.browser_download_url;
-    }
-  } catch {}
+  for (const x of relsByDate(await ghApi(env, `/repos/${GH_OWNER}/${mm[1]}/releases?per_page=20`, relsSlim))) {
+    const a = relFile(x, mm[2]);
+    if (a && a.browser_download_url.startsWith(base)) return a.browser_download_url;
+  }
   return '';
 }
-async function cleanLinks(req, url, path) {
-  if (req.method !== 'GET' && req.method !== 'HEAD') return new Response('Metodo non consentito', { status: 405 });
-  const m = path.match(/^\/get\/([a-z0-9-]{1,24})\.apk$/);
-  if (m) {
-    const e = GET_APK[m[1]]; if (!e) return new Response('Non trovato', { status: 404 });
-    const method = req.method === 'HEAD' ? 'HEAD' : 'GET';
-    let target = `https://github.com/${GH_OWNER}/${e[0]}`;
-    const getUp = async (u) => {
+/** con il token: il file [p.file] della release [p] dall'API; se è l'ultima release ed è uscita senza quel file, quello
+ *  della più recente che ce l'ha (come per i link pubblici). { a: file, rel: release } | null */
+async function ghAssetOf(env, p) {
+  const rel = await ghApi(env, `/repos/${GH_OWNER}/${p.repo}/releases/${p.tag ? 'tags/' + encodeURIComponent(p.tag) : 'latest'}`, relSlim);
+  const a = relFile(rel, p.file);
+  if (a && a.id) return { a, rel };
+  if (p.tag) return null;
+  for (const x of relsByDate(await ghApi(env, `/repos/${GH_OWNER}/${p.repo}/releases?per_page=20`, relsSlim))) { const b = relFile(x, p.file); if (b && b.id) return { a: b, rel: x }; }
+  return null;
+}
+/* con il token: file di una release (anche privata). L'API risponde con un rimando a un indirizzo firmato (valido pochi
+   minuti) da scaricare SENZA il token. L'indirizzo resta in memoria al massimo un minuto e non esce mai dal Worker */
+const ghSigned = new Map();
+async function ghAssetGet(env, p, a, hdr) {
+  for (let n = 0; n < 2; n++) {
+    const c = ghSigned.get(a.id), old = !!(c && now() - c.t < 60e3);
+    let loc = old ? c.u : '';
+    if (!loc) {
       let r = null;
-      for (let n = 0; n < 2; n++) {
-        try {
-          r = await ghFetch(u, method, 8000);
-          if (r.status !== 429 && r.status < 500) break;
-        } catch { r = null; }
-      }
-      return r;
-    };
-    let up = await getUp(target);
-    // «latest» senza il file: si serve quello della release precedente che ce l'ha (prima il cliente vedeva «App non disponibile»)
-    if (up && up.status === 404) { const alt = await ghOlderAsset(e[0]); if (alt) { target = alt; up = await getUp(alt); } }
-    if (up && up.status === 404) return new Response('App non disponibile al momento, riprova tra poco', { status: 502 });
-    if (!up || !up.ok) return new Response(null, { status: 302, headers: { Location: target, 'Cache-Control': 'no-store' } });
-    const h = new Headers();
-    h.set('Content-Type', 'application/vnd.android.package-archive');
-    h.set('Content-Disposition', `attachment; filename="${e[1]}"`);
-    const len = up.headers.get('Content-Length'); if (len) h.set('Content-Length', len);
-    h.set('Cache-Control', 'public, max-age=600');
-    h.set('Accept-Ranges', 'none');
-    return new Response(req.method === 'HEAD' ? null : up.body, { status: 200, headers: h });
+      try { r = await tfetch(`${GH_API}/repos/${GH_OWNER}/${p.repo}/releases/assets/${a.id}`, { redirect: 'manual', headers: { Accept: 'application/octet-stream', Authorization: 'Bearer ' + ghTok(env), 'User-Agent': GH_UA, 'X-GitHub-Api-Version': GH_V } }); } catch { return null; }
+      if (r.status < 300 || r.status >= 400) return r.ok || r.status === 416 ? r : null; // GitHub ha mandato il file direttamente (o errore)
+      loc = r.headers.get('Location') || '';
+      if (!/^https:\/\//i.test(loc)) return null;
+      ghSigned.set(a.id, { t: now(), u: loc }); if (ghSigned.size > 100) ghSigned.delete(ghSigned.keys().next().value);
+    }
+    let up = null;
+    try { up = await tfetch(loc, { redirect: 'follow', headers: { ...hdr, 'User-Agent': GH_UA } }); } catch {}
+    if (up && (up.ok || up.status === 416)) return up;
+    if (up && up.body) up.body.cancel().catch(() => {});
+    ghSigned.delete(a.id);
+    if (!old) return null; // indirizzo appena avuto: niente da riprovare
+    // l'indirizzo in memoria era scaduto: se ne chiede uno nuovo
   }
+  return null;
+}
+/** con il token: file piccolo di una release (i feed) dall'API; il testo resta in memoria finché il file su GitHub non cambia */
+const ghBlob = new Map();
+async function ghSmall(env, p) {
+  const x = await ghAssetOf(env, p);
+  if (!x || x.a.size > 256 * 1024) return null;
+  const k = `${p.repo}/${x.a.id}/${x.a.updated_at}`;
+  let t = ghBlob.get(k);
+  if (t === undefined) {
+    const r = await ghAssetGet(env, p, x.a, {});
+    if (!r || !r.ok) return null;
+    t = await r.text();
+    if (t.length > 256 * 1024) return null;
+    ghBlob.set(k, t); if (ghBlob.size > 60) ghBlob.delete(ghBlob.keys().next().value);
+  }
+  return { text: t, rel: x.rel };
+}
+/** file di una release del titolare dal suo link pubblico (i feed delle app). Con il token dall'API autenticata, anche dai
+ *  repository privati (se l'API non risponde si prova il link pubblico). Se l'ultima release è uscita senza il file si usa
+ *  la più recente che ce l'ha, come per gli APK. Tutti gli altri link: fetch normale, come prima */
+async function relFetch(env, u, init) {
+  const p = ghRelUrl(u);
+  if (p && ghTok(env)) { const x = await ghSmall(env, p).catch(() => null); if (x) return new Response(x.text, { status: 200, headers: { 'Content-Type': 'application/json' } }); }
+  const r = await fetch(u, init);
+  if (p && !p.tag && r.status === 404) { const alt = await ghOlderAsset(env, `${p.repo}/releases/latest/download/${p.file}`); if (alt) return fetch(alt, init); }
+  return r;
+}
+/** Range della richiesta (un solo intervallo): { s, e } (e = -1: fino alla fine; s = -1: gli ultimi e byte); null se manca o
+ *  non si capisce (allora si manda il file intero, come permette HTTP) */
+function rangeOf(v) {
+  const m = String(v || '').trim().match(/^bytes=(\d{0,15})-(\d{0,15})$/i);
+  if (!m || (!m[1] && !m[2])) return null;
+  if (!m[1]) return +m[2] > 0 ? { s: -1, e: +m[2] } : null;
+  const s = +m[1], e = m[2] ? +m[2] : -1;
+  return e !== -1 && e < s ? null : { s, e };
+}
+/** [inizio, fine] dell'intervallo su un file di [size] byte; null se comincia oltre la fine (416) */
+const rangeOn = (r, size) => (r.s === -1 ? [Math.max(0, size - r.e), size - 1] : r.s >= size ? null : [r.s, r.e === -1 ? size - 1 : Math.min(r.e, size - 1)]);
+/** If-Range: il pezzo si manda solo se il file è ancora quello (stesso ETag o stessa data), altrimenti il file intero */
+function ifRangeOk(v, h) {
+  if (!v) return true;
+  if (/^(W\/)?"/.test(v)) return !v.startsWith('W/') && h.get('ETag') === v;
+  const a = Date.parse(v);
+  return !!a && a === Date.parse(h.get('Last-Modified') || '');
+}
+/** byte [start, start+len) di un corpo in streaming (quando GitHub manda il file intero a una richiesta con Range) */
+function sliceBody(body, start, len) {
+  let pos = 0, left = len;
+  const ts = new TransformStream({
+    transform(ch, ctl) {
+      const u = ch instanceof Uint8Array ? ch : new Uint8Array(ch), a = Math.max(0, start - pos);
+      pos += u.length;
+      if (left <= 0 || a >= u.length) return;
+      const part = u.subarray(a, a + Math.min(left, u.length - a));
+      left -= part.length; ctl.enqueue(part);
+      if (left <= 0) ctl.terminate();
+    },
+  });
+  body.pipeTo(ts.writable).catch(() => {});
+  if (typeof FixedLengthStream !== 'function') return ts.readable;
+  const f = new FixedLengthStream(len); // Cloudflare: così la risposta porta la lunghezza esatta
+  ts.readable.pipeTo(f.writable).catch(() => {});
+  return f.readable;
+}
+/** risposta con l'APK: 200 (file intero), 206 (un pezzo, con Content-Range) o 416; [up] = risposta di GitHub (null per HEAD con il token) */
+function apkOut(req, h, up, rg, size0) {
+  const head = req.method === 'HEAD', drop = () => { if (up && up.body) up.body.cancel().catch(() => {}); };
+  if (up) for (const k of ['ETag', 'Last-Modified']) { const v = up.headers.get(k); if (v) h.set(k, v); }
+  if (up && up.status === 206) {
+    for (const k of ['Content-Range', 'Content-Length']) { const v = up.headers.get(k); if (v) h.set(k, v); }
+    if (head) drop();
+    return new Response(head ? null : up.body, { status: 206, headers: h });
+  }
+  if (up && up.status === 416) { drop(); const cr = up.headers.get('Content-Range'); if (cr) h.set('Content-Range', cr); return new Response(null, { status: 416, headers: h }); }
+  const size = (up && +(up.headers.get('Content-Length') || 0)) || size0 || 0;
+  // file intero: se il cliente ne ha chiesto un pezzo (ed è ancora lo stesso file) si ritaglia qui
+  if (rg && size > 0 && ifRangeOk(req.headers.get('If-Range'), h)) {
+    const r = rangeOn(rg, size);
+    if (!r) { drop(); h.set('Content-Range', `bytes */${size}`); return new Response(null, { status: 416, headers: h }); }
+    h.set('Content-Range', `bytes ${r[0]}-${r[1]}/${size}`); h.set('Content-Length', String(r[1] - r[0] + 1));
+    if (head || !up || !up.body) { drop(); return new Response(null, { status: 206, headers: h }); }
+    return new Response(sliceBody(up.body, r[0], r[1] - r[0] + 1), { status: 206, headers: h });
+  }
+  if (size > 0) h.set('Content-Length', String(size));
+  if (head) drop();
+  return new Response(head || !up ? null : up.body, { status: 200, headers: h });
+}
+/* /get/<app>.apk: l'APK in streaming dal Worker, senza rimandare a GitHub. Range (206 e Content-Range) per riprendere i
+   download interrotti; If-Range: se intanto è uscita una versione nuova si riparte dall'inizio con il file intero */
+async function dlApk(req, env, e) {
+  const method = req.method === 'HEAD' ? 'HEAD' : 'GET', p = ghRelOf(e[0]), rg = rangeOf(req.headers.get('Range')), ifr = req.headers.get('If-Range');
+  const hdr = rg ? { Range: String(req.headers.get('Range')).trim(), ...(ifr ? { 'If-Range': ifr } : {}) } : null;
+  const h = new Headers();
+  h.set('Content-Type', 'application/vnd.android.package-archive');
+  h.set('Content-Disposition', `attachment; filename="${e[1]}"`);
+  h.set('Cache-Control', 'public, max-age=600');
+  h.set('Accept-Ranges', 'bytes');
+  // con il token dall'API (anche dai repository privati); se l'API non risponde si prova il link pubblico
+  if (p && ghTok(env)) {
+    const x = await ghAssetOf(env, p).catch(() => null);
+    if (x && x.a.size > 0) {
+      if (method === 'HEAD') { const lm = Date.parse(x.a.updated_at); if (lm) h.set('Last-Modified', new Date(lm).toUTCString()); return apkOut(req, h, null, rg, x.a.size); }
+      const up = await ghAssetGet(env, p, x.a, hdr || {}).catch(() => null);
+      if (up) return apkOut(req, h, up, rg, x.a.size);
+    }
+  }
+  // link pubblico, come prima: se «latest» è senza il file si serve quello della release più recente che ce l'ha
+  const getUp = async (u) => {
+    let r = null;
+    for (let n = 0; n < 2; n++) {
+      try { r = await ghFetch(u, method, 8000, hdr || undefined); if (r.status !== 429 && r.status < 500) break; } catch { r = null; }
+    }
+    return r;
+  };
+  let up = await getUp(`https://github.com/${GH_OWNER}/${e[0]}`);
+  if (up && up.status === 404) { const alt = await ghOlderAsset(env, e[0]); if (alt) up = await getUp(alt); }
+  if (up && (up.ok || up.status === 416)) return apkOut(req, h, up, rg, 0);
+  if (up && up.body) up.body.cancel().catch(() => {});
+  return new Response('App non disponibile al momento, riprova tra poco', { status: 502, headers: { 'Cache-Control': 'no-store' } });
+}
+/* /get/<id>.json: il feed dell'ultima release dell'app com'è nel file della release (per lo store ricavato dalla release),
+   con i link del pannello al posto di quelli di GitHub. In memoria 5 minuti (le app controllano spesso); se GitHub non
+   risponde resta buono l'ultimo letto (fino a 6 ore), altrimenti 502 e le app lo trattano come «nessun aggiornamento» */
+const dlFeedMem = new Map();
+async function dlFeed(env, id) {
+  const k = (ghTok(env) ? 't:' : 'p:') + id, c = dlFeedMem.get(k), TTL = 300e3;
+  if (c && now() - c.t < TTL) return c.v;
+  let v = null;
+  try { v = id === 'store' ? await dlStoreFeed(env) : await dlAppFeed(env, id); } catch { v = null; }
+  if (!v && c && c.v && now() - c.ok < 6 * 3600e3) { c.t = now() - TTL + 60e3; return c.v; }
+  dlFeedMem.set(k, { t: v ? now() : now() - TTL + 60e3, ok: v ? now() : 0, v });
+  return v;
+}
+async function dlAppFeed(env, id) {
+  const r = await relFetch(env, ghPub({ ...ghRelOf(GET_APK[id][0]), file: GET_FEED[id] }), { headers: { 'User-Agent': GH_UA }, signal: AbortSignal.timeout(6000), cf: { cacheTtl: 300, cacheEverything: true } });
+  if (!r.ok) return null;
+  const t = await r.text();
+  if (t.length > 64 * 1024) return null;
+  const j = JSON.parse(t);
+  return j && typeof j === 'object' && !Array.isArray(j) && (typeof j.version === 'string' || typeof j.version === 'number') && String(j.version) ? j : null;
+}
+/** feed dello store (le app nuove lo chiedono qui invece che all'API GitHub): versione dal tag dell'ultima release con
+ *  KairosStore.apk (v1.0.131 → 1.0.131), versionCode come nella build dello store (1.0.N → N), data della release */
+async function dlStoreFeed(env) {
+  const p = ghRelOf(GET_APK.store[0]);
+  let tag = '', date = '';
+  if (ghTok(env)) { const x = await ghAssetOf(env, p).catch(() => null); if (x) { tag = x.rel.tag_name; date = x.rel.published_at || x.rel.created_at; } }
+  if (!tag) {
+    // senza token: «latest/download/KairosStore.apk» rimanda a «download/<tag>/KairosStore.apk», il tag senza usare l'API
+    let r = null;
+    try { r = await tfetch(ghPub(p), { method: 'HEAD', redirect: 'manual', headers: { 'User-Agent': GH_UA }, cf: { cacheTtl: 300, cacheEverything: true } }, 6000); } catch {}
+    let loc = r && r.status >= 300 && r.status < 400 ? r.headers.get('Location') || '' : '';
+    if (!loc && r && r.status === 404) loc = await ghOlderAsset(env, GET_APK.store[0]); // ultima release senza l'APK
+    const m = loc.match(/\/releases\/download\/([A-Za-z0-9._-]+)\/KairosStore\.apk(?:[?#]|$)/);
+    if (m) {
+      tag = m[1];
+      // data: quella del file (Last-Modified), come nei feed delle altre app
+      try { const hr = await ghFetch(new URL(loc, 'https://github.com/').href, 'HEAD', 6000); const lm = Date.parse(hr.headers.get('Last-Modified') || ''); if (hr.ok && lm) date = new Date(lm).toISOString().replace(/\.\d{3}Z$/, 'Z'); } catch {}
+    }
+  }
+  const v = String(tag || '').replace(/^v/i, '');
+  if (!/^\d{1,4}(\.\d{1,6}){1,3}$/.test(v)) return null;
+  const n = v.match(/^1\.0\.(\d+)$/);
+  return { version: v, versionCode: n ? +n[1] : semverCode(v), url: '', date: String(date || '') };
+}
+/** nessun indirizzo GitHub e nessun nome del titolare nei feed: i link diventano quelli del pannello (/get/<id>.apk) */
+const GH_HOST_RE = /github\.com|githubusercontent\.com|github\.io/i;
+function feedLinks(f, id, origin) {
+  const who = GH_OWNER.split('-')[0], ownT = new RegExp(who, 'i'), ownG = new RegExp(who + '[A-Za-z0-9-]*', 'gi');
+  const apk = (k) => `${origin}/get/${k === 'urlArm32' && hasKey(GET_APK, id + '-arm32') ? id + '-arm32' : id}.apk`;
+  const fix = (v, k, d) => {
+    if (typeof v === 'string') {
+      if (!GH_HOST_RE.test(v) && !ownT.test(v)) return v;
+      if (/^\s*https?:\/\/\S*\s*$/i.test(v)) return apk(k); // un link (dell'APK): quello del pannello
+      return v.replace(ownG, '').replace(/(?:https?:\/\/)?[A-Za-z0-9.-]*(?:github\.com|githubusercontent\.com|github\.io)[^\s"'<>]*/gi, apk(k));
+    }
+    if (!v || typeof v !== 'object') return v;
+    if (d > 8) return null;
+    if (Array.isArray(v)) return v.slice(0, 100).map((x) => fix(x, k, d + 1));
+    const o = {}; for (const [kk, x] of Object.entries(v).slice(0, 100)) o[kk] = fix(x, kk, d + 1);
+    return o;
+  };
+  const out = fix(f, '', 0);
+  if (id === 'store') out.url = `${origin}/get/store.apk`;
+  return out;
+}
+/** link GitHub dell'APK nelle risposte alle app (/api/player/update) → link del pannello /get/<id>.apk, solo se è proprio il
+ *  file che /get/<id>.apk serve: stesso repository, file e release ([fromLatest]: il feed è quello dell'ultima release) */
+function dlApkLink(origin, id, a, fromLatest) {
+  const p = hasKey(GET_APK, id) && ghRelOf(GET_APK[id][0]), q = p && a && ghRelUrl(a.url);
+  if (!q || q.repo.toLowerCase() !== p.repo.toLowerCase() || q.file !== p.file) return a;
+  if (q.tag !== p.tag && !(p.tag === '' && fromLatest)) return a;
+  return { ...a, url: `${origin}/get/${id}.apk` };
+}
+/* pagina dello store con il token: i file di docs/ di kairos-store (ramo main) dall'API GitHub, così vale anche con il
+   repository privato (GitHub Pages è gratis solo per i pubblici). L'elenco dei file si rilegge al più ogni minuto
+   (riconvalidato con l'ETag: un 304 non consuma il limite); il contenuto di ogni file resta in memoria finché non cambia
+   (per impronta). Un file che non c'è risponde 404 senza chiedere nulla a GitHub */
+const DOC_TYPE = { html: 'text/html; charset=utf-8', json: 'application/json; charset=utf-8', webmanifest: 'application/manifest+json', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8', txt: 'text/plain; charset=utf-8', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', ico: 'image/x-icon', woff: 'font/woff', woff2: 'font/woff2' };
+const docTreePick = (j) => { if (!j || !Array.isArray(j.tree)) return null; const m = Object.create(null); for (const x of j.tree) if (x && typeof x.path === 'string' && x.path.startsWith('docs/')) m[x.path.slice(5)] = [x.type === 'tree' ? 'd' : 'f', String(x.sha || ''), +x.size || 0]; return m; };
+const docBlob = new Map(); let docBytes = 0;
+async function storeDoc(env, rel) {
+  const tree = await ghApi(env, `/repos/${GH_OWNER}/kairos-store/git/trees/main?recursive=1`, docTreePick, 60e3);
+  if (!tree) return null;
+  const x = tree[rel];
+  if (!x) return { nf: true };
+  if (x[0] === 'd') return { dir: true };
+  if (!/^[0-9a-f]{40,64}$/.test(x[1])) return null;
+  let b = docBlob.get(x[1]);
+  if (b) { docBlob.delete(x[1]); docBlob.set(x[1], b); return { b }; } // usato adesso: in fondo alla coda
+  const r = await tfetch(`${GH_API}/repos/${GH_OWNER}/kairos-store/git/blobs/${x[1]}`, { headers: { Accept: 'application/vnd.github.raw+json', Authorization: 'Bearer ' + ghTok(env), 'User-Agent': GH_UA, 'X-GitHub-Api-Version': GH_V } });
+  if (!r.ok) { if (r.body) r.body.cancel().catch(() => {}); return null; }
+  b = await r.arrayBuffer();
+  if (b.byteLength <= 2 * 1024 * 1024) {
+    docBlob.set(x[1], b); docBytes += b.byteLength;
+    while (docBytes > 24 * 1024 * 1024 || docBlob.size > 400) { const [k0, v0] = docBlob.entries().next().value; docBlob.delete(k0); docBytes -= v0.byteLength; }
+  }
+  return { b };
+}
+async function cleanLinks(req, env, url, path) {
+  const mj = path.match(/^\/get\/([a-z0-9-]{1,24})\.json$/);
+  if (mj && req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS', 'Access-Control-Max-Age': '86400' } });
+  if (req.method !== 'GET' && req.method !== 'HEAD') return new Response('Metodo non consentito', { status: 405 });
+  if (mj) {
+    if (!hasKey(GET_FEED, mj[1])) return new Response('Non trovato', { status: 404 });
+    const f = await dlFeed(env, mj[1]);
+    if (!f) return new Response('Aggiornamenti non disponibili al momento', { status: 502, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+    return new Response(req.method === 'HEAD' ? null : JSON.stringify(feedLinks(f, mj[1], url.origin)), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' } });
+  }
+  const m = path.match(/^\/get\/([a-z0-9-]{1,24})\.apk$/);
+  if (m) return hasKey(GET_APK, m[1]) ? dlApk(req, env, GET_APK[m[1]]) : new Response('Non trovato', { status: 404 });
+  if (path.startsWith('/get/')) return new Response('Non trovato', { status: 404 });
   if (path === '/store') return Response.redirect(url.origin + '/store/' + url.search, 302);
   let rel = path.slice('/store/'.length);
   if (!rel || rel.endsWith('/')) rel += 'index.html';
   if (!/^[A-Za-z0-9_./-]{1,200}$/.test(rel) || rel.includes('..')) return new Response('Non trovato', { status: 404 });
   const img = /\.(png|jpe?g|webp|gif|svg|ico|woff2?)$/i.test(rel);
+  // con il token: i file di docs/ del repository kairos-store dall'API GitHub (anche con il repository privato)
+  if (ghTok(env)) {
+    const d = await storeDoc(env, rel).catch(() => null);
+    if (d && d.dir) return Response.redirect(url.origin + '/store/' + rel + '/' + url.search, 302);
+    if (d && d.nf) return new Response('Non trovato', { status: 404 });
+    if (d && d.b) {
+      const h = new Headers();
+      h.set('Content-Type', DOC_TYPE[((rel.match(/\.([A-Za-z0-9]+)$/) || [])[1] || '').toLowerCase()] || 'application/octet-stream');
+      h.set('Content-Length', String(d.b.byteLength));
+      h.set('Cache-Control', img ? 'public, max-age=3600' : 'no-cache');
+      return new Response(req.method === 'HEAD' ? null : d.b.slice(0), { status: 200, headers: h }); // una copia: quella in memoria resta intatta
+    }
+    // GitHub non risponde: si prova GitHub Pages (finché il repository è pubblico)
+  }
   const up = await fetch(STORE_PAGES + rel + url.search, { cf: { cacheTtl: img ? 3600 : 60, cacheEverything: true } });
   if (!up.ok) return new Response(up.status === 404 ? 'Non trovato' : 'Store non disponibile al momento, riprova tra poco', { status: up.status === 404 ? 404 : 502 });
   const h = new Headers();
@@ -3362,12 +3682,12 @@ const verNum = (v) => { const m = String(v || '').match(/(\d{1,3})\.(\d{1,3})(?:
 const verBehind = (cur, latest) => { const a = verNum(cur), b = verNum(latest); return !!(a && b && a < b); };
 /** ultima versione pubblicata dell'app del cliente: tv = Kairos Pro, ktv = Kairos TV, lite, xc */
 async function latestFor(env, s, app) {
-  if (app === 'lite') { const f = await liteFeed(s); return f && f.version ? { version: f.version, versionCode: semverCode(f.version) } : null; }
-  if (app === 'prem') { const f = await premFeed(); return f ? { version: f.version, versionCode: f.versionCode } : null; }
-  if (app === 'ktv') { const f = await ktvFeed(s); return f ? { version: f.version, versionCode: f.versionCode } : null; }
-  if (app === 'xc') { const f = await xcFeed(s); return f ? { version: f.version, versionCode: f.versionCode } : null; }
-  if (app === 'plus') { const f = await plusFeed(s); return f ? { version: f.version, versionCode: f.versionCode } : null; }
-  if (app === 'nova') { const f = await novaFeed(); return f ? { version: f.version, versionCode: f.versionCode } : null; }
+  if (app === 'lite') { const f = await liteFeed(s, env); return f && f.version ? { version: f.version, versionCode: semverCode(f.version) } : null; }
+  if (app === 'prem') { const f = await premFeed(env); return f ? { version: f.version, versionCode: f.versionCode } : null; }
+  if (app === 'ktv') { const f = await ktvFeed(s, env); return f ? { version: f.version, versionCode: f.versionCode } : null; }
+  if (app === 'xc') { const f = await xcFeed(s, env); return f ? { version: f.version, versionCode: f.versionCode } : null; }
+  if (app === 'plus') { const f = await plusFeed(s, env); return f ? { version: f.version, versionCode: f.versionCode } : null; }
+  if (app === 'nova') { const f = await novaFeed(env); return f ? { version: f.version, versionCode: f.versionCode } : null; }
   if (app !== 'tv') return null; // app non riconosciuta (es. KAIROS per Fire TV Vega OS): nessun confronto con gli APK
   const a = await latestApk(env, s); return a && a.version ? { version: a.version, versionCode: a.versionCode } : null;
 }
@@ -4609,9 +4929,13 @@ async function route(req, env, ctx) {
       const who = appFrom(req, null), prem = who === 'prem', ktv = who === 'ktv' || prem, xc = who === 'xc', plus = who === 'plus', nova = who === 'nova';
       // politica degli aggiornamenti del profilo dell'app (solo le due voci pubbliche): serve a Kairos Nova, che non si registra
       const prof = rcProfiles(s)[who] || {}, policy = {}; for (const k of ['bgupd', 'force']) if (prof[k] !== undefined) policy[k] = prof[k];
+      const apk = nova ? await novaFeed(env) : plus ? await plusFeed(s, env) : xc ? await xcFeed(s, env) : prem ? await premFeed(env) : ktv ? await ktvFeed(s, env) : await latestApk(env, s);
+      // l'APK si scarica dal pannello (/get/<app>.apk), non da GitHub: le app già installate si aggiornano anche con i repository privati
+      const gid = nova ? 'nova' : plus ? 'plus' : xc ? 'xc' : prem ? 'premium' : ktv ? 'tv' : 'pro';
+      const fromLatest = prem || (plus ? (s.plusApkUrl || PLUS_APK) === PLUS_APK : xc ? (s.xcApkUrl || XC_APK) === XC_APK : ktv && (s.ktvApkUrl || KTV_APK) === KTV_APK);
       return json({
         ui: env.UI_VERSION && !ktv && !xc && !plus && !nova ? { version: env.UI_VERSION, url: '/app/index.html' } : null,
-        apk: nova ? await novaFeed() : plus ? await plusFeed(s) : xc ? await xcFeed(s) : prem ? await premFeed() : ktv ? await ktvFeed(s) : await latestApk(env, s),
+        apk: dlApkLink(url.origin, gid, apk, fromLatest),
         policy,
       }, 200, { 'Cache-Control': 'no-store' });
     }
@@ -4629,7 +4953,7 @@ async function route(req, env, ctx) {
   if (path.startsWith('/ovpn/') && req.method === 'GET') { const r = await ovpnFile(env, path, WOLF_H); if (r) return r; }
 
   /* ---------- link puliti: APK delle app e pagina dello store serviti da qui (nessun nome nel link) ---------- */
-  if (path.startsWith('/get/') || path === '/store' || path.startsWith('/store/')) return cleanLinks(req, url, path);
+  if (path.startsWith('/get/') || path === '/store' || path.startsWith('/store/')) return cleanLinks(req, env, url, path);
 
   /* ---------- config pubblica del pannello ---------- */
   if (path === '/api/public/config' && req.method === 'GET') {
@@ -4673,13 +4997,13 @@ async function route(req, env, ctx) {
 /* ---------------- app: registrazione / sync ---------------- */
 const LITE_APK = 'https://github.com/mariopiccolo8562-lang/kairos-lite/releases/latest/download/kairos-lite.apk';
 let liteMem = { t: 0, k: '', v: null };
-async function liteFeed(s) {
+async function liteFeed(s, env) {
   const apk = s.liteApkUrl || LITE_APK, url = apk.replace(/\.apk(\?.*)?$/i, '.json');
   if (liteMem.k === url && now() - liteMem.t < 10 * 60e3) return liteMem.v;
   let v = null;
   if (/^https:\/\/.+\.json$/i.test(url)) {
     try {
-      const r = await fetch(url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
+      const r = await relFetch(env, url, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(4000), cf: { cacheTtl: 300, cacheEverything: true } });
       if (r.ok) { const j = await r.json(); v = { version: String(j.version || '').replace(/^v/i, '').slice(0, 20), date: String(j.date || '').slice(0, 40), url: /^https:\/\//.test(j.url || '') ? String(j.url).slice(0, 500) : apk }; }
     } catch {}
   }
@@ -5872,7 +6196,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       ses ? env.DB.prepare('SELECT COUNT(*) AS n FROM sessions WHERE admin_id = ? AND expires > ?').bind(ses.admin_id, now()).first() : null,
       dnsList(env),
       env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first(),
-      latestApk(env, settings), apkFeed(env), liteFeed(settings), ktvFeed(settings), xcFeed(settings), plusFeed(settings),
+      latestApk(env, settings), apkFeed(env), liteFeed(settings, env), ktvFeed(settings, env), xcFeed(settings, env), plusFeed(settings, env),
       storeAppNames(env), newCounts(env), onlineCount(env), ses ? agentsAll(env) : null, presenceMap(env),
     ]);
     const rows = rowsR.results || [];
@@ -5888,7 +6212,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       ktv: { apk: settings.ktvApkUrl || KTV_APK, feed: ktvF },
       xc: { apk: settings.xcApkUrl || XC_APK, feed: xcF },
       plus: { apk: settings.plusApkUrl || PLUS_APK, feed: plusF },
-      ...(await Promise.all([premFeed(), novaFeed()]).then(([pf, nf]) => ({ prem: { apk: PREM_APK, feed: pf }, nova: { apk: NOVA_APK, feed: nf } })).catch(() => ({}))),
+      ...(await Promise.all([premFeed(env), novaFeed(env)]).then(([pf, nf]) => ({ prem: { apk: PREM_APK, feed: pf }, nova: { apk: NOVA_APK, feed: nf } })).catch(() => ({}))),
       players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: orbixDnsList(settings.playersCfg.orbix, dnslOwner), max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents, codes: settings.playersCfg.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(settings.playersCfg) },
       dlCodes: dlCodesOf(settings),
       storeOwnerCode: await sellerOwnerCode(env),
