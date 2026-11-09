@@ -3872,9 +3872,10 @@ function aiEngineOf(s, P, d, app) {
   return AI_PROVIDERS.includes(v) ? v : aiProvOf(s);
 }
 async function aiUsed(env, id) { return ((await env.DB.prepare('SELECT n FROM ai_usage WHERE day = ? AND device_id = ?').bind(utcDay(), id).first()) || { n: 0 }).n; }
-async function aiCount(env, id, f, tin = 0, tout = 0) {
-  await env.DB.prepare(`INSERT INTO ai_usage (day, device_id, n, gm, cl, cl_in, cl_out) VALUES (?, ?, 1, ?, ?, ?, ?) ON CONFLICT(day, device_id) DO UPDATE SET n = n + 1, gm = gm + excluded.gm, cl = cl + excluded.cl, cl_in = cl_in + excluded.cl_in, cl_out = cl_out + excluded.cl_out`)
-    .bind(utcDay(), id, f === 'gm' ? 1 : 0, f === 'claude' ? 1 : 0, tin, tout).run();
+/** consumo della risposta (Gemini/Claude e token) sul giorno della domanda: la domanda è già contata quando si prenota */
+async function aiCount(env, id, f, tin = 0, tout = 0, day = utcDay()) {
+  await env.DB.prepare(`INSERT INTO ai_usage (day, device_id, n, gm, cl, cl_in, cl_out) VALUES (?, ?, 0, ?, ?, ?, ?) ON CONFLICT(day, device_id) DO UPDATE SET gm = gm + excluded.gm, cl = cl + excluded.cl, cl_in = cl_in + excluded.cl_in, cl_out = cl_out + excluded.cl_out`)
+    .bind(day, id, f === 'gm' ? 1 : 0, f === 'claude' ? 1 : 0, tin, tout).run();
 }
 /** primo oggetto JSON nel testo dell'IA (anche dentro ```json … ``` o con una virgola di troppo); null se non c'è */
 function aiJson(t) {
@@ -3932,7 +3933,7 @@ async function playerAi(req, env, ip, ctx) {
   const [P] = await activeAccount(env, d);
   if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
   if (permsParse(P.perms).ai === false) return json({ error: 'Assistente non attivo su questo abbonamento' }, 403);
-  const set = await getSettings(env), limit = aiLimitOf(P, set), used = await aiUsed(env, P.id);
+  const set = await getSettings(env), limit = aiLimitOf(P, set);
   if (limit === 0 && !(+P.ai_extra > 0)) return json({ error: 'Assistente non attivo su questo abbonamento' }, 403);
   const eng = aiEngineOf(set, P, d, appFrom(req, b) || appOfVer('', d.app));
   if (eng === 'off') return json({ off: true }); // spento dal Controllo remoto (profilo dell'app)
@@ -3961,14 +3962,20 @@ async function playerAi(req, env, ip, ctx) {
       if (v2) o = { system: AI_SYS_ASK, json: true, max: 500, ms: 15000 };
     }
   }
+  // la domanda si prenota subito con un contatore atomico (prima si leggeva il conteggio e si aggiungeva 1 solo dopo la
+  // risposta: tante richieste insieme superavano tutte il limite del giorno). Oltre il limite serve una domanda extra;
+  // se l'IA non risponde la prenotazione (e l'extra) tornano indietro
+  const day = utcDay();
+  const n = +((await env.DB.prepare('INSERT INTO ai_usage (day, device_id, n) VALUES (?, ?, 1) ON CONFLICT(day, device_id) DO UPDATE SET n = n + 1 RETURNING n').bind(day, P.id).first()) || { n: 1 }).n;
+  const unbook = () => env.DB.prepare('UPDATE ai_usage SET n = MAX(n - 1, 0) WHERE day = ? AND device_id = ?').bind(day, P.id).run();
   let extra = false;
-  if (used >= limit) {
+  if (n > limit) {
     const r = await env.DB.prepare('UPDATE devices SET ai_extra = ai_extra - 1 WHERE id = ? AND ai_extra > 0').bind(P.id).run();
-    if (!r.meta || r.meta.changes !== 1) return json({ error: `Hai usato le ${limit} domande di oggi: riprendono domani.`, limit: true, used, max: limit }, 429);
+    if (!r.meta || r.meta.changes !== 1) { await unbook(); return json({ error: `Hai usato le ${limit} domande di oggi: riprendono domani.`, limit: true, used: n - 1, max: limit }, 429); }
     extra = true;
   }
-  const back = () => (extra ? env.DB.prepare('UPDATE devices SET ai_extra = ai_extra + 1 WHERE id = ?').bind(P.id).run() : null);
-  const left = () => Math.max(0, limit - used - 1) + Math.max(0, +P.ai_extra - (extra ? 1 : 0));
+  const back = async () => { await unbook(); if (extra) await env.DB.prepare('UPDATE devices SET ai_extra = ai_extra + 1 WHERE id = ?').bind(P.id).run(); };
+  const left = () => Math.max(0, limit - n) + Math.max(0, +P.ai_extra - (extra ? 1 : 0));
   // risposta dell'IA → quello che serve alla app (criteri, proposte o risposta con i titoli da cercare nella libreria)
   const shape = (answer) => {
     if (mode === 'search') { const j = aiJson(answer); return { find: aiFindClean(j), label: j ? nameClean(j.label, 60) : '' }; }
@@ -3988,7 +3995,7 @@ async function playerAi(req, env, ip, ctx) {
     if (!m && /^\s*[{[]/.test(t)) t = '';
     return { answer: t.trim().slice(0, 1200) || 'Non ho una risposta per questa domanda.', titles: [], find: null };
   };
-  const ok = (answer, f, tin, tout) => { ctx.waitUntil(aiCount(env, P.id, f, tin, tout)); return json({ ...shape(answer), left: left(), by: AI_NAMES[f] }); };
+  const ok = (answer, f, tin, tout) => { ctx.waitUntil(aiCount(env, P.id, f, tin, tout, day)); return json({ ...shape(answer), left: left(), by: AI_NAMES[f] }); };
   for (const prov of [eng, ...AI_PROVIDERS.filter((x) => x !== eng)]) {
     if (prov === 'claude' && env.ANTHROPIC_API_KEY) {
       let r = null;
