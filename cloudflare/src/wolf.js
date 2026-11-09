@@ -544,7 +544,12 @@ async function routes(req, env, path, who, ip, H, ag) {
         const allIds = new Set(availableBouquets.all.map((x) => x.id));
         if ([...selected].some((v) => !allIds.has(v))) throw new HttpErr(400, 'Uno o più bouquet non sono disponibili per questa linea');
         selectedBouquets = availableBouquets.all.filter((x) => selected.has(x.id));
-        currentBouquets = selectedBouquets.map((x) => x.id).join(',');
+        const currentSet = new Set(availableBouquets.current);
+        const ordered = [
+          ...availableBouquets.current.filter((v) => selected.has(v)),
+          ...availableBouquets.all.map((x) => x.id).filter((v) => selected.has(v) && !currentSet.has(v)),
+        ];
+        currentBouquets = ordered.join(',');
       } else currentBouquets = bqOf(page, H);
       await wfJson(env, H, cfg, `/lines/edit/${id}`, { _token: tokenOf(page), current_bouquets: currentBouquets, username, password, owner: '', description });
       const lines = await fetchMine(true);

@@ -446,8 +446,10 @@
         if (!(await prompt)) return;
         const payload = { username: $('#weU').value, password: $('#weP').value, note: $('#weN').value };
         if (hasBouquets) {
-          payload.bouquets = [...$('#weBqList').querySelectorAll('[data-bq-id]:checked')].map((c) => +c.dataset.bqId);
-          if (!payload.bouquets.length) return toast('Seleziona almeno un bouquet', 1);
+          const selectedBouquets = [...$('#weBqList').querySelectorAll('[data-bq-id]:checked')].map((c) => +c.dataset.bqId);
+          if (!selectedBouquets.length) return toast('Seleziona almeno un bouquet', 1);
+          const current = new Set(bouquetData.current.map(Number)), selected = new Set(selectedBouquets);
+          if (current.size !== selected.size || [...current].some((id) => !selected.has(id))) payload.bouquets = selectedBouquets;
         }
         const r = await api('PUT', '/admin/wolf/lines/' + id, payload);
         toast('Linea modificata su WOLF' + (r.synced ? ' · playlist del cliente aggiornata' : '')); return loadLines(true);

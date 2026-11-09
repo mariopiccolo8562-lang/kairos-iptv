@@ -302,7 +302,7 @@ const mkArmadaLike = (cfg) => {
       Q('#abF').innerHTML = `Durata: <b>${duration}</b> · Totale: <b>${S.length} rinnovi</b> · ${funds}`;
     };
     Q('#abS').onchange = updateFooter; updateFooter();
-    if (!ok) return;
+    if (!(await pr)) return;
     const sub = +Q('#abS').value;
     const result = await KXTools.runReport(S, async (x) => {
       const r = await api('POST', API + '/renew', x.mac && !x.username ? { type: 'mag', mac: x.mac, sub } : { type: 'm3u', username: x.username, password: x.password, sub });
