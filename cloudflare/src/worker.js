@@ -3311,7 +3311,10 @@ async function playerHeartbeat(req, env, ip, ctx) {
     if (b.kickAck && +b.kickAck === +d.kick_t) await env.DB.prepare('UPDATE devices SET kick_t = 0 WHERE id = ? AND kick_t = ?').bind(d.id, +d.kick_t).run();
     else if (t - +d.kick_t < 180e3) kick = +d.kick_t;
   }
-  const S0 = await setP, mt = maintFor(S0, P) ? 1 : 0;
+  // mt = 1: l'app rilegge subito lo stato (register) e si ferma. Vale per la manutenzione e anche per l'abbonamento non più attivo
+  // (scaduto, disattivato, scollegato): prima il battito non lo diceva e l'app continuava fino alla rilettura dei 20 minuti
+  // (Kairos Pro durante la visione anche oltre). Tutte le app con il battito reagiscono già a mt rileggendo lo stato
+  const S0 = await setP, mt = !P || maintFor(S0, P) ? 1 : 0;
   // «Invia aggiornamento» dal pannello (o in automatico se l'app è vecchia e il titolare l'ha scelto): l'app controlla subito
   let upd = +d.upd_req || 0;
   if (!upd && S0.health && S0.health.on && S0.health.autoUpd) {
