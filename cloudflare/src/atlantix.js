@@ -76,6 +76,10 @@ async function ax(env, H, path, o = {}) {
     let jar = await loadJar(env, H);
     if (!Object.keys(jar).length) jar = await login(env, H, c);
     const r = await raw(H, jar, path, o.html ? {} : { ajax: true, ...o });
+    if ((r.status === 301 || r.status === 308) && r.loc && !/login/.test(r.loc)) {
+      const u = new URL(r.loc, URL0);
+      if (u.origin === URL0) Object.assign(r, await raw(H, jar, u.pathname + u.search, o.html ? {} : { ajax: true, ...o }));
+    }
     const gone = r.status === 401 || (r.j && r.j.data && r.j.data.redirect === 'login') || (r.status >= 300 && r.status < 400 && /login/.test(r.loc));
     if (gone) { mem.jar = {}; await saveJar(env, H, {}); if (i === 0) continue; throw new H.HttpErr(502, 'Atlantix ha chiuso la sessione: riprova'); }
     await saveJar(env, H, jar);
@@ -111,9 +115,9 @@ function parseForm(f) {
   walk(f, '');
   return out;
 }
-/** campi del modulo «Crea linea» di Atlantix (lines_users.php → #createLineForm), così KAIROS mostra le stesse opzioni */
+/** campi del modulo «Crea linea» di Atlantix (lines_users → #createLineForm), così KAIROS mostra le stesse opzioni */
 async function createForm(env, H) {
-  const page = await ax(env, H, '/lines_users.php', { html: true }), h = page.txt;
+  const page = await ax(env, H, '/lines_users', { html: true }), h = page.txt;
   const f = (h.match(/<form\b[^>]*id="createLineForm"[^>]*>([\s\S]*?)<\/form>/i) || [])[1];
   if (!f) throw new H.HttpErr(502, `Atlantix (${page.status}): ${txtOf(h).slice(0, 200) || 'Non trovo il modulo «Crea linea»'}`);
   return parseForm(f);
