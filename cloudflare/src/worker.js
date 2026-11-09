@@ -4672,7 +4672,9 @@ async function playerRegister(req, env, ip, ctx) {
     }
   } else if (!d.secret_hash) {
     // dispositivo creato dal pannello: il primo che si presenta col codice lo "lega" al proprio segreto
-    await env.DB.prepare('UPDATE devices SET secret_hash = ? WHERE id = ? AND secret_hash = ?').bind(sh, d.id, '').run();
+    const bound = await env.DB.prepare('UPDATE devices SET secret_hash = ? WHERE id = ? AND secret_hash = ?').bind(sh, d.id, '').run();
+    // due app con lo stesso codice nello stesso istante: vince la prima, l'altra non riceve playlist né VPN
+    if (!+((bound && bound.meta && bound.meta.changes) || 0)) { const cur = await env.DB.prepare('SELECT secret_hash FROM devices WHERE id = ?').bind(d.id).first(); if (!cur || !safeEq(cur.secret_hash || '', sh)) return json({ status: 'locked' }, 403); }
     d.secret_hash = sh;
     ctx.waitUntil(log(env, 'edit', `Dispositivo collegato: ${d.name || code}`, ip));
   } else if (!safeEq(d.secret_hash, sh)) {
