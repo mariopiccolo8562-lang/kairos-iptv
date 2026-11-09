@@ -13,7 +13,8 @@ import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide, storeAgent
 import { wolfRoutes, wolfCron, sockFetch, wolfCfg } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
 import { atxRoutes } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz), solo titolare
 import { oraRoutes } from './orapanel.js';
-import { orcpRoutes, orcpAgentConfig, setOrcpDownloader, ovpnFile } from './orcp.js'; // Pannello ORCP (cp.ottrun.com): l'app brandizzata OTTRUN, accesso passato dal titolare
+import { orcpRoutes, orcpAgentConfig, setOrcpDownloader, ovpnFile, orcpRemoteHosts } from './orcp.js'; // Pannello ORCP (cp.ottrun.com): l'app brandizzata OTTRUN, accesso passato dal titolare
+import { vpnMark as vpnMarkRows } from './vpn-mark.js';
 import { extRoutes } from './extpanels.js'; // Pannelli Realott e SLT (accesso diretto senza API), solo titolare // Pannello ORA (panel.oraplayers.com), accesso passato dal titolare
 import { orbixFetch, orbixOutageMessage, oxpRoutes } from './orbixpanel.js'; // playlist OrbixPlay gestite da KAIROS (sezione «Pannello OrbixPlay»)
 import { mxpRoutes } from './mxpanel.js'; // account MaxPlayer gestiti da KAIROS (sezione «Pannello MaxPlayer»)
@@ -97,7 +98,7 @@ async function readJSON(req, max = 64 * 1024) {
 }
 class HttpErr extends Error { constructor(status, msg, extra) { super(msg); this.status = status; this.extra = extra; } }
 // strumenti passati al modulo WOLF (src/wolf.js)
-const WOLF_H = { seal: (...a) => seal(...a), unseal: (...a) => unseal(...a), HttpErr, json, readJSON, str, log: (...a) => log(...a), note: (...a) => llNote(...a), pid: () => b64url(rand(6)), plsChanged: () => { srcMem.map = null; } };
+const WOLF_H = { seal: (...a) => seal(...a), unseal: (...a) => unseal(...a), HttpErr, json, readJSON, str, log: (...a) => log(...a), note: (...a) => llNote(...a), pid: () => b64url(rand(6)), vpnMark: (env, rows, fields) => vpnMark(env, rows, fields, WOLF_H), plsChanged: () => { srcMem.map = null; } };
 const AGM_MSG = 'Pannello in manutenzione: torniamo operativi a breve. Riprova tra poco.';
 
 /* ---------------- password (PBKDF2-SHA256) ---------------- */
@@ -2638,10 +2639,14 @@ async function wgGlobal(env) {
   return r ? unsealText(env, r.v) : '';
 }
 /** località VPN: più server WireGuard salvati cifrati, scelti dal pannello per ogni cliente (l'app non le mostra) */
-async function wgLocs(env) {
+async function wgLocs(env, H) {
   const r = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('wgl').first();
-  const v = r ? await unseal(env, r.v).catch(() => []) : [];
+  const read = H && H.unseal ? H.unseal : unseal;
+  const v = r ? await read(env, r.v).catch(() => []) : [];
   return Array.isArray(v) ? v.filter((x) => x && typeof x.id === 'string' && typeof x.conf === 'string') : [];
+}
+async function vpnMark(env, rows, fields, H) {
+  return vpnMarkRows(env, rows, fields, H, { wgLocs: (e, helper) => wgLocs(e, helper), orcpRemoteHosts });
 }
 async function vpnOf(env, P, me) {
   const lvl = +P.vpn || 0, mode = lvl === 2 ? 'force' : lvl === 1 ? 'allow' : 'off';

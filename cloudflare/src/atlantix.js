@@ -7,6 +7,13 @@ const URL0 = 'https://cms.axdash.biz';
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const K = 'atx';
 const mem = { jar: null };
+async function markConnData(env, data, H) {
+  if (!H.vpnMark) return data;
+  if (Array.isArray(data)) return H.vpnMark(env, data, { ip: (r) => r.user_ip || r.ip, isp: (r) => r.isp });
+  if (!data || typeof data !== 'object') return data;
+  const key = ['rows', 'items', 'connections', 'users', 'list', 'data'].find((k) => Array.isArray(data[k]));
+  return key ? { ...data, [key]: await H.vpnMark(env, data[key], { ip: (r) => r.user_ip || r.ip, isp: (r) => r.isp }) } : data;
+}
 const setRow = (env, k, v) => env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(k, v).run();
 const getRow = async (env, k) => ((await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(k).first()) || {}).v || '';
 const cookieHeader = (jar) => Object.entries(jar || {}).map(([k, v]) => `${k}=${v}`).join('; ');
@@ -132,9 +139,9 @@ export async function atxRoutes(req, env, path, who, ip, H) {
     for (let pg = 2; pg <= pages; pg++) { const d = await P(pg); rows.push(...(d.rows || d.items || d.lines || d.users || d.list || d.data || [])); }
     return json({ ...first, rows, items: undefined, lines: undefined, users: undefined, list: undefined, data: undefined, pages: 1, page: 1, partial: +first.pages > 12 });
   }
-  if (path === '/atx/line/conns' && m === 'GET') return json((await ax(env, H, '/api/lines/connections.php?' + qs({ user_id: n('id') }))).data || {});
+  if (path === '/atx/line/conns' && m === 'GET') return json(await markConnData(env, (await ax(env, H, '/api/lines/connections.php?' + qs({ user_id: n('id') }))).data || {}, H));
   if (path === '/atx/subs' && m === 'GET') return json((await ax(env, H, '/api/subresellers/list.php?' + qs({ page, per_page: 50, q, owner: '', status: '' }))).data || {});
-  if (path === '/atx/conns' && m === 'GET') return json((await ax(env, H, '/api/connections/list.php?' + qs({ reseller_id: '' }))).data || {});
+  if (path === '/atx/conns' && m === 'GET') return json(await markConnData(env, (await ax(env, H, '/api/connections/list.php?' + qs({ reseller_id: '' }))).data || {}, H));
   if (path === '/atx/createform' && m === 'GET') return json({ fields: (await createForm(env, H)).filter((f) => f.type !== 'hidden') });
   if (path === '/atx/lines/create' && m === 'POST') {
     const b = await H.readJSON(req, 16384), v = (b && b.fields) || {}, form = {};

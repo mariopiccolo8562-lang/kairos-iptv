@@ -50,7 +50,7 @@
     }).join('') || '<p class="mut" style="margin:14px 0">Niente da mostrare.</p>';
   }
   const subsCards = (k, rows) => rows.map((r, i) => card(`<div><b style="font-size:15px">${esc(r.username)}</b>${r.owner ? `<div class="mut" style="font-size:12.5px">sotto ${esc(r.owner)}</div>` : ''}</div><div>${r.enabled ? badge(r.status || 'Attivo', '#2ecc71') : badge(r.status || 'Disattivato', '#9aa4b2')}</div>`, [r.type ? KV('Tipo', esc(r.type)) : '', KV('Crediti', esc(String(r.credits ?? '—'))), KV('Linee', esc(String(r.lines ?? '—')))].filter(Boolean), k === 'ro' ? btn('stog', i, r.enabled ? 'Disattiva' : 'Riattiva') : '')).join('') || '<p class="mut" style="margin:14px 0">Niente da mostrare.</p>';
-  const connsCards = (rows) => rows.map((r) => card(`<div><b style="font-size:15px">${esc(r.username)}</b><div style="font-size:13px;margin-top:2px">${esc(r.stream || '—')}</div></div>`, [KV('IP', esc(r.ip || '—')), r.info ? KV('Info', esc(r.info)) : ''].filter(Boolean), '')).join('') || '<p class="mut" style="margin:14px 0">Nessuno collegato adesso.</p>';
+  const connsCards = (rows) => rows.map((r) => card(`<div><b style="font-size:15px">${esc(r.username)}</b><div style="font-size:13px;margin-top:2px">${esc(r.stream || '—')}</div></div>`, [KV('IP', window.KXVpn ? KXVpn.ip(r.ip, r.vpn) : esc(r.ip || '—')), r.info ? KV('Info', esc(r.info)) : ''].filter(Boolean), '')).join('') || '<p class="mut" style="margin:14px 0">Nessuno collegato adesso.</p>';
   function linesHtml(k, rows, dns) {
     if (narrow()) return linesCards(k, rows, dns);
     const all = ST[k].data.rows;
@@ -64,7 +64,7 @@
     }));
   }
   const subsHtml = (k, rows) => narrow() ? subsCards(k, rows) : grid(['Utente', 'Superiore', 'Tipo', 'Crediti', 'Linee', 'Stato', ''], rows.map((r, i) => tr([`<b>${esc(r.username)}</b>`, esc(r.owner || '—'), esc(r.type || '—'), esc(String(r.credits ?? '—')), esc(String(r.lines ?? '—')), r.enabled ? badge(r.status || 'Attivo', '#2ecc71') : badge(r.status || 'Disattivato', '#9aa4b2'), k === 'ro' ? btn('stog', i, r.enabled ? 'Disattiva' : 'Riattiva') : ''])));
-  const connsHtml = (rows) => narrow() ? connsCards(rows) : grid(['Utente', 'Canale', 'IP', 'Info'], rows.map((r) => tr([`<b>${esc(r.username)}</b>`, esc(r.stream || '—'), esc(r.ip || '—'), esc(r.info || '—')])));
+  const connsHtml = (rows) => `${window.KXVpn ? KXVpn.counter(rows) : ''}${narrow() ? connsCards(rows) : grid(['Utente', 'Canale', 'IP', 'Info'], rows.map((r) => tr([`<b>${esc(r.username)}</b>`, esc(r.stream || '—'), window.KXVpn ? KXVpn.ip(r.ip, r.vpn) : esc(r.ip || '—'), esc(r.info || '—')])))}`;
   /* riquadri in testa: se la lista linee è caricata i numeri (attive, in scadenza, scadute, disattivate, online) li calcola KAIROS dalle linee
      e un clic sul riquadro filtra la lista; altrimenti usa quelli della panoramica del pannello (Realott non dà scadute né online) */
   const overviewHtml = (d, m, rows) => {

@@ -11,9 +11,11 @@
 .on-st{font-size:12px;font-weight:700;white-space:nowrap}.on-st.g{color:#4ade80}.on-st.r{color:#f87171}.on-st.n{color:var(--mut)}
 .cn-k{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:12px}.cn-k div{background:#ffffff08;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
 .cn-k b{display:block;font-size:26px;font-weight:800}.cn-k small{color:var(--mut);font-size:12px}
-.cn-row{display:grid;grid-template-columns:230px 110px minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.2fr);gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);font-size:13px}
+.cn-row{display:grid;grid-template-columns:230px minmax(160px,180px) minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.2fr);gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);font-size:13px}
 .cn-row .k{font-size:11px;color:var(--mut);display:block}.cn-row .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media (max-width:900px){.cn-row{grid-template-columns:1fr 1fr}.cn-k{grid-template-columns:1fr}}`;
+.cn-row>div{min-width:0;max-width:100%}
+.cn-panel-cell{display:flex;flex-direction:column;gap:4px;align-items:flex-start;min-width:0;max-width:100%;overflow:hidden}
+@media (max-width:900px){.cn-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.cn-k{grid-template-columns:1fr}}`;
   document.head.appendChild(css);
 
   /* ---------- stato delle linee (cache 90 s) ---------- */
@@ -108,8 +110,8 @@
         // ORCP tiene una scheda per ogni installazione dell'app (reinstallata, aggiornata, dati cancellati) e lascia «online» anche
         // quelle vecchie: lo stesso dispositivo (stesso ID, oppure stesso modello sulla stessa rete) si conta una volta sola.
         const by = new Map(), seen = new Map();
-        for (const x of d.list || []) { const k = String(x.user || '').toLowerCase(); if (!k) continue; const r = by.get(k) || { p: 'MirkoTeam', u: x.user, n: '', v: { on: false, conns: 0 }, en: true, last: '' };
-          if (x.online) { r.v.on = true; const sn = seen.get(k) || new Set(), ids = orcpIds(x); if (!ids.length || !ids.some((i) => sn.has(i))) r.v.conns++; ids.forEach((i) => sn.add(i)); seen.set(k, sn); }
+        for (const x of d.list || []) { const k = String(x.user || '').toLowerCase(); if (!k) continue; const r = by.get(k) || { p: 'MirkoTeam', u: x.user, n: '', v: { on: false, conns: 0 }, en: true, last: '', vpn: '' };
+          if (x.online) { r.v.on = true; const rank = { prob: 1, app: 2, kairos: 2 }; if ((rank[x.vpn] || 0) > (rank[r.vpn] || 0)) r.vpn = x.vpn; const sn = seen.get(k) || new Set(), ids = orcpIds(x); if (!ids.length || !ids.some((i) => sn.has(i))) r.v.conns++; ids.forEach((i) => sn.add(i)); seen.set(k, sn); }
           const tag = [x.device, x.version && 'v' + x.version].filter(Boolean).join(' · '); if (x.online || !r.n) r.n = tag; if (x.last > r.last) r.last = x.last; by.set(k, r); }
         for (const r of by.values()) rows.push(r); })().catch(err('MirkoTeam')),
       canP('armada') && (async () => { const st = await api('GET', '/admin/armada/state'); if (!st.connected) return; const d = await api('GET', '/admin/armada/lines');
@@ -161,14 +163,14 @@
         <button class="btn sm" id="cnRe">${S.busy ? 'Carico…' : 'Aggiorna'}</button></div>
       <div class="cn-k"><div><small><i class="on-dot g"></i>Collegati</small><b style="color:#4ade80">${n('on')}</b></div><div><small><i class="on-dot r"></i>Scollegati</small><b style="color:#f87171">${n('off')}</b></div><div data-multi style="cursor:pointer" title="Linee aperte su più dispositivi nello stesso momento"><small><i class="on-dot o"></i>Con più connessioni</small><b style="color:#fbbf24">${nMulti}</b>${rows.some((r) => multi(r) && r.kick && !KICKED.has(r.kick)) ? `<button class="btn sm" id="cnKickAll" style="margin-top:6px;color:#ff8f8f" title="Chiude le connessioni aperte di tutte le linee con più connessioni (solo quelle su WOLF)">Disconnetti tutte</button>` : ''}</div><div><small><i class="on-dot"></i>Non verificabili${n('wait') ? ' · ' + n('wait') + ' in verifica' : ''}</small><b style="color:var(--mut)">${n('na')}</b></div></div>
       ${S.errs.length ? `<p style="color:#ff8f8f;margin:10px 0 0;font-size:12.5px">${S.errs.map(esc).join('<br>')}</p>` : ''}</div>
-      <div class="card glass" style="margin-top:14px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <div class="card glass" style="margin-top:14px"><div class="cn-filter-row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input class="inp" id="cnQ" placeholder="Cerca utente, cliente o canale" value="${esc(S.q)}" style="max-width:280px;margin:0">
         <select class="inp" id="cnF" style="width:auto;margin:0">${FL.map(([k, t]) => `<option value="${k}"${S.f === k ? ' selected' : ''}>${t}</option>`).join('')}</select>
         <select class="inp" id="cnP" style="width:auto;margin:0"><option value="">Tutti i pannelli</option>${panels.map((p) => `<option${S.p === p ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select>
-        <span class="mut" style="font-size:12.5px">${list.length} linee</span></div>
+        <span class="mut" style="font-size:12.5px">${list.length} linee</span>${window.KXVpn ? KXVpn.counter(list) : ''}</div>
       <div style="margin-top:8px">${!S.rows ? `<p class="mut">${S.busy ? 'Carico le linee dai pannelli…' : 'Nessun dato'}</p>` : !rows.length ? '<p class="mut">Nessun pannello collegato con linee da controllare.</p>' : shown.map((r) => `<div class="cn-row">
         <div>${r.kick && KICKED.has(r.kick) ? '<span class="mut">Disconnessa</span>' : r.v ? dot(r.v) : r.k ? `<span class="kx-on" data-on="${esc(r.k)}">${dot(window.KXOnline.get(r.k))}</span>` : dot(null)}${r.kick && !KICKED.has(r.kick) && stOf(r) === 'on' ? `<button class="btn sm" data-kick="${esc(r.u)}" style="margin-top:4px;color:#ff8f8f" title="${r.p === 'WOLF' ? 'Chiude le connessioni aperte di questa linea su WOLF' : 'La linea ' + esc(r.u) + ' è anche su WOLF: chiude lì le connessioni aperte'}">Disconnetti</button>` : ''}</div>
-        <div><span class="wf-tag g">${esc(r.p)}</span>${r.mx ? `<small class="mut" style="display:block;font-size:11px">max ${+r.mx} conn.</small>` : ''}${r.en === false ? '<span class="wf-tag b">Disattivata</span>' : ''}</div>
+        <div class="cn-panel-cell"><span class="wf-tag g">${esc(r.p)}</span>${r.p === 'MirkoTeam' && window.KXVpn ? KXVpn.tag(r.vpn) : ''}${r.mx ? `<small class="mut" style="font-size:11px">max ${+r.mx} conn.</small>` : ''}${r.en === false ? '<span class="wf-tag b">Disattivata</span>' : ''}</div>
         <div><span class="k">Utente</span><b class="mono">${esc(r.u) || '—'}</b></div>
         <div><span class="k">Cliente / nota</span><div class="mono">${esc(r.n) || '<span class="mut">—</span>'}</div></div>
         <div><span class="k">Sta guardando</span><div class="mono">${r.w ? '▶ ' + esc(r.w) : `<span class="mut" title="${r.p === 'WOLF' ? 'Nessun canale aperto in questo momento' : 'Il pannello ' + esc(r.p) + ' non dice quale canale è aperto: lo mostro solo se la stessa linea è anche su WOLF'}">—</span>`}${r.p === 'MirkoTeam' && r.last && !(r.v && r.v.on) ? `<small class="mut" style="display:block;font-size:11px">ultimo accesso ${esc(r.last)}</small>` : ''}</div></div></div>`).join('')}</div>

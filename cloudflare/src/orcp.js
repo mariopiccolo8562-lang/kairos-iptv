@@ -146,7 +146,8 @@ const devOf = (agent) => { const m = String(agent || '').match(/Android\s*([\d.]
 async function connections(env, H) {
   const r = await orcp(env, H, '/getallconnectionsforajax', { ajax: true, ref: '/connectionsdetails' });
   const list = Array.isArray(r.j) ? r.j : r.j && typeof r.j === 'object' ? Object.values(r.j).filter((x) => x && typeof x === 'object' && 'userid' in x) : [];
-  return list.map((x) => ({ id: String(x.id ?? ''), user: String(x.userid ?? '').slice(0, 120), app: String(x.appname ?? '').slice(0, 40), online: /^(yes|1|true)$/i.test(String(x.online ?? '')), last: String(x.time_last_online ?? '').slice(0, 19), ip: String(x.ip ?? '').slice(0, 64), device: devOf(x.agent), version: String(x.version ?? '').slice(0, 40), did: String(x.did ?? '').slice(0, 120) }));
+  const rows = list.map((x) => ({ id: String(x.id ?? ''), user: String(x.userid ?? '').slice(0, 120), app: String(x.appname ?? '').slice(0, 40), online: /^(yes|1|true)$/i.test(String(x.online ?? '')), last: String(x.time_last_online ?? '').slice(0, 19), ip: String(x.ip ?? '').slice(0, 64), device: devOf(x.agent), version: String(x.version ?? '').slice(0, 40), did: String(x.did ?? '').slice(0, 120) }));
+  return H.vpnMark ? H.vpnMark(env, rows, { ip: (x) => x.ip, isp: () => '' }) : rows;
 }
 /* ORCP è lento (connessioni ~20 s, versioni ~10 s): le versioni restano in cache 6 ore, le connessioni 60 secondi */
 async function versions(env, H) {
@@ -197,6 +198,20 @@ async function vpnList(env, H) {
   let countries = [];
   if (addPath) { const a = await orcp(env, H, addPath); countries = selectOpts(a.txt, 'vpn_country').filter((o) => o.v); }
   return { list, countries, addPath };
+}
+export async function orcpRemoteHosts(env, H) {
+  const r = await env.DB.prepare('SELECT v FROM settings WHERE k LIKE ?').bind(KV + '%').all();
+  const hosts = new Set();
+  for (const row of (r && (r.results || r.rows)) || []) {
+    try {
+      const value = await H.unseal(env, row.v), profile = typeof value === 'string' ? JSON.parse(value) : value;
+      for (const match of String(profile && profile.text || '').matchAll(/^\s*remote\s+(\S+)/gim)) {
+        const host = match[1].replace(/^\[|\]$/g, '').trim().toLowerCase();
+        if (host) hosts.add(host);
+      }
+    } catch {}
+  }
+  return [...hosts];
 }
 async function vpnOne(env, H, id) {
   const ed = await editForm(env, H, '/vpn', '/editvpn', 'id', id);
@@ -258,7 +273,12 @@ export async function orcpRoutes(req, env, path, who, ip, H, ctx) {
       let c = mem.conns;
       if (!c || fresh) c = await pull();
       else if (Date.now() - c.at > 60e3 && !mem.pulling) { mem.pulling = pull().catch(() => {}).then(() => { mem.pulling = null; }); if (ctx && ctx.waitUntil) ctx.waitUntil(mem.pulling); }
-      return json({ list: c.list, online: c.list.filter((x) => x.online).length, versions: c.vers, at: c.at, stale: Date.now() - c.at > 60e3 });
+      let list = c.list;
+      if (H.vpnMark && list.some((x) => !Object.prototype.hasOwnProperty.call(x, 'vpn'))) {
+        list = await H.vpnMark(env, list, { ip: (x) => x.ip, isp: () => '' });
+        c = { ...c, list }; mem.conns = c; await setRow(env, KCONNS, JSON.stringify(c)).catch(() => {});
+      }
+      return json({ list, online: list.filter((x) => x.online).length, versions: c.vers, at: c.at, stale: Date.now() - c.at > 60e3 });
     }
     if (w === 'portals') { const p = await portals(env, H); const s = await loadSes(env, H); if (s) { s.servers = p.list.filter((x) => x.name || x.url).map((x) => x.name || x.url); await saveSes(env, H, s).catch(() => {}); } return json(p); }
     if (w === 'messages') return json({ list: await messages(env, H) });

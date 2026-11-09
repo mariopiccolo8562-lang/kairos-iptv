@@ -59,11 +59,11 @@
   }
   function connsHtml(rows) {
     if (!rows.length) return '<p class="mut" style="margin:14px 0">Nessuno collegato in questo momento.</p>';
-    return grid(['Utente', 'Canale', 'IP', 'Luogo', 'Provider', 'Reseller', 'Da', 'Dispositivo', ''], rows.map((c, i) => tr([
-      `<b>${esc(c.username || '')}</b>`, c.channel ? esc(c.channel) : mut, esc(c.user_ip || c.ip || ''), esc([c.city, c.geoip_country_code].filter(Boolean).join(', ')) || mut,
+    return `${window.KXVpn ? KXVpn.counter(rows) : ''}${grid(['Utente', 'Canale', 'IP', 'Luogo', 'Provider', 'Reseller', 'Da', 'Dispositivo', ''], rows.map((c, i) => tr([
+      `<b>${esc(c.username || '')}</b>`, c.channel ? esc(c.channel) : mut, window.KXVpn ? KXVpn.ip(c.user_ip || c.ip, c.vpn) : esc(c.user_ip || c.ip || ''), esc([c.city, c.geoip_country_code].filter(Boolean).join(', ')) || mut,
       c.isp ? esc(c.isp) : mut, c.owner_username ? esc(c.owner_username) : mut, dur(c.total_seconds),
       `<span class="mut" style="font-size:11.5px">${esc(String(c.user_agent || '').slice(0, 40))}</span>`, c.activity_id ? btn('kill', i, 'Disconnetti') : ''
-    ])));
+    ])))}`;
   }
   function overviewHtml(d, m) {
     const mem = d.member || {}, st = d.stats || {};
@@ -166,7 +166,7 @@
         const line = { p: 'atx', tag: 'ATLANTIX', username: r.username, password: r.password, exp: r.exp_date || r.exp, note: r.notes || r.note };
         return window.KXOpenLineTarget ? window.KXOpenLineTarget(target, line, pre) : target === 'max' ? KXMxpNew(pre) : KXOxpNew(pre);
       }
-      if (a === 'lc') { const d = await api('GET', '/admin/atx/line/conns?id=' + r.id); const c = rowsOf(d); return ask('Connessi su ' + u, c.length ? c.map((x) => `<p style="margin:6px 0"><b>${esc(x.channel || 'canale ?')}</b><br><span class="mut" style="font-size:12.5px">${esc([x.user_ip || x.ip, x.city, x.geoip_country_code, x.isp].filter(Boolean).join(' · '))}</span></p>`).join('') : '<p class="mut">Nessuna connessione adesso.</p>', 'OK'); }
+      if (a === 'lc') { const d = await api('GET', '/admin/atx/line/conns?id=' + r.id); const c = rowsOf(d); return ask('Connessi su ' + u, (window.KXVpn ? KXVpn.counter(c) : '') + (c.length ? c.map((x) => `<p style="margin:6px 0"><b>${esc(x.channel || 'canale ?')}</b><br><span class="mut" style="font-size:12.5px">${esc([x.user_ip || x.ip, x.city, x.geoip_country_code, x.isp].filter(Boolean).join(' · '))}${window.KXVpn ? KXVpn.tag(x.vpn) : ''}</span></p>`).join('') : '<p class="mut">Nessuna connessione adesso.</p>'), 'OK'); }
       if (a === 'renew') {
         if (!(await ask('Rinnovare ' + u + '?', `<p>Scade il <b>${day(r.exp_date)}</b>. Il rinnovo usa i crediti del tuo account Atlantix.</p><label>Durata<select class="inp" id="axM">${[1, 2, 3, 6, 12].map((n) => `<option value="${n}"${n === 12 ? ' selected' : ''}>${n} ${n === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select></label><label style="display:block;margin-top:10px">Nota (nome del cliente, telefono…)<textarea class="inp" id="axRN" rows="2" maxlength="300" placeholder="es. Mario Rossi · 333 1234567">${esc(r.notes || '')}</textarea></label>`, 'Rinnova'))) return;
         const months = +$('#axM').value, notes = $('#axRN').value.trim();
