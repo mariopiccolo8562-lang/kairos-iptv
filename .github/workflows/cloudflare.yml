@@ -88,7 +88,7 @@ jobs:
               if dep; then exit 0; fi
             fi
             # il dominio non è ancora nel tuo account Cloudflare (o il token non può collegarlo): si pubblica sul vecchio indirizzo
-            echo "::warning::Dominio panel-kairos.com non collegato: aggiungilo al tuo account Cloudflare (Add a domain) e dai al token il permesso Zone → Workers Routes → Edit. Pubblicato sul vecchio indirizzo."
+            echo "::warning::Domini non collegati (panel-kairos.com / store-k.download): devono essere nel tuo account Cloudflare (Active), senza record DNS sullo stesso nome, e il token deve avere Zone → Workers Routes → Edit. Pubblicato senza cambiare i domini già collegati."
             sed -i '/^routes = \[/d' wrangler.toml
             wrangler deploy "${ARGS[@]}"
           fi

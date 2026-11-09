@@ -3,7 +3,9 @@ main = "src/worker.js"
 compatibility_date = "2025-09-01"
 workers_dev = true   # il vecchio indirizzo resta acceso finché tutte le app non sono passate al dominio
 # dominio del pannello (deve essere un sito del tuo account Cloudflare)
-routes = [{ pattern = "panel-kairos.com", custom_domain = true }]
+# store-k.download: dominio dei soli download (DL_HOSTS più sotto, README §34) — lì niente pannello né API.
+# Tenere «routes» su UNA riga: se un dominio non si collega, il workflow la toglie con sed e pubblica senza.
+routes = [{ pattern = "panel-kairos.com", custom_domain = true }, { pattern = "store-k.download", custom_domain = true }, { pattern = "www.store-k.download", custom_domain = true }]
 
 [assets]
 directory = "./public"

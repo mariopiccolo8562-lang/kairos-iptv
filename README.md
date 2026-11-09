@@ -557,11 +557,8 @@ Per toglierlo: revoca il token su GitHub, oppure Cloudflare → Workers → kair
 
 **Dominio dei download: store-k.download**
 - In `wrangler.toml` → `[vars]`: `DL_HOSTS = "store-k.download,www.store-k.download"`. Su questi host il Worker risponde solo a `/get/<id>.json`, `/get/<id>.apk`, `/store/…` e `/` (→ `/store/`); tutto il resto (pannello, `/admin`, `/app`, API, accesso) è **404** e nessuna intestazione nomina panel-kairos.com o workers.dev.
-- La route **non** è ancora in `wrangler.toml` (il dominio non è nell'account Cloudflare: la pubblicazione fallirebbe). Per collegarlo:
-  1. Cloudflare → **Add a domain** → `store-k.download` → cambia i nameserver dal registrar finché il dominio è **Active**.
-  2. Il token `CLOUDFLARE_API_TOKEN` (segreto di kairos-iptv) deve coprire **anche la nuova zona**: stessi permessi che ha per panel-kairos.com (Zone → Workers Routes → Edit), con *Zone Resources* che include store-k.download (o tutte le zone dell'account).
-  3. In `wrangler.toml` aggiungi alla riga `routes` (se ti serve anche il www, una seconda voce con `www.store-k.download`):
-     `{ pattern = "store-k.download", custom_domain = true }`
-     cioè `routes = [{ pattern = "panel-kairos.com", custom_domain = true }, { pattern = "store-k.download", custom_domain = true }]`
-  4. Push su main → pubblicazione. Se Cloudflare rifiuta il dominio, il workflow pubblica senza la riga `routes` (avviso nel log): ricontrolla zona e token.
+- **Collegato** (9 novembre 2026): `store-k.download` e `www.store-k.download` sono nella riga `routes` di `wrangler.toml`, accanto a panel-kairos.com. Requisiti (già soddisfatti):
+  1. il dominio è nello **stesso account Cloudflare** del pannello ed è **Active**, senza record DNS sullo stesso nome (DNS e certificato li crea Cloudflare quando collega il dominio);
+  2. il token `CLOUDFLARE_API_TOKEN` ha *Zone → Workers Routes → Edit* su **All zones**, quindi copre anche la nuova zona.
+  - La riga `routes` deve restare **su una sola riga**: se Cloudflare rifiuta un dominio, il workflow la toglie con `sed` e pubblica senza cambiare i domini già collegati (avviso nel log): ricontrolla zona, record DNS e token.
 - **Prove**: v260 (feed senza token, release vuote, cache, 502, CORS, altro dominio, `/api/player/update`), v261 (APK con Range, If-Range, 416, HEAD, nessun rimando), v262 (token e repository privati: API, indirizzi firmati senza token, store da `docs/`, ETag, token mai in risposte e log, ritorno ai link pubblici), v263 (store-k.download: solo download e store, tutto il resto 404).
