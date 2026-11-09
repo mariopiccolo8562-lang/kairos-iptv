@@ -156,8 +156,8 @@ const RO = {
   async subAction(env, H, b) { const id = parseInt(b.id, 10); if (!(id > 0)) throw new H.HttpErr(400, 'Sub-reseller non valido'); if (b.op !== 'toggle') throw new H.HttpErr(400, 'Operazione sconosciuta'); await this.post(env, H, `/subresellers/${id}/toggle`); return { what: 'stato cambiato' }; },
   async conns(env, H) {
     const h = await call(this, env, H, '/connections/table?q=&page=1', { html: true, headers: { 'X-Requested-With': 'fetch' } });
-    const heads = rowsOfTable(h).find((r) => /<th/i.test('<' + r.html)); const rows = [];
-    for (const tr of rowsOfTable((h.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/i) || ['', h])[1])) { const c = tr.cells.map(txtOf); if (c.length < 2 || !c.join('')) continue; rows.push({ username: c[0], stream: c[1] || '', ip: c[2] || '', info: c.slice(3).filter((x) => x && x !== '—').join(' · ') }); }
+    const heads = rowsOfTable(h).find((r) => /<th/i.test('<' + r.html)), headers = heads ? heads.cells.map(txtOf) : [], ispIndex = headers.findIndex((x) => /isp|provider|fornitore/i.test(x)), rows = [];
+    for (const tr of rowsOfTable((h.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/i) || ['', h])[1])) { const c = tr.cells.map(txtOf); if (c.length < 2 || !c.join('')) continue; rows.push({ username: c[0], stream: c[1] || '', ip: c[2] || '', isp: c[ispIndex >= 0 ? ispIndex : 3] || '', info: c.slice(3).filter((x) => x && x !== '—').join(' · ') }); }
     return { rows, heads: heads ? heads.cells.map(txtOf) : [] };
   },
 };
@@ -233,7 +233,7 @@ const SLT = {
   },
   async subs(env, H) { const j = await call(this, env, H, '/api/subresellers/list?index=0&size=200&start=0&filters=%5B%5D&sorting=%5B%5D', { ajax: true }); return { rows: (Array.isArray(j.data) ? j.data : []).map((r) => ({ id: r.id, username: r.username || r.name || '', owner: r.owner_name || r.parent_name || '', type: r.role_name || r.type || '', credits: r.credits != null ? r.credits : '', lines: r.lines_count != null ? r.lines_count : r.users_count != null ? r.users_count : '', status: r.enabled === false || r.is_banned ? 'Disattivato' : 'Attivo', enabled: r.enabled !== false && !r.is_banned })) }; },
   async subAction(env, H) { throw new H.HttpErr(400, 'Su SLT i sub-reseller si gestiscono dal loro pannello'); },
-  async conns(env, H) { const j = await call(this, env, H, '/api/live-connections/index?limit=200&page=1&line_type=&mac_address=&line_search=&ip_search=&is_internal=null&all_search=&show_restreamer=1&owner_id=&show_my_lines=0&show_owner=0&stream_type=&stream_id=&server_id=&country_code=&type=online', { ajax: true }); const a = Array.isArray(j) ? j : Array.isArray(j.data) ? j.data : []; return { rows: a.map((r) => ({ id: r.id, username: r.username || (r.line && r.line.username) || '', stream: r.stream_display_name || r.stream_name || (r.stream && r.stream.name) || '', ip: r.user_ip || r.ip || '', info: [r.isp, r.country_code || r.geoip_country_code, r.user_agent].filter(Boolean).join(' · ') })) }; },
+  async conns(env, H) { const j = await call(this, env, H, '/api/live-connections/index?limit=200&page=1&line_type=&mac_address=&line_search=&ip_search=&is_internal=null&all_search=&show_restreamer=1&owner_id=&show_my_lines=0&show_owner=0&stream_type=&stream_id=&server_id=&country_code=&type=online', { ajax: true }); const a = Array.isArray(j) ? j : Array.isArray(j.data) ? j.data : []; return { rows: a.map((r) => ({ id: r.id, username: r.username || (r.line && r.line.username) || '', stream: r.stream_display_name || r.stream_name || (r.stream && r.stream.name) || '', ip: r.user_ip || r.ip || '', isp: r.isp || '', info: [r.isp, r.country_code || r.geoip_country_code, r.user_agent].filter(Boolean).join(' · ') })) }; },
 };
 
 /** richiesta con la sessione salvata; se è scaduta rientra una volta da sola */
@@ -306,7 +306,11 @@ export async function extRoutes(req, env, path, who, ip, H, ag) {
   }
   if (sub === 'packages' && m === 'GET') return json(await P.packages(env, H));
   if (sub === 'subs' && m === 'GET') return json(await P.subs(env, H));
-  if (sub === 'conns' && m === 'GET') return json(await P.conns(env, H));
+  if (sub === 'conns' && m === 'GET') {
+    const data = await P.conns(env, H);
+    if (H.vpnMark && Array.isArray(data.rows)) data.rows = await H.vpnMark(env, data.rows, { ip: (r) => r.ip, isp: (r) => r.isp });
+    return json(data);
+  }
   if (sub === 'createform' && m === 'GET') return json({ fields: await P.createForm(env, H) });
   if (sub === 'lines/create' && m === 'POST') {
     const b = await H.readJSON(req, 16384), v = (b && b.fields) || {}, out = await P.create(env, H, v);
