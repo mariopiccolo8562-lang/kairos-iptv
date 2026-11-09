@@ -8,6 +8,26 @@
     const anchor = $('.nav[data-v="ora"]') || $('.nav[data-v="oxp"]') || $('.nav[data-v="wolf"]'); anchor ? anchor.after(b) : $('#side').appendChild(b);
     const sec = document.createElement('section'); sec.className = 'view'; sec.id = 'v-atx'; $('#v-dash').after(sec);
   }
+  /* «pagina venditore»: stile della testata che vedono gli agenti (come la home del reseller su Atlantix) */
+  if (!$('#atxSellerCss')) {
+    const s = document.createElement('style'); s.id = 'atxSellerCss';
+    s.textContent = `.axs{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:14px}
+.axs-hero{grid-row:span 2;display:flex;flex-direction:column;gap:18px;padding:22px 24px;border-radius:16px;border:1px solid var(--line);background:radial-gradient(120% 140% at 0% 0%,rgba(123,92,255,.20),transparent 55%),var(--glass)}
+.axs-top{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap}.axs-hi{font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1.15;margin:0}.axs-hi span{color:#8f7dff}
+.axs-sub{margin:6px 0 0;color:var(--mut);font-size:13px}.axs-cred{border-left:1px solid var(--line);padding-left:18px;min-width:160px}.axs-cred b{display:block;font-size:34px;font-weight:800;margin:6px 0 2px}
+.axs-k{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.axs-acts{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:10px;margin-top:auto}
+.axs-act{all:unset;box-sizing:border-box;cursor:pointer;display:flex;gap:11px;align-items:center;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.03);transition:background .15s}
+.axs-act:hover,.axs-tile:hover{background:rgba(255,255,255,.07)}.axs-act i{font-style:normal;display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:rgba(123,92,255,.2);font-size:16px;flex:none}
+.axs-act b{display:block;font-size:13.5px}.axs-act small{display:block;color:var(--mut);font-size:12px;margin-top:2px}
+.axs-tile{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:6px;padding:16px 18px;border-radius:16px;border:1px solid var(--line);background:var(--glass);min-height:120px;transition:background .15s}
+.axs-tile .n{display:block;font-size:30px;font-weight:800;line-height:1.1}.axs-tile small{color:var(--mut);font-size:12.5px}
+.axs-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.axs-two>div{display:flex;flex-direction:column;gap:2px}.axs-two>div+div{border-left:1px solid var(--line);padding-left:12px}
+.axs-exp{margin-bottom:14px}.axs-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}.axs-row:last-child{border-bottom:0}
+@media (max-width:1100px){.axs{grid-template-columns:1fr 1fr}.axs-hero{grid-column:1/-1;grid-row:auto}}
+@media (max-width:620px){.axs{grid-template-columns:1fr}.axs-hi{font-size:24px}.axs-cred{border-left:0;padding-left:0}}`;
+    document.head.appendChild(s);
+  }
   TITLES.atx = 'Pannello Atlantix';
   const isAg = () => D.role === 'agent';
   const TABS = [['lines', 'Linee'], ['subs', 'Sub-reseller'], ['conns', 'Connessioni'], ['overview', 'Panoramica'], ['log', '📜 Registro']];
@@ -118,12 +138,50 @@
     const rs = A.tab === 'lines' && A.resellers.length ? `<select class="inp" id="axR" style="max-width:180px"><option value="">Tutti i reseller</option>${A.resellers.map((r) => `<option value="${esc(String(r.id))}"${String(A.reseller) === String(r.id) ? ' selected' : ''}>${esc(r.username || '#' + r.id)}</option>`).join('')}</select>` : '';
     return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto">${st}${rs}${A.tab === 'lines' && window.KXSort ? KXSort.ui(A, 'ax') : ''}${A.tab === 'lines' && window.KXPay ? KXPay.panelTile('atx') : ''}<input class="inp" id="axQ" placeholder="Cerca utente…" value="${esc(A.q)}" style="max-width:200px">${A.tab === 'lines' ? '<button class="btn pri sm" data-o="new">+ Nuova linea</button>' + (window.KXQuick ? KXQuick.button('atx') : '') : ''}</div>`;
   }
+  /* «pagina venditore»: in cima alla pagina Atlantix dell'agente, al posto della riga dei crediti. Saluto, crediti,
+     azioni rapide, collegati ora, abbonamenti, vendite (oggi / mese), da gestire e prossime scadenze con «Rinnova».
+     Dati del suo account Atlantix (overview e linee «in scadenza»), riletti a ogni apertura della pagina. */
+  const hello = () => { const h = new Date().getHours(); return h >= 5 && h < 13 ? 'Buongiorno' : h >= 13 && h < 18 ? 'Buon pomeriggio' : 'Buonasera'; };
+  const num = (v) => (v === undefined || v === null || v === '' ? '—' : esc(String(v)));
+  const expSec = (t) => { const n = Number(t); return n ? (n > 1e11 ? n / 1000 : n) : 0; };
+  /** giorni di calendario da oggi alla scadenza (scade il 15, oggi è il 10 → 5) */
+  const daysTo = (t) => { const s = expSec(t); if (!s) return null; const e = new Date(s * 1000), d0 = new Date(); return Math.round((Date.UTC(e.getFullYear(), e.getMonth(), e.getDate()) - Date.UTC(d0.getFullYear(), d0.getMonth(), d0.getDate())) / 864e5); };
+  function sellerHtml() {
+    const st = A.st || {}, ov = A.ov || {}, mem = ov.member || {}, s = ov.stats || {}, wait = A.ov == null;
+    const v = (k) => (wait ? '…' : num(s[k]));
+    const credits = wait ? '…' : mem.unlimited ? '∞' : num(Math.trunc(Number(mem.credits || 0)));
+    const qa = (o, ic, t, d) => `<button type="button" class="axs-act" data-sx="${o}"><i>${ic}</i><span><b>${t}</b><small>${d}</small></span></button>`;
+    const exp = Array.isArray(A.exp) ? A.exp : [];
+    const when = (r) => { const d = daysTo(r.exp_date); return d == null ? '' : ' · ' + (d < 0 ? 'scaduta' : d === 0 ? 'oggi' : d === 1 ? 'domani' : 'tra ' + d + ' giorni'); };
+    const expBox = A.exp === false ? '' : `<div class="card glass axs-exp"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px"><b>⏳ Prossime scadenze</b>${exp.length ? '<button class="btn sm" data-sx="expiring">Vedi tutte</button>' : ''}</div>
+      ${A.exp == null ? '<p class="mut" style="margin:8px 0">Carico…</p>' : exp.length ? exp.slice(0, 6).map((r, i) => `<div class="axs-row"><div style="flex:1;min-width:0"><b>${esc(r.username || '#' + r.id)}</b><div class="mut" style="font-size:12px">scade il ${day(r.exp_date)}${when(r)}${r.notes ? ' · ' + esc(String(r.notes).slice(0, 60)) : ''}</div></div><button class="btn sm act-renew" data-sxr="${i}">Rinnova</button></div>`).join('') : '<p class="mut" style="margin:8px 0">Nessuna linea in scadenza. 🎉</p>'}</div>`;
+    return `<div class="axs">
+      <div class="axs-hero">
+        <div class="axs-top"><div><h2 class="axs-hi">${hello()}, <span>${esc(st.user || '')}</span></h2><p class="axs-sub">✅ Atlantix collegato · il tuo account</p></div>
+          <div class="axs-cred"><div class="axs-k">Credito disponibile</div><b>${credits}</b><small class="mut">crediti per attivare e rinnovare</small></div></div>
+        <div class="axs-acts">${qa('new', '⚡', 'Nuova linea', 'Attiva un nuovo abbonamento')}${qa('expiring', '↻', 'Rinnova linea', 'Le linee in scadenza')}${qa('conns', '🔗', 'Connessioni', 'Chi sta guardando adesso')}${$('.nav[data-v="agk"]') ? qa('agk', '📲', 'App Kairos', 'Link e codici per i clienti') : ''}</div>
+      </div>
+      <button type="button" class="axs-tile" data-sx="conns"><span class="axs-k">Collegati ora</span><span class="n" style="color:#3dffb0">${v('connections')}</span><small>connessioni aperte in questo momento</small></button>
+      <button type="button" class="axs-tile" data-sx="lines"><span class="axs-k">Abbonamenti</span><span class="n">${v('total')}</span><small>linee nel tuo account${!wait && s.active != null ? ' · ' + num(s.active) + ' attive' : ''}</small></button>
+      <button type="button" class="axs-tile" data-sx="lines"><span class="axs-k">Vendite</span><div class="axs-two"><div><span class="n">${v('created_today')}</span><small>linee oggi</small></div><div><span class="n">${v('created_month')}</span><small>questo mese</small></div></div></button>
+      <div class="axs-tile" style="cursor:default"><span class="axs-k">Da gestire</span><div class="axs-two"><div data-sx="expiring" style="cursor:pointer"><span class="n" style="color:#ffb020">${v('expiring')}</span><small>in scadenza</small></div><div data-sx="expired" style="cursor:pointer"><span class="n" style="color:#ff6b6b">${v('expired')}</span><small>scadute da rinnovare</small></div></div></div>
+    </div>${expBox}`;
+  }
+  function sellerGo(x) {
+    if (x === 'new') return op('new');
+    if (x === 'agk') return typeof view === 'function' ? view('agk') : null;
+    A.tab = x === 'conns' ? 'conns' : 'lines'; A.page = 1; A.q = ''; A.reseller = ''; A.days = 0; A.sort = '';
+    A.status = x === 'expiring' || x === 'expired' ? x : '';
+    load().then(() => { const tb = $('#v-atx [data-t]'); if (tb && tb.scrollIntoView) tb.scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+  }
   function render() {
     const V = $('#v-atx'); if (!V) return;
     if (isAg() && (A.tab === 'log' || A.tab === 'overview')) A.tab = 'lines';
     const st = A.st || {}, form = !st.connected || A.edit;
+    const seller = isAg() && st.connected && !form;
+    if (seller && A.exp === undefined) { A.exp = null; api('GET', '/admin/atx/lines?' + new URLSearchParams({ page: 1, q: '', status: 'expiring', reseller: '' })).then((d) => { A.exp = rowsOf(d).filter((r) => Number(r.enabled) !== 0 && expSec(r.exp_date) > now()).sort((x, y) => expSec(x.exp_date) - expSec(y.exp_date)); show(); }).catch(() => { A.exp = false; show(); }); }
     if (st.connected && A.tab !== 'log' && A.ov === undefined) { A.ov = null; api('GET', '/admin/atx/overview').then((d) => { A.ov = d; render(); }).catch(() => { A.ov = false; }); }
-    V.innerHTML = `<div class="card glass" style="margin-bottom:14px">
+    V.innerHTML = `${seller ? sellerHtml() : `<div class="card glass" style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start">
         <div><b style="font-size:16px">${st.connected ? '✅ Atlantix collegato' : 'Atlantix non collegato'}</b>
           <p class="mut" style="margin:4px 0 0;font-size:13px">${st.connected ? 'Account ' + esc(st.user || '') : isAg() ? 'Chi ti gestisce può assegnarti il tuo account Atlantix; oppure scrivi qui…' : 'Scrivi qui i dati con cui entri su cms.axdash.biz: restano cifrati in KAIROS.'}</p></div>
@@ -135,11 +193,13 @@
         <label>Codice di accesso<input class="inp" id="axC" type="password" autocomplete="new-password" placeholder="${st.connected ? 'lascia vuoto per non cambiarlo' : ''}"></label>
         <label>Codice 2FA (solo se Atlantix lo chiede)<input class="inp" id="axO" inputmode="numeric" maxlength="6" placeholder="000000"></label></div>
         <button class="btn pri" data-o="save" style="margin-top:12px">Collega Atlantix</button>` : ''}</div>
-      ${st.connected && A.tab !== 'overview' && A.tab !== 'log' && A.ov ? overviewHtml(A.ov, '0 0 14px') : ''}
+      ${st.connected && A.tab !== 'overview' && A.tab !== 'log' && A.ov ? overviewHtml(A.ov, '0 0 14px') : ''}`}
       ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.filter(([k]) => !isAg() || (k !== 'log' && k !== 'overview')).map(([k, n]) => `<button class="btn sm${A.tab === k ? ' pri' : ''}" data-t="${k}">${n}</button>`).join('')}${toolbar()}</div>${body()}</div>` : ''}`;
     if (!isAg() && A.tab === 'log' && st.connected && window.KXTools) KXTools.panelLog($('#atxPanelLog'), 'atx', '#1fa0b6');
     $$('[data-t]', V).forEach((b) => (b.onclick = () => { A.tab = b.dataset.t; A.page = 1; A.q = ''; A.status = ''; A.reseller = ''; A.days = 0; if (A.tab === 'log') render(); else load(); }));
     $$('[data-o]', V).forEach((b) => (b.onclick = () => op(b.dataset.o)));
+    $$('[data-sx]', V).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); sellerGo(b.dataset.sx); }));
+    $$('[data-sxr]', V).forEach((b) => (b.onclick = async () => { const r = (A.exp || [])[+b.dataset.sxr]; if (!r) return; await act('renew', r); A.exp = undefined; A.ov = undefined; show(); }));
     $$('[data-a]', V).forEach((b) => (b.onclick = () => act(b.dataset.a, rowsOf(A.data)[+b.dataset.i])));
     const q = $('#axQ'); if (q) q.onkeydown = (e) => { if (e.key === 'Enter') { A.q = q.value.trim(); A.page = 1; load(); } };
     const s = $('#axS'); if (s) s.onchange = () => { A.status = s.value; A.page = 1; load(); };
@@ -364,6 +424,7 @@
   }
   function show() { try { render(); } catch (e) { const V = $('#v-atx'); if (V) V.innerHTML = `<div class="card glass"><p style="color:#ff8f8f">Errore nella sezione Atlantix: ${esc(e.message || String(e))}</p></div>`; } }
   async function open() {
+    if (isAg()) { A.ov = undefined; A.exp = undefined; } // la pagina venditore rilegge riepilogo e scadenze a ogni apertura
     if (!A.st) { try { A.st = await api('GET', '/admin/atx/state'); } catch (e) { A.st = { connected: false }; A.err = e.message; } }
     show(); if (A.st.connected && A.tab !== 'log' && A.data == null && !A.busy && !A.err) load();
   }
