@@ -216,6 +216,7 @@ body.agent .foot{display:none}
   FP.push(['wolf', 'Pannello WOLF', 'Con il suo account reseller WOLF: sue linee e suoi crediti', 'wolf'], ['mxp', 'Pannello MaxPlayer', 'Solo i clienti del suo agente MaxPlayer', 'mxp'], ['oxp', 'Pannello OrbixPlay', 'Solo le playlist dei suoi clienti', 'oxp'], ['ro', 'Pannello Realott', 'Con il suo account sub-reseller Realott: sue linee e suoi crediti', 'ro'], ['slt', 'Pannello SLT', 'Con il suo account sub-reseller SLT: sue linee e suoi crediti', 'slt']);
   const PERM_VIEW = Object.fromEntries(FP.map(([k, , , v]) => [v, k]));
   PERM_VIEW.payments = 'payments';
+  PERM_VIEW.appsum = 'lines';
   PERM_VIEW['orcp-agent'] = 'orcpApp';
   const isAgent = () => D.role === 'agent';
   const me = () => D.me || {};
@@ -323,7 +324,7 @@ body.agent .foot{display:none}
   /* ---------- modalità agente ---------- */
   // «Online ora» e «Riepilogo store» sono solo del titolare (lo store è aperto: agli agenti non resta nulla da approvare)
   const agentCan = (v) => v === 'payments' ? (can('payments') || !!(window.KXPay && KXPay.hasRows())) : v !== 'live' && v !== 'store' && !!PERM_VIEW[v] && can(PERM_VIEW[v]);
-  const OWNER_ONLY = ['dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'storesum', 'dns', 'apps3', 'lines', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity', 'ora', 'atx', 'ro', 'slt', 'orcp', 'payments']; // ora/atx/ro/slt/orcp: solo titolare (il server risponde 403 agli agenti)
+  const OWNER_ONLY = ['dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'storesum', 'dns', 'apps3', 'lines', 'appsum', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity', 'ora', 'atx', 'ro', 'slt', 'orcp', 'payments']; // ora/atx/ro/slt/orcp: solo titolare (il server risponde 403 agli agenti)
   const AGENT_ONLY = ['orcp-agent'];
   let modeSet = '';
   function applyMode() {

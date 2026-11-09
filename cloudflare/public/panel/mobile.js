@@ -125,12 +125,13 @@ body{overscroll-behavior-y:none}
     bell: '<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 21a2 2 0 0 0 4 0"/>',
     menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
     pan: '<rect x="3" y="3" width="18" height="6" rx="2"/><rect x="3" y="15" width="18" height="6" rx="2"/><path d="M7 6h.01M7 18h.01M12 9v6"/>',
+    att: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><path d="M7 14v7M3.5 17.5h7M17.5 14v7M14 17.5h7"/>',
   };
   const ico = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">${IC[k]}</svg>`;
   const tab = document.createElement('nav'); tab.id = 'kcTab';
   tab.innerHTML = `<button data-t="dash">${ico('dash')}Panoramica</button><button data-t="devices">${ico('devices')}Clienti</button>
     <button data-t="new" class="plus"><span class="p"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="22" height="22"><path d="M12 5v14M5 12h14"/></svg></span>Nuovo</button>
-    <button data-t="hub:pan">${ico('pan')}Pannelli</button><button data-t="menu">${ico('menu')}<span class="n" id="tabN"></span>Menu</button>`;
+    <button data-t="hub:pan">${ico('pan')}Pannelli</button><button data-t="hub:att">${ico('att')}Attiva</button><button data-t="menu">${ico('menu')}<span class="n" id="tabN"></span>Menu</button>`;
   document.body.appendChild(tab);
   $$('[data-t]', tab).forEach((b) => (b.onclick = (e) => {
     const t = b.dataset.t;
@@ -150,6 +151,7 @@ body{overscroll-behavior-y:none}
     { const t = $('[data-t="new"]', tab).lastChild; if (t && t.nodeType === 3) t.textContent = ag ? 'Attiva' : 'Nuovo'; }
     tab.style.gridTemplateColumns = `repeat(${$$('[data-t]', tab).filter((b) => b.style.display !== 'none').length},1fr)`;
     { const p = $('[data-t="hub:pan"]', tab); if (p) p.style.display = window.KXHub && KXHub.has('pan') ? '' : 'none'; }
+    { const a = $('[data-t="hub:att"]', tab); if (a) a.style.display = window.KXHub && KXHub.has('att') ? '' : 'none'; }
     tab.style.gridTemplateColumns = `repeat(${$$('[data-t]', tab).filter((b) => b.style.display !== 'none').length},1fr)`;
     $$('[data-t]', tab).forEach((b) => b.classList.toggle('on', b.dataset.t.startsWith('hub:') ? !!window.KXHub && KXHub.cur() === b.dataset.t.slice(4) : on === 'v-' + b.dataset.t));
     const bn = $('#bellN'), tn = $('#tabN'); if (bn && tn) { tn.textContent = bn.textContent; tn.classList.toggle('on', bn.classList.contains('on')); }
