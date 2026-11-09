@@ -1494,7 +1494,7 @@ body.agent .foot{display:none}
         if ($('#wzDurN')) $('#wzDurN').value = '';
         $$('[data-wzm]').forEach((x) => x.classList.remove('on'));
       }
-      const clientName = KXTools.noteValue(r.note).trim().slice(0, 60), nameField = $('#wzName');
+      const clientName = KXTools.noteValue(r.name || r.note).trim().slice(0, 60), nameField = $('#wzName');
       const currentName = nameField ? nameField.value : st.name;
       if (clientName && (!currentName.trim() || (st.nameAuto && currentName === st.nameAuto))) {
         st.name = clientName;
