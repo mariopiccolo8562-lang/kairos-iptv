@@ -981,8 +981,8 @@ body.agent .foot{display:none}
       </div>
       <div class="ag-c ag-arm" id="agSt" style="grid-column:1/-1"><h4>⛈️ Pannello Storm</h4><small>Spento di base. Se lo accendi l'agente crea e rinnova linee e MAG su Storm <b>con i tuoi crediti</b>, fino al tetto che decidi qui. Vede e gestisce solo le linee create da lui (e dai suoi sotto-agenti); non vede il tuo saldo né i sotto-reseller. Ogni operazione resta nel registro attività.</small>
         <div class="ag-armg">
-          <div class="ag-chk">${chk('perm', 'storm', '<b>Può usare il pannello Storm</b>', !!P.armada, topP && !topP.armada, 'Crea, rinnova, attiva e disattiva le sue linee')}${chk('perm', 'stormTrial', '<b>Può creare prove gratuite</b>', !!P.stormTrial, topP && !topP.stormTrial, 'Al massimo 10 al giorno')}</div>
-          <div><label class="lbl" style="margin-top:0">Crediti al mese (tuoi)</label><input class="inp" id="agStC" type="number" min="0" step="0.5" max="${topP ? topP.stormCredits || 0 : 100000}" value="${+P.stormCredits || 0}" ${topP && !topP.armada ? 'disabled' : ''}>
+          <div class="ag-chk">${chk('perm', 'storm', '<b>Può usare il pannello Storm</b>', !!P.storm, topP && !topP.storm, 'Crea, rinnova, attiva e disattiva le sue linee')}${chk('perm', 'stormTrial', '<b>Può creare prove gratuite</b>', !!P.stormTrial, topP && !topP.stormTrial, 'Al massimo 10 al giorno')}</div>
+          <div><label class="lbl" style="margin-top:0">Crediti al mese (tuoi)</label><input class="inp" id="agStC" type="number" min="0" step="0.5" max="${topP ? topP.stormCredits || 0 : 100000}" value="${+P.stormCredits || 0}" ${topP && !topP.storm ? 'disabled' : ''}>
             <small class="mut" style="display:block;margin-top:6px">0 = nessun credito (solo prove, se concesse). Vale per lui e per i suoi sotto-agenti${topP ? `; tu ne hai ${armF(topP.stormCredits || 0)} al mese` : ''}.</small>
             ${a ? `<p class="ag-armu">Usati questo mese: <b>${armF(a.stormUsed || 0)}</b>${+P.stormCredits ? ` su ${armF(P.stormCredits)}` : ''}</p>` : ''}</div>
         </div>
