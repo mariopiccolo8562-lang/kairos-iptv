@@ -429,7 +429,7 @@
   window.addEventListener('kxledger:update', renderAgentDebtDash);
   const dash = $('#v-dash'); if (dash) new MutationObserver(renderAgentDebtDash).observe(dash, { childList: true });
   Object.assign(TITLES, { payments: 'Pagamenti' });
-  window.KXPay = { load, loadLedger, ledgerHistory, get, hasRows: () => cache.rows.length > 0 || !!(ledgerCache.own && ledgerCache.own.entries && ledgerCache.own.entries.length), effective, badge, open, isDue, filterDue, daysSince, amountText, dateText, remainingText, canEdit, saveDue, duePrompt, readDuePrompt, panelTile, renderPage, ownDebtText: () => { const balance = isAgent() && ledgerCache.own && ledgerCache.own.balance; return ledgerHasDebt(balance) ? ledgerPositiveText(balance) : ''; }, openOwnLedgerHistory };
+  window.KXPay = { load, loadLedger, ledgerHistory, get, hasRows: () => cache.rows.length > 0 || !!(ledgerCache.own && ledgerCache.own.entries && ledgerCache.own.entries.length), effective, badge, open, isDue, filterDue, daysSince, amountText, dateText, remainingText, canEdit, saveDue, duePrompt, readDuePrompt, panelTile, renderPage, dueSummary: () => { const due = rows().filter((r) => r.kind !== 'agent' && r.status === 'due'), total = due.reduce((a, r) => a + (+r.amount || 0), 0); return { n: due.length, total, text: amountText(total) || '0 €' }; }, ownDebtText: () => { const balance = isAgent() && ledgerCache.own && ledgerCache.own.balance; return ledgerHasDebt(balance) ? ledgerPositiveText(balance) : ''; }, openOwnLedgerHistory };
   renderAgentDebtDash();
   document.addEventListener('click', (e) => {
     const del = e.target.closest('[data-kxpay-delete]');

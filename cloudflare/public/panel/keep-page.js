@@ -52,7 +52,8 @@
   });
   function restore() {
     const v = get();
-    if (!v || v === 'dash') { ready = true; return; }
+    if (!v) { view('home'); setTimeout(() => (ready = true), 400); return; }
+    if (v === 'dash') { ready = true; return; }
     const done = open(v);
     // il menu può non essere ancora pronto (permessi dell'agente, gruppi): si riprova per qualche secondo
     if (!done && ++tries < 15) return setTimeout(restore, 200);
