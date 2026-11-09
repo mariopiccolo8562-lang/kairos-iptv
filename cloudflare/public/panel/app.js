@@ -465,7 +465,7 @@ function openQuick(d) {
     ${linked ? '' : `<div class="tog ${edit.active ? 'on' : ''}" id="qAct" style="margin-top:16px"><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
     <label class="lbl">Scadenza</label><div class="row"><input class="inp" type="date" id="qExp" value="${esc(edit.expires)}"><button class="btn" id="qInf">${edit.expires ? 'Rendi illimitato' : 'Illimitato ✓'}</button></div>
     ${periodQuickRow('quick-exp')}`}
-    <label class="lbl">Note</label><textarea class="inp" id="qNotes" placeholder="Pagamento, contatto, dettagli…">${esc(edit.notes || '')}</textarea>
+    <label class="lbl">Note</label><textarea class="inp" id="qNotes" maxlength="500" placeholder="Pagamento, contatto, dettagli…">${esc(edit.notes || '')}</textarea>
     <button class="btn qfull" id="qFull">Scheda completa →<small>playlist, lettore, profili, VPN, permessi, add-on</small></button>`;
   if ($('#qAct')) $('#qAct').onclick = () => { edit.active = !edit.active; $('#qAct').classList.toggle('on', edit.active); };
   if ($('#qInf')) $('#qInf').onclick = () => { $('#qExp').value = ''; $('#qInf').textContent = 'Illimitato ✓'; };
@@ -563,7 +563,7 @@ function renderDrawer() {
   const sec = (id, n, t, sub, html) => html.trim() ? `<section class="dsec" id="ds-${id}"><div class="dsh"><i>${n}</i><div><b>${t}</b>${sub ? `<small>${sub}</small>` : ''}</div></div>${html}</section>` : '';
   const S1 = `${isNew ? `<label class="lbl">Codice dispositivo</label><input class="inp mono" id="eCode" placeholder="Scrivi il codice che il cliente vede sull'app (KXAB-12CD)" value="${esc(edit.code)}">` : `<div class="tog" style="cursor:default"><div><b>${edit.bound ? '🔒 Collegato al dispositivo' : '🔓 Non ancora collegato'}</b><small>${edit.bound ? 'Il codice funziona solo sul dispositivo che l\'ha generato. Se il cliente cambia TV o reinstalla l\'app, sblocca il collegamento.' : 'Il primo dispositivo che usa questo codice verrà collegato.'}</small></div>${edit.bound ? '<button class="btn sm" id="eReset">Sblocca</button>' : ''}</div>`}
     ${linkedBox}${linkBox}${moveBox}
-    <label class="lbl">${linked ? 'Nome del dispositivo' : 'Nome cliente'}</label><input class="inp" id="eName" placeholder="${linked ? 'es. Camera da letto' : 'es. Mario Rossi'}" value="${esc(edit.name)}">
+    <label class="lbl">${linked ? 'Nome del dispositivo' : 'Nome cliente'}</label><input class="inp" id="eName" maxlength="60" placeholder="${linked ? 'es. Camera da letto' : 'es. Mario Rossi'}" value="${esc(edit.name)}">
     ${!linked && D.role !== 'agent' && (D.agents || []).length ? `<label class="lbl">Responsabile</label><select class="inp" id="eOwner"><option value="0">Tu (nessun agente)</option>${D.agents.map((a) => `<option value="${a.id}" ${+edit.ownerId === a.id ? 'selected' : ''}>${esc(a.username)}${a.active ? '' : ' (disattivato)'}</option>`).join('')}</select><small class="mut" style="display:block;margin-top:6px;font-size:12px">L'agente scelto vede e gestisce questo cliente dal suo pannello.</small>` : ''}`;
   const S2 = linked ? '' : `<div class="tog ${edit.active ? 'on' : ''}" id="eAct"><div><b>Servizio attivo</b><small>Se spento il player mostra “dispositivo disattivato”</small></div><i></i></div>
     <div class="row"><input class="inp" type="date" id="eExp" value="${esc(edit.expires)}"><button class="btn" id="eInf">${edit.expires ? 'Rendi illimitato' : 'Illimitato ✓'}</button></div>
@@ -586,7 +586,7 @@ function renderDrawer() {
   const addonBox = linked ? '' : `<div class="perms">${adCat.map((a) => a.mode === 'all' ? `<div class="tog on fixed" title="Incluso per tutti i clienti (si cambia in Impostazioni → Store add-on)"><div><b><span class="adsw" style="background:${ADDON_SW[a.id] || '#888'}"></span>${esc(a.name)}</b><small>${ADDON_GRP[a.cat]} · incluso per tutti</small></div><i></i></div>`
     : `<div class="tog ${edit.addons.includes(a.id) ? 'on' : ''}" data-addon="${a.id}"><div><b><span class="adsw" style="background:${ADDON_SW[a.id] || '#888'}"></span>${esc(a.name)}</b><small>${ADDON_GRP[a.cat]}${a.price ? ' · ' + esc(a.price) : ''}</small></div><i></i></div>`).join('')}</div>
     ${adCat.length ? '' : '<p class="mut">Tutti gli add-on sono nascosti (Impostazioni → Store add-on).</p>'}`;
-  const S8 = `<textarea class="inp" id="eNotes" placeholder="Pagamento, contatto, dettagli…">${esc(edit.notes)}</textarea>
+  const S8 = `<textarea class="inp" id="eNotes" maxlength="500" placeholder="Pagamento, contatto, dettagli…">${esc(edit.notes)}</textarea>
     ${!isNew ? `<p class="mut" style="font-size:12px;margin-top:10px">Registrato ${fmtD(edit.createdAt)} · ultimo accesso ${ago(edit.lastSeen)}${edit.model ? ' · ' + esc(edit.model) : ''}</p>` : ''}`;
   const SECS = linked
     ? [['cli', 'Dispositivo', 'Codice, nome e gestione', S1], ...(edit.own ? [['pl', 'Playlist', 'Le playlist di questa TV (gestione indipendente)', S3], ['ply', 'Lettore', 'Quale lettore usa l\'app di questa TV', playerBox]] : []), ['vpn', 'VPN', '', vpnBox], ['note', 'Note', 'Solo per te, il cliente non le vede', S8]]

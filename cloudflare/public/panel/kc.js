@@ -1229,7 +1229,7 @@
       const nt = e.target.closest('[data-note]');
       if (nt && !nt.querySelector('input')) {
         const d = D.devices.find((x) => x.id === nt.dataset.note); if (!d) return;
-        nt.innerHTML = `<input class="inp dvt-ni" maxlength="300" value="${esc(d.notes || '')}" placeholder="Nota (Invio per salvare, Esc per annullare)">`;
+        nt.innerHTML = `<input class="inp dvt-ni" maxlength="500" value="${esc(d.notes || '')}" placeholder="Nota (Invio per salvare, Esc per annullare)">`;
         const inp = nt.querySelector('input'); inp.focus(); inp.select();
         let done = false;
         const fin = async (keep) => { if (done) return; done = true; if (keep && inp.value.trim() !== (d.notes || '')) { if (await save(d, { notes: inp.value.trim() })) toast('Nota salvata'); else renderDevices(); } else renderDevices(); };
