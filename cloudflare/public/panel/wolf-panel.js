@@ -121,12 +121,12 @@
     const FL = [['', 'Tutte'], ['on', 'Attive'], ['soon', 'In scadenza'], ['exp', 'Scadute'], ['off', 'Disattivate'], ['conn', 'Collegate ora'], ['disc', 'Scollegate'], ...(isAg() ? [] : [['link', 'Collegate a clienti']])];
     V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">✅ Pannello WOLF collegato</b><small>${isAg() ? esc(W.cfg.user) : esc(W.cfg.url) + ' · ' + esc(W.cfg.user)}</small><small>Quello che fai qui succede subito anche su WOLF, e viceversa.</small></div>
         <div><small>Crediti WOLF</small><span class="cr">${d.credits ?? '—'}</span></div><div><small>Linee</small><span class="cr">${d.lines ? d.lines.length : '—'}</span></div>
-        <button class="btn sm" id="wfPw">Cambia password</button><button class="btn sm" id="wfRe">${W.busy || W.rsBusy ? 'Carico…' : 'Aggiorna'}</button><button class="btn sm" id="wfNew">${W.tab === 'rs' ? '+ Nuovo reseller' : '+ Nuova linea'}</button>${W.tab !== 'rs' && window.KXQuick ? KXQuick.button('wolf') : ''}</div>
+        <button class="btn sm" id="wfPw">Cambia password</button><button class="btn sm" id="wfRe">${W.busy || W.rsBusy ? 'Carico…' : 'Aggiorna'}</button>${W.tab === 'log' ? '' : `<button class="btn sm" id="wfNew">${W.tab === 'rs' ? '+ Nuovo reseller' : '+ Nuova linea'}</button>`}${W.tab === 'lines' && window.KXQuick ? KXQuick.button('wolf') : ''}</div>
         ${W.err ? `<p style="color:#ff8f8f;margin:10px 0 0">${esc(W.err)}</p>` : ''}
         <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:13px">Impostazioni WOLF</summary>${cfgForm(W.cfg)}</details>
-        <div class="wf-tabs"><button data-t="lines" class="${W.tab === 'lines' ? 'on' : ''}">Linee${d.lines ? ' · ' + d.lines.length : ''}</button><button data-t="rs" class="${W.tab === 'rs' ? 'on' : ''}">Reseller${W.rs ? ' · ' + W.rs.resellers.length : ''}</button></div></div>
-      ${W.tab !== 'rs' && d.lines && window.KXStats ? KXStats.strip(KXStats.tiles(KXStats.calc(d.lines))) : ''}${W.tab !== 'rs' && window.KXPay ? KXPay.panelTile('wolf') : ''}
-      ${W.tab === 'rs' ? rsHtml() : `<div class="card glass" style="margin-top:14px">
+        <div class="wf-tabs"><button data-t="lines" class="${W.tab === 'lines' ? 'on' : ''}">Linee${d.lines ? ' · ' + d.lines.length : ''}</button><button data-t="rs" class="${W.tab === 'rs' ? 'on' : ''}">Reseller${W.rs ? ' · ' + W.rs.resellers.length : ''}</button>${isAg() ? '' : `<button data-t="log" class="${W.tab === 'log' ? 'on' : ''}">📜 Registro</button>`}</div></div>
+      ${W.tab === 'lines' && d.lines && window.KXStats ? KXStats.strip(KXStats.tiles(KXStats.calc(d.lines))) : ''}${W.tab === 'lines' && window.KXPay ? KXPay.panelTile('wolf') : ''}
+      ${W.tab === 'rs' ? rsHtml() : W.tab === 'log' ? '<div class="card glass" style="margin-top:14px"><div id="wfPanelLog"></div></div>' : `<div class="card glass" style="margin-top:14px">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input class="inp" id="wfQ" placeholder="Cerca utente, ID o nota" value="${esc(W.q)}" style="max-width:280px;margin:0">
           <select class="inp" id="wfF" style="width:auto;margin:0">${FL.map(([k, t]) => `<option value="${k}"${W.f === k ? ' selected' : ''}>${t}</option>`).join('')}</select>${window.KXSort ? KXSort.ui(W, 'wf') : ''}
           <select class="inp" id="wfO" style="width:auto;margin:0"><option value="">Tutti i reseller</option>${owners().map(([o, n]) => `<option value="${esc(o)}"${W.own === o ? ' selected' : ''}>${esc(o)} · ${n}</option>`).join('')}</select>
@@ -143,11 +143,13 @@
         }).join('')}</div>
         ${list.length > shown.length ? `<div style="margin-top:10px"><button class="btn sm" id="wfMore">Mostra altre ${Math.min(100, list.length - shown.length)}</button></div>` : ''}</div>`}`;
     bindCfg();
+    if (W.tab === 'log' && window.KXTools) KXTools.panelLog($('#wfPanelLog'), 'wolf', '#e0524f');
     V.querySelectorAll('.wf-tabs [data-t]').forEach((b) => { b.onclick = () => { W.tab = b.dataset.t; render(); if (W.tab === 'rs' && !W.rs && !W.rsBusy) loadRs(); }; });
     $('#wfPw').onclick = changePw;
-    $('#wfRe').onclick = () => (W.tab === 'rs' ? loadRs() : loadLines(true));
-    $('#wfNew').onclick = W.tab === 'rs' ? newRs : newLine;
+    $('#wfRe').onclick = () => (W.tab === 'rs' ? loadRs() : W.tab === 'log' ? $('#wfPanelLog')._kxPanelLogRefresh() : loadLines(true));
+    if ($('#wfNew')) $('#wfNew').onclick = W.tab === 'rs' ? newRs : newLine;
     if (W.tab === 'rs') { V.querySelectorAll('.wf-rs [data-a]').forEach((b) => { b.onclick = () => rsAct(b.dataset.a, +b.closest('.wf-rs').dataset.id); }); return; }
+    if (W.tab === 'log') return;
     $('#wfO').onchange = (e) => { W.own = e.target.value; W.limit = 100; render(); };
     const q = $('#wfQ'); q.oninput = () => { W.q = q.value; W.limit = 100; const p = q.selectionStart; render(); const n = $('#wfQ'); n.focus(); n.setSelectionRange(p, p); };
     $('#wfF').onchange = (e) => { W.f = e.target.value; W.limit = 100; render(); };

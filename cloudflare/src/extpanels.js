@@ -278,12 +278,13 @@ export async function extRoutes(req, env, path, who, ip, H, ag) {
   const am = !ag && sub.match(/^agents\/(\d+)$/);
   if (am && (m === 'PUT' || m === 'DELETE')) {
     const id = +am[1], AK = keyOf(k, { id });
-    if (m === 'DELETE') { mem[AK + ':jar'] = null; await env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?)').bind(AK, AK + ':ses').run(); return json({ ok: true }); }
+    if (m === 'DELETE') { const [a, c] = await Promise.all([env.DB.prepare("SELECT username FROM admins WHERE id = ? AND role = 'agent'").bind(id).first(), cfgOf(env, H, AK).catch(() => null)]); mem[AK + ':jar'] = null; await env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?)').bind(AK, AK + ':ses').run(); if (c) await H.log(env, 'del', `${who}: account ${P.name} del venditore ${str(a && a.username || `#${id}`, 80)} scollegato`, ip).catch(() => {}); return json({ ok: true }); }
     const b = await H.readJSON(req, 4096), old = (await cfgOf(env, H, AK)) || {};
     const c = { user: str(b.user, 120).trim(), pass: str(b.pass, 200) || (b.user === old.user ? old.pass || '' : '') };
     if (!c.user || !c.pass) throw new HttpErr(400, `Scrivi utente e password ${P.name} del venditore`);
     const jar = {}; await P.login(H, jar, c); mem[AK + ':jar'] = null; await saveJar(env, H, AK, jar); await setRow(env, AK, await H.seal(env, c));
-    await H.log(env, 'edit', `${who}: account ${P.name} del venditore #${id} collegato (${c.user})`, ip).catch(() => {});
+    const a = await env.DB.prepare("SELECT username FROM admins WHERE id = ? AND role = 'agent'").bind(id).first();
+    await H.log(env, 'edit', `${who}: account ${P.name} del venditore ${str(a && a.username || `#${id}`, 80)} collegato (${c.user})`, ip).catch(() => {});
     return json({ ok: true });
   }
   if (sub === 'state' && m === 'GET') { const c = await cfgOf(env, H, KK); return json(c ? { connected: true, user: c.user, agent: !!ag } : { connected: false, agent: !!ag }); }
@@ -296,7 +297,7 @@ export async function extRoutes(req, env, path, who, ip, H, ag) {
     await H.log(env, 'edit', `${who}: pannello ${P.name} collegato (account ${c.user})`, ip).catch(() => {});
     return json({ ok: true });
   }
-  if (sub === 'config' && m === 'DELETE') { mem[KK + ':jar'] = null; await env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?)').bind(KK, KK + ':ses').run(); return json({ ok: true }); }
+  if (sub === 'config' && m === 'DELETE') { const c = await cfgOf(env, H, KK).catch(() => null); mem[KK + ':jar'] = null; await env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?)').bind(KK, KK + ':ses').run(); if (c) await H.log(env, 'del', `${who}: pannello ${P.name} scollegato (account ${c.user})`, ip).catch(() => {}); return json({ ok: true }); }
   if (sub === 'overview' && m === 'GET') return json(await P.overview(env, H));
   if (sub === 'lines' && m === 'GET') {
     const L = await P.lines(env, H);
@@ -323,7 +324,22 @@ export async function extRoutes(req, env, path, who, ip, H, ag) {
     await H.log(env, 'edit', `${who}: ${P.name} — linea ${str(out.username, 60)} creata`, ip).catch(() => {});
     return json({ ok: true, username: out.username, password: out.password, id: out.id || '' });
   }
-  if (sub === 'lines/action' && m === 'POST') { const b = await H.readJSON(req, 4096), r = await P.action(env, H, b); await H.log(env, 'edit', `${who}: ${P.name} — linea ${str(b.username || b.id, 60)} ${r.what}`, ip).catch(() => {}); return json({ ok: true, ...r }); }
-  if (sub === 'subs/action' && m === 'POST') { const b = await H.readJSON(req, 4096), r = await P.subAction(env, H, b); await H.log(env, 'edit', `${who}: ${P.name} — sub-reseller #${str(b.id, 40)} ${r.what}`, ip).catch(() => {}); return json({ ok: true }); }
+  if (sub === 'lines/action' && m === 'POST') {
+    const b = await H.readJSON(req, 4096), r = await P.action(env, H, b);
+    const target = str(b.username || b.mac || b.id, 120), label = b.mac && !b.username ? `MAG ${target}` : `linea ${target}`;
+    let what = r.what;
+    if (b.action === 'renew' && b.package_id) what += ` · pacchetto ${str(b.package_id, 40)}`;
+    const credits = r.credits_spent ?? r.credits_used ?? r.cost;
+    const expiry = r.exp ?? r.exp_date ?? r.expires_at;
+    if (credits !== undefined && credits !== null) what += ` · ${str(String(credits), 30)} crediti`;
+    if (expiry !== undefined && expiry !== null) what += ` · scadenza ${str(String(expiry), 40)}`;
+    await H.log(env, 'edit', `${who}: ${P.name} — ${label} ${what}`, ip).catch(() => {});
+    return json({ ok: true, ...r });
+  }
+  if (sub === 'subs/action' && m === 'POST') {
+    const b = await H.readJSON(req, 4096), r = await P.subAction(env, H, b), user = str(b.username || b.user || b.id, 120);
+    await H.log(env, 'edit', `${who}: ${P.name} — sub-reseller ${user} ${r.what}`, ip).catch(() => {});
+    return json({ ok: true });
+  }
   return null;
 }

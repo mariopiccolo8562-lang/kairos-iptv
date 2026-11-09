@@ -1203,6 +1203,8 @@ body.agent .foot{display:none}
       updateSyncInfo();
       if (showLinePick) window.KXLinePick.mount($('#cLinePick'), async (line) => {
         sync();
+        const clientName = KXTools.noteValue(line.note).trim().slice(0, 60), nameField = $('#cName');
+        if (nameField && !nameField.value.trim() && clientName) { nameField.value = clientName; e.name = clientName; }
         const target = $('#cLineTarget') ? $('#cLineTarget').value : '0';
         const index = target === 'new' ? e.playlists.length : Math.max(0, +target || 0);
         if (target === 'new') e.playlists.push({ id: 'p' + Date.now(), serverId: (D.servers[0] || {}).id || '', username: '', password: '' });
@@ -1319,7 +1321,7 @@ body.agent .foot{display:none}
       targets: new Set(initialTargets), code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1), payDue: false, payMonths: 1, payAmount: '',
       durationMode: 'months', durationN: '', durationUnit: 'd',
       pl: { serverId: (servers[0] || {}).id || '', username: '', password: '', host: '', ref: '', note: '', panel: '', picked: null }, expSource: '',
-      name: '', maxConn: 1, mxDomain: '', orbixId: '', oxDns: '0', orcpServer: '', appData: {}, busy: false, running: '', results: [],
+      name: '', nameAuto: '', maxConn: 1, mxDomain: '', orbixId: '', oxDns: '0', orcpServer: '', appData: {}, busy: false, running: '', results: [],
     };
     const showLinePick = canLoadLines(P);
     const APPS_W = [['tv', 'Kairos Pro'], ['prem', 'Kairos Premium'], ['ktv', 'Kairos TV'], ['plus', 'Kairos Plus'], ['xc', 'Kairos XC'], ['lite', 'Kairos Lite'], ['nova', 'Kairos Nova']];
@@ -1492,12 +1494,17 @@ body.agent .foot{display:none}
         if ($('#wzDurN')) $('#wzDurN').value = '';
         $$('[data-wzm]').forEach((x) => x.classList.remove('on'));
       }
-      if (!st.name.trim() && (r.name || r.note)) st.name = (r.name || r.note).slice(0, 60);
+      const clientName = KXTools.noteValue(r.note).trim().slice(0, 60), nameField = $('#wzName');
+      const currentName = nameField ? nameField.value : st.name;
+      if (clientName && (!currentName.trim() || (st.nameAuto && currentName === st.nameAuto))) {
+        st.name = clientName;
+        st.nameAuto = clientName;
+        if (nameField) nameField.value = clientName;
+      }
       if ($('#wzUser')) $('#wzUser').value = st.pl.username;
       if ($('#wzPass')) $('#wzPass').value = st.pl.password;
       if ($('#wzSrv')) $('#wzSrv').value = st.pl.serverId;
       if ($('#wzHost')) $('#wzHost').value = st.pl.host;
-      if ($('#wzName')) $('#wzName').value = st.name;
       const server = agent ? servers.find((x) => x.id === st.pl.serverId) : null;
       const where = agent ? server && server.name : st.pl.host;
       const user = esc(st.pl.username), chosen = label ? `Linea scelta · ${esc(label)} · ` : 'Linea riconosciuta · ';

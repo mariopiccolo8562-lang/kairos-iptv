@@ -1740,7 +1740,7 @@ async function armOwnerMap(env, pv) {
 const armByOf = (map, type, x) => { const a = map.get('i:' + type + ':' + x.id); return a !== undefined ? a : map.get(armKey(type, x)); };
 const monthIT = (t = now()) => dayIT(t).slice(0, 7);
 const armSpentRows = (env, pv) => reqMemo(env, 'armsp:' + pv, async () => { const m = new Map(); try { for (const r of ((await env.DB.prepare('SELECT agent_id, SUM(credits) AS c FROM armada_spend WHERE month = ? AND prov = ? GROUP BY agent_id').bind(monthIT(), pv).all()).results) || []) m.set(+r.agent_id, +r.c || 0); } catch {} return m; });
-async function armadaRoutes(req, env, url, path, who, ip, agentId = 0, pv = 'armada') {
+async function armadaRoutes(req, env, url, path, who, ip, agentId = 0, pv = 'armada', deferLog = false) {
   const m = req.method, s = await getSettings(env), P = armP(pv), N = P.name, R = '/' + pv, call = (params) => armadaCall(env, s, params, pv);
   if (path === R + '/state' && m === 'GET') {
     const out = { connected: !!armKeyOf(env, pv), url: armadaUrlOf(s, pv), dns: s[P.sDns] || '' };
@@ -1774,7 +1774,7 @@ async function armadaRoutes(req, env, url, path, who, ip, agentId = 0, pv = 'arm
     if (!agentId && out.host && !s[P.sDns]) await settingsPatch(env, { [P.sDns]: out.host }); // il DNS delle linee si impara dalla prima linea creata
     try { await env.DB.prepare('INSERT INTO armada_own (agent_id, type, line_id, username, mac, created, prov) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(agentId, type, out.userId, out.username, type === 'mag' ? out.mac.toUpperCase() : '', now(), pv).run(); memoDrop(env, 'armown:' + pv); } catch (e) { console.error('armada_own', e && e.message); }
     await llNote(env, { src: pv, app: N, owner: agentId, username: out.username || (type === 'mag' ? '' : out.userId), password: out.password, dns: out.host, mac: type === 'mag' ? out.mac : '', note: notes || '' });
-    await log(env, 'new', `${who}: ${N} — creata ${type === 'mag' ? 'MAG ' + out.mac : 'linea ' + (out.username || out.userId)} (${sub ? sub + (sub === 1 ? ' mese' : ' mesi') : 'prova'})`, ip);
+    if (!deferLog) await log(env, 'new', `${who}: ${N} — creata ${type === 'mag' ? 'MAG ' + out.mac : 'linea ' + (out.username || out.userId)} (${sub ? sub + (sub === 1 ? ' mese' : ' mesi') : 'prova'})`, ip);
     return json(out);
   }
   if (path === R + '/renew' && m === 'POST') {
@@ -1785,15 +1785,19 @@ async function armadaRoutes(req, env, url, path, who, ip, agentId = 0, pv = 'arm
     if (type === 'mag') { params.mac = armMac(b.mac); if (!params.mac) throw new HttpErr(400, 'MAC non valido'); }
     else { params.username = str(b.username, 120); params.password = typeof b.password === 'string' ? b.password.slice(0, 200) : ''; if (!params.username || !params.password) throw new HttpErr(400, 'Servono utente e password della linea'); }
     const x = armList(await call(params))[0] || {};
-    await log(env, 'edit', `${who}: ${N} — ${type === 'mag' ? 'MAG ' + params.mac : 'linea ' + params.username} rinnovata · durata ${sub} ${sub === 1 ? 'mese' : 'mesi'}`, ip);
-    return json({ ok: true, exp: armTs(x.expire_date) });
+    const exp = armTs(x.expire_date ?? x.new_exp ?? x.exp_date), expText = exp ? ` · scadenza ${new Date(exp).toLocaleDateString('it-IT')}` : '';
+    const credits = x.credits_spent ?? x.credits_used ?? x.debited ?? x.cost;
+    const creditText = credits !== undefined && credits !== null ? ` · ${str(String(credits), 30)} crediti` : '';
+    if (!deferLog) await log(env, 'edit', `${who}: ${N} — ${type === 'mag' ? 'MAG ' + params.mac : 'linea ' + params.username} rinnovata · durata ${sub} ${sub === 1 ? 'mese' : 'mesi'}${creditText}${expText}`, ip);
+    return json({ ok: true, exp });
   }
   if (path === R + '/toggle' && m === 'POST') {
     const b = await readJSON(req, 512);
     const id = parseInt(b.id, 10), on = b.enabled === true;
     if (!(id > 0)) throw new HttpErr(400, 'Linea non valida');
     await call({ action: 'device_status', id, status: on ? 'enable' : 'disable' });
-    await log(env, on ? 'on' : 'off', `${who}: ${N} — ${on ? 'attivata' : 'disattivata'} la linea #${id}`, ip);
+    const target = b.mac && !b.username ? `MAG ${str(b.mac, 32)}` : `linea ${str(b.username, 120).trim() || `#${id}`}`;
+    await log(env, on ? 'on' : 'off', `${who}: ${N} — ${on ? 'attivata' : 'disattivata'} ${target} (#${id})`, ip);
     return json({ ok: true });
   }
   return null;
@@ -1856,11 +1860,11 @@ async function agentArmada(req, env, url, path, who, ip, ctx, X, pv = 'armada') 
       if ((await armTrialsToday(env, A.id, pv)) >= ARM_TRIALS_DAY) throw new HttpErr(400, `Hai già creato ${ARM_TRIALS_DAY} prove oggi: riprova domani`);
     } else await armBudget(env, all, A, sub, pv);
     const before = sub ? await armCreditsNow(env, s, pv) : null;
-    const r = await armadaRoutes(sub2({ ...b, type, sub }), env, url, path, who, ip, A.id, pv);
+    const r = await armadaRoutes(sub2({ ...b, type, sub }), env, url, path, who, ip, A.id, pv, sub > 0);
     if (!r || r.status !== 200) return r;
     const out = await r.json(), cost = armCost(sub, before, sub ? await armCreditsNow(env, s, pv) : null);
     await armSpend(env, A, cost, sub ? 'new' : 'trial', type === 'mag' ? out.mac : out.username || out.userId, pv);
-    if (sub) ctx.waitUntil(log(env, 'edit', `${who}: ${N} — ${armFmt(cost)} crediti del titolare (${type === 'mag' ? 'MAG ' + out.mac : 'linea ' + (out.username || out.userId)})`, ip));
+    if (sub) ctx.waitUntil(log(env, 'new', `${who}: ${N} — creata ${type === 'mag' ? 'MAG ' + out.mac : 'linea ' + (out.username || out.userId)} (${sub} ${sub === 1 ? 'mese' : 'mesi'}) · ${armFmt(cost)} crediti del titolare`, ip));
     return json({ ...out, host: '', url: '', cost }); // all'agente mai il DNS né il link M3U
   }
   if (path === R + '/renew' && m === 'POST') {
@@ -1870,13 +1874,14 @@ async function agentArmada(req, env, url, path, who, ip, ctx, X, pv = 'armada') 
     if (!(type === 'mag' ? x.mac : x.username) || !ok(type, x)) throw new HttpErr(404, 'Puoi rinnovare solo le linee create da te');
     await armBudget(env, all, A, sub, pv);
     const before = await armCreditsNow(env, s, pv);
-    const r = await armadaRoutes(sub2({ ...b, type, sub }), env, url, path, who, ip, A.id, pv);
+    const r = await armadaRoutes(sub2({ ...b, type, sub }), env, url, path, who, ip, A.id, pv, true);
     if (!r || r.status !== 200) return r;
     const out = await r.json(), after = await armCreditsNow(env, s, pv);
     const measured = before !== null && after !== null && before - after >= 0 && before - after <= sub * 3;
     const cost = armCost(sub, before, after);
     await armSpend(env, A, cost, 'renew', type === 'mag' ? x.mac : x.username, pv);
-    ctx.waitUntil(log(env, 'edit', `${who}: ${N} — ${type === 'mag' ? 'MAG ' + x.mac : 'linea ' + x.username} rinnovata · durata ${sub} ${sub === 1 ? 'mese' : 'mesi'} · ${measured ? '' : 'circa '}${armFmt(cost)} crediti del titolare`, ip));
+    const expText = out.exp ? ` · scadenza ${new Date(out.exp).toLocaleDateString('it-IT')}` : '';
+    ctx.waitUntil(log(env, 'edit', `${who}: ${N} — ${type === 'mag' ? 'MAG ' + x.mac : 'linea ' + x.username} rinnovata · durata ${sub} ${sub === 1 ? 'mese' : 'mesi'} · ${measured ? '' : 'circa '}${armFmt(cost)} crediti del titolare${expText}`, ip));
     return json({ ...out, cost, costEstimated: !measured });
   }
   if (path === R + '/toggle' && m === 'POST') {
@@ -1886,7 +1891,7 @@ async function agentArmada(req, env, url, path, who, ip, ctx, X, pv = 'armada') 
     const [ls, ms, ok] = await Promise.all([call({ action: 'lines_list' }), call({ action: 'mag_devices_list' }), ownFn()]);
     const L = armList(ls).find((x) => +x.id === id), M = !L && armList(ms).find((x) => +x.id === id);
     if (!(L ? ok('m3u', { id, username: str(L.username, 120) }) : M ? ok('mag', { id, mac: str(M.mac, 32) }) : false)) throw new HttpErr(404, 'Puoi attivare o disattivare solo le linee create da te');
-    return armadaRoutes(sub2({ id, enabled: b.enabled === true }), env, url, path, who, ip, A.id, pv);
+    return armadaRoutes(sub2({ id, enabled: b.enabled === true, username: L ? str(L.username, 120) : '', mac: M ? armMac(M.mac) : '' }), env, url, path, who, ip, A.id, pv);
   }
   if (path === R + '/resellers') throw new HttpErr(403, `I sotto-reseller di ${N} li vede solo il titolare`);
   throw new HttpErr(404, 'Non trovato');
@@ -6020,6 +6025,34 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     A.store_code = ''; const c = await sellerAgentCode(env, A);
     await log(env, 'settings', `${who}: nuovo codice venditore Store per l'agente ${A.username}`, ip);
     return json({ ok: true, storeCode: c });
+  }
+  if (path === '/activity/panel' && m === 'GET') {
+    if (!ses || ses.agent || ses.assist) throw new HttpErr(403, 'Il registro è disponibile solo al titolare');
+    const panelName = { wolf: 'WOLF', armada: 'Armada', storm: 'Storm', atx: 'Atlantix', ro: 'Realott', slt: 'SLT' }[url.searchParams.get('p') || ''];
+    if (!panelName) throw new HttpErr(400, 'Pannello non valido');
+    const kind = url.searchParams.get('kind') || 'all';
+    if (!['all', 'lines', 'renew', 'credits', 'resellers'].includes(kind)) throw new HttpErr(400, 'Filtro non valido');
+    const beforeText = url.searchParams.get('before') || '';
+    const before = beforeText ? Number(beforeText) : 0;
+    if (beforeText && (!/^\d{1,18}$/.test(beforeText) || !Number.isSafeInteger(before) || before < 1)) throw new HttpErr(400, 'Pagina non valida');
+    const q = str(url.searchParams.get('q') || '', 120).trim().toLowerCase();
+    const where = ['(instr(text, ?) > 0 OR instr(text, ?) > 0 OR instr(text, ?) > 0)'];
+    const args = [` ${panelName} — `, `pannello ${panelName} `, `account ${panelName}`];
+    if (kind === 'renew') {
+      where.push("(instr(lower(text), 'rinnov') > 0 OR instr(lower(text), 'estesa') > 0 OR instr(lower(text), 'correzione') > 0)");
+    } else if (kind === 'credits') {
+      where.push("instr(lower(text), 'credit') > 0");
+    } else if (kind === 'resellers') {
+      where.push("(instr(lower(text), 'reseller') > 0 OR instr(lower(text), 'sub-reseller') > 0 OR instr(lower(text), 'venditore') > 0)");
+    } else if (kind === 'lines') {
+      where.push("(instr(lower(text), 'linea') > 0 OR instr(lower(text), 'mag') > 0 OR instr(lower(text), 'linee') > 0)");
+      where.push("instr(lower(text), 'rinnov') = 0 AND instr(lower(text), 'estesa') = 0 AND instr(lower(text), 'correzione') = 0 AND instr(lower(text), 'credit') = 0 AND instr(lower(text), 'reseller') = 0 AND instr(lower(text), 'venditore') = 0");
+    }
+    if (q) { where.push('instr(lower(text), ?) > 0'); args.push(q); }
+    if (before) { where.push('id < ?'); args.push(before); }
+    const result = await env.DB.prepare(`SELECT id, t, type, text FROM activity WHERE ${where.join(' AND ')} ORDER BY id DESC LIMIT 101`).bind(...args).all();
+    const all = result.results || [], rows = all.slice(0, 100);
+    return json({ rows: rows.map(({ id, t, type, text }) => ({ id, t, type, text })), more: all.length > 100 });
   }
   if (path === '/activity' && m === 'DELETE') {
     if (!ses || ses.agent) throw new HttpErr(403, 'Il registro lo può svuotare solo il titolare');

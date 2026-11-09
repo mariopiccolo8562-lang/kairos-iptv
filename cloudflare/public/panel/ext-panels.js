@@ -15,7 +15,7 @@
     const sec = document.createElement('section'); sec.className = 'view'; sec.id = 'v-' + k; $('#v-dash').after(sec);
     TITLES[k] = 'Pannello ' + P.name;
   }
-  const TABS = [['lines', 'Linee'], ['subs', 'Sub-reseller'], ['conns', 'Connessioni'], ['overview', 'Panoramica']];
+  const TABS = [['lines', 'Linee'], ['subs', 'Sub-reseller'], ['conns', 'Connessioni'], ['overview', 'Panoramica'], ['log', '📜 Registro']];
   const ST = {}; for (const k of Object.keys(PANELS)) ST[k] = { st: null, tab: 'lines', q: '', status: '', sort: '', days: 0, data: null, err: '', busy: false, edit: false, pk: null };
   const now = () => Math.floor(Date.now() / 1000);
   const day = (t, txt) => { const n = Number(t); if (!n) return txt ? esc(txt) : 'Illimitato'; const d = new Date(n * 1000); return isNaN(d) ? esc(txt || '') : d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }); };
@@ -84,6 +84,7 @@
 
   function body(k) {
     const A = ST[k], P = PANELS[k];
+    if (A.tab === 'log') return `<div id="exPanelLog-${k}"></div>`;
     if (A.busy) return `<p class="mut" style="margin:14px 0">Carico da ${P.name}…</p>`;
     if (A.err) return `<p style="color:#ff8f8f;margin:14px 0">${esc(A.err)}</p>`;
     if (A.data == null) return '';
@@ -100,8 +101,8 @@
   function render(k) {
     const V = $('#v-' + k); if (!V) return; const A = ST[k], P = PANELS[k];
     const st = A.st || {};
-    if (st.connected && A.ov === undefined) { A.ov = null; api('GET', `/admin/${k}/overview`).then((d) => { A.ov = d; show(k); }).catch(() => { A.ov = false; }); }
-    if (st.connected && A.rows === undefined) { A.rows = null; api('GET', `/admin/${k}/lines`).then((d) => { A.rows = Array.isArray(d.rows) ? d.rows : []; show(k); }).catch(() => { A.rows = false; }); }
+    if (st.connected && A.tab !== 'log' && A.ov === undefined) { A.ov = null; api('GET', `/admin/${k}/overview`).then((d) => { A.ov = d; show(k); }).catch(() => { A.ov = false; }); }
+    if (st.connected && A.tab !== 'log' && A.rows === undefined) { A.rows = null; api('GET', `/admin/${k}/lines`).then((d) => { A.rows = Array.isArray(d.rows) ? d.rows : []; show(k); }).catch(() => { A.rows = false; }); }
     {
       const form = !st.connected || A.edit;
       V.innerHTML = `<div class="card glass" style="margin-bottom:14px">
@@ -113,10 +114,11 @@
           <label>Username<input class="inp" id="exU" autocomplete="off" value="${esc(st.user || '')}"></label>
           <label>Password<input class="inp" id="exP" type="password" autocomplete="new-password" placeholder="${st.connected ? 'lascia vuoto per non cambiarla' : ''}"></label></div>
           <button class="btn pri" data-o="save" style="margin-top:12px">Collega ${esc(P.name)}</button>` : ''}</div>
-        ${st.connected && A.tab !== 'overview' && (A.ov || Array.isArray(A.rows)) ? overviewHtml(A.ov, '0 0 14px', A.rows) : ''}
-        ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.map(([t, n]) => `<button class="btn sm${A.tab === t ? ' pri' : ''}" data-t="${t}">${n}</button>`).join('')}${toolbar(k)}</div>${body(k)}</div>` : ''}`;
+        ${st.connected && A.tab !== 'overview' && A.tab !== 'log' && (A.ov || Array.isArray(A.rows)) ? overviewHtml(A.ov, '0 0 14px', A.rows) : ''}
+        ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.filter(([t]) => t !== 'log' || !isAg()).map(([t, n]) => `<button class="btn sm${A.tab === t ? ' pri' : ''}" data-t="${t}">${n}</button>`).join('')}${toolbar(k)}</div>${body(k)}</div>` : ''}`;
     }
-    $$('[data-t]', V).forEach((b) => (b.onclick = () => { A.tab = b.dataset.t; A.q = ''; A.status = ''; A.days = 0; load(k); }));
+    if (A.tab === 'log' && st.connected && !isAg() && window.KXTools) KXTools.panelLog($('#exPanelLog-' + k, V), k, k === 'ro' ? '#e08a1e' : '#2a9d5c');
+    $$('[data-t]', V).forEach((b) => (b.onclick = () => { A.tab = b.dataset.t; A.q = ''; A.status = ''; A.days = 0; if (A.tab === 'log') show(k); else load(k); }));
     if (window.KXStats) KXStats.bind(V, (f) => { const F = { online: 'online', active: 'active', expiring: 'expiring', expired: 'expired', disabled: 'disabled', total: '' }; if (!(f in F)) return; const go = () => { A.q = ''; A.days = 0; A.status = F[f]; show(k); }; if (A.tab !== 'lines') { A.tab = 'lines'; A.status = F[f]; load(k); } else go(); });
     $$('[data-o]', V).forEach((b) => (b.onclick = () => op(k, b.dataset.o)));
     $$('[data-a]', V).forEach((b) => (b.onclick = () => act(k, b.dataset.a, (A.data && A.data.rows || [])[+b.dataset.i])));
@@ -148,7 +150,7 @@
     const A = ST[k], P = PANELS[k];
     try {
       if (o === 'new') return await newLine(k);
-      if (o === 'reload') { A.st = null; A.data = null; A.ov = undefined; A.err = ''; A.pk = null; return open(k); }
+      if (o === 'reload') { if (A.tab === 'log' && $('#exPanelLog-' + k)) return $('#exPanelLog-' + k)._kxPanelLogRefresh(); A.st = null; A.data = null; A.ov = undefined; A.err = ''; A.pk = null; return open(k); }
       if (o === 'edit') { A.edit = !A.edit; return show(k); }
       if (o === 'off') { if (!(await ask(`Scollegare ${P.name}?`, `KAIROS dimentica utente e password di ${esc(P.name)}. Su ${esc(P.name)} non cambia niente.`, 'Scollega'))) return; await api('DELETE', `/admin/${k}/config`); A.st = null; A.data = null; A.ov = undefined; return open(k); }
       if (o === 'save') {
@@ -193,7 +195,7 @@
       if (a === 'on' || a === 'off') { const en = a === 'on'; if (!(await ask((en ? 'Attivare ' : 'Disattivare ') + u + '?', `La linea ${U} viene ${en ? 'attivata' : 'disattivata'} subito su ${esc(P.name)}.`, en ? 'Attiva' : 'Disattiva'))) return; return await lineAct(k, { action: 'toggle', id: r.id, username: r.username, enabled: en }, `${u} ${en ? 'attivata' : 'disattivata'}`); }
       if (a === 'kill') { if (!(await ask('Disconnettere ' + u + '?', 'Chiude le connessioni aperte adesso su questa linea. Il cliente potrà ricollegarsi.', 'Disconnetti'))) return; return await lineAct(k, { action: 'kill', id: r.id, username: r.username }, `${u}: connessioni chiuse`); }
       if (a === 'del') { if (!(await ask('Eliminare ' + u + '?', `<p>La linea <b>${U}</b> viene <b>eliminata definitivamente</b> da ${esc(P.name)}. Non si può annullare.</p>`, 'Elimina'))) return; return await lineAct(k, { action: 'delete', id: r.id, username: r.username }, `${u} eliminata`); }
-      if (a === 'stog') { if (!(await ask((r.enabled ? 'Disattivare ' : 'Riattivare ') + u + '?', `Il sub-reseller ${U} viene ${r.enabled ? 'disattivato' : 'riattivato'} su ${esc(P.name)}.`, r.enabled ? 'Disattiva' : 'Riattiva'))) return; await api('POST', `/admin/${k}/subs/action`, { op: 'toggle', id: r.id }); toast('Fatto'); return load(k); }
+      if (a === 'stog') { if (!(await ask((r.enabled ? 'Disattivare ' : 'Riattivare ') + u + '?', `Il sub-reseller ${U} viene ${r.enabled ? 'disattivato' : 'riattivato'} su ${esc(P.name)}.`, r.enabled ? 'Disattiva' : 'Riattiva'))) return; await api('POST', `/admin/${k}/subs/action`, { op: 'toggle', id: r.id, username: r.username }); toast('Fatto'); return load(k); }
     } catch (e) { toast(e.message, 1); }
   }
   async function load(k, afterRenew = false) {
@@ -205,7 +207,7 @@
   async function open(k) {
     const A = ST[k];
     if (!A.st) { try { A.st = await api('GET', `/admin/${k}/state`); } catch (e) { A.st = { connected: false }; A.err = e.message; } }
-    show(k); if (A.st.connected && A.data == null && !A.busy && !A.err) load(k);
+    show(k); if (A.st.connected && A.tab !== 'log' && A.data == null && !A.busy && !A.err) load(k);
   }
   let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { for (const k of Object.keys(PANELS)) { const V = $('#v-' + k); if (V && V.offsetParent !== null && ST[k].data) show(k); } }, 150); });
   const v0 = view;

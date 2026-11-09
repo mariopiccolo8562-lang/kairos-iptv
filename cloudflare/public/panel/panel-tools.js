@@ -22,6 +22,19 @@
 .kt-renew-report h4{margin:0 0 5px;font-size:13px}.kt-renew-report ul{margin:0;padding-left:19px}
 .kt-renew-report li{margin:4px 0;overflow-wrap:anywhere}
 .kt-renew-report .ok{color:#7ee2a8}.kt-renew-report .err{color:#ff9b9b}
+.kt-panel-log{--kt-log-color:#4f8cff;display:grid;gap:10px}
+.kt-panel-log-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.kt-panel-log-chips{display:flex;gap:6px;flex-wrap:wrap}
+.kt-panel-log-chips .fchip{font-size:12px;padding:5px 9px}
+.kt-panel-log .fchip.on{background:var(--kt-log-color)!important;border-color:transparent!important;color:#fff!important}
+.kt-panel-log-search{flex:1;min-width:150px;max-width:320px;margin:0}
+.kt-panel-log-list{display:grid;gap:7px}
+.kt-panel-log-row{display:grid;grid-template-columns:minmax(150px,auto) minmax(0,1fr);gap:4px 12px;align-items:start;padding:9px 10px;border:1px solid var(--line);border-left:3px solid color-mix(in srgb,var(--kt-log-color) 70%,transparent);border-radius:9px;background:#ffffff06}
+.kt-panel-log-time{color:var(--mut);font-size:11.5px;white-space:nowrap}
+.kt-panel-log-text{min-width:0;font-size:13px;overflow-wrap:anywhere}
+.kt-panel-log-who{font-weight:700;color:var(--txt,#fff)}
+.kt-panel-log-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:1px}
+@media(max-width:520px){.kt-panel-log-row{grid-template-columns:1fr;gap:3px}.kt-panel-log-time{white-space:normal}}
 .kx-creds{display:grid;gap:9px}.kx-creds-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px;background:#ffffff06}
 .kx-creds-row small{display:block;color:var(--mut);font-size:11.5px;margin-bottom:3px}.kx-creds-row .mono{display:block;overflow-wrap:anywhere;white-space:pre-wrap}`;
   document.head.appendChild(css);
@@ -76,6 +89,65 @@
     return { ok, err, items };
   }
   const panelHeader = (name, color) => `<div class="kt-renew-head" style="--kt-panel:${esc(color)}">Pannello: ${esc(name)}</div>`;
+  function panelLog(container, p, color) {
+    if (!container) return;
+    const kinds = [['all', 'Tutto'], ['lines', 'Linee'], ['renew', 'Rinnovi'], ['credits', 'Crediti'], ['resellers', 'Reseller']];
+    const state = { kind: 'all', q: '', rows: [], more: false, loading: false, error: '', timer: 0, seq: 0 };
+    const render = () => {
+      const search = container.querySelector('[data-kx-panel-log-search]');
+      const keepSearch = !!search && document.activeElement === search, pos = keepSearch ? search.selectionStart : 0;
+      container.innerHTML = `<div class="kt-panel-log" style="--kt-log-color:${esc(color)}">
+        <div class="kt-panel-log-head"><div class="kt-panel-log-chips filters">${kinds.map(([k, label]) => `<button type="button" class="fchip${state.kind === k ? ' on' : ''}" data-kx-panel-log-kind="${k}">${label}</button>`).join('')}</div>
+          <input class="inp kt-panel-log-search" data-kx-panel-log-search placeholder="Cerca nel registro…" value="${esc(state.q)}"><button type="button" class="btn sm" data-kx-panel-log-refresh>Aggiorna</button></div>
+        ${state.error ? `<div style="color:#ff9b9b">${esc(state.error)}</div>` : ''}
+        <div class="kt-panel-log-list">${state.rows.map((row) => {
+          const text = String(row.text || ''), split = text.indexOf(': ');
+          const who = split < 0 ? '' : text.slice(0, split), what = split < 0 ? text : text.slice(split + 2);
+          const dot = row.type === 'new' ? '#34d399' : row.type === 'del' ? '#fb7185' : row.type === 'edit' ? '#f5b041' : '#94a3b8';
+          const time = row.t ? new Date(+row.t).toLocaleString('it-IT') : '';
+          return `<div class="kt-panel-log-row"><time class="kt-panel-log-time">${esc(time)}</time><div class="kt-panel-log-text"><i class="kt-panel-log-dot" style="background:${dot}"></i>${who ? `<span class="kt-panel-log-who">${esc(who)}</span>: ` : ''}${esc(what)}</div></div>`;
+        }).join('') || (!state.loading ? '<div class="mut">Nessuna attività per questo pannello.</div>' : '')}</div>
+        ${state.loading ? '<div class="mut">Carico il registro…</div>' : ''}
+        ${state.more ? '<button type="button" class="btn sm" data-kx-panel-log-more>Carica altri</button>' : ''}</div>`;
+      if (keepSearch) {
+        const next = container.querySelector('[data-kx-panel-log-search]');
+        if (next) { next.focus(); next.setSelectionRange(pos, pos); }
+      }
+      container.querySelectorAll('[data-kx-panel-log-kind]').forEach((button) => {
+        button.onclick = () => { state.kind = button.dataset.kxPanelLogKind; load(false); };
+      });
+      const input = container.querySelector('[data-kx-panel-log-search]');
+      if (input) input.oninput = () => {
+        state.q = input.value;
+        clearTimeout(state.timer);
+        state.timer = setTimeout(() => load(false), 250);
+      };
+      const refresh = container.querySelector('[data-kx-panel-log-refresh]');
+      if (refresh) refresh.onclick = () => load(false);
+      const more = container.querySelector('[data-kx-panel-log-more]');
+      if (more) more.onclick = () => load(true);
+    };
+    const load = async (append) => {
+      const seq = ++state.seq, before = append && state.rows.length ? state.rows[state.rows.length - 1].id : 0;
+      if (!append) { state.rows = []; state.more = false; }
+      state.loading = true; state.error = ''; render();
+      const params = new URLSearchParams({ p, kind: state.kind, q: state.q });
+      if (before) params.set('before', String(before));
+      try {
+        const result = await api('GET', `/admin/activity/panel?${params}`);
+        if (seq !== state.seq) return;
+        state.rows = append ? [...state.rows, ...(result.rows || [])] : (result.rows || []);
+        state.more = !!result.more;
+      } catch (e) {
+        if (seq !== state.seq) return;
+        state.error = e && e.message ? e.message : String(e);
+      }
+      state.loading = false; render();
+    };
+    container._kxPanelLogRefresh = () => load(false);
+    render();
+    load(false);
+  }
 
   /* clienti KAIROS (principali) che hanno nelle playlist uno di questi utenti */
   function devsFor(users, extra) {
@@ -137,6 +209,6 @@
     });
   }
 
-  window.KXTools = { csv, day, stats, count, run, runReport, panelHeader, noteValue, noteChanged, noteWithTag, devsFor, msg, bar, ck, bind };
+  window.KXTools = { csv, day, stats, count, run, runReport, panelHeader, panelLog, noteValue, noteChanged, noteWithTag, devsFor, msg, bar, ck, bind };
   window.KXCreds = { show: showCredentials };
 })();

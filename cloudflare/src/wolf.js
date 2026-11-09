@@ -564,12 +564,13 @@ async function routes(req, env, path, who, ip, H, ag) {
       const page = await wfPage(env, H, cfg, `/lines/extend/${id}`);
       const username = inputVal(page, 'username'); if (!username) throw new HttpErr(404, 'Linea non trovata su WOLF');
       const ed = await wfPage(env, H, cfg, `/lines/edit/${id}`);
-      await wfJson(env, H, cfg, `/lines/extend/${id}`, { _token: tokenOf(page), current_bouquets: bqOf(ed, H), username, keep_current_bouquet: 'on', package: pkg, description: descOf(ed) });
+      const renewed = await wfJson(env, H, cfg, `/lines/extend/${id}`, { _token: tokenOf(page), current_bouquets: bqOf(ed, H), username, keep_current_bouquet: 'on', package: pkg, description: descOf(ed) });
       cfg.m.lines = null;
       const info = (await packages(env, H, cfg).catch(() => [])).find((x) => String(x.id) === pkg);
       const packageName = info ? info.name : pkg;
       const creditText = info && Number.isFinite(+info.credits) ? `${info.credits} crediti` : 'crediti non disponibili';
-      await H.log(env, 'edit', `${who}: WOLF — linea ${username} rinnovata · pacchetto ${packageName} · ${creditText}`, ip);
+      const expiry = renewed && (renewed.new_exp ?? renewed.exp_date ?? renewed.exp ?? (renewed.data && (renewed.data.new_exp ?? renewed.data.exp_date ?? renewed.data.exp)));
+      await H.log(env, 'edit', `${who}: WOLF — linea ${username} rinnovata · pacchetto ${packageName} · ${creditText}${expiry != null ? ` · scadenza ${str(String(expiry), 40)}` : ''}`, ip);
       return json({ ok: true, package: packageName, credits: info && Number.isFinite(+info.credits) ? +info.credits : null });
     }
     if (act === '/toggle' && m === 'POST') {
@@ -580,7 +581,12 @@ async function routes(req, env, path, who, ip, H, ag) {
       await H.log(env, 'edit', `${who}: WOLF — linea ${l.username} ${l.enabled ? 'disattivata' : 'attivata'}`, ip);
       return json({ ok: true });
     }
-    if (act === '/kick' && m === 'POST') { await wfJson(env, H, cfg, `/lines/kick/${id}`); cfg.m.lines = null; return json({ ok: true }); }
+    if (act === '/kick' && m === 'POST') {
+      const l = (cfg.m.lines || []).find((x) => x.id === id);
+      await wfJson(env, H, cfg, `/lines/kick/${id}`); cfg.m.lines = null;
+      await H.log(env, 'edit', `${who}: WOLF — linea ${l ? l.username : `#${id}`} disconnessa`, ip);
+      return json({ ok: true });
+    }
     if (!act && m === 'DELETE') {
       const l = (await fetchMine(false)).find((x) => x.id === id);
       await wfJson(env, H, cfg, `/lines/delete/${id}`);
@@ -660,7 +666,13 @@ async function routes(req, env, path, who, ip, H, ag) {
     return json(await linkLine(env, H, cfg, l, str(b.device, 20), who, ip));
   }
   const km = path.match(/^\/wolf\/links\/(\d+)$/);
-  if (km && m === 'DELETE') { await env.DB.prepare('DELETE FROM wolf_links WHERE line_id = ?').bind(+km[1]).run(); return json({ ok: true }); }
+  if (km && m === 'DELETE') {
+    const id = +km[1], link = await env.DB.prepare('SELECT device_id, username FROM wolf_links WHERE line_id = ?').bind(id).first();
+    const d = link ? await env.DB.prepare('SELECT name, code FROM devices WHERE id = ?').bind(link.device_id).first() : null;
+    const removed = await env.DB.prepare('DELETE FROM wolf_links WHERE line_id = ?').bind(id).run();
+    if (link && (removed.meta?.changes || 0) > 0) await H.log(env, 'del', `${who}: WOLF — linea ${str(link.username, 120) || `#${id}`} scollegata da ${str(d && (d.name || d.code) || 'cliente KAIROS', 80)}`, ip);
+    return json({ ok: true });
+  }
   return null;
 }
 
