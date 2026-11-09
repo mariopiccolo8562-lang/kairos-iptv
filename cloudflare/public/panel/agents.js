@@ -214,7 +214,7 @@ body.agent .foot{display:none}
     ['reports', 'Segnalazioni', 'Dei suoi clienti', 'reports'], ['contentReq', 'Richieste contenuti', 'Dei suoi clienti', 'creq'], ['addonReq', 'Richieste temi', 'Assegna solo gli add-on che gli concedi', 'areq'],
     ['messages', 'Messaggi', 'Solo ai suoi clienti, mai a tutti', 'msgs'],
     ['vod', 'Videoteca', 'Solo le linee dei suoi clienti', 'vod'], ['activity', 'Attività', 'Solo le sue azioni', 'activity'], ['dlcodes', 'Codici downloader', 'Le app da far installare ai clienti (solo da copiare)', 'dlc'], ['appstore', 'APP Store', 'Le app per caricare le liste: solo quelle che scegli qui sotto, in sola lettura', 'apps3'], ['appsOp', 'OrbixPlay e MaxPlayer', 'Codici cliente e liste create dei suoi clienti', 'agop'], ['appk', 'App Kairos', 'Link e codici Downloader delle app Kairos che scegli', 'agk'], ['lines', 'Linee collegate', 'Il registro delle linee collegate alle app: solo le sue', 'lines'], ['maint', 'Manutenzione dei suoi clienti', 'Schermata di manutenzione solo per i suoi clienti (mai per i tuoi)', ''], ['armada', 'Pannello Armada', 'Con i tuoi crediti, entro il tetto mensile', 'armada'], ['storm', 'Pannello Storm', 'Con i tuoi crediti Storm, entro il tetto che decidi', 'storm'], ['orcpApp', 'App MirkoTeam: scaricarla e scegliere il server', 'Downloader e solo i server che gli assegni', 'orcp-agent']];
-  FP.push(['wolf', 'Pannello WOLF', 'Con il suo account reseller WOLF: sue linee e suoi crediti', 'wolf'], ['mxp', 'Pannello MaxPlayer', 'Solo i clienti del suo agente MaxPlayer', 'mxp'], ['oxp', 'Pannello OrbixPlay', 'Solo le playlist dei suoi clienti', 'oxp'], ['ro', 'Pannello Realott', 'Con il suo account sub-reseller Realott: sue linee e suoi crediti', 'ro'], ['slt', 'Pannello SLT', 'Con il suo account sub-reseller SLT: sue linee e suoi crediti', 'slt']);
+  FP.push(['wolf', 'Pannello WOLF', 'Con il suo account reseller WOLF: sue linee e suoi crediti', 'wolf'], ['mxp', 'Pannello MaxPlayer', 'Solo i clienti del suo agente MaxPlayer', 'mxp'], ['oxp', 'Pannello OrbixPlay', 'Solo le playlist dei suoi clienti', 'oxp'], ['ro', 'Pannello Realott', 'Con il suo account sub-reseller Realott: sue linee e suoi crediti', 'ro'], ['slt', 'Pannello SLT', 'Con il suo account sub-reseller SLT: sue linee e suoi crediti', 'slt'], ['atx', 'Pannello Atlantix', 'Con il suo account sottovenditore Atlantix: sue linee e suoi crediti', 'atx']);
   const PERM_VIEW = Object.fromEntries(FP.map(([k, , , v]) => [v, k]));
   PERM_VIEW.payments = 'payments';
   PERM_VIEW.appsum = 'lines';
@@ -222,8 +222,10 @@ body.agent .foot{display:none}
   const isAgent = () => D.role === 'agent';
   const me = () => D.me || {};
   const can = (k) => !isAgent() || !!(me().perms || {})[k];
+  const AG_ATX_OK = /^\/admin\/atx\/[A-Za-z0-9_\/%.-]+(\?.*)?$/;
+  const AG_ATX_NEED = /^\/admin\/atx\//;
   const canOpenActivationWizard = () => !isAgent() || can('create') || (D.activationApps || []).some((x) => x.enabled && KXActApps.hasPermission(me().perms || {}, x)) || (!!(me().perms || {}).orcpApp && (me().perms || {}).orcpSrv?.length > 0);
-  const linePanels = ['wolf', 'armada', 'storm', 'ro', 'slt'];
+  const linePanels = ['wolf', 'armada', 'storm', 'atx', 'ro', 'slt'];
   const canLoadLines = (perms = me().perms || {}) => !!window.KXLinePick && (!isAgent() || linePanels.some((k) => !!perms[k]));
   const matchLineServer = async (host, servers, panel) => {
     if (!host && !panel) return null;
@@ -305,10 +307,10 @@ body.agent .foot{display:none}
   const AG_NEED = [[/^\/admin\/requests.*[?&]kind=content/, 'contentReq'], [/^\/admin\/requests.*[?&]kind=addon/, 'addonReq'], [/^\/admin\/requests.*[?&]kind=ai/, 'ai'],
     [/^\/admin\/requests(\?(?!.*kind=)|\?.*kind=report|$)/, 'reports'], [/^\/admin\/app-errors/, 'errors'], [/^\/admin\/presence/, 'online'], [/^\/admin\/catalog/, 'vod'], [/^\/admin\/apps3\/lists/, 'appsOp'],
     [/^\/admin\/ext-lists/, 'players'], [/^\/admin\/linked-lines/, 'lines'], [/^\/admin\/agent-maint/, 'maint'], [/^\/admin\/armada\//, 'armada'], [/^\/admin\/storm\//, 'storm'], [/^\/admin\/wolf\//, 'wolf'], [/^\/admin\/mxp\//, 'mxp'], [/^\/admin\/oxp\//, 'oxp'], [/^\/admin\/ro\//, 'ro'], [/^\/admin\/slt\//, 'slt']];
-  const agDenied = (m, p) => { if (!isAgent() || !D.me || !D.me.perms || m !== 'GET') return false; const x = AG_NEED.find(([re]) => re.test(p)); return !!x && !D.me.perms[x[1]]; };
+  const agDenied = (m, p) => { if (!isAgent() || !D.me || !D.me.perms || m !== 'GET') return false; const x = AG_NEED.find(([re]) => re.test(p)); return !!x && !D.me.perms[x[1]] || AG_ATX_NEED.test(p) && !D.me.perms.atx; };
   const origApi = api;
   window.api = api = async function (m, p, b) {
-    if (isAgent() && !AG_OK.test(p) && p !== '/admin/agent/agent-ledger') throw new Error('Funzione non disponibile per gli agenti');
+    if (isAgent() && !AG_OK.test(p) && !AG_ATX_OK.test(p) && p !== '/admin/agent/agent-ledger') throw new Error('Funzione non disponibile per gli agenti');
     if (agDenied(m, p)) throw new Error('Funzione non consentita: chiedila a chi ti ha creato');
     const asAt = window.__assist || null;
     const r = await origApi(m, p, b);
@@ -325,7 +327,7 @@ body.agent .foot{display:none}
   /* ---------- modalità agente ---------- */
   // «Online ora» e «Riepilogo store» sono solo del titolare (lo store è aperto: agli agenti non resta nulla da approvare)
   const agentCan = (v) => v === 'payments' ? (can('payments') || !!(window.KXPay && KXPay.hasRows())) : v !== 'live' && v !== 'store' && !!PERM_VIEW[v] && can(PERM_VIEW[v]);
-  const OWNER_ONLY = ['dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'storesum', 'dns', 'apps3', 'lines', 'appsum', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity', 'ora', 'atx', 'ro', 'slt', 'orcp', 'payments']; // ora/atx/ro/slt/orcp: solo titolare (il server risponde 403 agli agenti)
+  const OWNER_ONLY = ['dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'storesum', 'dns', 'apps3', 'lines', 'appsum', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity', 'ora', 'ro', 'slt', 'orcp', 'payments']; // ora/ro/slt/orcp: solo titolare (il server risponde 403 agli agenti)
   const AGENT_ONLY = ['orcp-agent'];
   let modeSet = '';
   function applyMode() {
@@ -620,7 +622,7 @@ body.agent .foot{display:none}
       <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th>${sub ? '' : '<th>Link accesso</th>'}<th>DNS</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
       ${list.map((a) => { const pct = a.maxClients ? Math.min(100, Math.round((a.clients / a.maxClients) * 100)) : 100; const up = a.parentId && byId.get(a.parentId);
         return `<tr data-ag="${a.id}"><td class="num">${a.id}</td>
-        <td><b>${esc(a.username)}</b>${ledgerBadge(ledgerSummary.get(a.id))}<small>${esc(a.email || '—')}${up ? ' · sotto ' + esc(up.username) : ''}</small></td>
+        <td><b>${esc(a.username)}</b>${ledgerBadge(ledgerSummary.get(a.id))}<small>${esc(a.email || '—')} · Responsabile: ${esc(up ? up.username : 'Master')}</small></td>
         <td><b>${a.clients}</b><small>Limite: ${a.maxClients}</small><div class="ag-bar2"><s style="width:${pct}%"></s></div><button type="button" class="btn sm ag-cl" data-agcl="${a.id}" title="Apre Clienti con solo i clienti di ${esc(a.username)}">👥 Vedi i suoi clienti</button></td>
         <td class="hm">${a.subAgents}</td>
         <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span>${(a.perms || {}).armada ? '<br><span class="chip" style="margin-top:4px">Armada</span>' : ''}${(a.perms || {}).storm ? '<br><span class="chip" style="margin-top:4px">Storm</span>' : ''}${(a.perms || {}).wolf ? '<br><span class="chip" style="margin-top:4px">WOLF</span>' : ''}${(a.perms || {}).mxp ? '<br><span class="chip" style="margin-top:4px">MaxPlayer</span>' : ''}${(a.perms || {}).oxp ? '<br><span class="chip" style="margin-top:4px">OrbixPlay</span>' : ''}</td>
@@ -741,11 +743,11 @@ body.agent .foot{display:none}
     }));
     const pr = ask('Link accesso · ' + a.username, html(), 'Chiudi'); bind(); await pr;
   }
-  const APP_KEYS = ['appstore', 'players', 'appsOp', 'dlcodes', 'appk', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'ro', 'slt']; // hanno la loro sezione nell'editor
+  const APP_KEYS = ['appstore', 'players', 'appsOp', 'dlcodes', 'appk', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'ro', 'slt', 'atx']; // hanno la loro sezione nell'editor
   const KAPPS = [['pro', 'Kairos Pro'], ['tv', 'Kairos TV'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['prem', 'Kairos Premium'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova'], ['store', 'Kairos Store']];
   const dlcNames = () => (Array.isArray(D.dlCodes) ? D.dlCodes : []).map((x) => [x.name, x.name]);
   const bulkAppFlags = new Set(['appstore', 'players', 'appsOp', 'dlcodes', 'appk']);
-  const bulkPanelFlags = new Set(['armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt']);
+  const bulkPanelFlags = new Set(['armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt', 'atx']);
   const bulkFlagGroups = [
     ['Permessi', FL.filter(([k]) => !bulkAppFlags.has(k) && !bulkPanelFlags.has(k))],
     ['Pagine del pannello', FP.filter(([k]) => !bulkAppFlags.has(k) && !bulkPanelFlags.has(k) && k !== 'store')],
@@ -902,6 +904,11 @@ body.agent .foot{display:none}
     let mxItems = [], mxErr = '';
     if (D.players && D.players.max) { try { mxItems = ((await api('GET', '/admin/maxplayer/domains')).domains || []).map((x) => [x.id, (x.label || 'DNS ' + x.id) + (!sub && x.domain ? ' — ' + x.domain + (x.port && !['80', '443'].includes(String(x.port)) ? ':' + x.port : '') : '')]); } catch (e) { mxErr = 'DNS di MaxPlayer non disponibili: ' + e.message; } }
     const P = a ? a.perms : { create: true, renew: true, disable: true, kick: true, playlists: true, delete: false, clientPerms: false, vpn: false, addons: [], maxConn: 1 };
+    const parentById = new Map((D.agents || []).map((x) => [x.id, x]));
+    const canManageAgents = (x) => { for (let p = x; p; p = parentById.get(p.parentId)) if (!p.canAgents) return false; return !!x; };
+    const descendants = new Set();
+    if (a) { let changed = true; while (changed) { changed = false; for (const x of D.agents || []) if (!descendants.has(x.id) && (x.parentId === a.id || descendants.has(x.parentId))) { descendants.add(x.id); changed = true; } } }
+    const parentOptions = (selected, exclude = 0) => '<option value="0"' + (!selected ? ' selected' : '') + '>Io (Master)</option>' + (D.agents || []).filter((x) => x.id !== exclude && (x.id === selected || !descendants.has(x.id)) && canManageAgents(x)).map((x) => `<option value="${x.id}"${x.id === selected ? ' selected' : ''}>${esc(x.username)}</option>`).join('');
     let ledgerPanelsValue = Array.isArray(P.ledgerPanels) ? [...P.ledgerPanels] : null;
     const topP = top ? top.perms || {} : null;
     const orcpKeys = ['portal', 'portal2', 'portal3', 'portal4', 'portal5'];
@@ -911,10 +918,23 @@ body.agent .foot{display:none}
       if (sub) orcpItems = (r && r.servers || []).map((x) => ({ k: orcpKeys[x.n - 1], n: x.n, name: x.name }));
       else orcpItems = (r && r.cfg && r.cfg.portalNames || []).map((x, i) => ({ ...x, n: orcpKeys.indexOf(x.k) + 1 || i + 1, name: x.name || `Server ${i + 1}` }));
     } catch {}
-    let wolfAcc = null, wolfErr = '', mxAccs = [], mxMap = null; const extAcc = { ro: null, slt: null };
+    let wolfAcc = null, wolfErr = '', mxAccs = [], mxMap = null, atxMasterConnected = false, atxSubs = [];
+    const extAcc = { ro: null, slt: null, atx: null };
     if (!sub) { try { mxAccs = (await api('GET', '/admin/mxp/accounts')).accounts || []; if (a) mxMap = ((await api('GET', '/admin/mxp/agents')).agents || []).find((x) => x.id === a.id) || null; } catch (e) { mxAccs = []; } }
     if (!sub && a) { try { wolfAcc = ((await api('GET', '/admin/wolf/agents')).agents || []).find((x) => x.id === a.id) || null; } catch (e) { wolfErr = ''; } }
-    if (!sub && a) for (const k of ['ro', 'slt']) { try { extAcc[k] = ((await api('GET', `/admin/${k}/agents`)).agents || []).find((x) => x.id === a.id) || null; } catch {} }
+    if (!sub) {
+      try {
+        atxMasterConnected = !!(await api('GET', '/admin/atx/state')).connected;
+        if (atxMasterConnected) {
+          const d = await api('GET', '/admin/atx/subs');
+          atxSubs = Array.isArray(d) ? d : ['rows', 'items', 'subresellers', 'resellers', 'list', 'data'].map((k) => d && d[k]).find(Array.isArray) || [];
+        }
+      } catch {}
+    }
+    if (!sub && a) {
+      for (const k of ['ro', 'slt']) { try { extAcc[k] = ((await api('GET', `/admin/${k}/agents`)).agents || []).find((x) => x.id === a.id) || null; } catch {} }
+      try { extAcc.atx = ((await api('GET', '/admin/atx/agents')).agents || []).find((x) => x.id === a.id) || null; } catch {}
+    }
     $('#agT').innerHTML = isNew ? (sub ? 'Nuovo sotto-agente' : 'Nuovo agente') : `${esc(a.username)} <span class="chip ${a.active ? 'g' : 'r'}" style="vertical-align:3px">${a.active ? 'Attivato' : 'Disattivato'}</span>`;
     $('#agB').innerHTML = `<div class="ag-g">
       <div class="ag-c"><h4>Account</h4><small>Le credenziali con cui l'agente entra in questo pannello</small>
@@ -925,6 +945,8 @@ body.agent .foot{display:none}
         <label class="lbl">Note (le vedi solo tu)</label><textarea class="inp" id="agN" maxlength="300" placeholder="Contatto, accordi, pagamenti…">${esc(a ? a.notes : '')}</textarea>
         <div class="tog ${!a || a.active ? 'on' : ''}" id="agA" style="margin-top:14px"><div><b>Account attivo</b><small>Se lo disattivi esce subito dal pannello, insieme ai suoi sotto-agenti. I clienti continuano a funzionare.</small></div><i></i></div>
       </div>
+      ${!sub && isNew ? `<div class="ag-c"><h4>Sotto chi</h4><small>Decidi quale agente gestirà questo nuovo agente</small><select class="inp" id="agParentSel">${parentOptions(0)}</select></div>` : ''}
+      ${!sub && a ? `<div class="ag-c"><h4>👥 Sposta sotto…</h4><small>Il nuovo responsabile vedrà l'agente e i suoi clienti</small><select class="inp" id="agMoveParent">${parentOptions(a.parentId || 0, a.id)}</select><button type="button" class="btn" id="agMoveBtn" style="margin-top:10px">Sposta agente</button></div>` : ''}
       <div class="ag-c"><h4>Limiti e accesso</h4><small>Quanti clienti può avere e cosa vede</small>
         <div class="row"><div><label class="lbl">Clienti massimi</label><input class="inp" id="agM" type="number" min="0" max="${top ? top.maxClients : 100000}" value="${a ? a.maxClients : Math.min(10, top ? top.maxClients : 10)}"></div>
         <div><label class="lbl">Connessioni per cliente</label><input class="inp" id="agC" type="number" min="1" max="${topP ? topP.maxConn : 10}" value="${P.maxConn || 1}"></div></div>
@@ -995,6 +1017,17 @@ body.agent .foot{display:none}
             <div><label class="lbl" style="margin-top:0">Password ${n}</label><input class="inp mono" id="agExP_${k}" type="password" maxlength="200" autocomplete="new-password" placeholder="${extAcc[k] ? 'lascia vuoto per non cambiarla' : ''}"></div></div>
             <small class="mut" style="display:block;margin-top:6px">${extAcc[k] ? 'Account collegato. Svuota l\'utente per scollegarlo.' : `Facoltativo: se lo lasci vuoto l'agente lo inserisce da solo. KAIROS controlla che ${n} lo accetti.`}</small></div>`}
         </div></div>`).join('')}
+      <div class="ag-c ag-arm" id="agEx_atx" style="grid-column:1/-1"><h4>🛰️ Pannello Atlantix</h4><small>Spento di base. Se lo accendi l'agente usa Atlantix da KAIROS <b>con il suo account sottovenditore e i suoi crediti</b>: vede solo le sue linee e crea o rinnova scalando <b>i suoi</b> crediti. Non vede il tuo account, DNS o indirizzi dei pannelli.</small>
+        <div class="ag-armg">
+          <div class="ag-chk">${chk('perm', 'atx', '<b>Può usare il pannello Atlantix</b>', !!P.atx, topP && !topP.atx, 'Linee, rinnovi e crediti del suo account Atlantix')}</div>
+          ${sub ? '<p class="mut" style="font-size:12.5px;margin:0">Utente, password e codice di accesso Atlantix li inserisce lui nella sua sezione «Pannello Atlantix».</p>' : `<div>
+            ${atxMasterConnected && atxSubs.length ? `<label class="lbl" style="margin-top:0">Scegli tra i tuoi sottovenditori<select class="inp" id="agExSel_atx"><option value="">— scegli un sottovenditore —</option>${atxSubs.map((x) => `<option value="${esc(String(x.id || ''))}">${esc(x.username || x.user || x.name || '')}</option>`).join('')}</select></label>` : ''}
+            <div class="row"><div><label class="lbl" style="margin-top:0">Utente Atlantix dell'agente</label><input class="inp mono" id="agExU_atx" maxlength="80" value="${esc(extAcc.atx ? extAcc.atx.user : '')}" autocomplete="off" placeholder="come su Atlantix"></div>
+              <div><label class="lbl" style="margin-top:0">Password Atlantix</label><input class="inp mono" id="agExP_atx" type="password" maxlength="200" autocomplete="new-password" placeholder="${extAcc.atx ? 'lascia vuoto per non cambiarla' : ''}"></div>
+              <div><label class="lbl" style="margin-top:0">Codice di accesso Atlantix</label><input class="inp mono" id="agExC_atx" type="password" maxlength="80" autocomplete="new-password" placeholder="${extAcc.atx ? 'lascia vuoto per non cambiarlo' : ''}"></div></div>
+            <small class="mut" style="display:block;margin-top:6px">${extAcc.atx ? 'Account collegato. Svuota l\'utente per scollegarlo.' : 'Facoltativo: se lo lasci vuoto l\'agente lo inserisce da solo. Il codice di accesso è richiesto da Atlantix.'}</small></div>`}
+        </div>
+      </div>
       <div class="ag-c ag-arm" id="agWf" style="grid-column:1/-1"><h4>🐺 Pannello WOLF</h4><small>Spento di base. Se lo accendi l'agente usa il pannello WOLF da KAIROS <b>con il suo account reseller WOLF</b>: vede le sue linee e i suoi sotto-reseller e crea o rinnova scalando <b>i suoi</b> crediti, come su WOLF. Non vede il tuo account. Ogni operazione resta nel registro attività.</small>
         <div class="ag-armg">
           <div class="ag-chk">${chk('perm', 'wolf', '<b>Può usare il pannello WOLF</b>', !!P.wolf, topP && !topP.wolf, 'Linee, rinnovi e sotto-reseller del suo account WOLF')}</div>
@@ -1087,13 +1120,26 @@ body.agent .foot{display:none}
     $$('#agR label').forEach((l) => (l.onclick = () => { $$('#agR label').forEach((x) => x.classList.toggle('on', x === l)); $('input', l).checked = true; }));
     if (sub && !top.canAgents) $$('#agR input').forEach((i) => (i.disabled = true));
     $('#agNo').onclick = closePage;
+    const atxPermInputs = $$('#agPg [data-perm="atx"], #agEx_atx [data-perm="atx"]');
+    atxPermInputs.forEach((input) => input.addEventListener('change', () => atxPermInputs.forEach((other) => { other.checked = input.checked; })));
+    if ($('#agExSel_atx')) $('#agExSel_atx').onchange = () => {
+      const selected = atxSubs.find((x) => String(x.id || '') === $('#agExSel_atx').value);
+      if (selected) {
+        const atxUser = selected.username || selected.user || selected.name || '';
+        $('#agExU_atx').value = atxUser;
+        const kairosUser = String(atxUser).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 40);
+        if ($('#agU') && !$('#agU').value.trim() && kairosUser.length >= 3) $('#agU').value = kairosUser;
+        const permission = $('#agEx_atx [data-perm="atx"]');
+        if (permission && !permission.checked) { permission.checked = true; permission.dispatchEvent(new Event('change', { bubbles: true })); }
+      }
+    };
     const read = () => ({
       email: $('#agE').value.trim(), notes: $('#agN').value, active: $('#agA').classList.contains('on'), maxClients: +$('#agM').value || 0,
       ...($('#agSc') && $('#agSc').value.trim() ? { storeCode: $('#agSc').value.trim().toUpperCase() } : {}),
       ...($('#agSm') ? { storeMax: $('#agSm').value.trim() === '' ? null : +$('#agSm').value } : {}),
       canAgents: $('#agR input:checked') ? $('#agR input:checked').value === '1' : false,
       servers: $$('#agS [data-srv]').filter((i) => i.checked).map((i) => i.dataset.srv),
-      perms: { ...Object.fromEntries([...FL, ...FP, ['armadaTrial'], ['stormTrial'], ['oxpNew']].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"], .ag-apps [data-perm="${k}"], #agAr [data-perm="${k}"], #agSt [data-perm="${k}"], #agWf [data-perm="${k}"], #agMx [data-perm="${k}"], #agOx [data-perm="${k}"]`) || {}).checked])), armadaCredits: Math.max(0, +(($('#agArC') || {}).value || 0) || 0), stormCredits: Math.max(0, +(($('#agStC') || {}).value || 0) || 0), dlcAllow: listRead('agDc', 'dlca'), kAllow: listRead('agKa', 'kapp'), orbDns: listRead('agOd', 'odns'), mxDns: listRead('agMd', 'mdns'), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad),
+      perms: { ...Object.fromEntries([...FL, ...FP, ['armadaTrial'], ['stormTrial'], ['oxpNew']].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"], .ag-apps [data-perm="${k}"], #agAr [data-perm="${k}"], #agSt [data-perm="${k}"], #agWf [data-perm="${k}"], #agMx [data-perm="${k}"], #agOx [data-perm="${k}"], #agEx_atx [data-perm="${k}"]`) || {}).checked])), armadaCredits: Math.max(0, +(($('#agArC') || {}).value || 0) || 0), stormCredits: Math.max(0, +(($('#agStC') || {}).value || 0) || 0), dlcAllow: listRead('agDc', 'dlca'), kAllow: listRead('agKa', 'kapp'), orbDns: listRead('agOd', 'odns'), mxDns: listRead('agMd', 'mdns'), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad),
         storeApps: $('#agSa [data-sapp="*"]') && $('#agSa [data-sapp="*"]').checked ? ['*'] : $$('#agSa [data-sapp]').filter((i) => i.checked && i.dataset.sapp !== '*').map((i) => i.dataset.sapp),
         actApps: $$('#agActApps [data-actapp]:checked').map((i) => i.dataset.actapp),
         appsAllow: $('#agAa [data-aapp="*"]') && $('#agAa [data-aapp="*"]').checked ? ['*'] : $$('#agAa [data-aapp]').filter((i) => i.checked && i.dataset.aapp !== '*').map((i) => i.dataset.aapp),
@@ -1102,18 +1148,26 @@ body.agent .foot{display:none}
     });
     $('#agOk').onclick = async () => {
       const b = read(), pw = $('#agP').value;
+      if ($('#agParentSel')) b.parentId = +$('#agParentSel').value || 0;
       try {
         let id = a && a.id;
         if (isNew) id = (await api('POST', '/admin/agents', { ...b, username: $('#agU').value.trim(), password: pw })).id;
         else await api('PUT', '/admin/agents/' + a.id, { ...b, ...(pw ? { password: pw } : {}) });
         let wErr = '';
         for (const k of ['ro', 'slt']) { const U = $('#agExU_' + k), Pw = $('#agExP_' + k); if (!U || !id) continue; const u = U.value.trim(), pw = Pw ? Pw.value : '', cur = extAcc[k]; try { if (!u && cur) await api('DELETE', `/admin/${k}/agents/${id}`); else if (u && (pw || !cur || cur.user !== u)) await api('PUT', `/admin/${k}/agents/${id}`, { user: u, pass: pw }); } catch (e) { toast(e.message, 1); } }
+        const atxU = $('#agExU_atx'), atxP = $('#agExP_atx'), atxC = $('#agExC_atx'), atxUser = atxU ? atxU.value.trim() : '', atxPass = atxP ? atxP.value : '', atxCode = atxC ? atxC.value.trim() : '', oldAtx = extAcc.atx;
+        if (atxU && id) {
+          try {
+            if (!atxUser && oldAtx) await api('DELETE', `/admin/atx/agents/${id}`);
+            else if (atxUser && (atxPass || atxCode || !oldAtx || oldAtx.user !== atxUser)) await api('PUT', `/admin/atx/agents/${id}`, { user: atxUser, pass: atxPass, code: atxCode });
+          } catch (e) { wErr = 'Atlantix: ' + e.message; }
+        }
         const wu = $('#agWfU') ? $('#agWfU').value.trim() : '', wp = $('#agWfP') ? $('#agWfP').value : '';
         if ($('#agWfU') && id) {
           try {
             if (wu && (wp || !wolfAcc || wolfAcc.user !== wu)) await api('PUT', '/admin/wolf/agents/' + id, { user: wu, pass: wp });
             else if (!wu && wolfAcc) await api('DELETE', '/admin/wolf/agents/' + id);
-          } catch (e) { wErr = e.message; }
+          } catch (e) { wErr = (wErr ? wErr + ' · ' : '') + 'WOLF: ' + e.message; }
         }
         if ($('#agMxA') && id) {
           const ma = $('#agMxA').value, mg = $('#agMxG').value;
@@ -1128,6 +1182,15 @@ body.agent .foot{display:none}
     $('#agTz') && ($('#agTz').onclick = async () => {
       if (!(await ask('Azzerare la verifica in due passaggi?', `<b>${esc(a.username)}</b> entrerà solo con la password e potrà riattivarla dal suo pannello.`, 'Azzera'))) return;
       try { await api('PUT', '/admin/agents/' + a.id, { resetTotp: true }); closePage(); await load(); toast('2FA azzerata'); } catch (e) { toast(e.message, 1); }
+    });
+    $('#agMoveBtn') && ($('#agMoveBtn').onclick = async () => {
+      const parentId = +$('#agMoveParent').value || 0;
+      if (parentId === (a.parentId || 0)) return;
+      const oldBoss = parentById.get(a.parentId) ? parentById.get(a.parentId).username : 'Master';
+      const newBoss = parentById.get(parentId) ? parentById.get(parentId).username : 'Master';
+      if (!(await ask('Spostare l’agente?', `<b>${esc(a.username)}</b> passerà da <b>${esc(oldBoss)}</b> a <b>${esc(newBoss)}</b>. I clienti, i pagamenti e gli account dei pannelli restano collegati all’agente.`, 'Sposta'))) return;
+      try { await api('PUT', `/admin/agents/${a.id}/parent`, { parentId }); closePage(); await load(); toast(`${a.username} spostato sotto ${newBoss}`); }
+      catch (e) { toast(e.message, 1); }
     });
     $('#agDel') && ($('#agDel').onclick = async () => {
       if (!(await askDanger('Eliminare l\'agente?', `<b>${esc(a.username)}</b> non potrà più entrare. I suoi ${a.clients} clienti e i suoi sotto-agenti passano a ${a.parentId ? 'chi stava sopra di lui' : 'te'}: nessun cliente smette di funzionare.`, a.username))) return;

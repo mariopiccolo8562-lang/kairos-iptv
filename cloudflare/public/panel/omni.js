@@ -42,9 +42,9 @@
           (u.users || []).forEach((x) => add({ p: 'mxp', tag: 'MAX', t: x.username || 'ID ' + x.id, s: (x.lists || []).map((l) => l.user).join(', '), q: x.username || String(x.id), hay: [x.id, x.username, x.email, ...(x.lists || []).map((l) => l.user + ' ' + l.fqdn)] }));
         }
       }).catch(() => {}));
-      // Atlantix, Realott, SLT e MirkoTeam (ORCP): stesse risposte delle loro schede (Atlantix e MirkoTeam solo titolare; Realott/SLT con il permesso)
+      // Atlantix, Realott, SLT e MirkoTeam (ORCP): stesse risposte delle loro schede
       const arr = (d) => (Array.isArray(d) ? d : d && typeof d === 'object' ? (['rows', 'items', 'lines', 'users', 'list', 'data'].map((k) => d[k]).find(Array.isArray) || []) : []);
-      if (!isAg()) T.push(api('GET', '/admin/atx/lines?all=1&page=1&q=&status=&reseller=').then((r) => arr(r).forEach((x) => add({ p: 'atx', tag: 'ATX', t: x.username, s: [x.notes, x.reseller || x.owner || x.reseller_username, Number(x.enabled) === 0 ? 'disattivata' : ''].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.id, x.reseller, x.owner, x.reseller_username] }))).catch(() => {}));
+      if (can('atx')) T.push(api('GET', '/admin/atx/lines?all=1&page=1&q=&status=&reseller=').then((r) => arr(r).forEach((x) => add({ p: 'atx', tag: 'ATX', t: x.username, s: [x.notes, x.reseller || x.owner || x.reseller_username, Number(x.enabled) === 0 ? 'disattivata' : ''].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.id, x.reseller, x.owner, x.reseller_username] }))).catch(() => {}));
       for (const [k, tag] of [['ro', 'REALOTT'], ['slt', 'SLT']]) if (can(k)) T.push(api('GET', `/admin/${k}/lines`).then((r) => (r.rows || []).forEach((x) => add({ p: k, tag, t: x.username, s: [x.notes, x.owner, x.status].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.owner, x.id] }))).catch(() => {}));
       if (!isAg()) T.push(api('GET', '/admin/orcp/state').then((st) => st.connected ? api('GET', '/admin/orcp/data?w=conns') : { list: [] }).then((r) => { const seen = new Set(); (r.list || []).forEach((x) => { const k = String(x.user || '').toLowerCase(); if (!k || seen.has(k)) return; seen.add(k); add({ p: 'orcp', tag: 'MIRKO', t: x.user, s: [x.online ? 'online ora' : 'ultimo accesso ' + (x.last || ''), x.device].filter(Boolean).join(' · '), q: x.user, hay: [x.user, x.device, x.ip] }); }); }).catch(() => {}));
       if (can('oxp')) T.push(api('GET', '/admin/oxp/playlists').then((r) => (r.playlists || []).forEach((x) => add({ p: 'oxp', tag: 'ORB', t: x.user || x.name, s: 'dispositivo ' + x.device + (x.name ? ' · ' + x.name : ''), q: x.device, hay: [x.user, x.device, x.name, x.host] }))).catch(() => {}));
@@ -94,7 +94,7 @@
     if (!q) { dd.classList.remove('on'); if (D.q) { D.q = ''; renderDevices(); } return; }
     const base = [['Clienti', clients(q, toks)], ['Agenti', agents(toks)], ['Pagine', pages(toks)]];
     const PK = PK0, PN = PN0;
-    const ext = q.length >= 3 && (!isAg() || ['wolf', 'armada', 'storm', 'mxp', 'oxp', 'ro', 'slt'].some(can));
+    const ext = q.length >= 3 && (!isAg() || ['wolf', 'armada', 'storm', 'mxp', 'oxp', 'atx', 'ro', 'slt'].some(can));
     const extOf = (L) => { const r = L.filter((x) => fits(x.hay, toks)); return PN.map((n, i) => [n, r.filter((x) => x.p === PK[i]).slice(0, 6).map((x) => ({ ...x, k: 'ext' }))]); };
     if (!ext) return draw(base, false);
     const fresh = EXT.t && Date.now() - EXT.t < 180e3;
