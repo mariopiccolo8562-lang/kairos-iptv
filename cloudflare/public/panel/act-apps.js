@@ -16,11 +16,25 @@
       const cfg = await api('GET', '/admin/agent/orcp');
       return { ...cfg, servers: (cfg.servers || []).map((x) => ({ n: x.n, name: x.name })) };
     }
-    const r = await (window.KXOrcpCfg ? window.KXOrcpCfg() : api('GET', '/admin/orcp/cfg'));
+    let r;
+    if (window.KXOrcpCfg) r = await window.KXOrcpCfg();
+    else {
+      const [cfg, state] = await Promise.all([api('GET', '/admin/orcp/cfg'), api('GET', '/admin/orcp/state')]);
+      r = { ...cfg, connected: !!state.connected };
+    }
     const cfg = r && (r.cfg || r);
     if (!cfg) return null;
-    const list = (cfg.portalNames || []).map((x, i) => ({ n: +(String(x.k || '').replace('portal', '') || 1), name: x.name || `SERVER-${i + 1}` })).filter((x) => x.name);
-    return { ...cfg, servers: list.length ? list : (r.servers || []).map((name, i) => ({ n: i + 1, name })) };
+    if (!r.connected) return { ...cfg, servers: [] };
+    const portalNames = Array.isArray(cfg.portalNames) ? cfg.portalNames : [];
+    const sessionServers = Array.isArray(r.sessionServers) ? r.sessionServers : Array.isArray(r.servers) ? r.servers : [];
+    const servers = Array.from({ length: 5 }, (_, i) => {
+      const n = i + 1, key = n === 1 ? 'portal' : `portal${n}`;
+      const portal = portalNames.find((x) => x && x.k === key);
+      const sessionServer = sessionServers[i];
+      const sessionName = typeof sessionServer === 'string' ? sessionServer : sessionServer && (sessionServer.name || sessionServer.label);
+      return { n, name: String((portal && portal.name) || '').trim() || String(sessionName || '').trim() || `SERVER-${n}` };
+    });
+    return { ...cfg, connected: true, servers };
   }
   async function submitOrcp({ cfg, serverNumber, username, password, registerLinked = true }) {
     const server = (cfg && cfg.servers || []).find((x) => String(x.n) === String(serverNumber));
