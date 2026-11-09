@@ -21,7 +21,28 @@ const selectVal = (h, name) => { const m = String(h).match(new RegExp('<select\\
 const selectOpts = (h, name) => { const m = String(h).match(new RegExp('<select\\b[^>]*\\bname=["\']' + name + '["\'][^>]*>([\\s\\S]*?)<\\/select>', 'i')); return m ? [...m[1].matchAll(/<option\b([^>]*)>([\s\S]*?)<\/option>/gi)].map((o) => ({ v: attr(o[1], 'value'), t: txtOf(o[2]) })) : []; };
 const csrf = (h) => inputVal(h, '_token') || attr((String(h).match(/<meta[^>]+name="csrf-token"[^>]*>/i) || [''])[0], 'content');
 const rows = (h) => [...String(h).matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => ({ html: m[1], cells: [...m[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => c[1]) })).filter((r) => r.cells.length);
-const isLogin = (r) => r.status === 302 && /\/login(?:$|\?)/.test(r.loc) || (r.status === 200 && /<form[^>]+action="[^"]*\/login"/i.test(r.txt) && /name="password"/i.test(r.txt));
+const isLogin = (r) => {
+  if (r.status === 302 && r.loc) {
+    try {
+      const path = new URL(r.loc, BASE).pathname;
+      if (path === '/' || /(?:login|signin)/i.test(path)) return true;
+    } catch {}
+  }
+  return r.status === 200 && /<input\b[^>]*\btype\s*=\s*(?:"password"|'password'|password\b)[^>]*>/i.test(r.txt);
+};
+const unexpectedResponse = (r) => {
+  let path = '';
+  if (r.loc) { try { path = new URL(r.loc, BASE).pathname; } catch {} }
+  const title = txtOf((String(r.txt || '').match(/<title\b[^>]*>([\s\S]*?)<\/title>/i) || ['', ''])[1]).slice(0, 60);
+  return `MirkoTeam ha risposto in modo inatteso (HTTP ${r.status}${path ? ` → ${path}` : ''}${title ? ` · pagina ${title}` : ''}): prova a ricollegare dalla scheda «Collega»`;
+};
+const responseFields = (data) => {
+  let keys = [];
+  if (Array.isArray(data)) { const first = data[0]; if (first && typeof first === 'object') keys = Object.keys(first); }
+  else if (data && typeof data === 'object') keys = Object.keys(data);
+  return keys.slice(0, 6).map((key) => String(key).slice(0, 40)).join(', ') || 'nessuno';
+};
+const changedConnectionFormat = (data) => `Formato delle connessioni MirkoTeam cambiato (campi: ${responseFields(data)})`;
 const cookieHeader = (jar) => Object.entries(jar || {}).map(([k, v]) => `${k}=${v}`).join('; ');
 function eatCookies(jar, res) {
   const list = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : (res.headers.get('set-cookie') || '').split(/,(?=\s*[A-Za-z0-9_-]+=)/);
@@ -145,14 +166,26 @@ async function appInfo(env, H, force) {
 const devOf = (agent) => { const m = String(agent || '').match(/Android\s*([\d.]+);\s*([^;)]+?)\s*(?:Build|\))/i); return m ? `${m[2].trim()} · Android ${m[1]}` : String(agent || '').slice(0, 60); };
 async function connections(env, H) {
   const r = await orcp(env, H, '/getallconnectionsforajax', { ajax: true, ref: '/connectionsdetails' });
-  const list = Array.isArray(r.j) ? r.j : r.j && typeof r.j === 'object' ? Object.values(r.j).filter((x) => x && typeof x === 'object' && 'userid' in x) : [];
+  if (r.status !== 200 || r.j === null) throw new H.HttpErr(502, unexpectedResponse(r));
+  let list = [];
+  if (Array.isArray(r.j)) {
+    if (!r.j.length) return [];
+    list = r.j.filter((x) => x && typeof x === 'object' && 'userid' in x);
+  } else if (r.j && typeof r.j === 'object') {
+    const keys = Object.keys(r.j);
+    if (!keys.length) return [];
+    list = Object.values(r.j).filter((x) => x && typeof x === 'object' && 'userid' in x);
+  } else {
+    throw new H.HttpErr(502, changedConnectionFormat(r.j));
+  }
+  if (!list.length) throw new H.HttpErr(502, changedConnectionFormat(r.j));
   const rows = list.map((x) => ({ id: String(x.id ?? ''), user: String(x.userid ?? '').slice(0, 120), app: String(x.appname ?? '').slice(0, 40), online: /^(yes|1|true)$/i.test(String(x.online ?? '')), last: String(x.time_last_online ?? '').slice(0, 19), ip: String(x.ip ?? '').slice(0, 64), device: devOf(x.agent), version: String(x.version ?? '').slice(0, 40), did: String(x.did ?? '').slice(0, 120) }));
   return rows;
 }
 /* ORCP è lento (connessioni ~20 s, versioni ~10 s): le versioni restano in cache 6 ore, le connessioni 60 secondi */
 async function versions(env, H) {
   const s = await loadSes(env, H); if (s && s.vers && Date.now() - s.vers.at < 6 * 3600e3) return s.vers.list;
-  const r = await orcp(env, H, '/getversions'); const list = rows(r.txt).map((x) => ({ count: +txtOf(x.cells[0]).replace(/\D/g, '') || 0, version: txtOf(x.cells[1]) })).filter((x) => x.version).slice(0, 40);
+  const r = await orcp(env, H, '/getversions'); if (r.status !== 200) throw new H.HttpErr(502, unexpectedResponse(r)); const list = rows(r.txt).map((x) => ({ count: +txtOf(x.cells[0]).replace(/\D/g, '') || 0, version: txtOf(x.cells[1]) })).filter((x) => x.version).slice(0, 40);
   if (s) { s.vers = { at: Date.now(), list }; await saveSes(env, H, s).catch(() => {}); }
   return list;
 }
@@ -247,14 +280,14 @@ export async function orcpRoutes(req, env, path, who, ip, H, ctx) {
   if (path === '/orcp/session' && m === 'PUT') {
     const b = await H.readJSON(req, 16384), jar = parseCookies(str(b.cookies, 12000));
     if (!remOf(jar) && !jar.orcp_ottrun_control_panel_session) throw new HttpErr(400, 'Non trovo i cookie di ORCP: servono «remember_web_…» (con «Remember me») o «orcp_ottrun_control_panel_session»');
-    mem.ses = { jar, at: Date.now() }; mem.cfg = null;
+    mem.ses = { jar, at: Date.now() }; mem.cfg = null; delete mem.connsErr;
     let app; try { app = await appInfo(env, H, true); } catch (e) { mem.ses = null; throw e instanceof HttpErr ? new HttpErr(400, 'ORCP non riconosce questo accesso: rientra su cp.ottrun.com con «Remember me» e ripassa i cookie') : e; }
     await saveSes(env, H, { ...mem.ses, app });
     if (!remOf(jar)) await H.log(env, 'edit', `${who}: ORCP collegato senza «Remember me» (l'accesso durerà circa 2 ore)`, ip).catch(() => {});
     else await H.log(env, 'edit', `${who}: pannello ORCP collegato (${app.name || 'app'})`, ip).catch(() => {});
     return json({ ok: true, remember: !!remOf(jar), app: { name: app.name, version: app.version, expires: app.expires } });
   }
-  if (path === '/orcp/session' && m === 'DELETE') { mem.ses = null; mem.conns = null; await delRow(env, K); await delRow(env, KCONNS).catch(() => {}); await H.log(env, 'edit', `${who}: pannello ORCP scollegato`, ip).catch(() => {}); return json({ ok: true }); }
+  if (path === '/orcp/session' && m === 'DELETE') { mem.ses = null; mem.conns = null; delete mem.connsErr; await delRow(env, K); await delRow(env, KCONNS).catch(() => {}); await H.log(env, 'edit', `${who}: pannello ORCP scollegato`, ip).catch(() => {}); return json({ ok: true }); }
   if (path === '/orcp/cfg' && m === 'GET') { const cfg = await cfgOf(env); const s = await loadSes(env, H); return json({ cfg: { ...cfg, name: cfg.name || (s && s.app && s.app.name) || '' }, servers: s && s.servers ? s.servers : [] }); }
   if (path === '/orcp/cfg' && m === 'PUT') {
     const b = await H.readJSON(req, 8192), cfg = cfgNorm({ ...(await cfgOf(env)), name: b.name, map: b.map });
@@ -268,11 +301,11 @@ export async function orcpRoutes(req, env, path, who, ip, H, ctx) {
       /* ORCP ci mette 15-20 s a rispondere: l'ultima lista resta salvata (memoria + D1) e si risponde subito con quella,
          aggiornandola in sottofondo quando ha più di 60 s. Solo «fresh=1» (pulsante Aggiorna) o la primissima volta aspettano ORCP. */
       const fresh = !!new URL(req.url).searchParams.get('fresh');
-      const pull = async () => { const [list, vers] = await Promise.all([connections(env, H), versions(env, H).catch(() => [])]); mem.conns = { at: Date.now(), list, vers }; await setRow(env, KCONNS, JSON.stringify(mem.conns)).catch(() => {}); return mem.conns; };
+      const pull = async () => { const [list, vers] = await Promise.all([connections(env, H), versions(env, H).catch(() => [])]); mem.conns = { at: Date.now(), list, vers }; delete mem.connsErr; await setRow(env, KCONNS, JSON.stringify(mem.conns)).catch(() => {}); return mem.conns; };
       if (!mem.conns) { try { const r = await getRow(env, KCONNS); const o = r ? JSON.parse(r) : null; if (o && Array.isArray(o.list) && Date.now() - o.at < 864e5) mem.conns = o; } catch { /* snapshot illeggibile: si rilegge da ORCP */ } }
       let c = mem.conns;
       if (!c || fresh) c = await pull();
-      else if (Date.now() - c.at > 60e3 && !mem.pulling) { mem.pulling = pull().catch(() => {}).then(() => { mem.pulling = null; }); if (ctx && ctx.waitUntil) ctx.waitUntil(mem.pulling); }
+      else if (Date.now() - c.at > 60e3 && !mem.pulling) { mem.pulling = pull().catch((e) => { mem.connsErr = { at: Date.now(), msg: e && e.message ? e.message : String(e) }; }).then(() => { mem.pulling = null; }); if (ctx && ctx.waitUntil) ctx.waitUntil(mem.pulling); }
       let list = (Array.isArray(c.list) ? c.list : []).map((row) => {
         if (!row || typeof row !== 'object') return row;
         const clean = { ...row }; delete clean.vpn; return clean;
@@ -283,7 +316,7 @@ export async function orcpRoutes(req, env, path, who, ip, H, ctx) {
           if (Array.isArray(marked)) list = marked;
         } catch {}
       }
-      return json({ list, online: list.filter((x) => x && x.online).length, versions: c.vers, at: c.at, stale: Date.now() - c.at > 60e3 });
+      return json({ list, online: list.filter((x) => x && x.online).length, versions: c.vers, at: c.at, stale: Date.now() - c.at > 60e3, ...(mem.connsErr && mem.connsErr.msg ? { warn: mem.connsErr.msg } : {}) });
     }
     if (w === 'portals') { const p = await portals(env, H); const s = await loadSes(env, H); if (s) { s.servers = p.list.filter((x) => x.name || x.url).map((x) => x.name || x.url); await saveSes(env, H, s).catch(() => {}); } return json(p); }
     if (w === 'messages') return json({ list: await messages(env, H) });
