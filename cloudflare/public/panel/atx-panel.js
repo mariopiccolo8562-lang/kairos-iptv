@@ -60,7 +60,7 @@
   function connsHtml(rows) {
     if (!rows.length) return '<p class="mut" style="margin:14px 0">Nessuno collegato in questo momento.</p>';
     return `${window.KXVpn ? KXVpn.counter(rows) : ''}${grid(['Utente', 'Canale', 'IP', 'Luogo', 'Provider', 'Reseller', 'Da', 'Dispositivo', ''], rows.map((c, i) => tr([
-      `<b>${esc(c.username || '')}</b>`, c.channel ? esc(c.channel) : mut, `${esc(c.user_ip || c.ip || '')}${window.KXVpn ? KXVpn.tag(c.vpn) : ''}`, esc([c.city, c.geoip_country_code].filter(Boolean).join(', ')) || mut,
+      `<b>${esc(c.username || '')}</b>`, c.channel ? esc(c.channel) : mut, window.KXVpn ? KXVpn.ip(c.user_ip || c.ip, c.vpn) : esc(c.user_ip || c.ip || ''), esc([c.city, c.geoip_country_code].filter(Boolean).join(', ')) || mut,
       c.isp ? esc(c.isp) : mut, c.owner_username ? esc(c.owner_username) : mut, dur(c.total_seconds),
       `<span class="mut" style="font-size:11.5px">${esc(String(c.user_agent || '').slice(0, 40))}</span>`, c.activity_id ? btn('kill', i, 'Disconnetti') : ''
     ])))}`;
