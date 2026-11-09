@@ -24,6 +24,7 @@ body{overscroll-behavior-y:none}
   #newDev{order:4;padding:9px 12px!important}
   #av{order:5}
   .topbar .search{order:10;flex:1 1 100%!important;min-width:0!important;margin:0}
+  #agLedgerBox{margin:0 8px 18px!important}
   #dlBar{flex-wrap:nowrap!important;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;margin:0 -14px 14px!important;padding:0 14px 4px;scrollbar-width:none}
   #dlBar::-webkit-scrollbar{display:none}
   #dlBar .dl{flex:0 0 auto;scroll-snap-align:start}
@@ -34,6 +35,15 @@ body{overscroll-behavior-y:none}
   .card{border-radius:14px}
   .tbl-wrap,.dvt-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
   table.tbl{min-width:560px}
+  table.tbl.ledger-history{min-width:0!important;table-layout:fixed}
+  table.tbl.ledger-history th,table.tbl.ledger-history td{padding-left:6px;padding-right:6px;overflow-wrap:anywhere}
+  table.tbl.ledger-history td:last-child{padding-left:2px;padding-right:2px;white-space:normal}
+  table.tbl.ledger-history td:last-child .btn{min-width:0;width:18px;height:22px;padding:0;justify-content:center}
+  table.tbl.ledger-history,table.tbl.ledger-history tbody{display:block;width:100%}
+  table.tbl.ledger-history tbody tr{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;margin-bottom:8px;padding:8px;border:1px solid var(--line);border-radius:10px}
+  table.tbl.ledger-history tbody td,table.tbl.ledger-history tbody td:first-child,table.tbl.ledger-history tbody td:last-child{display:flex;flex-direction:column;min-width:0;padding:4px!important;border:0!important;border-radius:0!important;text-align:left;white-space:normal}
+  table.tbl.ledger-history tbody td:before{content:attr(data-label);margin-bottom:2px;color:var(--mut);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+  table.tbl.ledger-history tbody td:last-child{grid-column:1/-1;flex-direction:row;gap:6px}
   #modal{padding:12px;align-items:end}
   #modal .glass{width:100%!important;max-height:88vh;overflow-y:auto;padding:22px 18px calc(18px + env(safe-area-inset-bottom))!important;border-radius:18px 18px 12px 12px}
   #modal .glass>div:last-child{position:sticky;bottom:-18px;background:inherit;padding-top:10px}

@@ -947,6 +947,22 @@ async function agentLedgerDetail(env, agentId, includeBy = true) {
   const entries = (rows && rows.results) || [];
   return { balance, entries: includeBy ? entries : entries.map(({ by, ...row }) => row) };
 }
+function filterLedgerForAgent(detail, allowed) {
+  if (allowed === null) return detail;
+  const panels = new Set(allowed || []);
+  return {
+    balance: {
+      ...detail.balance,
+      credits: Object.fromEntries(Object.entries(detail.balance.credits || {}).filter(([panel]) => panels.has(panel))),
+    },
+    entries: detail.entries.flatMap((entry) => {
+      if (+entry.credits > 0 && !panels.has(entry.panel || '')) {
+        return +entry.eur > 0 ? [{ ...entry, credits: 0, panel: '' }] : [];
+      }
+      return [entry];
+    }),
+  };
+}
 async function agentLedgerSummary(env) {
   const totals = ((await env.DB.prepare(`SELECT agent_id, SUM(CASE WHEN type = 'debt' THEN eur ELSE -eur END) AS eur, MAX(t) AS last
     FROM agent_ledger GROUP BY agent_id`).all()).results) || [];
@@ -4792,6 +4808,7 @@ function agentPerms(src) {
   p.mxDns = storeAppsList(o.mxDns); // DNS (domini) di MaxPlayer che può usare (per id; ['*'] = tutti). Ne vede solo il nome
   p.orcpSrv = Array.isArray(o.orcpSrv) ? [...new Set(o.orcpSrv.filter((x) => typeof x === 'string' && ORCP_SERVER_KEYS.includes(x)))].slice(0, 5) : [];
   p.actApps = Array.isArray(o.actApps) ? [...new Set(o.actApps.filter(validActAppKey))].slice(0, 200) : [];
+  p.ledgerPanels = Array.isArray(o.ledgerPanels) ? [...new Set(o.ledgerPanels.filter((x) => typeof x === 'string' && LEDGER_PANELS.has(x)))] : null;
   p.maxConn = Math.max(1, Math.min(MAX_CONN, parseInt(o.maxConn, 10) || 1));
   for (const k of ['armadaCredits', 'stormCredits']) p[k] = Math.max(0, Math.min(100000, Math.round((parseFloat(o[k]) || 0) * 100) / 100)); // crediti Armada/Storm del titolare al mese (0 = nessuno)
   return p;
@@ -4976,6 +4993,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
           requested = { ...requested, actApps: [...new Set(requested.actApps.filter((x) => typeof x === 'string' && known.has(x)))] };
         }
       }
+      if (top) requested = { ...(requested && typeof requested === 'object' && !Array.isArray(requested) ? requested : {}), ledgerPanels: cur ? agentPerms(cur.perms).ledgerPanels : null };
       o.perms = JSON.stringify(agentPermsWithin(requested, top ? agentPerms(top.perms) : null));
     }
     if (b.servers !== undefined) { if (!Array.isArray(b.servers)) throw new HttpErr(400, 'servers deve essere un elenco'); let l = serverIds(b.servers.join(',')).filter((x) => dnsIds.has(x)); if (top) { const mine = serverIds(top.servers); l = l.filter((x) => mine.includes(x)); } o.servers = l.join(','); }
@@ -5223,7 +5241,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const need = (k, msg) => { if (!P[k]) throw new HttpErr(403, msg || 'Funzione non consentita: chiedila a chi ti ha creato'); };
   if (path === '/agent/agent-ledger') {
     if (m !== 'GET') throw new HttpErr(403, 'Il registro debiti è di sola lettura');
-    return json(await agentLedgerDetail(env, A.id, false));
+    return json(filterLedgerForAgent(await agentLedgerDetail(env, A.id, false), P.ledgerPanels));
   }
   if (path === '/agent-ledger' || path.startsWith('/agent-ledger/')) throw new HttpErr(403, 'Il registro debiti è riservato al titolare');
   if (path === '/health-check' && m === 'GET') throw new HttpErr(403, 'Il controllo generale è riservato al titolare');
