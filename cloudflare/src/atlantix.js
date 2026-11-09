@@ -133,7 +133,7 @@ export async function atxRoutes(req, env, path, who, ip, H) {
     await H.log(env, 'edit', `${who}: pannello Atlantix collegato (account ${c.user})`, ip).catch(() => {});
     return json({ ok: true });
   }
-  if (path === '/atx/config' && m === 'DELETE') { mem.jar = null; await env.DB.prepare("DELETE FROM settings WHERE k IN ('atx', 'atx:ses')").run(); return json({ ok: true }); }
+  if (path === '/atx/config' && m === 'DELETE') { const c = await cfgOf(env, H); mem.jar = null; await env.DB.prepare("DELETE FROM settings WHERE k IN ('atx', 'atx:ses')").run(); if (c) await H.log(env, 'del', `${who}: pannello Atlantix scollegato (account ${c.user})`, ip).catch(() => {}); return json({ ok: true }); }
   if (path === '/atx/overview' && m === 'GET') return json((await ax(env, H, '/api/dashboard/overview.php?' + qs({}))).data || {});
   const n = (k) => parseInt(u.searchParams.get(k), 10) || 0;
   if (path === '/atx/lines' && m === 'GET') {
@@ -166,14 +166,22 @@ export async function atxRoutes(req, env, path, who, ip, H) {
   if (path === '/atx/lines/action' && m === 'POST') {
     const b = await H.readJSON(req, 4096), id = parseInt(b.user_id, 10);
     if (!(id > 0)) throw new HttpErr(400, 'Linea non valida');
+    const username = str(b.user, 120).trim(), d = {};
     let body, what;
-    if (b.action === 'renew') { const months = parseInt(b.months, 10); if (![1, 2, 3, 6, 12].includes(months)) throw new HttpErr(400, 'Mesi non validi'); body = { action: 'renew', user_id: id, months }; what = `rinnovata di ${months} mesi`; }
+    if (b.action === 'renew') { const months = parseInt(b.months, 10); if (![1, 2, 3, 6, 12].includes(months)) throw new HttpErr(400, 'Mesi non validi'); body = { action: 'renew', user_id: id, months }; what = `rinnovata · ${months} ${months === 1 ? 'mese' : 'mesi'}`; }
     else if (b.action === 'toggle') { body = { action: 'toggle', user_id: id, enabled: !!b.enabled }; what = b.enabled ? 'attivata' : 'disattivata'; }
     else if (b.action === 'save_notes') { body = { action: 'save_notes', user_id: id, notes: str(b.notes, 300) }; what = 'note aggiornate'; }
     else if (b.action === 'delete') { body = { action: 'delete', user_id: id }; what = 'eliminata'; }
     else throw new HttpErr(400, 'Operazione sconosciuta');
     const j = await ax(env, H, '/api/lines/action.php', { json: body });
-    await H.log(env, 'edit', `${who}: Atlantix — linea #${id} ${what}`, ip).catch(() => {});
+    Object.assign(d, j.data && typeof j.data === 'object' ? j.data : {});
+    if (b.action === 'renew') {
+      const credits = d.credits_spent ?? d.credits_used ?? d.debited ?? d.cost ?? j.credits_spent ?? j.credits_used ?? j.debited ?? j.cost;
+      const expiry = d.new_exp ?? d.exp_date ?? d.expires_at ?? j.new_exp ?? j.exp_date ?? j.expires_at;
+      if (credits !== undefined && credits !== null) what += ` · ${str(String(credits), 30)} crediti`;
+      if (expiry !== undefined && expiry !== null) what += ` · scadenza ${str(String(expiry), 40)}`;
+    }
+    await H.log(env, 'edit', `${who}: Atlantix — linea ${username || `#${id}`} (#${id}) ${what}`, ip).catch(() => {});
     return json({ ok: true, message: str(j.message || '', 200) });
   }
   if (path === '/atx/correction' && m === 'POST') {
@@ -222,7 +230,7 @@ export async function atxRoutes(req, env, path, who, ip, H) {
     return json({ ok: true, refund, extra_debit: extraDebit, message: str(j.message || '', 200) });
   }
   if (path === '/atx/subs/action' && m === 'POST') {
-    const b = await H.readJSON(req, 4096), id = String(parseInt(b.id, 10) || '');
+    const b = await H.readJSON(req, 4096), id = String(parseInt(b.id, 10) || ''), username = str(b.user, 120).trim();
     if (!id) throw new HttpErr(400, 'Sub-reseller non valido');
     const OPS = { enable: ['/subresellers_enable.php', 'riattivato'], disable: ['/subresellers_disable.php', 'disattivato'], users_on: ['/subresellers_enable_users.php', 'linee riattivate'], users_off: ['/subresellers_disable_users.php', 'linee disattivate'], sub_on: ['/subresellers_enable_subperm.php', 'può creare sub-reseller'], sub_off: ['/subresellers_disable_subperm.php', 'non può più creare sub-reseller'], delete: ['/subresellers_delete.php', 'eliminato'] };
     let form, url, what;
@@ -230,13 +238,16 @@ export async function atxRoutes(req, env, path, who, ip, H) {
     else if (OPS[b.op]) { [url, what] = OPS[b.op]; form = { id }; }
     else throw new HttpErr(400, 'Operazione sconosciuta');
     await ax(env, H, url, { form });
-    await H.log(env, 'edit', `${who}: Atlantix — sub-reseller #${id} ${what}`, ip).catch(() => {});
+    const reason = b.op === 'credits' ? str(b.reason, 80).trim() : '';
+    await H.log(env, 'edit', `${who}: Atlantix — sub-reseller ${str(username, 80) || `#${id}`} (#${id}) ${what}${reason ? ` · motivo ${reason}` : ''}`, ip).catch(() => {});
     return json({ ok: true });
   }
   if (path === '/atx/conns/kill' && m === 'POST') {
     const b = await H.readJSON(req, 1024), id = parseInt(b.activity_id, 10);
     if (!(id > 0)) throw new HttpErr(400, 'Connessione non valida');
     await ax(env, H, '/api/connections/kill.php', { json: { activity_id: id } });
+    const username = str(b.user, 120).trim();
+    await H.log(env, 'edit', `${who}: Atlantix — linea ${username || 'sconosciuta'} · connessione ${id} disconnessa`, ip).catch(() => {});
     return json({ ok: true });
   }
   return null;

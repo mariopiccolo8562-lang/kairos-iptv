@@ -169,14 +169,15 @@ const mkArmadaLike = (cfg) => {
     const s = A.st, on = s && s.connected;
     const nL = A.lines && !A.lines.err ? ` <span>${A.lines.length}</span>` : '', nM = A.mags && !A.mags.err ? ` <span>${A.mags.length}</span>` : '';
     if (isAg() && A.tab === 'res') A.tab = 'new';
-    const body = !on ? '' : A.tab === 'new' ? newHtml() : `<div class="card glass"><div class="hd"><h3>${A.tab === 'lines' ? 'Linee' : A.tab === 'mags' ? 'MAG' : 'Sotto-reseller'}<small>${A.tab === 'res' ? `I reseller sotto il tuo account ${N}` : isAg() ? 'Solo quelle create da te: i rinnovi usano i crediti del tuo tetto mensile' : `Dal tuo account ${N}: rinnovi e attivazioni usano i tuoi crediti`}</small></h3><button class="btn sm" id="arReT">Aggiorna</button></div>${A.tab === 'res' ? resHtml() : listHtml(A.tab)}</div>`;
+    const body = !on ? '' : A.tab === 'new' ? newHtml() : A.tab === 'log' ? `<div class="card glass"><div id="arPanelLog-${K}"></div></div>` : `<div class="card glass"><div class="hd"><h3>${A.tab === 'lines' ? 'Linee' : A.tab === 'mags' ? 'MAG' : 'Sotto-reseller'}<small>${A.tab === 'res' ? `I reseller sotto il tuo account ${N}` : isAg() ? 'Solo quelle create da te: i rinnovi usano i crediti del tuo tetto mensile' : `Dal tuo account ${N}: rinnovi e attivazioni usano i tuoi crediti`}</small></h3><button class="btn sm" id="arReT">Aggiorna</button></div>${A.tab === 'res' ? resHtml() : listHtml(A.tab)}</div>`;
     const y = window.scrollY;
-    if (on && !A.lines && !A.pL) loadLines().then(render);
+    if (on && A.tab !== 'log' && !A.lines && !A.pL) loadLines().then(render);
     const LS = A.tab === 'mags' && A.mags ? A.mags : A.lines;
-    const stats = on && LS && !LS.err && window.KXStats ? KXStats.strip(KXStats.tiles(KXStats.calc(LS), { noun: A.tab === 'mags' ? { active: 'MAG attivi', total: 'MAG totali' } : null })) : '';
-    V.innerHTML = stateHtml() + stats + (on ? `<div class="ar-tabs filters">${[['new', 'Nuova linea'], ['lines', 'Linee' + nL], ['mags', 'MAG' + nM], ...(isAg() ? [] : [['res', 'Sotto-reseller']])].map(([k, l]) => `<button class="fchip ${A.tab === k ? 'on' : ''}" data-artab="${k}">${l}</button>`).join('')}</div>` + body : '');
+    const stats = on && ['lines', 'mags'].includes(A.tab) && LS && !LS.err && window.KXStats ? KXStats.strip(KXStats.tiles(KXStats.calc(LS), { noun: A.tab === 'mags' ? { active: 'MAG attivi', total: 'MAG totali' } : null })) : '';
+    V.innerHTML = stateHtml() + stats + (on ? `<div class="ar-tabs filters">${[['new', 'Nuova linea'], ['lines', 'Linee' + nL], ['mags', 'MAG' + nM], ...(isAg() ? [] : [['res', 'Sotto-reseller'], ['log', '📜 Registro']])].map(([k, l]) => `<button class="fchip ${A.tab === k ? 'on' : ''}" data-artab="${k}">${l}</button>`).join('')}</div>` + body : '');
     window.scrollTo(0, y);
     bind(V); bindTools(V);
+    if (A.tab === 'log' && window.KXTools) KXTools.panelLog($('#arPanelLog-' + K), K, K === 'armada' ? '#2f7fd6' : '#7c4dff');
     if (window.KXStats) KXStats.bind(V, (k) => { const F = { active: 'ok', soon: 'soon', expired: 'exp', trial: 'trial', off: 'off', total: '' }; if (k in F) { if (A.tab !== 'lines' && A.tab !== 'mags') A.tab = 'lines'; A.F.f = F[k]; A.limit = 100; render(); } });
   }
 
@@ -193,7 +194,7 @@ const mkArmadaLike = (cfg) => {
     if (!V.dataset.bound) { V.dataset.bound = '1'; for (const ev of ['input', 'change']) V.addEventListener(ev, (e) => e.stopPropagation()); } // non conta tra le «modifiche non salvate»
     $('#arRe') && ($('#arRe').onclick = () => loadState());
     $('#arCfg') && ($('#arCfg').onclick = async () => { try { await api('PUT', '/admin/settings', { [`${K}Url`]: $('#arUrl').value.trim(), [`${K}Dns`]: $('#arDns').value.trim() }); toast('Indirizzi salvati'); A.pk = A.lines = A.mags = A.res = null; await loadState(); loadTab(); } catch (e) { toast(e.message, 1); } });
-    $$('[data-artab]', V).forEach((b) => (b.onclick = () => { readForm(); A.tab = b.dataset.artab; A.F = { q: '', f: '' }; A.sel.clear(); A.limit = 100; render(); loadTab(); }));
+    $$('[data-artab]', V).forEach((b) => (b.onclick = () => { readForm(); A.tab = b.dataset.artab; A.F = { q: '', f: '' }; A.sel.clear(); A.limit = 100; render(); if (A.tab !== 'log') loadTab(); }));
     $('#arReT') && ($('#arReT').onclick = () => loadTab(true));
     // nuova linea
     $$('#arType [data-t]').forEach((b) => (b.onclick = () => { readForm(); A.form.type = b.dataset.t; render(); }));
@@ -271,7 +272,7 @@ const mkArmadaLike = (cfg) => {
       if (!(await ask(`${on ? 'Attivare' : 'Disattivare'} su ${N}?`, on
         ? `<b>${esc(x.username || x.mac)}</b> torna a funzionare.`
         : `<b>${esc(x.username || x.mac)}</b> smette di funzionare finché non la riattivi.`, on ? 'Attiva' : 'Disattiva'))) return;
-      try { await api('POST', API + '/toggle', { id: x.id, enabled: on }); x.enabled = on; toast(on ? 'Attivata' : 'Disattivata'); render(); } catch (e) { toast(e.message, 1); }
+      try { await api('POST', API + '/toggle', { id: x.id, username: x.username || '', mac: x.mac || '', enabled: on }); x.enabled = on; toast(on ? 'Attivata' : 'Disattivata'); render(); } catch (e) { toast(e.message, 1); }
     }));
   }
 
@@ -372,7 +373,7 @@ const mkArmadaLike = (cfg) => {
     const S = selX().filter((x) => !!x.enabled !== on);
     if (!S.length) return toast(on ? 'Sono già tutte attive' : 'Sono già tutte disattivate');
     if (!(await ask(`${on ? 'Attivare' : 'Disattivare'} ${S.length} su ${N}?`, on ? 'Tornano a funzionare.' : 'Smettono di funzionare finché non le riattivi.', on ? 'Attiva' : 'Disattiva'))) return;
-    await KXTools.run(S, async (x) => { await api('POST', API + '/toggle', { id: x.id, enabled: on }); x.enabled = on; }, on ? 'Attivazione' : 'Disattivazione');
+    await KXTools.run(S, async (x) => { await api('POST', API + '/toggle', { id: x.id, username: x.username || '', mac: x.mac || '', enabled: on }); x.enabled = on; }, on ? 'Attivazione' : 'Disattivazione');
     A.sel.clear(); render();
   }
   const bindTools = (V) => window.KXTools && (A.tab === 'lines' || A.tab === 'mags') && KXTools.bind(V, PRE, A.sel, () => A.vis, { ren: bulkRen, on: () => bulkTgl(true), off: () => bulkTgl(false), csv: exportCsv,
