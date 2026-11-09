@@ -5431,7 +5431,8 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     // DNS di MaxPlayer limitati: servono i domini per mostrargli solo i codici cliente dei fornitori concessi (al massimo 2,5 s di attesa)
     const mxP = P.players && env.MAXPLAYER_KEY && !P.mxDns.includes('*') ? Promise.race([mxDomains(env).catch(() => null), new Promise((r) => setTimeout(() => r(null), 2500))]) : Promise.resolve(null);
     const agP = canAg ? agentsOut(env, all, tree.filter((x) => x !== A.id), mine) : Promise.resolve([]);
-    const actP = P.activity ? env.DB.prepare('SELECT t, type, text FROM activity WHERE ' + ctree.map(() => 'text LIKE ?').join(' OR ') + ' ORDER BY t DESC LIMIT 200').bind(...ctree.map((id) => 'Agente ' + (by.get(id) || {}).username + ':%')).all() : null;
+    // inizio esatto «Agente nome:» (con LIKE «_» faceva da jolly e le maiuscole non contavano: «a_b» vedeva le azioni di «axb», «rosa» quelle di «Rosa»)
+    const actP = P.activity ? env.DB.prepare('SELECT t, type, text FROM activity WHERE ' + ctree.map(() => 'instr(text, ?) = 1').join(' OR ') + ' ORDER BY t DESC LIMIT 200').bind(...ctree.map((id) => 'Agente ' + (by.get(id) || {}).username + ':')).all() : null;
     const msgP = P.messages ? env.DB.prepare('SELECT id, target, title, body, level, created, until, grp FROM messages ORDER BY id DESC LIMIT 3000').all() : null;
     const inboxP = ses.assist ? Promise.resolve([]) : (async () => { try { return ((await env.DB.prepare("SELECT id, title, body, level, created FROM agent_msgs WHERE (target = 'all' OR target = ?) AND (until = 0 OR until > ?) ORDER BY id DESC LIMIT 20").bind(String(A.id), now()).all()).results) || []; } catch { return []; } })();
     // i suoi clienti (principali) e le loro connessioni collegate: una sola query per gruppo di agenti
