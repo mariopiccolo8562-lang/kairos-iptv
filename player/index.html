@@ -6297,7 +6297,7 @@ async function apiPost(path, obj) {
   let j = null; try { j = JSON.parse(text); } catch {}
   if (status === 404 && (!j || j.error === 'Non trovato')) throw new Error('il server non ha ancora questa funzione: aggiorna il pannello');
   if (!j) throw new Error('risposta non valida (HTTP ' + status + ')');
-  if (status >= 400 || j.error) throw new Error(j.error || 'errore ' + status);
+  if (status >= 400 || j.error) { const e = new Error(j.error || 'errore ' + status); e.status = status; e.body = j; throw e; } // con codice e risposta (es. «wait» del 429)
   return j;
 }
 
@@ -7553,6 +7553,18 @@ function requestDialog() {
 }
 /* presenza: ogni minuto il server sa che l'app è aperta e cosa sta guardando (il fornitore lo vede in "Utenti online") */
 let hbLast = '', hbT = 0, hbPlv = '';
+/* il pannello accetta un battito ogni 15 s (contati dall'ultimo accettato) e con un 429 dice quanto aspettare: un battito chiesto
+   prima (zapping, inizio visione, ritorno nell'app) non parte per farsi rifiutare, aspetta e parte da solo appena si può.
+   Uno non riuscito (rete, errore, 429) non conta: al giro dopo si riprova (prima si aspettava fino a un minuto) */
+let hbOk = 0, hbHold = 0, hbBusy = false, hbWaitT = 0;
+function hbSoon(ms) {
+  clearTimeout(hbWaitT);
+  hbWaitT = setTimeout(() => { hbWaitT = 0; if (!document.hidden || S.inPlayer) heartbeat(true); }, Math.max(500, Math.min(60e3, ms)));
+}
+function hbFail(e) {
+  hbLast = '';
+  if (e && e.status === 429) { const w = Math.min(60, Math.max(1, +(e.body && e.body.wait) || 15)); hbHold = Date.now() + w * 1000; hbSoon(w * 1000 + 500); }
+}
 function hbState() {
   if (S.inPlayer && S.playingLive) return ['live', S.playingLive];
   if (S.inPlayer && S.playingVod) return [S.playingVod.k === 's' || S.playingVod.series ? 'series' : 'movie', S.playingVod];
@@ -7589,7 +7601,9 @@ async function heartbeat(force) {
   const sig = state + '|' + (it ? it.id : '');
   const now = Date.now();
   if (!force && sig === hbLast && now - hbT < (state === 'idle' ? 60e3 : 20e3)) return; // durante la visione ogni 20 s: «Disconnetti» dal pannello arriva in fretta
-  if (now - hbT < (force ? 3e3 : 15e3)) return; // mai più di una ogni 15 s (i battiti forzati, es. zapping, almeno ogni 3 s)
+  const hold = Math.max(hbOk ? hbOk + 15.5e3 - now : 0, hbHold - now); // mai più di uno ogni 15 s per il pannello
+  if (hold > 0) { if (force || sig !== hbLast) hbSoon(hold); return; }
+  if (hbBusy || now - hbT < (force ? 3e3 : 15e3)) { if (force) hbSoon(3e3); return; } // uno alla volta; tentativi a 15 s (quelli chiesti subito a 3 s)
   hbLast = sig; hbT = now;
   let net = null, stats = null;
   try { if (NATIVE && NATIVE.netInfo) net = JSON.parse(NATIVE.netInfo() || 'null'); } catch {}
@@ -7607,7 +7621,9 @@ async function heartbeat(force) {
     ver: (NATIVE && NATIVE.version && NATIVE.version()) || 'web', ui: (NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || '', model: (NATIVE && NATIVE.model && NATIVE.model()) || 'browser', screen: ($('.screen.on') || {}).id || '',
     net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off', cfg: rcSnapshot(), rcv: S.rcv || '', vis: !document.hidden || !!S.inPlayer, ...(S.kickAck ? { kickAck: S.kickAck } : {}), ...hbExtra(it) };
   try {
-    const hbT0 = Date.now(), j = await apiPost('/api/player/heartbeat', body); if (!j) return;
+    hbBusy = true;
+    const hbT0 = Date.now(), j = await apiPost('/api/player/heartbeat', body).catch((e) => { hbFail(e); return null; }).finally(() => { hbBusy = false; }); if (!j) return;
+    hbOk = Date.now(); hbHold = 0;
     try { hbResp(j, hbT0); } catch {} // autopilota: canali non funzionanti, esito dei controlli consegnato, orologio
     S.sat = Array.isArray(j.sat) ? j.sat : [];
     sendPlayEvents();
