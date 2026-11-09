@@ -507,6 +507,7 @@ body.agent .foot{display:none}
   let ledgerSummary = new Map(), ledgerSummaryAt = 0, ledgerSummaryBusy = false;
   const ledgerNum = (n) => (+n || 0).toLocaleString('it-IT', { maximumFractionDigits: 2 });
   const ledgerPanel = (p) => ({ '': 'Generico', wolf: 'WOLF', armada: 'Armada', storm: 'Storm', atx: 'Atlantix', ro: 'Realott', slt: 'SLT' }[p || ''] || p);
+  const LEDGER_PANEL_OPTIONS = [['', 'Generico', '#94a3b8'], ['wolf', 'WOLF', '#38bdf8'], ['armada', 'Armada', '#fb923c'], ['storm', 'Storm', '#a78bfa'], ['atx', 'Atlantix', '#22d3ee'], ['ro', 'Realott', '#4ade80'], ['slt', 'SLT', '#f472b6']];
   function ledgerBadge(s) {
     if (!s) return '';
     const credits = Object.values(s.credits || {}).reduce((n, x) => n + Math.max(0, +x || 0), 0);
@@ -544,9 +545,7 @@ body.agent .foot{display:none}
       if (!summary || !history || !$('#agLedgerBox')) return;
       summary.className = (+data.balance.eur > 0 || Object.values(data.balance.credits || {}).some((x) => +x > 0)) ? 'pay-badge due' : 'mut';
       summary.textContent = ledgerBalanceText(data.balance);
-      const credits = $('#agLedgerCredits');
-      if (credits) credits.innerHTML = window.KXPay?.ledgerCreditsSummary?.(data.entries) || '';
-      history.innerHTML = data.entries.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Data</th><th>Tipo</th><th>€</th><th>Crediti</th><th>Nota</th><th></th></tr></thead><tbody>${data.entries.map((e) => `<tr><td>${new Date(+e.t).toLocaleDateString('it-IT')}</td><td style="color:${e.type === 'debt' ? '#ff8f8f' : '#6ee3a6'}">${e.type === 'debt' ? 'Debito' : 'Pagamento'}</td><td>${+e.eur ? ledgerNum(e.eur) : '—'}</td><td>${+e.credits ? `${ledgerNum(e.credits)} cr${e.panel ? ' · ' + esc(ledgerPanel(e.panel)) : ''}` : '—'}</td><td>${esc(e.note || '')}</td><td><button class="btn sm" data-ledger-edit="${e.id}" title="Modifica movimento">✏️ Modifica</button> <button class="btn sm danger" data-ledger-delete="${e.id}" title="Elimina movimento">🗑</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="mut">Nessun movimento registrato.</p>';
+      history.innerHTML = window.KXPay?.ledgerHistory?.(data.entries, true) || '<p class="mut">Nessun movimento registrato.</p>';
       box.querySelectorAll('[data-ledger-add]').forEach((button) => {
         button.onclick = () => promptAgentLedger(agent, button.dataset.ledgerAdd);
       });
@@ -899,6 +898,7 @@ body.agent .foot{display:none}
     let mxItems = [], mxErr = '';
     if (D.players && D.players.max) { try { mxItems = ((await api('GET', '/admin/maxplayer/domains')).domains || []).map((x) => [x.id, (x.label || 'DNS ' + x.id) + (!sub && x.domain ? ' — ' + x.domain + (x.port && !['80', '443'].includes(String(x.port)) ? ':' + x.port : '') : '')]); } catch (e) { mxErr = 'DNS di MaxPlayer non disponibili: ' + e.message; } }
     const P = a ? a.perms : { create: true, renew: true, disable: true, kick: true, playlists: true, delete: false, clientPerms: false, vpn: false, addons: [], maxConn: 1 };
+    let ledgerPanelsValue = Array.isArray(P.ledgerPanels) ? [...P.ledgerPanels] : null;
     const topP = top ? top.perms || {} : null;
     const orcpKeys = ['portal', 'portal2', 'portal3', 'portal4', 'portal5'];
     let orcpItems = [];
@@ -1056,7 +1056,22 @@ body.agent .foot{display:none}
     if (orcpAll) orcpAll.onchange = () => $$('#agOrcpSrv [data-orcp-srv]').forEach((x) => { x.checked = orcpAll.checked; });
     $('#agSaAdd').onclick = () => { const n = $('#agSaN').value.trim(); if (!n) return; if (!$$('#agSa [data-sapp]').some((i) => i.dataset.sapp.toLowerCase() === n.toLowerCase())) $('#agSa').insertAdjacentHTML('beforeend', chk('sapp', n, esc(n), true, false, '')); else $$('#agSa [data-sapp]').forEach((i) => { if (i.dataset.sapp.toLowerCase() === n.toLowerCase()) i.checked = true; }); const all = $('#agSa [data-sapp="*"]'); if (all) all.checked = false; $('#agSaN').value = ''; saSync(); };
     if (!sub && a) {
-      $('#agB').insertAdjacentHTML('beforeend', `<div class="ag-c" id="agLedgerBox" style="margin:0 28px 18px"><h4>💰 Debito</h4><div id="agLedgerSummary" class="mut">Carico il registro…</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><button type="button" class="btn sm" data-ledger-add="debt">➕ Aggiungi debito</button><button type="button" class="btn sm pri" data-ledger-add="pay">✅ Registra pagamento</button></div><div id="agLedgerCredits"></div><div id="agLedgerHistory"></div></div>`);
+      const renderLedgerPanelChips = () => {
+        const selected = new Set(ledgerPanelsValue === null ? LEDGER_PANEL_OPTIONS.map(([key]) => key) : ledgerPanelsValue);
+        return LEDGER_PANEL_OPTIONS.map(([key, label, color]) => {
+          const on = selected.has(key);
+          return `<button type="button" class="btn sm" data-ledger-panel="${key || 'generic'}" aria-pressed="${on}" style="border:1px solid ${color};color:${on ? color : '#aab4c3'};background:${on ? `${color}22` : 'transparent'}">${label}</button>`;
+        }).join('');
+      };
+      $('#agB').insertAdjacentHTML('beforeend', `<div class="ag-c" id="agLedgerBox" style="margin:0 28px 18px"><h4>💰 Debito</h4><div id="agLedgerSummary" class="mut">Carico il registro…</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><button type="button" class="btn sm" data-ledger-add="debt">➕ Aggiungi debito</button><button type="button" class="btn sm pri" data-ledger-add="pay">✅ Registra pagamento</button></div><div style="margin:12px 0"><b style="display:block;margin-bottom:7px">Pannelli dei crediti che vede l'agente</b><div id="agLedgerPanelToggles" style="display:flex;gap:7px;flex-wrap:wrap">${renderLedgerPanelChips()}</div><small id="agLedgerPanelNote" class="mut" style="display:block;margin-top:6px">${ledgerPanelsValue === null ? 'Non ancora scelto: vede tutti i pannelli' : ''}</small></div><div id="agLedgerHistory"></div></div>`);
+      $('#agLedgerPanelToggles').onclick = (event) => {
+        const button = event.target.closest('[data-ledger-panel]'); if (!button) return;
+        if (ledgerPanelsValue === null) ledgerPanelsValue = LEDGER_PANEL_OPTIONS.map(([key]) => key);
+        const key = button.dataset.ledgerPanel === 'generic' ? '' : button.dataset.ledgerPanel;
+        ledgerPanelsValue = ledgerPanelsValue.includes(key) ? ledgerPanelsValue.filter((x) => x !== key) : [...ledgerPanelsValue, key];
+        $('#agLedgerPanelToggles').innerHTML = renderLedgerPanelChips();
+        $('#agLedgerPanelNote').textContent = '';
+      };
       loadAgentLedger(a);
     }
     $('#agPwEye') && ($('#agPwEye').onclick = () => { const i = $('#agPwNow'); i.type = i.type === 'password' ? 'text' : 'password'; });
@@ -1078,7 +1093,8 @@ body.agent .foot{display:none}
         storeApps: $('#agSa [data-sapp="*"]') && $('#agSa [data-sapp="*"]').checked ? ['*'] : $$('#agSa [data-sapp]').filter((i) => i.checked && i.dataset.sapp !== '*').map((i) => i.dataset.sapp),
         actApps: $$('#agActApps [data-actapp]:checked').map((i) => i.dataset.actapp),
         appsAllow: $('#agAa [data-aapp="*"]') && $('#agAa [data-aapp="*"]').checked ? ['*'] : $$('#agAa [data-aapp]').filter((i) => i.checked && i.dataset.aapp !== '*').map((i) => i.dataset.aapp),
-        orcpSrv: $$('#agOrcpSrv [data-orcp-srv]:checked').map((i) => i.dataset.orcpSrv) },
+        orcpSrv: $$('#agOrcpSrv [data-orcp-srv]:checked').map((i) => i.dataset.orcpSrv),
+        ...(!sub && $('#agLedgerBox') ? { ledgerPanels: ledgerPanelsValue === null ? null : [...ledgerPanelsValue] } : {}) },
     });
     $('#agOk').onclick = async () => {
       const b = read(), pw = $('#agP').value;
