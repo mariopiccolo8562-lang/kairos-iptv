@@ -26,7 +26,7 @@
   const isAg = () => D.role === 'agent';
   const KXMxpCan = () => !isAg() || !!(((D.me || {}).perms || {}).mxp);
   window.KXMxpCan = KXMxpCan;
-  const linePanels = ['wolf', 'armada', 'storm', 'ro', 'slt'];
+  const linePanels = ['wolf', 'armada', 'storm', 'atx', 'ro', 'slt'];
   const canLoadLines = () => !!window.KXLinePick && (!isAg() || linePanels.some((k) => !!(((D.me || {}).perms || {})[k])));
   const originOf = (value) => {
     const v = String(value || '').trim();

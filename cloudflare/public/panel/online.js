@@ -72,7 +72,7 @@
       await Promise.all([
         ok('wolf') && api('GET', '/admin/wolf/config').then((c) => (c.set ? api('GET', '/admin/wolf/lines') : { lines: [] })).then((d) => (d.lines || []).forEach((l) => l.conns > 0 && set('wolf', l.username, l.watching))).catch(() => {}),
         ...['ro', 'slt'].map((k) => ok(k) && api('GET', `/admin/${k}/conns`).then((d) => (d.rows || []).forEach((r) => set(k, r.username, r.stream))).catch(() => {})),
-        !isAgent() && api('GET', '/admin/atx/conns').then((d) => wAny(d).forEach((c) => set('atx', c.username, c.channel || c.stream_display_name))).catch(() => {}),
+        ok('atx') && api('GET', '/admin/atx/conns').then((d) => wAny(d).forEach((c) => set('atx', c.username, c.channel || c.stream_display_name))).catch(() => {}),
       ].filter(Boolean));
       WS.m = m; WS.t = Date.now(); WS.busy = null; paintW(); return m;
     })();
@@ -94,7 +94,7 @@
   const isAg = () => D.role === 'agent';
   const perms = () => (D.me && D.me.perms) || {};
   const canP = (k) => !isAg() || !!perms()[k];
-  setInterval(() => { const b = $('.nav[data-v="conn"]'); if (b) b.style.display = !isAg() || ['wolf', 'armada', 'storm', 'mxp', 'oxp'].some((k) => perms()[k]) ? '' : 'none'; }, 2000);
+  setInterval(() => { const b = $('.nav[data-v="conn"]'); if (b) b.style.display = !isAg() || ['wolf', 'armada', 'storm', 'mxp', 'oxp', 'atx', 'ro', 'slt'].some((k) => perms()[k]) ? '' : 'none'; }, 2000);
 
   const S = { rows: null, busy: false, f: '', p: '', q: '', errs: [], t: 0, limit: 200 };
   async function loadAll() {
@@ -118,6 +118,8 @@
         for (const x of d.lines || []) rows.push({ p: 'Armada', u: x.username, n: x.notes, h: st.dns, pw: x.password, mx: x.maxConn, en: x.enabled }); })().catch(err('Armada')),
       canP('storm') && (async () => { const st = await api('GET', '/admin/storm/state'); if (!st.connected) return; const d = await api('GET', '/admin/storm/lines');
         for (const x of d.lines || []) rows.push({ p: 'Storm', u: x.username, n: x.notes, h: st.dns, pw: x.password, mx: x.maxConn, en: x.enabled }); })().catch(err('Storm')),
+      canP('atx') && (async () => { const d = await api('GET', '/admin/atx/lines?all=1');
+        for (const x of d.rows || d.lines || []) rows.push({ p: 'Atlantix', u: x.username, n: x.notes, w: x.channel || '', v: { on: Number(x.online) > 0, conns: Number(x.online) || 0, max: Number(x.max_connections) || 0 }, mx: Number(x.max_connections) || 0, en: Number(x.enabled) !== 0 }); })().catch(err('Atlantix')),
       canP('mxp') && (async () => { const a = (await api('GET', '/admin/mxp/accounts')).accounts || [];
         for (const ac of a) { const us = (await api('GET', `/admin/mxp/a/${ac.id}/users`)).users || [];
           for (const u of us) for (const l of u.lists || []) rows.push({ p: 'MaxPlayer', u: l.user, n: u.username || u.email, h: (l.ssl ? 'https://' : 'http://') + l.fqdn + (l.port ? ':' + l.port : ''), pw: l.pass, en: true }); } })().catch(err('MaxPlayer')),
@@ -159,7 +161,7 @@
     const shown = list.slice(0, S.limit), panels = [...new Set(rows.map((r) => r.p))];
     const FL = [['', 'Tutti'], ['on', 'Collegati'], ['multi', 'Con più connessioni'], ['off', 'Scollegati'], ['na', 'Non verificabili']];
     const keep = document.activeElement && document.activeElement.id === 'cnQ' ? document.activeElement.selectionStart : -1;
-    V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">Online ora terzi</b><small>${isAg() ? 'I tuoi clienti di WOLF, Armada, MaxPlayer e OrbixPlay' : 'I clienti di WOLF, Armada, MaxPlayer, OrbixPlay e MirkoTeam'}: verde se stanno guardando adesso, arancione se la stessa linea è aperta su più dispositivi insieme, rosso se no. Si aggiorna ogni 2 minuti.</small>${S.t ? `<small>Ultimo controllo: ${new Date(S.t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</small>` : ''}</div>
+    V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">Online ora terzi</b><small>${isAg() ? 'I tuoi clienti di WOLF, Armada, Atlantix, MaxPlayer e OrbixPlay' : 'I clienti di WOLF, Armada, Atlantix, MaxPlayer, OrbixPlay e MirkoTeam'}: verde se stanno guardando adesso, arancione se la stessa linea è aperta su più dispositivi insieme, rosso se no. Si aggiorna ogni 2 minuti.</small>${S.t ? `<small>Ultimo controllo: ${new Date(S.t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</small>` : ''}</div>
         <button class="btn sm" id="cnRe">${S.busy ? 'Carico…' : 'Aggiorna'}</button></div>
       <div class="cn-k"><div><small><i class="on-dot g"></i>Collegati</small><b style="color:#4ade80">${n('on')}</b></div><div><small><i class="on-dot r"></i>Scollegati</small><b style="color:#f87171">${n('off')}</b></div><div data-multi style="cursor:pointer" title="Linee aperte su più dispositivi nello stesso momento"><small><i class="on-dot o"></i>Con più connessioni</small><b style="color:#fbbf24">${nMulti}</b>${rows.some((r) => multi(r) && r.kick && !KICKED.has(r.kick)) ? `<button class="btn sm" id="cnKickAll" style="margin-top:6px;color:#ff8f8f" title="Chiude le connessioni aperte di tutte le linee con più connessioni (solo quelle su WOLF)">Disconnetti tutte</button>` : ''}</div><div><small><i class="on-dot"></i>Non verificabili${n('wait') ? ' · ' + n('wait') + ' in verifica' : ''}</small><b style="color:var(--mut)">${n('na')}</b></div></div>
       ${S.errs.length ? `<p style="color:#ff8f8f;margin:10px 0 0;font-size:12.5px">${S.errs.map(esc).join('<br>')}</p>` : ''}</div>

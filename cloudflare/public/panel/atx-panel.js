@@ -1,6 +1,6 @@
-/* KAIROS Control — «Pannello Atlantix» (cms.axdash.biz): linee, sub-reseller e connessioni del tuo account Atlantix.
+/* KAIROS Control — «Pannello Atlantix» (cms.axdash.biz): linee, sub-reseller e connessioni dell'account Atlantix.
    KAIROS entra con utente, password e codice di accesso (salvati cifrati) e legge/scrive direttamente su Atlantix.
-   Solo il titolare (Master). Usa app.js. */
+   Usa app.js. */
 (() => {
   const IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 18H4z"/><path d="M8.5 14h7"/></svg>';
   if (!$('.nav[data-v="atx"]')) {
@@ -20,7 +20,7 @@
   const lineState = (r) => { if (Number(r.enabled) === 0) return badge('Disattivata', '#9aa4b2'); const e = Number(r.exp_date); if (e && e < now()) return badge('Scaduta', '#ff6b6b'); if (e && e <= now() + 7 * 86400) return badge('In scadenza', '#ffb020'); if (Number(r.is_trial) === 1) return badge('Prova', '#7aa7ff'); return badge('Attiva', '#2ecc71'); };
   const mut = '<span class="mut">—</span>';
   const copy = (v, what) => navigator.clipboard.writeText(String(v)).then(() => toast(what + ' copiato'), () => toast('Copia non riuscita', 1));
-  const m3u = (r) => { let d = String(r.reseller_dns || '').trim().replace(/\/+$/, ''); if (!d) return ''; if (!/^https?:\/\//i.test(d)) d = 'http://' + d; return `${d}/get.php?username=${encodeURIComponent(r.username)}&password=${encodeURIComponent(r.password)}&type=m3u_plus&output=ts`; };
+  const m3u = (r) => { if (isAg()) return ''; let d = String(r.reseller_dns || '').trim().replace(/\/+$/, ''); if (!d) return ''; if (!/^https?:\/\//i.test(d)) d = 'http://' + d; return `${d}/get.php?username=${encodeURIComponent(r.username)}&password=${encodeURIComponent(r.password)}&type=m3u_plus&output=ts`; };
   const TH = 'text-align:left;padding:9px 8px;border-bottom:1px solid var(--line,#333);white-space:nowrap;font-size:12px;text-transform:uppercase;letter-spacing:.04em;opacity:.75';
   const TD = 'padding:9px 8px;border-bottom:1px solid var(--line,#222);vertical-align:middle';
   const grid = (heads, rows) => `<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13.5px"><thead><tr>${heads.map((h) => `<th style="${TH}">${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
@@ -31,39 +31,66 @@
 
   function linesHtml(rows) {
     if (!rows.length) return '<p class="mut" style="margin:14px 0">Nessuna linea trovata.</p>';
-    return grid(['Utente', 'Password', 'Stato', 'Scadenza', 'Connessi', 'Canale / IP', 'Reseller', 'Note', 'Azioni'], rows.map((r, i) => tr([
+    const heads = ['Utente', 'Password', 'Stato', 'Scadenza', 'Connessi', 'Canale / IP'];
+    if (!isAg()) heads.push('Reseller');
+    heads.push('Note', 'Azioni');
+    return grid(heads, rows.map((r, i) => {
+      const cells = [
       `<b>${esc(r.username || '')}</b> <button class="btn sm" data-a="cu" data-i="${i}" title="Copia utente" style="padding:2px 7px;font-size:11px">Copia</button><div class="mut" style="font-size:11.5px">#${esc(String(r.id))}${Number(r.auto_renew) ? ' · auto-rinnovo' : ''}</div>`,
       `<code>${esc(r.password || '')}</code> <button class="btn sm" data-a="cp" data-i="${i}" title="Copia password" style="padding:2px 7px;font-size:11px">Copia</button>`,
       lineState(r),
       `<b>${day(r.exp_date)}</b>${window.KXPay ? `<br>${KXPay.badge('line', 'atx', r.id)}` : ''}`,
       Number(r.online) > 0 ? `<button class="btn sm" data-a="lc" data-i="${i}" title="Vedi chi è connesso">🟢 ${Number(r.online)}/${Number(r.max_connections || 0)}</button>` : `<span class="mut">${Number(r.online) || 0}/${Number(r.max_connections || 0)}</span>`,
       r.channel || r.ip ? `${r.channel ? `<b>${esc(r.channel)}</b>` : ''}<div class="mut" style="font-size:11.5px">${esc([r.country, r.ip].filter(Boolean).join(' · '))}</div>` : mut,
-      r.reseller ? esc(r.reseller) : mut,
+      ];
+      if (!isAg()) cells.push(r.reseller ? esc(r.reseller) : mut);
+      cells.push(
       `<button class="btn sm" data-a="note" data-i="${i}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.notes ? esc(r.notes) : '+ nota'}</button>`,
       `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('edit', i, 'Modifica')}${btn('renew', i, 'Rinnova')}${window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="atx" data-ref="${esc(r.id)}" data-label="${esc(r.username)}" data-auto-line="${esc(r.id)}" data-panel-note="${esc(r.notes || '')}">💰 Pagamento</button>` : ''}${Number(r.enabled) === 0 ? btn('on', i, 'Attiva') : btn('off', i, 'Disattiva')}${m3u(r) ? btn('m3u', i, 'M3U') : ''}${window.KXMxpNew && (!window.KXMxpCan || KXMxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('mxp', i, 'MaxPlayer') : ''}${window.KXOxpNew && (!window.KXOxpCan || KXOxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('oxp', i, 'OrbixPlay') : ''}${window.KXOrcpNew && (!isAg() || KXOrcpAgentCan()) ? btn('orcp', i, KXOrcpName()) : ''}${btn('del', i, 'Elimina')}</div>`
-    ])));
+      );
+      return tr(cells);
+    }));
   }
   function subsHtml(rows) {
     if (!rows.length) return '<p class="mut" style="margin:14px 0">Nessun sub-reseller.</p>';
-    return grid(['Reseller', 'Sopra di lui', 'Crediti', 'Stato', 'Linee attive', 'DNS', 'Crea sub', 'Ultimo accesso', 'Azioni'], rows.map((r, i) => tr([
+    const heads = ['Reseller'];
+    if (!isAg()) heads.push('Sopra di lui');
+    heads.push('Crediti', 'Stato', 'Linee attive');
+    if (!isAg()) heads.push('DNS');
+    heads.push('Crea sub', 'Ultimo accesso', 'Azioni');
+    return grid(heads, rows.map((r, i) => {
+      const cells = [
       `<b>${esc(r.username || '')}</b><div class="mut" style="font-size:11.5px">#${esc(String(r.id))}${r.notes ? ' · ' + esc(r.notes) : ''}</div>`,
-      r.owner_username ? esc(r.owner_username) : mut,
+      ];
+      if (!isAg()) cells.push(r.owner_username ? esc(r.owner_username) : mut);
+      cells.push(
       `<b>${esc(String(r.credits ?? 0))}</b>`,
       on(r.status) ? badge('Attivo', '#2ecc71') : badge('Disattivato', '#9aa4b2'),
       `${Number(r.iptv_active || 0)} / ${Number(r.iptv_total || 0)}`,
-      r.reseller_dns ? `<code style="font-size:12px">${esc(r.reseller_dns)}</code>` : mut,
+      );
+      if (!isAg()) cells.push(r.reseller_dns ? `<code style="font-size:12px">${esc(r.reseller_dns)}</code>` : mut);
+      cells.push(
       on(r.can_create_sub) ? 'sì' : 'no',
       r.last_login ? esc(String(r.last_login)) : mut,
       `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('cr', i, '± Crediti')}${on(r.status) ? btn('sdis', i, 'Disattiva') : btn('sen', i, 'Riattiva')}${btn('uoff', i, 'Blocca linee')}${btn('uon', i, 'Sblocca linee')}${on(r.can_create_sub) ? btn('poff', i, 'Togli crea sub') : btn('pon', i, 'Permetti sub')}${btn('sdel', i, 'Elimina', 'style="color:#ff8f8f"')}</div>`
-    ])));
+      );
+      return tr(cells);
+    }));
   }
   function connsHtml(rows) {
     if (!rows.length) return '<p class="mut" style="margin:14px 0">Nessuno collegato in questo momento.</p>';
-    return `${window.KXVpn ? KXVpn.counter(rows) : ''}${grid(['Utente', 'Canale', 'IP', 'Luogo', 'Provider', 'Reseller', 'Da', 'Dispositivo', ''], rows.map((c, i) => tr([
-      `<b>${esc(c.username || '')}</b>`, c.channel ? esc(c.channel) : mut, window.KXVpn ? KXVpn.ip(c.user_ip || c.ip, c.vpn) : esc(c.user_ip || c.ip || ''), esc([c.city, c.geoip_country_code].filter(Boolean).join(', ')) || mut,
-      c.isp ? esc(c.isp) : mut, c.owner_username ? esc(c.owner_username) : mut, dur(c.total_seconds),
-      `<span class="mut" style="font-size:11.5px">${esc(String(c.user_agent || '').slice(0, 40))}</span>`, c.activity_id ? btn('kill', i, 'Disconnetti') : ''
-    ])))}`;
+    const heads = ['Utente', 'Canale', 'IP', 'Luogo', 'Provider'];
+    if (!isAg()) heads.push('Reseller');
+    heads.push('Da', 'Dispositivo', '');
+    return `${window.KXVpn ? KXVpn.counter(rows) : ''}${grid(heads, rows.map((c, i) => {
+      const cells = [
+        `<b>${esc(c.username || '')}</b>`, c.channel ? esc(c.channel) : mut, window.KXVpn ? KXVpn.ip(c.user_ip || c.ip, c.vpn) : esc(c.user_ip || c.ip || ''), esc([c.city, c.geoip_country_code].filter(Boolean).join(', ')) || mut,
+        c.isp ? esc(c.isp) : mut,
+      ];
+      if (!isAg()) cells.push(c.owner_username ? esc(c.owner_username) : mut);
+      cells.push(dur(c.total_seconds), `<span class="mut" style="font-size:11.5px">${esc(String(c.user_agent || '').slice(0, 40))}</span>`, c.activity_id ? btn('kill', i, 'Disconnetti') : '');
+      return tr(cells);
+    }))}`;
   }
   function overviewHtml(d, m) {
     const mem = d.member || {}, st = d.stats || {};
@@ -92,14 +119,14 @@
   }
   function render() {
     const V = $('#v-atx'); if (!V) return;
-    if (isAg()) { V.innerHTML = '<div class="card glass"><p>Il Pannello Atlantix lo usa solo il Master.</p></div>'; return; }
+    if (isAg() && A.tab === 'log') A.tab = 'lines';
     const st = A.st || {}, form = !st.connected || A.edit;
     if (st.connected && A.tab !== 'log' && A.ov === undefined) { A.ov = null; api('GET', '/admin/atx/overview').then((d) => { A.ov = d; render(); }).catch(() => { A.ov = false; }); }
     V.innerHTML = `<div class="card glass" style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start">
         <div><b style="font-size:16px">${st.connected ? '✅ Atlantix collegato' : 'Atlantix non collegato'}</b>
-          <p class="mut" style="margin:4px 0 0;font-size:13px">${st.connected ? 'Account ' + esc(st.user || '') : 'Scrivi qui i dati con cui entri su cms.axdash.biz: restano cifrati in KAIROS.'}</p></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn sm" href="https://cms.axdash.biz/login" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Apri Atlantix</a>${st.connected ? `<button class="btn sm" data-o="reload">Aggiorna</button><button class="btn sm" data-o="edit">${A.edit ? 'Chiudi' : 'Cambia dati'}</button><button class="btn sm" data-o="off">Scollega</button>` : ''}</div>
+          <p class="mut" style="margin:4px 0 0;font-size:13px">${st.connected ? 'Account ' + esc(st.user || '') : isAg() ? 'Chi ti gestisce può assegnarti il tuo account Atlantix; oppure scrivi qui…' : 'Scrivi qui i dati con cui entri su cms.axdash.biz: restano cifrati in KAIROS.'}</p></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${isAg() ? '' : '<a class="btn sm" href="https://cms.axdash.biz/login" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Apri Atlantix</a>'}${st.connected ? `<button class="btn sm" data-o="reload">Aggiorna</button><button class="btn sm" data-o="edit">${A.edit ? 'Chiudi' : 'Cambia dati'}</button><button class="btn sm" data-o="off">Scollega</button>` : ''}</div>
       </div>
       ${form ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px">
         <label>Username<input class="inp" id="axU" autocomplete="off" value="${esc(st.user || '')}"></label>
@@ -108,8 +135,8 @@
         <label>Codice 2FA (solo se Atlantix lo chiede)<input class="inp" id="axO" inputmode="numeric" maxlength="6" placeholder="000000"></label></div>
         <button class="btn pri" data-o="save" style="margin-top:12px">Collega Atlantix</button>` : ''}</div>
       ${st.connected && A.tab !== 'overview' && A.tab !== 'log' && A.ov ? overviewHtml(A.ov, '0 0 14px') : ''}
-      ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.map(([k, n]) => `<button class="btn sm${A.tab === k ? ' pri' : ''}" data-t="${k}">${n}</button>`).join('')}${toolbar()}</div>${body()}</div>` : ''}`;
-    if (A.tab === 'log' && st.connected && window.KXTools) KXTools.panelLog($('#atxPanelLog'), 'atx', '#1fa0b6');
+      ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.filter(([k]) => !isAg() || k !== 'log').map(([k, n]) => `<button class="btn sm${A.tab === k ? ' pri' : ''}" data-t="${k}">${n}</button>`).join('')}${toolbar()}</div>${body()}</div>` : ''}`;
+    if (!isAg() && A.tab === 'log' && st.connected && window.KXTools) KXTools.panelLog($('#atxPanelLog'), 'atx', '#1fa0b6');
     $$('[data-t]', V).forEach((b) => (b.onclick = () => { A.tab = b.dataset.t; A.page = 1; A.q = ''; A.status = ''; A.reseller = ''; A.days = 0; if (A.tab === 'log') render(); else load(); }));
     $$('[data-o]', V).forEach((b) => (b.onclick = () => op(b.dataset.o)));
     $$('[data-a]', V).forEach((b) => (b.onclick = () => act(b.dataset.a, rowsOf(A.data)[+b.dataset.i])));
@@ -336,7 +363,6 @@
   }
   function show() { try { render(); } catch (e) { const V = $('#v-atx'); if (V) V.innerHTML = `<div class="card glass"><p style="color:#ff8f8f">Errore nella sezione Atlantix: ${esc(e.message || String(e))}</p></div>`; } }
   async function open() {
-    if (isAg()) return show();
     if (!A.st) { try { A.st = await api('GET', '/admin/atx/state'); } catch (e) { A.st = { connected: false }; A.err = e.message; } }
     show(); if (A.st.connected && A.tab !== 'log' && A.data == null && !A.busy && !A.err) load();
   }
