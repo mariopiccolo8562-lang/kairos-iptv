@@ -3768,6 +3768,9 @@ const RC_CAT = [
   ['logos', 'Loghi dei canali automatici', 'sel', [['on', 'Sì'], ['off', 'No']], KPRO, 'Con «No» l\'app non cerca i loghi mancanti: meno rete e memoria', '', 'Aspetto'],
   ['posters', 'Locandine', 'sel', [['auto', 'Automatiche (più leggere sulle chiavette da 1 GB)'], ['hi', 'Sempre nitide']], KPRO, 'Automatiche: sulle chiavette da 1 GB (Fire TV Stick/Lite) locandine e sfondi si scaricano più piccoli, un po\' meno nitidi ma con meno memoria. «Sempre nitide»: come sugli altri dispositivi, usa più memoria', '', 'Aspetto'],
   ['intro', 'Animazione d\'avvio', 'sel', [['auto', 'Automatica'], ['simple', 'Semplice'], ['off', 'Spenta']], KPRO, 'Automatica: completa sui dispositivi forti, senza gli effetti di sfondo pesanti su quelli deboli. Semplice: logo, scritta e barra, senza effetti di sfondo. Spenta: logo fermo e barra. Vale dall\'apertura successiva', '', 'Aspetto'],
+  // riquadro «FHD · 1080p · 50 fps» del lettore (contratto comune: "full" | "noq" | "off"; vuoto/assente = completo).
+  // Gruppo «Aspetto» e non «Lettore»: è una scelta del titolare, non una voce che il cliente può scegliere (niente «:allow»).
+  ['qbox', 'Riquadro qualità nel lettore', 'sel', [['full', 'Completo: «FHD · 1080p · 50 fps»'], ['noq', 'Senza sigla: «1080p · 50 fps»'], ['off', 'Nascosto']], RC_APPS, 'Il riquadro in alto a destra quando il cliente apre un canale in diretta, cambia risoluzione o apre la barra informazioni. «Senza sigla» toglie HD, FHD, 4K e SD e lascia risoluzione e FPS. Il permesso «Vedere risoluzione e FPS» del singolo cliente vale comunque', 'Non imposto (completo)', 'Aspetto'],
   /* ---- Lettore ---- */
   ['o.engLive', 'Lettore TV in diretta', 'sel', ENG_OPTS, KPRO_XC, 'Se nella scheda del cliente hai già scelto il lettore, vale quello', '', 'Lettore'],
   ['o.engMovie', 'Lettore film', 'sel', ENG_OPTS, KPRO_XC, '', '', 'Lettore'],
@@ -3780,7 +3783,7 @@ const RC_CAT = [
   ['p.aspect', 'Formato immagine', 'sel', [['fit', 'Adatta'], ['fill', 'Riempi'], ['zoom', 'Zoom']], KPRO, '', '', 'Lettore'],
   ['o.autoNext', 'Episodio successivo automatico', 'sel', YN, KPRO, '', '', 'Lettore'],
   ['o.introAuto', 'Salta l\'intro delle serie', 'sel', YN, KPRO, '', '', 'Lettore'],
-  ['o.resInd', 'Indicatore risoluzione', 'sel', YN, KPRO, '', '', 'Lettore'],
+  ['o.resInd', 'Indicatore risoluzione', 'sel', YN, KPRO, 'È l\'interruttore del cliente nelle Impostazioni della Pro. Per decidere tu in tutte le app usa «Riquadro qualità nel lettore» (Aspetto): con «Nascosto» vince quello', '', 'Lettore'],
   ['o.subSize', 'Dimensione sottotitoli', 'sel', [['small', 'Piccola'], ['medium', 'Media'], ['large', 'Grande'], ['xl', 'Molto grande']], KPRO, '', '', 'Lettore'],
   /* ---- TV in diretta e guida TV ---- */
   ['preview', 'Anteprima nella lista canali', 'sel', [['click', 'Al primo OK'], ['off', 'Spenta']], ['ktv', 'prem', 'lite', 'xc', 'plus'], 'Spenta: il canale parte subito a schermo intero (meno lavoro per il dispositivo)', '', 'TV in diretta e guida TV'],

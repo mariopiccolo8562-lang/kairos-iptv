@@ -3290,14 +3290,16 @@ function startVariant(c, lc, bw, quality) {
   const pr = varRankOf(pick);
   return { c: pick, v: g.filter((x) => x !== pick && varRankOf(x) < pr).slice(0, 3) };
 }
-const qBadge = (ch) => { const q = qualityOf(ch); return q ? `<span class="qb q${q}" data-q="${esc(ch.id)}">${q}</span>` : `<span class="qb qnone" data-q="${esc(ch.id)}"></span>`; };
+/* «Riquadro qualità nel lettore» del pannello (rc qbox): con «Senza sigla» o «Nascosto» niente sigle HD/FHD/4K/SD neanche accanto ai canali */
+const qTagsOff = () => { const v = S.rc && S.rc.qbox; return v === 'noq' || v === 'off'; }; // S.rc diretto: rcGet è definita più avanti nel file
+const qBadge = (ch) => { const q = qTagsOff() ? '' : qualityOf(ch); return q ? `<span class="qb q${q}" data-q="${esc(ch.id)}">${q}</span>` : `<span class="qb qnone" data-q="${esc(ch.id)}"></span>`; };
 function setMeasuredQuality(id, h) {
   if (!id || !(h > 0)) return;
   delete qMap[id]; qMap[id] = h; store.set('qmap', capObj(qMap, 1500));
   varCache = null; // l'altezza misurata cambia il rango fra le versioni dello stesso canale
   const ch = S.byId && S.byId.get(id); if (!ch) return;
-  const q = qualityOf(ch);
-  $$(`.qb[data-q="${CSS.escape(id)}"]`).forEach((e) => { e.className = 'qb q' + q; e.textContent = q; });
+  const q = qTagsOff() ? '' : qualityOf(ch);
+  $$(`.qb[data-q="${CSS.escape(id)}"]`).forEach((e) => { e.className = 'qb q' + (q || 'none'); e.textContent = q; });
 }
 window.kxPreviewInfo = (id, h) => setMeasuredQuality(S.pvVar && S.pvVar.id === id ? S.pvVar.vid : id, +h);
 let chRendered = 0, chStart = 0; // finestra di canali disegnati: [chStart, chRendered)
@@ -3873,7 +3875,7 @@ function nativePlay(item, kind, fromSec, extra) {
   try {
     NATIVE.play(JSON.stringify({ kind: pk, items, index, start: Math.floor(start * 1000), engine: engineFor(kind, item), engineKey, engAllow: engineAllow, engLock: !!imposedEngine, engAuto: imposedEngine === 'auto',
       quality: P.quality, buffer: P.buffer, aspect: P.aspect, brand: S.settings.brand || 'KAIROS',
-      hw: opt('hw'), sub: opt('subSize'), res: perm('resInd') && !!opt('resInd'), autoNext: !!opt('autoNext') && !!(extra && extra.list), adapt: !!opt('adaptQ'), drain: !!opt('drainQ'), pip: false,
+      hw: opt('hw'), sub: opt('subSize'), res: perm('resInd') && !!opt('resInd') && rcGet('qbox') !== 'off', resTag: rcGet('qbox') !== 'noq', autoNext: !!opt('autoNext') && !!(extra && extra.list), adapt: !!opt('adaptQ'), drain: !!opt('drainQ'), pip: false,
       line: lc, ...(bw != null ? { bw } : {}), // Kairos Adaptive: "weak" | "normal" | "good" e banda nota in Mbps (assente se sconosciuta)
       // autopilota: il lettore impara il motore migliore solo se la scelta è «Automatico» (mai contro pannello o cliente);
       // connessioni libere della linea (auto-controllo recente) per preparare in anticipo il canale successivo
@@ -5993,7 +5995,7 @@ function renderSettings(sec) {
     play: `<h3>Lettore</h3>${HAS_PLAYER ? '' : '<div class="snote">Queste opzioni valgono nell\'app (Fire TV, Android TV, telefoni).</div>'}
       ${optRow('engLive')}${optRow('engMovie')}${optRow('engSeries')}
       ${PLAY_OPTS.filter((o) => o[0] !== 'engine').map(([k, lbl, opts]) => playOptRow(k, lbl, opts, P)).join('')}
-      ${optRow('hw')}${optRow('adaptQ')}${optRow('drainQ')}<div class="snote" style="margin:-4px 0 10px">Se la connessione non regge, il canale passa da solo a una sua versione più leggera (es. da FHD a HD) e torna alla qualità piena quando la linea migliora. Se il video si blocca, l'app prova da sola a ripartire, la decodifica software o l'altro lettore.</div>${optRow('autoNext')}${optRow('introAuto')}${optRow('subSize')}${perm('resInd') ? optRow('resInd') : ''}
+      ${optRow('hw')}${optRow('adaptQ')}${optRow('drainQ')}<div class="snote" style="margin:-4px 0 10px">Se la connessione non regge, il canale passa da solo a una sua versione più leggera (es. da FHD a HD) e torna alla qualità piena quando la linea migliora. Se il video si blocca, l'app prova da sola a ripartire, la decodifica software o l'altro lettore.</div>${optRow('autoNext')}${optRow('introAuto')}${optRow('subSize')}${perm('resInd') && rcGet('qbox') !== 'off' ? optRow('resInd') : ''}
       <div class="snote"><b>Automatico (ExoPlayer, passa a VLC se serve)</b> sceglie da solo il lettore migliore per ogni contenuto e cambia lettore da solo se qualcosa non parte. Disattiva la decodifica hardware solo se vedi immagini verdi o a scatti. Durante la visione premi OK per audio, qualità e sottotitoli.</div>`,
     shop: '<div id="shopCard"></div>',
     org: `<h3>Organizza</h3>

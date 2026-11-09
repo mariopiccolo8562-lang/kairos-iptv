@@ -44,6 +44,11 @@
 .rc-home .rc-hg{display:grid;grid-template-columns:1fr 1fr;gap:12px}.rc-home label{display:block;font-size:13px;font-weight:700;margin-bottom:4px}.rc-home label small{display:block;font-weight:400;color:var(--mut);font-size:11.5px;margin-top:2px;line-height:1.35}
 .rc-home .rc-hf{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
 .rc-home label.rc-adult{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;margin:0 0 14px;border:1px solid rgba(96,165,250,.45);border-radius:12px;background:rgba(59,130,246,.08);cursor:pointer;font-weight:400}.rc-home label.rc-adult input{width:22px;height:22px;margin:1px 0 0;flex:none;accent-color:#3b82f6;cursor:pointer}.rc-home label.rc-adult b{display:block;font-size:15px;font-weight:700}.rc-home label.rc-adult small{display:block;margin-top:3px;font-size:12px;line-height:1.45;opacity:.8}
+.rc-qb{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.rc-qb button{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:4px;padding:11px 13px;border-radius:11px;border:1px solid var(--line);background:rgba(255,255,255,.03);transition:background .15s}
+.rc-qb button:hover{background:rgba(255,255,255,.07)}.rc-qb button b{font-size:13.5px}.rc-qb button small{color:var(--mut);font-size:11.5px;line-height:1.35}.rc-qb button code{font:600 12px/1.3 ui-monospace,monospace;color:#eef1f8;background:rgba(0,0,0,.35);border-radius:6px;padding:3px 7px;align-self:flex-start}
+.rc-qb button.on{background:var(--a1);border-color:transparent}.rc-qb button.on small{color:rgba(255,255,255,.85)}.rc-qb button:disabled{opacity:.5;cursor:wait}
+@media (max-width:700px){.rc-qb{grid-template-columns:1fr 1fr}}
 @media (max-width:1000px){.rc-g{grid-template-columns:1fr}.rc-r{grid-template-columns:1fr}.rc-reader .rc-mode{grid-template-columns:1fr}.rc-home .rc-hg{grid-template-columns:1fr}}`;
   document.head.appendChild(css);
 
@@ -186,7 +191,12 @@
       ${adultBox}<div class="rc-hg"><div><label>Categorie in primo piano<small>Nell'ordine che vuoi, separate da virgola: compaiono per prime nella Home e in cima agli elenchi</small></label><div class="rc-tx"><textarea class="inp" rows="3" id="rcHomeTop" placeholder="Es.: Sport, Prime Video, Netflix, Bambini">${esc(hTop || '')}</textarea></div></div>
         <div><label>Categorie nascoste dalla Home<small>Non compaiono nella Home; negli elenchi di Film, Serie e canali restano in fondo (con il PIN se bloccate)</small></label><div class="rc-tx"><textarea class="inp" rows="3" id="rcHomeHide" placeholder="Es.: adult, xxx, 18+">${esc(hHide || '')}</textarea><button type="button" class="btn sm" data-rcpre="1">＋ categorie per adulti</button></div></div></div>
       <div class="rc-hf"><button class="btn pri" id="rcHomeSave">Salva per tutte le app</button><span class="rc-note">${mixed ? '⚠ Ora le app hanno valori diversi: salvando diventano uguali per tutte.' : 'Arriva alle app al prossimo battito (entro un minuto se sono aperte).'}</span></div></div>` : '';
-    V.innerHTML = homeCard + `<div class="card glass" style="margin-bottom:16px"><div class="hd"><h3>Controllo remoto delle app<small>Decidi cosa resta libero, cosa il cliente può scegliere e cosa vuoi imporre: tutto arriva al battito successivo (entro un minuto se l'app è aperta, altrimenti alla prossima apertura).</small></h3><button class="btn sm" id="rcRe">Aggiorna</button></div>
+    // riquadro «FHD · 1080p · 50 fps» del lettore: voce «qbox» uguale in tutte le app (vuota = non imposto)
+    const qAll = same('qbox'), QB = [['full', 'Completo', 'FHD · 1080p · 50 fps'], ['noq', 'Senza sigla', '1080p · 50 fps'], ['off', 'Nascosto', ''], ['', 'Non imposto', '']];
+    const qboxCard = hCat('qbox') ? `<div class="card glass rc-home" style="margin-bottom:16px"><div class="hd"><h3>Riquadro della qualità nel lettore · tutte le app<small>Il riquadro in alto a destra quando il cliente apre un canale in diretta, cambia risoluzione o apre la barra informazioni. Vale per Kairos Pro, TV, Premium, Lite, XC, Plus e Nova (le versioni vecchie lo mostrano completo finché non si aggiornano). Il permesso «Vedere risoluzione e FPS» del singolo cliente vale comunque. Puoi poi cambiarlo per una sola app (profilo qui sotto, sezione Aspetto) o per un solo cliente.</small></h3></div>
+      <div class="rc-qb">${QB.map(([v, l, ex]) => `<button type="button" data-rcqb="${v}" class="${qAll === v ? 'on' : ''}"><b>${esc(l)}</b>${ex ? `<code>${esc(ex)}</code>` : `<small>${v === 'off' ? 'Il cliente non vede né sigla né risoluzione' : 'Come oggi: completo; nella Pro decide il cliente'}</small>`}</button>`).join('')}</div>
+      <p class="rc-note" style="margin:10px 0 0">${qAll === null ? '⚠ Ora le app hanno valori diversi: scegliendo diventano uguali per tutte.' : 'Arriva alle app al prossimo battito (entro un minuto se sono aperte).'}</p></div>` : '';
+    V.innerHTML = homeCard + qboxCard + `<div class="card glass" style="margin-bottom:16px"><div class="hd"><h3>Controllo remoto delle app<small>Decidi cosa resta libero, cosa il cliente può scegliere e cosa vuoi imporre: tutto arriva al battito successivo (entro un minuto se l'app è aperta, altrimenti alla prossima apertura).</small></h3><button class="btn sm" id="rcRe">Aggiorna</button></div>
       <div class="rc-apps">${APPS.map(([k, l]) => `<button type="button" data-rca="${k}" class="${k === app ? 'on' : ''}">${esc(l)}${unlinked(k) ? '' : `<span class="n">${byApp[k] || 0}</span>`}</button>`).join('')}</div>
       <div class="rc-g">
         <div><h4 style="margin:0 0 4px">Profilo di ${esc(name)}</h4><p class="rc-note" style="margin:0 0 10px">${unlinked(app) ? `${esc(name)} non si collega al pannello con un codice: vale per tutte le installazioni, che leggono la politica degli aggiornamenti a ogni controllo (all'apertura e ogni ora).` : `Vale per tutti i clienti con ${esc(name)} (${byApp[app] || 0}). «Decide il cliente» lascia la voce libera nell'app.`} ${nSet ? `<b>${nSet}</b> ${nSet === 1 ? 'regola impostata' : 'regole impostate'}.` : 'Nessuna regola impostata.'}</p>
@@ -219,6 +229,17 @@
         } catch (e) { cbA.checked = !on; cbA.disabled = false; toast(e.message, 1); }
       };
     }
+    $$('[data-rcqb]', V).forEach((b) => (b.onclick = async () => {
+      const v = b.dataset.rcqb; if (b.classList.contains('on')) return;
+      $$('[data-rcqb]', V).forEach((x) => (x.disabled = true));
+      try {
+        const r = await api('PUT', '/admin/rctl/all', { rc: { qbox: v } });
+        R.data.apps = r.apps || R.data.apps;
+        const msg = { full: 'Riquadro completo in tutte le app', noq: 'Riquadro senza sigla (HD, FHD…) in tutte le app', off: 'Riquadro della qualità nascosto in tutte le app' }[v];
+        toast(msg ? `${msg}: arriva al prossimo battito` : 'Riquadro non più imposto: torna come prima');
+      } catch (e) { toast(e.message, 1); }
+      draw();
+    }));
     if ($('#rcHomeSave')) $('#rcHomeSave').onclick = async () => {
       const clean = (v) => v.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean).join(', ');
       const rc = { 'home.top': clean($('#rcHomeTop').value), 'home.hide': clean($('#rcHomeHide').value) };

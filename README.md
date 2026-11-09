@@ -563,3 +563,29 @@ Per toglierlo: revoca il token su GitHub, oppure Cloudflare → Workers → kair
   2. il token `CLOUDFLARE_API_TOKEN` ha *Zone → Workers Routes → Edit* su **All zones**, quindi copre anche la nuova zona.
   - La riga `routes` deve restare **su una sola riga**: se Cloudflare rifiuta un dominio, il workflow la toglie con `sed` e pubblica senza cambiare i domini già collegati (avviso nel log): ricontrolla zona, record DNS e token.
 - **Prove**: v260 (feed senza token, release vuote, cache, 502, CORS, altro dominio, `/api/player/update`), v261 (APK con Range, If-Range, 416, HEAD, nessun rimando), v262 (token e repository privati: API, indirizzi firmati senza token, store da `docs/`, ETag, token mai in risposte e log, ritorno ai link pubblici), v263 (store-k.download: solo download e store, tutto il resto 404).
+
+## 35. Riquadro della qualità nel lettore, deciso dal pannello (9 novembre 2026)
+
+Il riquadro in alto a destra del lettore, «FHD · 1080p · 50 fps», compare quando il cliente apre un canale in diretta, cambia risoluzione o apre la barra informazioni. Ora lo decide il titolare, per tutte le app insieme.
+
+- **Pannello → Controllo remoto → card «Riquadro della qualità nel lettore · tutte le app»**. Le scelte:
+  - **Completo**: `FHD · 1080p · 50 fps`.
+  - **Senza sigla**: `1080p · 50 fps`, senza HD, FHD, 4K e SD.
+  - **Nascosto**.
+  - **Non imposto**: come prima.
+  
+  Il valore va nei profili di tutte e 7 le app (`PUT /api/admin/rctl/all {rc:{qbox}}`). Poi si può cambiare per una sola app (profilo, sezione *Aspetto*) o per un solo cliente.
+- **Voce rc `qbox`**: `"full"` | `"noq"` | `"off"`. Vuota o assente vale «completo». Arriva con il battito e la registrazione, come `adult`. È nel gruppo *Aspetto*, non *Lettore*, quindi non ha `:allow`: decide il titolare, non il cliente.
+- **Regole comuni a tutte le app:**
+  - **`off`**: niente riquadro (all'apertura, al cambio di risoluzione, con la barra informazioni). L'interruttore del cliente sparisce dove c'è: Pro «Indicatore risoluzione», Nova.
+  - **`noq`**: il riquadro resta, ma senza la sigla.
+  - Il permesso «Vedere risoluzione e FPS» (`resInd`) bloccato sul singolo cliente vince sempre.
+  - Non cambiano nomi dei canali, avvisi, qualità adattiva e dati mandati al pannello («Online ora»).
+- **Kairos Pro:**
+  - **Interfaccia (OTA)**: al lettore nativo passa `res:false` con `off` e `resTag:false` con `noq`. Con `noq` e `off` spariscono anche le sigle HD/FHD/4K/SD accanto ai canali (lista, anteprima, guida, Home).
+  - **Lettore nativo (`android/`)**: con `resTag:false` scrive solo risoluzione e FPS. Serve la prossima versione della Pro: le versioni installate ignorano `resTag` e, con `noq`, mostrano ancora il riquadro completo. `off` funziona subito.
+- **TV, Premium, Lite, XC, Plus, Nova**: leggono `rc["qbox"]` dalla prossima versione di ciascuna. Le versioni installate continuano a mostrare il riquadro completo.
+- **Test**:
+  - `v270` (pannello): catalogo, «per tutte le app», battito e registrazione, valori non validi, voce tolta, profilo di una sola app e del singolo cliente, impronta.
+  - `ui_qbox` (card del pannello in Chromium).
+  - `p_qbox_pro` (interfaccia Pro).

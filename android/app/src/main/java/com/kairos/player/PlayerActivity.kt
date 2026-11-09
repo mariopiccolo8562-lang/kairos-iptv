@@ -618,6 +618,8 @@ class PlayerActivity : ComponentActivity(), EngineListener {
     private var numBuf = ""
     private var subScale = 1f
     private var showRes = true
+    // «Riquadro qualità nel lettore» del pannello (rc qbox = noq): risoluzione e FPS senza la sigla 4K/FHD/HD/SD
+    private var showResTag = true
     private var autoNext = false
     private var engineKey = ""
     private lateinit var resView: TextView
@@ -675,6 +677,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
             }
             subScale = when (j.optString("sub", "medium")) { "small" -> 0.8f; "large" -> 1.3f; "xl" -> 1.6f; else -> 1f }
             showRes = j.optBoolean("res", true)
+            showResTag = j.optBoolean("resTag", true)
             autoNext = j.optBoolean("autoNext", false)
             adapt = j.optBoolean("adapt", true)
             drainEnabled = j.optBoolean("drain", true)
@@ -1058,7 +1061,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
         if (!osdOn && System.currentTimeMillis() >= resFlashUntil) { resView.visibility = View.GONE; return }
         val e = engine
         val h = e?.videoHeight() ?: 0
-        val tag = when { h >= 2000 -> "4K"; h >= 1000 -> "FHD"; h >= 700 -> "HD"; h > 0 -> "SD"; else -> "" }
+        val tag = if (!showResTag) "" else when { h >= 2000 -> "4K"; h >= 1000 -> "FHD"; h >= 700 -> "HD"; h > 0 -> "SD"; else -> "" }
         val fps = fpsLabel(e)
         val text = if (osdOn && e is ExoEngine && e.videoInfo().isNotBlank()) {
             val parts = e.videoInfo().split(" · ").toMutableList()
