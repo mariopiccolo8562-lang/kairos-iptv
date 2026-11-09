@@ -168,7 +168,8 @@ small.ag-cnt{display:block;margin:6px 0 0 2px;font-size:12px;color:var(--mut)}
 .ag-dh{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}.ag-dh b{display:block;font-size:14px}.ag-dh small{display:block;color:var(--mut);font-size:12px;margin-top:2px;line-height:1.35}
 .ag-dt{flex:none;min-width:34px;height:26px;padding:0 7px;border-radius:7px;display:grid;place-items:center;font-size:10.5px;font-weight:800;letter-spacing:.04em;color:#fff;background:var(--k)}
 .ag-dn{font-size:12px;color:var(--mut);margin:10px 0 0}
-@media (max-width:1100px){.ag-dg{grid-template-columns:1fr}}small.ag-cnt.no{color:var(--warn,#f5b041);font-weight:600}
+.ag-dg[data-n="1"]{grid-template-columns:minmax(0,560px)}.ag-dg[data-n="2"]{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:1100px){.ag-dg,.ag-dg[data-n]{grid-template-columns:1fr}}small.ag-cnt.no{color:var(--warn,#f5b041);font-weight:600}
 .ag-radio{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ag-radio label{display:block;padding:12px;border-radius:8px;border:1px solid var(--line);background:#1a1d22;cursor:pointer}
 .ag-radio label.on{border-color:var(--a1);background:rgba(61,124,245,.1)}.ag-radio b{display:block;font-size:13.5px}.ag-radio small{color:var(--mut);font-size:12px}
 .ag-radio input{display:none}
@@ -894,6 +895,29 @@ body.agent .foot{display:none}
   };
   const armF = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString('it-IT');
   const listRead = (box, attr) => { const st = $(`#${box} [data-${attr}="*"]`); return st && st.checked ? ['*'] : $$(`#${box} [data-${attr}]`).filter((i) => i.checked && i.dataset[attr] !== '*').map((i) => i.dataset[attr]); };
+  /* modulo di un sotto-agente aperto da un agente (anche in assistenza): si vede solo quello che il titolare ha dato a
+     chi lo crea. Permessi, pagine, voci della Sezione App, pannelli e add-on che lui non ha non si vedono più (prima
+     restavano grigi e sembravano assegnabili). Sono solo nascosti: il salvataggio legge gli stessi valori di prima
+     (elenchi app e DNS di un sub già creato restano com'erano). Il server li toglie comunque: agentPermsWithin. */
+  function onlyMine(root, topP) {
+    if (!root || !topP) return;
+    const hide = (el) => { if (el) el.style.setProperty('display', 'none', 'important'); };
+    const shown = (el) => !!el && el.style.display !== 'none';
+    const off = (box) => { const i = box.querySelector('input[data-perm]'); return !!(i && i.disabled); }; // il permesso principale della sezione: lui non ce l'ha
+    $$('.ag-arm', root).forEach((s) => { if (off(s)) hide(s); }); // pannelli: Armada, Storm, Realott, SLT, Atlantix, WOLF, MaxPlayer, OrbixPlay
+    $$('.ag-ap', root).forEach((s) => { if (off(s)) hide(s); }); // Sezione App: Attiva app, App MirkoTeam, OrbixPlay e MaxPlayer, Codici
+    $$('label.dis', root).forEach(hide); // singole caselle: permessi, pagine, prove, server MirkoTeam, add-on…
+    const aa = $('#agActApps', root); if (aa && !$$('label', aa).some(shown)) hide(aa.closest('.ag-ap')); // app di «Nuovo cliente»: non ne ha
+    // elenchi DNS di OrbixPlay e MaxPlayer: contano solo con «Attivare OrbixPlay e MaxPlayer» o con quei pannelli
+    if (!topP.players && !topP.oxp) hide($('.ag-dc.op', root));
+    if (!topP.players && !topP.mxp) hide($('.ag-dc.mx', root));
+    if (!topP.players) hide($('.ag-dn', root));
+    const dg = $('.ag-dg', root), n = dg ? $$('.ag-dc', dg).filter(shown).length : 3;
+    if (dg && n < 3) { dg.dataset.n = n; const sm = $('.ag-dns > small', root); if (sm) sm.textContent = (n === 2 ? 'Due elenchi separati, uno per ogni uso. ' : '') + 'L\'agente vede solo i nomi che scegli qui, mai gli indirizzi, e non può aggiungerne o cambiarli.'; }
+    [['#agPm', 'Non hai permessi da dare.'], ['#agPg', 'Non hai pagine da dare.']].forEach(([id, t]) => { const b = $(id, root); if (b && !$$('label', b).some(shown)) b.insertAdjacentHTML('beforeend', `<p class="mut" style="font-size:12.5px;margin:6px 0">${t}</p>`); });
+    const ad = $('#agAd', root); if (ad && !$$('label', ad).some(shown)) hide(ad.closest('.ag-c')); // add-on da dare: nessuno
+    const apps = $('.ag-apps', root); if (apps && !$$('.ag-ap', apps).some(shown)) hide(apps);
+  }
   async function openAgent(a) {
     const isNew = !a, sub = isAgent(), top = sub ? me() : null;
     let servers = [];
@@ -1196,6 +1220,7 @@ body.agent .foot{display:none}
       if (!(await askDanger('Eliminare l\'agente?', `<b>${esc(a.username)}</b> non potrà più entrare. I suoi ${a.clients} clienti e i suoi sotto-agenti passano a ${a.parentId ? 'chi stava sopra di lui' : 'te'}: nessun cliente smette di funzionare.`, a.username))) return;
       try { await api('DELETE', '/admin/agents/' + a.id); closePage(); await load(); toast('Agente eliminato'); } catch (e) { toast(e.message, 1); }
     });
+    if (sub) onlyMine($('#agB'), topP);
     page.classList.add('on'); $('#agB').scrollTop = 0;
   }
 
