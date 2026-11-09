@@ -15,7 +15,12 @@ const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Geck
 const K = 'atx';
 const mem = new Map();
 const stateOf = (k) => { if (!mem.has(k)) mem.set(k, { jar: null, user: null }); return mem.get(k); };
-const privateAgentField = (k) => /dns|host|portal|provider|domain|url|m3u|reseller|^(owner|parent|master)(_|$)/i.test(String(k || ''));
+const agentPublicFields = new Set(['reseller', 'reseller_id', 'resellers']);
+const privateAgentField = (k) => {
+  const key = String(k || '');
+  if (agentPublicFields.has(key)) return false;
+  return /dns|host|portal|provider|domain|url|m3u|reseller|^(owner|parent|master)(_|$)/i.test(key);
+};
 function agentSafe(data) {
   if (Array.isArray(data)) return data.map(agentSafe);
   if (!data || typeof data !== 'object') return data;
