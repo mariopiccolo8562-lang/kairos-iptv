@@ -10,8 +10,9 @@
 .mx-row .k,.mx-ag .k{font-size:11px;color:var(--mut);display:block}.mx-l{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:2px 0}.mx-l .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
 .mx-l button{background:none;border:0;color:var(--mut);cursor:pointer;padding:2px 5px;border-radius:5px;font:inherit;font-size:12px}.mx-l button:hover{color:var(--txt,#fff);background:#ffffff14}
 .mx-ag{display:grid;grid-template-columns:minmax(0,1.4fr) 72px 72px minmax(0,1fr) minmax(0,1.5fr);gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line);font-size:13px}.mx-ag .n{font-size:17px;font-weight:800}.mx-ag .wf-act{display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-width:0}.mx-ag .wf-act .btn{white-space:normal}.mx-agent-new{display:flex;justify-content:flex-end;margin-bottom:10px}.mx-agent-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mx-agent-form label{min-width:0}.mx-agent-form .wide{grid-column:1/-1}
+.mx-connect-form{grid-template-columns:1fr 2fr}
 @media (max-width:1000px){.mx-row,.mx-ag{grid-template-columns:1fr 1fr}.mx-row .wf-act,.mx-ag .wf-act{grid-column:1/-1;justify-content:flex-start}}
-@media (max-width:600px){.mx-agent-form{grid-template-columns:1fr}.mx-agent-form .wide{grid-column:1/-1}.mx-ag>div:first-child{min-width:0;overflow-wrap:anywhere}}`;
+@media (max-width:600px){.mx-agent-form{grid-template-columns:1fr}.mx-agent-form .wide{grid-column:1/-1}.mx-ag>div:first-child{min-width:0;overflow-wrap:anywhere}.mx-connect-form{grid-template-columns:1fr}}`;
   document.head.appendChild(css);
 
   const IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4M10 9l4 2-4 2z"/></svg>';
@@ -61,7 +62,7 @@
   function switchAcc(id) { M.acc = id; M.sel.clear(); M.ov = M.users = M.doms = M.agents = null; M.q = ''; M.limit = 100; M.show.clear(); loadAll(); }
 
   function connectForm() {
-    return `<div class="wf-f" style="margin-top:12px;grid-template-columns:1fr 2fr">
+    return `<div class="wf-f mx-connect-form" style="margin-top:12px">
       <label>Nome dell'account<input class="inp" id="mxN" maxlength="40" placeholder="es. MaxPlayer 2"></label>
       <label>Chiave API<input class="inp mono" id="mxK" type="password" autocomplete="off" placeholder="MaxPlayer → API pubblica → Accesso → Crea chiave"></label></div>
       <div style="display:flex;gap:8px;margin-top:12px"><button class="btn" id="mxAdd">Collega account</button></div>`;
