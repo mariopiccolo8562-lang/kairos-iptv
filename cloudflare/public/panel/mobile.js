@@ -96,11 +96,18 @@ body{overscroll-behavior-y:none}
   #dlBar .dl{max-width:82vw}
   .op-f,.op-f.mx{grid-template-columns:1fr!important}
   .ai-k{grid-template-columns:1fr!important}
+  .card .hd:has(> h3 > small){flex-wrap:wrap}
+  .card .hd:has(> h3 > small)>h3{flex:1 1 100%;min-width:0}
   h2#vTitle{font-size:18px!important}
 }
 @media (min-width:701px) and (max-width:1100px){
   .qa-acts{grid-template-columns:repeat(3,1fr)}
   .dv-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (pointer:coarse){
+  .wf-v button,.ar-v button,.ll-v button,.mx-l button,.mx-row button[data-a="cua"]{box-sizing:border-box;min-width:32px!important;min-height:32px!important;padding:6px!important}
+  .kt-ck{width:22px!important;height:22px!important}
+  .kt-panel-log .fchip{min-height:32px!important}
 }
 @media (display-mode:standalone){.demo-tag{top:calc(8px + env(safe-area-inset-top))}}`;
   document.head.appendChild(css);
