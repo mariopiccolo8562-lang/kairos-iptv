@@ -28,11 +28,14 @@
   const add = (out, p, tag, l, host) => {
     const username = String(l.username || ''), password = String(l.password || '');
     if (!username.trim() || !password) return;
-    out.push({ p, tag, username, password, host: String(host || ''), exp: expiryDate(l.exp || l.exp_date || l.expire_date || l.expTxt), note: String(l.note || l.notes || ''), status: statusOf(l) });
+    const status = statusOf(l), state = String(l.status || '').toLowerCase();
+    const enabled = !(l.enabled === false || l.enabled === 0 || l.enabled === '0' || l.enabled === 'false' || /disattiv|sospes|disabled|bann/.test(state));
+    const conns = l.conns == null && l.connections == null ? undefined : Number(l.conns ?? l.connections) || 0;
+    out.push({ p, tag, username, password, host: String(host || ''), exp: expiryDate(l.exp || l.exp_date || l.expire_date || l.expTxt), note: String(l.note || l.notes || ''), status, enabled, expired: status === 'scaduta', conns });
   };
-  function load() {
+  function load(force = false) {
     if (cache.busy) return cache.busy;
-    if (Date.now() - cache.t < 180e3) return Promise.resolve(cache.items);
+    if (!force && Date.now() - cache.t < 180e3) return Promise.resolve(cache.items);
     cache.busy = (async () => {
       const out = [], tasks = [];
       if (can('wolf')) tasks.push(api('GET', '/admin/wolf/lines').then((r) => (r.lines || []).forEach((l) => add(out, 'wolf', 'WOLF', l, l.dns || r.dns))).catch(() => {}));
@@ -42,6 +45,10 @@
         }).catch(() => {}));
       }
       for (const [p, tag] of [['ro', 'REALOTT'], ['slt', 'SLT']]) if (can(p)) tasks.push(api('GET', `/admin/${p}/lines`).then((r) => (r.rows || []).forEach((l) => add(out, p, tag, l, r.dns))).catch(() => {}));
+      if (D.role !== 'agent') tasks.push(api('GET', '/admin/atx/state').then((s) => s && s.connected ? api('GET', '/admin/atx/lines?all=1') : null).then((r) => {
+        const rows = r && (r.rows || r.lines || r.items || []);
+        (Array.isArray(rows) ? rows : []).forEach((l) => add(out, 'atx', 'ATLANTIX', l, l.dns || (r && r.dns)));
+      }).catch(() => {}));
       await Promise.all(tasks);
       cache.items = out; cache.t = Date.now();
       return out;
