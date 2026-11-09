@@ -52,3 +52,9 @@ enabled = true
 # Le variabili ACCESS_TEAM_DOMAIN, ACCESS_AUD e TURNSTILE_SITEKEY vengono passate
 # dalla GitHub Action (variabili del repository). I segreti ENC_KEY, ADMIN_BOOTSTRAP_PASS
 # e TURNSTILE_SECRET vengono caricati come "secrets" del Worker.
+
+[vars]
+# Dominio dedicato ai download (README §34): su questi host il Worker serve solo /get/… (APK e feed degli aggiornamenti)
+# e /store/… (pagina dello store); «/» porta allo store e tutto il resto risponde 404 (niente pannello, API, accesso).
+# Nomi separati da virgola. Il dominio va collegato al Worker a parte (riga in «routes», vedi README §34).
+DL_HOSTS = "store-k.download,www.store-k.download"

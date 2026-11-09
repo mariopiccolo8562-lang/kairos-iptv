@@ -1552,6 +1552,11 @@ const GH_UA = 'KairosPanel', GH_API = 'https://api.github.com', GH_V = '2022-11-
 const hasKey = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 /** token GitHub del Worker (segreto GH_TOKEN, facoltativo): '' se manca */
 const ghTok = (env) => { const t = String((env && env.GH_TOKEN) || '').trim(); return /^[\x21-\x7e]{20,255}$/.test(t) ? t : ''; };
+/** host dedicati ai download (variabile DL_HOSTS, nomi separati da virgola): lì il Worker serve solo /get/… e /store/… */
+function dlHost(env, host) {
+  const v = String((env && env.DL_HOSTS) || '').trim().toLowerCase();
+  return !!v && v.split(',').map((x) => x.trim().replace(/^https?:\/\//, '').replace(/[/:].*$/, '')).filter(Boolean).includes(String(host || '').toLowerCase());
+}
 /** «repo/releases/latest/download/file» o «repo/releases/download/tag/file» → { repo, tag ('' = ultima release), file } */
 function ghRelOf(rel) {
   const m = String(rel || '').match(/^([A-Za-z0-9._-]+)\/releases\/(?:latest\/download|download\/([A-Za-z0-9._-]+))\/([A-Za-z0-9._-]+)$/);
@@ -4891,6 +4896,13 @@ async function route(req, env, ctx) {
   const url = new URL(req.url);
   const path = url.pathname;
   const ip = ipOf(req);
+
+  // dominio dedicato ai download (variabile DL_HOSTS): solo /get/… e /store/…, mai il pannello né le API (README §34)
+  if (dlHost(env, url.hostname)) {
+    if (path === '/') return Response.redirect(url.origin + '/store/', 302);
+    if (path.startsWith('/get/') || path === '/store' || path.startsWith('/store/')) return cleanLinks(req, env, url, path);
+    return new Response('Non trovato', { status: 404 });
+  }
 
   if (path === '/' || path === '/panel') return Response.redirect(url.origin + '/panel/', 302);
 
