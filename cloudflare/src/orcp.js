@@ -21,14 +21,16 @@ const selectVal = (h, name) => { const m = String(h).match(new RegExp('<select\\
 const selectOpts = (h, name) => { const m = String(h).match(new RegExp('<select\\b[^>]*\\bname=["\']' + name + '["\'][^>]*>([\\s\\S]*?)<\\/select>', 'i')); return m ? [...m[1].matchAll(/<option\b([^>]*)>([\s\S]*?)<\/option>/gi)].map((o) => ({ v: attr(o[1], 'value'), t: txtOf(o[2]) })) : []; };
 const csrf = (h) => inputVal(h, '_token') || attr((String(h).match(/<meta[^>]+name="csrf-token"[^>]*>/i) || [''])[0], 'content');
 const rows = (h) => [...String(h).matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((m) => ({ html: m[1], cells: [...m[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map((c) => c[1]) })).filter((r) => r.cells.length);
-const isLogin = (r) => {
-  if (r.status === 302 && r.loc) {
+const isLogin = (r) => r.status === 302 && /\/login(?:$|\?)/.test(r.loc) || (r.status === 200 && /<form[^>]+action="[^"]*\/login"/i.test(r.txt) && /name="password"/i.test(r.txt));
+const isRequestLogin = (r, o) => {
+  if (isLogin(r)) return true;
+  if (!o.form && r.status === 302 && r.loc) {
     try {
       const path = new URL(r.loc, BASE).pathname;
       if (path === '/' || /(?:login|signin)/i.test(path)) return true;
     } catch {}
   }
-  return r.status === 200 && /<input\b[^>]*\btype\s*=\s*(?:"password"|'password'|password\b)[^>]*>/i.test(r.txt);
+  return !!o.ajax && r.status === 200 && /<input\b[^>]*\btype\s*=\s*(?:"password"|'password'|password\b)[^>]*>/i.test(r.txt);
 };
 const unexpectedResponse = (r) => {
   let path = '';
@@ -116,10 +118,10 @@ async function orcp(env, H, path, o = {}) {
     return { status: r.status, txt, j, loc: r.headers.get('location') || '' };
   };
   let r = await go();
-  if (isLogin(r) || (o.ajax && r.status === 403)) {
+  if (isRequestLogin(r, o) || (o.ajax && r.status === 403)) {
     const rem = remOf(s.jar);
     if (rem) { s.jar = { [rem]: s.jar[rem] }; await go().catch(() => {}); r = await go(); } // il remember apre una sessione nuova
-    if (isLogin(r) || (o.ajax && r.status === 403)) { s.bad = 1; await saveSes(env, H, s).catch(() => {}); throw new H.HttpErr(401, 'L\'accesso a ORCP è scaduto: entra su cp.ottrun.com (con «Remember me») e passa di nuovo l\'accesso a KAIROS'); }
+    if (isRequestLogin(r, o) || (o.ajax && r.status === 403)) { s.bad = 1; await saveSes(env, H, s).catch(() => {}); throw new H.HttpErr(401, 'L\'accesso a ORCP è scaduto: entra su cp.ottrun.com (con «Remember me») e passa di nuovo l\'accesso a KAIROS'); }
   }
   if (s.bad) delete s.bad;
   await saveSes(env, H, s).catch(() => {});
