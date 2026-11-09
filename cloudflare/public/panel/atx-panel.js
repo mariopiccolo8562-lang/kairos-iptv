@@ -19,6 +19,7 @@
   const badge = (t, c) => `<span style="display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;background:${c}22;color:${c};white-space:nowrap">${t}</span>`;
   const lineState = (r) => { if (Number(r.enabled) === 0) return badge('Disattivata', '#9aa4b2'); const e = Number(r.exp_date); if (e && e < now()) return badge('Scaduta', '#ff6b6b'); if (e && e <= now() + 7 * 86400) return badge('In scadenza', '#ffb020'); if (Number(r.is_trial) === 1) return badge('Prova', '#7aa7ff'); return badge('Attiva', '#2ecc71'); };
   const mut = '<span class="mut">—</span>';
+  const stamp = (v) => { const raw = String(v ?? ''), n = Number(raw); if (!raw.trim()) return mut; const d = Number.isFinite(n) ? new Date(n < 1e11 ? n * 1000 : n) : new Date(Date.parse(raw.replace(' ', 'T'))); return isNaN(d) ? esc(raw) : esc(d.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })); };
   const copy = (v, what) => navigator.clipboard.writeText(String(v)).then(() => toast(what + ' copiato'), () => toast('Copia non riuscita', 1));
   const m3u = (r) => { if (isAg()) return ''; let d = String(r.reseller_dns || '').trim().replace(/\/+$/, ''); if (!d) return ''; if (!/^https?:\/\//i.test(d)) d = 'http://' + d; return `${d}/get.php?username=${encodeURIComponent(r.username)}&password=${encodeURIComponent(r.password)}&type=m3u_plus&output=ts`; };
   const TH = 'text-align:left;padding:9px 8px;border-bottom:1px solid var(--line,#333);white-space:nowrap;font-size:12px;text-transform:uppercase;letter-spacing:.04em;opacity:.75';
@@ -31,8 +32,7 @@
 
   function linesHtml(rows) {
     if (!rows.length) return '<p class="mut" style="margin:14px 0">Nessuna linea trovata.</p>';
-    const heads = ['Utente', 'Password', 'Stato', 'Scadenza', 'Connessi', 'Canale / IP'];
-    if (!isAg()) heads.push('Reseller');
+    const heads = ['Utente', 'Password', 'Stato', 'Scadenza', 'Connessi', 'Canale / IP', 'Reseller'];
     heads.push('Note', 'Azioni');
     return grid(heads, rows.map((r, i) => {
       const cells = [
@@ -42,8 +42,8 @@
       `<b>${day(r.exp_date)}</b>${window.KXPay ? `<br>${KXPay.badge('line', 'atx', r.id)}` : ''}`,
       Number(r.online) > 0 ? `<button class="btn sm" data-a="lc" data-i="${i}" title="Vedi chi è connesso">🟢 ${Number(r.online)}/${Number(r.max_connections || 0)}</button>` : `<span class="mut">${Number(r.online) || 0}/${Number(r.max_connections || 0)}</span>`,
       r.channel || r.ip ? `${r.channel ? `<b>${esc(r.channel)}</b>` : ''}<div class="mut" style="font-size:11.5px">${esc([r.country, r.ip].filter(Boolean).join(' · '))}</div>` : mut,
+      r.reseller ? esc(r.reseller) : mut,
       ];
-      if (!isAg()) cells.push(r.reseller ? esc(r.reseller) : mut);
       cells.push(
       `<button class="btn sm" data-a="note" data-i="${i}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.notes ? esc(r.notes) : '+ nota'}</button>`,
       `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('edit', i, 'Modifica')}${btn('renew', i, 'Rinnova')}${window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="atx" data-ref="${esc(r.id)}" data-label="${esc(r.username)}" data-auto-line="${esc(r.id)}" data-panel-note="${esc(r.notes || '')}">💰 Pagamento</button>` : ''}${Number(r.enabled) === 0 ? btn('on', i, 'Attiva') : btn('off', i, 'Disattiva')}${m3u(r) ? btn('m3u', i, 'M3U') : ''}${window.KXMxpNew && (!window.KXMxpCan || KXMxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('mxp', i, 'MaxPlayer') : ''}${window.KXOxpNew && (!window.KXOxpCan || KXOxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('oxp', i, 'OrbixPlay') : ''}${window.KXOrcpNew && (!isAg() || KXOrcpAgentCan()) ? btn('orcp', i, KXOrcpName()) : ''}${btn('del', i, 'Elimina')}</div>`
@@ -71,7 +71,7 @@
       if (!isAg()) cells.push(r.reseller_dns ? `<code style="font-size:12px">${esc(r.reseller_dns)}</code>` : mut);
       cells.push(
       on(r.can_create_sub) ? 'sì' : 'no',
-      r.last_login ? esc(String(r.last_login)) : mut,
+      r.last_login ? stamp(r.last_login) : mut,
       `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('cr', i, '± Crediti')}${on(r.status) ? btn('sdis', i, 'Disattiva') : btn('sen', i, 'Riattiva')}${btn('uoff', i, 'Blocca linee')}${btn('uon', i, 'Sblocca linee')}${on(r.can_create_sub) ? btn('poff', i, 'Togli crea sub') : btn('pon', i, 'Permetti sub')}${btn('sdel', i, 'Elimina', 'style="color:#ff8f8f"')}</div>`
       );
       return tr(cells);
