@@ -847,8 +847,9 @@ function paymentEffective(row, today = paymentToday()) {
   return row;
 }
 function paymentAddMonths(months, base = paymentToday()) {
-  const d = new Date(base + 'T00:00:00Z');
-  d.setUTCMonth(d.getUTCMonth() + months);
+  const d = new Date(base + 'T00:00:00Z'), day = d.getUTCDate();
+  d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + months);
+  d.setUTCDate(Math.min(day, new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate())); // dal 31 gennaio +1 mese = 28/29 febbraio (prima 3 marzo)
   return d.toISOString().slice(0, 10);
 }
 async function paymentDeviceOwner(env, id) {

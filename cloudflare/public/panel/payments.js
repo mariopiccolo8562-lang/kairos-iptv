@@ -2,7 +2,7 @@
 (() => {
   const escP = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const addMonths = (n, base = localDay()) => { const d = new Date(base + 'T00:00:00'); d.setMonth(d.getMonth() + n); return localDay(d); };
+  const addMonths = (n, base = localDay()) => { const d = new Date(base + 'T00:00:00'), day = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + n); d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())); return localDay(d); }; // dal 31 +1 mese = ultimo giorno del mese dopo
   const amountText = (v) => v == null || v === '' ? '' : `${Number(v).toLocaleString('it-IT', { maximumFractionDigits: 2 })} €`;
   const dateText = (v) => v ? new Date(v + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   const effective = (r, today = localDay()) => {

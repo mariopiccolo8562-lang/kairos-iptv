@@ -385,8 +385,10 @@ function addPeriod(base, n, unit) {
   const today = romeDay(), from = /^\d{4}-\d{2}-\d{2}$/.test(base || '') && base > today ? base : today;
   const b = new Date(from + 'T00:00:00Z'), amount = Number(n);
   if (unit === 'd') b.setUTCDate(b.getUTCDate() + amount);
-  else if (unit === 'm') b.setUTCMonth(b.getUTCMonth() + amount);
-  else if (unit === 'y') b.setUTCFullYear(b.getUTCFullYear() + amount);
+  else if (unit === 'm' || unit === 'y') { // mesi di calendario: dal 31 gennaio +1 mese = 28/29 febbraio (prima 3 marzo), dal 29/2 +1 anno = 28/2
+    const day = b.getUTCDate(); b.setUTCDate(1); b.setUTCMonth(b.getUTCMonth() + amount * (unit === 'y' ? 12 : 1));
+    b.setUTCDate(Math.min(day, new Date(Date.UTC(b.getUTCFullYear(), b.getUTCMonth() + 1, 0)).getUTCDate()));
+  }
   return b.toISOString().slice(0, 10);
 }
 function periodQuickRow(key) {
