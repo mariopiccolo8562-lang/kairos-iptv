@@ -4626,6 +4626,10 @@ async function route(req, env, ctx) {
     catch (e) { if (e instanceof HttpErr) return json({ error: e.message, ...(e.extra || {}) }, e.status); throw e; }
   }
 
+  /* ---------- file statici: niente percorsi codificati («..%2f», «%2e%2e», «%5c», «\\»). Nessun file vero li usa e non devono
+     poter risalire ai file privati di public/privato (temi), che il Worker legge da sé con env.ASSETS ---------- */
+  if ((path.startsWith('/app/') || path.startsWith('/panel/')) && /%2e|%2f|%5c|\\/i.test(path)) return new Response('Non trovato', { status: 404 });
+
   /* ---------- interfaccia dell'app per l'aggiornamento automatico ---------- */
   if (path.startsWith('/app/')) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return new Response('Metodo non consentito', { status: 405 });
