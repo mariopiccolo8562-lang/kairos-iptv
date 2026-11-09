@@ -222,6 +222,7 @@ const mkArmadaLike = (cfg) => {
       setTimeout(() => { try { edit.playlists.push({ id: 'p' + Date.now(), name: `${N}`, type: 'xtream', url: '', host: L.host, username: L.username, password: L.password }); renderDrawer(); toast('Linea aggiunta alle playlist: controlla e premi Salva'); } catch (e) { toast('Aggiungila a mano con «Incolla linea»', 1); } }, 60);
     });
     $$('[data-arapp]', V).forEach((b) => (b.onclick = async () => {
+      if (!(await ask('Registrare in Appunti App?', `<p><b>${esc(L.username || L.mac || '')}</b> verrà aggiunta su <b>${esc(b.dataset.arapp)}</b>.</p>`, 'Registra'))) return;
       try { await api('POST', '/admin/linked-lines', { app: b.dataset.arapp, username: L.username, password: L.password, dns: L.host, note: A.form.notes || '' }); toast('Registrata in Appunti App su ' + b.dataset.arapp); } catch (e) { toast(e.message, 1); }
     }));
     // elenchi
@@ -267,7 +268,9 @@ const mkArmadaLike = (cfg) => {
     }));
     $$('[data-artog]', V).forEach((b) => (b.onclick = async () => {
       const x = find(b.dataset.artog), on = !x.enabled;
-      if (!on && !(await ask(`Disattivare su ${N}?`, `<b>${esc(x.username || x.mac)}</b> smette di funzionare finché non la riattivi.`, 'Disattiva'))) return;
+      if (!(await ask(`${on ? 'Attivare' : 'Disattivare'} su ${N}?`, on
+        ? `<b>${esc(x.username || x.mac)}</b> torna a funzionare.`
+        : `<b>${esc(x.username || x.mac)}</b> smette di funzionare finché non la riattivi.`, on ? 'Attiva' : 'Disattiva'))) return;
       try { await api('POST', API + '/toggle', { id: x.id, enabled: on }); x.enabled = on; toast(on ? 'Attivata' : 'Disattivata'); render(); } catch (e) { toast(e.message, 1); }
     }));
   }
