@@ -372,7 +372,7 @@ $('#rows').addEventListener('click', async (e) => {
   if (!d) return;
   if (d.parent) return openQuick(d); // connessione collegata: abbonamento gestito dal principale
   if (act === 'ext') return extend(d, 1);
-  if (act === 'tog') { await save(d, { active: !d.active }); return toast(d.active ? 'Dispositivo disattivato' : 'Dispositivo riattivato'); }
+  if (act === 'tog') { if (await save(d, { active: !d.active })) toast(d.active ? 'Dispositivo disattivato' : 'Dispositivo riattivato'); return; }
   if (act === 'open') return openDrawer(d, d.status === 'pending'); // «Modifica»: scheda completa
   openQuick(d);
 });
@@ -411,8 +411,9 @@ async function kickDev(d, quiet) {
   if (!quiet && !(await ask('Disconnettere?', `La visione in corso su <b>${esc(d.name || d.code)}</b>${kids.length ? ` e sui suoi ${kids.length} dispositivi collegati` : ''} viene interrotta entro una ventina di secondi e l'app torna alla home.<br><span class="mut">L'abbonamento resta attivo: il cliente può riprendere a guardare. Per bloccarlo usa «Disattiva».</span>`, 'Disconnetti'))) return false;
   try { const r = await api('POST', '/admin/devices/' + d.id + '/kick' + (kids.length ? '?all=1' : '')); if (!quiet) toast(`${d.name || d.code}: disconnesso${r && r.kicked > 1 ? ' (' + r.kicked + ' dispositivi)' : ''}`); return true; } catch (e) { toast(e.message, 1); return false; }
 }
-async function extend(d, m) { await save(d, { expires: addMonths(d.expires, m), active: true }); toast(`${d.name || d.code}: +${m} ${m === 1 ? 'mese' : 'mesi'}`); }
-async function save(d, patch) { try { await api('PUT', '/admin/devices/' + d.id, patch); await load(); } catch (e) { toast(e.message, 1); } }
+async function extend(d, m) { if (await save(d, { expires: addMonths(d.expires, m), active: true })) toast(`${d.name || d.code}: +${m} ${m === 1 ? 'mese' : 'mesi'}`); }
+/** salva e ricarica; true se il server ha accettato (chi chiama mostra «fatto» solo allora: prima compariva anche dopo un errore) */
+async function save(d, patch) { try { await api('PUT', '/admin/devices/' + d.id, patch); } catch (e) { toast(e.message, 1); return false; } await load().catch((e) => toast(e.message, 1)); return true; }
 
 /* ---------------- drawer ---------------- */
 let edit = null, isNew = false, lineSyncLoad = Promise.resolve(), lineSyncLoadFailed = false;

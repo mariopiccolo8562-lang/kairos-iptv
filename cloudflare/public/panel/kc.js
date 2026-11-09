@@ -1232,7 +1232,7 @@
         nt.innerHTML = `<input class="inp dvt-ni" maxlength="300" value="${esc(d.notes || '')}" placeholder="Nota (Invio per salvare, Esc per annullare)">`;
         const inp = nt.querySelector('input'); inp.focus(); inp.select();
         let done = false;
-        const fin = async (keep) => { if (done) return; done = true; if (keep && inp.value.trim() !== (d.notes || '')) { await save(d, { notes: inp.value.trim() }); toast('Nota salvata'); } else renderDevices(); };
+        const fin = async (keep) => { if (done) return; done = true; if (keep && inp.value.trim() !== (d.notes || '')) { if (await save(d, { notes: inp.value.trim() })) toast('Nota salvata'); else renderDevices(); } else renderDevices(); };
         inp.onkeydown = (ev) => { if (ev.key === 'Enter') fin(true); else if (ev.key === 'Escape') fin(false); };
         inp.onblur = () => fin(true);
         return;
@@ -1245,8 +1245,8 @@
         if (a === 'ext1') return extend(d, 1);
         if (a === 'ext12') return extend(d, 12);
         if (a === 'kick') return kickDev(d);
-        if (a === 'off') { if (!(await ask('Disattivare il cliente?', `<b>${esc(d.name || d.code)}</b> non potrà più guardare finché non lo riattivi.`, 'Disattiva'))) return; await save(d, { active: false }); return toast('Disattivato'); }
-        if (a === 'on') { await save(d, { active: true }); return toast('Riattivato'); }
+        if (a === 'off') { if (!(await ask('Disattivare il cliente?', `<b>${esc(d.name || d.code)}</b> non potrà più guardare finché non lo riattivi.`, 'Disattiva'))) return; if (await save(d, { active: false })) toast('Disattivato'); return; }
+        if (a === 'on') { if (await save(d, { active: true })) toast('Riattivato'); return; }
         if (a === 'del' && d.status === 'pending' && !d.parent) return delPend([d]);
         if (a === 'del') {
           const n = kidsOf(d.id).length;
@@ -1268,7 +1268,7 @@
       if (act === 'delp') return delPend([d]);
       const em = /^ext(\d+)$/.exec(act || ''); if (em) return extend(d, +em[1]);
       if (act === 'kick') return kickDev(d);
-      if (act === 'tog') { if (d.active && !(await ask('Disattivare il cliente?', `<b>${esc(d.name || d.code)}</b> non potrà più guardare finché non lo riattivi.`, 'Disattiva'))) return; await save(d, { active: !d.active }); return toast(d.active ? 'Cliente disattivato' : 'Cliente riattivato'); }
+      if (act === 'tog') { if (d.active && !(await ask('Disattivare il cliente?', `<b>${esc(d.name || d.code)}</b> non potrà più guardare finché non lo riattivi.`, 'Disattiva'))) return; if (await save(d, { active: !d.active })) toast(d.active ? 'Cliente disattivato' : 'Cliente riattivato'); return; }
       if (act === 'activate') return openDrawer(d, true);
       if (act === 'link') { openDrawer(d, false); setTimeout(() => { const s = $('#eLinkTo'); if (s) { s.scrollIntoView({ block: 'center' }); s.focus(); } }, 350); return; }
       if (act === 'open') return openDrawer(d, d.status === 'pending');
