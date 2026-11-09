@@ -5534,6 +5534,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     if (r.status !== 200) return r;
     const j = await r.json();
     try { await limitCheck(true); } catch (e) { await env.DB.prepare('DELETE FROM devices WHERE id = ? AND owner_id = ?').bind(j.id, A.id).run(); throw e; }
+    await log(env, 'new', `${who}: creato dispositivo ${str(b.name, 60) || code}`, ip); // per gli agenti /devices non lo scrive (il controllo del limite viene dopo)
     return json(j);
   }
   const dm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})(\/reset|\/kick|\/linkcode|\/unlink|\/link)?$/);
