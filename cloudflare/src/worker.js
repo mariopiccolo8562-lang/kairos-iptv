@@ -3347,7 +3347,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
     // ultima versione: di solito già in memoria; se va scaricata il battito non aspetta più di 800 ms
     const apu = appOfVer(f.ver, d.app); if (RC_APPS.includes(apu)) try { const lp = latestFor(env, S0, apu); ctx.waitUntil(lp.catch(() => {})); const L = await Promise.race([lp, new Promise((r) => setTimeout(() => r(null), 800))]); if (L && verBehind(f.ver, L.version)) upd = L.versionCode || 1; } catch {}
   }
-  const eff = rcEffective(S0, d, appOfVer(f.ver, d.app)), cmds = await cmdP;
+  const eff = rcEffective(S0, d, appOfVer(f.ver, d.app), true), cmds = await cmdP;
   // permessi spenti; l'assistente IA anche quando lo spegne il pannello (per tutti o dal profilo dell'app): l'app si riallinea subito
   const ph = P ? permsJson({ ...permsParse(P.perms), ...(aiEngineOf(S0, P, d, appOfVer(f.ver, d.app)) === 'off' ? { ai: false } : {}) }) : '';
   return json({ ok: true, mt, ...(upd ? { upd } : {}), rc: JSON.stringify(eff.rc), rcv: eff.rcv, ...(cmds.length ? { cmds } : {}), unseen: await unP, ts: t, vm, ph, ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', af: await acctFp(P), ...(sat.length ? { sat } : {}), ...(kick ? { kick } : {}), ...(dead ? { dead } : {}) });
@@ -3402,6 +3402,7 @@ const RC_CAT = [
   /* ---- Home: tipo «txt» = elenco di nomi (o parti di nome) di categorie separati da virgola ---- */
   ['home.top', 'Categorie in primo piano', 'txt', [], RC_APPS, 'Nomi (anche solo una parte) delle categorie da mettere per prime, separati da virgola e nell\'ordine che vuoi. Es.: Sport, Prime Video, Netflix. Valgono per la Home e per gli elenchi di Film, Serie e canali', '', 'Home'],
   ['home.hide', 'Categorie nascoste dalla Home', 'txt', [], RC_APPS, 'Nomi (anche solo una parte) delle categorie da non mostrare nella Home, separati da virgola. Es.: adult, xxx, 18+. Negli elenchi di Film, Serie e canali restano in fondo (con il PIN se bloccate)', '', 'Home'],
+  ['adult', 'Contenuti per adulti nella Home', 'sel', [['off', 'Nascosti'], ['on', 'Visibili']], RC_APPS, 'Nascosti: in nessuna riga della Home (categorie, titolo in evidenza, novità, tendenze, consigliati, continua a guardare, preferiti, canali). L\'app li riconosce da sola (xxx, adult, +18, 18+, porn, hentai, OnlyFans…) oltre alle «Categorie nascoste dalla Home»; negli elenchi restano in fondo, raggiungibili. «Decide il cliente»: nella Kairos Pro la scelta delle sue Impostazioni (di base nascosti), nelle altre app nascosti', '', 'Home'],
   /* ---- Aggiornamenti ---- */
   ['bgupd', 'Aggiornamenti in background', 'sel', [['on', 'Sì: scarica da sola, poi chiede solo «Installa»'], ['off', 'No: scarica solo quando il cliente accetta']], RC_APPS, 'Con «Sì» l\'app scarica e verifica da sola la versione nuova (su Wi-Fi o cavo, mai durante la visione): al cliente resta un solo tasto', '', 'Aggiornamenti'],
   ['force', 'Aggiornamento obbligatorio', 'sel', [['off', 'No: il cliente può rimandare'], ['7d', 'Dopo 7 giorni dal primo avviso'], ['3d', 'Dopo 3 giorni dal primo avviso'], ['now', 'Subito']], RC_APPS, 'Scaduto il termine l\'app si apre solo dopo aver installato la versione nuova. Blocca soltanto se l\'APK è già scaricato e verificato sul dispositivo, mai per un problema di rete', 'No: il cliente può rimandare', 'Aggiornamenti'],
@@ -3409,7 +3410,6 @@ const RC_CAT = [
   ['theme', 'Colore dell\'interfaccia', 'sel', [['cinema', 'Cinema (rosso)'], ['aurora', 'Aurora'], ['plasma', 'Plasma'], ['matrix', 'Matrix'], ['solar', 'Solare'], ['ice', 'Ghiaccio'], ['oro', 'Oro'], ['smeraldo', 'Smeraldo'], ['oceano', 'Oceano'], ['tramonto', 'Tramonto'], ['viola', 'Viola'], ['rosa', 'Rosa']], KPRO, 'I temi speciali dello Store restano quelli del cliente', '', 'Aspetto'],
   ['o.textSize', 'Dimensione testi', 'sel', [['s', 'Piccola'], ['m', 'Media'], ['l', 'Grande'], ['xl', 'Molto grande']], KPRO, '', '', 'Aspetto'],
   ['o.sfx', 'Effetti sonori', 'sel', [['classic', 'Classici'], ['soft', 'Morbidi'], ['futur', 'Futuristici'], ['retro', 'Retrò'], ['off', 'Disattivati']], KPRO, '', '', 'Aspetto'],
-  ['adult', 'Contenuti per adulti nella Home e nei consigliati', 'sel', [['on', 'Sì'], ['off', 'No']], KPRO, 'Riguarda solo Home e consigliati: le categorie restano raggiungibili (vedi «Blocca contenuti per adulti»)', '', 'Aspetto'],
   ['logos', 'Loghi dei canali automatici', 'sel', [['on', 'Sì'], ['off', 'No']], KPRO, 'Con «No» l\'app non cerca i loghi mancanti: meno rete e memoria', '', 'Aspetto'],
   ['posters', 'Locandine', 'sel', [['auto', 'Automatiche (più leggere sulle chiavette da 1 GB)'], ['hi', 'Sempre nitide']], KPRO, 'Automatiche: sulle chiavette da 1 GB (Fire TV Stick/Lite) locandine e sfondi si scaricano più piccoli, un po\' meno nitidi ma con meno memoria. «Sempre nitide»: come sugli altri dispositivi, usa più memoria', '', 'Aspetto'],
   ['intro', 'Animazione d\'avvio', 'sel', [['auto', 'Automatica'], ['simple', 'Semplice'], ['off', 'Spenta']], KPRO, 'Automatica: completa sui dispositivi forti, senza gli effetti di sfondo pesanti su quelli deboli. Semplice: logo, scritta e barra, senza effetti di sfondo. Spenta: logo fermo e barra. Vale dall\'apertura successiva', '', 'Aspetto'],
@@ -3459,7 +3459,7 @@ const rcCatByKey = new Map(RC_CAT.map((x) => [x[0], x]));
 const RC_PROF_ONLY = new Set(RC_CAT.filter((x) => x[8] === 'prof').map((x) => x[0]));
 const rcNoProf = (rc) => { for (const k of Object.keys(rc)) if (RC_PROF_ONLY.has(k.endsWith(':allow') ? k.slice(0, -6) : k)) delete rc[k]; return rc; };
 /** voce di tipo «txt»: elenco di nomi separati da virgola (o righe), senza doppioni, al massimo 20 da 40 caratteri; null = non valido */
-const RC_TXT_MAX = 20;
+const RC_TXT_MAX = 40;
 function rcTxt(v) {
   if (typeof v !== 'string' && !Array.isArray(v)) return null;
   const parts = (Array.isArray(v) ? v.map(String) : String(v).split(/[,;\n]+/)).map((x) => x.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)).filter(Boolean);
@@ -3502,18 +3502,35 @@ function rcClean(src, app) {
 }
 const rcProfiles = (s) => { const r = s && s.rcApp && typeof s.rcApp === 'object' ? s.rcApp : {}; const o = {}; for (const a of RC_APPS) { try { o[a] = rcClean(r[a] || {}, a); } catch { o[a] = {}; } } return o; };
 const rcDevOf = (d, app) => { try { return rcNoProf(rcClean(d && d.rc ? d.rc : {}, app || (d && d.app))); } catch { return {}; } };
-/** configurazione effettiva per un dispositivo: profilo della sua app + impostazioni sue; «rcv» = impronta corta */
-function rcEffective(s, d, app) {
+/** adulti fuori dalla Home anche nelle versioni già installate: le app diverse dalla Pro conoscono solo «home.hide» (parti di nome
+    delle categorie, maiuscole e accenti non contano), quindi con «adult» diverso da «on» ricevono anche queste parole. Le versioni
+    nuove riconoscono gli adulti da sole (vedi README §33): per loro è un di più che non cambia nulla. Stesso calcolo in remote-panel.js
+    (impronta «applicata»): se cambia qui, cambia anche lì */
+const ADULT_HOME_WORDS = ['xxx', 'adult', '18+', '+18', 'porn', 'hentai', 'erotic', 'erotik', 'playboy', 'brazzers', 'hustler', 'dorcel', 'onlyfans', 'only fans', 'red light', 'redlight', 'x-rated', 'vm18', 'vm 18', 'hot club', 'private tv', 'sexy', 'milf', 'nsfw', 'vietato ai minori'];
+const ADULT_MERGE_APPS = new Set(['ktv', 'prem', 'lite', 'xc', 'plus', 'nova']);
+function adultMerge(h) {
+  const cur = String(h || '').split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean), seen = new Set(cur.map((x) => x.toLowerCase()));
+  for (const w of ADULT_HOME_WORDS) if (!seen.has(w)) { seen.add(w); cur.push(w); }
+  return cur.join(', ');
+}
+/** configurazione mandata all'app: con gli adulti nascosti (voce «adult» diversa da «on») le parole per adulti in «home.hide» */
+function rcSent(rc, app) {
+  if (!ADULT_MERGE_APPS.has(app) || rc.adult === 'on') return rc;
+  return { ...rc, 'home.hide': adultMerge(rc['home.hide']) };
+}
+/** configurazione effettiva per un dispositivo: profilo della sua app + impostazioni sue; «rcv» = impronta corta di quella mandata
+    all'app. [forApp] = la configurazione da mandare all'app (con le parole per adulti), altrimenti quella decisa nel pannello */
+function rcEffective(s, d, app, forApp) {
   const a = app || appOfVer('', d && d.app) || 'tv';
   const rc = { ...(rcProfiles(s)[a] || {}) }, own = rcDevOf(d, a);
   for (const [k, v] of Object.entries(own)) {
     const base = k.endsWith(':allow') ? k.slice(0, -6) : k;
     delete rc[base]; delete rc[`${base}:allow`]; rc[k] = v;
   }
-  const keys = Object.keys(rc).sort();
-  const flat = keys.map((k) => k + '=' + JSON.stringify(rc[k])).join('&');
+  const sent = rcSent(rc, a), keys = Object.keys(sent).sort();
+  const flat = keys.map((k) => k + '=' + JSON.stringify(sent[k])).join('&');
   let h = 0; for (let i = 0; i < flat.length; i++) h = (h * 31 + flat.charCodeAt(i)) >>> 0;
-  return { rc, rcv: keys.length ? h.toString(36) : '' };
+  return { rc: forApp ? sent : rc, rcv: keys.length ? h.toString(36) : '' };
 }
 /** un comando non consegnato entro 7 giorni scade: non arriva più all'app (e non ne blocca uno nuovo uguale) */
 const RC_CMD_TTL = 7 * 864e5;
@@ -4753,7 +4770,7 @@ async function playerRegister(req, env, ip, ctx) {
   let status = P ? statusOf(P, Ppls) : 'pending';
   const { C, pls } = status === 'active' ? await effOf(env, d, P, Ppls) : { C: P, pls: [] };
   if (status === 'active' && maintFor(s, P)) status = 'maintenance';
-  const eff = rcEffective(s, d, regApp || appOfVer('', d.app));
+  const eff = rcEffective(s, d, regApp || appOfVer('', d.app), true);
   const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? await portalsOf(env, pls) : [], messages: await msgP, rc: eff.rc, rcv: eff.rcv };
   if (status === 'active') {
     [out.account, out.vpn, out.af] = await Promise.all([accountOf(env, P, d, pls, C), vpnOf(env, P, d), acctFp(P)]);
@@ -5891,7 +5908,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       const ov = {}; for (const r of dr.results || []) ov[r.id] = rcDevOf(r);
       const last = {}, pend = {}; for (const c of cr.results || []) { if (!c.done) pend[c.device_id] = (pend[c.device_id] || 0) + 1; if (!last[c.device_id]) last[c.device_id] = { cmd: c.cmd, t: c.created, sent: c.sent, done: c.done, ok: !!c.ok, info: c.info }; }
       const devs = {}; for (const r of pr.results || []) { let cfg = null; try { cfg = r.app_cfg ? JSON.parse(r.app_cfg) : null; } catch {} devs[r.device_id] = { cfg, rcv: r.rcv || '', ver: r.ver || '', t: +r.t }; }
-      return json({ apps: rcProfiles(s0), cat: RC_CAT, cmds: RC_CMDS, appNames: APP_NAME, linked: RC_LINKED, devs, over: ov, last, pending: pend });
+      return json({ apps: rcProfiles(s0), cat: RC_CAT, cmds: RC_CMDS, appNames: APP_NAME, linked: RC_LINKED, devs, over: ov, last, pending: pend, adultWords: ADULT_HOME_WORDS, adultApps: [...ADULT_MERGE_APPS] });
     }
     const pa = path.match(/^\/rctl\/app\/(tv|ktv|prem|lite|xc|plus|nova)$/);
     if (pa && m === 'PUT') {

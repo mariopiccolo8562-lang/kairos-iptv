@@ -509,3 +509,19 @@ cloudflare/
 ```
 
 L'app è solo un lettore e non contiene canali: i contenuti arrivano dalle playlist che assegni. Assicurati di avere i diritti per distribuirli.
+
+## 33. Adulti fuori dalla Home in tutte le app (9 novembre 2026)
+
+Richiesta del titolare: nella Home dei clienti non devono uscire contenuti per adulti, in nessuna app.
+
+- **Pannello → Richieste e controllo → «Home dei clienti · tutte le app»**: spunta **«Nascondi gli adulti dalla Home»**. Mette la voce `adult` = `off` nei profili di tutte e 7 le app (Pro, TV, Premium, Lite, XC, Plus, Nova) e il cliente non la può riattivare. Se le app hanno valori diversi, la spunta è «a metà». Togliendola, la voce viene tolta: nella Pro decide il cliente (di base nascosti), nelle altre app restano nascosti.
+- **Profilo di ogni app (sezione Home)**: voce «Contenuti per adulti nella Home» con *Nascosti* o *Visibili*. Si può cambiare anche per il singolo cliente.
+- **Riconoscimento**, uguale in tutte le app e provato con gli stessi 94 esempi in ognuna:
+  - nomi normalizzati: NFKD, senza accenti, minuscolo;
+  - **categorie** con xxx, adult/adulti, +18 / 18+, porn, erotic/erotico/erotik, hentai, playboy, brazzers, hustler, dorcel, OnlyFans, red light, x-rated, VM18, sexy, hot club, private tv, milf, nsfw, «vietato ai minori». «Adult Swim» è escluso;
+  - **titoli e canali** solo con parole forti: xxx, porn, hentai, brazzers, playboy tv, hustler tv, dorcel, OnlyFans, +18/18+. Così «Sex Education» o «The Hustler» restano;
+  - flag Xtream `is_adult`.
+- **Cosa sparisce dalla Home**: righe delle categorie, categorie in primo piano, titolo in evidenza (che sceglie fra gli altri titoli), novità, tendenze e top 10, consigliati, «Adesso per te», «La mia lista», coda, registrazioni, continua a guardare, canali recenti e in onda (dove l'app li ha). Negli elenchi le categorie per adulti restano in fondo e raggiungibili, con il PIN invariato. Ricerca e guida completa non cambiano.
+- **Versioni già installate**: TV, Premium, Lite, XC, Plus e Nova conoscono solo «Categorie nascoste dalla Home» (`home.hide`). Per loro il Worker aggiunge da solo le parole per adulti (`ADULT_HOME_WORDS`) a `home.hide` nel battito e all'apertura (`rcSent`), quando `adult` non è `on`. Così già oggi spariscono dalla Home le righe delle categorie per adulti e i loro titoli. Il pannello mostra sempre la lista scritta dal titolare. L'impronta «applicata» si calcola uguale in `remote-panel.js` (`sentOf`): se cambia il calcolo in un posto va cambiato anche nell'altro. Le versioni nuove delle app fanno il riconoscimento completo.
+- **Liste «Categorie in primo piano» e «Categorie nascoste»**: fino a 40 nomi (prima 20). Il pulsante «＋ categorie per adulti» aggiunge anche +18, onlyfans, brazzers, x-rated…
+- **Prove**: v250 (server: voce, parole, impronta, spunta, singolo cliente, 40 nomi), v251 (interfaccia: spunta, «a metà», cliente «applicata»), Pro nel browser (94 esempi, tutte le righe della Home, «La mia lista», titolo in evidenza, voce del pannello che vince sul cliente, adulti in fondo agli elenchi).

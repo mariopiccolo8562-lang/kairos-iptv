@@ -2571,7 +2571,7 @@ function xtreamMap(d, pl) {
   const cm = (a) => new Map(a.map((x) => [String(x.category_id), x.category_name]));
   const lc = cm(d.lc), vc = cm(d.vc), sc = cm(d.sc), h = pl.host, U = pl.U, P = pl.P, id = pl.id;
   return {
-    live: d.ls.map((s, i) => ({ id: 'x' + s.stream_id, k: 'l', sid: s.stream_id, num: +s.num || i + 1, added: +s.added || 0, name: String(s.name == null ? '' : s.name), logo: s.stream_icon, epgId: s.epg_channel_id || '', arch: +s.tv_archive ? +s.tv_archive_duration || 1 : 0, group: lc.get(String(s.category_id)) || 'Altro', url: `${h}/live/${U}/${P}/${s.stream_id}.m3u8`, alt: `${h}/live/${U}/${P}/${s.stream_id}.ts`, pl: id })),
+    live: d.ls.map((s, i) => ({ id: 'x' + s.stream_id, k: 'l', sid: s.stream_id, num: +s.num || i + 1, added: +s.added || 0, name: String(s.name == null ? '' : s.name), logo: s.stream_icon, epgId: s.epg_channel_id || '', arch: +s.tv_archive ? +s.tv_archive_duration || 1 : 0, group: lc.get(String(s.category_id)) || 'Altro', url: `${h}/live/${U}/${P}/${s.stream_id}.m3u8`, alt: `${h}/live/${U}/${P}/${s.stream_id}.ts`, pl: id, ...(+s.is_adult === 1 ? { xa: 1 } : {}) })),
     movies: d.vs.map((s) => ({ id: 'xm' + s.stream_id, k: 'm', vid: s.stream_id, name: String(s.name == null ? '' : s.name), poster: s.stream_icon, group: vc.get(String(s.category_id)) || 'Altro', rating: s.rating, added: +s.added || 0, url: `${h}/movie/${U}/${P}/${s.stream_id}.${s.container_extension || 'mp4'}`, pl: id })),
     series: d.ss.map((s) => ({ id: 'xs' + s.series_id, k: 's', seriesId: s.series_id, name: String(s.name == null ? '' : s.name), poster: s.cover, group: sc.get(String(s.category_id)) || 'Altro', rating: s.rating, plot: s.plot, genre: s.genre, cast: s.cast, added: +s.last_modified || 0, backdrop: (Array.isArray(s.backdrop_path) ? s.backdrop_path[0] : s.backdrop_path) || '', year: (s.releaseDate || s.release_date || '').slice(0, 4), pl: id })),
   };
@@ -2585,7 +2585,7 @@ function libFinish(out) {
     if (!ch.sid && ch.url) { const m = ch.url.match(/\/(\d+)(?:\.[a-z0-9]+)?(?:\?.*)?$/i); if (m) ch.sidc = m[1]; }
   }
   // contenuto per adulti già valutato (la home filtra senza regex su 100.000 titoli)
-  if (typeof RX_ADULT_G !== 'undefined') for (const arr of [out.live, out.movies, out.series]) for (const x of arr) x._ad = RX_ADULT_G.test(x.group || '') || RX_ADULT_N.test(x.name || '');
+  if (typeof adultCat !== 'undefined') { const gm = new Map(); for (const arr of [out.live, out.movies, out.series]) for (const x of arr) { const g = x.group || ''; let a = gm.get(g); if (a === undefined) { a = adultCat(g); gm.set(g, a); } x._ad = x.xa === 1 || a || adultTitle(x.name || ''); x._adv = ADV; } }
   out.sig = libSig(out); out.clean = 1;
   return out;
 }
@@ -2610,7 +2610,7 @@ function libWorker() {
   if (libWk || libWkBad) return libWk;
   try {
     const src = [
-      `const RX_SE = ${RX_SE}, RX_SE2 = ${RX_SE2}, RX_VOD = ${RX_VOD}, RX_SEP = ${RX_SEP}, CC3 = ${JSON.stringify(CC3)}, RX_CC = ${RX_CC}, RX_QUAL = ${RX_QUAL}, RX_ADULT_G = ${RX_ADULT_G}, RX_ADULT_N = ${RX_ADULT_N};`,
+      `const RX_SE = ${RX_SE}, RX_SE2 = ${RX_SE2}, RX_VOD = ${RX_VOD}, RX_SEP = ${RX_SEP}, CC3 = ${JSON.stringify(CC3)}, RX_CC = ${RX_CC}, RX_QUAL = ${RX_QUAL}, RX_ADULT_G = ${RX_ADULT_G}, RX_ADULT_N = ${RX_ADULT_N}, ADV = ${ADV}; const adultNorm = ${adultNorm}; const adultCat = ${adultCat}; const adultTitle = ${adultTitle};`,
       m3uAttr, parseM3U, `const isSepCh = ${isSepCh};`, logoKey, libSig, xtreamMap, `const xtArr = ${xtArr};`, libFinish,
       `const txt = async (t) => (typeof t === 'string' ? t : !t || !t.size ? '' : typeof FileReaderSync !== 'undefined' ? new FileReaderSync().readAsText(t, 'utf-8') : new Response(t).text());
       const KEEP = new Map(), KEYS = ['live', 'movies', 'series'];
@@ -4815,18 +4815,31 @@ function openFolder(f) {
   openVod(f.kind, f.name);
 }
 /* contenuti per adulti: mai nella Home né tra i consigliati (restano nella loro categoria) */
-const RX_ADULT_G = /(\bxxx\b|adult|adulti|\bporn|erotic|erotik|hentai|\b18\s*\+|\+\s*18\b|\bvm\s*18\b|for adults|\bsexy?\b|\bhot\s*club\b|playboy|brazzers|private\s*tv)/i;
-const RX_ADULT_N = /(\bxxx\b|\bporn|hentai|brazzers|playboy\s*tv|\b18\s*\+)/i;
+/* contenuti per adulti: riconoscimento uguale in tutte le app Kairos (stessi 94 esempi di prova in ogni app).
+   Categoria per adulti: nome normalizzato (NFKD, senza accenti, minuscolo; «adult swim» escluso) che combacia con RX_ADULT_G.
+   Titolo o canale per adulti: solo parole forti (RX_ADULT_N), così «Sex Education» o «The Hustler» restano. In più il flag
+   Xtream is_adult. ADV = versione: i titoli valutati con le regole vecchie (cache della libreria) si rivalutano da soli */
+const RX_ADULT_G = /(\bxxx\b|adult|\bporn|erotic|erotik|erotis|erotiq|hentai|\b18\s*\+|\+\s*18\b|\bv\.?\s*m\.?\s*18\b|\bsexy?\b|\bhot\s*club\b|playboy|brazzers|hustler|dorcel|only\s*fans|red\s*light|\bx[\s-]?rated\b|\bnsfw\b|\bmilf\b|private\s*tv|vietato ai minori)/i;
+const RX_ADULT_N = /(\bxxx\b|\bporn|hentai|brazzers|playboy\s*tv|hustler\s*tv|dorcel|only\s*fans|\b18\s*\+|\+\s*18\b)/i;
+const ADV = 2;
+const adultNorm = (v) => String(v || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const adultCat = (g) => RX_ADULT_G.test(adultNorm(g).replace(/adult\s*swim/g, ''));
+const adultTitle = (n) => RX_ADULT_N.test(adultNorm(n));
+const adultCatMemo = new Map();
+/** categoria per adulti (con memoria: gli elenchi delle categorie si ridisegnano spesso) */
+const adultCatC = (g) => { let r = adultCatMemo.get(g); if (r === undefined) { if (adultCatMemo.size > 4000) adultCatMemo.clear(); r = adultCat(g); adultCatMemo.set(g, r); } return r; };
 function isAdult(x) {
   if (!x) return false;
-  if (x._ad === undefined) x._ad = RX_ADULT_G.test(x.group || '') || RX_ADULT_N.test(x.name || '');
+  if (x._ad === undefined || x._adv !== ADV) { x._ad = x.xa === 1 || adultCatC(x.group || '') || adultTitle(x.name || ''); x._adv = ADV; }
   return x._ad;
 }
+/** per la Home: le registrazioni valgono come il loro canale */
+const homeAdult = (x) => !!x && (isAdult(x) || (x.k === 'r' && !!x.rec && isAdult(S.byId && S.byId.get(x.rec.chId))));
 /* contenuti per adulti in Home e consigliati, loghi automatici: la voce imposta dal pannello (adult, logos) vince su quella scelta qui */
 const showAdult = () => { const v = rcGet('adult'); return v !== undefined ? v === 'on' : store.get('adultHome', false) === true; };
 const autoLogoOn = () => { const v = rcGet('logos'); return v !== undefined ? v === 'on' : store.get('autoLogo', true) !== false; };
 const safe = (arr) => (showAdult() ? arr : arr.filter((x) => !isAdult(x)));
-const safeCats = (cats) => (showAdult() ? cats : cats.filter((c) => !RX_ADULT_G.test(c.name)));
+const safeCats = (cats) => (showAdult() ? cats : cats.filter((c) => !adultCatC(c.name)));
 /* Home decisa dal fornitore (Controllo remoto): categorie in primo piano (home.top) e nascoste dalla Home (home.hide).
    Basta una parte del nome; maiuscole e accenti non contano. Nascosta vince su primo piano */
 const normCat = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -4852,9 +4865,12 @@ const catTop = (name) => { const r = catHome(name); return r && !r[1] ? r[0] : -
 const homeOk = (x) => !x || !catHidden(x.group);
 /** elenchi di categorie: prima quelle in primo piano (nell'ordine degli schemi), poi le altre come prima, in fondo le nascoste */
 function homeOrder(cats) {
-  if (!homePats().on) return cats;
+  // adulti nascosti dalla Home (voce «adult» del pannello o scelta del cliente): negli elenchi le loro categorie vanno in fondo, come
+  // quelle nascoste dal fornitore (restano raggiungibili; PIN invariato). Stesso comportamento delle altre app Kairos
+  const noAd = !showAdult();
+  if (!homePats().on && !noAd) return cats;
   const top = [], mid = [], low = [];
-  for (const c of cats) { const r = catHome(c.name); if (r[1]) low.push(c); else if (r[0] >= 0) top.push([r[0], c]); else mid.push(c); }
+  for (const c of cats) { const r = catHome(c.name) || [-1, false]; if (r[1] || (noAd && adultCatC(c.name))) low.push(c); else if (r[0] >= 0) top.push([r[0], c]); else mid.push(c); }
   top.sort((a, b) => a[0] - b[0]); // sort stabile: a parità resta l'ordine di prima
   return [...top.map((x) => x[1]), ...mid, ...low];
 }
@@ -5116,8 +5132,11 @@ function makeRows(kind) {
     if (arr.length > 20) R.splice(R.findIndex((r) => r.type === 'top') >= 0 ? R.findIndex((r) => r.type === 'top') : R.length, 0, { title: 'Aggiunti di recente', type: 'poster', items: recent(arr), more: { kind, cat: 'all' } });
     // le categorie per adulti e quelle nascoste dal fornitore restano raggiungibili, ma in fondo
     const sc = homeOrder(sortCats(cats, kind === 'movies' ? 'm' : 's'));
-    catRows(arr, [...safeCats(sc), ...(showAdult() ? [] : sc.filter((c) => RX_ADULT_G.test(c.name)))].filter((c, i, a) => a.indexOf(c) === i), '', kind);
+    catRows(arr, [...safeCats(sc), ...(showAdult() ? [] : sc.filter((c) => adultCatC(c.name)))].filter((c, i, a) => a.indexOf(c) === i), '', kind);
   }
+  // Home: in nessuna riga (anche «La mia lista», coda, registrazioni, «Adesso per te», tendenze) titoli o canali per adulti
+  // (voce «adult» del pannello o scelta del cliente) né delle categorie nascoste dal fornitore
+  if (kind === 'all') { const noAd = !showAdult(); for (const r of R) if (r.type !== 'ev' && Array.isArray(r.items)) r.items = r.items.filter((x) => homeOk(x) && !(noAd && homeAdult(x))); }
   if (kind === 'all') tnHomeRow(R); // «Cosa guardo stasera?»: dopo «Adesso per te» e gli eventi sportivi
   return R.filter((r) => r.items.length);
 }
@@ -5128,9 +5147,9 @@ function featured(kind) {
   const key = kind + '|' + showAdult() + '|' + homePats().key;
   if (featMemo && featMemo.lib === L.movies && featMemo.lib2 === L.series && featMemo.key === key) return featMemo.out;
   // solo i primi 8 con immagine: una passata, senza ordinare tutta la libreria
-  const best = [], sc = (x) => (x.backdrop ? 100 : 0) + (+x.rating || 0);
+  const best = [], sc = (x) => (x.backdrop ? 100 : 0) + (+x.rating || 0), noAd = !showAdult();
   for (const arr of kind === 'movies' ? [L.movies] : kind === 'series' ? [L.series] : [L.movies, L.series]) for (const x of arr) {
-    if (!(x.backdrop || x.poster) || !homeOk(x)) continue;
+    if (!(x.backdrop || x.poster) || !homeOk(x) || (noAd && isAdult(x))) continue;
     const s0 = sc(x); if (best.length >= 8 && s0 <= best[7].s) continue;
     best.push({ x, s: s0 }); best.sort((a, b) => b.s - a.s); if (best.length > 8) best.length = 8;
   }

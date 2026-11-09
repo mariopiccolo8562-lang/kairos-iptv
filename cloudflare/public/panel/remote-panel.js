@@ -43,6 +43,7 @@
 .rc-tx .btn{justify-self:start}
 .rc-home .rc-hg{display:grid;grid-template-columns:1fr 1fr;gap:12px}.rc-home label{display:block;font-size:13px;font-weight:700;margin-bottom:4px}.rc-home label small{display:block;font-weight:400;color:var(--mut);font-size:11.5px;margin-top:2px;line-height:1.35}
 .rc-home .rc-hf{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.rc-home label.rc-adult{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;margin:0 0 14px;border:1px solid rgba(96,165,250,.45);border-radius:12px;background:rgba(59,130,246,.08);cursor:pointer;font-weight:400}.rc-home label.rc-adult input{width:22px;height:22px;margin:1px 0 0;flex:none;accent-color:#3b82f6;cursor:pointer}.rc-home label.rc-adult b{display:block;font-size:15px;font-weight:700}.rc-home label.rc-adult small{display:block;margin-top:3px;font-size:12px;line-height:1.45;opacity:.8}
 @media (max-width:1000px){.rc-g{grid-template-columns:1fr}.rc-r{grid-template-columns:1fr}.rc-reader .rc-mode{grid-template-columns:1fr}.rc-home .rc-hg{grid-template-columns:1fr}}`;
   document.head.appendChild(css);
 
@@ -72,21 +73,25 @@
   const cmdsFor = (app) => ((R.data || {}).cmds || []).filter((c) => !app || c[3].includes(app));
   const lblOf = (c, v) => { if (v === undefined || v === null || v === '') return ''; const o = c[3].find((x) => x[0] === v || String(x[0]) === String(v)); return o ? o[1] : String(v); };
   const rcvOf = (rc) => { const keys = Object.keys(rc || {}).sort(), flat = keys.map((k) => k + '=' + JSON.stringify(rc[k])).join('&'); let h = 0; for (let i = 0; i < flat.length; i++) h = (h * 31 + flat.charCodeAt(i)) >>> 0; return keys.length ? h.toString(36) : ''; };
-  const effOf = (d) => {
-    const rc = { ...((R.data.apps || {})[appOf(d)] || {}) }, own = (R.data.over || {})[d.id] || {};
+  /** come rcSent/adultMerge del server (worker.js): con gli adulti nascosti le app diverse dalla Pro ricevono anche le parole per
+      adulti in «home.hide». Serve per l'impronta: se il calcolo è diverso il cliente resta «in attesa» */
+  const adultMerge = (h) => { const cur = String(h || '').split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean), seen = new Set(cur.map((x) => x.toLowerCase())); for (const w of (R.data.adultWords || [])) if (!seen.has(w)) { seen.add(w); cur.push(w); } return cur.join(', '); };
+  const sentOf = (rc, app) => ((R.data.adultApps || []).includes(app) && rc.adult !== 'on' ? { ...rc, 'home.hide': adultMerge(rc['home.hide']) } : rc);
+  const effOf = (d, forApp) => {
+    const app = appOf(d), rc = { ...((R.data.apps || {})[app] || {}) }, own = (R.data.over || {})[d.id] || {};
     for (const [k, v] of Object.entries(own)) { const base = k.endsWith(':allow') ? k.slice(0, -6) : k; delete rc[base]; delete rc[`${base}:allow`]; rc[k] = v; }
-    return rc;
+    return forApp ? sentOf(rc, app) : rc;
   };
   /** stato della configurazione sul dispositivo: applicata / in attesa / app vecchia (non la manda ancora) */
   function cfgState(d) {
     const p = (R.data.devs || {})[d.id]; if (!p) return ['', 'mai aperta di recente'];
-    const want = rcvOf(effOf(d));
+    const want = rcvOf(effOf(d, true));
     if (!want) return ['ok', p.cfg ? 'nessuna impostazione imposta' : 'app da aggiornare'];
     if (p.rcv === want) return ['ok', 'applicata'];
     if (!p.cfg && !p.rcv) return ['wait', 'app da aggiornare: non riceve ancora il controllo remoto'];
     return ['wait', 'in attesa del prossimo battito'];
   }
-  const ADULT_WORDS = ['adult', 'xxx', '18+', 'porn', 'erotic', 'hentai'];
+  const ADULT_WORDS = ['adult', 'xxx', '18+', '+18', 'porn', 'erotic', 'hentai', 'playboy', 'brazzers', 'hustler', 'onlyfans', 'red light', 'x-rated', 'vm18', 'sexy', 'milf'];
   const READER_DEFAULTS = { 'o.engLive': 'auto', 'o.engMovie': 'auto', 'o.engSeries': 'auto', 'o.hw': 'auto', 'o.adaptQ': true, 'o.drainQ': true, 'p.quality': 'auto', 'p.buffer': 'balanced' };
   const isReader = (c) => c && c[2] === 'sel' && c[7] === 'Lettore';
   const hasRcKey = (rc, key) => Object.prototype.hasOwnProperty.call(rc || {}, key);
@@ -175,8 +180,10 @@
     const nSet = Object.keys(prof).length;
     const allApps = APPS.map((a) => a[0]), same = (k) => { const vals = allApps.map((a) => ((R.data.apps || {})[a] || {})[k] || ''); return vals.every((v) => v === vals[0]) ? vals[0] : null; };
     const hTop = same('home.top'), hHide = same('home.hide'), hCat = (k) => ((R.data.cat || []).find((c) => c[0] === k)), mixed = hTop === null || hHide === null;
+    // spunta «Nascondi gli adulti dalla Home»: voce «adult» = «off» in tutte le app
+    const aAll = same('adult'), adultBox = hCat('adult') ? `<label class="rc-adult"><input type="checkbox" id="rcAdultAll"${aAll === 'off' ? ' checked' : ''}><span><b>Nascondi gli adulti dalla Home</b><small>In tutte le app (Pro, TV, Premium, Lite, XC, Plus, Nova): nessuna categoria, film, serie o canale per adulti nella Home — righe, titolo in evidenza, novità, tendenze, consigliati, continua a guardare, preferiti, canali. Le app li riconoscono da sole (xxx, adult, +18, 18+, porn, hentai, OnlyFans…) oltre alla lista qui sotto; negli elenchi restano in fondo, raggiungibili. Il cliente non può riattivarli.${aAll === null ? ' ⚠ Ora le app hanno valori diversi: con la spunta diventano uguali.' : aAll === 'off' ? '' : ' Senza spunta: nella Kairos Pro decide il cliente (di base nascosti), nelle altre app restano nascosti; «Visibili» si sceglie nel profilo di ogni app.'}</small></span></label>` : '';
     const homeCard = hCat('home.top') ? `<div class="card glass rc-home" style="margin-bottom:16px"><div class="hd"><h3>Home dei clienti · tutte le app<small>Le categorie da mettere per prime e quelle da non mostrare nella Home: valgono per Kairos Pro, TV, Premium, Lite, XC, Plus e Nova. Basta una parte del nome (es. «sport» prende «SPORT HD» e «Sport Italia»). Puoi poi cambiarle per una sola app (profilo qui sotto) o per un solo cliente (Impostazioni e comandi).</small></h3></div>
-      <div class="rc-hg"><div><label>Categorie in primo piano<small>Nell'ordine che vuoi, separate da virgola: compaiono per prime nella Home e in cima agli elenchi</small></label><div class="rc-tx"><textarea class="inp" rows="3" id="rcHomeTop" placeholder="Es.: Sport, Prime Video, Netflix, Bambini">${esc(hTop || '')}</textarea></div></div>
+      ${adultBox}<div class="rc-hg"><div><label>Categorie in primo piano<small>Nell'ordine che vuoi, separate da virgola: compaiono per prime nella Home e in cima agli elenchi</small></label><div class="rc-tx"><textarea class="inp" rows="3" id="rcHomeTop" placeholder="Es.: Sport, Prime Video, Netflix, Bambini">${esc(hTop || '')}</textarea></div></div>
         <div><label>Categorie nascoste dalla Home<small>Non compaiono nella Home; negli elenchi di Film, Serie e canali restano in fondo (con il PIN se bloccate)</small></label><div class="rc-tx"><textarea class="inp" rows="3" id="rcHomeHide" placeholder="Es.: adult, xxx, 18+">${esc(hHide || '')}</textarea><button type="button" class="btn sm" data-rcpre="1">＋ categorie per adulti</button></div></div></div>
       <div class="rc-hf"><button class="btn pri" id="rcHomeSave">Salva per tutte le app</button><span class="rc-note">${mixed ? '⚠ Ora le app hanno valori diversi: salvando diventano uguali per tutte.' : 'Arriva alle app al prossimo battito (entro un minuto se sono aperte).'}</span></div></div>` : '';
     V.innerHTML = homeCard + `<div class="card glass" style="margin-bottom:16px"><div class="hd"><h3>Controllo remoto delle app<small>Decidi cosa resta libero, cosa il cliente può scegliere e cosa vuoi imporre: tutto arriva al battito successivo (entro un minuto se l'app è aperta, altrimenti alla prossima apertura).</small></h3><button class="btn sm" id="rcRe">Aggiorna</button></div>
@@ -199,6 +206,19 @@
     bindReaderControls($('#rcProf'), 'rcp');
     $('#rcRe').onclick = () => { loadR(true); load(true).catch(() => {}); };
     $$('[data-rcpre]', V).forEach((b) => (b.onclick = () => addAdult(b)));
+    const cbA = $('#rcAdultAll');
+    if (cbA) {
+      if (aAll === null) cbA.indeterminate = true;
+      cbA.onchange = async () => {
+        const on = cbA.checked; cbA.disabled = true;
+        try {
+          const r = await api('PUT', '/admin/rctl/all', { rc: { adult: on ? 'off' : '' } });
+          R.data.apps = r.apps || R.data.apps;
+          toast(on ? 'Adulti nascosti dalla Home in tutte le app: arriva al prossimo battito' : 'Spunta tolta: nella Kairos Pro decide il cliente, nelle altre app restano nascosti');
+          draw();
+        } catch (e) { cbA.checked = !on; cbA.disabled = false; toast(e.message, 1); }
+      };
+    }
     if ($('#rcHomeSave')) $('#rcHomeSave').onclick = async () => {
       const clean = (v) => v.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean).join(', ');
       const rc = { 'home.top': clean($('#rcHomeTop').value), 'home.hide': clean($('#rcHomeHide').value) };
