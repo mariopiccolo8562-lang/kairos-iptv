@@ -75,7 +75,7 @@ const agentPassword = (v, H) => {
   return v;
 };
 const agentUserCount = (v, H) => {
-  if (!Number.isInteger(v) || v < 0) throw new H.HttpErr(400, 'I posti clienti devono essere un numero intero non negativo');
+  if (!Number.isInteger(v) || v < 1) throw new H.HttpErr(400, 'I posti clienti devono essere almeno 1');
   return v;
 };
 const agentEmail = (v, H, required = false) => {

@@ -268,7 +268,7 @@
       <label>Utente${creating ? ' (facoltativo)' : ''}<input class="inp" id="mxAgentUser" maxlength="255" ${creating ? '' : 'required'} value="${esc(agent ? agent.username : '')}"></label>
       <label>Email<input class="inp" id="mxAgentEmail" type="email" maxlength="255" required value="${esc(agent ? agent.email : '')}"></label>
       ${creating ? '<label>Password<input class="inp" id="mxAgentPass" type="password" minlength="6" maxlength="72" autocomplete="new-password" required></label>' : ''}
-      <label>Posti clienti<input class="inp" id="mxAgentCount" type="number" min="0" step="1" required value="${agent ? agent.max : 0}"></label>
+      <label>Posti clienti<input class="inp" id="mxAgentCount" type="number" min="1" step="1" required value="${agent ? agent.max : 1}"></label>
       <label class="wide" style="display:flex;gap:8px;align-items:center"><input id="mxAgentAdmin" type="checkbox" ${agent && agent.admin ? 'checked' : ''} ${agent && agent.admin ? 'disabled' : ''}> Può creare sotto-venditori</label>
       <label class="wide">Domini<select class="inp" id="mxAgentDomainPerm">${domainOptions}</select></label>
       <label class="wide" id="mxAgentDomainWrap">Dominio<select class="inp" id="mxAgentDomain">${domOpts(agent && agent.domainId || '')}</select></label>
@@ -302,7 +302,7 @@
   async function agentDelete(agent) {
     if (isAg()) return;
     const options = (M.agents || []).filter((a) => a.id !== agent.id).map((a) => `<option value="${esc(a.id)}">${esc(a.name || a.username)} · ${esc(a.username)}</option>`).join('');
-    const content = `<p class="mut" style="margin:0 0 10px">Eliminare ${esc(agent.name || agent.username)} da MaxPlayer? Questa operazione non si può annullare.</p><label>Passa i suoi clienti e sotto-venditori a:<select class="inp" id="mxAgentTransfer"><option value="">Nessuno: i clienti restano senza venditore, i sotto-venditori vanno a chi sta sopra</option>${options}</select></label>`;
+    const content = `<p class="mut" style="margin:0 0 10px">Eliminare ${esc(agent.name || agent.username)} da MaxPlayer? Questa operazione non si può annullare.</p><label>Passa i suoi clienti e sotto-venditori a:<select class="inp" id="mxAgentTransfer"><option value="">Nessuno (clienti senza venditore)</option>${options}</select><small class="mut" style="display:block;margin-top:6px">Senza scelta: i clienti restano senza venditore e i sotto-venditori passano a chi sta sopra.</small></label>`;
     const pending = ask('Elimina venditore', content, 'Elimina'), confirm = $('#mYes');
     confirm.classList.add('danger'); confirm.style.setProperty('background', 'var(--bad)', 'important'); confirm.style.setProperty('border-color', 'var(--bad)', 'important');
     const confirmed = await pending;
