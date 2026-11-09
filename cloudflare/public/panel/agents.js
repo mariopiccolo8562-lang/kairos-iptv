@@ -616,14 +616,14 @@ body.agent .foot{display:none}
     V.innerHTML = `${hostCard}<div class="ag-bar"><input class="inp" id="agQ" placeholder="Cerca agente per nome, email o note" value="${esc(st.q)}">
       <div class="seg" id="agF">${[['all', 'Tutti'], ['on', 'Attivi'], ['off', 'Disattivati']].map(([k, l]) => `<button data-f="${k}" class="${st.f === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       ${!sub && !window.__assist ? '<button class="btn" id="agHealth">🩺 Controllo generale</button>' : ''}${!sub || me().canAgents ? '<button class="btn" id="agBulk">👥 Applica a più agenti</button>' : ''}<button class="btn pri" id="agNew">+ Nuovo ${sub ? 'sotto-agente' : 'agente'}</button></div>
-      <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th><th>Link accesso</th><th>DNS</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
+      <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th>${sub ? '' : '<th>Link accesso</th>'}<th>DNS</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
       ${list.map((a) => { const pct = a.maxClients ? Math.min(100, Math.round((a.clients / a.maxClients) * 100)) : 100; const up = a.parentId && byId.get(a.parentId);
         return `<tr data-ag="${a.id}"><td class="num">${a.id}</td>
         <td><b>${esc(a.username)}</b>${ledgerBadge(ledgerSummary.get(a.id))}<small>${esc(a.email || '—')}${up ? ' · sotto ' + esc(up.username) : ''}</small></td>
         <td><b>${a.clients}</b><small>Limite: ${a.maxClients}</small><div class="ag-bar2"><s style="width:${pct}%"></s></div><button type="button" class="btn sm ag-cl" data-agcl="${a.id}" title="Apre Clienti con solo i clienti di ${esc(a.username)}">👥 Vedi i suoi clienti</button></td>
         <td class="hm">${a.subAgents}</td>
         <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span>${(a.perms || {}).armada ? '<br><span class="chip" style="margin-top:4px">Armada</span>' : ''}${(a.perms || {}).storm ? '<br><span class="chip" style="margin-top:4px">Storm</span>' : ''}${(a.perms || {}).wolf ? '<br><span class="chip" style="margin-top:4px">WOLF</span>' : ''}${(a.perms || {}).mxp ? '<br><span class="chip" style="margin-top:4px">MaxPlayer</span>' : ''}${(a.perms || {}).oxp ? '<br><span class="chip" style="margin-top:4px">OrbixPlay</span>' : ''}</td>
-        <td><button type="button" class="btn sm" data-aglink="${a.id}" title="Link personale e codice di accesso">🔗 Link accesso</button></td>
+        ${sub ? '' : `<td><button type="button" class="btn sm" data-aglink="${a.id}" title="Link personale e codice di accesso">🔗 Link accesso</button></td>`}
         <td class="dn">${dnsSum(a)}</td>
         <td class="hm">${a.lastSeen ? esc(ago(a.lastSeen)) : '<span class="mut">mai</span>'}</td>
         <td class="hm">${a.totp ? '<span class="chip g">Attiva</span>' : '<span class="chip">No</span>'}</td>
