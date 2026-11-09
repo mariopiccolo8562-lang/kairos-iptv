@@ -54,10 +54,49 @@ function userOut(u) {
   };
 }
 function agentOut(a) {
-  return { id: s(a.id, 30), parent: s(a.parent_id, 30), name: s(a.fullname, 80), username: s(a.username, 80), email: s(a.email, 120), max: +a.max_users || 0, users: +a.user_count || 0, alloc: +a.allocated_users || 0, agents: +a.agent_count || 0, disabled: !!a.disabled, last: s(a.last_login, 30) };
+  const o = { id: s(a.id, 30), parent: s(a.parent_id, 30), name: s(a.fullname, 80), username: s(a.username, 80), email: s(a.email, 120), max: +a.max_users || 0, users: +a.user_count || 0, alloc: +a.allocated_users || 0, agents: +a.agent_count || 0, disabled: !!a.disabled, last: s(a.last_login, 30) };
+  if (a.permissions && typeof a.permissions.isadmin === 'boolean') o.admin = a.permissions.isadmin;
+  if (a.permissions && typeof a.permissions.domainpermission === 'string') o.domainPerm = s(a.permissions.domainpermission, 40);
+  if (a.domain_id != null) o.domainId = s(a.domain_id, 30);
+  return o;
 }
 function domOut(x) { return { id: s(x.id, 30), label: s(x.label, 60), domain: s(x.domain, 200), port: s(x.port, 8), https: x.https === true || String(x.https) === '1' || String(x.https) === 'true', status: s(x.status, 20) }; }
 const okIptv = (v, H, what) => { const x = H.str(v, 120); if (!x || /\s/.test(x)) throw new H.HttpErr(400, `${what}: obbligatorio, senza spazi`); return x; };
+const AGENT_DOMAIN_PERMS = new Set(['all_domains_hidden', 'all_domains_visible', 'all_domains_label_visible', 'own_domains', 'single_domain']);
+const agentDomain = (v, H) => {
+  const value = H.str(v, 40);
+  if (!AGENT_DOMAIN_PERMS.has(value)) throw new H.HttpErr(400, 'Scegli un permesso domini valido');
+  return value;
+};
+const agentPassword = (v, H) => {
+  if (typeof v !== 'string') throw new H.HttpErr(400, 'La password deve contenere da 6 a 72 caratteri');
+  const length = v.length;
+  if (length < 6 || length > 72) throw new H.HttpErr(400, 'La password deve contenere da 6 a 72 caratteri');
+  return v;
+};
+const agentUserCount = (v, H) => {
+  if (!Number.isInteger(v) || v < 1) throw new H.HttpErr(400, 'I posti clienti devono essere almeno 1');
+  return v;
+};
+const agentEmail = (v, H, required = false) => {
+  const email = typeof v === 'string' ? v.trim() : '';
+  if ((!email && required) || (email && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 255))) throw new H.HttpErr(400, 'Inserisci un indirizzo email valido');
+  return email;
+};
+const agentUsername = (v, H, required = false) => {
+  if (typeof v !== 'string') {
+    if (required) throw new H.HttpErr(400, 'Inserisci un utente valido');
+    return '';
+  }
+  const username = v.trim();
+  if ((!username && required) || username.includes('@') || username.length > 255) throw new H.HttpErr(400, 'L’utente è obbligatorio e non può contenere @');
+  return username;
+};
+const agentDomainId = (v, H) => {
+  const id = String(v ?? '').trim();
+  if (!/^\d{1,30}$/.test(id)) throw new H.HttpErr(400, 'Scegli un dominio valido');
+  return id;
+};
 
 const agRow = (id) => 'mxp:ag:' + id;
 async function agMap(env, id) { const r = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(agRow(id)).first(); try { const o = r ? JSON.parse(r.v) : null; return o && o.acc && o.mx ? o : null; } catch { return null; } }
@@ -80,6 +119,13 @@ async function agIds(H, acc, key, mx, fresh) {
 /** ag = { id } per un agente KAIROS con il permesso «mxp» */
 export async function mxpRoutes(req, env, path, who, ip, H, ag = null) {
   const m = req.method, { HttpErr, json, str } = H;
+  const accountAgentPath = path.match(/^\/mxp\/a\/[a-z0-9]{2,20}(\/agents(?:\/\d+(?:\/password)?)?)$/);
+  const accountAgentWrite = accountAgentPath && (
+    (accountAgentPath[1] === '/agents' && m === 'POST') ||
+    (/^\/agents\/\d+$/.test(accountAgentPath[1]) && (m === 'PUT' || m === 'DELETE')) ||
+    (/^\/agents\/\d+\/password$/.test(accountAgentPath[1]) && m === 'PUT')
+  );
+  if (ag && accountAgentWrite) throw new HttpErr(403, 'Funzione riservata al titolare');
   let map = null;
   if (ag) {
     if (path === '/mxp/agents' || path.startsWith('/mxp/agents/') || (path.startsWith('/mxp/accounts') && m !== 'GET')) throw new HttpErr(403, 'Funzione riservata al titolare');
@@ -142,6 +188,7 @@ export async function mxpRoutes(req, env, path, who, ip, H, ag = null) {
   if (map && acc !== map.acc) throw new HttpErr(403, 'Account MaxPlayer non consentito');
   const key = await keyOf(env, H, acc), mx = map ? map.mx : '';
   const drop = () => { mem.delete(acc); if (mx) mem.delete(acc + ':ag:' + mx); };
+  const dropAgentCaches = () => { for (const k of mem.keys()) if (k.startsWith(acc + ':ag:')) mem.delete(k); };
   const uname = (id) => { const c = mem.get(acc); const u = c && c.users.find((x) => x.id === id); return u ? u.username : 'ID ' + id; };
   /** agente: solo i clienti del suo agente MaxPlayer */
   const mine = async (id) => { if (!mx) return; if (!(await agIds(H, acc, key, mx)).has(id) && !(await agIds(H, acc, key, mx, true)).has(id)) throw new HttpErr(404, 'Cliente non trovato'); };
@@ -244,6 +291,73 @@ export async function mxpRoutes(req, env, path, who, ip, H, ag = null) {
     }
   }
   if (sub === '/agents' && m === 'GET') return json({ agents: (await allPages(H, key, '/agents', 20)).map(agentOut) });
+  if (sub === '/agents' && m === 'POST') {
+    const b = await H.readJSON(req, 2048);
+    const fullname = typeof b.fullname === 'string' ? b.fullname.trim() : '';
+    if (!fullname || fullname.length > 255) throw new HttpErr(400, 'Inserisci un nome valido (massimo 255 caratteri)');
+    const username = agentUsername(b.username, H);
+    const email = agentEmail(b.user_email, H, true);
+    const password = agentPassword(b.user_password, H);
+    const userCount = agentUserCount(b.user_count, H);
+    if (typeof b.is_admin !== 'boolean') throw new HttpErr(400, 'Scegli se può creare sotto-venditori');
+    const domainPermission = agentDomain(b.domain_permission, H);
+    const body = { fullname, user_count: userCount, is_admin: b.is_admin, user_email: email, user_password: password, domain_permission: domainPermission };
+    if (username) body.username = username;
+    if (domainPermission === 'single_domain') body.domain_id = agentDomainId(b.domain_id, H);
+    const created = await call(H, key, 'POST', '/agents', body);
+    drop(); dropAgentCaches();
+    const id = s(created.agent_id ?? (created.data && (created.data.agent_id ?? created.data.id)) ?? '', 30);
+    const name = s(created.username ?? (created.data && created.data.username) ?? username, 120);
+    await H.log(env, 'new', `${who}: Pannello MaxPlayer — venditore ${name || id} creato`, ip);
+    return json({ ok: true, id, username: name });
+  }
+  const agentRoute = sub.match(/^\/agents\/(\d{1,15})(?:\/(password))?$/);
+  if (agentRoute && m === 'PUT') {
+    const id = agentRoute[1], b = await H.readJSON(req, 2048);
+    if (agentRoute[2] === 'password') {
+      const password = agentPassword(b.password, H);
+      await call(H, key, 'PUT', `/agents/${id}/password`, { password });
+      drop(); dropAgentCaches();
+      await H.log(env, 'edit', `${who}: Pannello MaxPlayer — password del venditore ${id} cambiata`, ip);
+      return json({ ok: true });
+    }
+    const currentResponse = await call(H, key, 'GET', `/agents/${id}`);
+    const current = currentResponse.data || {};
+    const fullname = typeof b.fullname === 'string' ? b.fullname.trim() : '';
+    if (!fullname || fullname.length > 255) throw new HttpErr(400, 'Inserisci un nome valido (massimo 255 caratteri)');
+    const username = agentUsername(b.username, H, true);
+    const email = agentEmail(b.new_email, H) || agentEmail(current.email, H);
+    const userCount = agentUserCount(b.user_count, H);
+    if (typeof b.is_admin !== 'boolean') throw new HttpErr(400, 'Scegli se può creare sotto-venditori');
+    const wasAdmin = current.permissions && current.permissions.isadmin === true;
+    if (wasAdmin && !b.is_admin) throw new HttpErr(400, 'Un venditore amministratore non può essere declassato');
+    const body = { fullname, username, user_count: userCount, is_admin: b.is_admin, new_email: email, xtream_id: s(current.xtream_id, 255) };
+    await call(H, key, 'PUT', `/agents/${id}`, body);
+    if (Object.prototype.hasOwnProperty.call(b, 'domain_permission')) {
+      const domainPermission = agentDomain(b.domain_permission, H);
+      const currentPermission = current.permissions && current.permissions.domainpermission;
+      const domainId = domainPermission === 'single_domain' ? agentDomainId(b.domain_id, H) : '';
+      if (currentPermission !== domainPermission || (domainPermission === 'single_domain' && String(current.domain_id ?? '') !== domainId)) {
+        const domainBody = { domain_permission: domainPermission };
+        if (domainId) domainBody.domain_id = domainId;
+        await call(H, key, 'PUT', `/agents/${id}/domains`, domainBody);
+      }
+    }
+    drop(); dropAgentCaches();
+    await H.log(env, 'edit', `${who}: Pannello MaxPlayer — venditore ${username} modificato`, ip);
+    return json({ ok: true });
+  }
+  if (agentRoute && m === 'DELETE' && !agentRoute[2]) {
+    const id = agentRoute[1], b = await H.readJSON(req, 1024);
+    const transferTo = typeof b.transferTo === 'string' ? b.transferTo.trim() : '';
+    const agents = await allPages(H, key, '/agents', 20);
+    if (!agents.some((a) => s(a.id, 30) === id)) throw new HttpErr(404, 'Venditore non trovato');
+    if (transferTo && (transferTo === id || !agents.some((a) => s(a.id, 30) === transferTo))) throw new HttpErr(400, 'Scegli un altro venditore per il trasferimento');
+    await call(H, key, 'DELETE', `/agents/${id}`, { confirm: true, transfer_to_id: transferTo || null });
+    drop(); dropAgentCaches();
+    await H.log(env, 'del', `${who}: Pannello MaxPlayer — venditore ${id} eliminato`, ip);
+    return json({ ok: true });
+  }
   const gm = sub.match(/^\/agents\/(\d{1,15})\/(enable|disable)$/);
   if (gm && m === 'POST') {
     if (mx && !(await allPages(H, key, `/agents/${mx}/agents`, 10)).some((x) => s(x.id, 30) === gm[1])) throw new HttpErr(404, 'Agente non trovato');

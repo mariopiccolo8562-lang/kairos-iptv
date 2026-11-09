@@ -9,8 +9,9 @@
 .mx-row{display:grid;grid-template-columns:90px minmax(0,1fr) minmax(0,2.2fr) auto;gap:10px;align-items:start;padding:10px 0;border-top:1px solid var(--line);font-size:13px}
 .mx-row .k,.mx-ag .k{font-size:11px;color:var(--mut);display:block}.mx-l{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:2px 0}.mx-l .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
 .mx-l button{background:none;border:0;color:var(--mut);cursor:pointer;padding:2px 5px;border-radius:5px;font:inherit;font-size:12px}.mx-l button:hover{color:var(--txt,#fff);background:#ffffff14}
-.mx-ag{display:grid;grid-template-columns:minmax(0,1.4fr) 90px 90px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line);font-size:13px}.mx-ag .n{font-size:17px;font-weight:800}
-@media (max-width:1000px){.mx-row,.mx-ag{grid-template-columns:1fr 1fr}.mx-row .wf-act,.mx-ag .wf-act{grid-column:1/-1;justify-content:flex-start}}`;
+.mx-ag{display:grid;grid-template-columns:minmax(0,1.4fr) 72px 72px minmax(0,1fr) minmax(0,1.5fr);gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line);font-size:13px}.mx-ag .n{font-size:17px;font-weight:800}.mx-ag .wf-act{display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-width:0}.mx-ag .wf-act .btn{white-space:normal}.mx-agent-new{display:flex;justify-content:flex-end;margin-bottom:10px}.mx-agent-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mx-agent-form label{min-width:0}.mx-agent-form .wide{grid-column:1/-1}
+@media (max-width:1000px){.mx-row,.mx-ag{grid-template-columns:1fr 1fr}.mx-row .wf-act,.mx-ag .wf-act{grid-column:1/-1;justify-content:flex-start}}
+@media (max-width:600px){.mx-agent-form{grid-template-columns:1fr}.mx-agent-form .wide{grid-column:1/-1}.mx-ag>div:first-child{min-width:0;overflow-wrap:anywhere}}`;
   document.head.appendChild(css);
 
   const IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4M10 9l4 2-4 2z"/></svg>';
@@ -91,13 +92,14 @@
       ${list.length > shown.length ? `<div style="margin-top:10px"><button class="btn sm" id="mxMore">Mostra altri ${Math.min(100, list.length - shown.length)}</button></div>` : ''}`;
   }
   function agentsHtml() {
-    if (!M.agents) return `<p class="mut">Carico gli agenti da MaxPlayer…</p>`;
-    if (!M.agents.length) return '<p class="mut">Nessun agente su questo account.</p>';
-    return M.agents.map((a) => `<div class="mx-ag" data-id="${esc(a.id)}">
+    const add = isAg() ? '' : '<div class="mx-agent-new"><button class="btn sm" id="mxAgentNew">➕ Nuovo venditore</button></div>';
+    if (!M.agents) return add + '<p class="mut">Carico gli agenti da MaxPlayer…</p>';
+    if (!M.agents.length) return add + '<p class="mut">Nessun agente su questo account.</p>';
+    return add + M.agents.map((a) => `<div class="mx-ag" data-id="${esc(a.id)}">
       <div><span class="k">ID ${esc(a.id)}${a.agents ? ` · ${a.agents} sotto-agenti` : ''}</span><b>${esc(a.name || a.username)}</b> <span class="mono mut">${esc(a.username)}</span><br><small class="mut">${esc(a.email)}</small> ${a.disabled ? '<span class="wf-tag b">Disattivato</span>' : '<span class="wf-tag">Attivo</span>'}</div>
       <div><span class="k">Clienti</span><span class="n">${a.users}</span></div><div><span class="k">Massimo</span><span class="n">${a.max}</span></div>
       <div><span class="k">Ultimo accesso</span>${esc(a.last) || '—'}</div>
-      <div class="wf-act"><button class="btn sm ghost" data-a="${a.disabled ? 'enable' : 'disable'}">${a.disabled ? 'Attiva' : 'Disattiva'}</button></div></div>`).join('');
+      <div class="wf-act"><button class="btn sm ghost" data-a="${a.disabled ? 'enable' : 'disable'}">${a.disabled ? 'Attiva' : 'Disattiva'}</button>${isAg() ? '' : `<button class="btn sm" data-a="edit">✏️ Modifica</button><button class="btn sm" data-a="password">🔑 Password</button><button class="btn sm ghost" data-a="delete" style="color:#ff8f8f">🗑 Elimina</button>`}</div></div>`).join('');
   }
   function domsHtml() {
     if (!M.doms) return '<p class="mut">Carico…</p>';
@@ -132,6 +134,7 @@
     V.querySelectorAll('.wf-tabs [data-t]').forEach((b) => { b.onclick = async () => { M.tab = b.dataset.t; render(); if (M.tab === 'agents' && !M.agents) { await loadAgents(); show(); } }; });
     $('#mxRe').onclick = async () => { await loadAll(true); };
     $('#mxNew').onclick = newUser;
+    if ($('#mxAgentNew')) $('#mxAgentNew').onclick = () => agentForm();
     if ($('#mxIn')) $('#mxIn').onclick = () => window.KXPurgeThird && window.KXPurgeThird();
     V.querySelectorAll('[data-d]').forEach((b) => { b.onclick = () => domEdit(b.dataset.d); });
     if ($('#mxRnB')) $('#mxRnB').onclick = async () => { try { await api('PUT', '/admin/mxp/accounts/' + M.acc, { name: $('#mxRn').value }); await loadAccs(); render(); toast('Nome salvato'); } catch (e) { toast(e.message, 1); } };
@@ -243,8 +246,72 @@
   }
   async function agentAct(a, id) {
     const g = (M.agents || []).find((x) => x.id === id); if (!g) return;
+    if (a === 'edit') return agentForm(g);
+    if (a === 'password') return agentPassword(g);
+    if (a === 'delete') return agentDelete(g);
     if (!(await ask((a === 'enable' ? 'Attivare ' : 'Disattivare ') + (g.name || g.username) + '?', a === 'enable' ? 'L\'agente potrà di nuovo entrare su MaxPlayer.' : 'L\'agente non potrà più entrare su MaxPlayer finché non lo riattivi.', a === 'enable' ? 'Attiva' : 'Disattiva'))) return;
     try { await api('POST', P(`/agents/${id}/${a}`)); toast(a === 'enable' ? 'Agente attivato' : 'Agente disattivato'); await loadAgents(); show(); } catch (e) { toast(e.message, 1); }
+  }
+  const agentDomainOptions = [
+    ['all_domains_hidden', 'Tutti i domini (nascosti)'],
+    ['all_domains_visible', 'Tutti i domini (visibili)'],
+    ['all_domains_label_visible', 'Tutti i domini (solo etichetta)'],
+    ['own_domains', 'Solo i suoi domini'],
+    ['single_domain', 'Un solo dominio'],
+  ];
+  async function agentForm(agent = null) {
+    if (isAg()) return;
+    const creating = !agent, domainPerm = agent && agent.domainPerm || 'all_domains_hidden';
+    const domainOptions = agentDomainOptions.map(([value, label]) => `<option value="${value}"${domainPerm === value ? ' selected' : ''}>${label}</option>`).join('');
+    const body = `<div class="mx-agent-form">
+      <label>Nome<input class="inp" id="mxAgentName" maxlength="255" required value="${esc(agent ? agent.name : '')}"></label>
+      <label>Utente${creating ? ' (facoltativo)' : ''}<input class="inp" id="mxAgentUser" maxlength="255" ${creating ? '' : 'required'} value="${esc(agent ? agent.username : '')}"></label>
+      <label>Email<input class="inp" id="mxAgentEmail" type="email" maxlength="255" required value="${esc(agent ? agent.email : '')}"></label>
+      ${creating ? '<label>Password<input class="inp" id="mxAgentPass" type="password" minlength="6" maxlength="72" autocomplete="new-password" required></label>' : ''}
+      <label>Posti clienti<input class="inp" id="mxAgentCount" type="number" min="1" step="1" required value="${agent ? agent.max : 1}"></label>
+      <label class="wide" style="display:flex;gap:8px;align-items:center"><input id="mxAgentAdmin" type="checkbox" ${agent && agent.admin ? 'checked' : ''} ${agent && agent.admin ? 'disabled' : ''}> Può creare sotto-venditori</label>
+      <label class="wide">Domini<select class="inp" id="mxAgentDomainPerm">${domainOptions}</select></label>
+      <label class="wide" id="mxAgentDomainWrap">Dominio<select class="inp" id="mxAgentDomain">${domOpts(agent && agent.domainId || '')}</select></label>
+    </div>`;
+    const pending = ask(creating ? 'Nuovo venditore' : 'Modifica venditore', body, creating ? 'Crea venditore' : 'Salva');
+    const permission = $('#mxAgentDomainPerm'), domainWrap = $('#mxAgentDomainWrap');
+    const syncDomain = () => { domainWrap.style.display = permission.value === 'single_domain' ? '' : 'none'; };
+    permission.onchange = syncDomain; syncDomain();
+    if (!(await pending)) return;
+    const name = $('#mxAgentName').value.trim(), username = $('#mxAgentUser').value.trim(), email = $('#mxAgentEmail').value.trim();
+    const userCount = $('#mxAgentCount').valueAsNumber, isAdmin = $('#mxAgentAdmin').checked;
+    const payload = { fullname: name, username, user_count: userCount, is_admin: isAdmin, domain_permission: permission.value };
+    if (creating) { payload.user_email = email; payload.user_password = $('#mxAgentPass').value; }
+    else payload.new_email = email;
+    if (permission.value === 'single_domain') payload.domain_id = $('#mxAgentDomain').value;
+    try {
+      await api(creating ? 'POST' : 'PUT', P(creating ? '/agents' : `/agents/${agent.id}`), payload);
+      toast(creating ? 'Venditore creato su MaxPlayer' : 'Venditore aggiornato su MaxPlayer');
+      await loadAgents(); show();
+    } catch (e) { toast(e.message, 1); }
+  }
+  async function agentPassword(agent) {
+    if (isAg()) return;
+    const pending = ask('Nuova password per ' + (agent.name || agent.username), '<label>Password<input class="inp" id="mxAgentNewPassword" type="password" minlength="6" maxlength="72" autocomplete="new-password" required></label>', 'Cambia password');
+    if (!(await pending)) return;
+    try {
+      await api('PUT', P(`/agents/${agent.id}/password`), { password: $('#mxAgentNewPassword').value });
+      toast('Password del venditore aggiornata'); await loadAgents(); show();
+    } catch (e) { toast(e.message, 1); }
+  }
+  async function agentDelete(agent) {
+    if (isAg()) return;
+    const options = (M.agents || []).filter((a) => a.id !== agent.id).map((a) => `<option value="${esc(a.id)}">${esc(a.name || a.username)} · ${esc(a.username)}</option>`).join('');
+    const content = `<p class="mut" style="margin:0 0 10px">Eliminare ${esc(agent.name || agent.username)} da MaxPlayer? Questa operazione non si può annullare.</p><label>Passa i suoi clienti e sotto-venditori a:<select class="inp" id="mxAgentTransfer"><option value="">Nessuno (clienti senza venditore)</option>${options}</select><small class="mut" style="display:block;margin-top:6px">Senza scelta: i clienti restano senza venditore e i sotto-venditori passano a chi sta sopra.</small></label>`;
+    const pending = ask('Elimina venditore', content, 'Elimina'), confirm = $('#mYes');
+    confirm.classList.add('danger'); confirm.style.setProperty('background', 'var(--bad)', 'important'); confirm.style.setProperty('border-color', 'var(--bad)', 'important');
+    const confirmed = await pending;
+    confirm.classList.remove('danger'); confirm.style.removeProperty('background'); confirm.style.removeProperty('border-color');
+    if (!confirmed) return;
+    try {
+      await api('DELETE', P(`/agents/${agent.id}`), { transferTo: $('#mxAgentTransfer').value });
+      toast('Venditore eliminato da MaxPlayer'); await loadAgents(); show();
+    } catch (e) { toast(e.message, 1); }
   }
 
   /* «Elimina inattive»: toglie da OrbixPlay e MaxPlayer le liste dei clienti KAIROS scaduti o disattivati da N giorni */
