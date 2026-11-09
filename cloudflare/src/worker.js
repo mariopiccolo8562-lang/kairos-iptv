@@ -1,4 +1,3 @@
-import { ADDON_ASSETS } from './addon-assets.js';
 /*  KAIROS — Cloudflare Worker
  *  - /panel/*            pannello (asset statici) — protetto da Cloudflare Access se configurato
  *  - /api/admin/*        API del pannello — sessione + 2FA + CSRF + Access JWT
@@ -2549,6 +2548,23 @@ function addonCfg(s) {
   const c = s && s.addons && typeof s.addons === 'object' ? s.addons : {};
   return ADDONS.map(([id, name, cat, def = 'some']) => { const x = c[id] || {}; return { id, name, cat, mode: ADDON_MODES.includes(x.m) ? x.m : def, price: str(x.p || '', 20) }; });
 }
+/* Disegni dei temi speciali (scena + 4 avatar, immagini realistiche, anteprime): un file per tema in
+   public/privato/temi/<id>.json, letto con env.ASSETS solo quando un cliente (o il pannello) lo chiede.
+   Prima erano 2,3 MB dentro il codice del Worker e ogni avvio a freddo li caricava tutti (bundle 3 MB → 0,7 MB).
+   Non sono raggiungibili dal web: con run_worker_first = true ogni richiesta passa dal Worker, che per /privato/ risponde 404.
+   In memoria dell'istanza restano gli ultimi temi letti (gli stessi dati per tutti: niente di personale). */
+const themeMem = new Map();
+function addonAsset(env, id) {
+  if (typeof id !== 'string' || !/^tema-[a-z0-9-]{1,34}$/.test(id) || !ADDON_IDS.has(id)) return Promise.resolve(null);
+  let p = themeMem.get(id);
+  if (!p) {
+    p = env.ASSETS.fetch(new Request('https://kairos.assets/privato/temi/' + id + '.json')).then((r) => (r.ok ? r.json() : null));
+    themeMem.set(id, p);
+    p.then((v) => { if (!v) themeMem.delete(id); }, () => themeMem.delete(id));
+    if (themeMem.size > 8) themeMem.delete(themeMem.keys().next().value);
+  }
+  return p.catch(() => null);
+}
 /* immagini dei temi caricate dal fornitore (sfondo + 4 avatar): sostituiscono i disegni.
    Salvate in D1 come data URL JPEG/PNG/WebP (già ridimensionate dal pannello), al massimo 1,5 MB l'una. */
 const MEDIA_SLOTS = ['bg', 'a1', 'a2', 'a3', 'a4'];
@@ -2565,9 +2581,10 @@ async function playerAddonPreview(req, env, ip) {
   if (await limited(env.RL_DEVICE, 'adp:' + ip)) return json({ error: 'Troppe richieste' }, 429);
   let b;
   try { b = await readJSON(req, 2048); } catch (e) { return json({ error: e.message }, e.status || 400); }
+  const assetP = addonAsset(env, str(b.id, 40)); // il file del tema si legge mentre si controlla il dispositivo
   const [d, bad] = await deviceAuth(env, b);
   if (bad) return bad;
-  const id = str(b.id, 40), asset = ADDON_ASSETS[id];
+  const id = str(b.id, 40), asset = await assetP;
   if (!asset || !asset.prev) return json({ error: 'Add-on non trovato' }, 404);
   const [P] = await activeAccount(env, d);
   if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
@@ -2579,9 +2596,10 @@ async function playerAddon(req, env, ip) {
   if (await limited(env.RL_DEVICE, 'ad:' + ip)) return json({ error: 'Troppe richieste' }, 429);
   let b;
   try { b = await readJSON(req, 2048); } catch (e) { return json({ error: e.message }, e.status || 400); }
+  const assetP = addonAsset(env, str(b.id, 40));
   const [d, bad] = await deviceAuth(env, b);
   if (bad) return bad;
-  const id = str(b.id, 40), asset = ADDON_ASSETS[id];
+  const id = str(b.id, 40), asset = await assetP;
   if (!asset) return json({ error: 'Add-on non trovato' }, 404);
   const [P] = await activeAccount(env, d);
   if (!P) return json({ error: 'Abbonamento non attivo' }, 403);
@@ -6233,7 +6251,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   const amm = path.match(/^\/addon-media\/([a-z0-9-]{3,40})\/(bg|a[1-4])$/);
   if (amm) {
     const [, id, slot] = amm;
-    if (!ADDON_ASSETS[id]) throw new HttpErr(404, 'Tema non trovato');
+    if (!(await addonAsset(env, id))) throw new HttpErr(404, 'Tema non trovato');
     if (m === 'GET') {
       const r = await env.DB.prepare('SELECT data FROM addon_media WHERE addon = ? AND slot = ?').bind(id, slot).first();
       if (!r) throw new HttpErr(404, 'Nessuna immagine');
@@ -6258,7 +6276,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path === '/agents' || path.startsWith('/agents/')) return agentsAdmin(req, env, path, who, ip, null);
   if (path === '/ai' || path === '/ai/grant' || path === '/ai/test') { const r = await adminAi(req, env, path, who, ip); if (r) return r; }
   const apv = path.match(/^\/addon-preview\/([a-z0-9-]{3,40})$/);
-  if (apv && m === 'GET') { const a = ADDON_ASSETS[apv[1]]; if (!a || !a.prev) throw new HttpErr(404, 'Anteprima non disponibile'); return json({ id: apv[1], bg: a.prev.bg, avs: a.prev.avs }, 200, { 'Cache-Control': 'private, max-age=3600' }); }
+  if (apv && m === 'GET') { const a = await addonAsset(env, apv[1]); if (!a || !a.prev) throw new HttpErr(404, 'Anteprima non disponibile'); return json({ id: apv[1], bg: a.prev.bg, avs: a.prev.avs }, 200, { 'Cache-Control': 'private, max-age=3600' }); }
   if (path === '/devices/addons' && m === 'POST') {
     const b = await readJSON(req, 16384);
     if (!Array.isArray(b.ids) || !b.ids.length) throw new HttpErr(400, 'Scegli almeno un cliente');

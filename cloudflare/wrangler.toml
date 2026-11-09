@@ -8,6 +8,9 @@ routes = [{ pattern = "panel-kairos.com", custom_domain = true }]
 [assets]
 directory = "./public"
 binding = "ASSETS"
+# Ogni richiesta passa dal Worker: intestazioni di sicurezza (CSP) e cache dei file del pannello, controllo di Cloudflare
+# Access su /panel/, CORS di /app/ per l'aggiornamento della Pro. Tiene anche privati i file di public/privato/
+# (disegni dei temi, letti dal Worker con env.ASSETS solo per i clienti che li hanno): non sostituirlo con un elenco di percorsi.
 run_worker_first = true
 
 # Il Worker gira vicino al database: D1 sta a Chicago (ORD, regione ENAM) e prima ogni lettura del database faceva
