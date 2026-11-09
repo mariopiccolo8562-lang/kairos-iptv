@@ -145,10 +145,10 @@ async function unseal(env, s) {
 }
 /* /admin/state: se dall'ultima volta non è cambiato niente (stessa impronta) risponde { same: true } invece di rimandare tutto */
 async function stateJson(req, obj) {
-  const body = JSON.stringify(obj);
-  const tag = [...new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(body)))].slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('');
+  const bytes = enc.encode(JSON.stringify(obj)); // codificato una volta sola: serve all'impronta e diventa la risposta
+  const tag = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('');
   const h = { 'Content-Type': 'application/json; charset=utf-8', 'X-Kairos-Etag': tag, 'Cache-Control': 'no-store' };
-  return new Response(req.headers.get('X-Kairos-Etag') === tag ? '{"same":true}' : body, { headers: h });
+  return new Response(req.headers.get('X-Kairos-Etag') === tag ? '{"same":true}' : bytes, { headers: h });
 }
 
 /* ---------------- TOTP (RFC 6238) ---------------- */
