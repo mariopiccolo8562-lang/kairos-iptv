@@ -3221,7 +3221,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
   const t = now();
   // il database è lontano: abbonamento, impostazioni e messaggi non letti partono subito, insieme alla presenza
   // (prima erano sei attese una dopo l'altra, ora tre)
-  const accP = activeAccount(env, d), setP = getSettings(env), unP = unseenCount(env, d, d.parent), cmdP = rcPending(env, ctx, d.id);
+  const accP = activeAccount(env, d), setP = getSettings(env), unP = unseenCount(env, d, d.parent), cmdP = rcPending(env, ctx, d.id, +d.last_seen || 0);
   for (const x of [accP, setP, unP, cmdP]) x.catch(() => {});
   const old = await env.DB.prepare('SELECT * FROM presence WHERE device_id = ?').bind(d.id).first();
   // vis: l'app dice se è in primo piano (Pro dalla 2.6: true in uso o in visione, false quando va in sfondo); le app vecchie non lo mandano
@@ -3488,10 +3488,20 @@ function rcEffective(s, d, app) {
 }
 /** un comando non consegnato entro 7 giorni scade: non arriva più all'app (e non ne blocca uno nuovo uguale) */
 const RC_CMD_TTL = 7 * 864e5;
-/** comandi in attesa per un dispositivo (al massimo 5 per battito); si segnano come consegnati */
-async function rcPending(env, ctx, deviceId) {
+/** riavvio, svuota cache e chiudi: l'app li conferma e dopo meno di un secondo si riavvia o si chiude, quindi con la rete lenta la
+    conferma può perdersi. Se l'app si è riaperta dopo la consegna (register più recente) sono già stati eseguiti: si segnano fatti
+    invece di rimandarli, altrimenti l'app si riavviava di nuovo (o si chiudeva appena il cliente la riapriva) */
+const RC_ONCE = new Set(['reload', 'cache', 'exit']);
+/** comandi in attesa per un dispositivo (al massimo 5 per battito); si segnano come consegnati. [regT] = ultima apertura (register) */
+async function rcPending(env, ctx, deviceId, regT = 0) {
   try {
-    const rows = ((await env.DB.prepare('SELECT id, cmd, args FROM remote_cmds WHERE device_id = ? AND done = 0 AND created > ? ORDER BY id LIMIT 5').bind(deviceId, now() - RC_CMD_TTL).all()).results) || [];
+    let rows = ((await env.DB.prepare('SELECT id, cmd, args, sent FROM remote_cmds WHERE device_id = ? AND done = 0 AND created > ? ORDER BY id LIMIT 5').bind(deviceId, now() - RC_CMD_TTL).all()).results) || [];
+    const gone = regT > 0 ? rows.filter((r) => RC_ONCE.has(r.cmd) && +r.sent > 0 && regT > +r.sent) : [];
+    if (gone.length) {
+      const g = env.DB.prepare(`UPDATE remote_cmds SET done = ?, ok = 1, info = ? WHERE done = 0 AND id IN (${gone.map(() => '?').join(',')})`).bind(now(), 'eseguito: l\'app si è riaperta (conferma non arrivata)', ...gone.map((r) => r.id)).run().catch(() => {});
+      ctx && ctx.waitUntil ? ctx.waitUntil(g) : await g;
+      rows = rows.filter((r) => !gone.includes(r));
+    }
     if (!rows.length) return [];
     const w = env.DB.prepare(`UPDATE remote_cmds SET sent = ? WHERE sent = 0 AND id IN (${rows.map(() => '?').join(',')})`).bind(now(), ...rows.map((r) => r.id)).run().catch(() => {});
     ctx && ctx.waitUntil ? ctx.waitUntil(w) : await w;
