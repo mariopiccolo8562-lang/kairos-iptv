@@ -193,7 +193,7 @@
       const id = +p.id, isCurrent = id === current;
       return `<label style="display:flex;gap:8px;align-items:center;margin:7px 0"><input type="radio" name="axCorrectionPackage" value="${id}"${isCurrent ? ' checked' : ''}> <span>${esc(p.name || '')} · ${Number(p.credits) || 0} crediti${isCurrent ? ' <b>(attuale)</b>' : ''}</span></label>`;
     }).join('') : '<p class="mut">Nessun pacchetto disponibile.</p>';
-    ask('Modifica pacchetto', `<div style="max-height:45vh;overflow:auto">${options}</div><p class="mut">Atlantix rimborsa i crediti se il nuovo pacchetto costa meno; se costa di più, scala i crediti mancanti.</p>`, 'Cambia pacchetto').then(async (confirmed) => {
+    ask('Modifica pacchetto', `<div style="max-height:40vh;overflow:auto;margin:0 0 10px">${options}</div><p class="mut" style="margin:0">Atlantix rimborsa i crediti se il nuovo pacchetto costa meno; se costa di più, scala i crediti mancanti.</p>`, 'Cambia pacchetto').then(async (confirmed) => {
       if (!confirmed) return;
       if (!correctionActive(status)) return;
       const selected = Number(($('input[name="axCorrectionPackage"]:checked') || {}).value) || 0;
@@ -205,13 +205,22 @@
   function openCorrectionDelete(status) {
     const debited = Number(status.debited) || 0, username = esc(status.username || '');
     const refundText = debited > 0 ? `Verranno restituiti ${debited} crediti.` : 'Non risultano crediti da rimborsare.';
-    const confirm = typeof askDanger === 'function'
+    const dangerStyle = typeof askDanger === 'function';
+    const confirm = dangerStyle
       ? askDanger('Eliminare e rimborsare?', `<p>La linea <b>${username}</b> verrà eliminata completamente da Atlantix. ${refundText}</p>`, '', 'Elimina e rimborsa', false)
       : ask('Eliminare e rimborsare?', `<p>La linea <b>${username}</b> verrà eliminata completamente da Atlantix. ${refundText}</p>`, 'Elimina e rimborsa');
+    const confirmButton = dangerStyle ? $('#mYes') : null;
+    if (confirmButton) Object.assign(confirmButton.style, { background: 'var(--bad)', border: '1px solid var(--bad)', color: '#fff' });
     confirm.then(async (accepted) => {
       if (!accepted || !correctionActive(status)) return;
       await submitCorrection(status, 'delete', {});
-    }).catch((e) => toast(e.message, 1));
+    }).catch((e) => toast(e.message, 1)).finally(() => {
+      if (confirmButton) {
+        confirmButton.style.removeProperty('background');
+        confirmButton.style.removeProperty('border');
+        confirmButton.style.removeProperty('color');
+      }
+    });
   }
   async function submitCorrection(status, action, fields) {
     if (!correctionActive(status)) return;
