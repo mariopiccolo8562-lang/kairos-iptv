@@ -9,10 +9,16 @@ const K = 'atx';
 const mem = { jar: null };
 async function markConnData(env, data, H) {
   if (!H.vpnMark) return data;
-  if (Array.isArray(data)) return H.vpnMark(env, data, { ip: (r) => r.user_ip || r.ip, isp: (r) => r.isp });
+  const mark = async (rows) => {
+    try {
+      const marked = await H.vpnMark(env, rows, { ip: (r) => r.user_ip || r.ip, isp: (r) => r.isp });
+      return Array.isArray(marked) ? marked : rows;
+    } catch { return rows; }
+  };
+  if (Array.isArray(data)) return mark(data);
   if (!data || typeof data !== 'object') return data;
   const key = ['rows', 'items', 'connections', 'users', 'list', 'data'].find((k) => Array.isArray(data[k]));
-  return key ? { ...data, [key]: await H.vpnMark(env, data[key], { ip: (r) => r.user_ip || r.ip, isp: (r) => r.isp }) } : data;
+  return key ? { ...data, [key]: await mark(data[key]) } : data;
 }
 const setRow = (env, k, v) => env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(k, v).run();
 const getRow = async (env, k) => ((await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(k).first()) || {}).v || '';
