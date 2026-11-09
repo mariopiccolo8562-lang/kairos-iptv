@@ -23,7 +23,7 @@
 .h4-home-head h2{font-size:clamp(20px,2vw,26px);margin:0}
 .h4-home-head small{display:block;color:var(--mut);margin-top:4px;font-size:13px}
 .h4-home-grid{display:grid;grid-template-columns:1fr;gap:14px}
-.h4-home-tile{--hc:#4f8cff;position:relative;display:block;width:100%;min-width:0;text-align:left;color:var(--txt,#f4f5fa);font:inherit;padding:19px;border:1px solid color-mix(in srgb,var(--hc) 38%,var(--line));border-radius:18px;background:linear-gradient(135deg,color-mix(in srgb,var(--hc) 14%,rgba(17,19,34,.96)),rgba(17,19,34,.92));box-shadow:0 12px 32px rgba(0,0,0,.12);cursor:pointer;transition:transform .16s,border-color .16s,box-shadow .16s}
+.h4-home-tile{--hc:#4f8cff;position:relative;display:flex;flex-direction:column;justify-content:flex-start;width:100%;min-width:0;text-align:left;color:var(--txt,#f4f5fa);font:inherit;padding:19px;border:1px solid color-mix(in srgb,var(--hc) 38%,var(--line));border-radius:18px;background:linear-gradient(135deg,color-mix(in srgb,var(--hc) 14%,rgba(17,19,34,.96)),rgba(17,19,34,.92));box-shadow:0 12px 32px rgba(0,0,0,.12);cursor:pointer;transition:transform .16s,border-color .16s,box-shadow .16s}
 .h4-home-tile:hover{transform:translateY(-2px);border-color:var(--hc);box-shadow:0 16px 34px color-mix(in srgb,var(--hc) 14%,transparent)}
 .h4-home-title{display:flex;align-items:center;gap:11px;min-width:0}
 .h4-home-icon{width:42px;height:42px;display:grid;place-items:center;flex:none;border-radius:13px;background:color-mix(in srgb,var(--hc) 18%,transparent);color:var(--hc)}
@@ -47,11 +47,13 @@
 
   const metric = (value, label) => `<span class="h4-home-metric"><b>${esc(String(value))}</b><small>${esc(label)}</small></span>`;
   const dayLeft = (d) => d.expires ? Math.ceil((new Date(d.expires) - Date.now()) / 864e5) : null;
+  const liveNavVisible = () => { const n = side.querySelector('.nav[data-v="live"]'); return !!n && n.style.display !== 'none'; };
   function stats(id, label) {
     if (id === 'dash') {
-      const online = window.KC?.live?.counts?.online;
+      const online = liveNavVisible() ? window.KC?.live?.counts?.online : null;
       const recent = D.devices.filter((d) => Date.now() - d.lastSeen < 24 * 3600e3).length;
-      return `<div class="h4-home-metrics">${metric(online == null ? '—' : online, 'Online ora')}${metric(recent, 'Visti nelle 24h')}</div>`;
+      const liveMetric = liveNavVisible() ? metric(online == null ? '—' : online, 'Online ora') : '';
+      return `<div class="h4-home-metrics">${liveMetric}${metric(recent, 'Visti nelle 24h')}</div>`;
     }
     if (id === 'cli') {
       const active = D.devices.filter((d) => d.status === 'active').length;
@@ -90,13 +92,29 @@
     $('[data-home-new]', home)?.addEventListener('click', () => $('#newDev')?.click());
     $$('[data-home-hub]', home).forEach((b) => b.addEventListener('click', () => KXHub(b.dataset.homeHub)));
   }
+  let presenceAt = 0, presenceAttemptAt = 0, presenceRequest = null;
+  function refreshPresence() {
+    if (!home.classList.contains('on') || !liveNavVisible() || !window.KC?.api) return;
+    const now = Date.now();
+    if (window.KC.live && now - presenceAt < 120e3) return;
+    if (presenceRequest || now - presenceAttemptAt < 120e3) return presenceRequest;
+    presenceAttemptAt = now;
+    presenceRequest = (async () => {
+      try {
+        window.KC.live = await window.KC.api('GET', '/admin/presence');
+        presenceAt = Date.now();
+        if (home.classList.contains('on')) render();
+      } catch {} finally { presenceRequest = null; }
+    })();
+    return presenceRequest;
+  }
   const refreshLines = () => { if (home.classList.contains('on')) window.KXDashLines?.load().catch(() => {}); };
   window.addEventListener('kxlines:update', render);
   window.addEventListener('kxpay:update', render);
   const oldView = view;
-  window.view = view = function (v) { const r = oldView.apply(this, arguments); if (v === 'home') { render(); refreshLines(); } return r; };
+  window.view = view = function (v) { const r = oldView.apply(this, arguments); if (v === 'home') { render(); refreshLines(); refreshPresence(); } return r; };
   const oldRenderAll = renderAll;
-  window.renderAll = renderAll = function () { const r = oldRenderAll.apply(this, arguments); render(); refreshLines(); return r; };
+  window.renderAll = renderAll = function () { const r = oldRenderAll.apply(this, arguments); if (home.classList.contains('on')) { render(); refreshLines(); } return r; };
   const brand = side.querySelector('.brand');
   if (brand) {
     brand.setAttribute('role', 'button'); brand.tabIndex = 0;
