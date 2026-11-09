@@ -419,7 +419,7 @@
                     if (w === '@adult') return bqIsAdult(name);
                     return String(name).toLocaleLowerCase().includes(String(w).toLocaleLowerCase());
                   });
-                  c.checked = p.mode === 'drop' ? !match : match;
+                  if (p.mode === 'drop') { if (match) c.checked = false; } else c.checked = match;
                 }
                 updateCount();
               };
