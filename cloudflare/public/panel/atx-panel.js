@@ -168,11 +168,16 @@
       }
       if (a === 'lc') { const d = await api('GET', '/admin/atx/line/conns?id=' + r.id); const c = rowsOf(d); return ask('Connessi su ' + u, (window.KXVpn ? KXVpn.counter(c) : '') + (c.length ? c.map((x) => `<p style="margin:6px 0"><b>${esc(x.channel || 'canale ?')}</b><br><span class="mut" style="font-size:12.5px">${esc([x.user_ip || x.ip, x.city, x.geoip_country_code, x.isp].filter(Boolean).join(' · '))}${window.KXVpn ? KXVpn.tag(x.vpn) : ''}</span></p>`).join('') : '<p class="mut">Nessuna connessione adesso.</p>'), 'OK'); }
       if (a === 'renew') {
-        if (!(await ask('Rinnovare ' + u + '?', `<p>Scade il <b>${day(r.exp_date)}</b>. Il rinnovo usa i crediti del tuo account Atlantix.</p><label>Durata<select class="inp" id="axM">${[1, 2, 3, 6, 12].map((n) => `<option value="${n}"${n === 12 ? ' selected' : ''}>${n} ${n === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select></label><label style="display:block;margin-top:10px">Nota (nome del cliente, telefono…)<textarea class="inp" id="axRN" rows="2" maxlength="300" placeholder="es. Mario Rossi · 333 1234567">${esc(r.notes || '')}</textarea></label>`, 'Rinnova'))) return;
+        const originalNotes = String(r.notes || '');
+        if (!(await ask('Rinnovare ' + u + '?', `<p>Scade il <b>${day(r.exp_date)}</b>. Il rinnovo usa i crediti del tuo account Atlantix.</p><label>Durata<select class="inp" id="axM">${[1, 2, 3, 6, 12].map((n) => `<option value="${n}"${n === 12 ? ' selected' : ''}>${n} ${n === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select></label><label style="display:block;margin-top:10px">Nota (nome del cliente, telefono…)<textarea class="inp" id="axRN" rows="2" maxlength="300" placeholder="es. Mario Rossi · 333 1234567">${esc(KXTools.noteValue(originalNotes))}</textarea></label>`, 'Rinnova'))) return;
         const months = +$('#axM').value, notes = $('#axRN').value.trim();
         await api('POST', '/admin/atx/lines/action', { action: 'renew', user_id: r.id, months });
-        if (notes !== String(r.notes || '').trim()) await api('POST', '/admin/atx/lines/action', { action: 'save_notes', user_id: r.id, notes }).catch((e) => toast('Rinnovata, ma la nota non è stata salvata: ' + e.message, 1));
-        toast(`${u} rinnovata di ${months} ${months === 1 ? 'mese' : 'mesi'}`); return load();
+        let noteError = '';
+        if (KXTools.noteChanged(notes, originalNotes)) {
+          const savedNote = KXTools.noteWithTag(notes, originalNotes);
+          try { await api('POST', '/admin/atx/lines/action', { action: 'save_notes', user_id: r.id, notes: savedNote }); r.notes = savedNote; } catch (e) { noteError = e.message; }
+        }
+        toast(`${u} rinnovata di ${months} ${months === 1 ? 'mese' : 'mesi'}${noteError ? ' · nota non salvata: ' + noteError : ''}`); return load();
       }
       if (a === 'on' || a === 'off') { const en = a === 'on'; if (!(await ask((en ? 'Attivare ' : 'Disattivare ') + u + '?', `La linea ${U} viene ${en ? 'attivata' : 'disattivata'} subito su Atlantix.`, en ? 'Attiva' : 'Disattiva'))) return; return await lineAct({ action: 'toggle', user_id: r.id, enabled: en }, `${u} ${en ? 'attivata' : 'disattivata'}`); }
       if (a === 'edit') {

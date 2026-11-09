@@ -27,6 +27,15 @@
   document.head.appendChild(css);
 
   const cell = (v) => { const s = v === null || v === undefined ? '' : String(v); return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const PAYMENT_NOTE_TAG = /\s*\[K: [^\]]*\]\s*$/;
+  const noteValue = (note) => String(note ?? '').replace(PAYMENT_NOTE_TAG, '').trim();
+  const noteChanged = (value, original) => String(value ?? '').trim() !== noteValue(original);
+  const noteWithTag = (value, original) => {
+    const match = String(original ?? '').match(PAYMENT_NOTE_TAG), tag = match ? match[0].trim() : '';
+    const base = String(value ?? '').trim();
+    if (!tag) return base.slice(0, 300);
+    return `${base.slice(0, Math.max(0, 300 - tag.length - (base ? 1 : 0)))} ${tag}`.trim();
+  };
   function csv(name, cols, rows) {
     if (!rows.length) return toast('Niente da esportare', 1);
     const txt = '\ufeff' + [cols.map((c) => cell(c[0])).join(';'), ...rows.map((r) => cols.map((c) => cell(c[1](r))).join(';'))].join('\r\n');
@@ -128,6 +137,6 @@
     });
   }
 
-  window.KXTools = { csv, day, stats, count, run, runReport, panelHeader, devsFor, msg, bar, ck, bind };
+  window.KXTools = { csv, day, stats, count, run, runReport, panelHeader, noteValue, noteChanged, noteWithTag, devsFor, msg, bar, ck, bind };
   window.KXCreds = { show: showCredentials };
 })();

@@ -243,10 +243,27 @@ const mkArmadaLike = (cfg) => {
     }));
     $$('[data-arren]', V).forEach((b) => (b.onclick = async () => {
       const k = b.dataset.arren, x = find(k), sub = +$(`[data-arsub="${k}"]`).value, who = k[0] === 'l' ? x.username : x.mac;
+      const noteRef = x.username || x.mac || '', panelNote = window.KXLineNotes && noteRef ? await KXLineNotes.get(K, noteRef) : '';
+      const originalNote = panelNote || String(x.notes || x.note || '');
       const bd = A.st && A.st.budget;
-      if (!(await ask(`Rinnovare su ${N}?`, `<b>${esc(who)}</b> di <b>${sub} ${sub === 1 ? 'mese' : 'mesi'}</b>. ${bd ? `Usa i crediti del tuo tetto (ne restano ${fmtC(bd.left)} questo mese).` : `Usa i tuoi crediti ${N}.`}${k[0] === 'l' && window.KXPay ? KXPay.duePrompt('arPay', sub) : ''}`, 'Rinnova'))) return;
+      if (!(await ask(`Rinnovare su ${N}?`, `<b>${esc(who)}</b> di <b>${sub} ${sub === 1 ? 'mese' : 'mesi'}</b>. ${bd ? `Usa i crediti del tuo tetto (ne restano ${fmtC(bd.left)} questo mese).` : `Usa i tuoi crediti ${N}.`}<label style="display:block;margin-top:10px">Nota (nome del cliente, telefono…)<textarea class="inp" id="arRN" rows="2" maxlength="300" placeholder="es. Mario Rossi · 333 1234567">${esc(KXTools.noteValue(originalNote))}</textarea></label>${k[0] === 'l' && window.KXPay ? KXPay.duePrompt('arPay', sub) : ''}`, 'Rinnova'))) return;
       const due = k[0] === 'l' && window.KXPay ? KXPay.readDuePrompt('arPay') : null; if (due === false) return;
-      try { const r = await api('POST', API + '/renew', k[0] === 'l' ? { type: 'm3u', username: x.username, password: x.password, sub } : { type: 'mag', mac: x.mac, sub }); if (r.exp) x.exp = r.exp; toast('Rinnovata' + (r.exp ? ' fino al ' + fmtD(r.exp) : '')); if (due) await KXPay.saveDue('line', CFG.k, x.username, x.username, +x.byAgent || +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Rinnovo riuscito, ma pagamento non registrato: ' + e.message, 1)); loadState(); loadTab(true, true); } catch (e) { toast(e.message, 1); }
+      try {
+        const r = await api('POST', API + '/renew', k[0] === 'l' ? { type: 'm3u', username: x.username, password: x.password, sub } : { type: 'mag', mac: x.mac, sub });
+        if (r.exp) x.exp = r.exp;
+        const notes = Q('#arRN').value.trim(); let noteError = '', noteUpdated = false;
+        if (KXTools.noteChanged(notes, originalNote)) {
+          const savedNote = KXTools.noteWithTag(notes, originalNote);
+          try {
+            await api('PUT', '/admin/line-notes', { panel: K, ref: noteRef, note: savedNote });
+            if (window.KXLineNotes) KXLineNotes.set(K, noteRef, savedNote);
+            noteUpdated = true;
+          } catch (e) { noteError = e.message; }
+        }
+        toast(`Rinnovata${r.exp ? ' fino al ' + fmtD(r.exp) : ''}${noteUpdated ? ' · nota aggiornata' : ''}${noteError ? ' · nota non salvata: ' + noteError : ''}`);
+        if (due) await KXPay.saveDue('line', CFG.k, x.username, x.username, +x.byAgent || +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Rinnovo riuscito, ma pagamento non registrato: ' + e.message, 1));
+        loadState(); loadTab(true, true);
+      } catch (e) { toast(e.message, 1); }
     }));
     $$('[data-artog]', V).forEach((b) => (b.onclick = async () => {
       const x = find(b.dataset.artog), on = !x.enabled;
@@ -280,6 +297,13 @@ const mkArmadaLike = (cfg) => {
     const current = A.tab === 'lines' ? A.lines : A.mags;
     const S = Array.isArray(current) ? chosenIds.map((id) => current.find((x) => String(x.id) === id)).filter(Boolean) : chosen;
     if (Array.isArray(current) && S.length !== chosenIds.length) return toast('Una o più linee selezionate non risultano più disponibili su ' + N, 1);
+    const noteRef = (x) => String(x.username || x.mac || who(x));
+    const kairosNotes = window.KXLineNotes ? await KXLineNotes.getMany(K, S.map(noteRef)) : {};
+    const noteInfo = new Map(S.map((x) => {
+      const ref = noteRef(x), original = kairosNotes[ref.toLowerCase()] || String(x.notes || x.note || '');
+      return [String(x.id), { ref, original }];
+    }));
+    const noteEdits = new Map(S.map((x) => [String(x.id), KXTools.noteValue(noteInfo.get(String(x.id)).original)]));
     const beforeState = A.st, before = (() => {
       const raw = beforeState && beforeState.agent ? beforeState.budget && beforeState.budget.left : beforeState && beforeState.reseller && beforeState.reseller.credits;
       const n = parseFloat(String(raw ?? '').replace(',', '.'));
@@ -287,14 +311,16 @@ const mkArmadaLike = (cfg) => {
     })();
     const panelColor = K === 'armada' ? '#2f7fd6' : '#7c4dff';
     const itemLabel = A.tab === 'lines' ? 'Utente' : 'MAC';
-    const noteOrClient = (x) => {
+    const clientNames = (x) => {
       const username = String(x.username || '').toLocaleLowerCase();
-      const clients = username ? (D.devices || []).filter((d) => d && !d.parent && (d.playlists || []).some((p) => p && String(p.username || '').toLocaleLowerCase() === username)).map((d) => d.name || d.code).filter(Boolean) : [];
-      return [x.notes, clients.length ? `KAIROS: ${clients.join(', ')}` : ''].filter(Boolean).join(' · ') || '—';
+      return username ? (D.devices || []).filter((d) => d && !d.parent && (d.playlists || []).some((p) => p && String(p.username || '').toLocaleLowerCase() === username)).map((d) => d.name || d.code).filter(Boolean) : [];
     };
     const pr = ask(`Rinnovo massivo ${N}`, `${KXTools.panelHeader(N, panelColor)}
       <label class="lbl">Durata per tutte</label><select class="inp" id="abS">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select>
-      <div class="kt-renew-list" style="margin-top:10px"><table class="kt-renew-table"><thead><tr><th>${itemLabel}</th><th>Nota / cliente KAIROS</th><th>Scadenza attuale</th><th>Costo</th></tr></thead><tbody>${S.map((x) => `<tr><td>${esc(who(x))}</td><td>${esc(noteOrClient(x))}</td><td>${esc(fmtD(x.exp))}</td><td>1 rinnovo</td></tr>`).join('')}</tbody></table></div>
+      <div class="kt-renew-list" style="margin-top:10px"><table class="kt-renew-table"><thead><tr><th>${itemLabel}</th><th>Scadenza attuale</th><th>Costo</th></tr></thead><tbody>${S.map((x) => {
+        const clients = clientNames(x), value = noteEdits.get(String(x.id)) || '';
+        return `<tr><td style="border-bottom:0">${esc(who(x))}</td><td style="border-bottom:0">${esc(fmtD(x.exp))}</td><td style="border-bottom:0">1 rinnovo</td></tr><tr><td colspan="3" style="padding-top:0"><textarea class="inp" data-ar-note="${esc(x.id)}" maxlength="300" rows="2" placeholder="Nota (nome del cliente, telefono…)" style="width:100%;min-width:0;box-sizing:border-box;margin:0;padding:6px;font-size:12px;resize:vertical">${esc(value)}</textarea>${clients.length ? `<small class="mut" style="display:block;margin-top:4px">KAIROS: ${esc(clients.join(', '))}</small>` : ''}</td></tr>`;
+      }).join('')}</tbody></table></div>
       <p class="kt-renew-foot" id="abF"></p>`, 'Rinnova tutte');
     const updateFooter = () => {
       const sub = +Q('#abS').value, duration = `${sub} ${sub === 1 ? 'mese' : 'mesi'}`, bd = A.st && A.st.budget;
@@ -302,12 +328,25 @@ const mkArmadaLike = (cfg) => {
       Q('#abF').innerHTML = `Durata: <b>${duration}</b> · Totale: <b>${S.length} rinnovi</b> · ${funds}`;
     };
     Q('#abS').onchange = updateFooter; updateFooter();
+    Q('.kt-renew-table [data-ar-note]')?.closest('tbody')?.querySelectorAll('[data-ar-note]').forEach((input) => {
+      input.oninput = () => noteEdits.set(String(input.dataset.arNote), input.value);
+    });
     if (!(await pr)) return;
     const sub = +Q('#abS').value;
     const result = await KXTools.runReport(S, async (x) => {
       const r = await api('POST', API + '/renew', x.mac && !x.username ? { type: 'mag', mac: x.mac, sub } : { type: 'm3u', username: x.username, password: x.password, sub });
       if (r.exp) x.exp = r.exp;
-      return { cost: r && r.cost !== null && r.cost !== undefined && Number.isFinite(+r.cost) ? +r.cost : null, estimated: !!(r && r.costEstimated) };
+      const info = noteInfo.get(String(x.id)), note = noteEdits.get(String(x.id)) ?? KXTools.noteValue(info.original);
+      let noteUpdated = false, noteError = '';
+      if (KXTools.noteChanged(note, info.original)) {
+        const savedNote = KXTools.noteWithTag(note, info.original);
+        try {
+          await api('PUT', '/admin/line-notes', { panel: K, ref: info.ref, note: savedNote });
+          if (window.KXLineNotes) KXLineNotes.set(K, info.ref, savedNote);
+          noteUpdated = true;
+        } catch (e) { noteError = e.message; }
+      }
+      return { cost: r && r.cost !== null && r.cost !== undefined && Number.isFinite(+r.cost) ? +r.cost : null, estimated: !!(r && r.costEstimated), noteUpdated, noteError };
     }, 'Rinnovo');
     A.sel.clear();
     await loadState(); await loadTab(true, true); render();
@@ -317,11 +356,13 @@ const mkArmadaLike = (cfg) => {
     const successes = result.items.filter((x) => x.ok), failures = result.items.filter((x) => !x.ok);
     const estimated = successes.reduce((sum, x) => sum + (x.value.cost === null ? sub : x.value.cost), 0);
     const spent = used !== null ? `${fmtC(used)} crediti` : `circa ${fmtC(estimated)} crediti`;
-    const rows = successes.map((x) => `<li class="ok">${esc(who(x.item))} · ${x.value.cost === null ? '1 rinnovo (costo per linea non disponibile)' : `${x.value.estimated ? 'circa ' : ''}${fmtC(x.value.cost)} crediti`}</li>`).join('');
+    const rows = successes.map((x) => `<li class="ok">${esc(who(x.item))} · ${x.value.cost === null ? '1 rinnovo (costo per linea non disponibile)' : `${x.value.estimated ? 'circa ' : ''}${fmtC(x.value.cost)} crediti`}${x.value.noteUpdated ? ' · nota aggiornata' : ''}</li>`).join('');
     const errs = failures.map((x) => `<li class="err">${esc(who(x.item))}: ${esc(x.error)}</li>`).join('');
+    const noteErrors = successes.filter((x) => x.value.noteError).map((x) => `<li class="err">${esc(who(x.item))}: nota non salvata: ${esc(x.value.noteError)}</li>`).join('');
     await ask(`Riepilogo ${N}`, `${KXTools.panelHeader(N, panelColor)}<div class="kt-renew-report">
       <div><h4>Rinnovate (${result.ok})</h4><ul>${rows || '<li>—</li>'}</ul></div>
       <div><h4>Errori (${failures.length})</h4><ul>${errs || '<li>—</li>'}</ul></div>
+      ${noteErrors ? `<div><h4>Note non salvate</h4><ul>${noteErrors}</ul></div>` : ''}
       <p class="kt-renew-foot" style="margin:0">Crediti spesi: <b>${esc(spent)}</b>${used !== null ? ` · saldo ${fmtC(before)} → ${fmtC(after)}` : ''}</p></div>`, 'Chiudi');
   }
   async function bulkTgl(on) {
