@@ -4993,7 +4993,8 @@ async function agentsAdmin(req, env, path, who, ip, top) {
           requested = { ...requested, actApps: [...new Set(requested.actApps.filter((x) => typeof x === 'string' && known.has(x)))] };
         }
       }
-      if (top) requested = { ...(requested && typeof requested === 'object' && !Array.isArray(requested) ? requested : {}), ledgerPanels: cur ? agentPerms(cur.perms).ledgerPanels : null };
+      const requestedPerms = requested && typeof requested === 'object' && !Array.isArray(requested) ? requested : {};
+      if (top || !Object.prototype.hasOwnProperty.call(requestedPerms, 'ledgerPanels')) requested = { ...requestedPerms, ledgerPanels: cur ? agentPerms(cur.perms).ledgerPanels : null };
       o.perms = JSON.stringify(agentPermsWithin(requested, top ? agentPerms(top.perms) : null));
     }
     if (b.servers !== undefined) { if (!Array.isArray(b.servers)) throw new HttpErr(400, 'servers deve essere un elenco'); let l = serverIds(b.servers.join(',')).filter((x) => dnsIds.has(x)); if (top) { const mine = serverIds(top.servers); l = l.filter((x) => mine.includes(x)); } o.servers = l.join(','); }
