@@ -1526,19 +1526,43 @@ async function ghFetch(u, method, ms = 8000) {
   try { return await fetch(u, { method, redirect: 'follow', cf: { cacheTtl: 600, cacheEverything: true }, signal: ac.signal }); }
   finally { clearTimeout(timer); }
 }
+/** l'ultima release è stata creata senza il file (es. Kairos Premium 1.7.0 e 1.7.1, compilate senza la chiave di firma):
+ *  link al file della release più recente che ce l'ha, così il download dallo store non resta rotto; '' se non c'è */
+async function ghOlderAsset(rel) {
+  const mm = rel.match(/^([A-Za-z0-9._-]+)\/releases\/latest\/download\/([A-Za-z0-9._-]+)$/); if (!mm) return '';
+  const base = `https://github.com/${GH_OWNER}/${mm[1]}/releases/download/`;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${GH_OWNER}/${mm[1]}/releases?per_page=20`, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(6000), cf: { cacheTtl: 300, cacheEverything: true } });
+    if (!r.ok) return '';
+    const list = (await r.json().catch(() => [])) || [];
+    const t = (x) => Date.parse(x.published_at || x.created_at || '') || 0;
+    for (const x of (Array.isArray(list) ? list : []).filter((x) => x && !x.draft && !x.prerelease).sort((a, b) => t(b) - t(a))) {
+      const a = (Array.isArray(x.assets) ? x.assets : []).find((f) => f && f.name === mm[2] && (f.state || 'uploaded') === 'uploaded');
+      if (a && typeof a.browser_download_url === 'string' && a.browser_download_url.startsWith(base)) return a.browser_download_url;
+    }
+  } catch {}
+  return '';
+}
 async function cleanLinks(req, url, path) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return new Response('Metodo non consentito', { status: 405 });
   const m = path.match(/^\/get\/([a-z0-9-]{1,24})\.apk$/);
   if (m) {
     const e = GET_APK[m[1]]; if (!e) return new Response('Non trovato', { status: 404 });
-    const target = `https://github.com/${GH_OWNER}/${e[0]}`, method = req.method === 'HEAD' ? 'HEAD' : 'GET';
-    let up = null;
-    for (let n = 0; n < 2; n++) {
-      try {
-        up = await ghFetch(target, method, 8000);
-        if (up.status !== 429 && up.status < 500) break;
-      } catch { up = null; }
-    }
+    const method = req.method === 'HEAD' ? 'HEAD' : 'GET';
+    let target = `https://github.com/${GH_OWNER}/${e[0]}`;
+    const getUp = async (u) => {
+      let r = null;
+      for (let n = 0; n < 2; n++) {
+        try {
+          r = await ghFetch(u, method, 8000);
+          if (r.status !== 429 && r.status < 500) break;
+        } catch { r = null; }
+      }
+      return r;
+    };
+    let up = await getUp(target);
+    // «latest» senza il file: si serve quello della release precedente che ce l'ha (prima il cliente vedeva «App non disponibile»)
+    if (up && up.status === 404) { const alt = await ghOlderAsset(e[0]); if (alt) { target = alt; up = await getUp(alt); } }
     if (up && up.status === 404) return new Response('App non disponibile al momento, riprova tra poco', { status: 502 });
     if (!up || !up.ok) return new Response(null, { status: 302, headers: { Location: target, 'Cache-Control': 'no-store' } });
     const h = new Headers();
