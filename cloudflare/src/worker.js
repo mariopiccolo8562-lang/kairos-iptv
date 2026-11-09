@@ -3230,7 +3230,9 @@ async function playerHeartbeat(req, env, ip, ctx) {
   if (vis !== false && old && t - (+old.hb_t || 0) < HB_MIN_MS) return json({ error: 'Troppi battiti: attendi qualche secondo', wait: Math.ceil((HB_MIN_MS - (t - old.hb_t)) / 1000) }, 429);
   const cf = cfOf(req);
   const app = appFrom(req, b);
-  const state0 = STATES.includes(b.state) ? b.state : 'idle';
+  // Kairos Nova durante la visione manda «playing» (non distingue canali e film): conta come visione, non come «nei menu»
+  // (prima risultava sempre ferma nei menu: niente titolo in «Online ora», niente conteggio delle visioni contemporanee)
+  const state0 = STATES.includes(b.state) ? b.state : b.state === 'playing' ? 'live' : 'idle';
   // due app Kairos con lo stesso codice (es. Premium lasciata aperta mentre si usa la Pro): il battito di sfondo
   // dell'altra app non tocca la presenza, che resta dell'app in primo piano; il resto del battito (impostazioni, comandi) vale lo stesso
   const fgFresh = !!(old && +old.fg_t && t - +old.fg_t < FG_MS && old.fg_app);
