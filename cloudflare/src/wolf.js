@@ -16,6 +16,52 @@ const getRow = async (env, k) => ((await env.DB.prepare('SELECT v FROM settings 
 const unent = (s) => String(s || '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'");
 const tokenOf = (h) => ((h.match(/name="_token"\s+value="([^"]+)"/) || [])[1]) || '';
 const inputVal = (h, name) => unent(((h.match(new RegExp(`name="${name}"[^>]*value="([^"]*)"`)) || [])[1]) || '');
+const BQ_PRESETS_DEFAULT = [
+  { id: 'default-full', name: 'FULL (tutto)', mode: 'drop', ids: [], words: [] },
+  { id: 'default-no-foreign-adult', name: 'Togli stranieri e XXX', mode: 'drop', ids: [], words: ['@foreign', '@adult'] },
+  { id: 'default-no-foreign', name: 'Togli stranieri', mode: 'drop', ids: [], words: ['@foreign'] },
+  { id: 'default-single-flow', name: 'Flusso unico', mode: 'keep', ids: [], words: [] },
+];
+const attrVal = (attrs, name) => {
+  const m = attrs.match(new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'));
+  return unent(m ? m[1] ?? m[2] ?? m[3] ?? '' : '');
+};
+const hasAttr = (attrs, name) => new RegExp(`(?:^|\\s)${name}(?:\\s|=|$)`, 'i').test(attrs);
+function optionRows(html) {
+  return [...String(html || '').matchAll(/<option\b([^>]*)>([\s\S]*?)<\/option>/gi)].flatMap(([, attrs, text]) => {
+    const id = attrVal(attrs, 'value').trim();
+    if (!/^\d+$/.test(id)) return [];
+    const name = unent(text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()).replace(/&nbsp;/gi, ' ').trim();
+    return [{ id: +id, name: name || `Bouquet ${id}` }];
+  });
+}
+function bouquetListsFromPage(page) {
+  const selects = [...String(page || '').matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/gi)].map(([, attrs, body]) => ({
+    id: attrVal(attrs, 'id'),
+    rows: optionRows(body),
+  })).filter((x) => /^searchmain/i.test(x.id));
+  const currentRows = selects.find((x) => x.id.toLowerCase() === 'searchmain_to')?.rows || [];
+  const current = [...new Set(currentRows.map((x) => x.id))];
+  const byId = new Map();
+  for (const row of selects.flatMap((x) => x.rows)) if (!byId.has(row.id)) byId.set(row.id, row);
+  return { all: [...byId.values()], current, hasAvailable: selects.some((x) => x.id.toLowerCase() !== 'searchmain_to' && x.rows.length > 0) };
+}
+function packageIdFromPage(page) {
+  const html = String(page || '');
+  for (const [, attrs] of html.matchAll(/<input\b([^>]*)>/gi)) {
+    if (!/^(?:package|package_id)$/i.test(attrVal(attrs, 'name'))) continue;
+    const id = attrVal(attrs, 'value');
+    if (/^\d+$/.test(id)) return id;
+  }
+  for (const [, attrs, body] of html.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/gi)) {
+    if (!/package/i.test(`${attrVal(attrs, 'id')} ${attrVal(attrs, 'name')}`)) continue;
+    const options = [...body.matchAll(/<option\b([^>]*)>([\s\S]*?)<\/option>/gi)];
+    const selected = options.find(([, optionAttrs]) => hasAttr(optionAttrs, 'selected')) || options[0];
+    const id = selected ? attrVal(selected[1], 'value') : '';
+    if (/^\d+$/.test(id)) return id;
+  }
+  return '';
+}
 
 export async function wolfCfg(env, H, k = 'wolf') {
   const v = await getRow(env, k);
@@ -248,6 +294,7 @@ async function credits(env, H, cfg) {
   return m ? +m[1].replace(',', '.') : null;
 }
 async function packages(env, H, cfg) {
+  if (cfg.m.packages && Date.now() - cfg.m.packagesAt < 300e3) return cfg.m.packages;
   const h = await wfPage(env, H, cfg, '/lines/create/0/line');
   const sel = (h.match(/<select[^>]*name="package"[^>]*>([\s\S]*?)<\/select>/) || [])[1] || '';
   const out = [];
@@ -255,7 +302,8 @@ async function packages(env, H, cfg) {
     const v = (m[1].match(/value="(\d+)"/) || [])[1]; if (!v) continue;
     out.push({ id: v, name: unent(m[2].replace(/\s+/g, ' ').trim()).replace(/\s*-\s*cost.*$/i, ''), credits: +((m[1].match(/data-credits="([\d.]*)"/) || [])[1] || 0), months: +((m[1].match(/data-duration="(\d*)"/) || [])[1] || 0), unit: (m[1].match(/data-duration-in="([^"]*)"/) || [])[1] || '' });
   }
-  return out;
+  cfg.m.packages = out; cfg.m.packagesAt = Date.now();
+  return cfg.m.packages;
 }
 const selIds = (h, id) => { const s = (h.match(new RegExp(`<select[^>]*id="${id}"[^>]*>([\\s\\S]*?)<\\/select>`)) || [])[1] || ''; return [...s.matchAll(/<option[^>]*value="(\d+)"/g)].map((m) => m[1]); };
 const bqOf = (h, H) => { const ids = selIds(h, 'searchmain_to'); if (!ids.length) throw new H.HttpErr(502, 'Non trovo i bouquet della linea su WOLF: modifica annullata per sicurezza'); return ids.join(','); };
@@ -311,6 +359,12 @@ async function routes(req, env, path, who, ip, H, ag) {
   const m = req.method;
   const { HttpErr, json, str } = H;
   const K = ag ? agKey(ag.id) : 'wolf';
+  let lineEditBody = null;
+  if (ag && (path === '/wolf/bqpresets' || /^\/wolf\/lines\/\d+\/bouquets$/.test(path))) throw new HttpErr(403, 'Funzione riservata al titolare');
+  if (ag && m === 'PUT' && /^\/wolf\/lines\/\d+$/.test(path)) {
+    lineEditBody = await H.readJSON(req, 4096) || {};
+    if (Object.prototype.hasOwnProperty.call(lineEditBody, 'bouquets')) throw new HttpErr(403, 'Funzione riservata al titolare');
+  }
   if (ag && (path.startsWith('/wolf/links') || path.startsWith('/wolf/agents'))) throw new HttpErr(403, 'Funzione riservata al titolare');
   if (path === '/wolf/config' && m === 'GET') {
     const c = await wolfCfg(env, H, K), own = ag ? await wolfCfg(env, H) : c;
@@ -367,12 +421,66 @@ async function routes(req, env, path, who, ip, H, ag) {
       return json({ ok: true });
     }
   }
+  if (path === '/wolf/bqpresets' && m === 'GET') {
+    const row = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('wolf:bqpresets').first();
+    let presets = BQ_PRESETS_DEFAULT;
+    if (row) { try { const parsed = JSON.parse(row.v); if (Array.isArray(parsed)) presets = parsed; } catch {} }
+    return json({ presets });
+  }
+  if (path === '/wolf/bqpresets' && m === 'PUT') {
+    const body = await H.readJSON(req, 16384), input = Array.isArray(body) ? body : body && body.presets;
+    if (!Array.isArray(input) || input.length > 40) throw new HttpErr(400, 'Elenco opzioni bouquet non valido');
+    const presets = input.map((p) => {
+      const id = str(p && p.id, 80).trim(), name = str(p && p.name, 80).trim(), mode = p && p.mode;
+      if (!id || !name || !['keep', 'drop'].includes(mode) || !Array.isArray(p.ids) || !Array.isArray(p.words) || p.ids.length > 200 || p.words.length > 100) throw new HttpErr(400, 'Opzione bouquet non valida');
+      const ids = [];
+      for (const value of p.ids) {
+        const n = typeof value === 'number' ? value : /^\d+$/.test(String(value)) ? +value : NaN;
+        if (!Number.isSafeInteger(n) || n < 1) throw new HttpErr(400, 'ID bouquet non valido nell’opzione');
+        if (!ids.includes(n)) ids.push(n);
+      }
+      const words = [];
+      for (const value of p.words) {
+        if (typeof value !== 'string' || value.length > 80) throw new HttpErr(400, 'Parola non valida nell’opzione bouquet');
+        const word = str(value, 80).trim();
+        if (word && !words.includes(word)) words.push(word);
+      }
+      return { id, name, mode, ids, words };
+    });
+    await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('wolf:bqpresets', JSON.stringify(presets)).run();
+    return json({ ok: true, presets });
+  }
   if (!path.startsWith('/wolf/')) return null;
   const cfg = await wolfCfg(env, H, K);
   /* Master: tutte le linee. Agente: solo quelle di cui il suo account WOLF è proprietario, mai quelle del Master o degli altri */
   const fetchMine = async (fresh) => { const L = await fetchLines(env, H, cfg, !!fresh); const me = String(cfg.user || '').trim().toLowerCase(); return ag ? L.filter((l) => String(l.owner || '').trim().toLowerCase() === me).map((l) => ({ ...l, dns: '' })) : L; };
   if (ag && cfg) { const own = await wolfCfg(env, H); if (own && String(own.user).toLowerCase() === String(cfg.user).toLowerCase()) throw new HttpErr(403, 'Questo agente usa l\'account WOLF del Master: assegnagli il suo account reseller'); }
   if (!cfg) throw new HttpErr(400, ag ? 'Collega prima il tuo account WOLF (utente e password)' : 'Collega prima il pannello WOLF (indirizzo, utente e password)');
+  const lineBouquets = async (page) => {
+    const found = bouquetListsFromPage(page), byId = new Map(found.all.map((x) => [x.id, x]));
+    if (!found.hasAvailable || !byId.size) {
+      const packageId = packageIdFromPage(page);
+      if (packageId) {
+        const result = await wfJson(env, H, cfg, '/lines/packages', { package_id: packageId, trial: '0' });
+        for (const item of Array.isArray(result.bouquets) ? result.bouquets : []) {
+          const id = item && (item.id ?? item.bouquet_id ?? item.value);
+          const name = item && (item.name ?? item.bouquet_name ?? item.title ?? item.label ?? item.description ?? item.text);
+          if (/^\d+$/.test(String(id ?? '')) && name !== undefined && String(name).trim()) {
+            const n = +id; if (!byId.has(n)) byId.set(n, { id: n, name: unent(String(name)).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() });
+          }
+        }
+      }
+    }
+    return { all: [...byId.values()], current: found.current };
+  };
+  const lineBouquetPath = path.match(/^\/wolf\/lines\/(\d+)\/bouquets$/);
+  if (lineBouquetPath && m === 'GET') {
+    const page = await wfPage(env, H, cfg, `/lines/edit/${lineBouquetPath[1]}`);
+    if (!inputVal(page, 'username')) throw new HttpErr(404, 'Linea non trovata su WOLF');
+    const found = await lineBouquets(page);
+    if (!found.all.length) throw new HttpErr(502, 'Bouquet non disponibili: WOLF non ha restituito le opzioni della linea');
+    return json({ all: found.all, current: found.current });
+  }
 
   /* «Cambia password»: la cambia su WOLF (pagina Profilo, lasciando DNS e blocco IP come sono) e poi in KAIROS */
   if (path === '/wolf/password' && m === 'POST') {
@@ -419,16 +527,30 @@ async function routes(req, env, path, who, ip, H, ag) {
     const id = +lm[1], act = lm[2] || '';
     if (ag && !(await fetchMine(false)).some((x) => x.id === id)) throw new HttpErr(404, 'Linea non trovata');
     if (!act && m === 'PUT') {
-      const b = await H.readJSON(req, 4096);
+      const b = lineEditBody || await H.readJSON(req, 4096);
       const page = await wfPage(env, H, cfg, `/lines/edit/${id}`);
       const ou = inputVal(page, 'username'); if (!ou) throw new HttpErr(404, 'Linea non trovata su WOLF');
       const username = b.username !== undefined ? okUser(b.username, H, 'Utente') : ou;
       const password = b.password !== undefined ? okUser(b.password, H, 'Password') : inputVal(page, 'password');
       const description = b.note !== undefined ? str(b.note, 300) || '-' : descOf(page);
-      await wfJson(env, H, cfg, `/lines/edit/${id}`, { _token: tokenOf(page), current_bouquets: bqOf(page, H), username, password, owner: '', description });
+      let currentBouquets = '', selectedBouquets = null, availableBouquets = null;
+      if (b.bouquets !== undefined) {
+        if (!Array.isArray(b.bouquets) || !b.bouquets.length) throw new HttpErr(400, 'Seleziona almeno un bouquet');
+        availableBouquets = await lineBouquets(page);
+        if (!availableBouquets.all.length) throw new HttpErr(400, 'Bouquet non disponibili su WOLF');
+        const ids = b.bouquets.map((v) => typeof v === 'number' ? v : /^\d+$/.test(String(v)) ? +v : NaN);
+        if (ids.some((v) => !Number.isSafeInteger(v) || v < 1)) throw new HttpErr(400, 'ID bouquet non valido');
+        const selected = new Set(ids);
+        const allIds = new Set(availableBouquets.all.map((x) => x.id));
+        if ([...selected].some((v) => !allIds.has(v))) throw new HttpErr(400, 'Uno o più bouquet non sono disponibili per questa linea');
+        selectedBouquets = availableBouquets.all.filter((x) => selected.has(x.id));
+        currentBouquets = selectedBouquets.map((x) => x.id).join(',');
+      } else currentBouquets = bqOf(page, H);
+      await wfJson(env, H, cfg, `/lines/edit/${id}`, { _token: tokenOf(page), current_bouquets: currentBouquets, username, password, owner: '', description });
       const lines = await fetchMine(true);
       const synced = await syncLinks(env, H, lines, who, ip).catch(() => 0);
-      await H.log(env, 'edit', `${who}: WOLF — linea ${ou}${ou !== username ? ' → ' + username : ''} modificata`, ip);
+      const bouquetLog = selectedBouquets ? ` · bouquet cambiati: ${selectedBouquets.length} su ${availableBouquets.all.length}` : '';
+      await H.log(env, 'edit', `${who}: WOLF — linea ${ou}${ou !== username ? ' → ' + username : ''} modificata${bouquetLog}`, ip);
       return json({ ok: true, synced });
     }
     if (act === '/extend' && m === 'POST') {
@@ -439,8 +561,11 @@ async function routes(req, env, path, who, ip, H, ag) {
       const ed = await wfPage(env, H, cfg, `/lines/edit/${id}`);
       await wfJson(env, H, cfg, `/lines/extend/${id}`, { _token: tokenOf(page), current_bouquets: bqOf(ed, H), username, keep_current_bouquet: 'on', package: pkg, description: descOf(ed) });
       cfg.m.lines = null;
-      await H.log(env, 'edit', `${who}: WOLF — linea ${username} rinnovata`, ip);
-      return json({ ok: true });
+      const info = (await packages(env, H, cfg).catch(() => [])).find((x) => String(x.id) === pkg);
+      const packageName = info ? info.name : pkg;
+      const creditText = info && Number.isFinite(+info.credits) ? `${info.credits} crediti` : 'crediti non disponibili';
+      await H.log(env, 'edit', `${who}: WOLF — linea ${username} rinnovata · pacchetto ${packageName} · ${creditText}`, ip);
+      return json({ ok: true, package: packageName, credits: info && Number.isFinite(+info.credits) ? +info.credits : null });
     }
     if (act === '/toggle' && m === 'POST') {
       const l = (await fetchMine(true)).find((x) => x.id === id);

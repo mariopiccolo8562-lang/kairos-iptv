@@ -51,7 +51,7 @@ const mkArmadaLike = (cfg) => {
   const isAg = () => D.role === 'agent';
   const fmtC = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString('it-IT');
 
-  async function loadState() { try { A.st = await api('GET', API + '/state'); } catch (e) { A.st = { connected: false, error: e.message }; } render(); }
+  async function loadState() { try { A.st = await api('GET', API + '/state'); } catch (e) { A.st = { connected: false, error: e.message }; } render(); return A.st; }
   const loadLines = (afterRenew = false) => A.pL || (A.pL = api('GET', API + '/lines').then((r) => { A.lines = r.lines || []; if (window.KXLineSync) KXLineSync.apply(CFG.k, A.lines, afterRenew, api); }).catch((e) => { A.lines = ldErr(e); }).finally(() => { A.pL = null; }));
   async function loadTab(force, afterRenew = false) {
     if (!A.st || !A.st.connected) return;
@@ -274,15 +274,55 @@ const mkArmadaLike = (cfg) => {
       ...(ln ? [['Link M3U', (x) => m3u(x.username, x.password)]] : [])], L);
   }
   async function bulkRen() {
-    const S = selX(); if (!S.length) return;
-    const bd = A.st && A.st.budget;
-    const ok = await ask(`Rinnovare ${S.length} ${A.tab === 'lines' ? (S.length === 1 ? 'linea' : 'linee') : 'MAG'} su ${N}?`, `<label class="lbl">Durata per tutte</label><select class="inp" id="abS">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select>
-      <p style="margin:12px 0 0;font-size:13.5px">Costa come <b>${S.length === 1 ? '1 rinnovo singolo' : S.length + ' rinnovi singoli'}</b>. ${bd ? `Usa i crediti del tuo tetto (ne restano ${fmtC(bd.left)} questo mese).` : A.st && A.st.reseller ? `Crediti disponibili: <b>${esc(A.st.reseller.credits)}</b>.` : ''}</p>
-      <p class="mut" style="font-size:12.5px;margin:6px 0 0">${S.slice(0, 12).map((x) => esc(who(x))).join(', ')}${S.length > 12 ? ` e altre ${S.length - 12}` : ''}</p>`, 'Rinnova tutte');
+    const chosen = selX(); if (!chosen.length) return;
+    const chosenIds = chosen.map((x) => String(x.id));
+    await loadState(); await loadTab(true);
+    const current = A.tab === 'lines' ? A.lines : A.mags;
+    const S = Array.isArray(current) ? chosenIds.map((id) => current.find((x) => String(x.id) === id)).filter(Boolean) : chosen;
+    if (Array.isArray(current) && S.length !== chosenIds.length) return toast('Una o più linee selezionate non risultano più disponibili su ' + N, 1);
+    const beforeState = A.st, before = (() => {
+      const raw = beforeState && beforeState.agent ? beforeState.budget && beforeState.budget.left : beforeState && beforeState.reseller && beforeState.reseller.credits;
+      const n = parseFloat(String(raw ?? '').replace(',', '.'));
+      return Number.isFinite(n) ? n : null;
+    })();
+    const panelColor = K === 'armada' ? '#2f7fd6' : '#7c4dff';
+    const itemLabel = A.tab === 'lines' ? 'Utente' : 'MAC';
+    const noteOrClient = (x) => {
+      const username = String(x.username || '').toLocaleLowerCase();
+      const clients = username ? (D.devices || []).filter((d) => d && !d.parent && (d.playlists || []).some((p) => p && String(p.username || '').toLocaleLowerCase() === username)).map((d) => d.name || d.code).filter(Boolean) : [];
+      return [x.notes, clients.length ? `KAIROS: ${clients.join(', ')}` : ''].filter(Boolean).join(' · ') || '—';
+    };
+    const pr = ask(`Rinnovo massivo ${N}`, `${KXTools.panelHeader(N, panelColor)}
+      <label class="lbl">Durata per tutte</label><select class="inp" id="abS">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select>
+      <div class="kt-renew-list" style="margin-top:10px"><table class="kt-renew-table"><thead><tr><th>${itemLabel}</th><th>Nota / cliente KAIROS</th><th>Scadenza attuale</th><th>Costo</th></tr></thead><tbody>${S.map((x) => `<tr><td>${esc(who(x))}</td><td>${esc(noteOrClient(x))}</td><td>${esc(fmtD(x.exp))}</td><td>1 rinnovo</td></tr>`).join('')}</tbody></table></div>
+      <p class="kt-renew-foot" id="abF"></p>`, 'Rinnova tutte');
+    const updateFooter = () => {
+      const sub = +Q('#abS').value, duration = `${sub} ${sub === 1 ? 'mese' : 'mesi'}`, bd = A.st && A.st.budget;
+      const funds = bd ? `Budget: ${fmtC(bd.left)} crediti disponibili questo mese.` : A.st && A.st.reseller ? `Crediti disponibili: <b>${esc(A.st.reseller.credits)}</b>.` : 'Saldo non disponibile.';
+      Q('#abF').innerHTML = `Durata: <b>${duration}</b> · Totale: <b>${S.length} rinnovi</b> · ${funds}`;
+    };
+    Q('#abS').onchange = updateFooter; updateFooter();
     if (!ok) return;
     const sub = +Q('#abS').value;
-    await KXTools.run(S, async (x) => { const r = await api('POST', API + '/renew', x.mac && !x.username ? { type: 'mag', mac: x.mac, sub } : { type: 'm3u', username: x.username, password: x.password, sub }); if (r.exp) x.exp = r.exp; }, 'Rinnovo');
-    A.sel.clear(); loadState(); await loadTab(true, true); render();
+    const result = await KXTools.runReport(S, async (x) => {
+      const r = await api('POST', API + '/renew', x.mac && !x.username ? { type: 'mag', mac: x.mac, sub } : { type: 'm3u', username: x.username, password: x.password, sub });
+      if (r.exp) x.exp = r.exp;
+      return { cost: r && r.cost !== null && r.cost !== undefined && Number.isFinite(+r.cost) ? +r.cost : null, estimated: !!(r && r.costEstimated) };
+    }, 'Rinnovo');
+    A.sel.clear();
+    await loadState(); await loadTab(true, true); render();
+    const afterRaw = A.st && A.st.agent ? A.st.budget && A.st.budget.left : A.st && A.st.reseller && A.st.reseller.credits;
+    const after = parseFloat(String(afterRaw ?? '').replace(',', '.'));
+    const used = before !== null && Number.isFinite(after) ? before - after : null;
+    const successes = result.items.filter((x) => x.ok), failures = result.items.filter((x) => !x.ok);
+    const estimated = successes.reduce((sum, x) => sum + (x.value.cost === null ? sub : x.value.cost), 0);
+    const spent = used !== null ? `${fmtC(used)} crediti` : `circa ${fmtC(estimated)} crediti`;
+    const rows = successes.map((x) => `<li class="ok">${esc(who(x.item))} · ${x.value.cost === null ? '1 rinnovo (costo per linea non disponibile)' : `${x.value.estimated ? 'circa ' : ''}${fmtC(x.value.cost)} crediti`}</li>`).join('');
+    const errs = failures.map((x) => `<li class="err">${esc(who(x.item))}: ${esc(x.error)}</li>`).join('');
+    await ask(`Riepilogo ${N}`, `${KXTools.panelHeader(N, panelColor)}<div class="kt-renew-report">
+      <div><h4>Rinnovate (${result.ok})</h4><ul>${rows || '<li>—</li>'}</ul></div>
+      <div><h4>Errori (${failures.length})</h4><ul>${errs || '<li>—</li>'}</ul></div>
+      <p class="kt-renew-foot" style="margin:0">Crediti spesi: <b>${esc(spent)}</b>${used !== null ? ` · saldo ${fmtC(before)} → ${fmtC(after)}` : ''}</p></div>`, 'Chiudi');
   }
   async function bulkTgl(on) {
     const S = selX().filter((x) => !!x.enabled !== on);

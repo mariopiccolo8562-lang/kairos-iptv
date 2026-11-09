@@ -18,9 +18,13 @@
 .wf-act{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
 .wf-tabs{display:flex;gap:6px;margin:14px 0 0}.wf-tabs button{background:#ffffff0d;border:1px solid var(--line);color:var(--mut);padding:7px 14px;border-radius:9px;font:inherit;font-weight:700;font-size:13px;cursor:pointer}.wf-tabs button.on{color:var(--txt,#fff);background:#ffffff1c}
 .wf-rs{display:grid;grid-template-columns:minmax(0,1.3fr) 80px 80px minmax(0,1fr) minmax(0,1.1fr) auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line);font-size:13px}.wf-rs .k{font-size:11px;color:var(--mut);display:block}.wf-rs .n{font-size:17px;font-weight:800}
+.wf-bq{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}.wf-bq-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.wf-bq-head b{font-size:13px}.wf-bq-note{font-size:11.5px;color:var(--mut);margin:5px 0 8px}
+.wf-bq-tools,.wf-bq-presets,.wf-bq-savebox{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.wf-bq-presets{margin:8px 0}.wf-bq-option{display:inline-flex;gap:3px;align-items:center}.wf-bq-option button{font-size:11.5px;padding:5px 8px}.wf-bq-option .wf-bq-del{padding:4px 6px;color:#ff9b9b}
+.wf-bq-list{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:9px;padding:5px 8px}.wf-bq-row{display:grid;grid-template-columns:18px minmax(0,1fr);gap:7px;align-items:center;padding:5px 2px;font-size:12.5px;overflow-wrap:anywhere}.wf-bq-row input{margin:0;accent-color:#22c55e}
+.wf-bq-savebox{margin-top:8px}.wf-bq-savebox .inp{flex:1;min-width:150px}.wf-bq-unavailable{padding:10px;border:1px solid #f5b04155;border-radius:8px;color:#f5c46d;background:#f5b04112;font-size:12.5px}
 @media (max-width:1000px){.wf-rs{grid-template-columns:1fr 1fr 1fr}.wf-rs .wf-act{grid-column:1/-1;justify-content:flex-start}}
 @media (max-width:1000px){.wf-f{grid-template-columns:1fr 1fr}.wf-row{grid-template-columns:1fr 1fr}.wf-act{grid-column:1/-1;justify-content:flex-start}}
-@media (max-width:560px){.wf-f{grid-template-columns:1fr}}`;
+@media (max-width:560px){.wf-f{grid-template-columns:1fr}.wf-bq-list{max-height:34vh}.wf-bq-savebox{align-items:stretch}.wf-bq-savebox .inp{min-width:0;width:100%}}`;
   document.head.appendChild(css);
 
   const IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l4 5 4-3 4 3 4-5v9a8 8 0 0 1-16 0z"/><path d="M9 13h.01M15 13h.01M10 17l2 1 2-1"/></svg>';
@@ -40,15 +44,28 @@
   const devs = () => (Array.isArray(D.devices) ? D.devices : []).filter((d) => d && d.id);
   const devOpts = (sel) => '<option value="">— nessuno —</option>' + devs().map((d) => `<option value="${esc(d.id)}"${d.id === sel ? ' selected' : ''}>${esc(d.name || d.code)}${d.name && d.code ? ' · ' + esc(d.code) : ''}</option>`).join('');
   const pkOpts = () => (W.pk || []).map((p) => `<option value="${esc(p.id)}">${esc(p.name)} · ${p.credits} credit${p.credits === 1 ? 'o' : 'i'}</option>`).join('');
+  const BQ_PRESET_DEFAULTS = [
+    { id: 'default-full', name: 'FULL (tutto)', mode: 'drop', ids: [], words: [] },
+    { id: 'default-no-foreign-adult', name: 'Togli stranieri e XXX', mode: 'drop', ids: [], words: ['@foreign', '@adult'] },
+    { id: 'default-no-foreign', name: 'Togli stranieri', mode: 'drop', ids: [], words: ['@foreign'] },
+    { id: 'default-single-flow', name: 'Flusso unico', mode: 'keep', ids: [], words: [] },
+  ];
+  const BQ_ADULT = /xxx|adult|adulti|18\+|porn|hot\b|for adults/i;
+  const BQ_ITALIAN = /\b(?:IT|ITA|ITALIA|ITALY|RAI|MEDIASET)\b|\b(?:SKY|DAZN)\s*IT\b/i;
+  const BQ_FOREIGN = /^(?:[A-Z]{2}[ |:-])|\b(?:UK|U\.?K\.?|USA|U\.?S\.?A\.?|US|DE|DEUTSCH|GERMAN|FR|FRENCH|ES|ESPANA|SPANISH|AL|ALBANIA|RO|ROMANIA|AR|ARAB|TURK|TURKEY|POLSKA|POLAND|RU|RUSSIA|UA|UKRAINE|PT|PORTUGAL|BRASIL|LATINO|GREEK|NL|NETHERLANDS|CZ|CZECH|BG|BULGARIA|SRB|SERBIA|HR|CROATIA|BA|BOSNIA|HU|HUNGARY)\b/i;
+  const bqIsAdult = (name) => BQ_ADULT.test(String(name || ''));
+  const bqIsForeign = (name) => { const n = String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); return !BQ_ITALIAN.test(n) && BQ_FOREIGN.test(n); };
   const m3u = (l) => { const h = (W.data && W.data.dns) || l.dns; return h ? `${h}/get.php?username=${encodeURIComponent(l.username)}&password=${encodeURIComponent(l.password)}&type=m3u_plus&output=ts` : ''; };
 
   async function loadCfg() { try { W.cfg = await api('GET', '/admin/wolf/config'); W.err = ''; } catch (e) { W.cfg = { set: false }; W.err = e.message; } }
   async function loadLines(fresh, afterRenew = false) {
-    if (!W.cfg || !W.cfg.set) return;
+    if (!W.cfg || !W.cfg.set) return null;
     W.busy = true; render();
-    try { W.data = await api('GET', '/admin/wolf/lines' + (fresh ? '?fresh=1' : '')); W.err = ''; if (W.data.synced) toast(`${W.data.synced} playlist aggiornate da WOLF`); if (window.KXLineSync) KXLineSync.apply('wolf', W.data.lines || W.data.rows, afterRenew, api); }
+    let loaded = null;
+    try { W.data = loaded = await api('GET', '/admin/wolf/lines' + (fresh ? '?fresh=1' : '')); W.err = ''; if (W.data.synced) toast(`${W.data.synced} playlist aggiornate da WOLF`); if (window.KXLineSync) KXLineSync.apply('wolf', W.data.lines || W.data.rows, afterRenew, api); }
     catch (e) { W.err = e.message; }
     W.busy = false; show();
+    return loaded;
   }
   async function loadRs() {
     W.rsBusy = true; render();
@@ -158,19 +175,54 @@
       ['Nota', (l) => l.note], ['Reseller', (l) => l.owner], ['Cliente KAIROS', (l) => (linkOf(l.id) || {}).name || ''], ['Link M3U', (l) => m3u(l)]], L);
   }
   async function bulkExt() {
-    const S = selOf(); if (!S.length) return;
-    await loadPk(); if (!W.pk.length) return toast('Non trovo i pacchetti su WOLF', 1);
-    const cr = (W.data && W.data.credits) ?? null;
-    const pr = ask(`Rinnova ${S.length === 1 ? '1 linea' : S.length + ' linee'} su WOLF`, `<label class="lbl">Pacchetto per tutte (usa crediti WOLF)</label><select class="inp" id="wbK">${pkOpts()}</select>
-      <p id="wbC" style="margin:12px 0 0;font-size:13.5px"></p><p class="mut" style="font-size:12.5px;margin:6px 0 0">${S.slice(0, 12).map((l) => esc(l.username)).join(', ')}${S.length > 12 ? ` e altre ${S.length - 12}` : ''}</p>`, 'Rinnova tutte');
-    const cost = () => { const p = W.pk.find((x) => String(x.id) === $('#wbK').value) || {}; return (+p.credits || 0) * S.length; };
-    const upd = () => { const c = cost(); $('#wbC').innerHTML = `Costo totale: <b>${c} crediti</b>${cr !== null ? ` · disponibili <b>${cr}</b>${c > cr ? ' · <span style="color:#ff8f8f">non bastano</span>' : ''}` : ''}`; };
+    const selected = selOf(); if (!selected.length) return;
+    const selectedIds = selected.map((l) => l.id);
+    const [, fresh] = await Promise.all([loadPk(), loadLines(true)]);
+    if (!W.pk.length) return toast('Non trovo i pacchetti su WOLF', 1);
+    const S = fresh && Array.isArray(fresh.lines) ? selectedIds.map((id) => fresh.lines.find((l) => String(l.id) === String(id))).filter(Boolean) : selected;
+    if (S.length !== selectedIds.length) return toast('Una o più linee selezionate non risultano più disponibili su WOLF', 1);
+    const rawCredits = fresh && fresh.credits !== undefined ? fresh.credits : W.data && W.data.credits;
+    const cr = rawCredits !== null && rawCredits !== undefined && Number.isFinite(+rawCredits) ? +rawCredits : null;
+    const fmtC = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString('it-IT');
+    const pr = ask('Conferma rinnovo', `${KXTools.panelHeader('WOLF IPTV', '#e0524f')}
+      <label class="lbl">Pacchetto per tutte (usa crediti WOLF)</label><select class="inp" id="wbK">${pkOpts()}</select>
+      <div class="kt-renew-list" style="margin-top:10px"><table class="kt-renew-table"><thead><tr><th>Utente</th><th>Nota / cliente KAIROS</th><th>Scadenza attuale</th><th>Crediti</th></tr></thead><tbody id="wbRows"></tbody></table></div>
+      <p class="kt-renew-foot" id="wbC"></p>`, 'Rinnova tutte');
+    const packageNow = () => W.pk.find((x) => String(x.id) === $('#wbK').value) || {};
+    const cost = () => { const p = packageNow(); return Number.isFinite(+p.credits) ? +p.credits * S.length : null; };
+    const rows = () => {
+      const p = packageNow(), unit = Number.isFinite(+p.credits) ? +p.credits : null;
+      $('#wbRows').innerHTML = S.map((l) => {
+        const k = linkOf(l.id), note = [l.note, k && k.name ? `KAIROS: ${k.name}` : ''].filter(Boolean).join(' · ');
+        return `<tr><td>${esc(l.username)}</td><td>${esc(note || '—')}</td><td>${esc(fmtD(l.exp))}</td><td>${unit === null ? '—' : `${fmtC(unit)} crediti`}</td></tr>`;
+      }).join('');
+    };
+    const upd = () => {
+      const c = cost(), after = cr !== null && c !== null ? cr - c : null;
+      $('#wbC').innerHTML = `Totale: <b>${c === null ? '—' : fmtC(c)} crediti WOLF</b> · disponibili <b>${cr === null ? '—' : fmtC(cr)}</b> → dopo il rinnovo <b>${after === null ? '—' : fmtC(after)}</b>${cr !== null && c !== null && c > cr ? ' · <span style="color:#ff8f8f">crediti non sufficienti</span>' : ''}`;
+      rows();
+    };
     $('#wbK').onchange = upd; upd();
     if (!(await pr)) return;
-    const pkg = $('#wbK').value, c = cost();
+    const pkg = $('#wbK').value, selectedPackage = packageNow(), unitCost = Number.isFinite(+selectedPackage.credits) ? +selectedPackage.credits : null, c = cost();
     if (cr !== null && c > cr) return toast(`Servono ${c} crediti, ne hai ${cr}`, 1);
-    await KXTools.run(S, (l) => api('POST', `/admin/wolf/lines/${l.id}/extend`, { package: pkg }), 'Rinnovo');
-    W.sel.clear(); loadLines(true, true);
+    const result = await KXTools.runReport(S, async (l) => {
+      const r = await api('POST', `/admin/wolf/lines/${l.id}/extend`, { package: pkg });
+      const credits = r && r.credits !== null && r.credits !== undefined && Number.isFinite(+r.credits) ? +r.credits : unitCost;
+      return { package: r && r.package || selectedPackage.name || pkg, credits };
+    }, 'Rinnovo');
+    W.sel.clear();
+    const latest = await loadLines(true, true), afterRaw = latest && latest.credits;
+    const after = afterRaw !== null && afterRaw !== undefined && Number.isFinite(+afterRaw) ? +afterRaw : null;
+    const used = cr !== null && after !== null ? cr - after : null;
+    const estimate = unitCost !== null ? unitCost * result.ok : null;
+    const spent = used !== null ? `${fmtC(used)} crediti` : estimate !== null ? `circa ${fmtC(estimate)} crediti` : 'non verificabili';
+    const successes = result.items.filter((x) => x.ok).map((x) => `<li class="ok">${esc(x.item.username)} · ${x.value.credits === null ? 'costo non disponibile' : `${fmtC(x.value.credits)} crediti`}</li>`).join('');
+    const failures = result.items.filter((x) => !x.ok).map((x) => `<li class="err">${esc(x.item.username)}: ${esc(x.error)}</li>`).join('');
+    await ask('Riepilogo rinnovo WOLF', `${KXTools.panelHeader('WOLF IPTV', '#e0524f')}<div class="kt-renew-report">
+      <div><h4>Rinnovate (${result.ok})</h4><ul>${successes || '<li>—</li>'}</ul></div>
+      <div><h4>Errori (${result.err.length})</h4><ul>${failures || '<li>—</li>'}</ul></div>
+      <p class="kt-renew-foot" style="margin:0">Crediti spesi: <b>${esc(spent)}</b>${used !== null ? ` · saldo ${fmtC(cr)} → ${fmtC(after)}` : ''}</p></div>`, 'Chiudi');
   }
   async function bulkTgl(on) {
     const S = selOf().filter((l) => !!l.enabled !== on);
@@ -301,12 +353,103 @@
         return window.KXOpenLineTarget ? window.KXOpenLineTarget(target, line, pre) : target === 'max' ? KXMxpNew(pre) : KXOxpNew(pre);
       }
       if (a === 'edit') {
-        const ok = await ask('Modifica linea ' + l.username, `<div class="wf-f" style="grid-template-columns:1fr 1fr">
+        let bouquetData = null, presets = BQ_PRESET_DEFAULTS.map((p) => ({ ...p, ids: [...p.ids], words: [...p.words] }));
+        if (!isAg()) {
+          const [bqResult, presetResult] = await Promise.allSettled([
+            api('GET', `/admin/wolf/lines/${id}/bouquets`), api('GET', '/admin/wolf/bqpresets'),
+          ]);
+          if (bqResult.status === 'fulfilled' && bqResult.value && Array.isArray(bqResult.value.all) && bqResult.value.all.length) {
+            const ids = new Set();
+            bouquetData = {
+              all: bqResult.value.all.filter((x) => x && /^\d+$/.test(String(x.id)) && !ids.has(+x.id) && ids.add(+x.id)).map((x) => ({ id: +x.id, name: String(x.name || `Bouquet ${x.id}`) })),
+              current: Array.isArray(bqResult.value.current) ? bqResult.value.current.map(Number) : [],
+            };
+            if (!bouquetData.all.length) bouquetData = null;
+          }
+          if (presetResult.status === 'fulfilled' && presetResult.value && Array.isArray(presetResult.value.presets)) presets = presetResult.value.presets;
+        }
+        const hasBouquets = !!(bouquetData && bouquetData.all.length);
+        const bqSection = isAg() ? '' : hasBouquets ? `<section class="wf-bq">
+          <div class="wf-bq-head"><b id="weBqTitle">Bouquet (0 su ${bouquetData.all.length})</b><span class="wf-bq-tools"><button type="button" class="btn sm" id="weBqAll">Tutti</button><button type="button" class="btn sm ghost" id="weBqNone">Nessuno</button></span></div>
+          <p class="wf-bq-note">Le spunte si mettono in base al nome: controllale prima di salvare.</p>
+          <div class="wf-bq-presets" id="weBqPresets"></div>
+          <div class="wf-bq-tools" style="margin:6px 0"><input class="inp" id="weBqSearch" placeholder="Cerca bouquet…" style="flex:1;min-width:130px"><span class="mut" style="font-size:11.5px">Selezione manuale</span></div>
+          <div class="wf-bq-list" id="weBqList">${bouquetData.all.map((x) => `<label class="wf-bq-row" data-bq-search="${esc(x.name.toLocaleLowerCase())}"><input type="checkbox" data-bq-id="${x.id}"${bouquetData.current.includes(x.id) ? ' checked' : ''}><span>${esc(x.name)}</span></label>`).join('')}</div>
+          <button type="button" class="btn sm" id="weBqSaveStart" style="margin-top:8px">💾 Salva come opzione…</button>
+          <div class="wf-bq-savebox" id="weBqSaveBox" style="display:none"><input class="inp" id="weBqName" maxlength="60" placeholder="Nome dell’opzione"><button type="button" class="btn sm" id="weBqSaveConfirm">Salva</button><button type="button" class="btn sm ghost" id="weBqSaveCancel">Annulla</button></div>
+        </section>` : `<section class="wf-bq"><div class="wf-bq-unavailable">Bouquet non disponibili</div><p class="wf-bq-note">Puoi comunque salvare utente, password e nota.</p></section>`;
+        const prompt = ask('Modifica linea ' + l.username, `<div class="wf-f" style="grid-template-columns:1fr 1fr">
           <label>Utente<input class="inp mono" id="weU" value="${esc(l.username)}"></label><label>Password<input class="inp mono" id="weP" value="${esc(l.password)}"></label>
           <label style="grid-column:1/-1">Nota<input class="inp" id="weN" maxlength="300" value="${esc(l.note)}"></label></div>
+          ${bqSection}
           <p class="mut" style="font-size:12.5px;margin:10px 0 0">La modifica vale subito anche su WOLF${linkOf(id) ? ' e nella playlist del cliente collegato' : ''}.</p>`, 'Salva');
-        if (!ok) return;
-        const r = await api('PUT', '/admin/wolf/lines/' + id, { username: $('#weU').value, password: $('#weP').value, note: $('#weN').value });
+        $('#mYes').disabled = false;
+        if (hasBouquets) {
+          const checks = () => [...$('#weBqList').querySelectorAll('[data-bq-id]')];
+          const selected = () => checks().filter((c) => c.checked).map((c) => +c.dataset.bqId);
+          const updateCount = () => {
+            const n = selected().length;
+            $('#weBqTitle').textContent = `Bouquet (${n} su ${bouquetData.all.length})`;
+            $('#mYes').disabled = n === 0;
+          };
+          const renderPresets = () => {
+            $('#weBqPresets').innerHTML = presets.map((p) => `<span class="wf-bq-option"><button type="button" class="btn sm" data-bq-apply="${esc(p.id)}">${esc(p.name)}</button>${String(p.id).startsWith('custom-') ? `<button type="button" class="btn sm ghost wf-bq-del" data-bq-delete="${esc(p.id)}" title="Elimina opzione">🗑</button>` : ''}</span>`).join('');
+            $('#weBqPresets').querySelectorAll('[data-bq-apply]').forEach((button) => {
+              button.onclick = () => {
+                const p = presets.find((x) => String(x.id) === button.dataset.bqApply); if (!p) return;
+                const ids = new Set((p.ids || []).map(Number)), words = Array.isArray(p.words) ? p.words : [];
+                for (const c of checks()) {
+                  const item = bouquetData.all.find((x) => x.id === +c.dataset.bqId), name = item ? item.name : '';
+                  const match = ids.has(+c.dataset.bqId) || words.some((w) => {
+                    if (w === '@foreign') return bqIsForeign(name);
+                    if (w === '@adult') return bqIsAdult(name);
+                    return String(name).toLocaleLowerCase().includes(String(w).toLocaleLowerCase());
+                  });
+                  c.checked = p.mode === 'drop' ? !match : match;
+                }
+                updateCount();
+              };
+            });
+            $('#weBqPresets').querySelectorAll('[data-bq-delete]').forEach((button) => {
+              button.onclick = async () => {
+                const next = presets.filter((p) => String(p.id) !== button.dataset.bqDelete);
+                try {
+                  const r = await api('PUT', '/admin/wolf/bqpresets', { presets: next });
+                  presets = Array.isArray(r.presets) ? r.presets : next; renderPresets(); toast('Opzione eliminata');
+                } catch (e) { toast(e.message, 1); }
+              };
+            });
+          };
+          checks().forEach((c) => { c.onchange = updateCount; });
+          $('#weBqSearch').oninput = () => {
+            const q = $('#weBqSearch').value.trim().toLocaleLowerCase();
+            $('#weBqList').querySelectorAll('.wf-bq-row').forEach((row) => { row.style.display = !q || row.dataset.bqSearch.includes(q) ? 'grid' : 'none'; });
+          };
+          $('#weBqAll').onclick = () => { checks().forEach((c) => { c.checked = true; }); updateCount(); };
+          $('#weBqNone').onclick = () => { checks().forEach((c) => { c.checked = false; }); updateCount(); };
+          $('#weBqSaveStart').onclick = () => { $('#weBqSaveBox').style.display = 'flex'; $('#weBqName').focus(); };
+          $('#weBqSaveCancel').onclick = () => { $('#weBqSaveBox').style.display = 'none'; $('#weBqName').value = ''; };
+          $('#weBqSaveConfirm').onclick = async () => {
+            const name = $('#weBqName').value.trim(), ids = selected();
+            if (!name) return toast('Scrivi il nome dell’opzione', 1);
+            if (!ids.length) return toast('Seleziona almeno un bouquet per salvare l’opzione', 1);
+            const old = presets.find((p) => String(p.name).toLocaleLowerCase() === name.toLocaleLowerCase());
+            const nextPreset = { id: old ? old.id : `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, name, mode: 'keep', ids, words: [] };
+            const next = old ? presets.map((p) => String(p.id) === String(old.id) ? nextPreset : p) : [...presets, nextPreset];
+            try {
+              const r = await api('PUT', '/admin/wolf/bqpresets', { presets: next });
+              presets = Array.isArray(r.presets) ? r.presets : next; renderPresets(); $('#weBqSaveBox').style.display = 'none'; $('#weBqName').value = ''; toast('Opzione salvata');
+            } catch (e) { toast(e.message, 1); }
+          };
+          renderPresets(); updateCount();
+        }
+        if (!(await prompt)) return;
+        const payload = { username: $('#weU').value, password: $('#weP').value, note: $('#weN').value };
+        if (hasBouquets) {
+          payload.bouquets = [...$('#weBqList').querySelectorAll('[data-bq-id]:checked')].map((c) => +c.dataset.bqId);
+          if (!payload.bouquets.length) return toast('Seleziona almeno un bouquet', 1);
+        }
+        const r = await api('PUT', '/admin/wolf/lines/' + id, payload);
         toast('Linea modificata su WOLF' + (r.synced ? ' · playlist del cliente aggiornata' : '')); return loadLines(true);
       }
       if (a === 'ext') {

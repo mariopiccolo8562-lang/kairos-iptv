@@ -11,6 +11,17 @@
 .kt-st span{font-size:20px;font-weight:800}.kt-st .g{color:#6ee3a6}.kt-st .w{color:#ecc06f}.kt-st .b{color:#ff8f8f}
 .kt-top{margin-top:10px;font-size:12.5px;color:var(--mut)}.kt-top b{color:var(--txt,#fff)}
 .kt-ck{width:16px;height:16px;accent-color:#22c55e;vertical-align:middle;margin:0 6px 0 0;cursor:pointer}
+.kt-renew-head{margin:0 0 10px;padding:8px 10px;border-left:4px solid var(--kt-panel);border-radius:7px;background:color-mix(in srgb,var(--kt-panel) 12%,transparent);color:var(--kt-panel);font-weight:800}
+.kt-renew-list{max-height:min(46vh,420px);overflow:auto;border:1px solid var(--line);border-radius:9px}
+.kt-renew-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px}
+.kt-renew-table th,.kt-renew-table td{padding:7px 6px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.kt-renew-table th{position:sticky;top:0;z-index:1;background:#18202b;color:var(--mut);font-size:11px}
+.kt-renew-table tr:last-child td{border-bottom:0}
+.kt-renew-foot{margin:10px 0 0;padding:9px 10px;border-radius:8px;background:#ffffff08;font-size:13px}
+.kt-renew-report{display:grid;gap:10px;max-height:62vh;overflow:auto}
+.kt-renew-report h4{margin:0 0 5px;font-size:13px}.kt-renew-report ul{margin:0;padding-left:19px}
+.kt-renew-report li{margin:4px 0;overflow-wrap:anywhere}
+.kt-renew-report .ok{color:#7ee2a8}.kt-renew-report .err{color:#ff9b9b}
 .kx-creds{display:grid;gap:9px}.kx-creds-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px;background:#ffffff06}
 .kx-creds-row small{display:block;color:var(--mut);font-size:11.5px;margin-bottom:3px}.kx-creds-row .mono{display:block;overflow-wrap:anywhere;white-space:pre-wrap}`;
   document.head.appendChild(css);
@@ -45,6 +56,17 @@
     toast(`${label}: ${ok} fatte${err.length ? ` · ${err.length} errori (${err[0]})` : ''}`, !!err.length);
     return { ok, err };
   }
+  async function runReport(list, fn, label) {
+    const err = [], items = []; let ok = 0;
+    for (let i = 0; i < list.length; i++) {
+      if (i % 5 === 0) toast(`${label}: ${i + 1} di ${list.length}…`);
+      try { const value = await fn(list[i]); items.push({ item: list[i], ok: true, value }); ok++; }
+      catch (e) { const error = e && e.message ? e.message : String(e); err.push(error); items.push({ item: list[i], ok: false, error }); }
+    }
+    toast(`${label}: ${ok} fatte${err.length ? ` · ${err.length} errori (${err[0]})` : ''}`, !!err.length);
+    return { ok, err, items };
+  }
+  const panelHeader = (name, color) => `<div class="kt-renew-head" style="--kt-panel:${esc(color)}">Pannello: ${esc(name)}</div>`;
 
   /* clienti KAIROS (principali) che hanno nelle playlist uno di questi utenti */
   function devsFor(users, extra) {
@@ -106,6 +128,6 @@
     });
   }
 
-  window.KXTools = { csv, day, stats, count, run, devsFor, msg, bar, ck, bind };
+  window.KXTools = { csv, day, stats, count, run, runReport, panelHeader, devsFor, msg, bar, ck, bind };
   window.KXCreds = { show: showCredentials };
 })();
