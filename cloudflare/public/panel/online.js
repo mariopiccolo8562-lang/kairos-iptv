@@ -1,4 +1,4 @@
-/* KAIROS Control — «Online ora terzi»: chi è collegato in questo momento sui pannelli esterni (WOLF, Armada, MaxPlayer, OrbixPlay, MirkoTeam/ORCP).
+/* KAIROS Control — «Online ora terzi»: chi è collegato in questo momento sui pannelli esterni (WOLF, Armada, Atlantix, MaxPlayer, OrbixPlay, MirkoTeam/ORCP).
    WOLF dice da solo le connessioni attive di ogni linea; per le altre KAIROS chiede al server IPTV le «connessioni attive»
    (player_api → user_info.active_cons, come fa un'app quando entra: non apre il video). Verde = collegato, rosso = scollegato,
    grigio = il server non ha risposto. Titolare e agenti (solo i pannelli e i clienti che possono vedere). */
@@ -57,7 +57,7 @@
   window.KXOnline = { slot, dot, key, want, state, match, sel, watch, get: (k) => (C.get(k) || {}).v, refresh: () => { C.clear(); } };
 
   /* ---------- «Sta guardando» nelle liste dei pannelli ----------
-     Il canale in onda lo dicono WOLF (lista linee), Realott e SLT (connessioni) e Atlantix (connessioni, solo titolare).
+     Il canale in onda lo dicono WOLF (lista linee), Realott, SLT e Atlantix (connessioni).
      Armada, Storm, MaxPlayer, OrbixPlay e MirkoTeam non lo dicono: per le loro linee vale il canale di WOLF se la stessa
      username è anche una linea WOLF. Cache 60 s; il riquadro si riempie da solo quando arrivano i dati. */
   const WS = { t: 0, busy: null, m: new Map() };
@@ -72,7 +72,7 @@
       await Promise.all([
         ok('wolf') && api('GET', '/admin/wolf/config').then((c) => (c.set ? api('GET', '/admin/wolf/lines') : { lines: [] })).then((d) => (d.lines || []).forEach((l) => l.conns > 0 && set('wolf', l.username, l.watching))).catch(() => {}),
         ...['ro', 'slt'].map((k) => ok(k) && api('GET', `/admin/${k}/conns`).then((d) => (d.rows || []).forEach((r) => set(k, r.username, r.stream))).catch(() => {})),
-        !isAgent() && api('GET', '/admin/atx/conns').then((d) => wAny(d).forEach((c) => set('atx', c.username, c.channel || c.stream_display_name))).catch(() => {}),
+        ok('atx') && api('GET', '/admin/atx/state').then((s) => s && s.connected ? api('GET', '/admin/atx/conns') : { rows: [] }).then((d) => wAny(d).forEach((c) => set('atx', c.username, c.channel || c.stream_display_name))).catch(() => {}),
       ].filter(Boolean));
       WS.m = m; WS.t = Date.now(); WS.busy = null; paintW(); return m;
     })();
@@ -94,7 +94,7 @@
   const isAg = () => D.role === 'agent';
   const perms = () => (D.me && D.me.perms) || {};
   const canP = (k) => !isAg() || !!perms()[k];
-  setInterval(() => { const b = $('.nav[data-v="conn"]'); if (b) b.style.display = !isAg() || ['wolf', 'armada', 'storm', 'mxp', 'oxp'].some((k) => perms()[k]) ? '' : 'none'; }, 2000);
+  setInterval(() => { const b = $('.nav[data-v="conn"]'); if (b) b.style.display = !isAg() || ['wolf', 'armada', 'storm', 'mxp', 'oxp', 'atx'].some((k) => perms()[k]) ? '' : 'none'; }, 2000);
 
   const S = { rows: null, busy: false, f: '', p: '', q: '', errs: [], t: 0, limit: 200 };
   async function loadAll() {
@@ -123,6 +123,17 @@
           for (const u of us) for (const l of u.lists || []) rows.push({ p: 'MaxPlayer', u: l.user, n: u.username || u.email, h: (l.ssl ? 'https://' : 'http://') + l.fqdn + (l.port ? ':' + l.port : ''), pw: l.pass, en: true }); } })().catch(err('MaxPlayer')),
       canP('oxp') && (async () => { const st = await api('GET', '/admin/oxp/state'); if (!st.connected) return; const d = await api('GET', '/admin/oxp/playlists');
         for (const p of d.playlists || []) rows.push({ p: 'OrbixPlay', u: p.user, n: p.notes || p.name || p.device, h: p.host, pw: p.pass, en: true }); })().catch(err('OrbixPlay')),
+      canP('atx') && (async () => {
+        const st = await api('GET', '/admin/atx/state'); if (!st.connected) return;
+        const d = await api('GET', '/admin/atx/conns'), list = Array.isArray(d) ? d : d.rows || d.connections || d.items || d.list || [];
+        const by = new Map();
+        for (const c of list) {
+          const u = String(c.username || '').trim(); if (!u) continue;
+          const r = by.get(u) || { p: 'Atlantix', u, n: c.notes || '', w: '', v: { on: true, conns: 0 }, en: true };
+          r.v.conns++; r.w = c.channel || c.stream_display_name || r.w; by.set(u, r);
+        }
+        for (const r of by.values()) rows.push(r);
+      })().catch(err('Atlantix')),
     ].filter(Boolean));
     // solo WOLF dice il canale in onda: se la stessa linea è anche su OrbixPlay/MaxPlayer/Armada, «Sta guardando» lo prende da lì
     const ww = new Map(rows.filter((r) => r.p === 'WOLF' && r.w && r.u).map((r) => [String(r.u).toLowerCase(), r.w]));
@@ -159,7 +170,7 @@
     const shown = list.slice(0, S.limit), panels = [...new Set(rows.map((r) => r.p))];
     const FL = [['', 'Tutti'], ['on', 'Collegati'], ['multi', 'Con più connessioni'], ['off', 'Scollegati'], ['na', 'Non verificabili']];
     const keep = document.activeElement && document.activeElement.id === 'cnQ' ? document.activeElement.selectionStart : -1;
-    V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">Online ora terzi</b><small>${isAg() ? 'I tuoi clienti di WOLF, Armada, MaxPlayer e OrbixPlay' : 'I clienti di WOLF, Armada, MaxPlayer, OrbixPlay e MirkoTeam'}: verde se stanno guardando adesso, arancione se la stessa linea è aperta su più dispositivi insieme, rosso se no. Si aggiorna ogni 2 minuti.</small>${S.t ? `<small>Ultimo controllo: ${new Date(S.t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</small>` : ''}</div>
+    V.innerHTML = `<div class="card glass"><div class="wf-st"><div style="flex:1;min-width:220px"><b style="font-size:15px">Online ora terzi</b><small>${isAg() ? 'I tuoi clienti di WOLF, Armada, Atlantix, MaxPlayer e OrbixPlay' : 'I clienti di WOLF, Armada, Atlantix, MaxPlayer, OrbixPlay e MirkoTeam'}: verde se stanno guardando adesso, arancione se la stessa linea è aperta su più dispositivi insieme, rosso se no. Si aggiorna ogni 2 minuti.</small>${S.t ? `<small>Ultimo controllo: ${new Date(S.t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</small>` : ''}</div>
         <button class="btn sm" id="cnRe">${S.busy ? 'Carico…' : 'Aggiorna'}</button></div>
       <div class="cn-k"><div><small><i class="on-dot g"></i>Collegati</small><b style="color:#4ade80">${n('on')}</b></div><div><small><i class="on-dot r"></i>Scollegati</small><b style="color:#f87171">${n('off')}</b></div><div data-multi style="cursor:pointer" title="Linee aperte su più dispositivi nello stesso momento"><small><i class="on-dot o"></i>Con più connessioni</small><b style="color:#fbbf24">${nMulti}</b>${rows.some((r) => multi(r) && r.kick && !KICKED.has(r.kick)) ? `<button class="btn sm" id="cnKickAll" style="margin-top:6px;color:#ff8f8f" title="Chiude le connessioni aperte di tutte le linee con più connessioni (solo quelle su WOLF)">Disconnetti tutte</button>` : ''}</div><div><small><i class="on-dot"></i>Non verificabili${n('wait') ? ' · ' + n('wait') + ' in verifica' : ''}</small><b style="color:var(--mut)">${n('na')}</b></div></div>
       ${S.errs.length ? `<p style="color:#ff8f8f;margin:10px 0 0;font-size:12.5px">${S.errs.map(esc).join('<br>')}</p>` : ''}</div>

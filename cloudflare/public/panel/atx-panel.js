@@ -1,6 +1,6 @@
-/* KAIROS Control — «Pannello Atlantix» (cms.axdash.biz): linee, sub-reseller e connessioni del tuo account Atlantix.
+/* KAIROS Control — «Pannello Atlantix» (cms.axdash.biz): linee e connessioni dell'account Atlantix collegato.
    KAIROS entra con utente, password e codice di accesso (salvati cifrati) e legge/scrive direttamente su Atlantix.
-   Solo il titolare (Master). Usa app.js. */
+   Usa app.js. */
 (() => {
   const IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 18H4z"/><path d="M8.5 14h7"/></svg>';
   if (!$('.nav[data-v="atx"]')) {
@@ -31,17 +31,23 @@
 
   function linesHtml(rows) {
     if (!rows.length) return '<p class="mut" style="margin:14px 0">Nessuna linea trovata.</p>';
-    return grid(['Utente', 'Password', 'Stato', 'Scadenza', 'Connessi', 'Canale / IP', 'Reseller', 'Note', 'Azioni'], rows.map((r, i) => tr([
-      `<b>${esc(r.username || '')}</b> <button class="btn sm" data-a="cu" data-i="${i}" title="Copia utente" style="padding:2px 7px;font-size:11px">Copia</button><div class="mut" style="font-size:11.5px">#${esc(String(r.id))}${Number(r.auto_renew) ? ' · auto-rinnovo' : ''}</div>`,
-      `<code>${esc(r.password || '')}</code> <button class="btn sm" data-a="cp" data-i="${i}" title="Copia password" style="padding:2px 7px;font-size:11px">Copia</button>`,
-      lineState(r),
-      `<b>${day(r.exp_date)}</b>${window.KXPay ? `<br>${KXPay.badge('line', 'atx', r.id)}` : ''}`,
-      Number(r.online) > 0 ? `<button class="btn sm" data-a="lc" data-i="${i}" title="Vedi chi è connesso">🟢 ${Number(r.online)}/${Number(r.max_connections || 0)}</button>` : `<span class="mut">${Number(r.online) || 0}/${Number(r.max_connections || 0)}</span>`,
-      r.channel || r.ip ? `${r.channel ? `<b>${esc(r.channel)}</b>` : ''}<div class="mut" style="font-size:11.5px">${esc([r.country, r.ip].filter(Boolean).join(' · '))}</div>` : mut,
-      r.reseller ? esc(r.reseller) : mut,
-      `<button class="btn sm" data-a="note" data-i="${i}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.notes ? esc(r.notes) : '+ nota'}</button>`,
-      `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('edit', i, 'Modifica')}${btn('renew', i, 'Rinnova')}${window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="atx" data-ref="${esc(r.id)}" data-label="${esc(r.username)}" data-auto-line="${esc(r.id)}" data-panel-note="${esc(r.notes || '')}">💰 Pagamento</button>` : ''}${Number(r.enabled) === 0 ? btn('on', i, 'Attiva') : btn('off', i, 'Disattiva')}${m3u(r) ? btn('m3u', i, 'M3U') : ''}${window.KXMxpNew && (!window.KXMxpCan || KXMxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('mxp', i, 'MaxPlayer') : ''}${window.KXOxpNew && (!window.KXOxpCan || KXOxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('oxp', i, 'OrbixPlay') : ''}${window.KXOrcpNew && (!isAg() || KXOrcpAgentCan()) ? btn('orcp', i, KXOrcpName()) : ''}${btn('del', i, 'Elimina')}</div>`
-    ])));
+    const heads = ['Utente', 'Password', 'Stato', 'Scadenza', 'Connessi', 'Canale / IP', 'Reseller', 'Note', 'Azioni'];
+    if (isAg()) heads.splice(6, 1);
+    return grid(heads, rows.map((r, i) => {
+      const cells = [
+        `<b>${esc(r.username || '')}</b> <button class="btn sm" data-a="cu" data-i="${i}" title="Copia utente" style="padding:2px 7px;font-size:11px">Copia</button><div class="mut" style="font-size:11.5px">#${esc(String(r.id))}${Number(r.auto_renew) ? ' · auto-rinnovo' : ''}</div>`,
+        `<code>${esc(r.password || '')}</code> <button class="btn sm" data-a="cp" data-i="${i}" title="Copia password" style="padding:2px 7px;font-size:11px">Copia</button>`,
+        lineState(r),
+        `<b>${day(r.exp_date)}</b>${window.KXPay ? `<br>${KXPay.badge('line', 'atx', r.id)}` : ''}`,
+        Number(r.online) > 0 ? `<button class="btn sm" data-a="lc" data-i="${i}" title="Vedi chi è connesso">🟢 ${Number(r.online)}/${Number(r.max_connections || 0)}</button>` : `<span class="mut">${Number(r.online) || 0}/${Number(r.max_connections || 0)}</span>`,
+        r.channel || r.ip ? `${r.channel ? `<b>${esc(r.channel)}</b>` : ''}<div class="mut" style="font-size:11.5px">${esc([r.country, r.ip].filter(Boolean).join(' · '))}</div>` : mut,
+        r.reseller ? esc(r.reseller) : mut,
+        `<button class="btn sm" data-a="note" data-i="${i}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.notes ? esc(r.notes) : '+ nota'}</button>`,
+        `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('edit', i, 'Modifica')}${btn('renew', i, 'Rinnova')}${window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="atx" data-ref="${esc(r.id)}" data-label="${esc(r.username)}" data-auto-line="${esc(r.id)}" data-panel-note="${esc(r.notes || '')}">💰 Pagamento</button>` : ''}${Number(r.enabled) === 0 ? btn('on', i, 'Attiva') : btn('off', i, 'Disattiva')}${m3u(r) ? btn('m3u', i, 'M3U') : ''}${window.KXMxpNew && (!window.KXMxpCan || KXMxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('mxp', i, 'MaxPlayer') : ''}${window.KXOxpNew && (!window.KXOxpCan || KXOxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('oxp', i, 'OrbixPlay') : ''}${window.KXOrcpNew && (!isAg() || KXOrcpAgentCan()) ? btn('orcp', i, KXOrcpName()) : ''}${btn('del', i, 'Elimina')}</div>`
+      ];
+      if (isAg()) cells.splice(6, 1);
+      return tr(cells);
+    }));
   }
   function subsHtml(rows) {
     if (!rows.length) return '<p class="mut" style="margin:14px 0">Nessun sub-reseller.</p>';
@@ -59,11 +65,17 @@
   }
   function connsHtml(rows) {
     if (!rows.length) return '<p class="mut" style="margin:14px 0">Nessuno collegato in questo momento.</p>';
-    return `${window.KXVpn ? KXVpn.counter(rows) : ''}${grid(['Utente', 'Canale', 'IP', 'Luogo', 'Provider', 'Reseller', 'Da', 'Dispositivo', ''], rows.map((c, i) => tr([
-      `<b>${esc(c.username || '')}</b>`, c.channel ? esc(c.channel) : mut, window.KXVpn ? KXVpn.ip(c.user_ip || c.ip, c.vpn) : esc(c.user_ip || c.ip || ''), esc([c.city, c.geoip_country_code].filter(Boolean).join(', ')) || mut,
-      c.isp ? esc(c.isp) : mut, c.owner_username ? esc(c.owner_username) : mut, dur(c.total_seconds),
-      `<span class="mut" style="font-size:11.5px">${esc(String(c.user_agent || '').slice(0, 40))}</span>`, c.activity_id ? btn('kill', i, 'Disconnetti') : ''
-    ])))}`;
+    const heads = ['Utente', 'Canale', 'IP', 'Luogo', 'Provider', 'Reseller', 'Da', 'Dispositivo', ''];
+    if (isAg()) heads.splice(5, 1);
+    return `${window.KXVpn ? KXVpn.counter(rows) : ''}${grid(heads, rows.map((c, i) => {
+      const cells = [
+        `<b>${esc(c.username || '')}</b>`, c.channel ? esc(c.channel) : mut, window.KXVpn ? KXVpn.ip(c.user_ip || c.ip, c.vpn) : esc(c.user_ip || c.ip || ''), esc([c.city, c.geoip_country_code].filter(Boolean).join(', ')) || mut,
+        c.isp ? esc(c.isp) : mut, c.owner_username ? esc(c.owner_username) : mut, dur(c.total_seconds),
+        `<span class="mut" style="font-size:11.5px">${esc(String(c.user_agent || '').slice(0, 40))}</span>`, !isAg() && c.activity_id ? btn('kill', i, 'Disconnetti') : ''
+      ];
+      if (isAg()) cells.splice(5, 1);
+      return tr(cells);
+    }))}`;
   }
   function overviewHtml(d, m) {
     const mem = d.member || {}, st = d.stats || {};
@@ -87,19 +99,20 @@
   function toolbar() {
     if (A.tab === 'overview' || A.tab === 'conns' || A.tab === 'log') return '';
     const st = A.tab === 'lines' ? `<select class="inp" id="axS" style="max-width:160px">${[['', 'Tutti gli stati'], ['active', 'Attive'], ['expiring', 'In scadenza'], ['expired', 'Scadute'], ['disabled', 'Disattivate'], ['trial', 'Prove'], ['online', 'Online']].map(([v, t]) => `<option value="${v}"${A.status === v ? ' selected' : ''}>${t}</option>`).join('')}</select>` : '';
-    const rs = A.tab === 'lines' && A.resellers.length ? `<select class="inp" id="axR" style="max-width:180px"><option value="">Tutti i reseller</option>${A.resellers.map((r) => `<option value="${esc(String(r.id))}"${String(A.reseller) === String(r.id) ? ' selected' : ''}>${esc(r.username || '#' + r.id)}</option>`).join('')}</select>` : '';
+    const rs = !isAg() && A.tab === 'lines' && A.resellers.length ? `<select class="inp" id="axR" style="max-width:180px"><option value="">Tutti i reseller</option>${A.resellers.map((r) => `<option value="${esc(String(r.id))}"${String(A.reseller) === String(r.id) ? ' selected' : ''}>${esc(r.username || '#' + r.id)}</option>`).join('')}</select>` : '';
     return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto">${st}${rs}${A.tab === 'lines' && window.KXSort ? KXSort.ui(A, 'ax') : ''}${A.tab === 'lines' && window.KXPay ? KXPay.panelTile('atx') : ''}<input class="inp" id="axQ" placeholder="Cerca utente…" value="${esc(A.q)}" style="max-width:200px">${A.tab === 'lines' ? '<button class="btn pri sm" data-o="new">+ Nuova linea</button>' + (window.KXQuick ? KXQuick.button('atx') : '') : ''}</div>`;
   }
   function render() {
     const V = $('#v-atx'); if (!V) return;
-    if (isAg()) { V.innerHTML = '<div class="card glass"><p>Il Pannello Atlantix lo usa solo il Master.</p></div>'; return; }
+    if (isAg() && ['subs', 'log'].includes(A.tab)) A.tab = 'lines';
     const st = A.st || {}, form = !st.connected || A.edit;
+    const tabs = TABS.filter(([k]) => !isAg() || !['subs', 'log'].includes(k));
     if (st.connected && A.tab !== 'log' && A.ov === undefined) { A.ov = null; api('GET', '/admin/atx/overview').then((d) => { A.ov = d; render(); }).catch(() => { A.ov = false; }); }
     V.innerHTML = `<div class="card glass" style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start">
         <div><b style="font-size:16px">${st.connected ? '✅ Atlantix collegato' : 'Atlantix non collegato'}</b>
-          <p class="mut" style="margin:4px 0 0;font-size:13px">${st.connected ? 'Account ' + esc(st.user || '') : 'Scrivi qui i dati con cui entri su cms.axdash.biz: restano cifrati in KAIROS.'}</p></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn sm" href="https://cms.axdash.biz/login" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Apri Atlantix</a>${st.connected ? `<button class="btn sm" data-o="reload">Aggiorna</button><button class="btn sm" data-o="edit">${A.edit ? 'Chiudi' : 'Cambia dati'}</button><button class="btn sm" data-o="off">Scollega</button>` : ''}</div>
+          <p class="mut" style="margin:4px 0 0;font-size:13px">${st.connected ? (isAg() ? 'Il tuo account sub-reseller: ' : 'Account ') + esc(st.user || '') : isAg() ? 'Collega il tuo account sub-reseller Atlantix: userai i tuoi crediti e vedrai solo le tue linee.' : 'Scrivi qui i dati con cui entri su cms.axdash.biz: restano cifrati in KAIROS.'}</p></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${!isAg() ? '<a class="btn sm" href="https://cms.axdash.biz/login" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Apri Atlantix</a>' : ''}${st.connected ? `<button class="btn sm" data-o="reload">Aggiorna</button><button class="btn sm" data-o="edit">${A.edit ? 'Chiudi' : 'Cambia dati'}</button><button class="btn sm" data-o="off">Scollega</button>` : ''}</div>
       </div>
       ${form ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px">
         <label>Username<input class="inp" id="axU" autocomplete="off" value="${esc(st.user || '')}"></label>
@@ -108,7 +121,7 @@
         <label>Codice 2FA (solo se Atlantix lo chiede)<input class="inp" id="axO" inputmode="numeric" maxlength="6" placeholder="000000"></label></div>
         <button class="btn pri" data-o="save" style="margin-top:12px">Collega Atlantix</button>` : ''}</div>
       ${st.connected && A.tab !== 'overview' && A.tab !== 'log' && A.ov ? overviewHtml(A.ov, '0 0 14px') : ''}
-      ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.map(([k, n]) => `<button class="btn sm${A.tab === k ? ' pri' : ''}" data-t="${k}">${n}</button>`).join('')}${toolbar()}</div>${body()}</div>` : ''}`;
+      ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${tabs.map(([k, n]) => `<button class="btn sm${A.tab === k ? ' pri' : ''}" data-t="${k}">${n}</button>`).join('')}${toolbar()}</div>${body()}</div>` : ''}`;
     if (A.tab === 'log' && st.connected && window.KXTools) KXTools.panelLog($('#atxPanelLog'), 'atx', '#1fa0b6');
     $$('[data-t]', V).forEach((b) => (b.onclick = () => { A.tab = b.dataset.t; A.page = 1; A.q = ''; A.status = ''; A.reseller = ''; A.days = 0; if (A.tab === 'log') render(); else load(); }));
     $$('[data-o]', V).forEach((b) => (b.onclick = () => op(b.dataset.o)));
@@ -331,12 +344,11 @@
         if (key) { A.data[key] = KXSort.apply(A.data[key], A, { exp: (r) => { const v = r.exp_date ?? r.exp; if (v == null || v === '') return 0; const n = Number(v); if (!isNaN(n)) return n > 1e12 ? n : n * 1000; const t = Date.parse(String(v).replace(' ', 'T')); return isNaN(t) ? 0 : t; }, name: (r) => r.username, enabled: (r) => !!+r.enabled, conns: (r) => +r.online || 0, owner: (r) => r.reseller, created: (r) => Date.parse(String(r.created_at || r.created || '').replace(' ', 'T')) || 0, payKey: (r) => ['atx', String(r.id || r.username || '').toLowerCase()] }); A.data.total = A.data[key].length; }
       }
       if (A.tab === 'lines' && Array.isArray(A.data.resellers) && A.data.resellers.length) A.resellers = A.data.resellers;
-    } catch (e) { A.err = e.message; A.data = null; }
+    } catch (e) { A.err = e.message; A.data = null; if (/codice 2fa|codice a 6 cifre/i.test(A.err)) A.edit = true; }
     A.busy = false; show();
   }
   function show() { try { render(); } catch (e) { const V = $('#v-atx'); if (V) V.innerHTML = `<div class="card glass"><p style="color:#ff8f8f">Errore nella sezione Atlantix: ${esc(e.message || String(e))}</p></div>`; } }
   async function open() {
-    if (isAg()) return show();
     if (!A.st) { try { A.st = await api('GET', '/admin/atx/state'); } catch (e) { A.st = { connected: false }; A.err = e.message; } }
     show(); if (A.st.connected && A.tab !== 'log' && A.data == null && !A.busy && !A.err) load();
   }

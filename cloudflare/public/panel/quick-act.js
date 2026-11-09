@@ -46,7 +46,7 @@
     ['wolf', 'WOLF', 'Linea con utente e password', can('wolf')],
     ['armada', 'Armada', 'Linea M3U / Xtream', can('armada')],
     ['storm', 'Storm', 'Linea M3U / Xtream', can('storm')],
-    ['atx', 'Atlantix', 'Il modulo «Crea linea» di Atlantix', !isAg()],
+    ['atx', 'Atlantix', 'Il modulo «Crea linea» di Atlantix', can('atx')],
     ['ro', 'Realott', 'Pacchetto Realott (usa crediti)', can('ro')],
     ['slt', 'SLT', 'Pacchetto SLT (usa crediti)', can('slt')],
   ];

@@ -10,7 +10,7 @@
  */
 import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide, storeAgentAlerts } from './store.js'; // Store aperto: conteggi e compatibilità con gli store vecchi (/api/store/*)
 import { wolfRoutes, wolfCron, sockFetch, wolfCfg } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
-import { atxRoutes } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz), solo titolare
+import { atxRoutes } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz), account separati per gli agenti
 import { oraRoutes } from './orapanel.js';
 import { orcpRoutes, orcpAgentConfig, setOrcpDownloader, ovpnFile, orcpRemoteHosts } from './orcp.js'; // Pannello ORCP (cp.ottrun.com): l'app brandizzata OTTRUN, accesso passato dal titolare
 import { vpnMark as vpnMarkRows } from './vpn-mark.js';
@@ -5246,7 +5246,7 @@ async function adminInner(req, env, url, ip, ctx) {
    e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
    ====================================================================== */
 const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'account', 'ai',
-  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'payments', 'autoRenew', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt', 'orcpApp'];
+  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'payments', 'autoRenew', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt', 'atx', 'orcpApp'];
 const ORCP_SERVER_KEYS = ['portal', 'portal2', 'portal3', 'portal4', 'portal5'];
 function checkedOrcpServers(value) {
   if (!Array.isArray(value) || value.length > ORCP_SERVER_KEYS.length || value.some((x) => typeof x !== 'string' || !ORCP_SERVER_KEYS.includes(x)) || new Set(value).size !== value.length) {
@@ -5256,7 +5256,7 @@ function checkedOrcpServers(value) {
 }
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, payments: false, autoRenew: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, mxp: false, oxp: false, oxpNew: false, orcpApp: false, orcpSrv: [], actApps: [], addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, payments: false, autoRenew: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, atx: false, mxp: false, oxp: false, oxpNew: false, orcpApp: false, orcpSrv: [], actApps: [], addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
@@ -5779,8 +5779,9 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   if (path.startsWith('/oxp/')) { need('oxp', 'Non puoi usare il Pannello OrbixPlay: chiedilo a chi ti gestisce'); const r = await oxpRoutes(req, env, path, who, ip, WOLF_H, { id: A.id, tree: ctree, canNew: !!P.oxpNew, orbDns: agOrbList(await getSettings(env), P.orbDns) }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
   // Pannello MaxPlayer: con il permesso del titolare, solo i clienti dell'agente MaxPlayer che gli ha assegnato
   if (path.startsWith('/mxp/')) { need('mxp', 'Non puoi usare il Pannello MaxPlayer: chiedilo a chi ti gestisce'); const r = await mxpRoutes(req, env, path, who, ip, WOLF_H, { id: A.id }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
+  if (path.startsWith('/atx/')) { need('atx', 'Non puoi usare il pannello Atlantix: chiedilo a chi ti gestisce'); const r = await atxRoutes(req, env, path, who, ip, WOLF_H, { id: A.id }); if (r) return r; throw new HttpErr(403, 'Non puoi usare questa funzione del pannello Atlantix'); }
   // Pannello WOLF: con il permesso del titolare, sul proprio account reseller WOLF (sue linee e suoi crediti)
-  if (path === '/online' && m === 'POST') { if (!['wolf', 'armada', 'storm', 'mxp', 'oxp', 'ro', 'slt'].some((k) => P[k])) throw new HttpErr(403, 'Non hai pannelli esterni collegati'); return onlineRoute(req); }
+  if (path === '/online' && m === 'POST') { if (!['wolf', 'armada', 'storm', 'mxp', 'oxp', 'ro', 'slt', 'atx'].some((k) => P[k])) throw new HttpErr(403, 'Non hai pannelli esterni collegati'); return onlineRoute(req); }
   if (path.startsWith('/wolf/')) { need('wolf', 'Non puoi usare il pannello WOLF: chiedilo a chi ti gestisce'); const r = await wolfRoutes(req, env, path, who, ip, WOLF_H, { id: A.id }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
   if (/^\/(ro|slt)\//.test(path)) { need(path.split('/')[1], 'Non puoi usare questo pannello IPTV: chiedilo a chi ti gestisce'); const r = await extRoutes(req, env, path, who, ip, WOLF_H, { id: A.id }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
   // «Crea lista» su OrbixPlay/MaxPlayer senza cliente Kairos: con il permesso di attivarle dal pannello

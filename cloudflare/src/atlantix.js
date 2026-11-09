@@ -1,12 +1,35 @@
 import { sockFetch } from './wolf.js';
 /* ---------------- Pannello Atlantix (cms.axdash.biz): linee, sub-reseller e connessioni del tuo account ----------------
-   Atlantix non ha API pubbliche: il Worker entra con utente, password e «codice di accesso» del titolare e usa le
+   Atlantix non ha API pubbliche: il Worker entra con utente, password e «codice di accesso» e usa le
    stesse richieste JSON del loro pannello (api/...). Niente copie: si legge e si scrive su Atlantix.
-   Credenziali e cookie salvati cifrati (settings 'atx' e 'atx:ses'). Solo il titolare. */
+   Credenziali e cookie sono salvati cifrati, separati per titolare e agente. */
 const URL0 = 'https://cms.axdash.biz';
 const UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 const K = 'atx';
-const mem = { jar: null };
+const mem = {};
+const keyOf = (ag) => ag ? `${K}:ag:${ag.id}` : K;
+const PRIVATE_KEY = /^(?:dns|host|portal|m3u|url|server|domain)(?:_|[A-Z]|$)|(?:^|_)(?:dns|host|portal|m3u|url|server|domain)(?:_|[A-Z]|$)|^(?:resellers?|owners?|parents?|accounts?)(?:_id|_name|_username|_user|_url|_dns|_host|_portal)?$/i;
+const PRIVATE_FORM = /^(?:dns|host|portal|m3u|url|server|domain)(?:_|$)|(?:^|_)(?:dns|host|portal|m3u|url|server|domain)(?:_|$)|^(?:resellers?|owners?|parents?|accounts?)(?:_|$)/i;
+const safeAgentText = (value) => String(value || '').replace(/(?:https?:\/\/|www\.)[^\s<>"']+/gi, '[link rimosso]');
+function safeAgentData(value) {
+  if (Array.isArray(value)) return value.map(safeAgentData);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value).filter(([k]) => !PRIVATE_KEY.test(k)).map(([k, v]) => [k, safeAgentData(v)]));
+}
+function safeAgentOverview(value) {
+  const data = safeAgentData(value);
+  const stripAccount = (v) => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return v;
+    const out = { ...v };
+    for (const key of Object.keys(out)) if (/^(?:user|username|account|account_name|account_user)$/i.test(key)) delete out[key];
+    return out;
+  };
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+  const out = stripAccount(data);
+  if (out.member) out.member = stripAccount(out.member);
+  delete out.account;
+  return out;
+}
 async function markConnData(env, data, H) {
   if (!H.vpnMark) return data;
   const mark = async (rows) => {
@@ -27,17 +50,18 @@ function eatCookies(jar, res) {
   const list = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : (res.headers.get('set-cookie') || '').split(/,(?=\s*[A-Za-z0-9_-]+=)/);
   for (const c of list) { const m = c.match(/^\s*([^=;\s]+)=([^;]*)/); if (m) jar[m[1]] = m[2]; }
 }
-async function cfgOf(env, H) {
-  const v = await getRow(env, K); if (!v) return null;
+async function cfgOf(env, H, k = K) {
+  const v = await getRow(env, k); if (!v) return null;
   try { const c = await H.unseal(env, v); return c && c.user ? c : null; } catch { return null; }
 }
-async function loadJar(env, H) {
-  if (mem.jar) return mem.jar;
-  try { const v = await getRow(env, K + ':ses'); mem.jar = v ? await H.unseal(env, v) : {}; } catch { mem.jar = {}; }
-  if (!mem.jar || Array.isArray(mem.jar)) mem.jar = {};
-  return mem.jar;
+async function loadJar(env, H, k = K) {
+  if (mem[k + ':jar']) return mem[k + ':jar'];
+  let jar;
+  try { const v = await getRow(env, k + ':ses'); jar = v ? await H.unseal(env, v) : {}; } catch { jar = {}; }
+  if (!jar || Array.isArray(jar)) jar = {};
+  return (mem[k + ':jar'] = jar);
 }
-async function saveJar(env, H, jar) { mem.jar = jar; await setRow(env, K + ':ses', await H.seal(env, jar)).catch(() => {}); }
+async function saveJar(env, H, jar, k = K) { mem[k + ':jar'] = jar; await setRow(env, k + ':ses', await H.seal(env, jar)).catch(() => {}); }
 
 async function raw(H, jar, path, o = {}) {
   const headers = { 'User-Agent': UA, Accept: o.json !== undefined || o.ajax ? 'application/json, */*' : 'text/html', Cookie: cookieHeader(jar), Referer: URL0 + '/dashboard', Origin: URL0 };
@@ -55,7 +79,7 @@ async function raw(H, jar, path, o = {}) {
   const txt = await r.text(); let j = null; try { j = JSON.parse(txt); } catch {}
   return { status: r.status, txt, j, loc: r.headers.get('location') || '' };
 }
-async function login(env, H, c, otp) {
+async function login(env, H, c, otp, k = K) {
   const jar = {};
   const p = await raw(H, jar, '/login');
   const csrf = (p.txt.match(/id="csrf"\s+value="([^"]+)"/) || p.txt.match(/value="([^"]+)"\s+id="csrf"/) || [])[1] || '';
@@ -66,19 +90,19 @@ async function login(env, H, c, otp) {
     r = await raw(H, jar, '/api/auth/login.php', { json: { csrf, step: 'otp', otp } });
   }
   if (!r.j || !r.j.success) throw new H.HttpErr(400, 'Atlantix: ' + String((r.j && r.j.message) || `accesso non riuscito (${r.status})`).slice(0, 200));
-  await saveJar(env, H, jar);
+  await saveJar(env, H, jar, k);
   return jar;
 }
 /** richiesta con la sessione salvata; se è scaduta rientra una volta da solo */
-async function ax(env, H, path, o = {}) {
-  const c = await cfgOf(env, H); if (!c) throw new H.HttpErr(400, 'Atlantix non è collegato: inserisci utente, password e codice di accesso');
+async function ax(env, H, path, o = {}, k = K) {
+  const c = await cfgOf(env, H, k); if (!c) throw new H.HttpErr(400, 'Atlantix non è collegato: inserisci utente, password e codice di accesso');
   for (let i = 0; i < 2; i++) {
-    let jar = await loadJar(env, H);
-    if (!Object.keys(jar).length) jar = await login(env, H, c);
+    let jar = await loadJar(env, H, k);
+    if (!Object.keys(jar).length) jar = await login(env, H, c, '', k);
     const r = await raw(H, jar, path, o.html ? {} : { ajax: true, ...o });
     const gone = r.status === 401 || (r.j && r.j.data && r.j.data.redirect === 'login') || (r.status >= 300 && r.status < 400 && /login/.test(r.loc));
-    if (gone) { mem.jar = {}; await saveJar(env, H, {}); if (i === 0) continue; throw new H.HttpErr(502, 'Atlantix ha chiuso la sessione: riprova'); }
-    await saveJar(env, H, jar);
+    if (gone) { mem[k + ':jar'] = {}; await saveJar(env, H, {}, k); if (i === 0) continue; throw new H.HttpErr(502, 'Atlantix ha chiuso la sessione: riprova'); }
+    await saveJar(env, H, jar, k);
     if (o.html) return r.txt;
     if (!r.j) throw new H.HttpErr(502, r.status === 404 ? 'Questa funzione non esiste su Atlantix' : `Risposta di Atlantix non valida (${r.status})`);
     if (!(r.j.success || r.j.ok) || r.j.error) throw new H.HttpErr(400, 'Atlantix: ' + String(r.j.message || r.j.error || 'operazione non riuscita').slice(0, 200));
@@ -112,54 +136,103 @@ function parseForm(f) {
   return out;
 }
 /** campi del modulo «Crea linea» di Atlantix (lines_users.php → #createLineForm), così KAIROS mostra le stesse opzioni */
-async function createForm(env, H) {
-  const h = await ax(env, H, '/lines_users.php', { html: true });
+async function createForm(env, H, k = K) {
+  const h = await ax(env, H, '/lines_users.php', { html: true }, k);
   const f = (h.match(/<form\b[^>]*id="createLineForm"[^>]*>([\s\S]*?)<\/form>/i) || [])[1];
   if (!f) throw new H.HttpErr(502, 'Non trovo il modulo «Crea linea» su Atlantix');
   return parseForm(f);
 }
 const qs = (o) => new URLSearchParams({ ...o, _: Date.now() }).toString();
 
-export async function atxRoutes(req, env, path, who, ip, H) {
+export async function atxRoutes(req, env, path, who, ip, H, ag) {
   const m = req.method, { HttpErr, json, str } = H, u = new URL(req.url);
+  const KK = keyOf(ag);
   const page = Math.max(1, Math.min(10000, parseInt(u.searchParams.get('page'), 10) || 1)), q = str(u.searchParams.get('q') || '', 80);
-  if (path === '/atx/state' && m === 'GET') { const c = await cfgOf(env, H); return json(c ? { connected: true, user: c.user } : { connected: false }); }
+  const axFor = (p, o = {}) => ax(env, H, p, o, KK);
+  const allowedAgentRoutes = new Set([
+    'GET /atx/state', 'PUT /atx/config', 'DELETE /atx/config', 'GET /atx/overview',
+    'GET /atx/lines', 'GET /atx/line/conns', 'GET /atx/conns', 'GET /atx/createform',
+    'POST /atx/lines/create', 'POST /atx/lines/action', 'POST /atx/correction',
+  ]);
+  if (ag && !allowedAgentRoutes.has(`${m} ${path}`)) throw new HttpErr(403, 'Non puoi usare questa funzione del pannello Atlantix');
+  if (!ag && path === '/atx/agents' && m === 'GET') {
+    const rows = ((await env.DB.prepare('SELECT k, v FROM settings WHERE k LIKE ? AND k NOT LIKE ?').bind(K + ':ag:%', '%:ses').all()).results) || [];
+    const agents = [];
+    for (const r of rows) {
+      try {
+        const c = await H.unseal(env, r.v), id = +String(r.k).split(':')[2];
+        if (id > 0 && c && c.user) agents.push({ id, user: c.user });
+      } catch {}
+    }
+    return json({ agents });
+  }
+  const am = !ag && path.match(/^\/atx\/agents\/(\d+)$/);
+  if (am && (m === 'PUT' || m === 'DELETE')) {
+    const id = +am[1], AK = keyOf({ id });
+    const agent = await env.DB.prepare("SELECT username FROM admins WHERE id = ? AND role = 'agent'").bind(id).first();
+    if (!agent) throw new HttpErr(404, 'Agente non trovato');
+    const label = str(agent.username || `#${id}`, 80);
+    if (m === 'DELETE') {
+      const c = await cfgOf(env, H, AK).catch(() => null);
+      mem[AK + ':jar'] = null;
+      await env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?)').bind(AK, AK + ':ses').run();
+      if (c) await H.log(env, 'del', `${who}: account Atlantix del venditore ${label} scollegato`, ip).catch(() => {});
+      return json({ ok: true });
+    }
+    const b = await H.readJSON(req, 4096), old = (await cfgOf(env, H, AK)) || {};
+    const user = str(b.user, 120).trim();
+    const sameUser = user === old.user;
+    const c = { user, pass: str(b.pass, 200) || (sameUser ? old.pass || '' : ''), code: str(b.code, 80).trim() || (sameUser ? old.code || '' : '') };
+    if (!c.user || !c.pass) throw new HttpErr(400, 'Scrivi utente e password Atlantix del venditore');
+    mem[AK + ':jar'] = null;
+    await login(env, H, c, str(b.otp, 10).trim(), AK);
+    await setRow(env, AK, await H.seal(env, c));
+    await H.log(env, 'edit', `${who}: account Atlantix del venditore ${label} collegato (${c.user})`, ip).catch(() => {});
+    return json({ ok: true });
+  }
+  if (path === '/atx/state' && m === 'GET') { const c = await cfgOf(env, H, KK); return json(c ? { connected: true, user: c.user, agent: !!ag } : { connected: false, agent: !!ag }); }
   if (path === '/atx/config' && m === 'PUT') {
-    const b = await H.readJSON(req, 4096), old = (await cfgOf(env, H)) || {};
-    const c = { user: str(b.user, 80).trim(), pass: str(b.pass, 200) || old.pass || '', code: str(b.code, 80).trim() || (b.user === old.user ? old.code || '' : '') };
+    const b = await H.readJSON(req, 4096), old = (await cfgOf(env, H, KK)) || {};
+    const user = str(b.user, 120).trim(), sameUser = user === old.user;
+    const c = { user, pass: str(b.pass, 200) || (sameUser ? old.pass || '' : ''), code: str(b.code, 80).trim() || (sameUser ? old.code || '' : '') };
     if (!c.user || !c.pass) throw new HttpErr(400, 'Scrivi utente e password di Atlantix');
-    mem.jar = null; await login(env, H, c, str(b.otp, 10).trim());
-    await setRow(env, K, await H.seal(env, c));
+    mem[KK + ':jar'] = null; await login(env, H, c, str(b.otp, 10).trim(), KK);
+    await setRow(env, KK, await H.seal(env, c));
     await H.log(env, 'edit', `${who}: pannello Atlantix collegato (account ${c.user})`, ip).catch(() => {});
     return json({ ok: true });
   }
-  if (path === '/atx/config' && m === 'DELETE') { const c = await cfgOf(env, H); mem.jar = null; await env.DB.prepare("DELETE FROM settings WHERE k IN ('atx', 'atx:ses')").run(); if (c) await H.log(env, 'del', `${who}: pannello Atlantix scollegato (account ${c.user})`, ip).catch(() => {}); return json({ ok: true }); }
-  if (path === '/atx/overview' && m === 'GET') return json((await ax(env, H, '/api/dashboard/overview.php?' + qs({}))).data || {});
+  if (path === '/atx/config' && m === 'DELETE') { const c = await cfgOf(env, H, KK); mem[KK + ':jar'] = null; await env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?)').bind(KK, KK + ':ses').run(); if (c) await H.log(env, 'del', `${who}: pannello Atlantix scollegato (account ${c.user})`, ip).catch(() => {}); return json({ ok: true }); }
+  if (path === '/atx/overview' && m === 'GET') { const data = (await axFor('/api/dashboard/overview.php?' + qs({}))).data || {}; return json(ag ? safeAgentOverview(data) : data); }
   const n = (k) => parseInt(u.searchParams.get(k), 10) || 0;
   if (path === '/atx/lines' && m === 'GET') {
-    const P = (pg) => ax(env, H, '/api/lines/list.php?' + qs({ page: pg, per_page: 50, q, status: str(u.searchParams.get('status') || '', 20), reseller_id: n('reseller') || '', sort: '' })).then((r) => r.data || {});
-    if (!u.searchParams.get('all')) return json(await P(page));
+    const P = (pg) => axFor('/api/lines/list.php?' + qs({ page: pg, per_page: 50, q, status: str(u.searchParams.get('status') || '', 20), reseller_id: ag ? '' : n('reseller') || '', sort: '' })).then((r) => r.data || {});
+    if (!u.searchParams.get('all')) { const data = await P(page); return json(ag ? safeAgentData(data) : data); }
     // all=1: fino a 12 pagine insieme (600 linee), così KAIROS può ordinare e filtrare per scadenza su tutte
     const first = await P(1), rows = [...(first.rows || first.items || first.lines || first.users || first.list || first.data || [])];
     const pages = Math.min(12, +first.pages || 1);
     for (let pg = 2; pg <= pages; pg++) { const d = await P(pg); rows.push(...(d.rows || d.items || d.lines || d.users || d.list || d.data || [])); }
-    return json({ ...first, rows, items: undefined, lines: undefined, users: undefined, list: undefined, data: undefined, pages: 1, page: 1, partial: +first.pages > 12 });
+    return json(ag ? safeAgentData({ ...first, rows, items: undefined, lines: undefined, users: undefined, list: undefined, data: undefined, pages: 1, page: 1, partial: +first.pages > 12 })
+      : { ...first, rows, items: undefined, lines: undefined, users: undefined, list: undefined, data: undefined, pages: 1, page: 1, partial: +first.pages > 12 });
   }
-  if (path === '/atx/line/conns' && m === 'GET') return json(await markConnData(env, (await ax(env, H, '/api/lines/connections.php?' + qs({ user_id: n('id') }))).data || {}, H));
-  if (path === '/atx/subs' && m === 'GET') return json((await ax(env, H, '/api/subresellers/list.php?' + qs({ page, per_page: 50, q, owner: '', status: '' }))).data || {});
-  if (path === '/atx/conns' && m === 'GET') return json(await markConnData(env, (await ax(env, H, '/api/connections/list.php?' + qs({ reseller_id: '' }))).data || {}, H));
-  if (path === '/atx/createform' && m === 'GET') return json({ fields: (await createForm(env, H)).filter((f) => f.type !== 'hidden') });
+  if (path === '/atx/line/conns' && m === 'GET') { const data = await markConnData(env, (await axFor('/api/lines/connections.php?' + qs({ user_id: n('id') }))).data || {}, H); return json(ag ? safeAgentData(data) : data); }
+  if (path === '/atx/subs' && m === 'GET') return json((await axFor('/api/subresellers/list.php?' + qs({ page, per_page: 50, q, owner: '', status: '' }))).data || {});
+  if (path === '/atx/conns' && m === 'GET') { const data = await markConnData(env, (await axFor('/api/connections/list.php?' + qs({ reseller_id: '' }))).data || {}, H); return json(ag ? safeAgentData(data) : data); }
+  if (path === '/atx/createform' && m === 'GET') {
+    const fields = (await createForm(env, H, KK)).filter((f) => f.type !== 'hidden');
+    return json({ fields: ag ? fields.filter((f) => !PRIVATE_FORM.test(f.name)).map(safeAgentData) : fields });
+  }
   if (path === '/atx/lines/create' && m === 'POST') {
     const b = await H.readJSON(req, 16384), v = (b && b.fields) || {}, form = {};
-    for (const f of await createForm(env, H)) {
+    for (const f of await createForm(env, H, KK)) {
+      if (ag && PRIVATE_FORM.test(f.name)) continue;
       if (f.type === 'hidden') { form[f.name] = f.value || ''; continue; }
       const val = v[f.name];
       if (f.type === 'checkbox' || f.type === 'radio') { if (val === true || val === f.value) form[f.name] = f.value || '1'; continue; }
       if (val != null && val !== '') form[f.name] = str(String(val), 500);
     }
-    const j = await ax(env, H, '/api/users/create.php', { form });
+    const j = await axFor('/api/users/create.php', { form });
     const d = j.data || {};
-    await H.note(env, { src: 'atx', app: 'Atlantix', owner: 0, username: d.username || form.username || '', password: d.password || form.password || '' });
+    await H.note(env, { src: 'atx', app: 'Atlantix', owner: ag ? ag.id : 0, username: d.username || form.username || '', password: d.password || form.password || '' });
     await H.log(env, 'edit', `${who}: Atlantix — linea ${str(d.username || form.username || '', 60)} creata`, ip).catch(() => {});
     return json({ ok: true, username: d.username || '', password: d.password || '' });
   }
@@ -173,7 +246,7 @@ export async function atxRoutes(req, env, path, who, ip, H) {
     else if (b.action === 'save_notes') { body = { action: 'save_notes', user_id: id, notes: str(b.notes, 300) }; what = 'note aggiornate'; }
     else if (b.action === 'delete') { body = { action: 'delete', user_id: id }; what = 'eliminata'; }
     else throw new HttpErr(400, 'Operazione sconosciuta');
-    const j = await ax(env, H, '/api/lines/action.php', { json: body });
+    const j = await axFor('/api/lines/action.php', { json: body });
     Object.assign(d, j.data && typeof j.data === 'object' ? j.data : {});
     if (b.action === 'renew') {
       const credits = d.credits_spent ?? d.credits_used ?? d.debited ?? d.cost ?? j.credits_spent ?? j.credits_used ?? j.debited ?? j.cost;
@@ -182,7 +255,7 @@ export async function atxRoutes(req, env, path, who, ip, H) {
       if (expiry !== undefined && expiry !== null) what += ` · scadenza ${str(String(expiry), 40)}`;
     }
     await H.log(env, 'edit', `${who}: Atlantix — linea ${username || `#${id}`} (#${id}) ${what}`, ip).catch(() => {});
-    return json({ ok: true, message: str(j.message || '', 200) });
+    return json({ ok: true, message: ag ? safeAgentText(str(j.message || '', 200)) : str(j.message || '', 200) });
   }
   if (path === '/atx/correction' && m === 'POST') {
     const b = await H.readJSON(req, 2048), action = str(b.action, 40);
@@ -204,7 +277,7 @@ export async function atxRoutes(req, env, path, who, ip, H) {
         body.package_id = packageId;
       }
     }
-    const j = await ax(env, H, '/api/lines/correction.php', { json: body });
+    const j = await axFor('/api/lines/correction.php', { json: body });
     const d = j.data && typeof j.data === 'object' ? j.data : {};
     const num = (v) => Number.isFinite(+v) ? +v : 0;
     if (action === 'status') {
@@ -227,7 +300,7 @@ export async function atxRoutes(req, env, path, who, ip, H) {
     const refund = num(d.refund), extraDebit = num(d.extra_debit), username = str(b.user, 120).trim();
     const operation = action === 'change_expiry' ? `scadenza ${date}` : action === 'change_package' ? `pacchetto ${packageId}` : 'eliminata';
     await H.log(env, 'edit', `${who}: Atlantix — correzione linea${username ? ` ${username}` : ''}: ${operation} · rimborsati ${refund} / scalati ${extraDebit} crediti`, ip).catch(() => {});
-    return json({ ok: true, refund, extra_debit: extraDebit, message: str(j.message || '', 200) });
+    return json({ ok: true, refund, extra_debit: extraDebit, message: ag ? safeAgentText(str(j.message || '', 200)) : str(j.message || '', 200) });
   }
   if (path === '/atx/subs/action' && m === 'POST') {
     const b = await H.readJSON(req, 4096), id = String(parseInt(b.id, 10) || ''), username = str(b.user, 120).trim();
@@ -237,7 +310,7 @@ export async function atxRoutes(req, env, path, who, ip, H) {
     if (b.op === 'credits') { const amount = parseInt(b.amount, 10); if (!amount || Math.abs(amount) > 100000) throw new HttpErr(400, 'Importo non valido'); url = '/subresellers_add_credits_action.php'; form = { sub_id: id, amount: String(amount), reason: str(b.reason, 200) }; what = amount > 0 ? `+${amount} crediti` : `${amount} crediti`; }
     else if (OPS[b.op]) { [url, what] = OPS[b.op]; form = { id }; }
     else throw new HttpErr(400, 'Operazione sconosciuta');
-    await ax(env, H, url, { form });
+    await axFor(url, { form });
     const reason = b.op === 'credits' ? str(b.reason, 80).trim() : '';
     await H.log(env, 'edit', `${who}: Atlantix — sub-reseller ${str(username, 80) || `#${id}`} (#${id}) ${what}${reason ? ` · motivo ${reason}` : ''}`, ip).catch(() => {});
     return json({ ok: true });
@@ -245,7 +318,7 @@ export async function atxRoutes(req, env, path, who, ip, H) {
   if (path === '/atx/conns/kill' && m === 'POST') {
     const b = await H.readJSON(req, 1024), id = parseInt(b.activity_id, 10);
     if (!(id > 0)) throw new HttpErr(400, 'Connessione non valida');
-    await ax(env, H, '/api/connections/kill.php', { json: { activity_id: id } });
+    await axFor('/api/connections/kill.php', { json: { activity_id: id } });
     const username = str(b.user, 120).trim();
     await H.log(env, 'edit', `${who}: Atlantix — linea ${username || 'sconosciuta'} · connessione ${id} disconnessa`, ip).catch(() => {});
     return json({ ok: true });
