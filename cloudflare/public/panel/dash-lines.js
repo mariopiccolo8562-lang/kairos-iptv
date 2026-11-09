@@ -53,6 +53,11 @@
       return { k: `panel-${p}`, v: s.active, c: PCOL[p] || 'red', label: label(`Linee attivate su ${PANEL[p]}`, `scadono 7 g: ${s.soon} · scadute: ${s.expired}`) };
     });
   }
+  function homeSummary() {
+    const total = panelStats(cache.panels);
+    const panels = ORDER.filter((p) => cache.panels.some((l) => l.p === p)).map((p) => ({ id: p, name: PANEL[p], ...panelStats(cache.panels.filter((l) => l.p === p)) }));
+    return { total, panels, apps: cache.apps.length, canSeeApps: canSeeApps(), at: cache.at };
+  }
   function appTiles() {
     const groups = new Map(), byUser = new Map();
     for (const item of cache.apps) {
@@ -99,8 +104,8 @@
     if (!canSeeApps() && appView.classList.contains('on')) view('dash');
   }
   async function load(force = false) {
-    const dashOn = root.classList.contains('on'), appOn = appView.classList.contains('on');
-    if (!dashOn && !appOn) return;
+    const dashOn = root.classList.contains('on'), appOn = appView.classList.contains('on'), homeOn = $('#v-home')?.classList.contains('on');
+    if (!dashOn && !appOn && !homeOn) return;
     if (busy) return;
     if (!force && Date.now() - cache.at < 300e3) { render(false); return; }
     busy = true; render(true);
@@ -108,14 +113,16 @@
       window.KXLinePick.load(force).catch(() => []),
       canSeeApps() ? api('GET', '/admin/linked-lines').then((r) => r.items || []).catch(() => []) : Promise.resolve([])
     ]);
-    cache.panels = panels || []; cache.apps = apps || []; cache.at = Date.now(); busy = false; render(false);
+    cache.panels = panels || []; cache.apps = apps || []; cache.at = Date.now(); busy = false;
+    if (dashOn || appOn) render(false);
+    window.dispatchEvent(new Event('kxlines:update'));
   }
   card.querySelector('[data-kx-dash-refresh]').onclick = () => load(true);
   appView.querySelector('[data-kx-app-refresh]').onclick = () => load(true);
-  window.KXDashLines = { load };
+  window.KXDashLines = { load, homeSummary, canSeeApps };
   const oldView = view;
-  window.view = view = function (v) { const r = oldView.apply(this, arguments); if (v === 'dash' || v === 'appsum') load(); return r; };
+  window.view = view = function (v) { const r = oldView.apply(this, arguments); if (v === 'dash' || v === 'appsum' || v === 'home') load(); return r; };
   const oldRenderAll = renderAll;
-  window.renderAll = renderAll = function () { const r = oldRenderAll.apply(this, arguments); syncAccess(); if (root.classList.contains('on') || appView.classList.contains('on')) load(); return r; };
+  window.renderAll = renderAll = function () { const r = oldRenderAll.apply(this, arguments); syncAccess(); if (root.classList.contains('on') || appView.classList.contains('on') || $('#v-home')?.classList.contains('on')) load(); return r; };
   syncAccess();
 })();

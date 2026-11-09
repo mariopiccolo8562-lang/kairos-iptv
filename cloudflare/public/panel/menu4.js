@@ -17,6 +17,15 @@
     ['req', 'Richieste e controllo', '#fb923c', S('<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>'), ['reports', 'creq', 'areq', 'reqai', 'apperr', 'rctl', 'activity']],
     ['set', 'Impostazioni', '#f5b041', S('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'), ['set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'sec']],
   ];
+  HUBS.splice(0, HUBS.length,
+    ['dash', 'Oggi', '#4f8cff', S('<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>'), ['home', 'dash', 'live', 'conn']],
+    ['cli', 'Clienti', '#22c55e', S('<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>'), ['devices', 'msgs', 'trash']],
+    ['pan', 'Linee IPTV', '#2dd4bf', S('<rect x="3" y="3" width="18" height="6" rx="2"/><rect x="3" y="15" width="18" height="6" rx="2"/><path d="M7 6h.01M7 18h.01M12 9v6"/>'), ['wolf', 'armada', 'storm', 'atx', 'ro', 'slt']],
+    ['att', 'Attivazione app', '#f472b6', S('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><path d="M7 14v7M3.5 17.5h7M17.5 14v7M14 17.5h7"/>'), ['appsum', 'xlist', 'mxp', 'oxp', 'orcp', 'orcp-agent', 'ora', 'apps3', 'apps3op', 'agop', 'agk', 'lines', 'lmap', 'dlc']],
+    ['pay', 'Soldi', '#ef4444', S('<circle cx="12" cy="12" r="9"/><path d="M16 8.5c-.8-1-2-1.5-3.7-1.5-1.8 0-3.1.9-3.1 2.2 0 3.4 6.9 1.3 6.9 5 0 1.5-1.4 2.6-3.5 2.6-1.7 0-3.1-.6-4-1.7M12 5v14"/>'), ['payments']],
+    ['ag', 'Agenti', '#38bdf8', S('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14a5 5 0 0 1 3 6"/>'), ['agents']],
+    ['set', 'Solo Master', '#f5b041', S('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l-.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'), ['dns', 'appk', 'vod', 'store', 'activity', 'reports', 'creq', 'areq', 'reqai', 'apperr', 'rctl', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'sec']]
+  );
   const css = document.createElement('style');
   css.textContent = `
 #side.m4>.nav[data-v],#side.m4>.nav-h{display:none!important}
@@ -31,6 +40,7 @@
 #hub4side .nav .h4l{flex:1;min-width:0}
 #hub4 button{--c:var(--sc,#4f8cff)}
 #hub4 button .h4n{background:var(--bad);color:#fff;border-radius:9px;padding:0 6px;font-size:11px;font-weight:800;margin-left:2px}
+.h4-hidden{display:none!important}
 @media (min-width:701px) and (max-width:1180px){
   #app.on{grid-template-columns:92px 1fr!important}
   #side{position:sticky!important;top:0;height:100vh;inset:auto!important;width:92px!important;transform:none!important;box-shadow:none!important;padding:18px 8px!important;overflow-y:auto;scrollbar-width:none;z-index:15!important}
@@ -51,6 +61,7 @@
   const navOf = (v) => side.querySelector(`.nav[data-v="${v}"]`);
   const vis = (b) => b && b.style.display !== 'none';
   const items = (h) => h[4].map(navOf).filter(vis);
+  const labelOf = (h) => h[0] === 'set' && D.role === 'agent' ? 'Altro' : h[1];
   const nameOf = (b) => { let t = ''; for (const n of b.childNodes) if (n.nodeType === 3) t += n.textContent; return t.trim() || b.textContent.replace(/\d+\s*$/, '').trim(); };
   const badgeOf = (b) => { let t = 0; for (const e of b.querySelectorAll('span')) { const x = (e.textContent || '').trim(); if (/^\d+$/.test(x) && e.style.display !== 'none' && getComputedStyle(e).display !== 'none' && (e.classList.contains('on') || !e.classList.contains('kc-nb'))) t += +x; } return t; };
   const LK = 'kx_hub4';
@@ -62,7 +73,7 @@
   (side.querySelector('.foot') || $('#logout')).before(box);
   for (const h of HUBS) {
     const b = document.createElement('button'); b.className = 'nav'; b.dataset.hub = h[0]; b.style.setProperty('--sc', h[2]);
-    b.innerHTML = `${h[3]}<span class="h4l">${esc(h[1])}</span><b class="h4n"></b>`; b.title = h[1];
+    b.innerHTML = `${h[3]}<span class="h4l">${esc(labelOf(h))}</span><b class="h4n"></b>`; b.title = labelOf(h);
     b.onclick = () => go(h[0]);
     box.appendChild(b);
   }
@@ -76,7 +87,13 @@
     const last = navOf(lastOf()[id]);
     (its.includes(last) ? last : its[0]).click();
   }
-  window.KXHub = Object.assign(go, { has: (id) => { const h = HUBS.find((x) => x[0] === id); return !!h && items(h).length > 0; }, cur: () => (hubOfV(curV()) || [''])[0] });
+  const badge = (id) => { const h = HUBS.find((x) => x[0] === id); return h ? items(h).reduce((a, x) => a + badgeOf(x), 0) : 0; };
+  window.KXHub = Object.assign(go, {
+    has: (id) => { const h = HUBS.find((x) => x[0] === id); return !!h && items(h).length > 0; },
+    cur: () => (hubOfV(curV()) || [''])[0],
+    badge,
+    list: () => HUBS.filter((h) => items(h).length).map((h) => ({ id: h[0], label: labelOf(h), color: h[2], icon: h[3] })),
+  });
 
   let sig = '';
   function sync() {
@@ -85,8 +102,9 @@
     for (const b of box.children) {
       const h = HUBS.find((x) => x[0] === b.dataset.hub), its = items(h);
       const d = its.length ? '' : 'none'; if (b.style.display !== d) b.style.display = d;
+      const label = labelOf(h), name = b.querySelector('.h4l'); if (name && name.textContent !== label) name.textContent = label; b.title = label;
       const on = hub === h; if (b.classList.contains('on') !== on) b.classList.toggle('on', on);
-      const n = its.reduce((a, x) => a + badgeOf(x), 0), el = b.querySelector('.h4n'), t = n ? String(n) : '';
+      const n = badge(h[0]), el = b.querySelector('.h4n'), t = n ? String(n) : '';
       if (el.textContent !== t) { el.textContent = t; el.classList.toggle('on', !!n); }
     }
     // schede del gruppo (solo se ha più di una pagina)
@@ -100,6 +118,8 @@
       const on = bar.querySelector('.on'); if (on && bar.scrollWidth > bar.clientWidth) on.scrollIntoView({ block: 'nearest', inline: 'center' });
     }
     const tb = $('.topbar'); if (tb) document.documentElement.style.setProperty('--tb4', tb.offsetHeight + 'px');
+    const dl = $('#dlBar'), showDl = v === 'home' || v === 'dlc' || hub?.[0] === 'set';
+    if (dl) dl.classList.toggle('h4-hidden', !showDl);
   }
   let raf = 0; const later = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; sync(); }); };
   new MutationObserver(later).observe(side, { subtree: true, characterData: true, childList: true, attributes: true, attributeFilter: ['class', 'style'] });

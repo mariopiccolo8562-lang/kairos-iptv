@@ -136,7 +136,7 @@ body{overscroll-behavior-y:none}
   };
   const ico = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">${IC[k]}</svg>`;
   const tab = document.createElement('nav'); tab.id = 'kcTab';
-  tab.innerHTML = `<button data-t="dash">${ico('dash')}Panoramica</button><button data-t="devices">${ico('devices')}Clienti</button>
+  tab.innerHTML = `<button data-t="home">${ico('dash')}Home</button><button data-t="devices">${ico('devices')}Clienti</button>
     <button data-t="new" class="plus"><span class="p"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" width="22" height="22"><path d="M12 5v14M5 12h14"/></svg></span>Nuovo</button>
     <button data-t="hub:pan">${ico('pan')}Pannelli</button><button data-t="hub:att">${ico('att')}Attiva</button><button data-t="menu">${ico('menu')}<span class="n" id="tabN"></span>Menu</button>`;
   document.body.appendChild(tab);
@@ -153,14 +153,14 @@ body{overscroll-behavior-y:none}
   }));
   function syncTab() {
     const ag = D.role === 'agent', on = (document.querySelector('.view.on') || {}).id || '';
-    $('[data-t="dash"]', tab).style.display = ag && $('.nav[data-v="dash"]') && $('.nav[data-v="dash"]').style.display === 'none' ? 'none' : '';
+    $('[data-t="home"]', tab).style.display = '';
     $('[data-t="new"]', tab).style.display = $('#newDev').style.display === 'none' ? 'none' : '';
     { const t = $('[data-t="new"]', tab).lastChild; if (t && t.nodeType === 3) t.textContent = ag ? 'Attiva' : 'Nuovo'; }
     tab.style.gridTemplateColumns = `repeat(${$$('[data-t]', tab).filter((b) => b.style.display !== 'none').length},1fr)`;
     { const p = $('[data-t="hub:pan"]', tab); if (p) p.style.display = window.KXHub && KXHub.has('pan') ? '' : 'none'; }
     { const a = $('[data-t="hub:att"]', tab); if (a) a.style.display = window.KXHub && KXHub.has('att') ? '' : 'none'; }
     tab.style.gridTemplateColumns = `repeat(${$$('[data-t]', tab).filter((b) => b.style.display !== 'none').length},1fr)`;
-    $$('[data-t]', tab).forEach((b) => b.classList.toggle('on', b.dataset.t.startsWith('hub:') ? !!window.KXHub && KXHub.cur() === b.dataset.t.slice(4) : on === 'v-' + b.dataset.t));
+    $$('[data-t]', tab).forEach((b) => b.classList.toggle('on', b.dataset.t.startsWith('hub:') ? !!window.KXHub && KXHub.cur() === b.dataset.t.slice(4) : b.dataset.t === 'home' ? on === 'v-home' || !!window.KXHub && KXHub.cur() === 'dash' : on === 'v-' + b.dataset.t));
     const bn = $('#bellN'), tn = $('#tabN'); if (bn && tn) { tn.textContent = bn.textContent; tn.classList.toggle('on', bn.classList.contains('on')); }
     if (!$('#bellM') || !$('#bellM').classList.contains('on')) { const m = $('#bellM'); if (m) m.style.bottom = ''; }
   }
