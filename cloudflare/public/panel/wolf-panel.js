@@ -187,7 +187,7 @@
     const noteEdits = new Map(S.map((l) => [String(l.id), KXTools.noteValue(l.note)]));
     const pr = ask('Conferma rinnovo', `${KXTools.panelHeader('WOLF IPTV', '#e0524f')}
       <label class="lbl">Pacchetto per tutte (usa crediti WOLF)</label><select class="inp" id="wbK">${pkOpts()}</select>
-      <div class="kt-renew-list" style="margin-top:10px"><table class="kt-renew-table"><thead><tr><th>Utente</th><th>Nota / cliente KAIROS</th><th>Scadenza attuale</th><th>Crediti</th></tr></thead><tbody id="wbRows"></tbody></table></div>
+      <div class="kt-renew-list" style="margin-top:10px"><table class="kt-renew-table"><thead><tr><th>Utente</th><th>Scadenza attuale</th><th>Crediti</th></tr></thead><tbody id="wbRows"></tbody></table></div>
       <p class="kt-renew-foot" id="wbC"></p>`, 'Rinnova tutte');
     const packageNow = () => W.pk.find((x) => String(x.id) === $('#wbK').value) || {};
     const cost = () => { const p = packageNow(); return Number.isFinite(+p.credits) ? +p.credits * S.length : null; };
@@ -195,7 +195,7 @@
       const p = packageNow(), unit = Number.isFinite(+p.credits) ? +p.credits : null;
       $('#wbRows').innerHTML = S.map((l) => {
         const k = linkOf(l.id);
-        return `<tr><td>${esc(l.username)}</td><td><input class="inp" data-wb-note="${esc(l.id)}" maxlength="300" value="${esc(noteEdits.get(String(l.id)) || '')}" style="width:100%;min-width:0;box-sizing:border-box;margin:0;padding:6px;font-size:12px">${k && k.name ? `<small class="mut" style="display:block;margin-top:4px">KAIROS: ${esc(k.name)}</small>` : ''}</td><td>${esc(fmtD(l.exp))}</td><td>${unit === null ? '—' : `${fmtC(unit)} crediti`}</td></tr>`;
+        return `<tr><td style="border-bottom:0">${esc(l.username)}</td><td style="border-bottom:0">${esc(fmtD(l.exp))}</td><td style="border-bottom:0">${unit === null ? '—' : `${fmtC(unit)} crediti`}</td></tr><tr><td colspan="3" style="padding-top:0"><textarea class="inp" data-wb-note="${esc(l.id)}" maxlength="300" rows="2" placeholder="Nota (nome del cliente, telefono…)" style="width:100%;min-width:0;box-sizing:border-box;margin:0;padding:6px;font-size:12px;resize:vertical">${esc(noteEdits.get(String(l.id)) || '')}</textarea>${k && k.name ? `<small class="mut" style="display:block;margin-top:4px">KAIROS: ${esc(k.name)}</small>` : ''}</td></tr>`;
       }).join('');
       $('#wbRows').querySelectorAll('[data-wb-note]').forEach((input) => {
         input.oninput = () => noteEdits.set(String(input.dataset.wbNote), input.value);

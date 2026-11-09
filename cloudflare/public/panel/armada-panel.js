@@ -317,9 +317,9 @@ const mkArmadaLike = (cfg) => {
     };
     const pr = ask(`Rinnovo massivo ${N}`, `${KXTools.panelHeader(N, panelColor)}
       <label class="lbl">Durata per tutte</label><select class="inp" id="abS">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select>
-      <div class="kt-renew-list" style="margin-top:10px"><table class="kt-renew-table"><thead><tr><th>${itemLabel}</th><th>Nota / cliente KAIROS</th><th>Scadenza attuale</th><th>Costo</th></tr></thead><tbody>${S.map((x) => {
+      <div class="kt-renew-list" style="margin-top:10px"><table class="kt-renew-table"><thead><tr><th>${itemLabel}</th><th>Scadenza attuale</th><th>Costo</th></tr></thead><tbody>${S.map((x) => {
         const clients = clientNames(x), value = noteEdits.get(String(x.id)) || '';
-        return `<tr><td>${esc(who(x))}</td><td><input class="inp" data-ar-note="${esc(x.id)}" maxlength="300" value="${esc(value)}" style="width:100%;min-width:0;box-sizing:border-box;margin:0;padding:6px;font-size:12px">${clients.length ? `<small class="mut" style="display:block;margin-top:4px">KAIROS: ${esc(clients.join(', '))}</small>` : ''}</td><td>${esc(fmtD(x.exp))}</td><td>1 rinnovo</td></tr>`;
+        return `<tr><td style="border-bottom:0">${esc(who(x))}</td><td style="border-bottom:0">${esc(fmtD(x.exp))}</td><td style="border-bottom:0">1 rinnovo</td></tr><tr><td colspan="3" style="padding-top:0"><textarea class="inp" data-ar-note="${esc(x.id)}" maxlength="300" rows="2" placeholder="Nota (nome del cliente, telefono…)" style="width:100%;min-width:0;box-sizing:border-box;margin:0;padding:6px;font-size:12px;resize:vertical">${esc(value)}</textarea>${clients.length ? `<small class="mut" style="display:block;margin-top:4px">KAIROS: ${esc(clients.join(', '))}</small>` : ''}</td></tr>`;
       }).join('')}</tbody></table></div>
       <p class="kt-renew-foot" id="abF"></p>`, 'Rinnova tutte');
     const updateFooter = () => {
