@@ -209,6 +209,9 @@
   }
   async function go() {
     read2(); const e = check2(); if (e) return toast(e, 1);
+    const panelName = S.panel === 'wolf' ? 'WOLF' : ARM[S.panel] || FX[S.panel] || S.panel;
+    const destinations = [...S.apps].map((k) => k === 'orcp' ? orcpName() : APP_NAME[k] || k.replace(/^app:/, '')).join(' · ');
+    if (!(await ask('Confermare l’attivazione?', `<p>Verrà creata una linea su <b>${esc(panelName)}</b>${S.name ? ` per <b>${esc(S.name)}</b>` : ''}${destinations ? ` e registrata su <b>${esc(destinations)}</b>` : ''}.</p>`, 'Crea e attiva'))) return;
     localStorage.setItem(LS, JSON.stringify([...S.apps]));
     S.busy = true; S.step = 3; S.res = { line: null, apps: [] }; draw();
     try { S.line = await createLine(); S.res.line = { ok: true }; }
@@ -219,6 +222,8 @@
   }
   async function retry(i) {
     const it = S.res.apps[i]; if (!it || S.busy) return;
+    const label = it.k === 'orcp' ? orcpName() : APP_NAME[it.k] || it.k.replace(/^app:/, '');
+    if (!(await ask(`Riprova su ${label}?`, `<p>Verrà ripetuta l'operazione per <b>${esc(S.name || S.line?.username || 'questa linea')}</b>.</p>`, 'Riprova'))) return;
     read2(); it.ok = null; S.busy = true; draw();
     try { it.msg = await runApp(it.k); it.ok = true; } catch (err) { it.ok = false; it.msg = err.message; }
     S.busy = false; draw();

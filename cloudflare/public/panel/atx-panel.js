@@ -132,6 +132,7 @@
     const miss = fields.find((f) => f.required && f.type !== 'checkbox' && !String(vals[f.name] || '').trim());
     if (miss) return toast('Compila «' + miss.label + '»', 1);
     const r = await api('POST', '/admin/atx/lines/create', { fields: vals });
+    correctionCheck();
     A.page = 1; const refresh = load();
     if (window.KXCreds) await KXCreds.show('✅ Linea creata su Atlantix', [['Utente', r.username], ['Password', r.password]]);
     else toast('Linea creata su Atlantix');
@@ -153,6 +154,117 @@
   }
   const lineAct = (body, msg) => api('POST', '/admin/atx/lines/action', body).then(() => { toast(msg); return load(); });
   const subAct = (body, msg) => api('POST', '/admin/atx/subs/action', body).then(() => { toast(msg); return load(); });
+  let correctionTimer = null, correctionResize = null, correctionExpiredToast = false;
+  function removeCorrection() {
+    if (correctionTimer) clearInterval(correctionTimer);
+    correctionTimer = null;
+    if (correctionResize) window.removeEventListener('resize', correctionResize);
+    correctionResize = null;
+    $('#axCorrectionBox')?.remove();
+  }
+  function correctionExpired() {
+    removeCorrection();
+    if (!correctionExpiredToast) { correctionExpiredToast = true; toast('Tempo per la correzione scaduto', 1); }
+  }
+  function correctionActive(status) {
+    if (Date.now() / 1000 >= Number(status.expires_at)) { correctionExpired(); return false; }
+    return true;
+  }
+  function positionCorrection(box) {
+    const mobile = window.matchMedia ? window.matchMedia('(max-width: 600px)').matches : window.innerWidth <= 600;
+    Object.assign(box.style, mobile
+      ? { left: '10px', right: '10px', bottom: '10px', width: 'auto', maxWidth: 'none' }
+      : { left: 'auto', right: '18px', bottom: '18px', width: '360px', maxWidth: 'calc(100vw - 28px)' });
+  }
+  function openCorrectionExpiry(status) {
+    const exp = Number(status.new_exp), date = exp ? (() => { const d = new Date(exp > 1e11 ? exp : exp * 1000); return isNaN(d) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })() : '';
+    ask('Modifica scadenza', `<p>Scadenza attuale: <b>${day(status.new_exp)}</b></p><label>Nuova scadenza<input class="inp" type="date" id="axCorrectionDate" value="${date}"></label><p class="mut">Se la accorci, Atlantix ti rimborsa i crediti; se la allunghi, scala i crediti mancanti.</p>`, 'Modifica scadenza').then(async (confirmed) => {
+      if (!confirmed) return;
+      if (!correctionActive(status)) return;
+      const nextDate = ($('#axCorrectionDate') || {}).value || '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(nextDate)) return toast('Inserisci una data valida', 1);
+      await submitCorrection(status, 'change_expiry', { date: nextDate });
+    }).catch((e) => toast(e.message, 1));
+  }
+  function openCorrectionPackage(status) {
+    const current = Number(status.package_id) || 0;
+    const packages = (Array.isArray(status.packages) ? status.packages : []).filter((p) => p && Number.isInteger(+p.id) && +p.id > 0);
+    const options = packages.length ? packages.map((p) => {
+      const id = +p.id, isCurrent = id === current;
+      return `<label style="display:flex;gap:8px;align-items:center;margin:7px 0"><input type="radio" name="axCorrectionPackage" value="${id}"${isCurrent ? ' checked' : ''}> <span>${esc(p.name || '')} · ${Number(p.credits) || 0} crediti${isCurrent ? ' <b>(attuale)</b>' : ''}</span></label>`;
+    }).join('') : '<p class="mut">Nessun pacchetto disponibile.</p>';
+    ask('Modifica pacchetto', `<div style="max-height:45vh;overflow:auto">${options}</div><p class="mut">Atlantix rimborsa i crediti se il nuovo pacchetto costa meno; se costa di più, scala i crediti mancanti.</p>`, 'Cambia pacchetto').then(async (confirmed) => {
+      if (!confirmed) return;
+      if (!correctionActive(status)) return;
+      const selected = Number(($('input[name="axCorrectionPackage"]:checked') || {}).value) || 0;
+      if (!selected) return toast('Scegli un pacchetto', 1);
+      if (selected === current) return toast('È già il pacchetto attuale');
+      await submitCorrection(status, 'change_package', { package_id: selected });
+    }).catch((e) => toast(e.message, 1));
+  }
+  function openCorrectionDelete(status) {
+    const debited = Number(status.debited) || 0, username = esc(status.username || '');
+    const refundText = debited > 0 ? `Verranno restituiti ${debited} crediti.` : 'Non risultano crediti da rimborsare.';
+    const confirm = typeof askDanger === 'function'
+      ? askDanger('Eliminare e rimborsare?', `<p>La linea <b>${username}</b> verrà eliminata completamente da Atlantix. ${refundText}</p>`, '', 'Elimina e rimborsa', false)
+      : ask('Eliminare e rimborsare?', `<p>La linea <b>${username}</b> verrà eliminata completamente da Atlantix. ${refundText}</p>`, 'Elimina e rimborsa');
+    confirm.then(async (accepted) => {
+      if (!accepted || !correctionActive(status)) return;
+      await submitCorrection(status, 'delete', {});
+    }).catch((e) => toast(e.message, 1));
+  }
+  async function submitCorrection(status, action, fields) {
+    if (!correctionActive(status)) return;
+    try {
+      const result = await api('POST', '/admin/atx/correction', {
+        action, token: String(status.token || '').slice(0, 200), user: String(status.username || '').slice(0, 120), ...fields,
+      });
+      const parts = [];
+      if (+result.refund) parts.push(`rimborsati ${+result.refund} crediti`);
+      if (+result.extra_debit) parts.push(`scalati ${+result.extra_debit} crediti in più`);
+      const label = action === 'change_expiry' ? 'Scadenza aggiornata' : action === 'change_package' ? 'Pacchetto cambiato' : 'Linea eliminata';
+      const balance = parts.length ? parts.join(' · ') : action === 'delete' ? 'nessun credito rimborsato' : 'nessun conguaglio';
+      removeCorrection();
+      toast(`${label} · ${balance}`);
+      await load();
+    } catch (e) { toast(e.message, 1); }
+  }
+  function showCorrection(status) {
+    removeCorrection();
+    correctionExpiredToast = false;
+    const box = document.createElement('div');
+    box.id = 'axCorrectionBox';
+    box.className = 'card glass';
+    box.style.cssText = 'position:fixed;z-index:30;box-sizing:border-box;padding:14px;border:1px solid #ffb020;box-shadow:0 8px 32px #0008';
+    box.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><b>Correzione disponibile</b><button type="button" class="btn sm" data-ax-correction-close aria-label="Chiudi">×</button></div><div class="mut" style="margin:5px 0">${esc(status.username || '')}</div><div style="margin-bottom:10px">Tempo rimasto: <b data-ax-correction-time style="color:#ffb020"></b></div><div style="display:grid;gap:6px"><button class="btn sm" data-ax-correction="expiry">📅 Modifica scadenza</button><button class="btn sm" data-ax-correction="package">📦 Modifica pacchetto</button><button class="btn sm" data-ax-correction="delete">🗑 Elimina e rimborsa</button></div>`;
+    document.body.appendChild(box);
+    positionCorrection(box);
+    correctionResize = () => positionCorrection(box);
+    window.addEventListener('resize', correctionResize);
+    box.querySelector('[data-ax-correction-close]').onclick = removeCorrection;
+    box.querySelector('[data-ax-correction="expiry"]').onclick = () => openCorrectionExpiry(status);
+    box.querySelector('[data-ax-correction="package"]').onclick = () => openCorrectionPackage(status);
+    box.querySelector('[data-ax-correction="delete"]').onclick = () => openCorrectionDelete(status);
+    const tick = () => {
+      const remaining = Number(status.expires_at) - Date.now() / 1000;
+      if (remaining <= 0) return correctionExpired();
+      const seconds = Math.ceil(remaining), time = box.querySelector('[data-ax-correction-time]');
+      if (!time) return;
+      time.textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+      const color = seconds <= 10 ? '#ff6b6b' : '#ffb020';
+      time.style.color = color;
+      box.style.borderColor = color;
+    };
+    tick();
+    correctionTimer = setInterval(tick, 250);
+  }
+  async function correctionCheck() {
+    try {
+      const status = await api('POST', '/admin/atx/correction', { action: 'status' });
+      if (!status.active) { removeCorrection(); correctionExpiredToast = false; return; }
+      showCorrection(status);
+    } catch {}
+  }
   async function act(a, r) {
     if (!r) return;
     const u = r.username || '#' + (r.id || ''), U = esc(u);
@@ -177,6 +289,7 @@
           const savedNote = KXTools.noteWithTag(notes, originalNotes);
           try { await api('POST', '/admin/atx/lines/action', { action: 'save_notes', user_id: r.id, notes: savedNote }); r.notes = savedNote; } catch (e) { noteError = e.message; }
         }
+        correctionCheck();
         toast(`${u} rinnovata di ${months} ${months === 1 ? 'mese' : 'mesi'}${noteError ? ' · nota non salvata: ' + noteError : ''}`); return load();
       }
       if (a === 'on' || a === 'off') { const en = a === 'on'; if (!(await ask((en ? 'Attivare ' : 'Disattivare ') + u + '?', `La linea ${U} viene ${en ? 'attivata' : 'disattivata'} subito su Atlantix.`, en ? 'Attiva' : 'Disattiva'))) return; return await lineAct({ action: 'toggle', user_id: r.id, enabled: en }, `${u} ${en ? 'attivata' : 'disattivata'}`); }

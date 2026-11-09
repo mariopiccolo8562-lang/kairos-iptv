@@ -138,6 +138,8 @@
       if (!form.username) return toast('Scrivi il nome utente della linea', 1);
       const deviceId = clientFrom(form.client); if (deviceId === null) return toast('Cliente non trovato: sceglilo dall\'elenco o lascia vuoto', 1);
       const body = { app: form.app, username: form.username, password: form.password, dns: form.dns, mac: form.mac, deviceId, note: form.note };
+      const action = form.id ? 'aggiornare il collegamento registrato' : 'registrare il collegamento';
+      if (!(await ask(form.id ? 'Aggiornare la linea registrata?' : 'Registrare la linea?', `<p>Vuoi ${action} per <b>${esc(form.username)}</b> su <b>${esc(form.app)}</b>${form.client ? ` per ${esc(form.client)}` : ''} in Appunti App?</p>`, form.id ? 'Aggiorna' : 'Registra'))) return;
       busy = true;
       try { if (form.id) await api('PUT', '/admin/linked-lines/' + form.id, body); else await api('POST', '/admin/linked-lines', body); toast(form.id ? 'Linea aggiornata' : 'Linea registrata'); form = blank(); await loadItems(); }
       catch (e) { toast(e.message, 1); }

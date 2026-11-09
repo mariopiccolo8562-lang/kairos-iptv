@@ -176,6 +176,51 @@ export async function atxRoutes(req, env, path, who, ip, H) {
     await H.log(env, 'edit', `${who}: Atlantix — linea #${id} ${what}`, ip).catch(() => {});
     return json({ ok: true, message: str(j.message || '', 200) });
   }
+  if (path === '/atx/correction' && m === 'POST') {
+    const b = await H.readJSON(req, 2048), action = str(b.action, 40);
+    if (!['status', 'change_expiry', 'change_package', 'delete'].includes(action)) throw new HttpErr(400, 'Operazione sconosciuta');
+    const body = { action };
+    let date = '', packageId = 0;
+    if (action !== 'status') {
+      const token = str(b.token, 200).trim();
+      if (!token) throw new HttpErr(400, 'Correzione scaduta');
+      body.token = token;
+      if (action === 'change_expiry') {
+        date = str(b.date, 20).trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new HttpErr(400, 'Data non valida');
+        body.date = date;
+      }
+      if (action === 'change_package') {
+        packageId = Number(b.package_id);
+        if (!Number.isInteger(packageId) || packageId <= 0) throw new HttpErr(400, 'Pacchetto non valido');
+        body.package_id = packageId;
+      }
+    }
+    const j = await ax(env, H, '/api/lines/correction.php', { json: body });
+    const d = j.data && typeof j.data === 'object' ? j.data : {};
+    const num = (v) => Number.isFinite(+v) ? +v : 0;
+    if (action === 'status') {
+      const result = { active: !!d.active };
+      if (result.active) Object.assign(result, {
+        token: str(d.token, 200),
+        username: str(d.username, 120),
+        expires_at: num(d.expires_at),
+        new_exp: num(d.new_exp),
+        package_id: num(d.package_id),
+        debited: num(d.debited),
+        packages: (Array.isArray(d.packages) ? d.packages : []).slice(0, 50).map((p) => ({
+          id: num(p && p.id),
+          name: str(p && p.name, 80),
+          credits: num(p && p.credits),
+        })),
+      });
+      return json(result);
+    }
+    const refund = num(d.refund), extraDebit = num(d.extra_debit), username = str(b.user, 120).trim();
+    const operation = action === 'change_expiry' ? `scadenza ${date}` : action === 'change_package' ? `pacchetto ${packageId}` : 'eliminata';
+    await H.log(env, 'edit', `${who}: Atlantix — correzione linea${username ? ` ${username}` : ''}: ${operation} · rimborsati ${refund} / scalati ${extraDebit} crediti`, ip).catch(() => {});
+    return json({ ok: true, refund, extra_debit: extraDebit, message: str(j.message || '', 200) });
+  }
   if (path === '/atx/subs/action' && m === 'POST') {
     const b = await H.readJSON(req, 4096), id = String(parseInt(b.id, 10) || '');
     if (!id) throw new HttpErr(400, 'Sub-reseller non valido');
