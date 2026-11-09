@@ -1110,7 +1110,9 @@ async function generalHealthCheck(env, fresh = false) {
 async function paymentsRoutes(req, env, who, ip, ag) {
   const m = req.method;
   if (m === 'GET') {
-    const rows = ((await env.DB.prepare('SELECT * FROM payments ORDER BY updated DESC LIMIT 10000').all()).results) || [];
+    // il promemoria di un cliente segue il cliente: owner_id è quello di adesso (passato a un altro agente, agente eliminato…)
+    const rows = (((await env.DB.prepare("SELECT pm.*, CASE WHEN pm.kind = 'device' THEN COALESCE(CASE WHEN d.parent = '' THEN d.owner_id ELSE p.owner_id END, pm.owner_id) ELSE pm.owner_id END AS cur_owner FROM payments pm LEFT JOIN devices d ON pm.kind = 'device' AND d.id = pm.ref LEFT JOIN devices p ON p.id = d.parent ORDER BY pm.updated DESC LIMIT 10000").all()).results) || [])
+      .map(({ cur_owner, ...r }) => ({ ...r, owner_id: cur_owner ?? r.owner_id }));
     const visible = ag
       ? rows.filter((r) => ['line', 'device'].includes(r.kind) && ag.tree.includes(+r.owner_id || 0))
       : rows.filter((r) => r.kind !== 'agent');
@@ -1135,8 +1137,8 @@ async function paymentsRoutes(req, env, who, ip, ag) {
   }
   if (ag) {
     if (kind === 'device') {
+      // basta che il cliente sia suo adesso: il promemoria lasciato da chi lo aveva prima passa a lui
       if (!(await ag.own(ref))) throw new HttpErr(404, 'Cliente non trovato');
-      if (old && !ag.tree.includes(+old.owner_id || 0)) throw new HttpErr(403, 'Non puoi gestire i pagamenti di questo cliente');
     } else {
       if (old && !ag.tree.includes(+old.owner_id || 0)) throw new HttpErr(403, 'Non puoi gestire i pagamenti di questa linea');
       ownerId = ag.id;
