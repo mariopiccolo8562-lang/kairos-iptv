@@ -525,3 +525,43 @@ Richiesta del titolare: nella Home dei clienti non devono uscire contenuti per a
 - **Versioni già installate**: TV, Premium, Lite, XC, Plus e Nova conoscono solo «Categorie nascoste dalla Home» (`home.hide`). Per loro il Worker aggiunge da solo le parole per adulti (`ADULT_HOME_WORDS`) a `home.hide` nel battito e all'apertura (`rcSent`), quando `adult` non è `on`. Così già oggi spariscono dalla Home le righe delle categorie per adulti e i loro titoli. Il pannello mostra sempre la lista scritta dal titolare. L'impronta «applicata» si calcola uguale in `remote-panel.js` (`sentOf`): se cambia il calcolo in un posto va cambiato anche nell'altro. Le versioni nuove delle app fanno il riconoscimento completo.
 - **Liste «Categorie in primo piano» e «Categorie nascoste»**: fino a 40 nomi (prima 20). Il pulsante «＋ categorie per adulti» aggiunge anche +18, onlyfans, brazzers, x-rated…
 - **Prove**: v250 (server: voce, parole, impronta, spunta, singolo cliente, 40 nomi), v251 (interfaccia: spunta, «a metà», cliente «applicata»), Pro nel browser (94 esempi, tutte le righe della Home, «La mia lista», titolo in evidenza, voce del pannello che vince sul cliente, adulti in fondo agli elenchi).
+
+## 34. Download dal pannello e repo privati
+
+Obiettivo: poter rendere **privati** i repository GitHub delle app (kairos-iptv, kairos-tv, kairos-premium, kairos-lite, kairos-xc, kairos-flutter, Lairos-nova, kairos-store) senza rompere download e aggiornamenti. Il pannello è il **punto unico di download**; funziona già oggi con i repository pubblici.
+
+**Indirizzi (contratto con le app nuove)**
+- `GET /get/<id>.json`, id = `tv`, `premium`, `lite`, `xc`, `plus`, `nova`, `store`, `pro`: il feed dell'ultima release **com'è nel file della release** (`kairos-tv.json`, `kairos-premium.json`, `kairos-lite.json`, `kairos-xc.json`, `kairos-plus.json`, `kairos-nova.json` della release «latest»; per la Pro `kairos-tv.json` della release «kairos-tv» di kairos-store). Ogni link GitHub diventa `<dominio>/get/<id>.apk` (Nova: `urlArm32` → `/get/nova-arm32.apk`); nessun github.com né nome del titolare. Release vuota (Premium 1.7.0/1.7.1): la più recente che ha il file. Store: `{version, versionCode, url, date}` dalla sua release (v1.0.131 → versionCode 131, come nella build). Cache di 5 minuti; se GitHub non risponde resta l'ultimo feed letto, altrimenti **502** (per le app: nessun aggiornamento). JSON, CORS aperto.
+- `GET/HEAD /get/<id>.apk`: APK **in streaming dal Worker**, mai un rimando a GitHub. **Range** (206, `Content-Range`, 416) e `If-Range`: i download interrotti riprendono; se intanto è uscita una versione nuova si riparte da zero.
+- `/store/…`: la pagina dello store.
+- `/api/player/update` (lo usano già Kairos Pro e Kairos Nova installate): il link dell'APK ora è `/get/<id>.apk` (solo se è lo stesso file; i link scritti a mano nel pannello restano com'erano).
+- I link usano il dominio della richiesta: funzionano su qualunque dominio collegato al Worker.
+
+**Senza token** (come prima): link pubblici delle release (nessun limite di richieste) e GitHub Pages.
+**Con il token**: API GitHub autenticata per release, feed, APK (GitHub dà un indirizzo firmato che il Worker scarica **senza** token) e file di `docs/` di kairos-store (ramo main, al più ogni minuto, con l'ETag: le risposte «non cambiato» non consumano il limite di 5000 richieste all'ora). Se l'API rifiuta il token o non risponde si torna ai link pubblici (finché i repository sono pubblici). Il token resta nel Worker: mai in risposte, log o errori.
+
+**Creare il token** (una volta)
+1. GitHub → foto profilo → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+2. Nome `kairos-download`, *Resource owner* il tuo account, scadenza (es. 1 anno: rinnovalo prima, GitHub avvisa per email).
+3. *Repository access* → **Only select repositories** → gli 8 repository: kairos-iptv, kairos-tv, kairos-premium, kairos-lite, kairos-xc, kairos-flutter, Lairos-nova, kairos-store.
+4. *Permissions* → *Repository permissions* → **Contents: Read-only** (Metadata: Read-only si aggiunge da solo). Nient'altro.
+5. **Generate token** e copialo (`github_pat_…`).
+6. Repository **kairos-iptv** → Settings → Secrets and variables → Actions → **New repository secret**: nome `GH_RELEASES_TOKEN`, valore il token.
+7. Actions → **Pannello Cloudflare** → *Run workflow* (o il prossimo push su main): il token arriva al Worker come segreto `GH_TOKEN`. Senza il segreto la pubblicazione va avanti come prima.
+Per toglierlo: revoca il token su GitHub, oppure Cloudflare → Workers → kairos-panel → Settings → Variables and Secrets → `GH_TOKEN` → Delete (togliere solo il segreto da GitHub non basta: il Worker tiene l'ultimo valore).
+
+**Quando rendere privati i repository** (passo 3, più avanti): quando quasi tutti i clienti hanno le app nuove che chiedono `/get/<id>.json`, e dopo aver messo il token e controllato che i link sopra rispondano uguale. Con i repository privati:
+- TV, Premium, Lite, XC e Plus **vecchie** leggono il feed direttamente da GitHub: non trovano più aggiornamenti (si aggiornano solo installando la versione nuova). Pro e Nova installate passano già dal pannello e continuano ad aggiornarsi.
+- Kairos Store attuale controlla i propri aggiornamenti dall'API GitHub: smette di aggiornarsi da solo; la sua pagina chiede a GitHub solo il numero di versione del piè di pagina.
+- GitHub Pages sparisce: gli store e i link devono usare `/store/` del pannello. Anche codici Downloader e link condivisi che puntano a github.com vanno cambiati con `/get/<id>.apk`.
+
+**Dominio dei download: store-k.download**
+- In `wrangler.toml` → `[vars]`: `DL_HOSTS = "store-k.download,www.store-k.download"`. Su questi host il Worker risponde solo a `/get/<id>.json`, `/get/<id>.apk`, `/store/…` e `/` (→ `/store/`); tutto il resto (pannello, `/admin`, `/app`, API, accesso) è **404** e nessuna intestazione nomina panel-kairos.com o workers.dev.
+- La route **non** è ancora in `wrangler.toml` (il dominio non è nell'account Cloudflare: la pubblicazione fallirebbe). Per collegarlo:
+  1. Cloudflare → **Add a domain** → `store-k.download` → cambia i nameserver dal registrar finché il dominio è **Active**.
+  2. Il token `CLOUDFLARE_API_TOKEN` (segreto di kairos-iptv) deve coprire **anche la nuova zona**: stessi permessi che ha per panel-kairos.com (Zone → Workers Routes → Edit), con *Zone Resources* che include store-k.download (o tutte le zone dell'account).
+  3. In `wrangler.toml` aggiungi alla riga `routes` (se ti serve anche il www, una seconda voce con `www.store-k.download`):
+     `{ pattern = "store-k.download", custom_domain = true }`
+     cioè `routes = [{ pattern = "panel-kairos.com", custom_domain = true }, { pattern = "store-k.download", custom_domain = true }]`
+  4. Push su main → pubblicazione. Se Cloudflare rifiuta il dominio, il workflow pubblica senza la riga `routes` (avviso nel log): ricontrolla zona e token.
+- **Prove**: v260 (feed senza token, release vuote, cache, 502, CORS, altro dominio, `/api/player/update`), v261 (APK con Range, If-Range, 416, HEAD, nessun rimando), v262 (token e repository privati: API, indirizzi firmati senza token, store da `docs/`, ETag, token mai in risposte e log, ritorno ai link pubblici), v263 (store-k.download: solo download e store, tutto il resto 404).
