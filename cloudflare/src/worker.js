@@ -1260,6 +1260,7 @@ async function applyLineSync(env, panel, lines, ownerId, ag) {
     const device = await env.DB.prepare('SELECT id, name, expires, parent FROM devices WHERE id = ?').bind(link.device_id).first();
     if (!device || !device.expires || device.parent || device.expires === exp) continue;
     if (ag && !(await ag.own(device.id))) continue;
+    if (ag && Date.parse(exp + 'T00:00:00Z') - now() > 3 * 366 * 864e5) continue; // agenti: scadenza massima 3 anni, come dalla scheda del cliente
     await env.DB.prepare('UPDATE devices SET expires = ? WHERE id = ?').bind(exp, device.id).run();
     await log(env, 'edit', `Scadenza di ${device.name || device.id} allineata alla linea ${panel} ${link.username}: ${exp}`, '').catch(() => {});
     changed++;
