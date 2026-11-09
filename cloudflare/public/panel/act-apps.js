@@ -6,7 +6,11 @@
     return palette[Math.abs(hash) % palette.length];
   })();
   const targetIcon = (key, label) => ({ kairos: 'K', max: 'M', orbix: 'O', orcp: 'MT' })[key] || String(label || '').trim().split(/\s+/).slice(0, 2).map((x) => x[0] || '').join('').toUpperCase();
-  const dynamicApps = (apps, agent, perms = {}) => (apps || []).filter((x) => x.enabled && (!agent || (perms.actApps || []).includes(x.key)));
+  const hasPermission = (perms, app) => {
+    const keys = Array.isArray(app && app.aliases) && app.aliases.length ? app.aliases : [app && app.key];
+    return keys.some((key) => (perms && perms.actApps || []).includes(key));
+  };
+  const dynamicApps = (apps, agent, perms = {}) => (apps || []).filter((x) => x.enabled && (!agent || hasPermission(perms, x)));
   async function loadOrcpConfig(agent) {
     if (agent) {
       const cfg = await api('GET', '/admin/agent/orcp');
@@ -41,5 +45,5 @@
     const copyItems = [{ label: 'MAC', value: mac }, ...(playlist ? [{ label: 'M3U', value: playlist }] : []), ...(dns ? [{ label: 'DNS', value: dns }] : []), { label: 'utente', value: username }, { label: 'password', value: password }];
     return { message: `${app.name} registrata per ${mac}.`, activationUrl: app.link || '', copyItems };
   }
-  window.KXActApps = { targetColor, targetIcon, dynamicApps, loadOrcpConfig, submitOrcp, submitApp };
+  window.KXActApps = { targetColor, targetIcon, hasPermission, dynamicApps, loadOrcpConfig, submitOrcp, submitApp };
 })();

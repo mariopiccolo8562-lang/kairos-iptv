@@ -220,7 +220,7 @@ body.agent .foot{display:none}
   const isAgent = () => D.role === 'agent';
   const me = () => D.me || {};
   const can = (k) => !isAgent() || !!(me().perms || {})[k];
-  const canOpenActivationWizard = () => !isAgent() || can('create') || (D.activationApps || []).some((x) => x.enabled && (me().perms || {}).actApps?.includes(x.key)) || (!!(me().perms || {}).orcpApp && (me().perms || {}).orcpSrv?.length > 0);
+  const canOpenActivationWizard = () => !isAgent() || can('create') || (D.activationApps || []).some((x) => x.enabled && KXActApps.hasPermission(me().perms || {}, x)) || (!!(me().perms || {}).orcpApp && (me().perms || {}).orcpSrv?.length > 0);
   const linePanels = ['wolf', 'armada', 'storm', 'ro', 'slt'];
   const canLoadLines = (perms = me().perms || {}) => !!window.KXLinePick && (!isAgent() || linePanels.some((k) => !!perms[k]));
   const matchLineServer = async (host, servers, panel) => {
@@ -699,8 +699,9 @@ body.agent .foot{display:none}
   const actAppsBox = (P, topP) => {
     const cur = new Set(Array.isArray(P.actApps) ? P.actApps : []);
     const allowed = new Set(Array.isArray(topP && topP.actApps) ? topP.actApps : []);
-    const apps = (D.activationApps || []).filter((x) => !topP || allowed.has(x.key));
-    return apps.length ? apps.map((x) => chk('actapp', x.key, esc(x.name) + (x.enabled ? '' : ' <small>(spenta dal Master)</small>'), cur.has(x.key), !x.enabled, '')).join('') : '<small class="mut">Il Master non ha ancora attivato app per Nuovo cliente.</small>';
+    const has = (keys, app) => (Array.isArray(app.aliases) && app.aliases.length ? app.aliases : [app.key]).some((key) => keys.has(key));
+    const apps = (D.activationApps || []).filter((x) => !topP || has(allowed, x));
+    return apps.length ? apps.map((x) => chk('actapp', x.key, esc(x.name) + (x.enabled ? '' : ' <small>(spenta dal Master)</small>'), has(cur, x), !x.enabled, '')).join('') : '<small class="mut">Il Master non ha ancora attivato app per Nuovo cliente.</small>';
   };
   /* link di accesso personale di un agente + codice: copia, rigenera, revoca (come i pannelli dei fornitori) */
   async function linkBox(a) {
@@ -1470,9 +1471,8 @@ body.agent .foot{display:none}
         <label class="lbl">Server<select class="inp" id="wzOrcpSrv"><option value="">Scegli il server…</option>${((orcpCfg && orcpCfg.servers) || []).map((x) => `<option value="${esc(x.n)}"${String(st.orcpServer) === String(x.n) ? ' selected' : ''}>Server ${esc(x.n)} · ${esc(x.name)}</option>`).join('')}</select></label></div>` : '';
       const apps = dynamicApps.filter((x) => has(x.key)).map((x) => {
         const data = st.appData[x.key] || {};
-        const deviceKey = /^(ibo-player|ibo-one)$/.test(x.key) ? `<label class="lbl">Device key (facoltativa)<input class="inp" id="wzActKey-${x.key}" value="${esc(data.deviceKey || '')}" maxlength="120"></label>` : '';
         return `<div class="wz-st wz-app-st" style="--wzt:${targetColor(x.key)}"><b>${esc(x.name)}</b><p class="wz-help">Inserisci il MAC / ID del dispositivo per questa app.</p>
-          <label class="lbl">MAC / ID del dispositivo<input class="inp" data-act-mac id="wzActMac-${x.key}" value="${esc(data.mac || '')}" maxlength="64" autocomplete="off"></label>${deviceKey}</div>`;
+          <label class="lbl">MAC / ID del dispositivo<input class="inp" data-act-mac id="wzActMac-${x.key}" value="${esc(data.mac || '')}" maxlength="64" autocomplete="off"></label><label class="lbl">Device key (facoltativa)<input class="inp" id="wzActKey-${x.key}" value="${esc(data.deviceKey || '')}" maxlength="120"></label></div>`;
       }).join('');
       const picker = showLinePick ? '<div id="wzLinePick" data-placeholder="🔎 Cerca una linea già creata"></div>' : '';
       const dnsFallback = !agent && showLinePick ? '<div id="wzLineDns"></div>' : '';
@@ -1654,7 +1654,7 @@ body.agent .foot{display:none}
   }
   window.KXNewClient = (preset) => {
     const targets = preset && Array.isArray(preset.targets) ? preset.targets : ['kairos'];
-    const P = (me().perms || {}), allowed = (k) => k === 'kairos' ? can('create') : ['max', 'orbix'].includes(k) ? can('players') : k === 'orcp' ? !!P.orcpApp && Array.isArray(P.orcpSrv) && P.orcpSrv.length > 0 : (D.activationApps || []).some((x) => x.key === k && x.enabled && (P.actApps || []).includes(k));
+    const P = (me().perms || {}), allowed = (k) => k === 'kairos' ? can('create') : ['max', 'orbix'].includes(k) ? can('players') : k === 'orcp' ? !!P.orcpApp && Array.isArray(P.orcpSrv) && P.orcpSrv.length > 0 : (D.activationApps || []).some((x) => x.key === k && x.enabled && KXActApps.hasPermission(P, x));
     if (isAgent() && (!targets.length || targets.some((k) => !allowed(k)))) {
       return toast('Non hai il permesso per attivare questi target', 1);
     }

@@ -320,20 +320,33 @@ const DEFAULT_SETTINGS = {
   ],
 };
 const actAppSlug = (name) => String(name || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+const actAppCompact = (name) => actAppSlug(name).replace(/-/g, '');
 const actAppExcluded = (name) => /^(?:kairos\b|max\s*-?player\b|orbix\s*play\b|mirkoteam\b)/i.test(String(name || '').trim());
+const activationAliases = (app) => Array.isArray(app && app.aliases) && app.aliases.length ? app.aliases : [app && app.key].filter(Boolean);
+const activationAppEnabled = (settings, app) => activationAliases(app).some((key) => settings && settings.actApps && settings.actApps[key] === true);
+const activationAppAllowed = (perms, app) => activationAliases(app).some((key) => Array.isArray(perms && perms.actApps) && perms.actApps.includes(key));
 const isPanelHost = (value) => /^(?:https?:\/\/|localhost(?::\d+)?$|(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?$|[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/|$))/i.test(String(value || '').trim());
 const agentDnsLabel = (value, index, fallback = '') => { const label = str(value, 80).trim(); return label && !isPanelHost(label) ? label : fallback || `DNS ${index + 1}`; };
 async function activationApps(env, settings) {
-  const names = [...(await storeAppNames(env)), ...((Array.isArray(settings.appLinks) ? settings.appLinks : []).map((x) => x && x.name))];
-  const seen = new Set(), keys = new Set(), apps = [];
-  for (const value of names) {
-    const name = String(value || '').trim(), norm = name.toLowerCase(), key = actAppSlug(name);
-    if (!name || !key || actAppExcluded(name) || seen.has(norm) || keys.has(key)) continue;
-    seen.add(norm); keys.add(key);
-    const link = (Array.isArray(settings.appLinks) ? settings.appLinks : []).find((x) => String(x && x.name || '').trim().toLowerCase() === norm && /^https?:\/\//i.test(String(x && x.url || '')));
-    apps.push({ key, name, link: link || null });
+  const links = (Array.isArray(settings.appLinks) ? settings.appLinks : []).filter((x) => x && typeof x.name === 'string');
+  const groups = new Map();
+  const priorKeys = new Set(Object.keys(settings.actApps || {}).filter(validActAppKey));
+  try { for (const agent of await agentsAll(env)) for (const key of agentPerms(agent.perms).actApps) priorKeys.add(key); } catch {}
+  for (const value of [...(await storeAppNames(env)), ...links.map((x) => x.name)]) {
+    const name = String(value || '').trim(), key = actAppSlug(name), compact = actAppCompact(name);
+    if (!name || !key || !compact || actAppExcluded(name)) continue;
+    let group = groups.get(compact);
+    if (!group) { group = { names: [], aliases: new Set() }; groups.set(compact, group); }
+    group.names.push({ name, key });
+    group.aliases.add(key);
   }
-  return apps;
+  return [...groups.entries()].map(([compact, group]) => {
+    const link = links.find((x) => actAppCompact(x.name) === compact && /^https?:\/\//i.test(String(x.url || ''))) || null;
+    const preferred = link ? { name: String(link.name).trim(), key: actAppSlug(link.name) } : group.names[0];
+    group.aliases.add(preferred.key);
+    for (const key of priorKeys) if (actAppCompact(key) === compact) group.aliases.add(key);
+    return { key: preferred.key, name: preferred.name, link, aliases: [...group.aliases] };
+  });
 }
 const validActAppKey = (key) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(key || ''));
 /* Versione dell'APK da proporre alle app: quella pubblicata in automatico da GitHub (kairos-tv.json)
@@ -4780,7 +4793,8 @@ function agentPermsWithin(req, top) {
   if (!top.appsAllow.includes('*')) p.appsAllow = p.appsAllow.includes('*') ? [...top.appsAllow] : p.appsAllow.filter((x) => storeAppOk(top.appsAllow, x));
   for (const k of ['dlcAllow', 'kAllow', 'orbDns', 'mxDns']) if (!top[k].includes('*')) p[k] = p[k].includes('*') ? [...top[k]] : p[k].filter((x) => storeAppOk(top[k], x));
   p.orcpSrv = p.orcpSrv.filter((x) => top.orcpSrv.includes(x));
-  p.actApps = p.actApps.filter((x) => top.actApps.includes(x));
+  const topActApps = new Set(top.actApps.map(actAppCompact));
+  p.actApps = p.actApps.filter((x) => topActApps.has(actAppCompact(x)));
   p.maxConn = Math.min(p.maxConn, top.maxConn);
   p.armadaCredits = Math.min(p.armadaCredits, top.armadaCredits);
   p.stormCredits = Math.min(p.stormCredits, top.stormCredits);
@@ -4945,7 +4959,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
         if (Object.hasOwn(requested, 'orcpSrv')) checkedOrcpServers(requested.orcpSrv);
         if (Object.hasOwn(requested, 'actApps')) {
           if (!Array.isArray(requested.actApps)) throw new HttpErr(400, 'Le app da attivare devono essere un elenco');
-          const known = new Set((await activationApps(env, await getSettings(env))).map((x) => x.key));
+          const known = new Set((await activationApps(env, await getSettings(env))).flatMap(activationAliases));
           requested = { ...requested, actApps: [...new Set(requested.actApps.filter((x) => typeof x === 'string' && known.has(x)))] };
         }
       }
@@ -4972,7 +4986,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
       if (!AGENT_FLAGS.includes(k)) throw new HttpErr(400, `Permesso non valido: ${k}`);
       if (typeof v !== 'boolean') throw new HttpErr(400, `Il permesso ${k} deve essere Sì o No`);
     }
-    const actSettings = await getSettings(env), actCatalog = await activationApps(env, actSettings), listKeys = ['dlcAllow', 'appsAllow', 'kAllow', 'storeApps', 'actApps'], listOps = {}, actKeys = new Set(actCatalog.map((x) => x.key)), actEnabled = new Set(actCatalog.filter((x) => actSettings.actApps[x.key]).map((x) => x.key));
+    const actSettings = await getSettings(env), actCatalog = await activationApps(env, actSettings), listKeys = ['dlcAllow', 'appsAllow', 'kAllow', 'storeApps', 'actApps'], listOps = {}, actKeys = new Set(actCatalog.flatMap(activationAliases)), actEnabled = new Set(actCatalog.filter((x) => activationAppEnabled(actSettings, x)).map((x) => x.key));
     for (const [k, op] of Object.entries(lists)) {
       if (!listKeys.includes(k)) throw new HttpErr(400, `Elenco non valido: ${k}`);
       if (!op || typeof op !== 'object' || Array.isArray(op) || Object.keys(op).some((x) => !['mode', 'items'].includes(x))) throw new HttpErr(400, `Operazione non valida per ${k}`);
@@ -4983,7 +4997,12 @@ async function agentsAdmin(req, env, path, who, ip, top) {
         const value = str(item, 80);
         if (!value) throw new HttpErr(400, `Voce non valida per ${k}`);
         if (k === 'actApps' && value === '*') { for (const key of actEnabled) if (!items.includes(key)) items.push(key); continue; }
-        if (k === 'actApps' && !actKeys.has(value)) continue;
+        if (k === 'actApps') {
+          if (!actKeys.has(value)) continue;
+          const app = actCatalog.find((x) => activationAliases(x).includes(value));
+          if (app && !items.includes(app.key)) items.push(app.key);
+          continue;
+        }
         if (!items.some((x) => x.toLowerCase() === value.toLowerCase())) items.push(value);
       }
       if (items.length) listOps[k] = { mode: op.mode, items };
@@ -4998,7 +5017,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
       const perms = agentPerms(A.perms);
       for (const [k, value] of Object.entries(flags)) perms[k] = value;
       for (const [k, op] of Object.entries(listOps)) {
-        const current = perms[k], selected = op.items;
+        const current = k === 'actApps' ? [...new Set(perms[k].map((key) => actCatalog.find((x) => activationAliases(x).includes(key))?.key).filter(Boolean))] : perms[k], selected = op.items;
         if (op.mode === 'set') perms[k] = selected.includes('*') ? ['*'] : selected;
         else if (op.mode === 'add') {
           perms[k] = current.includes('*') || selected.includes('*') ? ['*'] : [...current, ...selected.filter((x) => !current.some((y) => y.toLowerCase() === x.toLowerCase()))];
@@ -5099,7 +5118,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   let P = agentPerms(A.perms), mine = serverIds(A.servers);
   let canAg = !!A.can_agents;
   for (let x = by.get(A.parent_id), n = 0; x && n < 20; x = by.get(x.parent_id), n++) { P = agentPermsWithin(P, agentPerms(x.perms)); const up = serverIds(x.servers); mine = mine.filter((y) => up.includes(y)); if (!x.can_agents) canAg = false; }
-  const currentActKeys = new Set((await activationApps(env, await getSettings(env))).map((x) => x.key));
+  const currentActKeys = new Set((await activationApps(env, await getSettings(env))).flatMap(activationAliases));
   P.actApps = P.actApps.filter((x) => currentActKeys.has(x));
   const Aeff = { ...A, can_agents: canAg ? 1 : 0, perms: JSON.stringify(P), servers: mine.join(',') };
   const tree = agentTree(all, A.id), who = ses.assist ? `Assistenza di ${ses.assistBy} · ${A.username}` : 'Agente ' + A.username;
@@ -5122,8 +5141,8 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     if (m !== 'POST') throw new HttpErr(405, 'Metodo non consentito');
     const b = await readJSON(req, 4096);
     if (!b || typeof b !== 'object' || Array.isArray(b) || Object.keys(b).some((k) => !['appKey', 'username', 'password', 'mac', 'deviceKey', 'serverId'].includes(k))) throw new HttpErr(400, 'Richiesta di attivazione non valida');
-    const key = str(b.appKey, 60), settings = await getSettings(env), app = (await activationApps(env, settings)).find((x) => x.key === key);
-    if (!app || !P.actApps.includes(key) || !settings.actApps[key]) throw new HttpErr(403, 'Questa app non è abilitata per te');
+    const key = str(b.appKey, 60), settings = await getSettings(env), app = (await activationApps(env, settings)).find((x) => activationAliases(x).includes(key));
+    if (!app || !activationAppAllowed(P, app) || !activationAppEnabled(settings, app)) throw new HttpErr(403, 'Questa app non è abilitata per te');
     const username = str(b.username, 120).trim(), password = str(b.password, 200), mac = str(b.mac, 64).trim(), deviceKey = str(b.deviceKey, 120).trim();
     if (!username || !password || !mac) throw new HttpErr(400, 'Scrivi utente, password e MAC / ID del dispositivo');
     const serverId = str(b.serverId, 20), server = serverId ? servers.find((x) => x.id === serverId && x.host) || null : null;
@@ -5370,7 +5389,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const activationCatalog = await activationApps(env, s);
     return stateJson(req, { role: 'agent', user: A.username, me: { ...meSafe, storeCode: await sellerAgentCode(env, A), perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: agList,
-      activationApps: activationCatalog.filter((x) => P.actApps.includes(x.key)).map(({ key, name, link }) => ({ key, name, enabled: !!s.actApps[key], link: link ? link.url : '' })),
+      activationApps: activationCatalog.filter((x) => activationAppAllowed(P, x)).map((x) => ({ key: x.key, name: x.name, aliases: activationAliases(x), enabled: activationAppEnabled(s, x), link: x.link ? x.link.url : '' })),
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { ...x, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
       // codici Downloader e link delle app Kairos: solo quelli che il titolare gli concede (kAllow)
@@ -5698,7 +5717,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: orbixDnsList(settings.playersCfg.orbix, dnslOwner), max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents, codes: settings.playersCfg.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(settings.playersCfg) },
       dlCodes: dlCodesOf(settings),
       storeOwnerCode: await sellerOwnerCode(env),
-      storeAppNames: sAppNames, activationApps: (await activationApps(env, settings)).map(({ key, name, link }) => ({ key, name, enabled: !!settings.actApps[key], link: link ? link.url : '' })), maintAg: Object.entries(settings.maintAg || {}).filter(([, x]) => x && x.on).map(([id]) => +id),
+      storeAppNames: sAppNames, activationApps: (await activationApps(env, settings)).map((x) => ({ key: x.key, name: x.name, aliases: activationAliases(x), enabled: activationAppEnabled(settings, x), link: x.link ? x.link.url : '' })), maintAg: Object.entries(settings.maintAg || {}).filter(([, x]) => x && x.on).map(([id]) => +id),
       counts: { ...nCounts, online: onl }, permKeys: PERM_KEYS, addonCat: addonCfg(settings), role: 'owner', ...(ses ? { agents: await agentsOut(env, agAll) } : {}),
     });
   }
@@ -6231,8 +6250,12 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (b.actApps !== undefined) {
       if (!b.actApps || typeof b.actApps !== 'object' || Array.isArray(b.actApps)) throw new HttpErr(400, 'Impostazioni app da attivare non valide');
       const known = await activationApps(env, s);
-      if (known.some((x) => Object.hasOwn(b.actApps, x.key) && typeof b.actApps[x.key] !== 'boolean')) throw new HttpErr(400, 'Ogni app da attivare deve essere Sì o No');
-      s.actApps = Object.fromEntries(known.map((x) => [x.key, b.actApps[x.key] === true]));
+      if (known.some((x) => activationAliases(x).some((key) => Object.hasOwn(b.actApps, key) && typeof b.actApps[key] !== 'boolean'))) throw new HttpErr(400, 'Ogni app da attivare deve essere Sì o No');
+      s.actApps = Object.fromEntries(known.map((x) => {
+        const aliases = activationAliases(x);
+        const enabled = Object.hasOwn(b.actApps, x.key) ? b.actApps[x.key] === true : aliases.some((key) => b.actApps[key] === true);
+        return [x.key, enabled];
+      }));
     }
     let pendNow = 0;
     if (b.codeOnly !== undefined) {
