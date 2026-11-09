@@ -571,7 +571,9 @@ body.agent .foot{display:none}
     }
   }
   function promptAgentLedger(agent, type, entry = null) {
-    const date = entry ? new Date(+entry.t).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+    // oggi in Italia (ora del pannello): con toISOString dopo mezzanotte la data proposta era ancora quella di ieri (UTC)
+    const now0 = new Date(), today = `${now0.getFullYear()}-${String(now0.getMonth() + 1).padStart(2, '0')}-${String(now0.getDate()).padStart(2, '0')}`;
+    const date = entry ? new Date(+entry.t).toISOString().slice(0, 10) : today;
     const title = entry ? 'Modifica movimento' : type === 'debt' ? 'Aggiungi debito' : 'Registra pagamento';
     return ask(title, `<label class="lbl">Tipo</label><select class="inp" id="agLedgerType"><option value="debt"${(entry?.type || type) === 'debt' ? ' selected' : ''}>Debito</option><option value="pay"${(entry?.type || type) === 'pay' ? ' selected' : ''}>Pagamento</option></select><label class="lbl">Data</label><input class="inp" id="agLedgerDate" type="date" value="${date}"><label class="lbl">Euro</label><input class="inp" id="agLedgerEur" type="number" min="0" max="100000" step="0.01" value="${entry?.eur ?? ''}"><label class="lbl">Crediti</label><div style="display:flex;gap:8px"><input class="inp" id="agLedgerCredits" type="number" min="0" max="1000000" step="0.01" style="flex:1" value="${entry?.credits ?? ''}"><select class="inp" id="agLedgerPanel"><option value="">Generico</option><option value="wolf"${entry?.panel === 'wolf' ? ' selected' : ''}>WOLF</option><option value="armada"${entry?.panel === 'armada' ? ' selected' : ''}>Armada</option><option value="storm"${entry?.panel === 'storm' ? ' selected' : ''}>Storm</option><option value="atx"${entry?.panel === 'atx' ? ' selected' : ''}>Atlantix</option><option value="ro"${entry?.panel === 'ro' ? ' selected' : ''}>Realott</option><option value="slt"${entry?.panel === 'slt' ? ' selected' : ''}>SLT</option></select></div><label class="lbl">Nota</label><input class="inp" id="agLedgerNote" maxlength="200" value="${esc(entry?.note || '')}">`, 'Salva').then(async (ok) => {
       if (!ok) return;
