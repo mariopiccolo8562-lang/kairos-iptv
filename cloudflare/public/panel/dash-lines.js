@@ -8,6 +8,7 @@
   card.innerHTML = '<div class="hd"><h3>📊 Linee attivate<small>Riepilogo dei pannelli IPTV e delle app collegate</small></h3><button class="btn sm" data-kx-dash-refresh>Aggiorna</button></div><div data-kx-dash-body><p class="mut">Carico…</p></div>';
   (anchor || document.getElementById('kpis')).insertAdjacentElement(anchor ? 'afterend' : 'afterend', card);
   const DAY = 864e5, PANEL = { wolf: 'WOLF IPTV', armada: 'Armada IPTV', storm: 'Storm IPTV', atx: 'Atlantix IPTV', ro: 'Realott IPTV', slt: 'SLT' };
+  const PCOL = { wolf: '#e0524f', armada: '#2f7fd6', storm: '#7c4dff', atx: '#1fa0b6', ro: '#e08a1e', slt: '#2a9d5c' };
   const ORDER = Object.keys(PANEL), canonical = { maxplayer: 'MaxPlayer', orbixplay: 'OrbixPlay', mirkoteam: 'MirkoTeam', oraplayer: 'Ora Player', iboone: 'Ibo One', iboplayer: 'Ibo Player', duplexpro: 'Duplex Pro' };
   const cache = { at: 0, panels: [], apps: [] };
   let busy = false;
@@ -26,7 +27,7 @@
     const rows = cache.panels, apps = cache.apps;
     const panelTiles = ORDER.filter((p) => rows.some((l) => l.p === p)).map((p) => {
       const s = panelStats(rows.filter((l) => l.p === p));
-      return { k: `panel-${p}`, v: s.active, c: 'red', label: label(`Linee attivate su ${PANEL[p]}`, `scadono 7 g: ${s.soon} · scadute: ${s.expired}`) };
+      return { k: `panel-${p}`, v: s.active, c: PCOL[p] || 'red', label: label(`Linee attivate su ${PANEL[p]}`, `scadono 7 g: ${s.soon} · scadute: ${s.expired}`) };
     });
     const all = panelStats(rows), groups = new Map();
     for (const item of apps) {
