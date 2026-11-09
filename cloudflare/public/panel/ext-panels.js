@@ -179,11 +179,16 @@
       }
       if (a === 'renew') {
         if (!A.pk) A.pk = (await api('GET', `/admin/${k}/packages`)).packages || [];
-        if (!(await ask('Rinnovare ' + u + '?', `<p>Scade il <b>${day(r.exp, r.expTxt)}</b>. Il rinnovo usa i crediti del tuo account ${esc(P.name)}.</p><label>Pacchetto<select class="inp" id="exM">${A.pk.map((p) => `<option value="${esc(p.id)}"${String(p.id) === String(r.pkg) ? ' selected' : ''}>${esc(p.name)} — ${p.cost} crediti${p.dur ? ' · ' + esc(String(p.dur)) : ''}</option>`).join('')}</select></label><label style="display:block;margin-top:10px">Nota (nome del cliente, telefono…)<textarea class="inp" id="exN" rows="2" maxlength="300" placeholder="es. Mario Rossi · 333 1234567">${esc(r.notes || '')}</textarea></label>`, 'Rinnova'))) return;
+        const originalNotes = String(r.notes || '');
+        if (!(await ask('Rinnovare ' + u + '?', `<p>Scade il <b>${day(r.exp, r.expTxt)}</b>. Il rinnovo usa i crediti del tuo account ${esc(P.name)}.</p><label>Pacchetto<select class="inp" id="exM">${A.pk.map((p) => `<option value="${esc(p.id)}"${String(p.id) === String(r.pkg) ? ' selected' : ''}>${esc(p.name)} — ${p.cost} crediti${p.dur ? ' · ' + esc(String(p.dur)) : ''}</option>`).join('')}</select></label><label style="display:block;margin-top:10px">Nota (nome del cliente, telefono…)<textarea class="inp" id="exN" rows="2" maxlength="300" placeholder="es. Mario Rossi · 333 1234567">${esc(KXTools.noteValue(originalNotes))}</textarea></label>`, 'Rinnova'))) return;
         const pkgId = $('#exM').value, notes = $('#exN').value.trim();
         const rr = await api('POST', `/admin/${k}/lines/action`, { action: 'renew', id: r.id, username: r.username, package_id: pkgId });
-        if (notes !== String(r.notes || '').trim()) await api('POST', `/admin/${k}/lines/action`, { action: 'notes', id: r.id, username: r.username, notes }).catch((e) => toast('Rinnovata, ma la nota non è stata salvata: ' + e.message, 1));
-        toast(`${u} rinnovata` + (rr.balance != null ? ` · crediti: ${rr.balance}` : '')); return load(k, true);
+        let noteError = '';
+        if (KXTools.noteChanged(notes, originalNotes)) {
+          const savedNote = KXTools.noteWithTag(notes, originalNotes);
+          try { await api('POST', `/admin/${k}/lines/action`, { action: 'notes', id: r.id, username: r.username, notes: savedNote }); r.notes = savedNote; } catch (e) { noteError = e.message; }
+        }
+        toast(`${u} rinnovata` + (rr.balance != null ? ` · crediti: ${rr.balance}` : '') + (noteError ? ' · nota non salvata: ' + noteError : '')); return load(k, true);
       }
       if (a === 'on' || a === 'off') { const en = a === 'on'; if (!(await ask((en ? 'Attivare ' : 'Disattivare ') + u + '?', `La linea ${U} viene ${en ? 'attivata' : 'disattivata'} subito su ${esc(P.name)}.`, en ? 'Attiva' : 'Disattiva'))) return; return await lineAct(k, { action: 'toggle', id: r.id, username: r.username, enabled: en }, `${u} ${en ? 'attivata' : 'disattivata'}`); }
       if (a === 'kill') { if (!(await ask('Disconnettere ' + u + '?', 'Chiude le connessioni aperte adesso su questa linea. Il cliente potrà ricollegarsi.', 'Disconnetti'))) return; return await lineAct(k, { action: 'kill', id: r.id, username: r.username }, `${u}: connessioni chiuse`); }

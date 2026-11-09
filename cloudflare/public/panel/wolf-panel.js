@@ -184,6 +184,7 @@
     const rawCredits = fresh && fresh.credits !== undefined ? fresh.credits : W.data && W.data.credits;
     const cr = rawCredits !== null && rawCredits !== undefined && Number.isFinite(+rawCredits) ? +rawCredits : null;
     const fmtC = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString('it-IT');
+    const noteEdits = new Map(S.map((l) => [String(l.id), KXTools.noteValue(l.note)]));
     const pr = ask('Conferma rinnovo', `${KXTools.panelHeader('WOLF IPTV', '#e0524f')}
       <label class="lbl">Pacchetto per tutte (usa crediti WOLF)</label><select class="inp" id="wbK">${pkOpts()}</select>
       <div class="kt-renew-list" style="margin-top:10px"><table class="kt-renew-table"><thead><tr><th>Utente</th><th>Nota / cliente KAIROS</th><th>Scadenza attuale</th><th>Crediti</th></tr></thead><tbody id="wbRows"></tbody></table></div>
@@ -193,9 +194,12 @@
     const rows = () => {
       const p = packageNow(), unit = Number.isFinite(+p.credits) ? +p.credits : null;
       $('#wbRows').innerHTML = S.map((l) => {
-        const k = linkOf(l.id), note = [l.note, k && k.name ? `KAIROS: ${k.name}` : ''].filter(Boolean).join(' · ');
-        return `<tr><td>${esc(l.username)}</td><td>${esc(note || '—')}</td><td>${esc(fmtD(l.exp))}</td><td>${unit === null ? '—' : `${fmtC(unit)} crediti`}</td></tr>`;
+        const k = linkOf(l.id);
+        return `<tr><td>${esc(l.username)}</td><td><input class="inp" data-wb-note="${esc(l.id)}" maxlength="300" value="${esc(noteEdits.get(String(l.id)) || '')}" style="width:100%;min-width:0;box-sizing:border-box;margin:0;padding:6px;font-size:12px">${k && k.name ? `<small class="mut" style="display:block;margin-top:4px">KAIROS: ${esc(k.name)}</small>` : ''}</td><td>${esc(fmtD(l.exp))}</td><td>${unit === null ? '—' : `${fmtC(unit)} crediti`}</td></tr>`;
       }).join('');
+      $('#wbRows').querySelectorAll('[data-wb-note]').forEach((input) => {
+        input.oninput = () => noteEdits.set(String(input.dataset.wbNote), input.value);
+      });
     };
     const upd = () => {
       const c = cost(), after = cr !== null && c !== null ? cr - c : null;
@@ -209,7 +213,13 @@
     const result = await KXTools.runReport(S, async (l) => {
       const r = await api('POST', `/admin/wolf/lines/${l.id}/extend`, { package: pkg });
       const credits = r && r.credits !== null && r.credits !== undefined && Number.isFinite(+r.credits) ? +r.credits : unitCost;
-      return { package: r && r.package || selectedPackage.name || pkg, credits };
+      const note = noteEdits.get(String(l.id)) ?? KXTools.noteValue(l.note);
+      let noteUpdated = false, noteError = '';
+      if (KXTools.noteChanged(note, l.note)) {
+        const savedNote = KXTools.noteWithTag(note, l.note);
+        try { await api('PUT', `/admin/wolf/lines/${l.id}`, { note: savedNote }); l.note = savedNote; noteUpdated = true; } catch (e) { noteError = e.message; }
+      }
+      return { package: r && r.package || selectedPackage.name || pkg, credits, noteUpdated, noteError };
     }, 'Rinnovo');
     W.sel.clear();
     const latest = await loadLines(true, true), afterRaw = latest && latest.credits;
@@ -217,11 +227,13 @@
     const used = cr !== null && after !== null ? cr - after : null;
     const estimate = unitCost !== null ? unitCost * result.ok : null;
     const spent = used !== null ? `${fmtC(used)} crediti` : estimate !== null ? `circa ${fmtC(estimate)} crediti` : 'non verificabili';
-    const successes = result.items.filter((x) => x.ok).map((x) => `<li class="ok">${esc(x.item.username)} · ${x.value.credits === null ? 'costo non disponibile' : `${fmtC(x.value.credits)} crediti`}</li>`).join('');
+    const successes = result.items.filter((x) => x.ok).map((x) => `<li class="ok">${esc(x.item.username)} · ${x.value.credits === null ? 'costo non disponibile' : `${fmtC(x.value.credits)} crediti`}${x.value.noteUpdated ? ' · nota aggiornata' : ''}</li>`).join('');
     const failures = result.items.filter((x) => !x.ok).map((x) => `<li class="err">${esc(x.item.username)}: ${esc(x.error)}</li>`).join('');
+    const noteErrors = result.items.filter((x) => x.ok && x.value.noteError).map((x) => `<li class="err">${esc(x.item.username)}: nota non salvata: ${esc(x.value.noteError)}</li>`).join('');
     await ask('Riepilogo rinnovo WOLF', `${KXTools.panelHeader('WOLF IPTV', '#e0524f')}<div class="kt-renew-report">
       <div><h4>Rinnovate (${result.ok})</h4><ul>${successes || '<li>—</li>'}</ul></div>
       <div><h4>Errori (${result.err.length})</h4><ul>${failures || '<li>—</li>'}</ul></div>
+      ${noteErrors ? `<div><h4>Note non salvate</h4><ul>${noteErrors}</ul></div>` : ''}
       <p class="kt-renew-foot" style="margin:0">Crediti spesi: <b>${esc(spent)}</b>${used !== null ? ` · saldo ${fmtC(cr)} → ${fmtC(after)}` : ''}</p></div>`, 'Chiudi');
   }
   async function bulkTgl(on) {
@@ -457,14 +469,20 @@
       if (a === 'ext') {
         await loadPk();
         const ok = await ask('Rinnova ' + l.username, `<label class="lbl">Pacchetto (usa crediti WOLF)</label><select class="inp" id="wxK">${pkOpts()}</select>
-          <label class="lbl" style="margin-top:10px">Nota (nome del cliente, telefono…)</label><input class="inp" id="wxN" maxlength="300" value="${esc(l.note || '')}" placeholder="es. Mario Rossi · 333 1234567">
+          <label class="lbl" style="margin-top:10px">Nota (nome del cliente, telefono…)</label><input class="inp" id="wxN" maxlength="300" value="${esc(KXTools.noteValue(l.note))}" placeholder="es. Mario Rossi · 333 1234567">
           ${window.KXPay ? KXPay.duePrompt('wxPay') : ''}<p class="mut" style="font-size:12.5px;margin:10px 0 0">Scadenza attuale: <b>${fmtD(l.exp)}</b>. Crediti disponibili: <b>${(W.data && W.data.credits) ?? '—'}</b>.</p>`, 'Rinnova');
         if (!ok) return;
         const due = window.KXPay ? KXPay.readDuePrompt('wxPay') : null; if (due === false) return;
-        const pkg = $('#wxK').value, note = $('#wxN').value.trim();
+        const pkg = $('#wxK').value, note = $('#wxN').value.trim(), originalNote = String(l.note || '');
         const r = await api('POST', `/admin/wolf/lines/${id}/extend`, { package: pkg });
-        if (note !== String(l.note || '').trim()) await api('PUT', '/admin/wolf/lines/' + id, { note }).catch((e) => toast('Rinnovata, ma la nota non è stata salvata: ' + e.message, 1));
-        toast('Linea rinnovata su WOLF'); if (due) await KXPay.saveDue('line', 'wolf', id, l.username, +l.ownerId || +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Rinnovo riuscito, ma pagamento non registrato: ' + e.message, 1)); return loadLines(true, true);
+        let noteError = '';
+        if (KXTools.noteChanged(note, originalNote)) {
+          const savedNote = KXTools.noteWithTag(note, originalNote);
+          try { await api('PUT', '/admin/wolf/lines/' + id, { note: savedNote }); l.note = savedNote; } catch (e) { noteError = e.message; }
+        }
+        toast(noteError ? 'Rinnovo riuscito, ma la nota non è stata salvata: ' + noteError : 'Linea rinnovata su WOLF');
+        if (due) await KXPay.saveDue('line', 'wolf', id, l.username, +l.ownerId || +D.me?.id || 0, due.months, due.amount).catch((e) => toast('Rinnovo riuscito, ma pagamento non registrato: ' + e.message, 1));
+        return loadLines(true, true);
       }
       if (a === 'link') {
         const k = linkOf(id);

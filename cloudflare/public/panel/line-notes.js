@@ -8,6 +8,17 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const C = {}; // panel → { t, notes }
   async function notesOf(p) { const c = C[p]; if (c && Date.now() - c.t < 120e3) return c.notes; const r = await api('GET', '/admin/line-notes?panel=' + p).catch(() => ({ notes: {} })); C[p] = { t: Date.now(), notes: r.notes || {} }; return C[p].notes; }
+  async function getNote(p, ref) { const notes = await notesOf(p); return notes[String(ref || '').toLowerCase()] || ''; }
+  async function getNotes(p, refs) {
+    const notes = await notesOf(p);
+    return Object.fromEntries(refs.map((ref) => { const key = String(ref || '').toLowerCase(); return [key, notes[key] || '']; }));
+  }
+  function setNote(p, ref, note) {
+    const key = String(ref || '').toLowerCase(), c = C[p] || { t: 0, notes: {} };
+    if (note) c.notes[key] = note; else delete c.notes[key];
+    c.t = Date.now(); C[p] = c; tick().catch(() => {});
+  }
+  window.KXLineNotes = { get: getNote, getMany: getNotes, set: setNote };
   async function edit(p, ref, label) {
     const cur = ((C[p] || {}).notes || {})[ref.toLowerCase()] || '';
     if (!(await ask('Nota di ' + label, `<textarea class="inp" id="lnN" rows="3" maxlength="300" placeholder="es. Mario Rossi · 333 1234567">${esc(cur)}</textarea><p class="mut" style="font-size:12px;margin:8px 0 0">La nota resta in KAIROS: questo pannello non ha un campo nota.</p>`, 'Salva'))) return;
