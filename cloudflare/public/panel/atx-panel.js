@@ -97,7 +97,8 @@
     const LBL = { total: 'Linee totali', active: 'Attive', expired: 'Scadute', expiring: 'In scadenza', online: 'Collegati ora', trial: 'Prove', disabled: 'Disattivate', subresellers: 'Sub-reseller' };
     const card = (n, v) => `<div class="card glass" style="padding:14px 16px;min-width:150px"><div class="mut" style="font-size:12px">${esc(n)}</div><div style="font-size:24px;font-weight:700;margin-top:4px">${esc(String(v))}</div></div>`;
     const CL = { total: 'dark', active: 'red', expired: 'dark', expiring: 'dark', online: 'blue', trial: 'dark', disabled: 'dark', subresellers: 'dark' };
-    const T = [{ label: 'Crediti disponibili', v: mem.unlimited ? '∞' : Math.trunc(Number(mem.credits || 0)), c: 'green' }, ...Object.entries(st).filter(([, v]) => typeof v !== 'object').map(([k, v]) => ({ label: LBL[k] || k.replace(/_/g, ' '), v: esc(String(v)), c: CL[k] || 'dark' }))];
+    // agli agenti solo i crediti: connessioni, linee create, totali, in scadenza e scadute le vede il titolare
+    const T = [{ label: 'Crediti disponibili', v: mem.unlimited ? '∞' : Math.trunc(Number(mem.credits || 0)), c: 'green' }, ...Object.entries(isAg() ? {} : st).filter(([, v]) => typeof v !== 'object').map(([k, v]) => ({ label: LBL[k] || k.replace(/_/g, ' '), v: esc(String(v)), c: CL[k] || 'dark' }))];
     return window.KXStats ? KXStats.strip(T, { margin: m || '10px 0 0' }) : `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px">${T.map((t) => card(t.label, t.v)).join('')}</div>`;
   }
   function body() {
@@ -119,14 +120,14 @@
   }
   function render() {
     const V = $('#v-atx'); if (!V) return;
-    if (isAg() && A.tab === 'log') A.tab = 'lines';
+    if (isAg() && (A.tab === 'log' || A.tab === 'overview')) A.tab = 'lines';
     const st = A.st || {}, form = !st.connected || A.edit;
     if (st.connected && A.tab !== 'log' && A.ov === undefined) { A.ov = null; api('GET', '/admin/atx/overview').then((d) => { A.ov = d; render(); }).catch(() => { A.ov = false; }); }
     V.innerHTML = `<div class="card glass" style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;align-items:flex-start">
         <div><b style="font-size:16px">${st.connected ? '✅ Atlantix collegato' : 'Atlantix non collegato'}</b>
           <p class="mut" style="margin:4px 0 0;font-size:13px">${st.connected ? 'Account ' + esc(st.user || '') : isAg() ? 'Chi ti gestisce può assegnarti il tuo account Atlantix; oppure scrivi qui…' : 'Scrivi qui i dati con cui entri su cms.axdash.biz: restano cifrati in KAIROS.'}</p></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">${isAg() ? '' : '<a class="btn sm" href="https://cms.axdash.biz/login" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Apri Atlantix</a>'}${st.connected ? `<button class="btn sm" data-o="reload">Aggiorna</button><button class="btn sm" data-o="edit">${A.edit ? 'Chiudi' : 'Cambia dati'}</button><button class="btn sm" data-o="off">Scollega</button>` : ''}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${isAg() ? '' : '<a class="btn sm" href="https://cms.axdash.biz/login" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">Apri Atlantix</a>'}${st.connected && !isAg() ? `<button class="btn sm" data-o="reload">Aggiorna</button><button class="btn sm" data-o="edit">${A.edit ? 'Chiudi' : 'Cambia dati'}</button><button class="btn sm" data-o="off">Scollega</button>` : ''}</div>
       </div>
       ${form ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px">
         <label>Username<input class="inp" id="axU" autocomplete="off" value="${esc(st.user || '')}"></label>
@@ -135,7 +136,7 @@
         <label>Codice 2FA (solo se Atlantix lo chiede)<input class="inp" id="axO" inputmode="numeric" maxlength="6" placeholder="000000"></label></div>
         <button class="btn pri" data-o="save" style="margin-top:12px">Collega Atlantix</button>` : ''}</div>
       ${st.connected && A.tab !== 'overview' && A.tab !== 'log' && A.ov ? overviewHtml(A.ov, '0 0 14px') : ''}
-      ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.filter(([k]) => !isAg() || k !== 'log').map(([k, n]) => `<button class="btn sm${A.tab === k ? ' pri' : ''}" data-t="${k}">${n}</button>`).join('')}${toolbar()}</div>${body()}</div>` : ''}`;
+      ${st.connected ? `<div class="card glass"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">${TABS.filter(([k]) => !isAg() || (k !== 'log' && k !== 'overview')).map(([k, n]) => `<button class="btn sm${A.tab === k ? ' pri' : ''}" data-t="${k}">${n}</button>`).join('')}${toolbar()}</div>${body()}</div>` : ''}`;
     if (!isAg() && A.tab === 'log' && st.connected && window.KXTools) KXTools.panelLog($('#atxPanelLog'), 'atx', '#1fa0b6');
     $$('[data-t]', V).forEach((b) => (b.onclick = () => { A.tab = b.dataset.t; A.page = 1; A.q = ''; A.status = ''; A.reseller = ''; A.days = 0; if (A.tab === 'log') render(); else load(); }));
     $$('[data-o]', V).forEach((b) => (b.onclick = () => op(b.dataset.o)));
