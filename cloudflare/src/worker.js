@@ -1893,6 +1893,19 @@ async function storeDoc(env, rel) {
   }
   return { b };
 }
+/** politica pubblica degli aggiornamenti di Kairos Nova (solo bgupd e force del profilo «nova», come /api/player/update)
+ *  per /get/nova.json. In memoria per 60 s: il feed è pubblico e non legge il database a ogni richiesta.
+ *  Database non raggiungibile: l'ultima letta, altrimenti null (l'app tiene la politica salvata). */
+let novaPolMem = null;
+async function novaPolicy(env) {
+  if (novaPolMem && now() - novaPolMem.t < 60e3) return novaPolMem.v;
+  try {
+    const prof = rcProfiles(await getSettings(env)).nova || {}, v = {};
+    for (const k of ['bgupd', 'force']) if (prof[k] !== undefined) v[k] = prof[k];
+    novaPolMem = { t: now(), v };
+    return v;
+  } catch { return novaPolMem ? novaPolMem.v : null; }
+}
 async function cleanLinks(req, env, url, path) {
   const mj = path.match(/^\/get\/([a-z0-9-]{1,24})\.json$/);
   if (mj && req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS', 'Access-Control-Max-Age': '86400' } });
@@ -1901,7 +1914,10 @@ async function cleanLinks(req, env, url, path) {
     if (!hasKey(GET_FEED, mj[1])) return new Response('Non trovato', { status: 404 });
     const f = await dlFeed(env, mj[1]);
     if (!f) return new Response('Aggiornamenti non disponibili al momento', { status: 502, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
-    return new Response(req.method === 'HEAD' ? null : JSON.stringify(feedLinks(f, mj[1], url.origin)), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' } });
+    const out = feedLinks(f, mj[1], url.origin);
+    // Kairos Nova non si registra: la politica pubblica degli aggiornamenti arriva col feed, come da /api/player/update
+    if (mj[1] === 'nova') { const p = await novaPolicy(env); if (p) out.policy = p; }
+    return new Response(req.method === 'HEAD' ? null : JSON.stringify(out), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' } });
   }
   const m = path.match(/^\/get\/([a-z0-9-]{1,24})\.apk$/);
   if (m) return hasKey(GET_APK, m[1]) ? dlApk(req, env, GET_APK[m[1]]) : new Response('Non trovato', { status: 404 });
