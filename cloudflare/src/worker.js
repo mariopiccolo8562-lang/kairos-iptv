@@ -909,7 +909,13 @@ function paymentNoteText(current, row) {
   const tag = paymentNoteTag(row);
   return `${base.slice(0, Math.max(0, 300 - tag.length - (base ? 1 : 0)))} ${tag}`.trim();
 }
-async function setPanelLineNote(env, panel, ref, mutate, ownerId = 0) {
+/** nota KAIROS di una linea: nessuna nota oppure scritta da chi ha questo elenco di id (l'agente e i suoi sotto-agenti) */
+async function lineNoteMine(env, panel, ref, tree) {
+  const row = await env.DB.prepare('SELECT owner_id FROM line_notes WHERE panel = ? AND ref = ?').bind(panel, String(ref || '').toLowerCase()).first();
+  return !row || tree.includes(+row.owner_id || 0);
+}
+/** tree: per un agente i suoi id (la nota KAIROS di un altro non si tocca né si legge); null = titolare */
+async function setPanelLineNote(env, panel, ref, mutate, ownerId = 0, tree = null) {
   const panelName = PAYMENT_PANEL_NAMES[panel] || String(panel || '').toUpperCase();
   const writer = PAYMENT_PANEL_NOTE_WRITERS[panel], where = writer ? 'panel' : 'kairos';
   if (writer) {
@@ -920,6 +926,7 @@ async function setPanelLineNote(env, panel, ref, mutate, ownerId = 0) {
     if (next !== current) await writer.write(env, ownerId, ref, next);
   } else {
     const key = String(ref || '').toLowerCase();
+    if (tree && !(await lineNoteMine(env, panel, key, tree))) throw new Error('Nota di un altro');
     const row = await env.DB.prepare('SELECT note FROM line_notes WHERE panel = ? AND ref = ?').bind(panel, key).first();
     const current = String(row && row.note || ''), next = String(mutate(current) || '').trim().slice(0, 300);
     if (next !== current) {
@@ -929,8 +936,8 @@ async function setPanelLineNote(env, panel, ref, mutate, ownerId = 0) {
   }
   return { ok: true, where, panelName };
 }
-async function trySetPanelLineNote(env, panel, ref, mutate, ownerId = 0) {
-  try { return await setPanelLineNote(env, panel, ref, mutate, ownerId); }
+async function trySetPanelLineNote(env, panel, ref, mutate, ownerId = 0, tree = null) {
+  try { return await setPanelLineNote(env, panel, ref, mutate, ownerId, tree); }
   catch { return { ok: false, where: PAYMENT_PANEL_NOTE_WRITERS[panel] ? 'panel' : 'kairos', panelName: PAYMENT_PANEL_NAMES[panel] || String(panel || '').toUpperCase(), error: 'pannello non raggiungibile o linea non trovata' }; }
 }
 const LEDGER_PANELS = new Set(['', 'wolf', 'armada', 'storm', 'atx', 'ro', 'slt']);
@@ -1150,7 +1157,7 @@ async function paymentsRoutes(req, env, who, ip, ag) {
     let panelNote = null;
     if (old) {
       await env.DB.prepare('DELETE FROM payments WHERE kind = ? AND panel = ? AND ref = ?').bind(kind, panel, ref).run();
-      if (kind === 'line') panelNote = await trySetPanelLineNote(env, panel, ref, (current) => String(current || '').replace(PAYMENT_NOTE_TAG, '').trim(), ownerId);
+      if (kind === 'line') panelNote = await trySetPanelLineNote(env, panel, ref, (current) => String(current || '').replace(PAYMENT_NOTE_TAG, '').trim(), ownerId, ag ? ag.tree : null);
       const noteResult = panelNote ? ` · nota ${panelNote.ok ? panelNote.where === 'panel' ? 'aggiornata su ' + panelNote.panelName : 'aggiornata in KAIROS' : 'non aggiornata'}` : '';
       await log(env, 'edit', `${who}: promemoria di pagamento rimosso (${panel || kind})${noteResult}`, ip).catch(() => {});
     }
@@ -1219,7 +1226,7 @@ async function paymentsRoutes(req, env, who, ip, ag) {
   let panelNote = null;
   if (kind === 'line') {
     const payment = { status, months, amount, note, paid_until: paidUntil, auto_months: autoMonths, auto_opt: autoOpt };
-    panelNote = await trySetPanelLineNote(env, panel, ref, (current) => paymentNoteText(current, payment), ownerId);
+    panelNote = await trySetPanelLineNote(env, panel, ref, (current) => paymentNoteText(current, payment), ownerId, ag ? ag.tree : null);
   }
   const noteResult = panelNote ? ` · nota ${panelNote.ok ? panelNote.where === 'panel' ? 'scritta su ' + panelNote.panelName : 'salvata in KAIROS' : 'non scritta'}` : '';
   await log(env, 'edit', `${who}: pagamento ${status === 'due' ? 'da riscuotere' : 'segnato pagato'} (${panel || kind})${noteResult}`, ip).catch(() => {});
@@ -1416,6 +1423,7 @@ async function linkedLinesRoutes(req, env, path, who, ip, ag) {
   if (path === '/line-notes' && m === 'PUT') {
     const b = await readJSON(req, 2048), panel = str(b.panel, 20).toLowerCase(), ref = str(b.ref, 120).trim().toLowerCase(), note = str(b.note, 300).trim();
     if (!/^[a-z]{2,10}$/.test(panel) || !ref) throw new HttpErr(400, 'Linea non valida');
+    if (ag && !(await lineNoteMine(env, panel, ref, ag.tree || [ag.id]))) throw new HttpErr(403, 'Questa nota non è tua: non puoi modificarla'); // la nota del titolare o di un altro agente
     if (!note) await env.DB.prepare('DELETE FROM line_notes WHERE panel = ? AND ref = ?').bind(panel, ref).run();
     else await env.DB.prepare('INSERT INTO line_notes (panel, ref, note, owner_id, updated) VALUES (?, ?, ?, ?, ?) ON CONFLICT(panel, ref) DO UPDATE SET note = excluded.note, owner_id = excluded.owner_id, updated = excluded.updated').bind(panel, ref, note, ag ? ag.id : 0, now()).run();
     await log(env, 'edit', `${who}: nota ${note ? 'salvata' : 'tolta'} sulla linea ${ref} (${panel})`, ip).catch(() => {});
