@@ -1785,7 +1785,7 @@ async function armadaRoutes(req, env, url, path, who, ip, agentId = 0, pv = 'arm
     if (type === 'mag') { params.mac = armMac(b.mac); if (!params.mac) throw new HttpErr(400, 'MAC non valido'); }
     else { params.username = str(b.username, 120); params.password = typeof b.password === 'string' ? b.password.slice(0, 200) : ''; if (!params.username || !params.password) throw new HttpErr(400, 'Servono utente e password della linea'); }
     const x = armList(await call(params))[0] || {};
-    await log(env, 'edit', `${who}: ${N} — rinnovata ${type === 'mag' ? 'MAG ' + params.mac : 'linea ' + params.username} di ${sub} ${sub === 1 ? 'mese' : 'mesi'}`, ip);
+    await log(env, 'edit', `${who}: ${N} — ${type === 'mag' ? 'MAG ' + params.mac : 'linea ' + params.username} rinnovata · durata ${sub} ${sub === 1 ? 'mese' : 'mesi'}`, ip);
     return json({ ok: true, exp: armTs(x.expire_date) });
   }
   if (path === R + '/toggle' && m === 'POST') {
@@ -1872,10 +1872,12 @@ async function agentArmada(req, env, url, path, who, ip, ctx, X, pv = 'armada') 
     const before = await armCreditsNow(env, s, pv);
     const r = await armadaRoutes(sub2({ ...b, type, sub }), env, url, path, who, ip, A.id, pv);
     if (!r || r.status !== 200) return r;
-    const out = await r.json(), cost = armCost(sub, before, await armCreditsNow(env, s, pv));
+    const out = await r.json(), after = await armCreditsNow(env, s, pv);
+    const measured = before !== null && after !== null && before - after >= 0 && before - after <= sub * 3;
+    const cost = armCost(sub, before, after);
     await armSpend(env, A, cost, 'renew', type === 'mag' ? x.mac : x.username, pv);
-    ctx.waitUntil(log(env, 'edit', `${who}: ${N} — ${armFmt(cost)} crediti del titolare (rinnovo ${type === 'mag' ? 'MAG ' + x.mac : 'linea ' + x.username})`, ip));
-    return json({ ...out, cost });
+    ctx.waitUntil(log(env, 'edit', `${who}: ${N} — ${type === 'mag' ? 'MAG ' + x.mac : 'linea ' + x.username} rinnovata · durata ${sub} ${sub === 1 ? 'mese' : 'mesi'} · ${measured ? '' : 'circa '}${armFmt(cost)} crediti del titolare`, ip));
+    return json({ ...out, cost, costEstimated: !measured });
   }
   if (path === R + '/toggle' && m === 'POST') {
     const b = await readJSON(req, 512), id = parseInt(b.id, 10);
