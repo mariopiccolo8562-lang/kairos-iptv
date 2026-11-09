@@ -5204,7 +5204,8 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   if (path.startsWith('/orcp/')) throw new HttpErr(403, 'Solo il titolare può gestire il Pannello ORCP');
   // in assistenza: niente «ultimo accesso» falsato e niente modifiche alla sicurezza dell'account dell'agente
   if (ses.assist && /^\/(logout-all|password|totp\/(setup|enable|disable))$/.test(path)) throw new HttpErr(403, 'In assistenza non puoi cambiare password, verifica in due passaggi o sessioni dell\'agente');
-  if (!ses.assist && now() - (+A.last_seen || 0) > 5 * 60e3) ctx.waitUntil(env.DB.prepare('UPDATE admins SET last_seen = ? WHERE id = ?').bind(now(), A.id).run());
+  // (anche i lavori notturni fatti a suo nome — rinnovi automatici, allineamento delle scadenze — non sono un suo accesso)
+  if (!ses.assist && !/^auto-renew-/.test(String(ses.id || '')) && now() - (+A.last_seen || 0) > 5 * 60e3) ctx.waitUntil(env.DB.prepare('UPDATE admins SET last_seen = ? WHERE id = ?').bind(now(), A.id).run());
   if (path === '/password' && m === 'PUT') { const b = await readJSON(req, 4096); if (typeof b.next === 'string' && b.next.length >= 10 && b.next.length <= 200 && (await checkPass(str(b.current, 200), (await env.DB.prepare('SELECT pass_hash FROM admins WHERE id = ?').bind(A.id).first()).pass_hash))) ctx.waitUntil((async () => { await env.DB.prepare('UPDATE admins SET pw_seal = ? WHERE id = ?').bind(await seal(env, b.next), A.id).run(); })()); return adminRoutes(new Request(url.href, { method: 'PUT', body: JSON.stringify({ current: b.current, next: b.next }) }), env, url, path, who, ip, ctx, aSes); } // il nome utente lo cambia solo chi l'ha creato
   if (AGENT_SELF.test(path) && m !== 'GET') return adminRoutes(req, env, url, path, who, ip, ctx, aSes);
   if (path === '/agents' || path.startsWith('/agents/')) { if (!canAg) throw new HttpErr(403, 'Non puoi gestire agenti'); return agentsAdmin(req, env, path, who, ip, Aeff); }
