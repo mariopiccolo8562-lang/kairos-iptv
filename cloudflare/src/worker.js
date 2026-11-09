@@ -7060,7 +7060,10 @@ async function trashRestore(env, id, who, ip) {
   const done = async (msg) => { await env.DB.prepare('DELETE FROM trash WHERE id = ?').bind(id).run(); await log(env, 'new', `${who}: ripristinato dal cestino ${TRASH_KIND[r.kind] || r.kind} · ${r.label}`, ip); return { ok: true, kind: r.kind, label: r.label, msg: msg || '' }; };
   if (r.kind === 'device') {
     const d = { ...data, orbix: '', maxp: '' }; // le liste sulle app terze erano state tolte: si rimandano dalla scheda
-    if (await env.DB.prepare('SELECT id FROM devices WHERE code = ? AND id <> ?').bind(d.code, d.id).first()) throw new HttpErr(409, `Il codice ${d.code} è stato preso da un altro dispositivo: il cliente non si può ripristinare`);
+    const other = await env.DB.prepare('SELECT id FROM devices WHERE code = ? AND id <> ?').bind(d.code, d.id).first();
+    // l'app del cliente, rimasta aperta, si ripresenta subito con lo stesso codice come richiesta «da attivare»: se nessuno
+    // l'ha toccata lascia il posto al cliente ripristinato (prima il ripristino era quasi sempre impossibile)
+    if (other && !(await env.DB.prepare(`DELETE FROM devices WHERE id = ? AND ${FREE_DEV} RETURNING id`).bind(other.id).first())) throw new HttpErr(409, `Il codice ${d.code} è stato preso da un altro dispositivo: il cliente non si può ripristinare`);
     if (!(await trashRow(env, 'devices', d))) throw new HttpErr(409, 'Il cliente esiste già');
     // le connessioni collegate tornano sotto di lui (solo quelle rimaste "in attesa")
     let n = 0;
