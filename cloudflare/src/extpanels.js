@@ -308,7 +308,12 @@ export async function extRoutes(req, env, path, who, ip, H, ag) {
   if (sub === 'subs' && m === 'GET') return json(await P.subs(env, H));
   if (sub === 'conns' && m === 'GET') {
     const data = await P.conns(env, H);
-    if (H.vpnMark && Array.isArray(data.rows)) data.rows = await H.vpnMark(env, data.rows, { ip: (r) => r.ip, isp: (r) => r.isp });
+    if (H.vpnMark && Array.isArray(data.rows)) {
+      try {
+        const marked = await H.vpnMark(env, data.rows, { ip: (r) => r.ip, isp: (r) => r.isp });
+        if (Array.isArray(marked)) data.rows = marked;
+      } catch {}
+    }
     return json(data);
   }
   if (sub === 'createform' && m === 'GET') return json({ fields: await P.createForm(env, H) });
