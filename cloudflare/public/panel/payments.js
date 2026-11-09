@@ -251,32 +251,43 @@
     return parts.join(' e ');
   };
   const ledgerPanelText = (p) => ({ '': 'Generico', wolf: 'WOLF', armada: 'Armada', storm: 'Storm', atx: 'Atlantix', ro: 'Realott', slt: 'SLT' }[p || ''] || p);
+  function ledgerCreditsSummary(entries = [], includeRows = true) {
+    const panels = [['', 'Generico'], ['wolf', 'WOLF'], ['armada', 'Armada'], ['storm', 'Storm'], ['atx', 'Atlantix'], ['ro', 'Realott'], ['slt', 'SLT']];
+    const credits = (entries || []).filter((e) => +e.credits > 0);
+    const cards = panels.map(([key, name]) => {
+      const given = credits.filter((e) => (e.panel || '') === key && e.type === 'debt').reduce((n, e) => n + (+e.credits || 0), 0);
+      const paid = credits.filter((e) => (e.panel || '') === key && e.type === 'pay').reduce((n, e) => n + (+e.credits || 0), 0);
+      const remaining = given - paid;
+      return `<div style="min-width:0;padding:9px 10px;border:1px solid #35445c;border-left:3px solid ${remaining > 0 ? '#f87171' : '#34d399'};border-radius:10px;background:#151c27"><b>${escP(name)}</b><small style="display:block;color:#cbd5e1;margin-top:4px">Dati ${ledgerNumber(given)} · Restituiti ${ledgerNumber(paid)} · Restano ${ledgerNumber(remaining)}</small></div>`;
+    }).join('');
+    const rows = credits.slice().sort((a, b) => (+b.t - +a.t) || (+b.id - +a.id));
+    const history = !includeRows ? '' : `<h5 style="margin:12px 0 6px">Giorno · Pannello · Crediti · Nota</h5>${rows.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Giorno</th><th>Pannello</th><th>Crediti</th><th>Nota</th></tr></thead><tbody>${rows.map((e) => `<tr><td>${new Date(+e.t).toLocaleDateString('it-IT')}</td><td>${escP(ledgerPanelText(e.panel))}</td><td style="color:${e.type === 'pay' ? '#6ee3a6' : '#e2e8f0'}">${e.type === 'pay' ? '−' : '+'}${ledgerNumber(e.credits)}</td><td>${escP(e.note || '')}</td></tr>`).join('')}</tbody></table></div>` : '<p class="mut" style="margin:6px 0">Nessun movimento con crediti.</p>'}`;
+    return `<section style="margin:12px 0;padding:12px;border:1px solid #344156;border-radius:12px;background:rgba(24,33,48,.55)"><h4 style="margin:0 0 8px">🎟 Crediti avuti</h4><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:7px">${cards}</div>${history}</section>`;
+  }
   function ledgerHistory(entries, deletable = false) {
-    if (!entries || !entries.length) return '<div class="mut" style="padding:12px 4px">Nessun movimento registrato.</div>';
-    return `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Data</th><th>Tipo</th><th>€</th><th>Crediti</th><th>Nota</th>${deletable ? '<th></th>' : ''}</tr></thead><tbody>${entries.map((e) => `<tr><td>${new Date(+e.t).toLocaleDateString('it-IT')}</td><td style="color:${e.type === 'debt' ? '#ff8f8f' : '#6ee3a6'}">${e.type === 'debt' ? 'Debito' : 'Pagamento'}</td><td>${+e.eur ? ledgerNumber(e.eur) : '—'}</td><td>${+e.credits ? `${ledgerNumber(e.credits)} cr${e.panel ? ' · ' + escP(ledgerPanelText(e.panel)) : ''}` : '—'}</td><td>${escP(e.note || '')}</td>${deletable ? `<td><button class="btn sm danger" data-ledger-delete="${e.id}" title="Elimina movimento">🗑</button></td>` : ''}</tr>`).join('')}</tbody></table></div>`;
+    const creditSummary = ledgerCreditsSummary(entries || []);
+    if (!entries || !entries.length) return `${creditSummary}<div class="mut" style="padding:12px 4px">Nessun movimento registrato.</div>`;
+    return `${creditSummary}<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Data</th><th>Tipo</th><th>€</th><th>Crediti</th><th>Nota</th>${deletable ? '<th></th>' : ''}</tr></thead><tbody>${entries.map((e) => `<tr><td>${new Date(+e.t).toLocaleDateString('it-IT')}</td><td style="color:${e.type === 'debt' ? '#ff8f8f' : '#6ee3a6'}">${e.type === 'debt' ? 'Debito' : 'Pagamento'}</td><td>${+e.eur ? ledgerNumber(e.eur) : '—'}</td><td>${+e.credits ? `${ledgerNumber(e.credits)} cr${e.panel ? ' · ' + escP(ledgerPanelText(e.panel)) : ''}` : '—'}</td><td>${escP(e.note || '')}</td>${deletable ? `<td><button class="btn sm" data-ledger-edit="${e.id}" title="Modifica movimento">✏️ Modifica</button> <button class="btn sm danger" data-ledger-delete="${e.id}" title="Elimina movimento">🗑</button></td>` : ''}</tr>`).join('')}</tbody></table></div>`;
   }
   async function refreshLedger() {
     await loadLedger(true);
     if ($('#v-payments')?.classList.contains('on')) renderPage();
     window.dispatchEvent(new CustomEvent('kxledger:update'));
   }
-  function promptLedgerEntry(agent, type) {
-    const title = type === 'debt' ? 'Aggiungi debito' : 'Registra pagamento';
-    ask(title, `<label class="lbl">Euro</label><input class="inp" id="payLedgerEur" type="number" min="0" max="100000" step="0.01"><label class="lbl">Crediti</label><div style="display:flex;gap:8px"><input class="inp" id="payLedgerCredits" type="number" min="0" max="1000000" step="0.01" style="flex:1"><select class="inp" id="payLedgerPanel"><option value="">Generico</option><option value="wolf">WOLF</option><option value="armada">Armada</option><option value="storm">Storm</option><option value="atx">Atlantix</option><option value="ro">Realott</option><option value="slt">SLT</option></select></div><label class="lbl">Nota</label><input class="inp" id="payLedgerNote" maxlength="200">`, 'Salva').then(async (ok) => {
-      if (!ok) return;
-      const eur = Number($('#payLedgerEur').value), credits = Number($('#payLedgerCredits').value), note = $('#payLedgerNote').value.trim();
-      if (!Number.isFinite(eur) || eur < 0 || eur > 100000 || !Number.isFinite(credits) || credits < 0 || credits > 1000000 || !(eur > 0 || credits > 0) || note.length > 200) return toast('Controlla importi e nota', 1);
-      try {
-        await api('POST', '/admin/agent-ledger', { agent: agent.id, type, eur, credits, panel: $('#payLedgerPanel').value, note });
-        await refreshLedger(); toast(type === 'debt' ? 'Debito aggiunto' : 'Pagamento registrato');
-      } catch (e) { toast(e.message, 1); }
-    });
-  }
+  const promptLedgerEntry = (agent, type) => window.KXAgentLedger?.prompt(agent, type);
   async function openAgentLedger(agent) {
     let data;
     try { data = await api('GET', `/admin/agent-ledger?agent=${agent.id}`); } catch (e) { toast(e.message, 1); return; }
+    let editEntry = null;
     const pr = ask(`Storico · ${agent.username}`, ledgerHistory(data.entries, true), 'Chiudi');
-    const bind = () => $$('#mB [data-ledger-delete]').forEach((button) => {
+    const bind = () => {
+      $$('#mB [data-ledger-edit]').forEach((button) => {
+        button.onclick = () => {
+          editEntry = data.entries.find((x) => String(x.id) === button.dataset.ledgerEdit) || null;
+          $('#mYes').click();
+        };
+      });
+      $$('#mB [data-ledger-delete]').forEach((button) => {
       button.onclick = async () => {
         const entry = data.entries.find((x) => String(x.id) === button.dataset.ledgerDelete);
         if (!entry || !window.confirm('Eliminare questo movimento?')) return;
@@ -288,9 +299,14 @@
           await refreshLedger();
         } catch (e) { toast(e.message, 1); }
       };
-    });
+      });
+    };
     bind();
     await pr;
+    if (editEntry) {
+      await window.KXAgentLedger?.prompt(agent, editEntry.type, editEntry);
+      await openAgentLedger(agent);
+    }
   }
   function renderMenuCount() {
     const b = $('#payCount'), n = dueRows().length; if (!b) return;
@@ -370,7 +386,7 @@
     const master = !isAgent(), total = due.reduce((a, r) => a + (+r.amount || 0), 0);
     const autoRows = clients.filter((r) => +r.auto_months > 0 || !!r.auto_opt);
     const ownBalance = !master && ledgerCache.own && ledgerCache.own.balance;
-    const debtBox = ledgerHasDebt(ownBalance) ? `<div style="margin-bottom:14px;padding:12px 14px;border-radius:12px;background:rgba(220,38,38,.16);border:1px solid rgba(239,68,68,.45);color:#ffd2d2"><b>Devi pagare ${escP(ledgerPositiveText(ownBalance))} al tuo fornitore</b> <button class="btn sm" id="payLedgerHistory">Storico</button></div>` : '';
+    const debtBox = ledgerHasDebt(ownBalance) ? `<div style="margin-bottom:14px;padding:12px 14px;border-radius:12px;background:rgba(220,38,38,.16);border:1px solid rgba(239,68,68,.45);color:#ffd2d2"><b>Devi pagare ${escP(ledgerPositiveText(ownBalance))} al tuo fornitore</b> <button class="btn sm" id="payLedgerHistory">Storico</button>${ledgerCreditsSummary(ledgerCache.own?.entries || [], false)}</div>` : '';
     if (pageTab === 'agents' && !master) pageTab = 'due';
     V.innerHTML = `${debtBox}<div class="card glass"><div class="hd"><h3>💰 Pagamenti<small>Così sai sempre chi deve pagare e chi ha già pagato</small></h3></div>
       <div class="filters"><button class="fchip ${pageTab === 'due' ? 'on' : ''}" data-pt="due">Da pagare <span>${due.length}</span></button><button class="fchip ${pageTab === 'paid' ? 'on' : ''}" data-pt="paid">Pagati <span>${paid.length}</span></button>${master ? `<button class="fchip ${pageTab === 'agents' ? 'on' : ''}" data-pt="agents">Agenti <span>${ledgerCache.summary.length}</span></button>` : `<button class="fchip ${pageTab === 'ledger' ? 'on' : ''}" data-pt="ledger">Storico <span>${ledgerCache.own?.entries?.length || 0}</span></button>`}<button class="fchip ${pageTab === 'auto' ? 'on' : ''}" data-pt="auto">🔁 Rinnovi automatici <span>${autoRows.length}</span></button></div>
@@ -398,7 +414,7 @@
     let box = $('#kxAgentDebtDash');
     if (!box) { box = document.createElement('div'); box.id = 'kxAgentDebtDash'; box.className = 'card glass'; }
     box.style.cssText = 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;border-radius:12px;background:rgba(220,38,38,.16);border:1px solid rgba(239,68,68,.45);color:#ffd2d2';
-    box.innerHTML = `<b style="flex:1;min-width:220px">💰 Devi pagare ${escP(ledgerPositiveText(balance))} al tuo fornitore</b><button class="btn sm" id="kxAgentDebtHistory">Storico</button>`;
+    box.innerHTML = `<b style="flex:1;min-width:220px">💰 Devi pagare ${escP(ledgerPositiveText(balance))} al tuo fornitore</b><button class="btn sm" id="kxAgentDebtHistory">Storico</button>${ledgerCreditsSummary(ledgerCache.own?.entries || [], false)}`;
     if (box.parentElement !== V || V.firstElementChild !== box) V.prepend(box);
     $('#kxAgentDebtHistory', box).onclick = openOwnLedgerHistory;
   }
@@ -425,7 +441,7 @@
   window.addEventListener('kxledger:update', renderAgentDebtDash);
   const dash = $('#v-dash'); if (dash) new MutationObserver(renderAgentDebtDash).observe(dash, { childList: true });
   Object.assign(TITLES, { payments: 'Pagamenti' });
-  window.KXPay = { load, loadLedger, get, hasRows: () => cache.rows.length > 0 || !!(ledgerCache.own && ledgerCache.own.entries && ledgerCache.own.entries.length), effective, badge, open, isDue, filterDue, daysSince, amountText, dateText, remainingText, canEdit, saveDue, duePrompt, readDuePrompt, panelTile, renderPage, ownDebtText: () => { const balance = isAgent() && ledgerCache.own && ledgerCache.own.balance; return ledgerHasDebt(balance) ? ledgerPositiveText(balance) : ''; }, openOwnLedgerHistory };
+  window.KXPay = { load, loadLedger, ledgerCreditsSummary, get, hasRows: () => cache.rows.length > 0 || !!(ledgerCache.own && ledgerCache.own.entries && ledgerCache.own.entries.length), effective, badge, open, isDue, filterDue, daysSince, amountText, dateText, remainingText, canEdit, saveDue, duePrompt, readDuePrompt, panelTile, renderPage, ownDebtText: () => { const balance = isAgent() && ledgerCache.own && ledgerCache.own.balance; return ledgerHasDebt(balance) ? ledgerPositiveText(balance) : ''; }, openOwnLedgerHistory };
   renderAgentDebtDash();
   document.addEventListener('click', (e) => {
     const del = e.target.closest('[data-kxpay-delete]');
