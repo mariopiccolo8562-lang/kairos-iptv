@@ -3359,15 +3359,17 @@ const ENG_OPTS = [['auto', 'Automatico (ExoPlayer, passa a VLC se serve)'], ['ex
 const RC_CAT = [
   /* ---- Generale ---- */
   ['lite', 'Modalità leggera', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['max', 'Leggerissima'], ['off', 'Spenta']], KALL_LITE, 'Niente animazioni ed effetti, immagini e memoria ridotte: per chiavette e TV vecchie. «Leggerissima» toglie anche le transizioni e svuota le cache: la scelta giusta per Fire Stick con poca memoria', '', 'Generale'],
-  ['privacy', 'Finestra «Privacy e condizioni»', 'sel', [['show', 'Mostrala al primo avvio'], ['skip', 'Non mostrarla']], ['tv', 'ktv', 'prem', 'lite', 'xc'], 'Con «Non mostrarla» il cliente non vede più la finestra all\'avvio', '', 'Generale'],
+  ['privacy', 'Finestra «Privacy e condizioni»', 'sel', [['show', 'Mostrala al primo avvio'], ['skip', 'Non mostrarla']], ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus'], 'Con «Non mostrarla» il cliente non vede più la finestra all\'avvio', '', 'Generale'],
   ['o.startScr', 'Schermata iniziale', 'sel', [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta'], ['guide', 'Guida TV'], ['lastch', 'Ultimo canale guardato']], KPRO, '', '', 'Generale'],
   ['o.orient', 'Layout su telefoni e tablet', 'sel', [['auto', 'Automatico'], ['land', 'Sempre orizzontale']], KPRO, 'Sulle TV non cambia nulla', '', 'Generale'],
   ['tvmode', 'Modalità TV', 'sel', [['on', 'Attiva: interfaccia per telecomando'], ['off', 'Spenta']], ['nova'], '', '', 'Generale'],
   // solo nel profilo dell'app (c[8] = 'prof'): per il singolo cliente l'IA si sceglie nella sua scheda, che vince sul profilo
-  ['ai', 'Assistente IA', 'sel', [['gm', 'Gemini'], ['claude', 'Claude'], ['off', 'Spento']], KPRO_XC, 'Ricerca con le frasi (anche a voce), «Cosa guardo stasera?» e domande sui titoli. Vale per i clienti che nella loro scheda hanno «predefinito»; le domande al giorno restano quelle della pagina Assistente IA. Spento: le funzioni IA spariscono dall\'app. In Kairos XC servono anche le «Funzioni intelligenti» accese', 'Predefinito (pagina Assistente IA)', 'Generale', 'prof'],
-  // Kairos XC: autopilota, canali non funzionanti in fondo, promemoria, «Per te», «Stasera», assistente e ricerca a voce. Spente di serie:
-  // l'app fa quello che faceva prima (restano solo decoder e versione giusta del canale, canali non funzionanti in fondo)
-  ['smart', 'Funzioni intelligenti', 'sel', [['on', 'Accese'], ['off', 'Spente']], ['xc'], 'Kairos XC si adatta da sola (decoder del dispositivo, lettore imparato), si controlla da sola nei menu (server, linea, guida, spazio, orologio: esito in Salute e Dati), propone promemoria, «Per te» e «Stasera», assistente IA e ricerca a voce. Leggera anche sulle chiavette da 1 GB: niente lavoro all\'avvio né durante la visione', 'Spente (di serie)', 'Generale'],
+  // Kairos XC: su main c'è la 3.4.0, senza assistente né funzioni intelligenti (sono nel ramo xc-intelligente, non pubblicato):
+  // le due voci tornano con 'xc' quando quella versione esce, prima il pannello offrirebbe impostazioni che l'app ignora
+  ['ai', 'Assistente IA', 'sel', [['gm', 'Gemini'], ['claude', 'Claude'], ['off', 'Spento']], KPRO, 'Ricerca con le frasi (anche a voce), «Cosa guardo stasera?» e domande sui titoli. Vale per i clienti che nella loro scheda hanno «predefinito»; le domande al giorno restano quelle della pagina Assistente IA. Spento: le funzioni IA spariscono dall\'app', 'Predefinito (pagina Assistente IA)', 'Generale', 'prof'],
+  // Kairos XC «intelligente» (ramo xc-intelligente): autopilota, canali non funzionanti in fondo, promemoria, «Per te», «Stasera»,
+  // assistente e ricerca a voce. Nessuna app per ora (vedi sopra): con la versione pubblicata si rimette ['xc']
+  ['smart', 'Funzioni intelligenti', 'sel', [['on', 'Accese'], ['off', 'Spente']], [], 'Kairos XC si adatta da sola (decoder del dispositivo, lettore imparato), si controlla da sola nei menu (server, linea, guida, spazio, orologio: esito in Salute e Dati), propone promemoria, «Per te» e «Stasera», assistente IA e ricerca a voce. Leggera anche sulle chiavette da 1 GB: niente lavoro all\'avvio né durante la visione', 'Spente (di serie)', 'Generale'],
   /* ---- Home: tipo «txt» = elenco di nomi (o parti di nome) di categorie separati da virgola ---- */
   ['home.top', 'Categorie in primo piano', 'txt', [], RC_APPS, 'Nomi (anche solo una parte) delle categorie da mettere per prime, separati da virgola e nell\'ordine che vuoi. Es.: Sport, Prime Video, Netflix. Valgono per la Home e per gli elenchi di Film, Serie e canali', '', 'Home'],
   ['home.hide', 'Categorie nascoste dalla Home', 'txt', [], RC_APPS, 'Nomi (anche solo una parte) delle categorie da non mostrare nella Home, separati da virgola. Es.: adult, xxx, 18+. Negli elenchi di Film, Serie e canali restano in fondo (con il PIN se bloccate)', '', 'Home'],
@@ -3418,8 +3420,9 @@ const RC_CMDS = [
   ['settings', 'Apri le impostazioni', 'Porta il cliente nella pagina Impostazioni dell\'app', RC_LINKED],
   ['update', 'Aggiorna l\'app', 'L\'app controlla subito se c\'è una versione nuova: la scarica in background e propone «Installa ora»', RC_LINKED],
   ['speed', 'Speed test', 'Misura la connessione del dispositivo: il risultato arriva qui sotto e in «Online ora» (Kairos XC dalla versione 3.3.2)', ['tv', 'xc']],
-  ['perm', 'Chiedi il permesso per gli aggiornamenti', 'Apre sulla TV la schermata di Android «Installa app sconosciute»: il cliente deve solo attivarla (Android non permette di farlo da remoto)', ['tv', 'ktv', 'prem', 'lite', 'xc']],
-  ['pin', 'Reimposta PIN controllo genitori', 'Il PIN torna 0000 e l\'app chiede al cliente di sceglierne uno nuovo: per chi lo ha dimenticato', RC_LINKED],
+  ['perm', 'Chiedi il permesso per gli aggiornamenti', 'Apre sulla TV la schermata di Android «Installa app sconosciute»: il cliente deve solo attivarla (Android non permette di farlo da remoto)', ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus', 'nova']],
+  // Kairos Premium non ha il controllo genitori: il comando le arriverebbe come «non supportato»
+  ['pin', 'Reimposta PIN controllo genitori', 'Il PIN torna 0000 e l\'app chiede al cliente di sceglierne uno nuovo: per chi lo ha dimenticato', RC_LINKED.filter((a) => a !== 'prem')],
   ['exit', 'Chiudi l\'app', 'L\'app si chiude; il cliente la riapre quando vuole', RC_LINKED],
 ];
 const rcCatByKey = new Map(RC_CAT.map((x) => [x[0], x]));
