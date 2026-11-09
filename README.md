@@ -486,6 +486,8 @@ Riusa quello che c'era già (classe del dispositivo D/N/O, modalità leggera aut
 
 ## 32. Kairos XC «intelligente» (interruttore «Funzioni intelligenti»)
 
+> **Per ora non attivo.** Il titolare ha deciso di lasciare Kairos XC alla 3.4.0 (leggera, per le chiavette da 1 GB): la versione intelligente è nel ramo `xc-intelligente` del repo `kairos-xc`, non pubblicata. Finché resta così, nel Controllo remoto di Kairos XC non compaiono «Funzioni intelligenti» né «Assistente IA» (l'app le ignorerebbe). Quando si pubblica quella versione basta rimettere `'xc'` nelle due voci del catalogo `RC_CAT` in `cloudflare/src/worker.js`.
+
 - **Controllo remoto › Kairos XC › «Funzioni intelligenti»: Accese | Spente** (profilo di tutti i clienti XC o singolo cliente, che vince sul profilo). **Spente di serie**: Kairos XC fa quello che faceva prima.
 - Accese, Kairos XC porta le funzioni della Kairos Pro (§30 e §31) in versione leggera per le chiavette da 1 GB: lettore imparato per formato (solo con «Automatico»), auto-controlli silenziosi nei menu con l'esito nel battito (`chk`: «Salute delle app» e «Dati» › Auto-controlli), DNS del canale successivo, promemoria dei programmi e delle squadre seguiti, pagine «Per te» e «Stasera» (due pulsanti discreti nella Home), assistente IA in Cerca (frasi, domande libere) e ricerca a voce.
 - Sempre attive anche con l'interruttore spento (non costano nulla e correggono soltanto): **decoder del dispositivo** (letti una volta: 4K → FHD, HEVC → H.264 fra le versioni dello stesso canale) e **canali non funzionanti** (stesso contratto della Pro: `ck` negli errori, anche da VLC, `dv`/`dead` nel battito; il canale va in fondo alla lista con «non disponibile»).
