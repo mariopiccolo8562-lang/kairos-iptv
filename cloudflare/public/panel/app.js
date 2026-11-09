@@ -719,7 +719,7 @@ function renderDrawer() {
   $('#dSave').onclick = async () => {
     sync();
     const vpnPart = edit.wgText && edit.wgText.trim() ? { vpnConf: edit.wgText } : edit.vpnConfClear ? { vpnConfClear: true } : {};
-    const acc = { maxConn: edit.maxConn, maxProfiles: edit.maxProfiles, maxStreams: +edit.maxStreams || 0, vpnLoc: edit.vpnLoc || '', perms: Object.fromEntries(PERM_L.map(([k]) => [k, !edit.perms || edit.perms[k] !== false])), lockProfiles: !!edit.lockProfiles, vpn: +edit.vpn || 0, plMode: edit.plMode === 'split' ? 'split' : 'merge', plDefault: edit.plDefault || '', player: { live: (edit.player || {}).live || '', movie: (edit.player || {}).movie || '', series: (edit.player || {}).series || '' }, profiles: edit.profiles.map((p) => ({ id: p.id || undefined, name: p.name, avatar: p.avatar, kids: !!p.kids, pl: p.pl || 'all' })) };
+    const acc = { maxConn: edit.maxConn, maxProfiles: edit.maxProfiles, maxStreams: +edit.maxStreams || 0, vpnLoc: edit.vpnLoc || '', perms: Object.fromEntries(PERM_L.map(([k]) => [k, !edit.perms || edit.perms[k] !== false])), lockProfiles: !!edit.lockProfiles, vpn: +edit.vpn || 0, plMode: edit.plMode === 'split' ? 'split' : 'merge', plDefault: edit.plDefault || '', player: { live: (edit.player || {}).live || '', movie: (edit.player || {}).movie || '', series: (edit.player || {}).series || '' }, profiles: edit.profiles.map((p) => ({ id: p.id || undefined, name: p.name, avatar: p.avatar, kids: !!p.kids, pl: p.pl || 'all', pinH: p.pinH || '', age: p.kids && p.age ? +p.age : null })) }; // PIN ed età del profilo: senza, «Salva» li cancellava
     try {
       const own = $('#eOwner') ? { ownerId: edit.ownerId || 0 } : {};
       if (edit.aiLimitIn !== undefined) own.aiLimit = edit.aiLimitIn;
