@@ -4,6 +4,33 @@
    create da lui (e dai suoi sotto-agenti) da KAIROS. */
 const API = 'https://apis.orbixplay.com';
 const s = (v, n = 200) => String(v ?? '').slice(0, n);
+const RETRY_STATUSES = new Set([502, 503, 504]);
+const IDEMPOTENT_PATHS = new Set(['/detect-slots', '/list-playlists', '/get-playlist', '/update-playlist', '/delete-playlist', '/delete-playlists']);
+const RETRY_DELAYS = [700, 1500];
+export async function orbixFetch(url, init, path) {
+  const retryable = IDEMPOTENT_PATHS.has(path) || path === '/add-playlist';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let response;
+    try { response = await fetch(url, init); }
+    catch {
+      if (retryable && attempt < RETRY_DELAYS.length) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS[attempt]));
+        continue;
+      }
+      return { response: null, status: 502, unavailable: true };
+    }
+    if (RETRY_STATUSES.has(response.status)) {
+      const retry = IDEMPOTENT_PATHS.has(path) || (path === '/add-playlist' && response.status === 503);
+      if (retry && attempt < RETRY_DELAYS.length) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS[attempt]));
+        continue;
+      }
+      return { response, status: response.status, unavailable: true };
+    }
+    return { response, status: response.status, unavailable: false };
+  }
+}
+export const orbixOutageMessage = (path, status) => `OrbixPlay è momentaneamente fuori servizio (errore ${status}): riprova tra qualche minuto. ${path === '/add-playlist' ? 'KAIROS non ha creato la playlist.' : "KAIROS non ha completato l'operazione."}`;
 /* ID OrbixPlay: se è un MAC (12 cifre esadecimali, con o senza separatori) lo scrive come 00:1A:79:AA:BB:CC, come lo mostra l'app */
 const macShort = (v) => /^[0-9A-Fa-f]{2}([:.-][0-9A-Fa-f]{2}){2,4}$/.test(String(v || '').trim()); // sembra un MAC ma ha meno di 6 coppie
 const macNorm = (v) => { v = String(v || '').trim(); const h = v.replace(/[^0-9A-Fa-f]/g, ''); return h.length === 12 && /^[0-9A-Fa-f:.\s-]+$/.test(v) ? h.toUpperCase().match(/../g).join(':') : v; };
@@ -15,8 +42,9 @@ async function call(env, H, path, query) {
   let r, j, why = '';
   for (const id of ids) {
     const qq = id ? { ...query, deviceid: id } : query;
-    try { r = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-customer-key': env.ORBIX_KEY }, body: JSON.stringify({ query: qq }) }); }
-    catch { throw new H.HttpErr(502, 'OrbixPlay non risponde, riprova tra poco'); }
+    const result = await orbixFetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-customer-key': env.ORBIX_KEY }, body: JSON.stringify({ query: qq }) }, path);
+    if (result.unavailable) throw new H.HttpErr(502, orbixOutageMessage(path, result.status));
+    r = result.response;
     j = await r.json().catch(() => ({}));
     if (r.ok) { if (id) query.deviceid = id; return j; }
     why = H.str(String(j.error || j.message || ''), 160);

@@ -15,7 +15,7 @@ import { atxRoutes } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz)
 import { oraRoutes } from './orapanel.js';
 import { orcpRoutes, orcpAgentConfig, setOrcpDownloader, ovpnFile } from './orcp.js'; // Pannello ORCP (cp.ottrun.com): l'app brandizzata OTTRUN, accesso passato dal titolare
 import { extRoutes } from './extpanels.js'; // Pannelli Realott e SLT (accesso diretto senza API), solo titolare // Pannello ORA (panel.oraplayers.com), accesso passato dal titolare
-import { oxpRoutes } from './orbixpanel.js'; // playlist OrbixPlay gestite da KAIROS (sezione «Pannello OrbixPlay»)
+import { orbixFetch, orbixOutageMessage, oxpRoutes } from './orbixpanel.js'; // playlist OrbixPlay gestite da KAIROS (sezione «Pannello OrbixPlay»)
 import { mxpRoutes } from './mxpanel.js'; // account MaxPlayer gestiti da KAIROS (sezione «Pannello MaxPlayer»)
 import { tgHook, notifyNew, notifyDecided, notifyActivated, notifyAdmin } from './notify.js'; // avvisi su Telegram e notifiche del pannello
 
@@ -483,7 +483,9 @@ async function orbixCall(env, path, query) {
   let r, j, why = '';
   for (const id of ids) {
     const qq = id ? { ...query, deviceid: id } : query;
-    try { r = await fetch(ORBIX_API + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-customer-key': env.ORBIX_KEY }, body: JSON.stringify({ query: qq }) }); } catch { throw new HttpErr(502, 'OrbixPlay non risponde, riprova tra poco'); }
+    const result = await orbixFetch(ORBIX_API + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-customer-key': env.ORBIX_KEY }, body: JSON.stringify({ query: qq }) }, path);
+    if (result.unavailable) throw new HttpErr(502, orbixOutageMessage(path, result.status));
+    r = result.response;
     j = await r.json().catch(() => ({}));
     if (r.ok) { if (id) query.deviceid = id; return j; }
     why = str(j.error || j.message || '', 160);
