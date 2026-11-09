@@ -161,7 +161,7 @@ $('#lform').addEventListener('submit', async (e) => {
   } catch (err) { tsReset(); $('#lerr').textContent = D.demo ? '' : err.message; $('.lcard').animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-10px)' }, { transform: 'translateX(10px)' }, { transform: 'translateX(0)' }], { duration: 300 }); }
 });
 let poll;
-function showLogin() { clearInterval(poll); const c = $('#chk'); if (c) c.remove(); $('#app').classList.remove('on'); $('#login').style.display = 'grid'; $('#lt').style.display = 'none'; tsReset(); }
+function showLogin() { clearInterval(poll); ST_BOOT = null; const c = $('#chk'); if (c) c.remove(); $('#app').classList.remove('on'); $('#login').style.display = 'grid'; $('#lt').style.display = 'none'; tsReset(); }
 async function logout() { try { await api('POST', '/admin/logout'); } catch {} showLogin(); }
 $('#logout').onclick = logout;
 
