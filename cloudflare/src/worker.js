@@ -2247,10 +2247,16 @@ function cleanHost(h) {
   if (!/^[a-z0-9.-]+$/i.test(u.hostname) && !/^\[[0-9a-f:.]+\]$/i.test(u.hostname)) throw new HttpErr(400, 'Nome del server non valido');
   return u.origin;
 }
-/** confronta due indirizzi solo per nome host (ignora schema e porta): per abbinare una linea incollata a un server salvato */
-function sameHostname(a, b) {
-  const h = (x) => { try { return new URL(/^https?:\/\//i.test(x) ? x : 'http://' + x).hostname.toLowerCase(); } catch { return ''; } };
-  const ha = h(a); return !!ha && ha === h(b);
+/** confronta nome host e porta effettiva, usando 80/443 se manca la porta esplicita */
+function sameServerEndpoint(a, b) {
+  const endpoint = (x) => {
+    try {
+      const u = new URL(/^https?:\/\//i.test(x) ? x : 'http://' + x);
+      return { host: u.hostname.toLowerCase(), port: u.port || (u.protocol === 'https:' ? '443' : '80') };
+    } catch { return null; }
+  };
+  const aa = endpoint(a), bb = endpoint(b);
+  return !!aa && !!bb && aa.host === bb.host && aa.port === bb.port;
 }
 /** stessa playlist con un altro server (percorso e parametri invariati) */
 /* lettore per tipo di contenuto scelto dal pannello ('' = decide il cliente) */
@@ -5177,7 +5183,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     if (panel && !LINE_SYNC_PANELS.has(panel)) throw new HttpErr(400, 'Pannello non valido');
     if (panel && !P[panel]) throw new HttpErr(403, 'Non puoi usare questo pannello IPTV');
     const host = str(b.host, 300) || (panel ? await masterLineDns(env, panel) : '');
-    const sv = servers.find((x) => host && sameHostname(x.host, host));
+    const sv = servers.find((x) => host && sameServerEndpoint(x.host, host));
     return json({ server: sv ? { id: sv.id, name: sv.name } : null });
   }
   const apv = path.match(/^\/addon-preview\/([a-z0-9-]{3,40})$/);

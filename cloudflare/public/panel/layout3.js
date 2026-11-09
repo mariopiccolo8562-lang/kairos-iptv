@@ -49,7 +49,7 @@
   // nomi delle voci: chiari e distinguibili (il titolo della pagina segue)
   const LABEL = {
     lmap: 'App dei clienti', lines: 'Appunti App', dns: 'DNS e server', armada: 'Pannello Armada', storm: 'Pannello Storm', wolf: 'Pannello WOLF', mxp: 'Pannello MaxPlayer', oxp: 'Pannello OrbixPlay',
-    apps3: 'Link di attivazione', apps3op: 'OrbixPlay e MaxPlayer', xlist: 'Attivazione Max/Orbix', dlc: 'Codici downloader', appk: 'App Kairos', agop: 'OrbixPlay e MaxPlayer', agk: 'App Kairos',
+    apps3: 'Link di attivazione', apps3op: 'OrbixPlay e MaxPlayer', xlist: 'Attivazione app', dlc: 'Codici downloader', appk: 'App Kairos', agop: 'OrbixPlay e MaxPlayer', agk: 'App Kairos',
     store: 'Riepilogo store', reports: 'Segnalazioni', creq: 'Contenuti richiesti', areq: 'Temi richiesti', reqai: 'Domande all\'IA',
     live: 'Online ora Kairos', rctl: 'Controllo remoto', apperr: 'Errori delle app', activity: 'Registro attività', trash: 'Cestino',
     'set-look': 'Aspetto e marchio', 'set-app': 'Funzioni dell\'app', 'set-addon': 'Store add-on', 'set-ai': 'Assistente IA', 'set-maint': 'Manutenzione', 'set-sec': 'Sicurezza e account', api: 'API e integrazioni',

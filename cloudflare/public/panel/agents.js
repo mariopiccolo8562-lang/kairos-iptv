@@ -230,10 +230,6 @@ body.agent .foot{display:none}
       const match = await api('POST', '/admin/match-server', { host: host || '', ...(panel ? { panel } : {}) });
       if (match && match.server) server = servers.find((s) => s.id === match.server.id) || null;
     } catch {}
-    if (!server && host) {
-      const value = String(host).replace(/^https?:\/\//, '').toLowerCase();
-      server = servers.find((s) => value && String(s.name).length >= 2 && value.includes(String(s.name).toLowerCase())) || null;
-    }
     return server;
   };
 
@@ -1248,7 +1244,7 @@ body.agent .foot{display:none}
     const showKairos = !agent || can('create');
     const showMax = !agent || (!!players().max && can('players'));
     const showOrbix = !agent || (!!players().orbix && can('players'));
-    const dynamicApps = (D.activationApps || []).filter((x) => x.enabled && (!agent || (P.actApps || []).includes(x.key)));
+    const dynamicApps = KXActApps.dynamicApps(D.activationApps, agent, P);
     let orcpCfg = null;
     const availableTargets = () => new Set([...(showKairos ? ['kairos'] : []), ...(showMax ? ['max'] : []), ...(showOrbix ? ['orbix'] : []), ...(orcpCfg && orcpCfg.servers && orcpCfg.servers.length ? ['orcp'] : []), ...dynamicApps.map((x) => x.key)]);
     const initialTargets = Array.isArray(preset.targets) ? preset.targets.filter((k) => availableTargets().has(k) || k === 'orcp') : [showKairos ? 'kairos' : (dynamicApps[0] && dynamicApps[0].key)].filter(Boolean);
@@ -1262,9 +1258,7 @@ body.agent .foot{display:none}
     const APPS_W = [['tv', 'Kairos Pro'], ['prem', 'Kairos Premium'], ['ktv', 'Kairos TV'], ['plus', 'Kairos Plus'], ['xc', 'Kairos XC'], ['lite', 'Kairos Lite'], ['nova', 'Kairos Nova']];
     const targets = () => [['kairos', 'App Kairos'], ['max', 'MaxPlayer'], ['orbix', 'OrbixPlay'], ...(orcpCfg && orcpCfg.servers && orcpCfg.servers.length ? [['orcp', 'MirkoTeam']] : []), ...dynamicApps.map((x) => [x.key, x.name])];
     const targetNames = () => Object.fromEntries(targets().map(([k, n]) => [k, n]));
-    const appColors = ['#2563eb', '#06b6d4', '#ec4899', '#22c55e', '#8b5cf6', '#f97316', '#14b8a6', '#eab308', '#6366f1', '#ef4444'];
-    const targetColor = (k) => ({ kairos: '#2563eb', max: '#8b5cf6', orbix: '#f97316', orcp: '#0d9488' })[k] || (() => { let h = 0; for (const c of String(k)) h = (h * 31 + c.charCodeAt(0)) | 0; return appColors[Math.abs(h) % appColors.length]; })();
-    const targetIcon = (k, label) => ({ kairos: 'K', max: 'M', orbix: 'O', orcp: 'MT' })[k] || String(label || '').trim().split(/\s+/).slice(0, 2).map((x) => x[0] || '').join('').toUpperCase();
+    const targetColor = KXActApps.targetColor, targetIcon = KXActApps.targetIcon;
     const preselectOrcp = () => {
       if (!orcpCfg || !st.pl.panel) return;
       const name = String((orcpCfg.map || {})[st.pl.panel] || '');
@@ -1574,7 +1568,7 @@ body.agent .foot{display:none}
       $('#agB').innerHTML = `<div class="wz"><div class="wz-s"><span class="n">${finished && !failed ? '✓' : '⚡'}</span><div><h4>${finished ? 'Esito dell’attivazione' : 'Attivazione in corso'}</h4>
         <p class="hint">${finished ? `${succeeded} su ${st.results.length} attivati${failed ? ` · ${failed} da riprovare` : ''}.` : 'Eseguo un’app alla volta. Puoi leggere qui il risultato di ciascuna.'}</p>
         <div class="wz-results">${st.results.map((r, ri) => `<div class="wz-result${r.status === 'ok' ? ' ok' : r.status === 'error' ? ' ko' : ''}"><i>${r.status === 'ok' ? '✓' : r.status === 'error' ? '✕' : r.status === 'running' ? '…' : '·'}</i><div><b>${esc(targetNames()[r.key] || r.key)}</b><small>${esc(r.message || (r.status === 'running' ? 'Attivazione in corso…' : 'In attesa'))}</small>
-          ${r.activationUrl ? `<a class="btn sm" href="${esc(r.activationUrl)}" target="_blank" rel="noopener">Apri il sito di attivazione ↗</a>` : ''}
+          ${r.activationUrl ? `<a class="btn sm act-app-link" href="${esc(r.activationUrl)}" target="_blank" rel="noopener">Apri il sito di attivazione ↗</a>` : ''}
           ${r.copyText ? `<button type="button" class="btn sm" data-wz-copy="${ri}">Copia tutto</button>` : ''}
           ${r.copyItems && r.copyItems.length ? `<div class="wz-copy-items">${r.copyItems.map((x, xi) => `<button type="button" class="btn sm" data-wz-copyitem="${ri}:${xi}">Copia ${esc(x.label)}</button>`).join('')}</div>` : ''}
         </div>${finished && r.status === 'error' && !st.running ? `<button type="button" class="btn sm" data-wzretry="${r.key}">Riprova</button>` : ''}</div>`).join('')}</div>
@@ -1597,7 +1591,6 @@ body.agent .foot{display:none}
     const runTarget = async (k) => {
       const username = st.pl.username.trim(), name = st.name.trim() || username, note = st.pl.ref || st.pl.note || '';
       const plName = String(st.pl.ref || '').split(/\s+/)[0] || 'Linea';
-      const linkedLine = (app, mac = '', rowNote = '', dns = '') => api('POST', '/admin/linked-lines', { app, username, password: st.pl.password, dns, mac, note: rowNote });
       if (k === 'kairos') {
         const playlist = agent
           ? { serverId: st.pl.serverId, name: plName, username, password: st.pl.password }
@@ -1623,29 +1616,12 @@ body.agent .foot{display:none}
         return 'Linea inviata a OrbixPlay';
       }
       if (k === 'orcp') {
-        const server = (orcpCfg.servers || []).find((x) => String(x.n) === String(st.orcpServer));
-        if (!server) throw new Error('Scegli un server MirkoTeam assegnato');
-        if (!agent || can('lines')) await linkedLine(orcpCfg.name || 'MirkoTeam', '', `Server ${server.n}`);
-        const download = orcpCfg.apk ? `Downloader ${orcpCfg.dl || '8128314'} (oppure ${orcpCfg.apk})` : `Downloader ${orcpCfg.dl || '8128314'}`;
-        const message = `Scarica l'app ${orcpCfg.name || 'MirkoTeam'}: ${download}. Apri l'app, scegli il server «${server.name}» ed entra con utente ${username} e password ${st.pl.password}.`;
-        return { message, copyText: message };
+        return KXActApps.submitOrcp({ cfg: orcpCfg, serverNumber: st.orcpServer, username, password: st.pl.password, registerLinked: !agent || can('lines') });
       }
       const app = dynamicApps.find((x) => x.key === k);
       if (!app) throw new Error('App non disponibile');
       const data = st.appData[k] || {}, mac = String(data.mac || '').trim(), deviceKey = String(data.deviceKey || '').trim();
-      const rowNote = deviceKey ? `key: ${deviceKey}` : '';
-      const m3u = (dns) => `${String(dns || '').replace(/\/$/, '')}/get.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(st.pl.password)}&type=m3u_plus&output=ts`;
-      let dns = '', playlist = '', activationUrl = app.link || '';
-      if (agent) {
-        const response = await api('POST', '/admin/agent/act-request', { appKey: k, username, password: st.pl.password, mac, deviceKey, serverId: st.pl.panel ? (st.pl.serverId || '') : '' });
-        if (response.pending) return { message: `Richiesta inviata: il tuo fornitore attiverà ${app.name} sul dispositivo ${mac}.` };
-        dns = response.dns || ''; playlist = response.m3u || (dns ? m3u(dns) : '');
-      } else {
-        dns = st.pl.host.trim(); playlist = dns ? m3u(dns) : '';
-        await linkedLine(app.name, mac, rowNote, dns);
-      }
-      const copyItems = [{ label: 'MAC', value: mac }, ...(playlist ? [{ label: 'M3U', value: playlist }] : []), ...(dns ? [{ label: 'DNS', value: dns }] : []), { label: 'utente', value: username }, { label: 'password', value: st.pl.password }];
-      return { message: `${app.name} registrata per ${mac}.`, activationUrl, copyItems };
+      return KXActApps.submitApp({ app, agent, username, password: st.pl.password, mac, deviceKey, serverId: st.pl.panel ? (st.pl.serverId || '') : '', dns: agent ? '' : st.pl.host.trim() });
     };
     const startActivation = async () => {
       syncForm();
@@ -1662,13 +1638,7 @@ body.agent .foot{display:none}
     const loadOptions = async () => {
       const jobs = [];
       if (showMax) jobs.push(api('GET', '/admin/maxplayer/domains').then((r) => { mxDomains = r.domains || []; if (mxDomains.length && !st.mxDomain) st.mxDomain = String(mxDomains[0].id); }).catch((e) => { mxDomains = []; mxError = e.message || 'DNS MaxPlayer non disponibili'; }).finally(() => { mxLoading = false; }));
-      if (agent) jobs.push(api('GET', '/admin/agent/orcp').then((c) => { orcpCfg = { ...c, servers: (c.servers || []).map((x) => ({ n: x.n, name: x.name })) }; preselectOrcp(); }).catch(() => { orcpCfg = null; }));
-      else jobs.push(api('GET', '/admin/orcp/cfg').then((r) => {
-        const c = r && r.cfg; if (!c) return;
-        const list = (c.portalNames || []).map((x, i) => ({ n: +(String(x.k || '').replace('portal', '') || 1), name: x.name || `SERVER-${i + 1}` })).filter((x) => x.name);
-        orcpCfg = { ...c, servers: list.length ? list : (r.servers || []).map((name, i) => ({ n: i + 1, name })) };
-        preselectOrcp();
-      }).catch(() => { orcpCfg = null; }));
+      jobs.push(KXActApps.loadOrcpConfig(agent).then((c) => { orcpCfg = c; preselectOrcp(); }).catch(() => { orcpCfg = null; }));
       if (!agent) jobs.push(api('GET', '/admin/dns').then((r) => { dnsSaved = r.saved || []; }).catch(() => { dnsSaved = []; }));
       if (jobs.length) { await Promise.all(jobs); if (!orcpCfg || !orcpCfg.servers || !orcpCfg.servers.length) st.targets.delete('orcp'); else if (!st.targets.size && !showKairos && !dynamicApps.length) st.targets.add('orcp'); if (alive) draw(false); }
     };
@@ -1741,7 +1711,7 @@ body.agent .foot{display:none}
         if (pend) return { ok: true, code, found: true, free: true, app: 'tv', appName: 'Kairos Pro', model: d.model || 'Fire TV Stick 4K', seen: Date.now() - 120e3 };
         return [2, 4].includes(d.ownerId) ? { ok: true, code, found: true, mine: true, id: d.id, name: d.name, app: 'tv', appName: 'Kairos Pro' } : { ok: true, code, found: true, taken: true };
       }
-      if (p === '/admin/match-server') { const h = (b.host || '').replace(/^https?:\/\//, '').replace(/[:/].*$/, '').toLowerCase(); const sv = DEMO.srv.find((s) => s.host && h === s.host.replace(/^https?:\/\//, '').replace(/[:/].*$/, '').toLowerCase()); return { server: sv ? { id: sv.id, name: sv.name } : null }; }
+      if (p === '/admin/match-server') { const end = (x) => { try { const u = new URL(/^https?:\/\//i.test(x) ? x : 'http://' + x); return `${u.hostname.toLowerCase()}:${u.port || (u.protocol === 'https:' ? '443' : '80')}`; } catch { return ''; } }; const h = end(b.host || ''); const sv = DEMO.srv.find((s) => s.host && h && h === end(s.host)); return { server: sv ? { id: sv.id, name: sv.name } : null }; }
       if (p === '/admin/state') {
         const r = await origDemo(m, p, b);
         if (!demoAgent) return { ...r, role: 'owner', agents: DEMO.agents.map(out), storeAppNames: ['IBO Player', 'IboOne', 'OrbixPlay', 'Smarters Pro', 'TiviMate'], maintAg: DEMO.maintAg.on ? [2] : [] };

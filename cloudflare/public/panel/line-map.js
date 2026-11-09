@@ -1,5 +1,5 @@
 /* KAIROS Control — «Per linea»: unisce tutto quello che usa lo stesso nome utente (la linea IPTV):
-   i clienti Kairos (Pro, TV, Lite, XC), le attivazioni OrbixPlay e MaxPlayer (dalla scheda o da «Attivazione Max/Orbix»)
+   i clienti Kairos (Pro, TV, Lite, XC), le attivazioni OrbixPlay e MaxPlayer (dalla scheda o da «Attivazione app»)
    e le altre app registrate in «Appunti App». Così si vede subito su quante app è attiva ogni linea.
    Pagina in Linee IPTV → «Per linea» e riquadro nella scheda del cliente. */
 (() => {
@@ -10,7 +10,7 @@
 .lm-row:hover{border-color:rgba(79,140,255,.45)}.lm-row b{display:block}.lm-row small{color:var(--mut);font-size:12px}
 .lm-det{grid-column:1/-1;border-top:1px solid var(--line);padding-top:10px;margin-top:4px;font-size:13px}.lm-det div{padding:4px 0}
 .lm-box{border:1px solid rgba(34,197,94,.4);border-left:4px solid #22c55e;border-radius:14px;padding:12px 14px;margin-bottom:14px;background:linear-gradient(150deg,rgba(34,197,94,.1),transparent)}
-.lm-det a{color:#93c5fd;text-decoration:none;font-weight:600;margin-left:6px}.lm-det a:hover{text-decoration:underline}
+.lm-det a{color:#7dd3fc;text-decoration:none;font-weight:600;margin-left:6px}.lm-det a:hover{text-decoration:none}
 .lm-box h4{margin:0 0 6px;font-size:14px}.lm-warn{color:#fbbf24;font-size:12px;font-weight:700}`;
   document.head.appendChild(css);
   const COL = { 'Kairos Pro': '#4f8cff', 'Kairos TV': '#22d3ee', 'Kairos Lite': '#34d399', 'Kairos XC': '#a78bfa', 'Kairos Plus': '#e879f9', OrbixPlay: '#38bdf8', MaxPlayer: '#fb7185' };
@@ -56,7 +56,7 @@
     V.innerHTML = `<div class="card glass"><div class="hd"><h3>Per linea<small>Tutto quello che usa lo stesso nome utente: clienti Kairos, OrbixPlay, MaxPlayer e le altre app di «Appunti App». Il numero è quante app usano quella linea.</small></h3><b class="mut" style="font-size:13px">${groups.length} linee · ${multi} su più app</b></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><input class="inp" id="lmQ" placeholder="Cerca utente, cliente, app…" value="${esc(F.q)}" style="flex:1;min-width:200px;margin:0"><div class="filters" style="margin:0"><button class="fchip ${F.many ? '' : 'on'}" data-lmf="0">Tutte</button><button class="fchip ${F.many ? 'on' : ''}" data-lmf="1">Solo su più app</button></div></div>
       ${!LL && !XL ? '<p class="mut">Carico le linee collegate…</p>' : ''}
-      ${list.length ? list.slice(0, 400).map((g) => { const k = norm(g.user), ap = appsOf(g), op = F.open.has(k); return `<div class="lm-row" data-lmk="${esc(k)}"><span class="lm-n ${g.items.length > 1 ? 'many' : ''}">${g.items.length}</span><div><b class="mono">${esc(g.user)}</b><small>${esc([...new Set(g.items.map((i) => i.who))].slice(0, 3).join(', '))}</small>${g.pw.size > 1 ? '<div class="lm-warn">⚠ password diverse tra le app</div>' : ''}</div><div>${ap.map(chip).join('')}</div>${op ? `<div class="lm-det">${g.items.map((i) => `<div>${chip(i.app)} <b>${esc(i.who)}</b> <span class="mut">${esc(i.ref || '')}${i.linked ? ' · TV collegata' : ''}${i.ext ? ' · da «Attivazione Max/Orbix»' : ''}${i.ll ? ' · Linee collegate' : ''}</span>${i.id ? ` <a href="#" data-lmopen="${esc(i.id)}">scheda</a>` : ''}</div>`).join('')}</div>` : ''}</div>`; }).join('') : '<div class="emptyc">Nessuna linea</div>'}</div>`;
+      ${list.length ? list.slice(0, 400).map((g) => { const k = norm(g.user), ap = appsOf(g), op = F.open.has(k); return `<div class="lm-row" data-lmk="${esc(k)}"><span class="lm-n ${g.items.length > 1 ? 'many' : ''}">${g.items.length}</span><div><b class="mono">${esc(g.user)}</b><small>${esc([...new Set(g.items.map((i) => i.who))].slice(0, 3).join(', '))}</small>${g.pw.size > 1 ? '<div class="lm-warn">⚠ password diverse tra le app</div>' : ''}</div><div>${ap.map(chip).join('')}</div>${op ? `<div class="lm-det">${g.items.map((i) => `<div>${chip(i.app)} <b>${esc(i.who)}</b> <span class="mut">${esc(i.ref || '')}${i.linked ? ' · TV collegata' : ''}${i.ext ? ' · da «Attivazione app»' : ''}${i.ll ? ' · Linee collegate' : ''}</span>${i.id ? ` <a href="#" data-lmopen="${esc(i.id)}">scheda</a>` : ''}</div>`).join('')}</div>` : ''}</div>`; }).join('') : '<div class="emptyc">Nessuna linea</div>'}</div>`;
     const qi = $('#lmQ'); qi.oninput = () => { F.q = qi.value; const p = qi.selectionStart; page(); const q2 = $('#lmQ'); q2.focus(); q2.setSelectionRange(p, p); };
     $$('[data-lmf]', V).forEach((b) => (b.onclick = () => { F.many = b.dataset.lmf === '1'; page(); }));
     $$('[data-lmk]', V).forEach((r) => (r.onclick = (e) => { if (e.target.closest('a,input,button')) return; const k = r.dataset.lmk; F.open.has(k) ? F.open.delete(k) : F.open.add(k); page(); }));
