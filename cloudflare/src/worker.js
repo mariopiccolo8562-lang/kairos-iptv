@@ -1779,8 +1779,17 @@ async function dlApk(req, env, e) {
     }
     return r;
   };
-  let up = await getUp(`https://github.com/${GH_OWNER}/${e[0]}`);
-  if (up && up.status === 404) { const alt = await ghOlderAsset(env, e[0]); if (alt) up = await getUp(alt); }
+  let target = `https://github.com/${GH_OWNER}/${e[0]}`, up = await getUp(target);
+  if (up && up.status === 404) { const alt = await ghOlderAsset(env, e[0]); if (alt) { target = alt; up = await getUp(alt); } }
+  // HEAD: l'indirizzo firmato dove GitHub tiene il file accetta solo GET (a HEAD risponde 401): si chiede il primo byte
+  // e se ne leggono lunghezza (Content-Range), ETag e data
+  if (method === 'HEAD' && up && (up.status === 401 || up.status === 403)) {
+    let g = null;
+    try { g = await ghFetch(target, 'GET', 8000, { Range: 'bytes=0-0' }); } catch {}
+    if (g && g.body) g.body.cancel().catch(() => {});
+    const tot = g && g.status === 206 ? +(String(g.headers.get('Content-Range') || '').split('/')[1] || 0) : g && g.ok ? +(g.headers.get('Content-Length') || 0) : 0;
+    if (tot > 0) { for (const k of ['ETag', 'Last-Modified']) { const v = g.headers.get(k); if (v) h.set(k, v); } return apkOut(req, h, null, rg, tot); }
+  }
   if (up && (up.ok || up.status === 416)) return apkOut(req, h, up, rg, 0);
   if (up && up.body) up.body.cancel().catch(() => {});
   return new Response('App non disponibile al momento, riprova tra poco', { status: 502, headers: { 'Cache-Control': 'no-store' } });
@@ -1821,8 +1830,8 @@ async function dlStoreFeed(env) {
     const m = loc.match(/\/releases\/download\/([A-Za-z0-9._-]+)\/KairosStore\.apk(?:[?#]|$)/);
     if (m) {
       tag = m[1];
-      // data: quella del file (Last-Modified), come nei feed delle altre app
-      try { const hr = await ghFetch(new URL(loc, 'https://github.com/').href, 'HEAD', 6000); const lm = Date.parse(hr.headers.get('Last-Modified') || ''); if (hr.ok && lm) date = new Date(lm).toISOString().replace(/\.\d{3}Z$/, 'Z'); } catch {}
+      // data: quella del file (Last-Modified), come nei feed delle altre app. Solo il primo byte: a HEAD GitHub risponde 401
+      try { const hr = await ghFetch(new URL(loc, 'https://github.com/').href, 'GET', 6000, { Range: 'bytes=0-0' }); if (hr.body) hr.body.cancel().catch(() => {}); const lm = Date.parse(hr.headers.get('Last-Modified') || ''); if (hr.ok && lm) date = new Date(lm).toISOString().replace(/\.\d{3}Z$/, 'Z'); } catch {}
     }
   }
   const v = String(tag || '').replace(/^v/i, '');
