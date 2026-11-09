@@ -4642,6 +4642,14 @@ function appFrom(req, b) {
   if (/KairosPlayer\//i.test(ua) || ver) return 'tv';
   return '';
 }
+/** app che si apre (register): Kairos Premium fino alla 1.7.x all'apertura non manda la versione e si presenta come «KairosTV/x.y»,
+    quindi risultava Kairos TV e riceveva le impostazioni imposte di Kairos TV (poi, al battito, di nuovo le sue: la modalità leggera
+    diversa la faceva riavviare a ogni apertura). Ogni app ha i suoi codici: un dispositivo che i battiti («tv x.y premium») hanno già
+    riconosciuto come Premium resta Premium */
+function regAppOf(req, b, d) {
+  const a = appFrom(req, b);
+  return a === 'ktv' && d && d.app === 'prem' && !String((b && b.ver) || '').trim() ? 'prem' : a;
+}
 async function playerRegister(req, env, ip, ctx) {
   if (await limited(env.RL_DEVICE, 'dev:' + ip)) return json({ error: 'Troppe richieste, riprova tra poco' }, 429);
   let b;
@@ -4687,7 +4695,8 @@ async function playerRegister(req, env, ip, ctx) {
 
   ctx.waitUntil(env.DB.prepare('UPDATE devices SET last_seen = ?, last_ip = ?, model = CASE WHEN ? <> \'\' THEN ? ELSE model END WHERE id = ?')
     .bind(now(), ip, model, model, d.id).run());
-  { const app = appFrom(req, b); if (app && d.app !== app) { d.app = app; ctx.waitUntil(env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(app, d.id).run()); } }
+  const regApp = regAppOf(req, b, d);
+  { const app = regApp; if (app && d.app !== app) { d.app = app; ctx.waitUntil(env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(app, d.id).run()); } }
   ctx.waitUntil(presenceFromRegister(env, d, b, ip, cfOf(req)));
 
   // un dispositivo collegato usa stato, scadenza, profili e limiti del suo principale; le playlist e il lettore
@@ -4700,12 +4709,12 @@ async function playerRegister(req, env, ip, ctx) {
   let status = P ? statusOf(P, Ppls) : 'pending';
   const { C, pls } = status === 'active' ? await effOf(env, d, P, Ppls) : { C: P, pls: [] };
   if (status === 'active' && maintFor(s, P)) status = 'maintenance';
-  const eff = rcEffective(s, d, appFrom(req, b) || appOfVer('', d.app));
+  const eff = rcEffective(s, d, regApp || appOfVer('', d.app));
   const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? await portalsOf(env, pls) : [], messages: await msgP, rc: eff.rc, rcv: eff.rcv };
   if (status === 'active') {
     [out.account, out.vpn, out.af] = await Promise.all([accountOf(env, P, d, pls, C), vpnOf(env, P, d), acctFp(P)]);
     out.perms = permsOf(P); // i collegati ereditano i permessi del principale
-    if (aiEngineOf(s, P, d, appFrom(req, b) || appOfVer('', d.app)) === 'off') out.perms.ai = false; // assistente spento dal pannello (per tutti, dal profilo dell'app o per il cliente)
+    if (aiEngineOf(s, P, d, regApp || appOfVer('', d.app)) === 'off') out.perms.ai = false; // assistente spento dal pannello (per tutti, dal profilo dell'app o per il cliente)
     out.addons = addonsFor(s, P); out.adg = P.addons || ''; // add-on (i collegati usano quelli del principale)
   }
   return json(out);
