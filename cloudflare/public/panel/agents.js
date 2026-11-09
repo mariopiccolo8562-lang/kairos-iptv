@@ -1535,7 +1535,7 @@ body.agent .foot{display:none}
       const apps = dynamicApps.filter((x) => has(x.key)).map((x) => {
         const data = st.appData[x.key] || {};
         return `<div class="wz-st wz-app-st" style="--wzt:${targetColor(x.key)}"><b>${esc(x.name)}</b><p class="wz-help">Inserisci il MAC / ID del dispositivo per questa app.</p>
-          <label class="lbl">MAC / ID del dispositivo<input class="inp" data-act-mac id="wzActMac-${x.key}" value="${esc(data.mac || '')}" maxlength="64" autocomplete="off"></label><label class="lbl">Device key (facoltativa)<input class="inp" id="wzActKey-${x.key}" value="${esc(data.deviceKey || '')}" maxlength="120"></label></div>`;
+          <label class="lbl">MAC / ID del dispositivo<input class="inp" data-act-mac data-mac id="wzActMac-${x.key}" value="${esc(data.mac || '')}" maxlength="64" autocomplete="off"></label><label class="lbl">Device key (facoltativa)<input class="inp" id="wzActKey-${x.key}" value="${esc(data.deviceKey || '')}" maxlength="120"></label></div>`;
       }).join('');
       const picker = showLinePick ? '<div id="wzLinePick" data-placeholder="🔎 Cerca una linea già creata"></div>' : '';
       const dnsFallback = !agent && showLinePick ? '<div id="wzLineDns"></div>' : '';
