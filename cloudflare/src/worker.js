@@ -5300,6 +5300,9 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     return list.map((p, i) => {
       const old = p && p.id && (cur || []).find((x) => x.id === p.id);
       const sv = servers.find((x) => x.id === str(p && p.serverId, 20)) || (old && servers.find((x) => x.host === hostOf(old)));
+      // una playlist che il cliente ha già, rimandata uguale (server non più assegnato, M3U messa dal titolare…), resta com'è:
+      // prima rinominare o rinnovare quel cliente dava «Scegli uno dei server…» (cambiarla resta possibile solo verso i suoi server)
+      if (!sv && old && !str(p && p.serverId, 20) && (!p.username || p.username === old.username) && (!p.password || p.password === old.password)) return old;
       if (!sv) throw new HttpErr(400, 'Scegli uno dei server che ti sono stati assegnati');
       const username = str(p.username, 120) || (old && old.username) || '', password = typeof p.password === 'string' && p.password ? p.password.slice(0, 200) : (old && old.password) || '';
       if (!username || !password) throw new HttpErr(400, 'Inserisci utente e password della linea');
