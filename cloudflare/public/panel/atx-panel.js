@@ -41,7 +41,7 @@
     heads.push('Note', 'Azioni');
     return grid(heads, rows.map((r, i) => {
       const cells = [
-      `<b>${esc(r.username || '')}</b> <button class="btn sm" data-a="cu" data-i="${i}" title="Copia utente" style="padding:2px 7px;font-size:11px">Copia</button><div class="mut" style="font-size:11.5px">#${esc(String(r.id))}${Number(r.auto_renew) ? ' · auto-rinnovo' : ''}</div>`,
+      `<b class="${window.KXSort ? KXSort.tone(r.exp_date, Number(r.enabled) !== 0) : ''}">${esc(r.username || '')}</b> <button class="btn sm" data-a="cu" data-i="${i}" title="Copia utente" style="padding:2px 7px;font-size:11px">Copia</button><div class="mut" style="font-size:11.5px">#${esc(String(r.id))}${Number(r.auto_renew) ? ' · auto-rinnovo' : ''}</div>`,
       `<code>${esc(r.password || '')}</code> <button class="btn sm" data-a="cp" data-i="${i}" title="Copia password" style="padding:2px 7px;font-size:11px">Copia</button>`,
       lineState(r),
       `<b>${day(r.exp_date)}</b>${window.KXPay ? `<br>${KXPay.badge('line', 'atx', r.id)}` : ''}`,
@@ -52,7 +52,7 @@
       cells.push(
       // nota leggibile: va a capo (fino a 3 righe, intera passandoci sopra) e si apre al clic. Prima stava in un pulsante
       // centrato su una riga sola e le note lunghe venivano tagliate a destra e a sinistra («cenzo cognato paolo 01/10 0»)
-      r.notes ? `<button type="button" class="ax-note" data-a="note" data-i="${i}" title="${esc(r.notes)}"><span>📝 ${esc(r.notes)}</span></button>` : `<button class="btn sm" data-a="note" data-i="${i}">+ nota</button>`,
+      r.notes ? `<button type="button" class="ax-note" data-a="note" data-i="${i}" title="${esc(r.notes)}"><span class="${window.KXSort ? KXSort.tone(r.exp_date, Number(r.enabled) !== 0) : ''}">📝 ${esc(r.notes)}</span></button>` : `<button class="btn sm" data-a="note" data-i="${i}">+ nota</button>`,
       `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('edit', i, 'Modifica')}${btn('renew', i, 'Rinnova')}${window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="atx" data-ref="${esc(r.id)}" data-label="${esc(r.username)}" data-auto-line="${esc(r.id)}" data-panel-note="${esc(r.notes || '')}">💰 Pagamento</button>` : ''}${Number(r.enabled) === 0 ? btn('on', i, 'Attiva') : btn('off', i, 'Disattiva')}${m3u(r) ? btn('m3u', i, 'M3U') : ''}${window.KXMxpNew && (!window.KXMxpCan || KXMxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('mxp', i, 'MaxPlayer') : ''}${window.KXOxpNew && (!window.KXOxpCan || KXOxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('oxp', i, 'OrbixPlay') : ''}${window.KXOrcpNew && (!isAg() || KXOrcpAgentCan()) ? btn('orcp', i, KXOrcpName()) : ''}${btn('del', i, 'Elimina')}</div>`
       );
       return tr(cells);

@@ -137,13 +137,13 @@ const mkArmadaLike = (cfg) => {
     A.vis = list.map((x) => (kind === 'lines' ? 'l' : 'm') + x.id);
     const TAG = { ok: ['Attiva', ''], soon: ['In scadenza', 'w'], exp: ['Scaduta', 'b'], trial: ['Prova', 'w'], off: ['Disattivata', 'g'] };
     const row = (x) => {
-      const t = TAG[st(x)], id = kind === 'lines' ? 'l' + x.id : 'm' + x.id, vis = A.show.has(id), link = kind === 'lines' ? m3u(x.username, x.password) : '';
-      return `<div class="ar-row" data-kx-owner-id="${+x.byAgent || 0}" data-kx-auto-line="${esc(JSON.stringify(kind === 'lines' ? { type: 'm3u', username: x.username } : { type: 'mag', mac: x.mac }))}">
-        <div>${window.KXTools ? KXTools.ck(PRE, id, A.sel.has(id)) : ''}${kind === 'lines' ? `<span class="k">Utente</span><div class="ar-v"><span class="mono">${esc(x.username)}</span><button data-arc="u" data-ari="${x.id}" title="Copia">⧉</button></div><span class="k" style="margin-top:4px">Password</span><div class="ar-v"><span class="mono">${vis ? esc(x.password) : '••••••••'}</span><button data-areye="${id}" title="Mostra / nascondi">👁</button><button data-arc="p" data-ari="${x.id}" title="Copia">⧉</button></div>`
-          : `<span class="k">MAC</span><div class="ar-v"><span class="mono">${esc(x.mac)}</span><button data-arc="m" data-ari="${x.id}" title="Copia">⧉</button></div>`}</div>
+      const t = TAG[st(x)], id = kind === 'lines' ? 'l' + x.id : 'm' + x.id, vis = A.show.has(id), link = kind === 'lines' ? m3u(x.username, x.password) : '', tc = window.KXSort ? KXSort.tone(x.exp, !!x.enabled) : '';
+      return `<div class="ar-row" data-kxt="${tc}" data-kx-owner-id="${+x.byAgent || 0}" data-kx-auto-line="${esc(JSON.stringify(kind === 'lines' ? { type: 'm3u', username: x.username } : { type: 'mag', mac: x.mac }))}">
+        <div>${window.KXTools ? KXTools.ck(PRE, id, A.sel.has(id)) : ''}${kind === 'lines' ? `<span class="k">Utente</span><div class="ar-v"><span class="mono ${tc}">${esc(x.username)}</span><button data-arc="u" data-ari="${x.id}" title="Copia">⧉</button></div><span class="k" style="margin-top:4px">Password</span><div class="ar-v"><span class="mono">${vis ? esc(x.password) : '••••••••'}</span><button data-areye="${id}" title="Mostra / nascondi">👁</button><button data-arc="p" data-ari="${x.id}" title="Copia">⧉</button></div>`
+          : `<span class="k">MAC</span><div class="ar-v"><span class="mono ${tc}">${esc(x.mac)}</span><button data-arc="m" data-ari="${x.id}" title="Copia">⧉</button></div>`}</div>
         <div><span class="k">Scadenza</span>${esc(fmtD(x.exp))}<br><span class="mut" style="font-size:12px">${esc(left(x.exp))}</span></div>
         <div><span class="ar-tag ${t[1]}">${t[0]}</span>${x.trial && st(x) !== 'trial' ? '<span class="ar-tag w">prova</span>' : ''}<br><span class="mut" style="font-size:12px">${x.maxConn ? x.maxConn + ' conn.' : ''}${x.country ? ' · ' + esc(x.country) : ''}</span></div>
-        <div>${kind === 'lines' && window.KXOnline && A.st ? KXOnline.slot(A.st.dns, x.username, x.password) + (window.KXWatch ? KXWatch.slot(K, x.username) : '') + '<br>' : ''}<span class="k">Ultima attività</span>${esc(x.lastActivity || '—')}${x.notes ? `<span class="k" style="margin-top:4px">Note</span><span>${esc(x.notes)}</span>` : ''}${x.owner && A.st.reseller && x.owner !== A.st.reseller.username ? `<span class="k" style="margin-top:4px">Reseller</span><span>${esc(x.owner)}</span>` : ''}${x.byAgent ? `<span class="k" style="margin-top:4px">Creata dall'agente</span><span>${esc(x.by)}</span>` : ''}</div>
+        <div>${kind === 'lines' && window.KXOnline && A.st ? KXOnline.slot(A.st.dns, x.username, x.password) + (window.KXWatch ? KXWatch.slot(K, x.username) : '') + '<br>' : ''}<span class="k">Ultima attività</span>${esc(x.lastActivity || '—')}${x.notes ? `<span class="k" style="margin-top:4px">Note</span><span class="${tc}">${esc(x.notes)}</span>` : ''}${x.owner && A.st.reseller && x.owner !== A.st.reseller.username ? `<span class="k" style="margin-top:4px">Reseller</span><span>${esc(x.owner)}</span>` : ''}${x.byAgent ? `<span class="k" style="margin-top:4px">Creata dall'agente</span><span>${esc(x.by)}</span>` : ''}</div>
         <div class="ar-act">${link ? `<button class="btn sm act-m3u" data-arlink="${x.id}">Copia link</button>` : ''}${kind === 'lines' && window.KXMxpNew && (!window.KXMxpCan || KXMxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? `<button class="btn sm act-mxp" data-armxp="${x.id}" title="Crea il cliente su MaxPlayer con questa linea">MaxPlayer</button>` : ''}${kind === 'lines' && window.KXOxpNew && (!window.KXOxpCan || KXOxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? `<button class="btn sm act-oxp" data-aroxp="${x.id}" title="Aggiungi questa linea a un dispositivo OrbixPlay">OrbixPlay</button>` : ''}${kind === 'lines' && window.KXOrcpNew && (!isAg() || KXOrcpAgentCan()) ? `<button class="btn sm act-orcp" data-arorcp="${x.id}" title="Segna la linea per l'app e prepara il messaggio al cliente">${esc(KXOrcpName())}</button>` : ''}<select class="inp" data-arsub="${id}">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select><button class="btn sm act-renew" data-arren="${id}">Rinnova</button><button class="btn sm ${x.enabled ? 'act-toggle' : 'act-toggle act-toggle-on'}" data-artog="${id}">${x.enabled ? 'Disattiva' : 'Attiva'}</button></div></div>`;
     };
     const cnt = (k) => L.filter((x) => !k || st(x) === k).length;
@@ -181,7 +181,7 @@ const mkArmadaLike = (cfg) => {
     window.scrollTo(0, y);
     bind(V); bindTools(V);
     if (A.tab === 'log' && window.KXTools) KXTools.panelLog($('#arPanelLog-' + K), K, K === 'armada' ? '#2f7fd6' : '#7c4dff');
-    if (window.KXStats) KXStats.bind(V, (k) => { const F = { active: 'ok', soon: 'soon', expired: 'exp', trial: 'trial', off: 'off', total: '' }; if (k in F) { if (A.tab !== 'lines' && A.tab !== 'mags') A.tab = 'lines'; A.F.f = F[k]; A.limit = 100; render(); } });
+    if (window.KXStats) KXStats.bind(V, (k) => { const F = { active: 'ok', soon: 'soon', expired: 'exp', trial: 'trial', off: 'off', total: '', soon4: '' }; if (k in F) { if (A.tab !== 'lines' && A.tab !== 'mags') A.tab = 'lines'; A.F.f = F[k]; if (k === 'soon4') A.F.days = 4; else if (A.F.days !== 'due') A.F.days = 0; A.limit = 100; render(); } });
   }
 
   function readForm() {
@@ -310,6 +310,7 @@ const mkArmadaLike = (cfg) => {
       return [String(x.id), { ref, original }];
     }));
     const noteEdits = new Map(S.map((x) => [String(x.id), KXTools.noteValue(noteInfo.get(String(x.id)).original)]));
+    const payEdits = new Map(); // id → mesi pagati (0 = non segnare)
     const beforeState = A.st, before = (() => {
       const raw = beforeState && beforeState.agent ? beforeState.budget && beforeState.budget.left : beforeState && beforeState.reseller && beforeState.reseller.credits;
       const n = parseFloat(String(raw ?? '').replace(',', '.'));
@@ -322,10 +323,10 @@ const mkArmadaLike = (cfg) => {
       return username ? (D.devices || []).filter((d) => d && !d.parent && (d.playlists || []).some((p) => p && String(p.username || '').toLocaleLowerCase() === username)).map((d) => d.name || d.code).filter(Boolean) : [];
     };
     const pr = ask(`Rinnovo massivo ${N}`, `${KXTools.panelHeader(N, panelColor)}
-      <label class="lbl">Durata per tutte</label><select class="inp" id="abS">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select>
+      <label class="lbl">Durata per tutte</label><select class="inp" id="abS">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select>${window.KXPay ? KXPay.bulkPayHead() : ''}
       <div class="kt-renew-list" style="margin-top:10px"><table class="kt-renew-table"><thead><tr><th>${itemLabel}</th><th>Scadenza attuale</th><th>Costo</th></tr></thead><tbody>${S.map((x) => {
         const clients = clientNames(x), value = noteEdits.get(String(x.id)) || '';
-        return `<tr><td style="border-bottom:0">${esc(who(x))}</td><td style="border-bottom:0">${esc(fmtD(x.exp))}</td><td style="border-bottom:0">1 rinnovo</td></tr><tr><td colspan="3" style="padding-top:0"><textarea class="inp" data-ar-note="${esc(x.id)}" maxlength="300" rows="2" placeholder="Nota (nome del cliente, telefono…)" style="width:100%;min-width:0;box-sizing:border-box;margin:0;padding:6px;font-size:12px;resize:vertical">${esc(value)}</textarea>${clients.length ? `<small class="mut" style="display:block;margin-top:4px">KAIROS: ${esc(clients.join(', '))}</small>` : ''}</td></tr>`;
+        return `<tr><td style="border-bottom:0">${esc(who(x))}</td><td style="border-bottom:0">${esc(fmtD(x.exp))}</td><td style="border-bottom:0">1 rinnovo</td></tr><tr><td colspan="3" style="padding-top:0"><textarea class="inp" data-ar-note="${esc(x.id)}" maxlength="300" rows="2" placeholder="Nota (nome del cliente, telefono…)" style="width:100%;min-width:0;box-sizing:border-box;margin:0;padding:6px;font-size:12px;resize:vertical">${esc(value)}</textarea>${clients.length ? `<small class="mut" style="display:block;margin-top:4px">KAIROS: ${esc(clients.join(', '))}</small>` : ''}${window.KXPay ? KXPay.bulkPayRow(x.id, x.exp, 0) : ''}</td></tr>`;
       }).join('')}</tbody></table></div>
       <p class="kt-renew-foot" id="abF"></p>`, 'Rinnova tutte');
     const updateFooter = () => {
@@ -337,9 +338,11 @@ const mkArmadaLike = (cfg) => {
     Q('.kt-renew-table [data-ar-note]')?.closest('tbody')?.querySelectorAll('[data-ar-note]').forEach((input) => {
       input.oninput = () => noteEdits.set(String(input.dataset.arNote), input.value);
     });
+    if (window.KXPay) KXPay.bulkPayBind(Q('#abS') && Q('#abS').parentElement, payEdits);
     if (!(await pr)) return;
     const sub = +Q('#abS').value;
     const result = await KXTools.runReport(S, async (x) => {
+      const oldExp = x.exp; // «Pagato fino al» parte dalla scadenza di prima del rinnovo (qui sotto x.exp diventa la nuova)
       const r = await api('POST', API + '/renew', x.mac && !x.username ? { type: 'mag', mac: x.mac, sub } : { type: 'm3u', username: x.username, password: x.password, sub });
       if (r.exp) x.exp = r.exp;
       const info = noteInfo.get(String(x.id)), note = noteEdits.get(String(x.id)) ?? KXTools.noteValue(info.original);
@@ -352,9 +355,13 @@ const mkArmadaLike = (cfg) => {
           noteUpdated = true;
         } catch (e) { noteError = e.message; }
       }
-      return { cost: r && r.cost !== null && r.cost !== undefined && Number.isFinite(+r.cost) ? +r.cost : null, estimated: !!(r && r.costEstimated), noteUpdated, noteError };
+      let paid = null, payError = '';
+      const months = payEdits.get(String(x.id)) || 0;
+      if (months && window.KXPay) { try { paid = await KXPay.markPaid({ panel: K, ref: x.username || x.mac, label: x.username || x.mac, ownerId: x.byAgent, months, exp: oldExp }); } catch (e) { payError = e.message; } }
+      return { cost: r && r.cost !== null && r.cost !== undefined && Number.isFinite(+r.cost) ? +r.cost : null, estimated: !!(r && r.costEstimated), noteUpdated, noteError, paid, payError };
     }, 'Rinnovo');
     A.sel.clear();
+    if (window.KXPay && [...payEdits.values()].some((m) => m > 0)) await KXPay.afterBulk().catch(() => {});
     await loadState(); await loadTab(true, true); render();
     const afterRaw = A.st && A.st.agent ? A.st.budget && A.st.budget.left : A.st && A.st.reseller && A.st.reseller.credits;
     const after = parseFloat(String(afterRaw ?? '').replace(',', '.'));
@@ -362,13 +369,14 @@ const mkArmadaLike = (cfg) => {
     const successes = result.items.filter((x) => x.ok), failures = result.items.filter((x) => !x.ok);
     const estimated = successes.reduce((sum, x) => sum + (x.value.cost === null ? sub : x.value.cost), 0);
     const spent = used !== null ? `${fmtC(used)} crediti` : `circa ${fmtC(estimated)} crediti`;
-    const rows = successes.map((x) => `<li class="ok">${esc(who(x.item))} · ${x.value.cost === null ? '1 rinnovo (costo per linea non disponibile)' : `${x.value.estimated ? 'circa ' : ''}${fmtC(x.value.cost)} crediti`}${x.value.noteUpdated ? ' · nota aggiornata' : ''}</li>`).join('');
+    const rows = successes.map((x) => `<li class="ok">${esc(who(x.item))} · ${x.value.cost === null ? '1 rinnovo (costo per linea non disponibile)' : `${x.value.estimated ? 'circa ' : ''}${fmtC(x.value.cost)} crediti`}${x.value.noteUpdated ? ' · nota aggiornata' : ''}${x.value.paid ? ' · 💰 pagato fino al ' + esc(x.value.paid.text) : ''}</li>`).join('');
     const errs = failures.map((x) => `<li class="err">${esc(who(x.item))}: ${esc(x.error)}</li>`).join('');
-    const noteErrors = successes.filter((x) => x.value.noteError).map((x) => `<li class="err">${esc(who(x.item))}: nota non salvata: ${esc(x.value.noteError)}</li>`).join('');
+    const noteErrors = successes.filter((x) => x.value.noteError).map((x) => `<li class="err">${esc(who(x.item))}: nota non salvata: ${esc(x.value.noteError)}</li>`).join('')
+      + successes.filter((x) => x.value.payError).map((x) => `<li class="err">${esc(who(x.item))}: pagamento non segnato: ${esc(x.value.payError)}</li>`).join('');
     await ask(`Riepilogo ${N}`, `${KXTools.panelHeader(N, panelColor)}<div class="kt-renew-report">
       <div><h4>Rinnovate (${result.ok})</h4><ul>${rows || '<li>—</li>'}</ul></div>
       <div><h4>Errori (${failures.length})</h4><ul>${errs || '<li>—</li>'}</ul></div>
-      ${noteErrors ? `<div><h4>Note non salvate</h4><ul>${noteErrors}</ul></div>` : ''}
+      ${noteErrors ? `<div><h4>Note o pagamenti non salvati</h4><ul>${noteErrors}</ul></div>` : ''}
       <p class="kt-renew-foot" style="margin:0">Crediti spesi: <b>${esc(spent)}</b>${used !== null ? ` · saldo ${fmtC(before)} → ${fmtC(after)}` : ''}</p></div>`, 'Chiudi');
   }
   async function bulkTgl(on) {

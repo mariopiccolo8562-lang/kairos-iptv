@@ -768,3 +768,28 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
 - **Atlantix**: nella procedura rapida resta solo del titolare. Il reseller con Atlantix crea le linee dalla sua pagina Atlantix; lì il pulsante rosso non compare più, perché non portava a niente.
 - Il titolare vede tutto come prima. Il DNS non compare mai al reseller.
 - **Test**: `ui_quick_agent`, 13 controlli.
+
+## 43. Scadenze a 4 giorni, nomi colorati e mesi pagati nel rinnovo di massa (10 novembre 2026)
+
+- **Menu «Tutte le scadenze»** delle linee: c'è anche **«Scadono entro 4 giorni»** (2, 3, 4, 5, 7). I giorni ora sono di calendario, come «tra N g».
+- **Riquadro cliccabile «Scadono entro 4 giorni»** in WOLF, Armada, Storm, Realott e SLT: mostra solo quelle linee.
+  - Atlantix ha solo il menu, perché i suoi riquadri arrivano da Atlantix.
+  - Gli altri riquadri tolgono il filtro dei giorni.
+- **Colore del nome** (utente e nota o cliente) in WOLF, Armada, Storm, Atlantix, Realott e SLT:
+  - **rosso** se la linea è scaduta;
+  - **giallo** se mancano 4 giorni o meno;
+  - **grigio** se è disattivata;
+  - bianco tutte le altre.
+  
+  Le note KAIROS di Armada e Storm ora sono bianche (prima erano gialline): così il giallo vuol dire solo «quasi scaduta».
+- **Clienti → «In scadenza»**: c'è la scelta «Scadono entro 4 · 7 · 14 · 30 giorni», predefinita 14 e ricordata sul dispositivo. La seguono anche il numero in Home e il filtro delle sezioni agenti.
+- **Rinnova tutte** (WOLF, Armada, Storm), per chi rinnova di 1 mese ma incassa 3 o 6 mesi:
+  - c'è **«💰 Mesi pagati (per tutte)»**, più una scelta per ogni linea: 1, 3, 6 o 12 mesi;
+  - dopo il rinnovo, per ogni linea segna **«Pagato fino al»** con il servizio dei pagamenti di sempre;
+  - la data parte dalla scadenza di prima del rinnovo, o da oggi se la linea era già scaduta;
+  - nella nota compare `[K: PAGATO fino al …]` e sulla linea il bollino verde;
+  - quando la data passa, la linea va in «Deve pagare», con il promemoria;
+  - il riepilogo dice «💰 pagato fino al …» per ogni linea; la nota libera di ogni riga resta.
+  
+  Il pulsante compare solo a chi può gestire i pagamenti.
+- **Test**: `ui_scadenze`, 31 controlli.

@@ -465,7 +465,7 @@ body.agent .foot{display:none}
     ownSave(b.dataset.own);
     // il filtro in alto (Attivi, Da attivare…) resta, salvo che nella nuova sezione non mostri nessuno
     const all = D.devices || [], keyOf = ownKeyFn(all), f = D.filter || 'all';
-    const fit = (d) => f === 'all' || (f === 'soon' ? d.status === 'active' && !d.parent && daysLeft(d) !== null && daysLeft(d) <= 14 : d.status === f);
+    const fit = (d) => f === 'all' || (f === 'soon' ? d.status === 'active' && !d.parent && daysLeft(d) !== null && daysLeft(d) <= (window.kxSoonDays ? kxSoonDays() : 14) : d.status === f);
     if (f !== 'all' && !all.some((d) => inSec(OWN.k, keyOf(d)) && fit(d))) D.filter = 'all';
     renderDevices();
   }

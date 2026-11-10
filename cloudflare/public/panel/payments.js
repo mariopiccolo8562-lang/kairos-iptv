@@ -413,6 +413,39 @@
     if (!canEdit()) return '';
     return `<div style="margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px"><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="${escP(prefix)}On"> Non ha ancora pagato</label><div style="display:flex;gap:8px;margin-top:8px"><label>Mesi<input class="inp" type="number" id="${escP(prefix)}Months" min="0" max="120" value="${+months || 0}" style="width:90px;margin:0"></label><label>Importo € (facoltativo)<input class="inp" type="number" id="${escP(prefix)}Amount" min="0" max="100000" step="0.01" style="width:140px;margin:0"></label></div></div>`;
   }
+  /* rinnovo di massa (WOLF, Armada, Storm), 10 novembre 2026: «Mesi pagati» per ogni linea → «Pagato fino al»,
+     contato dalla scadenza attuale della linea (da oggi se è già scaduta). Chi rinnova di 1 mese e incassa 3 o 6 mesi
+     vede la data giusta nella nota ([K: PAGATO fino al …]) e quando passa la linea torna in «Deve pagare» */
+  const PAY_OPTS = [1, 3, 6, 12];
+  function paidUntilFrom(exp, months) {
+    const t = window.KXSort ? KXSort.ms(exp) : +exp || 0;
+    return addMonths(months, t && t > Date.now() ? localDay(new Date(t)) : localDay());
+  }
+  const dayIt = (iso) => (/^\d{4}-\d{2}-\d{2}$/.test(iso || '') ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '');
+  function bulkPayHead() {
+    if (!canEdit()) return '';
+    return `<label class="lbl" style="margin-top:12px">💰 Mesi pagati (per tutte)</label><select class="inp" id="kpPayAll"><option value="">— non segnare il pagamento</option>${PAY_OPTS.map((m) => `<option value="${m}">${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select>
+      <small class="mut" style="display:block;margin-top:4px;font-size:12px">Segna «Pagato fino al…» su ogni linea, dalla scadenza attuale (da oggi se è già scaduta). Per chi ha pagato diverso lo cambi sulla sua riga.</small>`;
+  }
+  function bulkPayRow(id, exp, months) {
+    if (!canEdit()) return '';
+    return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px"><span class="mut" style="font-size:12px">💰 Pagato</span><select class="inp" data-kp-pay="${escP(id)}" data-exp="${escP(String(exp ?? ''))}" style="width:auto;margin:0;padding:4px 8px;font-size:12px"><option value="">—</option>${PAY_OPTS.map((m) => `<option value="${m}"${+months === m ? ' selected' : ''}>${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select><span data-kp-to="${escP(id)}" style="font-size:12px;color:#7ef0ab"></span></div>`;
+  }
+  /* edits: Map id → mesi (resta valida anche quando il pannello ridisegna le righe) */
+  function bulkPayBind(root, edits) {
+    root = root || document;
+    const show = (sel) => { const to = root.querySelector(`[data-kp-to="${CSS.escape(sel.dataset.kpPay)}"]`); if (to) to.textContent = +sel.value ? '→ fino al ' + dayIt(paidUntilFrom(sel.dataset.exp, +sel.value)) : ''; };
+    root.querySelectorAll('[data-kp-pay]').forEach((sel) => { sel.onchange = () => { edits.set(sel.dataset.kpPay, +sel.value || 0); show(sel); }; show(sel); });
+    const all = root.querySelector('#kpPayAll');
+    if (all) all.onchange = () => root.querySelectorAll('[data-kp-pay]').forEach((sel) => { sel.value = all.value; edits.set(sel.dataset.kpPay, +all.value || 0); show(sel); });
+  }
+  /* dopo il rinnovo: «Pagato fino al» con il servizio dei pagamenti di sempre (che scrive anche la nota della linea) */
+  async function markPaid({ panel, ref, label, ownerId, months, exp }) {
+    const paidUntil = paidUntilFrom(exp, months), old = get('line', panel, ref);
+    const r = await api('PUT', '/admin/payments', { kind: 'line', panel, ref: String(ref), ownerId: +ownerId || 0, label: String(label || ref), status: 'paid', months, amount: old && old.amount != null ? old.amount : null, paidUntil, remind: old ? old.remind !== 0 : true });
+    return { paidUntil, text: dayIt(paidUntil), panelNote: r && r.panelNote };
+  }
+  async function afterBulk() { cache.at = 0; await load(true); }
   function readDuePrompt(prefix) {
     const on = $('#' + prefix + 'On'); if (!on || !on.checked) return null;
     const months = Number($('#' + prefix + 'Months').value), av = $('#' + prefix + 'Amount').value.trim(), amount = av ? Number(av) : null;
@@ -429,7 +462,7 @@
   window.addEventListener('kxledger:update', renderAgentDebtDash);
   const dash = $('#v-dash'); if (dash) new MutationObserver(renderAgentDebtDash).observe(dash, { childList: true });
   Object.assign(TITLES, { payments: 'Pagamenti' });
-  window.KXPay = { load, loadLedger, ledgerHistory, get, ready: () => !!cache.at && !!ledgerCache.at, hasRows: () => cache.rows.length > 0 || !!(ledgerCache.own && ledgerCache.own.entries && ledgerCache.own.entries.length), effective, badge, open, isDue, filterDue, daysSince, amountText, dateText, remainingText, canEdit, saveDue, duePrompt, readDuePrompt, panelTile, renderPage, dueSummary: () => { const due = rows().filter((r) => r.kind !== 'agent' && r.status === 'due'), total = due.reduce((a, r) => a + (+r.amount || 0), 0); return { n: due.length, total, text: amountText(total) || '0 €', oldest: due.reduce((m, r) => Math.max(m, daysSince(r)), 0) }; }, agentDebtSummary: () => { const s = (ledgerCache.summary || []).filter((x) => +x.eur > 0 || Object.values(x.credits || {}).some((v) => +v > 0)); const eur = s.reduce((n, x) => n + Math.max(0, +x.eur || 0), 0), credits = s.reduce((n, x) => n + Object.values(x.credits || {}).reduce((m, v) => m + Math.max(0, +v || 0), 0), 0); return { n: s.length, eur, credits, text: [eur > 0 ? amountText(eur) : '', credits > 0 ? `${ledgerNumber(credits)} crediti` : ''].filter(Boolean).join(' e '), short: [eur > 0 ? amountText(eur) : '', credits > 0 ? `${ledgerNumber(credits)} cr` : ''].filter(Boolean).join(' + ') }; }, ownDebtText: () => { const balance = isAgent() && ledgerCache.own && ledgerCache.own.balance; return ledgerHasDebt(balance) ? ledgerPositiveText(balance) : ''; }, openOwnLedgerHistory };
+  window.KXPay = { bulkPayHead, bulkPayRow, bulkPayBind, markPaid, afterBulk, paidUntilFrom, load, loadLedger, ledgerHistory, get, ready: () => !!cache.at && !!ledgerCache.at, hasRows: () => cache.rows.length > 0 || !!(ledgerCache.own && ledgerCache.own.entries && ledgerCache.own.entries.length), effective, badge, open, isDue, filterDue, daysSince, amountText, dateText, remainingText, canEdit, saveDue, duePrompt, readDuePrompt, panelTile, renderPage, dueSummary: () => { const due = rows().filter((r) => r.kind !== 'agent' && r.status === 'due'), total = due.reduce((a, r) => a + (+r.amount || 0), 0); return { n: due.length, total, text: amountText(total) || '0 €', oldest: due.reduce((m, r) => Math.max(m, daysSince(r)), 0) }; }, agentDebtSummary: () => { const s = (ledgerCache.summary || []).filter((x) => +x.eur > 0 || Object.values(x.credits || {}).some((v) => +v > 0)); const eur = s.reduce((n, x) => n + Math.max(0, +x.eur || 0), 0), credits = s.reduce((n, x) => n + Object.values(x.credits || {}).reduce((m, v) => m + Math.max(0, +v || 0), 0), 0); return { n: s.length, eur, credits, text: [eur > 0 ? amountText(eur) : '', credits > 0 ? `${ledgerNumber(credits)} crediti` : ''].filter(Boolean).join(' e '), short: [eur > 0 ? amountText(eur) : '', credits > 0 ? `${ledgerNumber(credits)} cr` : ''].filter(Boolean).join(' + ') }; }, ownDebtText: () => { const balance = isAgent() && ledgerCache.own && ledgerCache.own.balance; return ledgerHasDebt(balance) ? ledgerPositiveText(balance) : ''; }, openOwnLedgerHistory };
   renderAgentDebtDash();
   document.addEventListener('click', (e) => {
     const del = e.target.closest('[data-kxpay-delete]');

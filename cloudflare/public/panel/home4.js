@@ -57,9 +57,9 @@
     }
     if (id === 'cli') {
       const active = D.devices.filter((d) => d.status === 'active').length;
-      const soon = D.devices.filter((d) => d.status === 'active' && dayLeft(d) !== null && dayLeft(d) <= 14).length;
+      const sd = window.kxSoonDays ? kxSoonDays() : 14, soon = D.devices.filter((d) => d.status === 'active' && dayLeft(d) !== null && dayLeft(d) <= sd).length;
       const expired = D.devices.filter((d) => d.status === 'expired').length;
-      return `<div class="h4-home-metrics">${metric(active, 'Attivi')}${metric(soon, 'In scadenza · 14 g')}${metric(expired, 'Scaduti')}</div>`;
+      return `<div class="h4-home-metrics">${metric(active, 'Attivi')}${metric(soon, 'In scadenza · ' + sd + ' g')}${metric(expired, 'Scaduti')}</div>`;
     }
     if (id === 'pan') {
       const s = window.KXDashLines?.homeSummary?.();

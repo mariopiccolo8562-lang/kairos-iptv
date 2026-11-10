@@ -3,15 +3,38 @@
    ordina e si filtra. Lo stato (sort, days) vive nel pannello. Usa app.js ($, $$, esc). */
 (() => {
   const SORTS = [['', 'Ordine del pannello'], ['exp', 'Scadenza: prima le più vicine'], ['exp-desc', 'Scadenza: prima le più lontane'], ['name', 'Nome: A → Z'], ['name-desc', 'Nome: Z → A'], ['conns', 'Connessioni: più attive prima'], ['status', 'Stato: attive, in scadenza, scadute'], ['owner', 'Reseller: A → Z'], ['new', 'Create: più recenti prima']];
-  const DAYS = [[0, 'Tutte le scadenze'], [2, 'Scadono entro 2 giorni'], [3, 'Scadono entro 3 giorni'], [5, 'Scadono entro 5 giorni'], [7, 'Scadono entro 7 giorni'], ['due', '💰 Deve pagare']];
+  const DAYS = [[0, 'Tutte le scadenze'], [2, 'Scadono entro 2 giorni'], [3, 'Scadono entro 3 giorni'], [4, 'Scadono entro 4 giorni'], [5, 'Scadono entro 5 giorni'], [7, 'Scadono entro 7 giorni'], ['due', '💰 Deve pagare']];
   const DAY = 86400e3;
+  /* scadenza in ms da: numero (secondi o ms), «07-11-2026 17:44» (WOLF), ISO; 0 = illimitata */
+  const ms = (v) => {
+    if (v == null || v === '') return 0;
+    if (typeof v === 'number' || /^\d+$/.test(String(v))) { const n = +v; return n > 0 ? (n < 1e12 ? n * 1000 : n) : 0; }
+    const t = String(v).trim(), m = t.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
+    if (m) return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)).getTime() || 0;
+    const d = Date.parse(t); return Number.isFinite(d) ? d : 0;
+  };
+  /* giorni di calendario da oggi alla data (come «tra N g»): 0 = oggi */
+  const calDays = (t) => { const e = new Date(t), n = new Date(); return Math.round((Date.UTC(e.getFullYear(), e.getMonth(), e.getDate()) - Date.UTC(n.getFullYear(), n.getMonth(), n.getDate())) / DAY); };
+  /* colore del nome nelle liste linee (10 novembre 2026): rosso scaduta, giallo se mancano 4 giorni o meno,
+     grigio disattivata, altrimenti normale (bianco) */
+  const SOON = 4;
+  const tone = (exp, enabled = true, expired = false) => {
+    if (enabled === false) return 'kx-n-off';
+    const t = ms(exp);
+    if (expired || (t && t < Date.now())) return 'kx-n-exp';
+    return t && calDays(t) <= SOON ? 'kx-n-soon' : '';
+  };
+  const css = document.createElement('style');
+  css.textContent = `.kx-n-exp,[data-kxt="kx-n-exp"] .ln-t{color:#ff6b6b!important}.kx-n-soon,[data-kxt="kx-n-soon"] .ln-t{color:#fbbf24!important}.kx-n-off,[data-kxt="kx-n-off"] .ln-t{color:#8b95a7!important}
+.ar-row .ln-box .ln-t{color:var(--txt,#e8eef8)}`;
+  document.head.appendChild(css);
   const cmpStr = (a, b) => String(a || '').localeCompare(String(b || ''), 'it', { sensitivity: 'base', numeric: true });
   /** acc: { exp(x) → ms (0 = illimitata), name(x), enabled(x) → bool, conns(x) → n, owner(x), created(x) → ms } */
   const apply = (list, S, acc) => {
     const now = Date.now(), exp = (x) => +(acc.exp ? acc.exp(x) : x.exp) || 0;
     let L = list;
     if (S.days === 'due' && acc.payKey && window.KXPay) L = KXPay.filterDue(L, acc.payKey);
-    else if (+S.days > 0) L = L.filter((x) => { const e = exp(x); return e && e > now && e - now <= +S.days * DAY && (acc.enabled ? acc.enabled(x) : x.enabled !== false); });
+    else if (+S.days > 0) L = L.filter((x) => { const e = exp(x); return e && e > now && calDays(e) <= +S.days && (acc.enabled ? acc.enabled(x) : x.enabled !== false); });
     const k = S.sort || ''; if (!k) return L;
     const nm = (x) => (acc.name ? acc.name(x) : x.username), en = (x) => (acc.enabled ? acc.enabled(x) : x.enabled !== false), cn = (x) => +(acc.conns ? acc.conns(x) : x.conns) || 0;
     const st = (x) => (!en(x) ? 3 : exp(x) && exp(x) < now ? 2 : exp(x) && exp(x) - now < 7 * DAY ? 1 : 0);
@@ -30,5 +53,5 @@
   /** titolo di colonna cliccabile: alterna A→Z / Z→A per quel campo */
   const th = (S, key, label, p) => `<span class="kx-th" data-ks="${key}" style="cursor:pointer;user-select:none">${label}${S.sort === key ? ' ▲' : S.sort === key + '-desc' ? ' ▼' : ''}</span>`;
   const bindTh = (V, S, onChange) => $$('.kx-th', V).forEach((e) => (e.onclick = () => { const k = e.dataset.ks; S.sort = S.sort === k ? (k === 'exp' || k === 'name' ? k + '-desc' : '') : k; onChange(); }));
-  window.KXSort = { apply, ui, bind, th, bindTh, SORTS, DAYS };
+  window.KXSort = { apply, ui, bind, th, bindTh, SORTS, DAYS, ms, calDays, tone, SOON };
 })();

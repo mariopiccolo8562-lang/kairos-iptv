@@ -254,6 +254,7 @@
 .dv-tile:hover{background:rgba(255,255,255,.06)}.dv-tile i{font-style:normal;font-size:20px;width:40px;height:40px;display:grid;place-items:center;border-radius:12px;background:rgba(255,255,255,.06);flex:none}
 .dv-tile b{display:block;font-size:24px;line-height:1}.dv-tile em{display:block;font-style:normal;font-weight:700;font-size:14px;margin-top:3px}.dv-tile small{display:block;color:var(--mut);font-size:11.5px}
 .dv-tile.on{border-color:rgba(255,90,60,.55);background:linear-gradient(135deg,rgba(255,60,60,.16),rgba(255,255,255,.03));box-shadow:0 0 24px rgba(255,60,60,.12)}
+.dv-soon{grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:-2px}.dv-soon>span{color:var(--mut);font-size:13px;margin-right:2px}.dv-soon .fchip{margin:0}
 .dv-tile.pending b{color:#ffd37a}.dv-tile.soon b{color:#ffd37a}.dv-tile.expired b,.dv-tile.disabled b{color:#ff8f96}.dv-tile.active b{color:#7ef0ab}
 .dv-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .dv-q{flex:1;min-width:240px;position:relative}.dv-q svg{position:absolute;left:14px;top:50%;width:18px;height:18px;transform:translateY(-50%);color:var(--mut)}.dv-q .inp{margin:0;padding-left:42px}
@@ -1035,6 +1036,9 @@
     let k0 = 'look'; try { k0 = sessionStorage.getItem('kc_st') || 'look'; } catch {}
     stShow($(`.st-tab[data-st="${k0}"]`, V) ? k0 : 'look');
   })();
+  /* «In scadenza» dei clienti: entro quanti giorni (4, 7, 14 o 30; predefinito 14), scelto in Clienti e ricordato sul dispositivo */
+  const SOON_OPTS = [4, 7, 14, 30];
+  window.kxSoonDays = () => { try { const v = +localStorage.getItem('kc_soon'); return SOON_OPTS.includes(v) ? v : 14; } catch { return 14; } };
   /* ---------- Dispositivi (2.0): riquadri-filtro, clienti in schede, dispositivi da attivare in evidenza ---------- */
   (function devicesCards() {
     const V = $('#v-devices'); if (!V) return;
@@ -1050,7 +1054,7 @@
       ['all', 'Tutti', '👥', 'Ogni dispositivo'], ['active', 'Attivi', '✅', 'Abbonamento in corso'], ['soon', 'In scadenza', '⏳', 'Entro 14 giorni'],
       ['pending', 'Da attivare', '🆕', 'Aspettano te'], ['expired', 'Scaduti', '⌛', 'Da rinnovare'], ['disabled', 'Disattivati', '⏸️', 'Spenti da te'],
     ];
-    const soon = (d) => d.status === 'active' && !d.parent && daysLeft(d) !== null && daysLeft(d) <= 14;
+    const soon = (d) => d.status === 'active' && !d.parent && daysLeft(d) !== null && daysLeft(d) <= kxSoonDays();
     const fit = (d, f) => f === 'all' || (f === 'soon' ? soon(d) : d.status === f);
     const initial = (t) => (String(t || '?').trim()[0] || '?').toUpperCase();
     const hue = (t) => { let h = 0; for (const c of String(t || '')) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
@@ -1202,7 +1206,9 @@
         ? `<div class="card glass dv-pend">${st.pendOpen ? expandedPend : `<div class="dvp-codeonly"><span>${pendingTitle}</span><button type="button" class="btn sm pri" data-pendtoggle aria-expanded="false">Mostra</button></div>`}</div>`
         : `<div class="card glass dv-pend"><div class="hd"><h3>🆕 Da attivare <span class="cnt">${pend.length}</span><small>Il cliente apre l'app e ti legge il codice: premi <b>Attiva</b>, scegli durata e playlist. Se è una TV in più di un cliente che hai già, usa <b>Collega a un cliente</b>.</small></h3>${pendTools(pend)}</div><div class="dv-pgrid">${pend.slice(0, 24).map(pendCard).join('')}</div></div>`;
       $('#dvPend').innerHTML = pendingHtml;
-      $('#dvTiles').innerHTML = TILES.map(([k, l, ic, sub]) => `<button class="dv-tile ${k} ${f === k && !(codeOnly && k === 'pending') ? 'on' : ''}" data-fl2="${k}"><span><b>${D.devices.filter((d) => fit(d, k)).length}</b><em>${l}</em><small>${sub}</small></span></button>`).join('');
+      const sd = kxSoonDays();
+      $('#dvTiles').innerHTML = TILES.map(([k, l, ic, sub]) => `<button class="dv-tile ${k} ${f === k && !(codeOnly && k === 'pending') ? 'on' : ''}" data-fl2="${k}"><span><b>${D.devices.filter((d) => fit(d, k)).length}</b><em>${l}</em><small>${k === 'soon' ? `Entro ${sd} giorni` : sub}</small></span></button>`).join('')
+        + (f === 'soon' ? `<div class="dv-soon"><span>Scadono entro</span>${SOON_OPTS.map((n) => `<button type="button" class="fchip ${sd === n ? 'on' : ''}" data-soon="${n}">${n} giorni</button>`).join('')}</div>` : '');
       $$('#dvView [data-dv]').forEach((b) => b.classList.toggle('on', b.dataset.dv === st.view));
       V.classList.toggle('dv-cardsview', st.view !== 'list');
       if (st.view === 'list') { if (!codeOnly) $('#dvPend').innerHTML = ''; $('#dvCards').innerHTML = $('#dvMore').innerHTML = $('#dvTbl').innerHTML = ''; bulkBar(); return; }
@@ -1228,6 +1234,7 @@
     }
     V.addEventListener('click', async (e) => {
       const pToggle = e.target.closest('[data-pendtoggle]'); if (pToggle) { st.pendOpen = !st.pendOpen; return renderDevices(); }
+      const sdb = e.target.closest('[data-soon]'); if (sdb) { try { localStorage.setItem('kc_soon', sdb.dataset.soon); } catch {} st.limit = st.view === 'table' ? 100 : 60; return renderDevices(); }
       const t = e.target.closest('[data-fl2]'); if (t) { D.filter = t.dataset.fl2; st.limit = st.view === 'table' ? 100 : 60; return renderDevices(); }
       const v = e.target.closest('[data-dv]'); if (v) { st.view = v.dataset.dv; st.limit = st.view === 'table' ? 100 : 60; try { localStorage.setItem('kc_dv', st.view); } catch {} V.classList.toggle('dv-cardsview', st.view !== 'list'); return renderDevices(); }
       const o = e.target.closest('[data-open]'); if (o) { const k = D.devices.find((x) => x.id === o.dataset.open); if (k) openQuick(k); return; }

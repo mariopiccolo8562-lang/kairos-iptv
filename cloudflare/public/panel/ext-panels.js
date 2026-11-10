@@ -41,9 +41,10 @@
     return rows.map((r) => {
       const i = all.indexOf(r);
       const ref = String(r.id || r.username || '');
-      const head = `<div><b style="font-size:15px">${esc(r.username)}</b> ${btn('cu', i, 'Copia')}<div class="mono" style="font-size:13px;margin-top:4px">${r.password ? esc(r.password) + ' ' + btn('cp', i, 'Copia') : mut}</div></div><div>${lineState(r)}</div>`;
+      const tc = window.KXSort ? KXSort.tone(r.exp, !!r.enabled, !!r.expired) : '';
+      const head = `<div><b class="${tc}" style="font-size:15px">${esc(r.username)}</b> ${btn('cu', i, 'Copia')}<div class="mono" style="font-size:13px;margin-top:4px">${r.password ? esc(r.password) + ' ' + btn('cp', i, 'Copia') : mut}</div></div><div>${lineState(r)}</div>`;
       const pay = window.KXPay ? KXPay.badge('line', k, ref) : '';
-      const kv = [KV('Scadenza', day(r.exp, r.expTxt) + (pay ? '<br>' + pay : '')), KV('Conn.', r.max ? `${r.conns}/${r.max}` : String(r.conns ?? '—')), r.type ? KV('Pacchetto', esc(r.type)) : '', r.owner ? KV('Reseller', esc(r.owner)) : '', r.notes ? KV('Note', esc(r.notes)) : '', r.stream ? KV('Ultima visione', esc(r.stream) + (r.last ? ' · ' + esc(r.last) : '')) : ''].filter(Boolean);
+      const kv = [KV('Scadenza', day(r.exp, r.expTxt) + (pay ? '<br>' + pay : '')), KV('Conn.', r.max ? `${r.conns}/${r.max}` : String(r.conns ?? '—')), r.type ? KV('Pacchetto', esc(r.type)) : '', r.owner ? KV('Reseller', esc(r.owner)) : '', r.notes ? KV('Note', `<span class="${tc}">${esc(r.notes)}</span>`) : '', r.stream ? KV('Ultima visione', esc(r.stream) + (r.last ? ' · ' + esc(r.last) : '')) : ''].filter(Boolean);
       const payBtn = window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="${k}" data-ref="${esc(ref)}" data-label="${esc(r.username)}" data-owner="${+r.ownerId || +r.owner_id || 0}" data-auto-line="${esc(r.id || '')}" data-panel-note="${esc(r.notes || '')}">💰 Pagamento</button>` : '';
       const acts = [btn('edit', i, 'Modifica'), btn('renew', i, 'Rinnova'), payBtn, btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', window.KXMxpNew && (!window.KXMxpCan || KXMxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('mxp', i, 'MaxPlayer') : '', window.KXOxpNew && (!window.KXOxpCan || KXOxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('oxp', i, 'OrbixPlay') : '', window.KXOrcpNew && (!isAg() || KXOrcpAgentCan()) ? btn('orcp', i, KXOrcpName()) : '', btn('del', i, 'Elimina')].filter(Boolean).join('');
       return card(head, kv, acts);
@@ -57,10 +58,10 @@
     const H = window.KXSort ? (key, t) => KXSort.th(ST[k], key, t) : (key, t) => t; // intestazioni cliccabili: ordinano la lista
     return grid([H('name', 'Utente'), 'Password', H('status', 'Stato'), H('exp', 'Scadenza'), H('conns', 'Conn.'), 'Pacchetto', H('owner', 'Reseller'), 'Note', ''], rows.map((r) => {
       const i = all.indexOf(r);
-      const ref = String(r.id || r.username || ''), pay = window.KXPay ? KXPay.badge('line', k, ref) : '';
+      const ref = String(r.id || r.username || ''), pay = window.KXPay ? KXPay.badge('line', k, ref) : '', tc = window.KXSort ? KXSort.tone(r.exp, !!r.enabled, !!r.expired) : '';
       const payBtn = window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="${k}" data-ref="${esc(ref)}" data-label="${esc(r.username)}" data-owner="${+r.ownerId || +r.owner_id || 0}" data-auto-line="${esc(r.id || '')}" data-panel-note="${esc(r.notes || '')}">💰 Pagamento</button>` : '';
       const acts = [btn('edit', i, 'Modifica'), btn('renew', i, 'Rinnova'), payBtn, btn(r.enabled ? 'off' : 'on', i, r.enabled ? 'Disattiva' : 'Attiva'), btn('kill', i, 'Disconnetti'), dns ? btn('m3u', i, 'M3U') : '', window.KXMxpNew && (!window.KXMxpCan || KXMxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('mxp', i, 'MaxPlayer') : '', window.KXOxpNew && (!window.KXOxpCan || KXOxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('oxp', i, 'OrbixPlay') : '', window.KXOrcpNew && (!isAg() || KXOrcpAgentCan()) ? btn('orcp', i, KXOrcpName()) : '', btn('del', i, 'Elimina')].filter(Boolean).join(' ');
-      return tr([`<b>${esc(r.username)}</b> ${btn('cu', i, 'Copia')}${!r.stream && window.KXWatch ? KXWatch.slot(k, r.username) : ''}${r.ip ? `<br><span class="mut" style="font-size:11.5px">${esc(r.stream || '')}${r.last ? ' · ' + esc(r.last) : ''}</span>` : ''}`, r.password ? `<span class="mono">${esc(r.password)}</span> ${btn('cp', i, 'Copia')}` : mut, lineState(r), day(r.exp, r.expTxt) + (pay ? '<br>' + pay : ''), r.max ? `${r.conns}/${r.max}` : String(r.conns ?? '—'), esc(r.type || '—'), esc(r.owner || '—'), r.notes ? esc(r.notes) : mut, `<div style="display:flex;gap:4px;flex-wrap:wrap">${acts}</div>`]);
+      return tr([`<b class="${tc}">${esc(r.username)}</b> ${btn('cu', i, 'Copia')}${!r.stream && window.KXWatch ? KXWatch.slot(k, r.username) : ''}${r.ip ? `<br><span class="mut" style="font-size:11.5px">${esc(r.stream || '')}${r.last ? ' · ' + esc(r.last) : ''}</span>` : ''}`, r.password ? `<span class="mono">${esc(r.password)}</span> ${btn('cp', i, 'Copia')}` : mut, lineState(r), day(r.exp, r.expTxt) + (pay ? '<br>' + pay : ''), r.max ? `${r.conns}/${r.max}` : String(r.conns ?? '—'), esc(r.type || '—'), esc(r.owner || '—'), r.notes ? `<span class="${tc}">${esc(r.notes)}</span>` : mut, `<div style="display:flex;gap:4px;flex-wrap:wrap">${acts}</div>`]);
     }));
   }
   const subsHtml = (k, rows) => narrow() ? subsCards(k, rows) : grid(['Utente', 'Superiore', 'Tipo', 'Crediti', 'Linee', 'Stato', ''], rows.map((r, i) => tr([`<b>${esc(r.username)}</b>`, esc(r.owner || '—'), esc(r.type || '—'), esc(String(r.credits ?? '—')), esc(String(r.lines ?? '—')), r.enabled ? badge(r.status || 'Attivo', '#2ecc71') : badge(r.status || 'Disattivato', '#9aa4b2'), k === 'ro' ? btn('stog', i, r.enabled ? 'Disattiva' : 'Riattiva') : ''])));
@@ -70,14 +71,14 @@
   const overviewHtml = (d, m, rows) => {
     d = d || {};
     if (Array.isArray(rows)) {
-      const t = now(), c = { total: rows.length, active: 0, soon: 0, expired: 0, off: 0, online: 0, conns: 0 }; /* r.exp in secondi, come il filtro della lista */
+      const t = now(), c = { total: rows.length, active: 0, soon: 0, soon4: 0, expired: 0, off: 0, online: 0, conns: 0 }; /* r.exp in secondi, come il filtro della lista */
       for (const r of rows) {
         const ex = !!r.enabled && (r.expired || (r.exp && r.exp < t));
-        if (!r.enabled) c.off++; else if (ex) c.expired++; else { c.active++; if (r.exp && r.exp - t < 7 * 86400) c.soon++; }
+        if (!r.enabled) c.off++; else if (ex) c.expired++; else { c.active++; if (r.exp && r.exp - t < 7 * 86400) c.soon++; if (window.KXSort && KXSort.tone(r.exp, true) === 'kx-n-soon') c.soon4++; }
         if (r.conns > 0) { c.online++; c.conns += +r.conns || 0; }
       }
       const T = [['Crediti', d.credits, 'green'], ['Online ora', c.online, 'blue', 'online'], ['Abbonamenti attivi', c.active, 'red', 'active'], ['Linee totali', c.total, 'dark', ''],
-        ['Scadono entro 7 giorni', c.soon, 'dark', 'expiring'], ['Scadute', c.expired, 'dark', 'expired'], ['Disattivate', c.off, 'dark', 'disabled']].filter(([, v]) => v != null);
+        ['Scadono entro 4 giorni', c.soon4, 'dark', 'soon4'], ['Scadono entro 7 giorni', c.soon, 'dark', 'expiring'], ['Scadute', c.expired, 'dark', 'expired'], ['Disattivate', c.off, 'dark', 'disabled']].filter(([, v]) => v != null);
       return window.KXStats ? KXStats.strip(T.map(([l, v, cl, k]) => ({ k, label: l, v: esc(String(v)), c: cl })), { margin: m || '0' }) : '';
     }
     const T = [['Crediti', d.credits, 'green'], ['Linee totali', d.total, 'dark'], ['Attive', d.active, 'red'], ['Scadute', d.expired, 'dark'], ['Online ora', d.online, 'blue'], ['Connessioni aperte', d.conns, 'blue']].filter(([, v]) => v != null); return window.KXStats ? KXStats.strip(T.map(([l, v, c]) => ({ label: l, v: esc(String(v)), c })), { margin: m || '0' }) : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">${T.map(([l, v]) => `<div class="card" style="padding:14px"><div class="mut" style="font-size:12px">${l}</div><div style="font-size:24px;font-weight:700">${esc(String(v))}</div></div>`).join('')}</div>`; };
@@ -119,7 +120,7 @@
     }
     if (A.tab === 'log' && st.connected && !isAg() && window.KXTools) KXTools.panelLog($('#exPanelLog-' + k, V), k, k === 'ro' ? '#e08a1e' : '#2a9d5c');
     $$('[data-t]', V).forEach((b) => (b.onclick = () => { A.tab = b.dataset.t; A.q = ''; A.status = ''; A.days = 0; if (A.tab === 'log') show(k); else load(k); }));
-    if (window.KXStats) KXStats.bind(V, (f) => { const F = { online: 'online', active: 'active', expiring: 'expiring', expired: 'expired', disabled: 'disabled', total: '' }; if (!(f in F)) return; const go = () => { A.q = ''; A.days = 0; A.status = F[f]; show(k); }; if (A.tab !== 'lines') { A.tab = 'lines'; A.status = F[f]; load(k); } else go(); });
+    if (window.KXStats) KXStats.bind(V, (f) => { const F = { online: 'online', active: 'active', expiring: 'expiring', expired: 'expired', disabled: 'disabled', total: '', soon4: '' }; if (!(f in F)) return; const go = () => { A.q = ''; A.days = f === 'soon4' ? 4 : 0; A.status = F[f]; show(k); }; if (A.tab !== 'lines') { A.tab = 'lines'; A.status = F[f]; A.days = f === 'soon4' ? 4 : 0; load(k); } else go(); });
     $$('[data-o]', V).forEach((b) => (b.onclick = () => op(k, b.dataset.o)));
     $$('[data-a]', V).forEach((b) => (b.onclick = () => act(k, b.dataset.a, (A.data && A.data.rows || [])[+b.dataset.i])));
     const q = $('#exQ', V); if (q) q.oninput = () => { A.q = q.value.trim(); const x = $('#exQ', V); show(k); const y = $('#exQ', V); if (y && x !== y) { y.focus(); y.setSelectionRange(y.value.length, y.value.length); } };

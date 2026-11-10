@@ -323,7 +323,7 @@ function renderDevices() {
   { const V = $('#v-devices'); if (V && V.classList.contains('dv-cardsview')) return; }
   const codeOnly = D.role !== 'agent' && !window.__assist && !!(D.settings || {}).codeOnly;
   const untouchedPending = (d) => !d.parent && !+d.active && !(d.playlists || []).length && !d.name && !d.notes && !d.expires;
-  const soon = (d) => d.status === 'active' && !d.parent && daysLeft(d) !== null && daysLeft(d) <= 14;
+  const soon = (d) => d.status === 'active' && !d.parent && daysLeft(d) !== null && daysLeft(d) <= (window.kxSoonDays ? kxSoonDays() : 14);
   const fit = (d, s) => s === 'all' || (s === 'soon' ? soon(d) : d.status === s);
   const cnt = (s) => D.devices.filter((d) => fit(d, s)).length;
   $('#filters').innerHTML = ['all', 'active', 'soon', 'pending', 'expired', 'disabled'].map((s) => `<button class="fchip ${D.filter === s && !(codeOnly && s === 'pending') ? 'on' : ''}" data-fl="${s}">${s === 'all' ? 'Tutti' : s === 'soon' ? 'In scadenza' : STL[s]}<span>${cnt(s)}</span></button>`).join('');

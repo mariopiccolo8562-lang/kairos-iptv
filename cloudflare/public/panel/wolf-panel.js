@@ -169,12 +169,12 @@
           <span class="mut" style="font-size:12.5px">${list.length} linee</span></div>
         ${d.lines && window.KXTools ? KXTools.bar('wf', selOf(list).length, list.length, [['ext', 'Rinnova', 'pri'], ['on', 'Attiva'], ['off', 'Disattiva'], ['msg', 'Messaggio ai clienti']]) + (W.st ? statsHtml() : '') : ''}
         <div style="margin-top:8px">${!d.lines ? `<p class="mut">${W.busy ? 'Carico le linee da WOLF…' : 'Nessun dato'}</p>` : shown.map((l) => {
-          const k = linkOf(l.id), sh = W.show.has(l.id), conn = l.conns == null && l.max == null ? '' : `${l.conns ?? '?'}/${l.max || '?'}`;
+          const k = linkOf(l.id), sh = W.show.has(l.id), conn = l.conns == null && l.max == null ? '' : `${l.conns ?? '?'}/${l.max || '?'}`, tc = window.KXSort ? KXSort.tone(l.exp, !!l.enabled) : '';
           return `<div class="wf-row" data-id="${l.id}"><div><span class="k">${window.KXTools ? KXTools.ck('wf', l.id, W.sel.has(String(l.id))) : ''}ID</span>${l.id}</div>
-            <div><span class="k">Utente / password</span><div class="wf-v"><b class="mono">${esc(l.username)}</b><button data-a="cu" title="Copia utente">⧉</button></div><div class="wf-v"><span class="mono">${sh ? esc(l.password) : '••••••'}</span><button data-a="eye" title="${sh ? 'Nascondi' : 'Mostra'} password">${sh ? 'Nascondi' : 'Mostra'}</button><button data-a="cp" title="Copia password">⧉</button></div></div>
+            <div><span class="k">Utente / password</span><div class="wf-v"><b class="mono ${tc}">${esc(l.username)}</b><button data-a="cu" title="Copia utente">⧉</button></div><div class="wf-v"><span class="mono">${sh ? esc(l.password) : '••••••'}</span><button data-a="eye" title="${sh ? 'Nascondi' : 'Mostra'} password">${sh ? 'Nascondi' : 'Mostra'}</button><button data-a="cp" title="Copia password">⧉</button></div></div>
             <div><span class="k">Scadenza</span>${fmtD(l.exp)}<br><small class="mut">${left(l.exp)}</small>${window.KXPay ? KXPay.badge('line', 'wolf', l.id) : ''}</div>
             <div><span class="k">Stato</span>${window.KXOnline ? KXOnline.dot({ on: l.conns > 0, conns: l.conns, max: l.max }) + (l.conns > 0 && l.watching ? `<small class="mut" title="Sta guardando"> ▶ ${esc(l.watching)}</small>` : '') + '<br>' : ''}${status(l)}${l.trial ? '<span class="wf-tag g">Prova</span>' : ''}${conn ? `<br><small class="mut">${esc(conn)} conn.</small>` : ''}</div>
-            <div><span class="k">Nota / cliente KAIROS</span><div class="mono">${esc(l.note) || '<span class="mut">—</span>'}</div>${k ? `<span class="wf-tag">↔ ${esc(k.name)}</span>` : ''}${l.owner && l.owner !== W.cfg.user ? `<span class="wf-tag g" title="Reseller">${esc(l.owner)}</span>` : ''}</div>
+            <div><span class="k">Nota / cliente KAIROS</span><div class="mono ${tc}">${esc(l.note) || '<span class="mut">—</span>'}</div>${k ? `<span class="wf-tag">↔ ${esc(k.name)}</span>` : ''}${l.owner && l.owner !== W.cfg.user ? `<span class="wf-tag g" title="Reseller">${esc(l.owner)}</span>` : ''}</div>
             <div class="wf-act"><button class="btn sm act-edit" data-a="edit">Modifica</button><button class="btn sm act-renew" data-a="ext">Rinnova</button>${window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="wolf" data-ref="${esc(l.id)}" data-label="${esc(l.username)}" data-owner="${+l.ownerId || 0}" data-auto-line="${esc(l.id)}" data-panel-note="${esc(l.note || '')}">💰 Pagamento</button>` : ''}${isAg() ? '' : `<button class="btn sm" data-a="link">${k ? 'Cliente' : 'Collega cliente'}</button>`}<button class="btn sm act-m3u" data-a="m3u">M3U</button>${window.KXMxpNew && (!window.KXMxpCan || KXMxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? '<button class="btn sm act-mxp" data-a="mxp" title="Crea il cliente su MaxPlayer con questa linea">MaxPlayer</button>' : ''}${window.KXOxpNew && (!window.KXOxpCan || KXOxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? '<button class="btn sm act-oxp" data-a="oxp" title="Aggiungi questa linea a un dispositivo OrbixPlay">OrbixPlay</button>' : ''}${window.KXOrcpNew && (!isAg() || KXOrcpAgentCan()) ? '<button class="btn sm act-orcp" data-a="orcp" title="Segna la linea per l\'app e prepara il messaggio al cliente">' + esc(KXOrcpName()) + '</button>' : ''}<button class="btn sm ghost act-toggle ${l.enabled ? '' : 'act-toggle-on'}" data-a="tgl">${l.enabled ? 'Disattiva' : 'Attiva'}</button><button class="btn sm act-delete" data-a="del">Elimina</button></div></div>`;
         }).join('')}</div>
         ${list.length > shown.length ? `<div style="margin-top:10px"><button class="btn sm" id="wfMore">Mostra altre ${Math.min(100, list.length - shown.length)}</button></div>` : ''}</div>`}`;
@@ -193,7 +193,7 @@
     if (window.KXSort) KXSort.bind(V, W, 'wf', () => { W.limit = 100; render(); });
     if ($('#wfMore')) $('#wfMore').onclick = () => { W.limit += 100; render(); };
     V.querySelectorAll('.wf-row [data-a]').forEach((b) => { b.onclick = () => act(b.dataset.a, +b.closest('.wf-row').dataset.id); });
-    if (window.KXStats) KXStats.bind(V, (k) => { const F = { online: 'conn', active: 'on', expired: 'exp', soon: 'soon', off: 'off', total: '' }; if (k in F) { W.f = F[k]; W.q = ''; render(); } });
+    if (window.KXStats) KXStats.bind(V, (k) => { if (k === 'soon4') { W.f = ''; W.q = ''; W.days = 4; return render(); } const F = { online: 'conn', active: 'on', expired: 'exp', soon: 'soon', off: 'off', total: '' }; if (k in F) { W.f = F[k]; W.q = ''; if (W.days !== 'due') W.days = 0; render(); } });
     if (window.KXTools && d.lines) KXTools.bind(V, 'wf', W.sel, () => filtered().map((l) => l.id), { ext: bulkExt, on: () => bulkTgl(true), off: () => bulkTgl(false), msg: bulkMsg, csv: exportCsv, stats: () => { W.st = !W.st; render(); } }, render);
   }
   /* azioni su più linee: solo quelle selezionate e visibili con i filtri attuali */
@@ -224,8 +224,9 @@
     const cr = rawCredits !== null && rawCredits !== undefined && Number.isFinite(+rawCredits) ? +rawCredits : null;
     const fmtC = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString('it-IT');
     const noteEdits = new Map(S.map((l) => [String(l.id), KXTools.noteValue(l.note)]));
+    const payEdits = new Map(); // id → mesi pagati (0 = non segnare)
     const pr = ask('Conferma rinnovo', `${KXTools.panelHeader('WOLF IPTV', '#e0524f')}
-      <label class="lbl">Pacchetto per tutte (usa crediti WOLF)</label><select class="inp" id="wbK">${pkOpts()}</select>
+      <label class="lbl">Pacchetto per tutte (usa crediti WOLF)</label><select class="inp" id="wbK">${pkOpts()}</select>${window.KXPay ? KXPay.bulkPayHead() : ''}
       <div class="kt-renew-list" style="margin-top:10px"><table class="kt-renew-table"><thead><tr><th>Utente</th><th>Scadenza attuale</th><th>Crediti</th></tr></thead><tbody id="wbRows"></tbody></table></div>
       <p class="kt-renew-foot" id="wbC"></p>`, 'Rinnova tutte');
     const packageNow = () => W.pk.find((x) => String(x.id) === $('#wbK').value) || {};
@@ -234,11 +235,12 @@
       const p = packageNow(), unit = Number.isFinite(+p.credits) ? +p.credits : null;
       $('#wbRows').innerHTML = S.map((l) => {
         const k = linkOf(l.id);
-        return `<tr><td style="border-bottom:0">${esc(l.username)}</td><td style="border-bottom:0">${esc(fmtD(l.exp))}</td><td style="border-bottom:0">${unit === null ? '—' : `${fmtC(unit)} crediti`}</td></tr><tr><td colspan="3" style="padding-top:0"><textarea class="inp" data-wb-note="${esc(l.id)}" maxlength="300" rows="2" placeholder="Nota (nome del cliente, telefono…)" style="width:100%;min-width:0;box-sizing:border-box;margin:0;padding:6px;font-size:12px;resize:vertical">${esc(noteEdits.get(String(l.id)) || '')}</textarea>${k && k.name ? `<small class="mut" style="display:block;margin-top:4px">KAIROS: ${esc(k.name)}</small>` : ''}</td></tr>`;
+        return `<tr><td style="border-bottom:0">${esc(l.username)}</td><td style="border-bottom:0">${esc(fmtD(l.exp))}</td><td style="border-bottom:0">${unit === null ? '—' : `${fmtC(unit)} crediti`}</td></tr><tr><td colspan="3" style="padding-top:0"><textarea class="inp" data-wb-note="${esc(l.id)}" maxlength="300" rows="2" placeholder="Nota (nome del cliente, telefono…)" style="width:100%;min-width:0;box-sizing:border-box;margin:0;padding:6px;font-size:12px;resize:vertical">${esc(noteEdits.get(String(l.id)) || '')}</textarea>${k && k.name ? `<small class="mut" style="display:block;margin-top:4px">KAIROS: ${esc(k.name)}</small>` : ''}${window.KXPay ? KXPay.bulkPayRow(l.id, l.exp, payEdits.get(String(l.id))) : ''}</td></tr>`;
       }).join('');
       $('#wbRows').querySelectorAll('[data-wb-note]').forEach((input) => {
         input.oninput = () => noteEdits.set(String(input.dataset.wbNote), input.value);
       });
+      if (window.KXPay) KXPay.bulkPayBind($('#wbRows').closest('.kt-renew-list').parentElement, payEdits);
     };
     const upd = () => {
       const c = cost(), after = cr !== null && c !== null ? cr - c : null;
@@ -250,6 +252,7 @@
     const pkg = $('#wbK').value, selectedPackage = packageNow(), unitCost = Number.isFinite(+selectedPackage.credits) ? +selectedPackage.credits : null, c = cost();
     if (cr !== null && c > cr) return toast(`Servono ${c} crediti, ne hai ${cr}`, 1);
     const result = await KXTools.runReport(S, async (l) => {
+      const oldExp = l.exp; // «Pagato fino al» parte dalla scadenza di prima del rinnovo
       const r = await api('POST', `/admin/wolf/lines/${l.id}/extend`, { package: pkg });
       const credits = r && r.credits !== null && r.credits !== undefined && Number.isFinite(+r.credits) ? +r.credits : unitCost;
       const note = noteEdits.get(String(l.id)) ?? KXTools.noteValue(l.note);
@@ -258,21 +261,26 @@
         const savedNote = KXTools.noteWithTag(note, l.note);
         try { await api('PUT', `/admin/wolf/lines/${l.id}`, { note: savedNote }); l.note = savedNote; noteUpdated = true; } catch (e) { noteError = e.message; }
       }
-      return { package: r && r.package || selectedPackage.name || pkg, credits, noteUpdated, noteError };
+      let paid = null, payError = '';
+      const months = payEdits.get(String(l.id)) || 0;
+      if (months && window.KXPay) { try { paid = await KXPay.markPaid({ panel: 'wolf', ref: l.id, label: l.username, ownerId: l.ownerId, months, exp: oldExp }); } catch (e) { payError = e.message; } }
+      return { package: r && r.package || selectedPackage.name || pkg, credits, noteUpdated, noteError, paid, payError };
     }, 'Rinnovo');
     W.sel.clear();
+    if (window.KXPay && [...payEdits.values()].some((m) => m > 0)) await KXPay.afterBulk().catch(() => {});
     const latest = await loadLines(true, true), afterRaw = latest && latest.credits;
     const after = afterRaw !== null && afterRaw !== undefined && Number.isFinite(+afterRaw) ? +afterRaw : null;
     const used = cr !== null && after !== null ? cr - after : null;
     const estimate = unitCost !== null ? unitCost * result.ok : null;
     const spent = used !== null ? `${fmtC(used)} crediti` : estimate !== null ? `circa ${fmtC(estimate)} crediti` : 'non verificabili';
-    const successes = result.items.filter((x) => x.ok).map((x) => `<li class="ok">${esc(x.item.username)} · ${x.value.credits === null ? 'costo non disponibile' : `${fmtC(x.value.credits)} crediti`}${x.value.noteUpdated ? ' · nota aggiornata' : ''}</li>`).join('');
+    const successes = result.items.filter((x) => x.ok).map((x) => `<li class="ok">${esc(x.item.username)} · ${x.value.credits === null ? 'costo non disponibile' : `${fmtC(x.value.credits)} crediti`}${x.value.noteUpdated ? ' · nota aggiornata' : ''}${x.value.paid ? ' · 💰 pagato fino al ' + esc(x.value.paid.text) : ''}</li>`).join('');
     const failures = result.items.filter((x) => !x.ok).map((x) => `<li class="err">${esc(x.item.username)}: ${esc(x.error)}</li>`).join('');
-    const noteErrors = result.items.filter((x) => x.ok && x.value.noteError).map((x) => `<li class="err">${esc(x.item.username)}: nota non salvata: ${esc(x.value.noteError)}</li>`).join('');
+    const noteErrors = result.items.filter((x) => x.ok && x.value.noteError).map((x) => `<li class="err">${esc(x.item.username)}: nota non salvata: ${esc(x.value.noteError)}</li>`).join('')
+      + result.items.filter((x) => x.ok && x.value.payError).map((x) => `<li class="err">${esc(x.item.username)}: pagamento non segnato: ${esc(x.value.payError)}</li>`).join('');
     await ask('Riepilogo rinnovo WOLF', `${KXTools.panelHeader('WOLF IPTV', '#e0524f')}<div class="kt-renew-report">
       <div><h4>Rinnovate (${result.ok})</h4><ul>${successes || '<li>—</li>'}</ul></div>
       <div><h4>Errori (${result.err.length})</h4><ul>${failures || '<li>—</li>'}</ul></div>
-      ${noteErrors ? `<div><h4>Note non salvate</h4><ul>${noteErrors}</ul></div>` : ''}
+      ${noteErrors ? `<div><h4>Note o pagamenti non salvati</h4><ul>${noteErrors}</ul></div>` : ''}
       <p class="kt-renew-foot" style="margin:0">Crediti spesi: <b>${esc(spent)}</b>${used !== null ? ` · saldo ${fmtC(cr)} → ${fmtC(after)}` : ''}</p></div>`, 'Chiudi');
   }
   async function bulkTgl(on) {

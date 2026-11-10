@@ -16,14 +16,15 @@
   function calc(L, f) {
     f = Object.assign({ exp: (l) => l.exp, created: (l) => l.created, enabled: (l) => l.enabled !== false, conns: (l) => +l.conns || 0, trial: (l) => !!l.trial }, f || {});
     const now = Date.now(), d0 = new Date(); d0.setHours(0, 0, 0, 0); const day = d0.getTime(), month = new Date(d0.getFullYear(), d0.getMonth(), 1).getTime();
-    const o = { total: 0, online: 0, conns: 0, today: 0, month: 0, active: 0, expired: 0, soon: 0, trial: 0, off: 0, hasConns: false, hasCreated: false };
+    const o = { total: 0, online: 0, conns: 0, today: 0, month: 0, active: 0, expired: 0, soon: 0, soon4: 0, trial: 0, off: 0, hasConns: false, hasCreated: false };
+    const cal = window.KXSort && KXSort.calDays, lim = (window.KXSort && KXSort.SOON) || 4; // come il giallo dei nomi: giorni di calendario
     for (const l of L || []) {
       o.total++;
       const exp = ts(f.exp(l)), cr = ts(f.created(l)), en = !!f.enabled(l), c = f.conns(l);
       if (l.conns != null || c) o.hasConns = true; if (cr) o.hasCreated = true;
       if (c > 0) { o.online++; o.conns += c; }
       if (cr >= day) o.today++; if (cr >= month) o.month++;
-      if (!en) o.off++; else if (exp && exp < now) o.expired++; else { o.active++; if (exp && exp - now < 7 * DAY) o.soon++; }
+      if (!en) o.off++; else if (exp && exp < now) o.expired++; else { o.active++; if (exp && exp - now < 7 * DAY) o.soon++; if (exp && (cal ? cal(exp) <= lim : exp - now <= lim * DAY)) o.soon4++; }
       if (f.trial(l)) o.trial++;
     }
     return o;
@@ -43,7 +44,7 @@
     if (o.hasCreated) T.push({ k: 'today', label: 'Create oggi', v: o.today, c: 'teal' }, { k: 'month', label: 'Create questo mese', v: o.month, c: 'orange' });
     T.push({ k: 'active', label: n('active') || 'Abbonamenti attivi', v: o.active, c: 'red', hint: 'Attive e non scadute' });
     if (o.hasConns && o.conns !== o.online) T.push({ k: 'conns', label: 'Connessioni aperte', v: o.conns, c: 'blue', hint: 'Somma delle connessioni aperte adesso (più di una per linea)' });
-    T.push({ k: 'total', label: n('total') || 'Linee totali', v: o.total, c: 'dark' }, { k: 'soon', label: 'Scadono entro 7 giorni', v: o.soon, c: 'dark' }, { k: 'expired', label: 'Scadute', v: o.expired, c: 'dark' });
+    T.push({ k: 'total', label: n('total') || 'Linee totali', v: o.total, c: 'dark' }, { k: 'soon4', label: 'Scadono entro 4 giorni', v: o.soon4, c: 'dark', hint: 'Mancano 4 giorni o meno (nomi in giallo)' }, { k: 'soon', label: 'Scadono entro 7 giorni', v: o.soon, c: 'dark' }, { k: 'expired', label: 'Scadute', v: o.expired, c: 'dark' });
     if (o.off) T.push({ k: 'off', label: 'Disattivate', v: o.off, c: 'dark' });
     if (o.trial) T.push({ k: 'trial', label: 'Prove', v: o.trial, c: 'dark' });
     return T;
