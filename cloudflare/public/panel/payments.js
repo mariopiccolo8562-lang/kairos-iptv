@@ -24,7 +24,7 @@
       maybeRemind();
       dispatch();
       return cache.rows.map(effective);
-    }).catch((e) => { if (!cache.at) toast(e.message, 1); return cache.rows.map(effective); }).finally(() => { pending = null; });
+    }).catch((e) => { if (!cache.at && !/^Sessione scaduta/.test(e.message || '')) toast(e.message, 1); return cache.rows.map(effective); }).finally(() => { pending = null; }); // prima dell'accesso niente avviso «Sessione scaduta» sulla pagina di accesso
     return pending;
   }
   function get(kind, panel, ref) { return byKey().get(rowKey(kind, panel, ref)) || null; }

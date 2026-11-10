@@ -48,17 +48,21 @@
 @media (min-width:701px) and (max-width:1180px){
   #app.on{grid-template-columns:92px 1fr!important}
   #side{position:sticky!important;top:0;height:100vh;inset:auto!important;width:92px!important;transform:none!important;box-shadow:none!important;padding:18px 8px!important;overflow-y:auto;scrollbar-width:none;z-index:15!important}
-  #side .brand{justify-content:center;padding:0 0 18px!important}#side .brand>:not(svg){display:none}
+  #side .brand{flex-direction:column;justify-content:center;gap:7px;padding:0 0 16px!important}
+  #side .brand>div{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;max-width:100%;min-width:0}
+  #side .brand b.brandName{font-size:11px!important;letter-spacing:.2em;margin-right:-.2em;line-height:1}
+  #side .brand small.brandRole{margin:0;font-size:10.5px!important;line-height:1.2;white-space:nowrap;max-width:76px;overflow:hidden;text-overflow:ellipsis}
   #side .foot{display:none!important}
   #hub4side .nav{flex-direction:column;gap:5px;padding:10px 4px;font-size:10.5px;line-height:1.15;text-align:center;justify-content:center}
   #hub4side .nav svg{width:23px;height:23px}
   #hub4side .nav.on::before{left:-8px}
   #hub4side .nav .h4n{position:absolute;top:4px;right:10px;margin:0}
-  #side #logout{flex-direction:column;gap:4px;font-size:10.5px;padding:10px 4px;justify-content:center}
+  #side #logout{flex-direction:column;gap:4px;font-size:10.5px;padding:10px 4px;justify-content:center;flex-shrink:0}
   .menu-b,#kcScrim{display:none!important}
   main{padding:0 18px 28px!important}
   .topbar{margin:0 -18px 14px!important;padding:10px 18px!important}
 }
+@media (min-width:701px) and (max-width:1180px) and (max-height:800px){#side .brand{gap:5px;padding-bottom:12px!important}aside#side .brand svg.kx-logo{width:44px!important;height:44px!important}}
 @media (max-width:700px){#hub4{position:sticky;top:var(--tb4,104px);z-index:12;margin:0 -14px 14px!important;padding:8px 14px;background:rgba(11,12,16,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}}`;
   document.head.appendChild(css);
 

@@ -31,6 +31,17 @@
 #v-stapps .sa-bd{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.04em;vertical-align:2px;background:rgba(148,163,184,.18);color:#cbd5e1}
 #v-stapps .sa-bd.warn{background:rgba(245,176,65,.16);color:#f2c46c}
 #v-stapps .sa-bd.tag{background:color-mix(in srgb,var(--g) 18%,transparent);color:color-mix(in srgb,var(--g) 70%,#fff)}
+#v-stapps .sa-bd.dl{background:rgba(34,211,238,.13);color:#a5f3fc;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.05em}
+#v-stapps .sa-bd.nodl{background:transparent;border:1px dashed rgba(148,163,184,.5);color:var(--mut);padding:0 6px}
+#v-stapps .sa-dl{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;margin:0 0 12px;padding:10px 12px;border-radius:12px;border:1px solid rgba(34,211,238,.28);background:rgba(34,211,238,.06);font-size:13.5px;line-height:1.45}
+#v-stapps .sa-dl[hidden]{display:none}
+#v-stapps .sa-dl.ok{border-color:rgba(52,211,153,.32);background:rgba(52,211,153,.07);color:#a7f3d0}
+#v-stapps .sa-dl>span{flex:1;min-width:220px}
+#v-stapps .sa-dl small{display:block;color:var(--mut);font-size:12.5px;margin-top:3px}
+#v-stapps .sa-dl small b{color:inherit;filter:brightness(1.35)}
+#v-stapps .sa-dl a{color:#67e8f9}
+#v-stapps .sa-use{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:5px 10px;border-radius:9px;border:1px solid rgba(34,211,238,.4);background:rgba(34,211,238,.08);color:#a5f3fc;font:inherit;font-size:12.5px;cursor:pointer}
+#v-stapps .sa-use b{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#e0faff}
 #v-stapps .sa-mv{display:flex;gap:4px;flex:none}
 #v-stapps .sa-mv button{width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:transparent;color:inherit;cursor:pointer;font-size:15px}
 #v-stapps .sa-mv button:disabled{opacity:.3;cursor:default}
@@ -82,6 +93,42 @@
     return p;
   };
 
+  /* codici Downloader che il pannello conosce già: app Kairos (Impostazioni → App e aggiornamenti; dal link /get/<app>.apk o dal
+     nome) e «Codici Downloader» (stesso nome, oppure stesso link). Due voci con lo stesso nome e codici diversi: non si indovina */
+  const DLK = { pro: 'downloaderCode', premium: 'premDownloaderCode', prem: 'premDownloaderCode', tv: 'ktvDownloaderCode', ktv: 'ktvDownloaderCode', plus: 'plusDownloaderCode', xc: 'xcDownloaderCode', lite: 'liteDownloaderCode', nova: 'novaDownloaderCode', 'nova-arm32': 'novaDownloaderCode', store: 'storeDownloaderCode' };
+  const norm = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\([^)]*\)/g, '').replace(/[^a-z0-9]/g, '');
+  const okCode = (c) => { c = String(c == null ? '' : c).trim(); return /^[A-Za-z0-9]{1,12}$/.test(c) ? c : ''; };
+  const codeOf = (a) => String(a.code || '').trim();
+  function panelCode(a) {
+    const s = (typeof D === 'object' && D && D.settings) || {}, n = norm(a.name);
+    const m = /\/get\/([a-z0-9-]+)\.apk(?:[?#]|$)/i.exec(String(a.url || ''));
+    const dk = (id) => (Object.prototype.hasOwnProperty.call(DLK, id) ? DLK[id] : '');
+    const k = (m && dk(m[1].toLowerCase())) || (n.startsWith('kairos') && dk(n.slice(6))) || '';
+    if (k && okCode(s[k])) return okCode(s[k]);
+    const list = (typeof D === 'object' && D && Array.isArray(D.dlCodes)) ? D.dlCodes : [];
+    const hits = new Set(list.filter((x) => x && okCode(x.code) && ((n && norm(x.name) === n) || (a.url && (x.link === a.url || (Array.isArray(x.links) && x.links.some((l) => l && l.url === a.url)))))).map((x) => okCode(x.code)));
+    return hits.size === 1 ? [...hits][0] : '';
+  }
+  function dlInfo() {
+    const x = { have: 0, total: S.data.apps.length, fill: [], missing: [], diff: [] };
+    S.data.apps.forEach((a, i) => {
+      const c = codeOf(a), pc = panelCode(a);
+      if (c) { x.have++; if (pc && pc !== c) x.diff.push(i); } else if (pc) x.fill.push([i, pc]); else x.missing.push(i);
+    });
+    return x;
+  }
+  function dlLine() {
+    const el = $('#saDl'); if (!el || !S.data) return;
+    const x = dlInfo(), nm = (arr) => arr.map((i) => '<b>' + esc(S.data.apps[i].name || 'Nuova app') + '</b>').join(', ');
+    el.hidden = !x.total; el.classList.toggle('ok', x.total > 0 && x.have === x.total && !x.diff.length);
+    if (!x.total) return;
+    el.innerHTML = `<span>${x.have === x.total ? `✓ Tutte le app hanno il codice Downloader (${x.total})` : `Codice Downloader: ce l'hanno <b>${x.have}</b> app su ${x.total}`}
+      ${x.fill.length ? `<small>Il pannello conosce già quello di ${nm(x.fill.map((f) => f[0]))}.</small>` : ''}
+      ${x.missing.length ? `<small>Da scrivere nella scheda dell'app: ${nm(x.missing)}. Il codice lo crei su <a href="https://go.aftvnews.com/" target="_blank" rel="noopener">go.aftvnews.com</a> incollando il link diretto dell'APK.</small>` : ''}
+      ${x.diff.length ? `<small>Diverso da quello del pannello: ${nm(x.diff)}. Apri l'app per scegliere quale tenere.</small>` : ''}</span>
+      ${x.fill.length && S.canSave ? `<button class="btn pri sm" type="button" id="saDlFill">${x.fill.length === 1 ? 'Aggiungi il codice' : `Aggiungi i ${x.fill.length} codici`}</button>` : ''}`;
+  }
+
   async function load(force) {
     if (!isOwner()) return;
     if (S.loading) return S.loading;
@@ -112,12 +159,12 @@
   }
 
   function appRow(a, i, n) {
-    const pr = problems(a), ro = !S.canSave, dis = ro ? ' disabled' : '';
+    const pr = problems(a), ro = !S.canSave, dis = ro ? ' disabled' : '', pc = panelCode(a);
     const icons = [...new Set([...S.icons, ...Object.keys(S.local), a.icon].filter(Boolean))];
     return `<div class="sa-app${i === S.open ? ' open' : ''}${a.hidden ? ' hid' : ''}" style="--g:${esc(glowOf(a))}" data-app="${i}">
       <div class="sa-h" data-act="toggle" data-i="${i}">
         <span class="sa-ic${a.light ? ' contain' : ''}">${iconHtml(a)}</span>
-        <span class="sa-tt"><b>${esc(a.name || 'Nuova app')}</b>${a.tag ? `<span class="sa-bd tag">${esc(a.tag)}</span>` : ''}${a.hidden ? '<span class="sa-bd">NASCOSTA</span>' : ''}${pr.length ? '<span class="sa-bd warn">DA COMPLETARE</span>' : ''}
+        <span class="sa-tt"><b>${esc(a.name || 'Nuova app')}</b>${a.tag ? `<span class="sa-bd tag">${esc(a.tag)}</span>` : ''}${a.hidden ? '<span class="sa-bd">NASCOSTA</span>' : ''}${pr.length ? '<span class="sa-bd warn">DA COMPLETARE</span>' : ''}${codeOf(a) ? `<span class="sa-bd dl" title="Codice Downloader">DL ${esc(codeOf(a))}</span>` : '<span class="sa-bd nodl" title="Manca il codice Downloader">SENZA CODICE</span>'}
           <small>${esc(a.description || a.url || '—')}</small></span>
         ${ro ? '' : `<span class="sa-mv"><button type="button" data-act="up" data-i="${i}" title="Sposta su" aria-label="Sposta su"${i === 0 ? ' disabled' : ''}>↑</button><button type="button" data-act="down" data-i="${i}" title="Sposta giù" aria-label="Sposta giù"${i === n - 1 ? ' disabled' : ''}>↓</button></span>`}
         <svg class="sa-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg>
@@ -131,7 +178,7 @@
         <div class="sa-f"><label>Descrizione (si vede nello store)</label><textarea class="inp" data-f="description" data-i="${i}" rows="3" maxlength="1000"${dis}>${esc(a.description || '')}</textarea></div>
         <div class="sa-f"><label>Link diretto all'APK * (deve scaricare il file, non aprire una pagina)</label><input class="inp${a.url && !validUrl(a.url) ? ' err' : ''}" type="url" data-f="url" data-i="${i}" value="${esc(a.url || '')}" placeholder="https://…/app.apk" maxlength="500" spellcheck="false"${dis}></div>
         <div class="sa-g2">
-          <div><label>Codice Downloader (promemoria, non si vede nello store)</label><input class="inp" data-f="code" data-i="${i}" value="${esc(a.code || '')}" maxlength="12"${dis}></div>
+          <div><label>Codice Downloader (promemoria, non si vede nello store)</label><input class="inp" data-f="code" data-i="${i}" value="${esc(a.code || '')}" maxlength="12" inputmode="numeric" placeholder="es. 1234567"${dis}>${!ro && pc && pc !== codeOf(a) ? `<button type="button" class="sa-use" data-act="dluse" data-i="${i}">${codeOf(a) ? 'Nel pannello è' : 'Il pannello lo conosce:'} <b>${esc(pc)}</b> · usa questo</button>` : ''}</div>
           <div><label>Nome pacchetto Android (facoltativo, per «Disinstalla»)</label><input class="inp" data-f="pkg" data-i="${i}" value="${esc(a.pkg || '')}" placeholder="com.esempio.player" maxlength="100" spellcheck="false"${dis}></div>
         </div>
         <div class="sa-icrow">
@@ -165,6 +212,7 @@
         </div></div>
       <div class="card glass"><div class="hd"><h3>App <span class="mut" id="saCount" style="font-weight:500">(${vis} visibili su ${d.apps.length})</span><small>Tocca un'app per cambiarla. Le frecce decidono l'ordine nello store.</small></h3>
         ${ro || d.apps.length >= 60 ? '' : '<button class="btn pri sm" type="button" id="saAdd">+ Aggiungi app</button>'}</div>
+        <div class="sa-dl" id="saDl" hidden></div>
         <div class="sa-list" id="saList">${d.apps.length ? d.apps.map((a, i) => appRow(a, i, d.apps.length)).join('') : '<p class="mut">Nessuna app. Premi «+ Aggiungi app».</p>'}</div></div>
       <div class="sa-bar" id="saBar" hidden><span id="saSt">Modifiche non salvate</span><button class="btn" type="button" id="saUndo">Annulla</button><button class="btn pri" type="button" id="saSave">Salva</button></div>
       <input type="file" id="saFile" accept="image/png,image/webp,image/jpeg" hidden>`;
@@ -178,6 +226,7 @@
     const t = $('#saSt'); if (t) t.textContent = S.busy ? 'Salvo…' : bad ? `Modifiche non salvate · ${bad === 1 ? '1 app da completare' : bad + ' app da completare'}` : 'Modifiche non salvate';
     const sv = $('#saSave'); if (sv) sv.disabled = S.busy;
     const c = $('#saCount'); if (c) c.textContent = `(${S.data.apps.filter((a) => !a.hidden).length} visibili su ${S.data.apps.length})`;
+    dlLine();
   }
   function head(i) { // aggiorna solo l'intestazione dell'app i (mentre si scrive non si ridisegna tutto)
     const el = V.querySelector(`.sa-app[data-app="${i}"]`), a = S.data.apps[i]; if (!el || !a) return;
@@ -240,7 +289,12 @@
     bar();
   });
   V.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-act],#saReload,#saAdd,#saSave,#saUndo'); if (!t || !V.contains(t)) return;
+    const t = e.target.closest('[data-act],#saReload,#saAdd,#saSave,#saUndo,#saDlFill'); if (!t || !V.contains(t)) return;
+    if (t.id === 'saDlFill') {
+      const f = dlInfo().fill; if (!f.length || !S.canSave) return;
+      for (const [i, c] of f) S.data.apps[i].code = c;
+      render(); toast(`${f.length === 1 ? 'Aggiunto 1 codice' : `Aggiunti ${f.length} codici`}: premi «Salva» per mandarli allo store`); return;
+    }
     if (t.id === 'saReload') { if (dirty() && !(await ask('Ricaricare l\'elenco?', 'Le modifiche non salvate si perdono.', 'Ricarica'))) return; S.data = null; return load(true); }
     if (t.id === 'saSave') return save();
     if (t.id === 'saUndo') { S.data = JSON.parse(S.saved); render(); return; }
@@ -258,7 +312,8 @@
       if (!(await ask('Eliminare l\'app?', `«${esc(A[i].name || 'Nuova app')}» sparisce dallo store dopo il salvataggio. Se vuoi solo toglierla per un po', usa «Nascondi».`, 'Elimina'))) return;
       A.splice(i, 1); S.open = -1; render(); return;
     }
-    if (act === 'upload') { S.upFor = i; const fi = $('#saFile'); fi.value = ''; fi.click(); }
+    if (act === 'upload') { S.upFor = i; const fi = $('#saFile'); fi.value = ''; fi.click(); return; }
+    if (act === 'dluse' && A[i] && S.canSave) { const c = panelCode(A[i]); if (c) { A[i].code = c; S.open = i; render(); } }
   });
 
   V.addEventListener('error', (e) => { const im = e.target; if (im && im.tagName === 'IMG' && im.closest('.sa-ic')) { const a = S.data && S.data.apps[+((im.closest('.sa-app') || {}).dataset || {}).app]; im.replaceWith(document.createTextNode(((a && a.name) || '?').trim().charAt(0).toUpperCase() || '?')); } }, true);

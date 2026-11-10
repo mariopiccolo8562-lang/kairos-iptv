@@ -366,7 +366,7 @@ body.agent .foot{display:none}
   }
   window.addEventListener('kxpay:update', () => { if (isAgent()) { applyMode(); layoutMenu(); } });
   const origRenderAll = renderAll;
-  window.renderAll = renderAll = function () { applyMode(); origRenderAll(); renderAgents(); if (window.KXPay) { KXPay.load(); KXPay.loadLedger?.(); } };
+  window.renderAll = renderAll = function () { applyMode(); origRenderAll(); renderAgents(); if (window.KXPay) { KXPay.load(); KXPay.loadLedger?.()?.catch(() => {}); } }; // aggiornamento in sottofondo: se non riesce (es. mentre si entra in assistenza) niente errore
   const origMsgs = renderMsgs;
   window.renderMsgs = renderMsgs = function () { origMsgs(); if (isAgent()) { const o = $('#mTo option[value="all"]'); if (o) o.remove(); $$('#mTo option').forEach((x) => { const d = D.devices.find((y) => y.id === x.value); if (d && d.parent) x.remove(); }); } };
   const origSec = renderSecurity;

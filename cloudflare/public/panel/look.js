@@ -134,6 +134,10 @@ html.lx #hub4side .nav .h4n{background:#fbbf24;color:#1c1300}
   html.lx #hub4side .nav.on::before{display:none}
 }
 
+@media (min-width:701px) and (max-width:1180px){
+  html.lx #side .brand b.brandName{font:800 10.5px/1 ${SANS}!important;letter-spacing:.3em!important;margin-right:-.3em;color:#e8f6ff;text-shadow:0 0 12px rgba(34,211,238,.45)}
+  html.lx #side .brand small.brandRole{padding:3px 5px;border-radius:999px;border:1px solid rgba(167,139,250,.55);background:rgba(139,92,246,.12);color:#ddd6fe;font:700 8px/1.25 ${MONO}!important;letter-spacing:.03em!important;text-transform:uppercase;max-width:78px;overflow:hidden;text-overflow:ellipsis}
+}
 /* telefono: menu a scomparsa scuro e barra in basso con il pulsante luminoso */
 @media (max-width:700px){
   html.lx aside{background:#060b18!important}
@@ -358,8 +362,10 @@ html.lx-f #lxHome .x-km,html.lx-f #lxHome .x-hm{display:none}
 @media (min-width:1181px){
   html.lx-f #app.on{grid-template-columns:96px 1fr!important}
   html.lx-f #side{padding:20px 0 16px!important;align-items:center;position:relative;z-index:20;overflow:visible!important}
-  html.lx-f #side .brand{justify-content:center;padding:0 0 18px!important;margin:0}
-  html.lx-f #side .brand>:not(svg){display:none!important}
+  html.lx-f #side .brand{flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 0 16px!important;margin:0}
+  html.lx-f #side .brand>div{display:flex!important;flex-direction:column;align-items:center;gap:6px}
+  html.lx-f #side .brand .brandName{font:800 11px/1 ${SANS};letter-spacing:.34em;margin-right:-.34em;color:#e8f6ff;text-shadow:0 0 12px rgba(34,211,238,.45)}
+  html.lx-f #side .brand .brandRole{display:block;max-width:90px;padding:3px 6px;border-radius:999px;border:1px solid rgba(167,139,250,.55);background:rgba(139,92,246,.12);color:#ddd6fe;font:700 8px/1.25 ${MONO};letter-spacing:.08em;text-transform:uppercase;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:1}
   html.lx-f #side .brand svg.kx-logo{width:56px!important;height:56px!important}
   html.lx-f #hub4side{align-items:center;gap:10px;width:100%}
   html.lx-f #hub4side .nav{width:56px!important;height:56px;padding:0!important;gap:0;justify-content:center;border-radius:16px;color:#93a4c3}
@@ -375,13 +381,12 @@ html.lx-f #lxHome .x-km,html.lx-f #lxHome .x-hm{display:none}
   html.lx-f #side #logout{width:56px;height:46px;padding:0!important;justify-content:center;font-size:0;gap:0;border-radius:14px;margin-left:auto!important;margin-right:auto!important}
   html.lx-f #side #logout svg{width:20px;height:20px}
 /* barra a icone sugli schermi bassi (portatili): voci un po' più strette, così entrano tutte con «Esci» */
-@media (min-width:701px) and (max-height:860px){html.lx-f #side .brand svg.kx-logo{width:46px!important;height:46px!important}html.lx-f #side .brand{padding-bottom:12px!important}html.lx-f #hub4side{gap:6px}html.lx-f #hub4side .nav{height:50px}html.lx-f #lxStyleBtn{margin-bottom:10px}}
-@media (min-width:701px) and (max-height:700px){html.lx-f #side{padding:12px 0 10px!important}html.lx-f #side .brand svg.kx-logo{width:40px!important;height:40px!important}html.lx-f #hub4side{gap:4px}html.lx-f #hub4side .nav{height:44px;width:52px!important;border-radius:14px}html.lx-f #side #logout{height:40px}html.lx-f #lxStyleBtn{margin:-4px auto 8px;padding:5px 0}}
+@media (min-width:701px) and (max-height:860px){html.lx-f #side .brand svg.kx-logo{width:46px!important;height:46px!important}html.lx-f #side .brand{padding-bottom:12px!important;gap:6px}html.lx-f #side .brand>div{gap:5px}html.lx-f #hub4side{gap:6px}html.lx-f #hub4side .nav{height:50px}html.lx-f #lxStyleBtn{margin-bottom:10px}}
+@media (min-width:701px) and (max-height:700px){html.lx-f #side{padding:12px 0 10px!important}html.lx-f #side .brand svg.kx-logo{width:40px!important;height:40px!important}html.lx-f #side .brand{padding-bottom:8px!important;gap:5px}html.lx-f #side .brand .brandName{font-size:10px}html.lx-f #hub4side{gap:4px}html.lx-f #hub4side .nav{height:44px;width:52px!important;border-radius:14px}html.lx-f #side #logout{height:40px}html.lx-f #lxStyleBtn{margin:-4px auto 8px;padding:5px 0}}
 @media (min-width:701px) and (max-height:590px){html.lx-f #side{overflow-y:auto!important;scrollbar-width:none}}
   html.lx-f #lxBrand{display:block;flex:none;margin-right:6px}
-  html.lx-f #lxBrand .x-wm{display:block;font:800 23px ${SANS};letter-spacing:.34em;background:linear-gradient(90deg,#f0fdff,#67e8f9 45%,#a78bfa);-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1.1}
-  html.lx-f #lxBrand .x-mt{display:flex;align-items:center;gap:10px;margin-top:4px;font:500 12.5px ${MONO};color:#93a4c3;white-space:nowrap}
-  html.lx-f #lxBrand .x-rl{padding:2px 9px;border-radius:6px;border:1px solid rgba(167,139,250,.55);color:#ddd6fe;font-weight:700;letter-spacing:.14em;text-transform:uppercase;box-shadow:0 0 14px -4px rgba(139,92,246,.8)}
+  html.lx-f #lxBrand .x-wm,html.lx-f #lxBrand .x-rl{display:none}
+  html.lx-f #lxBrand .x-mt{display:flex;align-items:center;gap:10px;font:500 13.5px ${MONO};color:#b4c3dc;white-space:nowrap}
   html.lx-f .topbar h2#vTitle{font:700 12px ${MONO}!important;letter-spacing:.24em;text-transform:uppercase;color:#67e8f9;border-left:1px solid rgba(125,211,252,.28)!important;padding:6px 0 6px 16px!important;align-self:center}
   html.lx-f #lxHome .x-gr{display:none}
 }

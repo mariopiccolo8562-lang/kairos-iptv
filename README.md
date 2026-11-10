@@ -730,3 +730,29 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
   - `v303`, 22 controlli: titolare, agente, link personale, codice usato due volte, nuovi codici, azzeramento, assistenza.
   - `ui_totp`, 27 controlli.
 
+
+## 41. Codici Downloader nello store, nome e ruolo sotto il logo (10 novembre 2026)
+
+- **App dello store** (Store → App dello store), solo per il titolare:
+  - **Ogni app mostra il suo codice** nell'intestazione: `DL 618101`, oppure «SENZA CODICE».
+  - **Una riga in cima all'elenco** dice quante app hanno il codice. Elenca:
+    - quelle di cui il pannello lo conosce già;
+    - quelle da scrivere a mano, con il link a go.aftvnews.com dove si crea;
+    - quelle con un codice diverso da quello del pannello.
+  - **«Aggiungi i N codici»** riempie le app senza codice con i codici del pannello. Poi si preme «Salva».
+    - App Kairos: codici di Impostazioni → App e aggiornamenti. L'app si riconosce dal link `/get/<app>.apk` o dal nome.
+    - Altre app: «Codici Downloader», con lo stesso nome o lo stesso link.
+    - Se due voci hanno lo stesso nome e codici diversi (per esempio «IBO Pro» e «IBO-PRO»), il pannello non sceglie.
+  - **Nella scheda dell'app**, se il pannello ha un altro codice, compare «Nel pannello è … · usa questo».
+  - Il codice resta un promemoria: lo store non lo mostra ai clienti.
+- **Nome e ruolo sotto il logo che gira**: «KAIROS» e poi il ruolo. Il titolare vede «Master»; un agente creato dal titolare «Reseller»; un agente creato da un agente «Sub reseller».
+  - **Futuro su computer**: il ruolo sta in una pillola sotto il logo. In alto resta l'orologio, così «KAIROS» non compare due volte.
+  - **Tablet, in tutti gli aspetti**: la barra stretta mostra nome e ruolo sotto il logo. Sugli schermi bassi il logo si rimpicciolisce.
+  - «Esci» non si schiaccia più: se non c'è spazio, la barra scorre.
+- **Piccole correzioni**:
+  - La pagina di accesso non mostra più «Sessione scaduta» alla prima visita.
+  - Entrando in assistenza, l'aggiornamento in sottofondo dei debiti non dà più errore.
+- **Test**:
+  - `ui_store_dlcodes`, 17 controlli.
+  - `ui_logo_role` (tablet: KAIROS e ruolo interi sotto il logo).
+  - `ui_look` (Futuro: KAIROS e «Master» sotto il logo, niente doppione in alto).
