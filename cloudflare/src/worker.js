@@ -1670,6 +1670,15 @@ const GH_UA = 'KairosPanel', GH_API = 'https://api.github.com', GH_V = '2022-11-
 const hasKey = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 /** token GitHub del Worker (segreto GH_TOKEN, facoltativo): '' se manca */
 const ghTok = (env) => { const t = String((env && env.GH_TOKEN) || '').trim(); return /^[\x21-\x7e]{20,255}$/.test(t) ? t : ''; };
+/** domini dei download come indirizzi https, il primo è quello principale (store-k.download) e gli altri sono le riserve;
+ *  «www.» di un dominio già in elenco non conta due volte. Vanno nei file degli aggiornamenti («mirrors»): le app li
+ *  ricordano e li provano se il principale non risponde (10 novembre 2026: niente più pannello né GitHub negli aggiornamenti) */
+function dlOrigins(env) {
+  const hs = String((env && env.DL_HOSTS) || '').toLowerCase().split(',').map((x) => x.trim().replace(/^https?:\/\//, '').replace(/[/:].*$/, '')).filter((x) => /^[a-z0-9.-]+\.[a-z]{2,}$/.test(x));
+  const out = [];
+  for (const h of hs) { const b = h.replace(/^www\./, ''); if (h.startsWith('www.') && hs.includes(b)) continue; if (!out.includes('https://' + h)) out.push('https://' + h); }
+  return out.slice(0, 4);
+}
 /** host dedicati ai download (variabile DL_HOSTS, nomi separati da virgola): lì il Worker serve solo /get/… e /store/… */
 function dlHost(env, host) {
   const v = String((env && env.DL_HOSTS) || '').trim().toLowerCase();
@@ -2032,7 +2041,10 @@ async function cleanLinks(req, env, url, path) {
     if (!hasKey(GET_FEED, mj[1])) return new Response('Non trovato', { status: 404 });
     const f = await dlFeed(env, mj[1]);
     if (!f) return new Response('Aggiornamenti non disponibili al momento', { status: 502, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
-    const out = feedLinks(f, mj[1], url.origin);
+    // i link dell'APK sul dominio dei download (mai il pannello): se la richiesta arriva da lì, lo stesso dominio
+    const dl = dlOrigins(env), base = dlHost(env, url.hostname) || !dl.length ? url.origin : dl[0];
+    const out = feedLinks(f, mj[1], base);
+    if (dl.length) out.mirrors = dl;
     // Kairos Nova non si registra: la politica pubblica degli aggiornamenti arriva col feed, come da /api/player/update
     if (mj[1] === 'nova') { const p = await novaPolicy(env); if (p) out.policy = p; }
     return new Response(req.method === 'HEAD' ? null : JSON.stringify(out), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' } });
@@ -5310,10 +5322,13 @@ async function route(req, env, ctx) {
       // l'APK si scarica dal pannello (/get/<app>.apk), non da GitHub: le app già installate si aggiornano anche con i repository privati
       const gid = nova ? 'nova' : plus ? 'plus' : xc ? 'xc' : prem ? 'premium' : ktv ? 'tv' : 'pro';
       const fromLatest = prem || (plus ? (s.plusApkUrl || PLUS_APK) === PLUS_APK : xc ? (s.xcApkUrl || XC_APK) === XC_APK : ktv && (s.ktvApkUrl || KTV_APK) === KTV_APK);
+      // l'APK dal dominio dei download (store-k.download), non dal pannello; «mirrors» = i domini di riserva da ricordare
+      const dl = dlOrigins(env);
       return json({
         ui: env.UI_VERSION && !ktv && !xc && !plus && !nova ? { version: env.UI_VERSION, url: '/app/index.html' } : null,
-        apk: dlApkLink(url.origin, gid, apk, fromLatest),
+        apk: dlApkLink(dl[0] || url.origin, gid, apk, fromLatest),
         policy,
+        ...(dl.length ? { mirrors: dl } : {}),
       }, 200, { 'Cache-Control': 'no-store' });
     }
     return json({ error: 'Non trovato' }, 404);

@@ -962,3 +962,18 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
 - **Passi**: token e cambio di visibilità, nella parte che si apre. Nota sui minuti: 2.000 al mese gratis per tutti i repo privati insieme; il pannello per ultimo.
 - **«Riduci»** lascia solo il titolo (resta ridotto); gli agenti non lo vedono e il server glielo nega.
 - **Test**: `ui_repo_ready` (13 controlli).
+
+## 53. Aggiornamenti delle app solo dal dominio dei download, con riserve (10 novembre 2026)
+
+- **Richiesta del titolare**: negli aggiornamenti delle app niente più pannello (panel-kairos.com) né GitHub. Resta store-k.download, più la possibilità di un secondo dominio di riserva quando lo compra.
+- **Server**:
+  - **«mirrors»**: i file `/get/<id>.json` portano i domini dei download (`DL_HOSTS`, il principale per primo, senza «www.» doppio). Le app li ricordano e li provano se store-k.download non risponde. Così un dominio di riserva comprato dopo arriva anche alle app già installate, senza una versione nuova.
+  - **Link dell'APK**: nei feed chiesti al pannello e in `/api/player/update` (Pro e le altre) il link è sul dominio dei download. Se la richiesta arriva da un dominio dei download resta su quello.
+  - **Senza `DL_HOSTS`** (prove locali) resta tutto come prima.
+- **App Kotlin** (Kairos TV, Premium, XC, Lite; `UpdFeed.kt`): le basi sono `DL_BASE` (store-k.download), poi `DL_BASE2` (variabile `KAIROS_DL_BASE2` del repository, vuota finché non c'è), poi i «mirrors» ricordati (`Store.dlMirrors`), al massimo 4. Tolti `PANEL`, `UPDATE_URL_FALLBACK` e `APK_URL_FALLBACK` (GitHub).
+- **Quando compri il dominio di riserva**:
+  1. aggiungilo a Cloudflare;
+  2. va aggiunto a `routes` e a `DL_HOSTS` in `wrangler.toml` (`routes` resta su una riga);
+  3. dal deploy dopo, i feed lo annunciano e le app lo imparano al primo controllo;
+  4. facoltativo: mettilo anche nella variabile `KAIROS_DL_BASE2` dei repository delle app, per le installazioni nuove.
+- **Test**: `srv_dl_mirrors` (7 controlli); `UpdFeedTest` nelle quattro app (gira a ogni build su GitHub).
