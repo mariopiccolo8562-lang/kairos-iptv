@@ -20,7 +20,33 @@
     const sec = document.createElement('section'); sec.className = 'view'; sec.id = 'v-orcp-agent'; $('#v-dash').after(sec);
   }
   const TABS = [['conns', 'Connessioni'], ['msgs', 'Messaggi'], ['ann', 'Annuncio'], ['maint', 'Manutenzione'], ['pin', 'PIN parentale'], ['vpn', 'VPN'], ['portals', 'Portali e server'], ['link', 'Collega']];
-  const R = { st: null, tab: 'conns', q: '', onlyOn: false, data: {}, err: '', busy: false, edit: null, pin: null, ck: '' };
+  const R = { st: null, tab: 'conns', q: '', onlyOn: false, data: {}, err: '', busy: false, edit: null, pin: null, ck: '', extension: { found: false, checked: false, version: '' }, pairMessage: '', pairing: false };
+  let pairPendingResolve = null;
+  let pairDiscoveryTimer = 0;
+  function discoverExtension() {
+    R.extension = { found: false, checked: false, version: '' };
+    window.postMessage({ type: 'kairos-ponte-discover' }, location.origin);
+    if (pairDiscoveryTimer) clearTimeout(pairDiscoveryTimer);
+    pairDiscoveryTimer = setTimeout(() => {
+      R.extension.checked = true;
+      render();
+    }, 800);
+  }
+  window.addEventListener('message', (event) => {
+    if (event.source !== window || event.origin !== location.origin) return;
+    const data = event.data;
+    if (!data || typeof data !== 'object') return;
+    if (data.type === 'kairos-ponte-here' || data.type === 'kairos-ponte-paired') {
+      R.extension = { found: true, checked: true, version: String(data.version || '').slice(0, 30) };
+      if (pairDiscoveryTimer) clearTimeout(pairDiscoveryTimer);
+      if (data.type === 'kairos-ponte-paired' && pairPendingResolve) {
+        const resolve = pairPendingResolve;
+        pairPendingResolve = null;
+        resolve(data);
+      }
+      if ($('#v-orcp') && $('#v-orcp').classList.contains('on')) render();
+    }
+  });
   if (!$('#orcp-agent-style')) {
     const style = document.createElement('style'); style.id = 'orcp-agent-style';
     style.textContent = `
@@ -179,12 +205,26 @@
     const s = R.st || {};
     const stTxt = !s.connected ? badge('Non collegato', '#9aa4b2') : s.expired ? badge('Accesso scaduto', '#ff6b6b') : badge('Collegato', '#2dd4bf');
     const ping = s.ping ? ` · ultimo: ${esc(new Date(s.ping).toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'short', timeStyle: 'short' }))}` : '';
-    const info = s.connected ? `<div class="mut" style="font-size:13px;margin:6px 0 10px;line-height:1.6">${s.user ? 'Account ORCP: <b>' + esc(s.user) + '</b><br>' : ''}${s.app ? `App: <b>${esc(s.app.name || '')}</b>${s.app.version ? ' · versione ' + esc(s.app.version) : ''}${s.app.expires ? ' · licenza fino al ' + esc(s.app.expires) : ''}<br>` : ''}${s.remember ? 'Accesso con «Remember me»: resta valido per mesi, finché non cambi password o premi Log Out su ORCP.' : '<span style="color:#ffb020">Collegato senza «Remember me»: dura circa 2 ore. Rientra su ORCP spuntando «Remember me» e ripassa l\'accesso.</span>'}<br>Controllo automatico ogni 6 ore${ping}</div>` : '';
+    const accessText = s.src === 'ext'
+      ? 'Accesso passato dall\'estensione.'
+      : s.remember
+        ? 'Accesso con «Remember me»: resta valido per mesi, finché non cambi password o premi Log Out su ORCP.'
+        : '<span style="color:#ffb020">Collegato senza «Remember me»: dura circa 2 ore. Rientra su ORCP spuntando «Remember me» e ripassa l\'accesso.</span>';
+    const info = s.connected ? `<div class="mut" style="font-size:13px;margin:6px 0 10px;line-height:1.6">${s.user ? 'Account ORCP: <b>' + esc(s.user) + '</b><br>' : ''}${s.app ? `App: <b>${esc(s.app.name || '')}</b>${s.app.version ? ' · versione ' + esc(s.app.version) : ''}${s.app.expires ? ' · licenza fino al ' + esc(s.app.expires) : ''}<br>` : ''}${accessText}<br>Controllo automatico ogni 6 ore${ping}</div>` : '';
+    const extensionState = R.extension.found
+      ? `Estensione KAIROS Ponte ${esc(R.extension.version || '')} trovata`
+      : R.extension.checked ? 'Estensione non trovata in questo browser' : 'Verifico se l\'estensione è presente…';
+    const extensionMessage = R.pairMessage ? `<p class="mut" role="status" style="margin:8px 0 0">${esc(R.pairMessage)}</p>` : '';
     return `<div class="card" style="padding:14px;max-width:720px"><div style="display:flex;gap:10px;align-items:center"><b>Accesso a cp.ottrun.com</b>${stTxt}</div>${info}
-      <p class="mut" style="font-size:13px;line-height:1.6;margin:8px 0">ORCP ha la verifica «sono umano» al login, quindi KAIROS non può entrare da solo. Entri tu una volta e gli passi l'accesso:</p>
-      <ol class="mut" style="font-size:13px;line-height:1.7;margin:0 0 10px 18px;padding:0"><li>Dal computer entra su <b>cp.ottrun.com</b> spuntando <b>«Remember me»</b>.</li><li>Apri gli strumenti del browser (F12 o ⌘⌥I) → <b>Application</b> → <b>Cookies</b> → cp.ottrun.com.</li><li>Copia la riga <b>remember_web_…</b> (nome e valore) e incollala qui sotto. Va bene anche la tabella intera copiata.</li></ol>
-      <textarea class="inp" id="orCK" rows="3" placeholder="remember_web_…=valore; orcp_ottrun_control_panel_session=valore" style="font-family:monospace;font-size:12px">${esc(R.ck || '')}</textarea>
-      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn pri" data-or="linksave">${s.connected ? 'Aggiorna accesso' : 'Collega'}</button>${s.connected ? '<button class="btn" data-or="unlink">Scollega</button>' : ''}<a class="btn" href="https://cp.ottrun.com/login" target="_blank" rel="noopener">Apri ORCP</a></div></div>`;
+      <div class="card" style="padding:12px 14px;margin:10px 0"><b>Ricollegamento automatico</b><div class="mut" style="font-size:13px;margin-top:5px">${extensionState}</div>${extensionMessage}
+        <div style="margin-top:10px"><button class="btn pri" data-or="pair" ${R.pairing || !R.extension.checked || !R.extension.found ? 'disabled' : ''}>${R.pairing ? 'Collegamento in corso…' : 'Collega l\'estensione'}</button></div>
+      </div>
+      <details><summary class="mut" style="cursor:pointer;font-size:13px">Metodo manuale (senza estensione)</summary><div style="padding-top:10px">
+        <p class="mut" style="font-size:13px;line-height:1.6;margin:0 0 8px">ORCP ha la verifica «sono umano» al login. Entra su cp.ottrun.com con «Remember me» e passa a KAIROS i cookie:</p>
+        <ol class="mut" style="font-size:13px;line-height:1.7;margin:0 0 10px 18px;padding:0"><li>Apri gli strumenti del browser (F12 o ⌘⌥I) → <b>Application</b> → <b>Cookies</b> → cp.ottrun.com.</li><li>Copia la riga <b>remember_web_…</b> (nome e valore) e incollala qui sotto. Va bene anche la tabella intera copiata.</li></ol>
+        <textarea class="inp" id="orCK" rows="3" placeholder="remember_web_…=valore; orcp_ottrun_control_panel_session=valore" style="font-family:monospace;font-size:12px">${esc(R.ck || '')}</textarea>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn pri" data-or="linksave">${s.connected ? 'Aggiorna accesso' : 'Collega'}</button>${s.connected ? '<button class="btn" data-or="unlink">Scollega</button>' : ''}<a class="btn" href="https://cp.ottrun.com/login" target="_blank" rel="noopener">Apri ORCP</a></div>
+      </div></details></div>`;
   }
 
   function statsHtml(d) { const all = d.list || [], onN = all.filter((x) => x.online).length, dayN = all.filter((x) => !x.online && KXStats.ts(x.last) >= Date.now() - 864e5).length; return KXStats.strip([{ k: 'online', label: 'Online ora', v: onN, c: 'blue' }, { k: 'day', label: 'Offline, viste nelle 24 ore', v: dayN, c: 'teal' }, { k: 'all', label: 'Utenti totali', v: all.length, c: 'dark' }, { label: 'Versioni app', v: (d.versions || []).length, c: 'dark' }], { margin: '0 0 12px' }); }
@@ -207,7 +247,7 @@
   async function act(fn, okMsg) { if (R.busy) return; R.busy = true; try { await fn(); if (okMsg) toast(okMsg); R.err = ''; } catch (e) { R.err = e.message; toast(e.message, 1); } R.busy = false; render(); }
   function wire(V) {
     if (window.KXStats) KXStats.bind(V, (k) => { R.tab = 'conns'; R.onlyOn = k === 'online'; R.q = ''; render(); });
-    $$('[data-ortab]', V).forEach((b) => (b.onclick = () => { R.tab = b.dataset.ortab; R.err = ''; render(); }));
+    $$('[data-ortab]', V).forEach((b) => (b.onclick = () => { R.tab = b.dataset.ortab; R.err = ''; render(); if (R.tab === 'link') discoverExtension(); }));
     const q = $('#orQ'); if (q) { q.oninput = () => { R.q = q.value; const st = q.selectionStart; render(); const n = $('#orQ'); if (n) { n.focus(); n.setSelectionRange(st, st); } }; }
     const on = $('#orOn'); if (on) on.onchange = () => { R.onlyOn = on.checked; render(); };
     $$('[data-orcp-app]', V).forEach((x) => {
@@ -228,6 +268,7 @@
     $$('[data-orvdel]', V).forEach((b) => (b.onclick = async () => { if (!(await ask('Eliminare questa configurazione VPN?', 'L\'app non la userà più.'))) return; act(async () => { R.data.vpn = await api('DELETE', '/admin/orcp/vpn/' + encodeURIComponent(b.dataset.orvdel)); if (R.vedit && R.vedit.id === b.dataset.orvdel) R.vedit = null; }, 'Configurazione eliminata'); }));
     $$('[data-or]', V).forEach((b) => (b.onclick = () => {
       const a = b.dataset.or;
+      if (a === 'pair') void pairExtension();
       if (a === 'reload') { R.data.conns = null; R.err = ''; LD.add('conns'); render(); api('GET', '/admin/orcp/data?w=conns&fresh=1').then((r) => { R.data.conns = r; }).catch((e) => { R.err = e.message; }).then(() => { LD.delete('conns'); render(); }); }
       if (a === 'qa') window.KXQuickAct && KXQuickAct({ app: 'orcp' });
       if (a === 'msgcancel') { R.edit = null; render(); }
@@ -249,7 +290,53 @@
       if (a === 'unlink') ask('Scollegare ORCP?', 'KAIROS dimentica l\'accesso. Su ORCP non cambia niente.').then((ok) => ok && act(async () => { await api('DELETE', '/admin/orcp/session'); R.data = {}; await state(true); }, 'ORCP scollegato'));
     }));
   }
-  async function open() { if (isAg()) return render(); render(); await state(); render(); }
+  async function pairExtension() {
+    if (R.pairing) return;
+    if (!R.extension.checked || !R.extension.found) {
+      R.pairMessage = 'Estensione non trovata: installala e ricarica questa pagina';
+      render();
+      return;
+    }
+    R.pairing = true;
+    R.pairMessage = 'Collegamento in corso…';
+    render();
+    try {
+      // Il nuovo codice sostituisce quello del ponte Black e viene salvato subito anche nell'estensione.
+      const created = await api('POST', '/admin/blk/token', {});
+      const token = created && created.token;
+      if (typeof token !== 'string' || token.length < 20 || token.length > 200) throw new Error('Non è stato possibile creare il codice del ponte');
+      const paired = await new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          if (pairPendingResolve === finish) pairPendingResolve = null;
+          resolve(null);
+        }, 5000);
+        function finish(data) {
+          clearTimeout(timer);
+          resolve(data);
+        }
+        pairPendingResolve = finish;
+        window.postMessage({ type: 'kairos-ponte-pair', token }, location.origin);
+      });
+      if (!paired) {
+        R.pairMessage = 'Estensione non trovata: installala e ricarica questa pagina';
+        R.extension = { found: false, checked: true, version: '' };
+        return;
+      }
+      R.extension = { found: true, checked: true, version: String(paired.version || '').slice(0, 30) };
+      R.pairMessage = paired.orcp === 'nologin'
+        ? 'Estensione collegata ✓ Ora entra su cp.ottrun.com con “Remember me”: KAIROS si ricollega da solo'
+        : paired.orcp === 'ok'
+          ? 'Estensione collegata ✓'
+          : 'Estensione collegata ✓, ma la sincronizzazione ORCP non è riuscita';
+      await state(true);
+    } catch (error) {
+      R.pairMessage = error.message || 'Non è stato possibile collegare l\'estensione';
+    } finally {
+      R.pairing = false;
+      render();
+    }
+  }
+  async function open() { if (isAg()) return render(); render(); await state(); if (!R.st.connected || R.tab === 'link') discoverExtension(); render(); }
 
   /* ---------- per le linee e «Nuova attivazione»: nome dell'app, server dei pannelli, messaggio per il cliente ---------- */
   let cfgP = null;

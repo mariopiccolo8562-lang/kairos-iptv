@@ -6,14 +6,22 @@ function formatTime(value) {
 }
 
 async function render() {
-  const stored = await chrome.storage.local.get(['kairosUrl', 'token', 'relayStatus']);
+  const stored = await chrome.storage.local.get(['kairosUrl', 'token', 'relayStatus', 'orcpStatus']);
   const configured = !!String(stored.token || '').trim();
   const status = stored.relayStatus || {};
+  const orcp = stored.orcpStatus || {};
   const active = configured && status.lastPoll && Date.now() - status.lastPoll < 20000;
   $('kairosUrl').value = stored.kairosUrl || DEFAULT_URL;
   $('token').value = stored.token || '';
   $('state').textContent = active ? 'Ponte attivo' : configured ? 'Ponte spento' : 'Non configurato';
   $('state').className = `state ${active ? 'ok' : 'off'}`;
+  $('orcpStatus').textContent = orcp.state === 'ok'
+    ? `MirkoTeam: accesso passato a KAIROS il ${formatTime(orcp.at)}`
+    : orcp.state === 'nologin'
+      ? 'MirkoTeam: entra su cp.ottrun.com con “Remember me”'
+      : orcp.state === 'error'
+        ? `MirkoTeam: ${orcp.error || 'errore nel collegamento'}`
+        : 'MirkoTeam: non collegato';
   $('lastPoll').textContent = formatTime(status.lastPoll);
   $('jobs').textContent = String(Number(status.jobs) || 0);
   $('lastError').textContent = status.lastError || 'Nessuno';

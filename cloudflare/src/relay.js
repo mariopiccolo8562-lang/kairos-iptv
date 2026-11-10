@@ -1,3 +1,5 @@
+import { orcpAcceptCookies } from './orcp.js';
+
 const ORIGIN = 'https://reseller.blkaccess.com';
 const enc = new TextEncoder();
 const JSON_LIMIT = 2 * 1024 * 1024;
@@ -63,12 +65,16 @@ function safePath(path) {
 
 export async function relayPublic(req, env, path, H) {
   const started = Date.now();
-  if (path !== '/api/relay/poll' && path !== '/api/relay/result') return null;
+  if (path !== '/api/relay/poll' && path !== '/api/relay/result' && path !== '/api/relay/orcp') return null;
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (req.method !== 'POST') return corsJSON(H, { error: 'Metodo non consentito' }, 405);
   try {
-    const body = await H.readJSON(req, JSON_LIMIT);
+    const body = await H.readJSON(req, path === '/api/relay/orcp' ? 16384 : JSON_LIMIT);
     if (!await authorized(env, H, body.token)) return corsJSON(H, { error: 'Token del ponte non valido' }, 401);
+    if (path === '/api/relay/orcp') {
+      const accepted = await orcpAcceptCookies(env, H, body.cookies, 'ext');
+      return corsJSON(H, { ok: accepted.ok, remember: accepted.remember });
+    }
     const now = nowSec();
     if (path === '/api/relay/poll') {
       await putSetting(env, 'blk:relay:seen', String(now));
