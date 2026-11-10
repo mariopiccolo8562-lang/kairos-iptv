@@ -132,7 +132,8 @@ export async function orcpKeepAlive(env, H) {
   if (!s) return { skipped: true };
   try {
     await orcp(env, H, '/home');
-  } catch {
+  } catch (e) {
+    if (!e || e.status !== 401) return { error: true };
     if (s.alert !== 1) {
       const text = '⚠️ <b>MirkoTeam</b>\nL\'accesso a cp.ottrun.com è scaduto: in KAIROS apri «App MirkoTeam» → scheda <b>Collega</b> e ripassa l\'accesso (entra su cp.ottrun.com con «Remember me»).';
       try { await H.notifyOwnersText(env, text); } catch {}

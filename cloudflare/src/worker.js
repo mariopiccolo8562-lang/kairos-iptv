@@ -21,6 +21,7 @@ import { mxpRoutes } from './mxpanel.js'; // account MaxPlayer gestiti da KAIROS
 import { tgHook, notifyNew, notifyDecided, notifyActivated, notifyAdmin, notifyOwnersText } from './notify.js'; // avvisi su Telegram e notifiche del pannello
 
 const SESSION_TTL = 30 * 86400; // secondi: l'accesso resta valido 30 giorni dall'ultimo uso (si rinnova da solo)
+const ORCP_KEEPALIVE_CRON = '41 */6 * * *';
 const COOKIE = '__Host-kx';
 const PBKDF2_ITER = 100000; // massimo supportato da Workers
 const MAX_PENDING = 2000;
@@ -41,6 +42,10 @@ export default {
   },
   async scheduled(_ev, env0) {
     const env = reqEnv(env0);
+    if (_ev && _ev.cron === ORCP_KEEPALIVE_CRON) {
+      try { await orcpKeepAlive(env, WOLF_H); } catch {}
+      return;
+    }
     await cleanup(env);
     try { await pendSweep(env, true, effectivePendTtl(await getSettings(env))); } catch {} // richieste «da attivare» non accettate entro il tempo scelto
     // app terzi: se l'hai chiesto, ogni notte si tolgono le liste inattive
