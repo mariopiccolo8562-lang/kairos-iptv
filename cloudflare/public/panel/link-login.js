@@ -14,7 +14,7 @@
     e.preventDefault(); e.stopImmediatePropagation(); $('#lerr').textContent = '';
     try {
       const j = await api('POST', '/admin/link-login', { k, code: $('#lk').value.trim(), totp: $('#lt').value.trim(), turnstile: tsToken() });
-      if (j.needTotp) { $('#lt').style.display = 'block'; $('#lt').focus(); $('#lerr').innerHTML = '<span class="mut">Inserisci il codice dell\'app di autenticazione</span>'; return; }
+      if (j.needTotp) { kxTotpAsk(); return; }
       $('#lk').value = ''; $('#lt').value = '';
       history.replaceState(null, '', location.pathname); // il link non resta nella barra degli indirizzi
       await enter();

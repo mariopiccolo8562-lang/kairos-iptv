@@ -158,12 +158,30 @@ $('#lform').addEventListener('submit', async (e) => {
   e.preventDefault(); $('#lerr').textContent = '';
   try {
     const j = await api('POST', '/admin/login', { user: $('#lu').value.trim(), pass: $('#lp').value, totp: $('#lt').value.trim(), turnstile: tsToken() });
-    if (j.needTotp) { $('#lt').style.display = 'block'; $('#lt').focus(); $('#lerr').innerHTML = '<span class="mut">Inserisci il codice dell\'app di autenticazione</span>'; return; }
+    if (j.needTotp) { kxTotpAsk(); return; }
     $('#lp').value = ''; $('#lt').value = ''; await enter();
   } catch (err) { tsReset(); $('#lerr').textContent = D.demo ? '' : err.message; $('.lcard').animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-10px)' }, { transform: 'translateX(10px)' }, { transform: 'translateX(0)' }], { duration: 300 }); }
 });
+/* dopo la password: il codice dell'app oppure, con il link sotto il campo, un codice di recupero (telefono perso) */
+function kxTotpAsk() {
+  const lt = $('#lt'); lt.style.display = 'block';
+  $('#lerr').innerHTML = '<span class="mut">' + (lt.dataset.rec ? 'Scrivi uno dei codici di recupero' : 'Inserisci il codice dell\'app di autenticazione') + '</span>';
+  if (!$('#ltRec')) {
+    lt.insertAdjacentHTML('afterend', '<a href="#" id="ltRec" class="mut" style="display:block;text-align:center;font-size:12.5px;margin:2px 0 8px">Hai perso il telefono? Usa un codice di recupero</a>');
+    $('#ltRec').onclick = (e) => { e.preventDefault(); kxTotpMode(!lt.dataset.rec); lt.focus(); };
+  }
+  $('#ltRec').style.display = 'block'; lt.focus();
+}
+function kxTotpMode(rec) {
+  const lt = $('#lt'), a = $('#ltRec'); lt.dataset.rec = rec ? '1' : ''; lt.value = '';
+  lt.maxLength = rec ? 9 : 6; lt.inputMode = rec ? 'text' : 'numeric'; lt.autocomplete = rec ? 'off' : 'one-time-code';
+  lt.placeholder = rec ? 'Codice di recupero (es. K7M4-P3XZ)' : 'Codice a 6 cifre dell\'app di autenticazione';
+  lt.style.letterSpacing = rec ? '.14em' : '.4em'; lt.style.textTransform = rec ? 'uppercase' : '';
+  if (a) a.textContent = rec ? 'Torna al codice dell\'app' : 'Hai perso il telefono? Usa un codice di recupero';
+  $('#lerr').innerHTML = '<span class="mut">' + (rec ? 'Scrivi uno dei codici di recupero (vale una volta sola)' : 'Inserisci il codice dell\'app di autenticazione') + '</span>';
+}
 let poll;
-function showLogin() { clearInterval(poll); ST_BOOT = null; const c = $('#chk'); if (c) c.remove(); $('#app').classList.remove('on'); $('#login').style.display = 'grid'; $('#lt').style.display = 'none'; tsReset(); }
+function showLogin() { clearInterval(poll); ST_BOOT = null; const c = $('#chk'); if (c) c.remove(); $('#app').classList.remove('on'); $('#login').style.display = 'grid'; $('#lt').style.display = 'none'; if ($('#ltRec')) { kxTotpMode(false); $('#ltRec').style.display = 'none'; $('#lerr').textContent = ''; } tsReset(); }
 async function logout() { try { await api('POST', '/admin/logout'); } catch {} showLogin(); }
 $('#logout').onclick = logout;
 
@@ -895,23 +913,43 @@ function renderSecurity() {
     row(true, 'Password cifrate (PBKDF2)', 'Le password non sono mai salvate in chiaro'),
     row(true, 'Sessione protetta', 'Cookie sicuro, valido 30 giorni dall\'ultimo uso, protezione CSRF e blocco dopo 5 tentativi falliti'),
     row(x.encryption, 'Playlist cifrate (AES-256)', x.encryption ? 'Le credenziali delle playlist sono cifrate nel database' : 'Manca il segreto ENC_KEY sul Worker'),
-    row(x.totp, 'Verifica in due passaggi', x.totp ? 'Attiva sul tuo account' : 'Consigliata: attivala qui sotto'),
+    row(x.totp, 'Verifica in due passaggi', x.totp ? `Attiva sul tuo account · codici di recupero: ${x.rec ?? 0}${(x.rec ?? 0) <= 2 ? ' — creane di nuovi qui sotto' : ''}` : 'Consigliata: attivala qui sotto'),
     row(x.turnstile, 'Anti-bot Turnstile', x.turnstile ? 'Attivo sulla pagina di accesso' : 'Non configurato (vedi guida)'),
     row(x.access, 'Cloudflare Access', x.access ? 'Il pannello è dietro Zero Trust' : 'Non configurato (vedi guida)'),
     row(true, 'Codici legati al dispositivo', 'Un codice copiato su un\'altra TV non funziona'),
   ].join('') + `<p class="mut" style="font-size:12px;margin-top:8px">Sessioni aperte: ${x.sessions ?? 1}</p>`;
   // verifica in due passaggi: mentre la stai configurando (o disattivando) gli aggiornamenti del pannello non toccano il riquadro
   const tb = $('#totpBox');
-  if (tb.querySelector('#tConf, #tOffC')) return;
+  if (tb.querySelector('#tConf, #tOffC, #tRecDone, #tRecC')) return;
   tb.innerHTML = x.totp
-    ? '<button class="btn sm danger" id="tOff">Disattiva verifica in due passaggi</button>'
+    ? '<button class="btn sm" id="tRec">Nuovi codici di recupero</button> <button class="btn sm danger" id="tOff">Disattiva verifica in due passaggi</button>'
     : '<button class="btn sm pri" id="tOn">Attiva verifica in due passaggi</button>';
+  $('#tRec') && ($('#tRec').onclick = () => {
+    tb.innerHTML = '<p class="mut" style="font-size:13px;margin:0 0 8px">Per creare 10 codici nuovi (quelli di prima smettono di valere) scrivi la password e il codice dell\'app.</p><div class="row"><input class="inp" type="password" id="tPw" placeholder="Password" autocomplete="current-password"><input class="inp mono" id="tCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Codice 2FA"></div><button class="btn sm pri" id="tRecC">Crea i codici</button> <a href="#" id="tCancel" class="mut" style="font-size:12.5px;margin-left:8px">Annulla</a>';
+    $('#tCancel').onclick = (e) => { e.preventDefault(); tb.innerHTML = ''; renderSecurity(); };
+    $('#tRecC').onclick = async () => { try { const r = await api('POST', '/admin/totp/recovery', { password: $('#tPw').value, code: $('#tCode').value }); totpCodes(r.recovery || []); await load(); } catch (e) { toast(e.message, 1); } };
+  });
   $('#tOn') && ($('#tOn').onclick = () => totpSetup(false));
   $('#tOff') && ($('#tOff').onclick = () => {
     tb.innerHTML = '<div class="row"><input class="inp" type="password" id="tPw" placeholder="Password" autocomplete="current-password"><input class="inp mono" id="tCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Codice 2FA"></div><button class="btn sm danger" id="tOffC">Conferma disattivazione</button> <a href="#" id="tCancel" class="mut" style="font-size:12.5px;margin-left:8px">Annulla</a>';
     $('#tCancel').onclick = (e) => { e.preventDefault(); tb.innerHTML = ''; renderSecurity(); };
     $('#tOffC').onclick = async () => { try { await api('POST', '/admin/totp/disable', { password: $('#tPw').value, code: $('#tCode').value }); tb.innerHTML = ''; toast('Verifica in due passaggi disattivata'); await load(); } catch (e) { toast(e.message, 1); } };
   });
+}
+/* codici di recupero appena creati: si vedono solo adesso (nel server c'è solo l'impronta) */
+function totpCodes(codes) {
+  const tb = $('#totpBox'); if (!codes.length) { tb.innerHTML = ''; renderSecurity(); return; }
+  const txt = codes.join('\n');
+  tb.innerHTML = `<div class="tf-rec"><p><b>Codici di recupero</b>: servono per entrare se perdi il telefono. Ognuno vale <b>una volta sola</b>. Salvali adesso, poi non si vedono più: scaricali, copiali o fai uno screenshot e tienili in un posto sicuro (non nel telefono dei codici).</p>
+    <div class="tf-codes">${codes.map((c) => `<code>${esc(c)}</code>`).join('')}</div>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn sm" id="tRecCopy" type="button">Copia</button><button class="btn sm" id="tRecDl" type="button">Scarica</button><button class="btn sm pri" id="tRecDone" type="button">Li ho salvati</button></div></div>`;
+  $('#tRecCopy').onclick = () => navigator.clipboard.writeText(txt).then(() => toast('Codici copiati'), () => toast('Copia non consentita dal browser', 1));
+  $('#tRecDl').onclick = () => {
+    const body = `Codici di recupero KAIROS Control${D.user ? ' (' + D.user + ')' : ''}\nCreati il ${new Date().toLocaleString('it-IT')}\nOgnuno vale una volta sola: all'accesso, «Hai perso il telefono? Usa un codice di recupero».\n\n${txt}\n`;
+    const u = URL.createObjectURL(new Blob([body], { type: 'text/plain;charset=utf-8' })), a = document.createElement('a');
+    a.href = u; a.download = 'kairos-codici-recupero.txt'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000);
+  };
+  $('#tRecDone').onclick = () => { tb.innerHTML = ''; renderSecurity(); };
 }
 /* configurazione con QR da inquadrare (fotocamera o app Password dell'iPhone, Google Authenticator…), tasto per aggiungerla
    dal telefono stesso e chiave da copiare. La chiave resta la stessa finché non confermi («Chiave nuova» la cambia) */
@@ -938,7 +976,7 @@ async function totpSetup(fresh) {
     $('#tNew').onclick = async (e) => { e.preventDefault(); if (await ask('Chiave nuova?', 'Quella di adesso smette di valere: sul telefono cancella la voce vecchia e aggiungi quella nuova.', 'Chiave nuova')) totpSetup(true); };
     $('#tCancel').onclick = (e) => { e.preventDefault(); tb.innerHTML = ''; renderSecurity(); };
     $('#tConf').onclick = async () => {
-      try { await api('POST', '/admin/totp/enable', { code: $('#tCode').value }); tb.innerHTML = ''; toast('Verifica in due passaggi attivata'); await load(); }
+      try { const r = await api('POST', '/admin/totp/enable', { code: $('#tCode').value }); toast('Verifica in due passaggi attivata'); totpCodes(r.recovery || []); await load(); }
       catch (e) { toast(/non valido/i.test(e.message || '') ? 'Codice non valido: sul telefono deve esserci la chiave di adesso (cancella le voci vecchie) e l\'ora del telefono deve essere automatica' : e.message, 1); }
     };
   } catch (e) { toast(e.message, 1); }

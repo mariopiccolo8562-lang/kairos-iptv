@@ -178,6 +178,40 @@ async function checkTotp(secret, code, last = 0) {
   return -1;
 }
 
+/* codici di recupero della verifica in due passaggi (come nel pannello a parte dello store): 10 codici da 8 caratteri senza
+   lettere che si confondono, ognuno vale una volta. Nel database solo l'impronta (HMAC con ENC_KEY), in settings 'totprec:<id>'.
+   Si creano quando si attiva la verifica e con «Nuovi codici» (password + codice); spariscono disattivandola o azzerandola */
+const REC_AB = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const recNorm = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const recIs = (c) => recNorm(c).length === 8;
+const recHash = (env, id, c) => hmacHex(String(env.ENC_KEY || 'kairos'), 'rec:' + id + ':' + recNorm(c));
+async function recNew(env, id) {
+  const codes = [], hashes = [];
+  while (codes.length < 10) {
+    let x = '';
+    while (x.length < 8) for (const b of rand(16)) if (b < 248 && x.length < 8) x += REC_AB[b % 31]; // senza sbilanciamenti
+    if (codes.includes(x.slice(0, 4) + '-' + x.slice(4))) continue;
+    codes.push(x.slice(0, 4) + '-' + x.slice(4)); hashes.push(await recHash(env, id, x));
+  }
+  await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('totprec:' + id, JSON.stringify(hashes)).run();
+  return codes;
+}
+async function recLeft(env, id) {
+  const r = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('totprec:' + id).first();
+  try { const l = r ? JSON.parse(r.v) : []; return Array.isArray(l) ? l.length : 0; } catch { return 0; }
+}
+/** usa un codice di recupero: quanti ne restano, -1 se non vale (sbagliato o già usato) */
+async function recUse(env, id, code) {
+  const r = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('totprec:' + id).first(); if (!r) return -1;
+  let l; try { l = JSON.parse(r.v); } catch { return -1; }
+  if (!Array.isArray(l)) return -1;
+  const i = l.indexOf(await recHash(env, id, code)); if (i < 0) return -1;
+  l.splice(i, 1);
+  const u = await env.DB.prepare('UPDATE settings SET v = ? WHERE k = ? AND v = ?').bind(JSON.stringify(l), 'totprec:' + id, r.v).run();
+  return u && u.meta && u.meta.changes ? l.length : -1; // usato nello stesso istante da un'altra richiesta: non vale due volte
+}
+const recDrop = (env, id) => env.DB.prepare('DELETE FROM settings WHERE k = ?').bind('totprec:' + id).run();
+
 /* ---------------- Cloudflare Access (verifica JWT) ---------------- */
 let jwks = null, jwksAt = 0;
 async function verifyAccess(req, env) {
@@ -5747,7 +5781,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
   if (m === 'PUT') {
     const b = await readJSON(req, 16384);
     const o = await clean(b, A);
-    if (b.resetTotp === true) { o.totp_on = 0; o.totp_secret = ''; o.totp_last = 0; }
+    if (b.resetTotp === true) { o.totp_on = 0; o.totp_secret = ''; o.totp_last = 0; await recDrop(env, id); }
     if (b.storeCode !== undefined) {
       if (top) throw new HttpErr(403, 'Il codice venditore lo decide il titolare');
       const c = sellerNorm(b.storeCode);
@@ -5784,7 +5818,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
   throw new HttpErr(405, 'Metodo non consentito');
 }
 /** pannello dell'agente: solo queste funzioni, sempre limitate ai suoi clienti */
-const AGENT_SELF = /^\/(logout|logout-all|password|totp\/(setup|enable|disable))$/;
+const AGENT_SELF = /^\/(logout|logout-all|password|totp\/(setup|enable|disable|recovery))$/;
 /** dispositivo "libero": comparso sulla TV ma mai toccato dal pannello (né dal proprietario né da altri agenti) */
 const FREE_DEV = "owner_id = 0 AND parent = '' AND active = 0 AND playlists = '' AND name = '' AND notes = '' AND expires = ''";
 async function agentRoutes(req, env, url, path, ses, ip, ctx) {
@@ -5816,7 +5850,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   }
   if (path.startsWith('/orcp/')) throw new HttpErr(403, 'Solo il titolare può gestire il Pannello ORCP');
   // in assistenza: niente «ultimo accesso» falsato e niente modifiche alla sicurezza dell'account dell'agente
-  if (ses.assist && /^\/(logout-all|password|totp\/(setup|enable|disable))$/.test(path)) throw new HttpErr(403, 'In assistenza non puoi cambiare password, verifica in due passaggi o sessioni dell\'agente');
+  if (ses.assist && /^\/(logout-all|password|totp\/(setup|enable|disable|recovery))$/.test(path)) throw new HttpErr(403, 'In assistenza non puoi cambiare password, verifica in due passaggi o sessioni dell\'agente');
   // (anche i lavori notturni fatti a suo nome — rinnovi automatici, allineamento delle scadenze — non sono un suo accesso)
   if (!ses.assist && !/^auto-renew-/.test(String(ses.id || '')) && now() - (+A.last_seen || 0) > 5 * 60e3) ctx.waitUntil(env.DB.prepare('UPDATE admins SET last_seen = ? WHERE id = ?').bind(now(), A.id).run());
   if (path === '/password' && m === 'PUT') { const b = await readJSON(req, 4096); if (typeof b.next === 'string' && b.next.length >= 10 && b.next.length <= 200 && (await checkPass(str(b.current, 200), (await env.DB.prepare('SELECT pass_hash FROM admins WHERE id = ?').bind(A.id).first()).pass_hash))) ctx.waitUntil((async () => { await env.DB.prepare('UPDATE admins SET pw_seal = ? WHERE id = ?').bind(await seal(env, b.next), A.id).run(); })()); return adminRoutes(new Request(url.href, { method: 'PUT', body: JSON.stringify({ current: b.current, next: b.next }) }), env, url, path, who, ip, ctx, aSes); } // il nome utente lo cambia solo chi l'ha creato
@@ -6088,7 +6122,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
       settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', plusDownloaderCode: ok('plus') ? s.plusDownloaderCode || '' : '', premDownloaderCode: ok('prem') ? s.premDownloaderCode || '' : '', novaDownloaderCode: ok('nova') ? s.novaDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),
       // app Kairos per gli agenti: sempre visibili (quali le decide il titolare in kAllow), con il link pulito del pannello
       // (/get/<app>.apk: niente nome del titolare nei link) e il codice Downloader se c'è
-      kairosApps: kairosAppsOf(s).filter((x) => storeAppOk(P.kAllow, x.key)).map((x) => { const g = { prem: 'premium' }[x.key] || x.key; return { ...x, apk: GET_APK[g] ? `${url.origin}/get/${g}.apk` : x.apk }; }), permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on) }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
+      kairosApps: kairosAppsOf(s).filter((x) => storeAppOk(P.kAllow, x.key)).map((x) => { const g = { prem: 'premium' }[x.key] || x.key; return { ...x, apk: GET_APK[g] ? `${url.origin}/get/${g}.apk` : x.apk }; }), permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on), rec: (ses.assist ? A.totp_on : ses.totp_on) ? await recLeft(env, A.id) : 0 }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
       activity: actR ? actR.results || [] : [],
       messages: msgR ? msgGroups((msgR.results || []).filter((x) => byId.has(x.target))).slice(0, 150) : [],
       // messaggi del titolare per questo agente (a tutti gli agenti, a lui o al suo gruppo)
@@ -6406,7 +6440,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     return stateJson(req, {
       settings, devices, activity, messages, agentMsgs, user: who, apk, apkFeed: apkF,
       wgConf: !!wgR,
-      security: { totp: !!(ses && ses.totp_on), encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
+      security: { totp: !!(ses && ses.totp_on), rec: ses && ses.totp_on ? await recLeft(env, ses.admin_id) : 0, encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
       lite: { apk: settings.liteApkUrl || LITE_APK, feed: liteF },
       ktv: { apk: settings.ktvApkUrl || KTV_APK, feed: ktvF },
       xc: { apk: settings.xcApkUrl || XC_APK, feed: xcF },
@@ -7135,8 +7169,21 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const ctr = await checkTotp(a.totp_secret, b.code, a.totp_last);
     if (ctr < 0) throw new HttpErr(400, 'Codice non valido');
     await env.DB.prepare('UPDATE admins SET totp_on = 1, totp_last = ? WHERE id = ?').bind(ctr, a.id).run();
-    await log(env, 'auth', `${who}: verifica in due passaggi attivata`, ip);
-    return json({ ok: true });
+    const recovery = await recNew(env, a.id);
+    await log(env, 'auth', `${who}: verifica in due passaggi attivata (10 codici di recupero)`, ip);
+    return json({ ok: true, recovery });
+  }
+  if (path === '/totp/recovery' && m === 'POST') {
+    const b = await readJSON(req);
+    const a = await env.DB.prepare('SELECT * FROM admins WHERE id = ?').bind(ses.admin_id).first();
+    if (!a.totp_on) throw new HttpErr(400, 'Attiva prima la verifica in due passaggi');
+    if (!(await checkPass(str(b.password, 200), a.pass_hash))) throw new HttpErr(400, 'Password errata');
+    const ctr = await checkTotp(a.totp_secret, b.code, a.totp_last);
+    if (ctr < 0) throw new HttpErr(400, 'Codice non valido');
+    await env.DB.prepare('UPDATE admins SET totp_last = ? WHERE id = ?').bind(ctr, a.id).run();
+    const recovery = await recNew(env, a.id);
+    await log(env, 'auth', `${who}: nuovi codici di recupero (i vecchi non valgono più)`, ip);
+    return json({ ok: true, recovery });
   }
   if (path === '/totp/disable' && m === 'POST') {
     const b = await readJSON(req);
@@ -7145,6 +7192,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const ctr = await checkTotp(a.totp_secret, b.code, a.totp_last);
     if (ctr < 0) throw new HttpErr(400, 'Codice non valido');
     await env.DB.prepare('UPDATE admins SET totp_on = 0, totp_secret = ?, totp_last = 0 WHERE id = ?').bind('', a.id).run();
+    await recDrop(env, a.id);
     await log(env, 'auth', `${who}: verifica in due passaggi disattivata`, ip);
     return json({ ok: true });
   }
@@ -7625,13 +7673,15 @@ async function login(req, env, ip, ctx) {
   }
   if (a.totp_on) {
     if (!b.totp) return json({ needTotp: true }, 200);
-    const ctr = await checkTotp(a.totp_secret, b.totp, a.totp_last);
-    if (ctr < 0) {
+    const rec = recIs(b.totp) ? await recUse(env, a.id, b.totp) : -1;
+    const ctr = rec < 0 ? await checkTotp(a.totp_secret, b.totp, a.totp_last) : -1;
+    if (ctr < 0 && rec < 0) {
       const blocked = await strike();
       await log(env, 'off', `Codice 2FA errato per ${a.username}${blocked}`, ip);
       throw new HttpErr(401, 'Codice di verifica errato');
     }
-    await env.DB.prepare('UPDATE admins SET totp_last = ? WHERE id = ?').bind(ctr, a.id).run();
+    if (ctr >= 0) await env.DB.prepare('UPDATE admins SET totp_last = ? WHERE id = ?').bind(ctr, a.id).run();
+    else await log(env, 'auth', `${a.username}: accesso con un codice di recupero (ne restano ${rec})`, ip);
   }
   await env.DB.prepare('DELETE FROM login_fail WHERE ip = ?').bind(ip).run();
   // un eventuale cookie di sessione già presente viene invalidato: a ogni accesso un token nuovo
@@ -7671,9 +7721,11 @@ async function linkLogin(req, env, ip, ctx) {
   { const am = S0.agMaint; if (am && am.on) throw new HttpErr(503, am.msg || AGM_MSG, { maint: true }); }
   if (a.totp_on) {
     if (!b.totp) return json({ needTotp: true }, 200);
-    const ctr = await checkTotp(a.totp_secret, b.totp, a.totp_last);
-    if (ctr < 0) { const blocked = await strike(); await log(env, 'off', `Codice 2FA errato per ${a.username}${blocked}`, ip); throw new HttpErr(401, 'Codice di verifica errato'); }
-    await env.DB.prepare('UPDATE admins SET totp_last = ? WHERE id = ?').bind(ctr, a.id).run();
+    const rec = recIs(b.totp) ? await recUse(env, a.id, b.totp) : -1;
+    const ctr = rec < 0 ? await checkTotp(a.totp_secret, b.totp, a.totp_last) : -1;
+    if (ctr < 0 && rec < 0) { const blocked = await strike(); await log(env, 'off', `Codice 2FA errato per ${a.username}${blocked}`, ip); throw new HttpErr(401, 'Codice di verifica errato'); }
+    if (ctr >= 0) await env.DB.prepare('UPDATE admins SET totp_last = ? WHERE id = ?').bind(ctr, a.id).run();
+    else await log(env, 'auth', `${a.username}: accesso con un codice di recupero (ne restano ${rec})`, ip);
   }
   await env.DB.prepare('DELETE FROM login_fail WHERE ip = ?').bind(ip).run();
   const old = cookieOf(req);

@@ -711,3 +711,22 @@ Controllo completo del pannello come titolare, reseller e sub reseller, su compu
   - `ui_totp`, 17 controlli: il QR si legge con OpenCV e contiene il link giusto, poi copia, riquadro stabile, attivazione e accesso con il codice.
   - In più, 62 QR di prova da 1 a 213 caratteri, tutti letti.
 
+## 40. Codici di recupero della verifica in due passaggi (10 novembre 2026)
+
+Funzionano come nel pannello a parte dello store, per il titolare e per gli agenti.
+
+- **Quando si attiva la verifica** compaiono **10 codici di recupero**: 8 caratteri senza lettere che si confondono, nella forma `K7M4-P3XZ`.
+  - Si vedono una volta sola, con «Copia», «Scarica» (file `kairos-codici-recupero.txt`) e «Li ho salvati».
+  - Gli aggiornamenti del pannello non li nascondono.
+  - Nel database c'è solo l'impronta (HMAC con `ENC_KEY`), in `settings`, chiave `totprec:<id>`.
+- **All'accesso**, sotto il campo del codice c'è «Hai perso il telefono? Usa un codice di recupero».
+  - Ogni codice vale una volta, anche con il link personale dell'agente.
+  - Il registro attività segna «accesso con un codice di recupero (ne restano N)».
+  - Un codice sbagliato conta come errore di accesso, quindi c'è il blocco dell'IP dopo 5.
+- **Sicurezza e account** mostra quanti codici restano: con 2 o meno compare un avviso.
+  - «Nuovi codici di recupero» chiede password e codice dell'app, e i vecchi smettono di valere: `POST /admin/totp/recovery`.
+  - Disattivando la verifica, o quando il titolare la azzera a un agente, i codici spariscono. In assistenza non si possono creare.
+- **Test**:
+  - `v303`, 22 controlli: titolare, agente, link personale, codice usato due volte, nuovi codici, azzeramento, assistenza.
+  - `ui_totp`, 27 controlli.
+

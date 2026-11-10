@@ -374,7 +374,7 @@ body.agent .foot{display:none}
     origSec();
     if (!isAgent()) return;
     const x = D.security || {};
-    $('#secList').innerHTML = `<div class="sec"><i class="${x.totp ? 'y' : 'n'}">${x.totp ? '✓' : '!'}</i><div><b>Verifica in due passaggi</b><small>${x.totp ? 'Attiva: all\'accesso serve anche il codice dell\'app di autenticazione' : 'Facoltativa ma consigliata: protegge il tuo account anche se qualcuno scopre la password'}</small></div></div>
+    $('#secList').innerHTML = `<div class="sec"><i class="${x.totp ? 'y' : 'n'}">${x.totp ? '✓' : '!'}</i><div><b>Verifica in due passaggi</b><small>${x.totp ? `Attiva: all'accesso serve anche il codice dell'app di autenticazione · codici di recupero: ${x.rec ?? 0}${(x.rec ?? 0) <= 2 ? ' — creane di nuovi qui sotto' : ''}` : 'Facoltativa ma consigliata: protegge il tuo account anche se qualcuno scopre la password'}</small></div></div>
       <div class="sec"><i class="y">✓</i><div><b>Accesso limitato</b><small>Vedi e gestisci solo i tuoi clienti${me().canAgents ? ' e quelli dei tuoi sotto-agenti' : ''}</small></div></div>`;
   };
   const view0 = view;
