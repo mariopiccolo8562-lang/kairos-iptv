@@ -271,10 +271,35 @@ export function jsonStructure(text, path, status, trunc, via) {
     url: path, bytes: enc.encode(raw).length, json,
   } : null;
 }
+function htmlTableFragments(html) {
+  const source = String(html || ''), stack = [], tables = [];
+  for (const tag of source.matchAll(/<\/?table\b[^>]*>/gi)) {
+    if (/^<\//.test(tag[0])) {
+      const open = stack.pop();
+      if (open) tables.push({ start: open.start, end: tag.index + tag[0].length, content: source.slice(open.end, tag.index) });
+    } else stack.push({ start: tag.index, end: tag.index + tag[0].length });
+  }
+  return tables.sort((a, b) => a.start - b.start);
+}
+function withoutNestedTables(html) {
+  const source = String(html || '');
+  let depth = 0, cursor = 0, result = '';
+  for (const tag of source.matchAll(/<\/?table\b[^>]*>/gi)) {
+    if (!/^<\//.test(tag[0])) {
+      if (!depth) result += source.slice(cursor, tag.index);
+      depth++;
+    } else if (depth) {
+      depth--;
+      if (!depth) cursor = tag.index + tag[0].length;
+    }
+  }
+  if (!depth) result += source.slice(cursor);
+  return result;
+}
 export function pageStructure(html, path, status, trunc, via) {
   const tables = [];
-  for (const table of String(html).matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi)) {
-    const tableHtml = table[1], allRows = [...tableHtml.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)];
+  for (const table of htmlTableFragments(html)) {
+    const tableHtml = withoutNestedTables(table.content), allRows = [...tableHtml.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)];
     const headerRow = allRows.find((row) => /<th\b/i.test(row[1]));
     const headerHtml = (tableHtml.match(/<thead\b[^>]*>([\s\S]*?)<\/thead>/i) || [])[1] || (headerRow && headerRow[1]) || '';
     const headers = [...headerHtml.matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/gi)].map((cell) => textOnly(cell[1]).slice(0, 80)).slice(0, 40);
@@ -413,22 +438,72 @@ function blkPagination(html, path, rowsOnPage) {
     shape: { params: [...safeParams].slice(0, 20), hrefs: [...safeHrefs].slice(0, 40) },
   };
 }
-export function blkUsersPage(html, path = BLK_USERS_PATH) {
-  let tableHtml = '', headerCells = [], bodyRows = [];
-  for (const table of String(html || '').matchAll(/<table\b[^>]*>([\s\S]*?)<\/table\s*>/gi)) {
-    const content = table[1], allRows = [...content.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)];
-    const headRows = [...((content.match(/<thead\b[^>]*>([\s\S]*?)<\/thead\s*>/i) || [])[1] || '').matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)];
-    const headerRow = headRows[0] || allRows.find((row) => /<th\b/i.test(row[1]));
+function blkRowMatches(html) {
+  return [...String(html || '').matchAll(/<tr\b([^>]*)>([\s\S]*?)<\/tr\s*>/gi)];
+}
+function blkCellMatches(row) {
+  return [...String(row && row[2] || '').matchAll(/<t[dh]\b([^>]*)>([\s\S]*?)<\/t[dh]\s*>/gi)];
+}
+function blkRowInfo(row) {
+  const cells = blkCellMatches(row);
+  const classes = [attr(`<tr${row[1]}>`, 'class'), ...cells.map((cell) => attr(`<td${cell[1]}>`, 'class'))];
+  return {
+    cells: cells.map((cell) => cell[2]),
+    placeholder: cells.length === 1 || cells.some((cell) => /\bcolspan\s*=/i.test(cell[1]))
+      || classes.some((value) => /(?:^|\s)dataTables_(?:empty|processing)(?:\s|$)/i.test(value)),
+  };
+}
+function blkTableLayout(fragment) {
+  const content = withoutNestedTables(fragment.content), allRows = blkRowMatches(content);
+  const head = (content.match(/<thead\b[^>]*>([\s\S]*?)<\/thead\s*>/i) || [])[1] || '';
+  const headerRow = blkRowMatches(head)[0] || allRows.find((row) => /<th\b/i.test(row[2]));
+  const tbodyMatch = content.match(/<tbody\b[^>]*>([\s\S]*?)<\/tbody\s*>/i);
+  const bodyRows = tbodyMatch
+    ? blkRowMatches(tbodyMatch[1])
+    : allRows.filter((row) => !headerRow || row[2] !== headerRow[2]);
+  return { content, headerRow, bodyRows, hasTbody: !!tbodyMatch };
+}
+function blkUsersPageData(html, path = BLK_USERS_PATH) {
+  const tables = htmlTableFragments(html);
+  let headerCells = [], bodyRows = [], hasHeaders = false, sawBodyRows = false, onlyPlaceholderRows = true;
+  const noteBodyRows = (rows) => {
+    for (const row of rows) {
+      sawBodyRows = true;
+      if (!blkRowInfo(row).placeholder) onlyPlaceholderRows = false;
+    }
+  };
+  for (let i = 0; i < tables.length; i++) {
+    const layout = blkTableLayout(tables[i]), headerRow = layout.headerRow;
     if (!headerRow) continue;
-    const cells = [...headerRow[1].matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]\s*>/gi)];
-    const headers = cells.map((cell) => blkHeaderKey(textOnly(cell[1])));
+    const headers = blkCellMatches(headerRow).map((cell) => blkHeaderKey(textOnly(cell[2])));
     if (!headers.includes('username') || !headers.includes('scadenza')) continue;
-    tableHtml = content; headerCells = headers;
-    const tbody = (content.match(/<tbody\b[^>]*>([\s\S]*?)<\/tbody\s*>/i) || [])[1];
-    bodyRows = tbody != null
-      ? [...tbody.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)]
-      : allRows.filter((row) => row !== headerRow);
-    break;
+    hasHeaders = true;
+    if (!headerCells.length) headerCells = headers;
+    noteBodyRows(layout.bodyRows);
+    const ownRows = layout.bodyRows.filter((row) => {
+      const info = blkRowInfo(row);
+      return !info.placeholder && info.cells.length >= headers.length;
+    });
+    if (ownRows.length) {
+      headerCells = headers;
+      bodyRows = ownRows;
+      break;
+    }
+    for (let j = i + 1; j < tables.length; j++) {
+      if (tables[j].start < tables[i].end) continue;
+      const nextLayout = blkTableLayout(tables[j]);
+      if (!nextLayout.hasTbody) continue;
+      noteBodyRows(nextLayout.bodyRows);
+      const dataRows = nextLayout.bodyRows.filter((row) => {
+        const info = blkRowInfo(row);
+        return !info.placeholder && info.cells.length >= headers.length;
+      });
+      if (!dataRows.length) continue;
+      headerCells = headers;
+      bodyRows = dataRows;
+      break;
+    }
+    if (bodyRows.length) break;
   }
   const aliases = {
     id: ['id'], username: ['username', 'user'], password: ['password', 'pass'], reseller: ['reseller'],
@@ -439,7 +514,7 @@ export function blkUsersPage(html, path = BLK_USERS_PATH) {
   const columns = Object.fromEntries(Object.entries(aliases).map(([key, names]) => [key, headerCells.findIndex((name) => names.includes(name))]));
   const rows = [];
   for (const row of bodyRows) {
-    const cells = [...row[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]\s*>/gi)].map((cell) => cell[1]);
+    const cells = blkRowInfo(row).cells;
     if (!cells.length) continue;
     const get = (key) => {
       const index = columns[key], htmlCell = index >= 0 ? cells[index] || '' : '';
@@ -457,9 +532,13 @@ export function blkUsersPage(html, path = BLK_USERS_PATH) {
     if (item.username) rows.push(item);
   }
   const pagination = blkPagination(html, path, rows.length);
-  const result = { rows, pages: pagination.pages };
+  const result = { rows, pages: pagination.pages, placeholder: hasHeaders && sawBodyRows && onlyPlaceholderRows, hasHeaders };
   const total = blkTotal(html);
   if (total != null) result.total = total;
+  return result;
+}
+export function blkUsersPage(html, path = BLK_USERS_PATH) {
+  const { hasHeaders, ...result } = blkUsersPageData(html, path);
   return result;
 }
 function blkDeduplicate(rows, incoming) {
@@ -526,11 +605,38 @@ export async function blkRoutes(req, env, path, who, ip, H) {
     } else await deleteSetting(env, BLK_LINES_TMP_KEY);
     const page = (+stage.pages || 0) + 1;
     if (page > BLK_MAX_PAGES) throw new H.HttpErr(413, 'Elenco Black oltre il limite di 200 pagine');
-    const response = await relayFetch(env, H, {
-      path: requestPath, headers: { 'X-Kairos-Render': 'iframe' }, timeout: 45000, label: 'Lettura linee Black IPTV',
-    });
-    if (response.status < 200 || response.status >= 400) throw new H.HttpErr(502, `Black IPTV ha risposto HTTP ${response.status}`);
-    const parsed = blkUsersPage(response.txt, requestPath);
+    const fetchPage = async (timeout) => {
+      const result = await relayFetch(env, H, {
+        path: requestPath, headers: { 'X-Kairos-Render': 'iframe' }, timeout, label: 'Lettura linee Black IPTV',
+      });
+      if (result.status < 200 || result.status >= 400) throw new H.HttpErr(502, `Black IPTV ha risposto HTTP ${result.status}`);
+      return result;
+    };
+    let response = await fetchPage(45000);
+    let parsed = blkUsersPageData(response.txt, requestPath);
+    if (page === 1 && !parsed.rows.length) {
+      if (parsed.placeholder || parsed.hasHeaders) {
+        for (let attempt = 0; attempt < 2 && !parsed.rows.length; attempt++) {
+          await (typeof H.sleep === 'function' ? H.sleep(4000) : sleep(4000));
+          response = await fetchPage(20000);
+          parsed = blkUsersPageData(response.txt, requestPath);
+        }
+      }
+      if (!parsed.rows.length) {
+        await deleteSetting(env, BLK_LINES_TMP_KEY);
+        const structure = pageStructure(response.txt, requestPath, response.status, response.trunc, response.via);
+        const diag = {
+          via: response.via === 'fetch' || response.via === 'iframe' ? response.via : null,
+          status: response.status, bytes: structure && structure.bytes || enc.encode(String(response.txt || '')).length,
+          title: structure && structure.title || '', placeholder: !!parsed.placeholder,
+          tables: (structure && structure.tables || []).slice(0, 10).map((table) => ({
+            headers: table.headers || [], rows: Number(table.rows) || 0, firstRowCellKinds: table.firstRowCellKinds || [],
+          })),
+        };
+        await H.log(env, 'edit', 'Linee Black IPTV: pagina senza righe', ip).catch(() => {});
+        return H.json({ page, rows: 0, next: null, collected: 0, empty: true, diag });
+      }
+    }
     const pagination = blkPagination(response.txt, requestPath, parsed.rows.length);
     stage.rows = blkDeduplicate(stage.rows || [], parsed.rows);
     if (stage.rows.length > BLK_MAX_ROWS) throw new H.HttpErr(413, 'Elenco Black oltre il limite di 20000 linee');
