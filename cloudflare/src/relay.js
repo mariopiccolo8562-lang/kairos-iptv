@@ -181,7 +181,91 @@ function sameHostPath(href, path) {
     return url.origin === ORIGIN ? url.pathname.slice(0, 300) : '';
   } catch { return ''; }
 }
-function pageStructure(html, path, status, trunc, via) {
+function sameHostUrl(href, path) {
+  try {
+    const url = new URL(href, ORIGIN + path);
+    return url.origin === ORIGIN ? `${url.pathname}${url.search}`.slice(0, 300) : '';
+  } catch { return ''; }
+}
+function pageEndpoints(html, path) {
+  const endpoints = [], seen = new Set();
+  const add = (value, from) => {
+    if (!value || value.length > 300 || endpoints.length >= 40) return;
+    const url = sameHostUrl(value, path);
+    if (!url || url.split('?')[0].toLowerCase().endsWith('.js') || seen.has(url)) return;
+    seen.add(url);
+    endpoints.push({ url, from });
+  };
+  const endpointPattern = /^(?:https?:\/\/[^\s"']+|\/[A-Za-z0-9_\-./]+\.php(?:\?[^\s"']*)?|[A-Za-z0-9_\-.]+\.php(?:\?[^\s"']*)?)$/;
+  for (const script of String(html).matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+    const src = attr(`<script${script[1]}>`, 'src');
+    if (src) add(src, 'src');
+    if (src) continue;
+    for (const match of script[2].matchAll(/(["'])([^"'\\\r\n]{1,300})\1/g)) {
+      if (endpointPattern.test(match[2])) add(match[2], 'script');
+      if (endpoints.length >= 40) break;
+    }
+    if (endpoints.length >= 40) break;
+  }
+  return endpoints;
+}
+function jsonType(value) {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  if (typeof value === 'object') return 'object';
+  return typeof value;
+}
+function jsonKeys(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  return Object.keys(value).slice(0, 60).map((name) => ({ name: name.slice(0, 80), type: jsonType(value[name]) }));
+}
+function arrayKeys(value) {
+  return value.slice(0, 60).map((item, index) => ({ name: String(index), type: jsonType(item) }));
+}
+function jsonShape(value) {
+  if (Array.isArray(value)) {
+    const first = value[0];
+    return {
+      kind: 'array',
+      count: value.length,
+      keys: first && typeof first === 'object' && !Array.isArray(first) ? jsonKeys(first) : [],
+    };
+  }
+  if (!value || typeof value !== 'object') return null;
+  const names = Object.keys(value);
+  const summary = {
+    kind: 'object',
+    count: names.length,
+    keys: names.slice(0, 60).map((name) => ({ name: name.slice(0, 80), type: jsonType(value[name]) })),
+  };
+  const rowsKey = names.find((name) => ['data', 'aaData', 'rows'].includes(name) && Array.isArray(value[name]))
+    ?? names.find((name) => Array.isArray(value[name]) && value[name].some((row) => row !== null && typeof row === 'object'));
+  if (rowsKey !== undefined) {
+    const rows = value[rowsKey], first = rows[0];
+    summary.rowsKey = rowsKey.slice(0, 80);
+    summary.rows = rows.length;
+    summary.rowKeys = Array.isArray(first) ? arrayKeys(first) : jsonKeys(first);
+  }
+  return summary;
+}
+export function jsonStructure(text, path, status, trunc, via) {
+  const raw = String(text || '');
+  let value = raw;
+  if (via === 'iframe') {
+    const pre = raw.match(/<pre\b[^>]*>([\s\S]*?)<\/pre\s*>/i);
+    if (pre) value = textOnly(pre[1]);
+  }
+  value = value.trim();
+  if (!value.startsWith('{') && !value.startsWith('[')) return null;
+  let parsed;
+  try { parsed = JSON.parse(value); } catch { return null; }
+  const json = jsonShape(parsed);
+  return json ? {
+    status, trunc, via: via === 'fetch' || via === 'iframe' ? via : null,
+    url: path, bytes: enc.encode(raw).length, json,
+  } : null;
+}
+export function pageStructure(html, path, status, trunc, via) {
   const tables = [];
   for (const table of String(html).matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi)) {
     const tableHtml = table[1], allRows = [...tableHtml.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)];
@@ -213,6 +297,7 @@ function pageStructure(html, path, status, trunc, via) {
     status, trunc, via: via === 'fetch' || via === 'iframe' ? via : null, title, url: path, tables, forms, links,
     scripts: [...String(html).matchAll(/<script\b/gi)].length,
     bytes: enc.encode(String(html)).length,
+    endpoints: pageEndpoints(html, path),
   };
 }
 
@@ -241,11 +326,22 @@ export async function blkRoutes(req, env, path, who, ip, H) {
     return H.json({ ok: true });
   }
   if (path === '/blk/probe' && method === 'POST') {
-    const body = await H.readJSON(req, 4096);
+    const body = await H.readJSON(req, 32768);
     const target = typeof body.path === 'string' ? body.path : '';
-    if (target.length > 512 || !/^\/[A-Za-z0-9_.\/-]*$/.test(target) || target.includes('..')) throw new H.HttpErr(400, 'Percorso non valido: usa solo il percorso della pagina, senza query');
-    const result = await relayFetch(env, H, { method: 'GET', path: target, timeout: 45000, label: 'Controllo pagine Black IPTV' });
-    const summary = pageStructure(result.txt, target, result.status, result.trunc, result.via);
+    if (target.length > 512 || target.includes('..') || !/^\/[A-Za-z0-9_.\/-]*(?:\?[A-Za-z0-9_.\/\-=&%+:,~*!'()\[\]]*)?$/.test(target)) throw new H.HttpErr(400, 'Percorso non valido');
+    const probeMethod = body.method === undefined ? 'GET' : body.method;
+    if (probeMethod !== 'GET' && probeMethod !== 'POST') throw new H.HttpErr(400, 'Metodo non consentito');
+    if (body.form !== undefined && (typeof body.form !== 'string' || body.form.length > 4000)) throw new H.HttpErr(400, 'Parametri POST non validi');
+    const headers = probeMethod === 'POST'
+      ? { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' }
+      : target.includes('?') ? { 'X-Requested-With': 'XMLHttpRequest' } : {};
+    const result = await relayFetch(env, H, {
+      method: probeMethod, path: target, headers,
+      body: probeMethod === 'POST' ? body.form || '' : undefined,
+      timeout: 45000, label: 'Controllo pagine Black IPTV',
+    });
+    const summary = jsonStructure(result.txt, target, result.status, result.trunc, result.via)
+      || pageStructure(result.txt, target, result.status, result.trunc, result.via);
     await H.log(env, 'edit', `${who}: controllo struttura pagina Black IPTV (HTTP ${result.status})`, ip).catch(() => {});
     return H.json(summary);
   }
