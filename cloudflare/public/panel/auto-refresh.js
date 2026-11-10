@@ -9,7 +9,7 @@
     sec: () => { const n = parseInt(LS.get('kc_auto_s', '20'), 10); return n >= 5 && n <= 3600 ? n : 20; },
   });
   // pagine che si ridisegnano da sole (solo elenchi da guardare: niente moduli da compilare)
-  const PAGES = ['live', 'apperr', 'reports', 'creq', 'areq', 'reqai', 'activity'];
+  const PAGES = ['live', 'appon', 'apperr', 'reports', 'creq', 'areq', 'reqai', 'activity'];
   const fmt = (s) => (s < 60 ? s + ' s' : s % 60 ? Math.floor(s / 60) + ' min ' + (s % 60) + ' s' : s / 60 + ' min');
   const css = document.createElement('style');
   css.textContent = `

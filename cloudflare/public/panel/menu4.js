@@ -21,7 +21,7 @@
     ['dash', 'Oggi', '#4f8cff', S('<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>'), ['home', 'dash', 'live', 'conn']],
     ['cli', 'Clienti', '#22c55e', S('<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>'), ['devices', 'msgs', 'trash']],
     ['pan', 'Linee IPTV', '#2dd4bf', S('<rect x="3" y="3" width="18" height="6" rx="2"/><rect x="3" y="15" width="18" height="6" rx="2"/><path d="M7 6h.01M7 18h.01M12 9v6"/>'), ['allp', 'wolf', 'armada', 'storm', 'atx', 'ro', 'slt', 'blk']],
-    ['att', 'Attivazione app', '#f472b6', S('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><path d="M7 14v7M3.5 17.5h7M17.5 14v7M14 17.5h7"/>'), ['appsum', 'xlist', 'mxp', 'oxp', 'orcp', 'orcp-agent', 'ora', 'apps3', 'apps3op', 'agop', 'agk', 'lines', 'lmap', 'dlc']],
+    ['att', 'Attivazione app', '#f472b6', S('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><path d="M7 14v7M3.5 17.5h7M17.5 14v7M14 17.5h7"/>'), ['appon', 'appsum', 'xlist', 'mxp', 'oxp', 'orcp', 'orcp-agent', 'ora', 'apps3', 'apps3op', 'agop', 'agk', 'lines', 'lmap', 'dlc']],
     ['pay', 'Soldi', '#ef4444', S('<circle cx="12" cy="12" r="9"/><path d="M16 8.5c-.8-1-2-1.5-3.7-1.5-1.8 0-3.1.9-3.1 2.2 0 3.4 6.9 1.3 6.9 5 0 1.5-1.4 2.6-3.5 2.6-1.7 0-3.1-.6-4-1.7M12 5v14"/>'), ['payments']],
     ['ag', 'Agenti', '#38bdf8', S('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14a5 5 0 0 1 3 6"/>'), ['agents']],
     // Store (solo titolare): le app dello store (prima in un pannello a parte), il riepilogo e App Kairos, tutto in un posto

@@ -843,3 +843,35 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
 - **Correzione**: aprendo una linea da un'altra scheda, l'evidenziazione cadeva sul nome nel riquadro rosso invece che sulla riga della lista (`omni.js`). Ora salta il riquadro, e «Modifica»/«Rinnova» premono il pulsante della riga giusta.
 - **Telefono**: barra a due colonne, riquadri 2×2, spunta a sinistra di ogni riga, schede di «Consulta» su due colonne.
 - **Test**: `ui_allpanels` (57 controlli; ogni finestra viene annullata e il test verifica che non parta nessuna scrittura verso i pannelli).
+
+## 46. «🟢 Online nelle app»: chi usa le app, con canale e IP (10 novembre 2026)
+
+- **Attivazione app → «Online nelle app»** è la prima scheda e la vede solo il titolare (`appsonline.js`; agli agenti il server risponde comunque 403 su presenza e ORCP).
+- **Le app dentro**, solo con letture che il pannello fa già:
+  - **app KAIROS** (Pro, TV, XC, Lite, Premium, Plus, Nova, Vega): i dati della presenza che mandano le app.
+    - L'app si riconosce dalla versione, come fa il server; se manca la versione vale quella salvata nel cliente.
+    - Per ogni utente: cosa guarda (canale, programma e gruppo, film, serie) o «nei menu», IP con città e paese, «⚠ 2 IP» e «⚠ paese diverso».
+    - Anche versione, dispositivo, rete (Wi-Fi/cavo/mobile, segnale), velocità, linea del cliente, video (risoluzione, fps, bitrate, codec, decodifica), blocchi, qualità ridotta, VPN, cliente, scadenza e reseller.
+    - Ci sono anche gli offline delle ultime 24 ore, con l'ultima visione.
+  - **MirkoTeam (ORCP)**: le installazioni raccolte per utente.
+    - Online su N dispositivi: lo stesso dispositivo conta una volta, come in «Online ora terzi».
+    - IP con VPN, dispositivo, versione e ultimo accesso; nella scheda, la tabella delle installazioni.
+    - Gli offline da più di 24 ore restano fuori. ORCP non dice il canale.
+  - **MaxPlayer e OrbixPlay**: le loro API non dicono chi è online né l'IP.
+    - «Collegato» è il controllo delle connessioni attive della linea, lo stesso di «Online ora terzi»; compaiono tutti i loro clienti.
+    - Il canale c'è se la stessa linea è anche su WOLF, Atlantix, Realott o SLT.
+    - C'è il cliente KAIROS collegato, se c'è.
+  - **ORA** resta fuori: non ha un'API ufficiale e non dice chi è online.
+- **Riquadri**: Online ora · Stanno guardando · Offline (24 ore) · Da controllare (2 IP, paese diverso, 3+ blocchi in un'ora, qualità ridotta, più dispositivi o connessioni, probabile VPN) · Tutti.
+- **Barra**:
+  - ricerca per nome, codice, utente, IP, canale, città, dispositivo o versione;
+  - stato: online, stanno guardando, nei menu, offline, più connessioni, da controllare, non verificabili;
+  - ordine: prima chi è online, ultimo collegamento, nome, app, cosa guarda, IP;
+  - reseller: «Tu» o l'agente del cliente.
+  - **Ricerca per app**: un pulsante per ogni app trovata, con i conteggi.
+- **Clic su una riga**: la scheda con tutti i dati.
+  - **App KAIROS**: «Apri cliente» e «📊 Dati». Poi «Disconnetti» se sta guardando, e «Spegni VPN» se il cliente ha la VPN prevista. Le ultime due chiedono la conferma di sempre e la scheda resta sotto la finestra di conferma.
+  - **MirkoTeam, MaxPlayer, OrbixPlay**: «Apri in …» porta alla loro scheda con la ricerca già fatta.
+- **Aggiornamento**: segue il pulsante «Auto» (la pagina è nell'elenco di quelle che si rileggono da sole). Presenza KAIROS e connessioni ORCP si rileggono a ogni giro; le liste di MaxPlayer e OrbixPlay al massimo ogni 2 minuti; il controllo delle linee ha la sua cache di 90 secondi.
+- **Telefono**: barra a due colonne, riquadri 2 per riga, righe a due colonne, scheda nello schermo.
+- **Test**: `ui_appsonline` (43 controlli; «Disconnetti» e «Spegni VPN» vengono annullati e il test verifica che non parta niente).
