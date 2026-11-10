@@ -12,15 +12,16 @@ import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide, storeAgent
 import { wolfRoutes, wolfCron, sockFetch, wolfCfg } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
 import { atxRoutes, clearAtxAgent } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz)
 import { oraRoutes } from './orapanel.js';
-import { orcpRoutes, orcpAgentConfig, setOrcpDownloader, ovpnFile, orcpRemoteHosts } from './orcp.js'; // Pannello ORCP (cp.ottrun.com): l'app brandizzata OTTRUN, accesso passato dal titolare
+import { orcpRoutes, orcpAgentConfig, setOrcpDownloader, ovpnFile, orcpRemoteHosts, orcpKeepAlive } from './orcp.js'; // Pannello ORCP (cp.ottrun.com): l'app brandizzata OTTRUN, accesso passato dal titolare
 import { vpnMark as vpnMarkRows } from './vpn-mark.js';
 import { extRoutes } from './extpanels.js'; // Pannelli Realott e SLT (accesso diretto senza API), solo titolare // Pannello ORA (panel.oraplayers.com), accesso passato dal titolare
 import { blkRoutes, relayPublic } from './relay.js';
 import { orbixFetch, orbixOutageMessage, oxpRoutes } from './orbixpanel.js'; // playlist OrbixPlay gestite da KAIROS (sezione «Pannello OrbixPlay»)
 import { mxpRoutes } from './mxpanel.js'; // account MaxPlayer gestiti da KAIROS (sezione «Pannello MaxPlayer»)
-import { tgHook, notifyNew, notifyDecided, notifyActivated, notifyAdmin } from './notify.js'; // avvisi su Telegram e notifiche del pannello
+import { tgHook, notifyNew, notifyDecided, notifyActivated, notifyAdmin, notifyOwnersText } from './notify.js'; // avvisi su Telegram e notifiche del pannello
 
 const SESSION_TTL = 30 * 86400; // secondi: l'accesso resta valido 30 giorni dall'ultimo uso (si rinnova da solo)
+const ORCP_KEEPALIVE_CRON = '41 */6 * * *';
 const COOKIE = '__Host-kx';
 const PBKDF2_ITER = 100000; // massimo supportato da Workers
 const MAX_PENDING = 2000;
@@ -41,11 +42,16 @@ export default {
   },
   async scheduled(_ev, env0) {
     const env = reqEnv(env0);
+    if (_ev && _ev.cron === ORCP_KEEPALIVE_CRON) {
+      try { await orcpKeepAlive(env, WOLF_H); } catch {}
+      return;
+    }
     await cleanup(env);
     try { await pendSweep(env, true, effectivePendTtl(await getSettings(env))); } catch {} // richieste «da attivare» non accettate entro il tempo scelto
     // app terzi: se l'hai chiesto, ogni notte si tolgono le liste inattive
     try { const c = (await getSettings(env)).playersCfg || {}; if (c.autoClean) await thirdCleanup(env, c.cleanDays || 60, 'Pulizia automatica', ''); } catch {}
     try { await wolfCron(env, WOLF_H); } catch {}
+    try { await orcpKeepAlive(env, WOLF_H); } catch {}
     try { await paymentsAutoRenew(env); } catch {}
     try { await lineSyncCron(env); } catch {}
   },
@@ -98,7 +104,7 @@ async function readJSON(req, max = 64 * 1024) {
 }
 class HttpErr extends Error { constructor(status, msg, extra) { super(msg); this.status = status; this.extra = extra; } }
 // strumenti passati al modulo WOLF (src/wolf.js)
-const WOLF_H = { seal: (...a) => seal(...a), unseal: (...a) => unseal(...a), HttpErr, json, readJSON, str, log: (...a) => log(...a), note: (...a) => llNote(...a), pid: () => b64url(rand(6)), vpnMark: (env, rows, fields) => vpnMark(env, rows, fields, WOLF_H), plsChanged: () => { srcMem.map = null; } };
+const WOLF_H = { seal: (...a) => seal(...a), unseal: (...a) => unseal(...a), HttpErr, json, readJSON, str, log: (...a) => log(...a), note: (...a) => llNote(...a), pid: () => b64url(rand(6)), vpnMark: (env, rows, fields) => vpnMark(env, rows, fields, WOLF_H), notifyOwnersText: (env, text) => notifyOwnersText(env, notifyH(env), text), plsChanged: () => { srcMem.map = null; } };
 const AGM_MSG = 'Pannello in manutenzione: torniamo operativi a breve. Riprova tra poco.';
 
 /* ---------------- password (PBKDF2-SHA256) ---------------- */

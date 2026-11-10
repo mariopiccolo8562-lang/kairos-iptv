@@ -127,6 +127,27 @@ async function orcp(env, H, path, o = {}) {
   await saveSes(env, H, s).catch(() => {});
   return r;
 }
+export async function orcpKeepAlive(env, H) {
+  const s = await loadSes(env, H);
+  if (!s) return { skipped: true };
+  try {
+    await orcp(env, H, '/home');
+  } catch (e) {
+    if (!e || e.status !== 401) return { error: true };
+    if (s.alert !== 1) {
+      const text = '⚠️ <b>MirkoTeam</b>\nL\'accesso a cp.ottrun.com è scaduto: in KAIROS apri «App MirkoTeam» → scheda <b>Collega</b> e ripassa l\'accesso (entra su cp.ottrun.com con «Remember me»).';
+      try { await H.notifyOwnersText(env, text); } catch {}
+      s.alert = 1;
+      await saveSes(env, H, s).catch(() => {});
+      await H.log(env, 'off', 'MirkoTeam: accesso a ORCP scaduto, serve ripassare i cookie dalla scheda «Collega»').catch(() => {});
+    }
+    return { expired: true };
+  }
+  s.ping = Date.now();
+  if (s.alert !== undefined) delete s.alert;
+  await saveSes(env, H, s);
+  return { ok: true };
+}
 /** POST di un modulo Laravel: prende il _token dalla pagina del modulo; ORCP risponde con un redirect quando va bene */
 async function post(env, H, pagePath, action, form, hid = ['appid', 'customerid']) {
   const pg = await orcp(env, H, pagePath); const tok = csrf(pg.txt);
@@ -277,7 +298,7 @@ export async function orcpRoutes(req, env, path, who, ip, H, ctx) {
     if (!s) return json({ connected: false, cfg });
     let app = s.app || null; if (!app && !s.bad) { try { app = await appInfo(env, H); } catch {} }
     const remember = !!remOf(s.jar);
-    return json({ connected: true, expired: !!s.bad, remember, at: s.at || 0, user: app ? app.user : '', app: app ? { name: app.name || cfg.name, version: app.version, expires: app.expires, apk: app.apk, id: app.appid } : null, cfg: { ...cfg, name: cfg.name || (app && app.name) || '' } });
+    return json({ connected: true, expired: !!s.bad, remember, at: s.at || 0, ping: s.ping || 0, user: app ? app.user : '', app: app ? { name: app.name || cfg.name, version: app.version, expires: app.expires, apk: app.apk, id: app.appid } : null, cfg: { ...cfg, name: cfg.name || (app && app.name) || '' } });
   }
   if (path === '/orcp/session' && m === 'PUT') {
     const b = await H.readJSON(req, 16384), jar = parseCookies(str(b.cookies, 12000));

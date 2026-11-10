@@ -155,6 +155,26 @@ async function tgNew(env, r, h, ip) {
   }
   return n;
 }
+export async function notifyOwnersText(env, h, text) {
+  try {
+    if (!tgReady(env)) return 0;
+    const who = await recipients(env, null, 'tg', h, {});
+    const owners = [...new Set(who.filter((x) => x.owner).map((x) => x.id))];
+    if (!owners.length) return 0;
+    const rows = ((await env.DB.prepare(`SELECT admin_id, tg_chat FROM notify_links WHERE tg_chat <> '' AND admin_id IN (${owners.map(() => '?').join(',')})`).bind(...owners).all()).results) || [];
+    const chats = [...new Set(rows.map((x) => x.tg_chat).filter(Boolean))];
+    let n = 0;
+    for (const chat of chats) {
+      try {
+        await tg(env, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true });
+        n++;
+      } catch {}
+    }
+    return n;
+  } catch {
+    return 0;
+  }
+}
 /** dopo una decisione (da qualsiasi parte): i messaggi già inviati mostrano l'esito, senza pulsanti */
 async function tgDecided(env, r, st, whoTxt) {
   if (!tgReady(env)) return;
