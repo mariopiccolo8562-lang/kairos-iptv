@@ -24,7 +24,9 @@
     ['att', 'Attivazione app', '#f472b6', S('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><path d="M7 14v7M3.5 17.5h7M17.5 14v7M14 17.5h7"/>'), ['appsum', 'xlist', 'mxp', 'oxp', 'orcp', 'orcp-agent', 'ora', 'apps3', 'apps3op', 'agop', 'agk', 'lines', 'lmap', 'dlc']],
     ['pay', 'Soldi', '#ef4444', S('<circle cx="12" cy="12" r="9"/><path d="M16 8.5c-.8-1-2-1.5-3.7-1.5-1.8 0-3.1.9-3.1 2.2 0 3.4 6.9 1.3 6.9 5 0 1.5-1.4 2.6-3.5 2.6-1.7 0-3.1-.6-4-1.7M12 5v14"/>'), ['payments']],
     ['ag', 'Agenti', '#38bdf8', S('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14a5 5 0 0 1 3 6"/>'), ['agents']],
-    ['set', 'Solo Master', '#f5b041', S('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l-.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'), ['dns', 'appk', 'vod', 'store', 'activity', 'reports', 'creq', 'areq', 'reqai', 'apperr', 'rctl', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'sec']]
+    // Store (solo titolare): le app dello store (prima in un pannello a parte), il riepilogo e App Kairos, tutto in un posto
+    ['sto', 'Store', '#a78bfa', S('<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>'), ['stapps', 'store', 'appk']],
+    ['set', 'Solo Master', '#f5b041', S('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l-.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'), ['dns', 'vod', 'activity', 'reports', 'creq', 'areq', 'reqai', 'apperr', 'rctl', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'sec']]
   );
   const css = document.createElement('style');
   css.textContent = `
@@ -120,9 +122,9 @@
       const on = bar.querySelector('.on'); if (on && bar.scrollWidth > bar.clientWidth) on.scrollIntoView({ block: 'nearest', inline: 'center' });
     }
     const tb = $('.topbar'); if (tb) document.documentElement.style.setProperty('--tb4', tb.offsetHeight + 'px');
-    // codici Downloader: tutti in Home, «Codici Downloader» e Solo Master; nelle altre schede di «Oggi» e nella pagina Clienti
+    // codici Downloader: tutti in Home, «Codici Downloader», Store e Solo Master; nelle altre schede di «Oggi» e nella pagina Clienti
     // solo quello del Kairos Store (codice, oppure indirizzo se il codice non c'è; niente barra se lo Store non è tra le sue app)
-    const dl = $('#dlBar'), showDl = v === 'home' || v === 'dlc' || hub?.[0] === 'set', stOnly = !showDl && (hub?.[0] === 'dash' || v === 'devices');
+    const dl = $('#dlBar'), showDl = v === 'home' || v === 'dlc' || hub?.[0] === 'set' || hub?.[0] === 'sto', stOnly = !showDl && (hub?.[0] === 'dash' || v === 'devices');
     if (dl) { dl.classList.toggle('h4-hidden', !showDl && !stOnly); dl.classList.toggle('dl-st-only', stOnly); }
   }
   let raf = 0; const later = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; sync(); }); };

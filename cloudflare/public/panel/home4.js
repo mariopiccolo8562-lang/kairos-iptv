@@ -78,6 +78,7 @@
       const ag = !isAgent() ? window.KXPay?.agentDebtSummary?.() : null, own = isAgent() ? window.KXPay?.ownDebtText?.() : '';
       return `<div class="h4-home-metrics">${metric(due.n, 'Da pagare')}${metric(due.text, 'Totale da riscuotere')}${ag && ag.n ? metric(ag.short || ag.text, ag.n === 1 ? 'Ti deve 1 agente' : `Ti devono ${ag.n} agenti`) : ''}${own ? metric(own, 'Devi al fornitore') : ''}</div>`;
     }
+    if (id === 'sto') return '<small class="h4-home-sub">App dello store, riepilogo e App Kairos</small>';
     if (id === 'ag') {
       if (isAgent()) return '';
       const agents = D.agents || [];

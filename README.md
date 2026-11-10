@@ -667,3 +667,30 @@ Controllo completo del pannello come titolare, reseller e sub reseller, su compu
   - `ui_audit` (19 controlli): tabella nascosta vuota, Futuro fermo e fluido, nessuna pagina più larga del telefono, controllo errori leggero, ricarica al cambio di account.
   - Passano tutti i test dell'interfaccia e del server, tranne 5 test vecchi che aspettano risultati superati da modifiche precedenti: v26, v32, v45, v55, v161.
 
+## 38. Store nel menu: tutto lo store in un posto (10 novembre 2026)
+
+- **Voce «Store»** nel menu, fra Agenti e Solo Master; c'è anche il riquadro in Home. La vede solo il titolare. Dentro ci sono tre schede:
+  - **App dello store**, che si apre per prima;
+  - **Riepilogo store**;
+  - **App Kairos**.
+  
+  Le ultime due prima stavano fra le 18 schede di «Solo Master».
+- **App dello store** è il pannello a parte dello store (Worker `kairos-store`) portato dentro Kairos Control. Usa lo stesso elenco, `docs/apps.json` del repository kairos-store, con le stesse voci e regole.
+  - **Per ogni app**: nome, etichetta, colore, descrizione, link all'APK, codice Downloader, pacchetto, icona (caricata e ridotta a 144×144), logo trasparente, nascondi, ordine con le frecce, elimina.
+  - **Per lo store**: nome, contatto e frasi in alto.
+  - **Salva** scrive su GitHub con il commit «Aggiorna app dal pannello Kairos Control»; lo store mostra le app nuove entro un minuto.
+  - Se l'elenco è cambiato altrove nel frattempo, il pannello avvisa e tiene le modifiche. Un'app incompleta non si salva: il pannello la apre e dice cosa manca.
+  - Il registro attività segna «app dello store salvate (N visibili su M)».
+- **Per salvare serve `STORE_GH_TOKEN`**, un segreto del repository kairos-iptv. Va passato al Worker dal workflow «Pannello Cloudflare».
+  - Il token è a grana fine: solo kairos-store, «Contents: Read and write».
+  - Resta sul server e non arriva mai al browser.
+  - Senza il token la pagina mostra l'elenco solo da vedere, con i tre passaggi per aggiungerlo.
+- **Sicurezza**:
+  - `GET/PUT /api/admin/store-apps` e `POST /api/admin/store-apps/icon` sono solo del titolare. Agenti, sub e titolare in assistenza ricevono 403 e non parte nessuna richiesta a GitHub.
+  - Le icone devono essere PNG o WEBP vere, al massimo di 400 KB.
+  - I dati sono controllati come nel pannello dello store.
+  - Uscendo dal pannello la pagina si svuota.
+- **Il pannello a parte dello store** continua a funzionare. Vale l'ultimo salvataggio: se uno dei due salva sopra l'altro, il secondo avvisa. Quando non serve più si può spegnere da Cloudflare.
+- **Futuro**: sugli schermi bassi dei portatili la barra a icone è più compatta, così entrano tutte le voci con «Esci».
+- **Test**: `v301` (server, GitHub finto), `ui_store_apps` (19 controlli), `ui_store_menu` (35).
+

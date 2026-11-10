@@ -1950,6 +1950,107 @@ async function cleanLinks(req, env, url, path) {
   return new Response(req.method === 'HEAD' ? null : up.body, { status: 200, headers: h });
 }
 
+/* ---------------- App dello store (solo titolare): l'elenco delle app del Kairos Store ----------------
+   È il file docs/apps.json del repository kairos-store, con le icone in docs/icons/. Prima si cambiava solo dal pannello
+   a parte dello store (Worker «kairos-store»); ora anche da qui: Store → App dello store. Stesse regole dei dati.
+   Per salvare serve STORE_GH_TOKEN: token GitHub a grana fine, solo kairos-store, «Contents» lettura e scrittura. Resta
+   sul server (non arriva mai al browser). Senza, l'elenco si legge con GH_TOKEN o dalla copia pubblicata, solo da vedere.
+   Gli agenti non arrivano qui: le loro rotte sono a parte e chiuse per tutto il resto. */
+const storeTok = (env) => { const t = String((env && env.STORE_GH_TOKEN) || '').trim(); return /^[\x21-\x7e]{20,255}$/.test(t) ? t : ''; };
+const SA_DOCS = `/repos/${GH_OWNER}/kairos-store/contents/docs/`;
+const saStr = (v, max) => String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
+function storeAppsClean(d) {
+  if (!d || typeof d !== 'object' || !Array.isArray(d.apps)) throw new HttpErr(400, 'Dati non validi');
+  if (d.apps.length > 60) throw new HttpErr(400, 'Massimo 60 app');
+  const st = d.store && typeof d.store === 'object' ? d.store : {};
+  const out = {
+    store: {
+      name: saStr(st.name, 40) || 'KAIROS STORE',
+      taglines: (Array.isArray(st.taglines) ? st.taglines : []).map((t) => saStr(t, 120)).filter(Boolean).slice(0, 10),
+      contact: saStr(st.contact, 80),
+    },
+    apps: [],
+  };
+  d.apps.forEach((a0, i) => {
+    const a = a0 && typeof a0 === 'object' ? a0 : {};
+    const o = {
+      name: saStr(a.name, 30), tag: saStr(a.tag, 14), description: saStr(a.description, 1000), url: saStr(a.url, 500),
+      code: saStr(a.code, 12), icon: saStr(a.icon, 120), glow: saStr(a.glow, 7), pkg: saStr(a.pkg, 100),
+      light: a.light === true, hidden: a.hidden === true,
+    };
+    const n = 'App ' + (i + 1) + (o.name ? ' (' + o.name + ')' : '');
+    if (!o.name) throw new HttpErr(400, n + ': manca il nome');
+    if (o.url && !/^https?:\/\/[^\s"'<>\\]+\.[^\s"'<>\\]+$/i.test(o.url)) throw new HttpErr(400, n + ': il link all\'APK non è valido');
+    if (!o.url && !o.hidden) throw new HttpErr(400, n + ': manca il link all\'APK (oppure nascondila)');
+    if (o.icon && !/^icons\/[A-Za-z0-9._-]+\.(webp|png|jpe?g|svg)$/.test(o.icon)) throw new HttpErr(400, n + ': icona non valida');
+    if (!/^#[0-9a-fA-F]{6}$/.test(o.glow)) o.glow = '#22d3ee';
+    if (!/^[A-Za-z0-9._]*$/.test(o.pkg)) throw new HttpErr(400, n + ': nome pacchetto non valido');
+    out.apps.push(o);
+  });
+  return out;
+}
+const saB64 = (u8) => { let x = ''; for (let i = 0; i < u8.length; i += 0x8000) x += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(x); };
+const saUnB64 = (t) => Uint8Array.from(atob(String(t || '').replace(/\s+/g, '')), (c) => c.charCodeAt(0));
+async function saGh(tok, path, init = {}) {
+  const h = { Accept: 'application/vnd.github+json', 'User-Agent': GH_UA, 'X-GitHub-Api-Version': GH_V, Authorization: 'Bearer ' + tok };
+  if (init.body) h['Content-Type'] = 'application/json';
+  const r = await tfetch(GH_API + path, { ...init, headers: h }, 15000);
+  const j = await r.json().catch(() => null);
+  if (!r.ok) { const e = new Error('GitHub ' + r.status); e.status = r.status; throw e; }
+  return j;
+}
+function saErr(e) {
+  const st = (e && e.status) || 0;
+  if (st === 409 || st === 422) return new HttpErr(409, 'L\'elenco è stato cambiato altrove nel frattempo (per esempio dal pannello dello store a parte): ricarica e riprova');
+  if (st === 401 || st === 403 || st === 404) return new HttpErr(502, `Il token dello store non può scrivere su kairos-store (GitHub ${st}): deve avere «Contents: Read and write» sul repository kairos-store`);
+  return new HttpErr(502, `GitHub non risponde (${st || 'rete'}): riprova tra poco`);
+}
+async function storeApps(req, env, path, m, who, ip) {
+  const wTok = storeTok(env), rTok = wTok || ghTok(env);
+  if (path === '/store-apps' && m === 'GET') {
+    let data = null, sha = '', icons = null, from = '';
+    if (rTok) {
+      try { const j = await saGh(rTok, SA_DOCS + 'apps.json?ref=main'); sha = String(j.sha || ''); data = JSON.parse(new TextDecoder().decode(saUnB64(j.content))); from = 'github'; }
+      catch (e) { if (e && e.status === 404) from = 'nuovo'; }
+      try { const l = await saGh(rTok, SA_DOCS + 'icons?ref=main'); if (Array.isArray(l)) icons = l.filter((f) => f && f.type === 'file' && /\.(webp|png|jpe?g|svg)$/i.test(f.name)).map((f) => 'icons/' + f.name); } catch {}
+    }
+    if (!data && from !== 'nuovo') { // senza token, o GitHub non risponde: la copia pubblicata dello store, solo da vedere
+      try { const r = await tfetch(STORE_PAGES + 'apps.json', { cf: { cacheTtl: 30, cacheEverything: true } }, 8000); if (r.ok) { data = await r.json(); from = 'copia'; } } catch {}
+    }
+    if (!data || typeof data !== 'object' || !Array.isArray(data.apps)) data = { store: { name: 'KAIROS STORE', taglines: ['Le tue app, in un solo posto.'], contact: '' }, apps: [] };
+    if (!icons) icons = [...new Set(data.apps.map((a) => a && a.icon).filter((x) => typeof x === 'string' && /^icons\//.test(x)))];
+    return json({ data, sha, icons, from, canSave: !!wTok && (from === 'github' || from === 'nuovo'), token: wTok ? 'scrittura' : rTok ? 'lettura' : '' });
+  }
+  if (path === '/store-apps' && m === 'PUT') {
+    if (!wTok) throw new HttpErr(400, 'Per salvare da qui manca il token dello store (STORE_GH_TOKEN): vedi le istruzioni nella pagina');
+    const b = await readJSON(req, 256 * 1024);
+    const clean = storeAppsClean(b.data);
+    const put = { message: 'Aggiorna app dal pannello Kairos Control', content: saB64(new TextEncoder().encode(JSON.stringify(clean, null, 2) + '\n')), branch: 'main' };
+    if (b.sha) put.sha = saStr(b.sha, 64);
+    let r; try { r = await saGh(wTok, SA_DOCS + 'apps.json', { method: 'PUT', body: JSON.stringify(put) }); } catch (e) { throw saErr(e); }
+    ghMem.delete(`/repos/${GH_OWNER}/kairos-store/git/trees/main?recursive=1`); // la pagina dello store la rilegge subito
+    await log(env, 'settings', `${who}: app dello store salvate (${clean.apps.filter((a) => !a.hidden).length} visibili su ${clean.apps.length})`, ip);
+    return json({ ok: true, sha: String((r && r.content && r.content.sha) || ''), data: clean });
+  }
+  if (path === '/store-apps/icon' && m === 'POST') {
+    if (!wTok) throw new HttpErr(400, 'Per caricare icone manca il token dello store (STORE_GH_TOKEN)');
+    const b = await readJSON(req, 600 * 1024);
+    const ext = b.type === 'png' ? 'png' : b.type === 'webp' ? 'webp' : '';
+    if (!ext) throw new HttpErr(400, 'Formato icona non valido: serve PNG o WEBP');
+    let bytes; try { bytes = saUnB64(b.data); } catch { throw new HttpErr(400, 'Immagine non valida'); }
+    if (!bytes.length || bytes.length > 400000) throw new HttpErr(400, 'Immagine troppo grande (massimo 400 KB)');
+    const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+    const isWebp = String.fromCharCode(...bytes.subarray(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.subarray(8, 12)) === 'WEBP';
+    if ((ext === 'png' && !isPng) || (ext === 'webp' && !isWebp)) throw new HttpErr(400, 'Immagine non valida');
+    const slug = saStr(b.name, 30).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'app';
+    const rel = 'icons/' + slug + '-' + Date.now().toString(36) + '.' + ext;
+    try { await saGh(wTok, SA_DOCS + rel, { method: 'PUT', body: JSON.stringify({ message: 'Icona ' + slug + ' dal pannello Kairos Control', content: saB64(bytes), branch: 'main' }) }); } catch (e) { throw saErr(e); }
+    await log(env, 'settings', `${who}: icona caricata per lo store (${rel})`, ip);
+    return json({ ok: true, path: rel });
+  }
+  throw new HttpErr(404, 'Non trovato');
+}
+
 /* ---------------- Pannelli Armada e Storm: stessa API reseller (api.php?action=…&api_key=…) ----------------
    Azioni: resellers_list, lines_list, mag_devices_list, new, device_info, device_status, renew, bouquet, reseller.
    Ogni pannello ha la sua chiave (ARMADA_KEY, STORM_KEY), che resta sul server: non arriva mai al pannello né ai log.
@@ -6266,6 +6367,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     return json(j);
   }
   if (path === '/store/summary' && m === 'GET') return storeAdmin(req, env, path, who, ip, 0); // riepilogo dello store aperto (solo titolare)
+  if (path === '/store-apps' || path === '/store-apps/icon') return storeApps(req, env, path, m, who, ip); // app dello store (solo titolare)
   if (path === '/store' || path.startsWith('/store/')) return storeAdmin(req, env, path, who, ip, 0, { smsAgentList: () => storeSmsAgentList(env) }); // Download store
   if ((path === '/notify' || path.startsWith('/notify/')) && ses && !ses.agent) return notifyAdmin(req, env, path, { id: ses.admin_id, username: ses.username, agent: false }, ip, url.origin, notifyH(env)); // avvisi Telegram / notifiche
 

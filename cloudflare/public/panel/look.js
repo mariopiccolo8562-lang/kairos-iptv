@@ -374,6 +374,10 @@ html.lx-f #lxHome .x-km,html.lx-f #lxHome .x-hm{display:none}
   html.lx-f #hub4side .nav .h4n{position:absolute;top:6px;right:6px;margin:0;min-width:16px;height:16px;padding:0 4px;border-radius:8px;font-size:10px}
   html.lx-f #side #logout{width:56px;height:46px;padding:0!important;justify-content:center;font-size:0;gap:0;border-radius:14px;margin-left:auto!important;margin-right:auto!important}
   html.lx-f #side #logout svg{width:20px;height:20px}
+/* barra a icone sugli schermi bassi (portatili): voci un po' più strette, così entrano tutte con «Esci» */
+@media (min-width:701px) and (max-height:860px){html.lx-f #side .brand svg.kx-logo{width:46px!important;height:46px!important}html.lx-f #side .brand{padding-bottom:12px!important}html.lx-f #hub4side{gap:6px}html.lx-f #hub4side .nav{height:50px}html.lx-f #lxStyleBtn{margin-bottom:10px}}
+@media (min-width:701px) and (max-height:700px){html.lx-f #side{padding:12px 0 10px!important}html.lx-f #side .brand svg.kx-logo{width:40px!important;height:40px!important}html.lx-f #hub4side{gap:4px}html.lx-f #hub4side .nav{height:44px;width:52px!important;border-radius:14px}html.lx-f #side #logout{height:40px}html.lx-f #lxStyleBtn{margin:-4px auto 8px;padding:5px 0}}
+@media (min-width:701px) and (max-height:590px){html.lx-f #side{overflow-y:auto!important;scrollbar-width:none}}
   html.lx-f #lxBrand{display:block;flex:none;margin-right:6px}
   html.lx-f #lxBrand .x-wm{display:block;font:800 23px ${SANS};letter-spacing:.34em;background:linear-gradient(90deg,#f0fdff,#67e8f9 45%,#a78bfa);-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1.1}
   html.lx-f #lxBrand .x-mt{display:flex;align-items:center;gap:10px;margin-top:4px;font:500 12.5px ${MONO};color:#93a4c3;white-space:nowrap}
