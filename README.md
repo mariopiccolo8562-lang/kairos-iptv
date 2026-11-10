@@ -888,3 +888,11 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
 - **Database**: migrazione `0048_pay_remind.sql` (`remind_days`, `remind_from`); i promemoria già salvati restano «ogni 2 giorni».
 - **Store → App dello store**: **📋 Incolla** accanto al link dell'APK e al codice Downloader. Dal link prende solo l'indirizzo, dal codice solo le cifre, anche da un messaggio intero; se negli appunti non c'è niente di utile la casella non cambia e lo dice.
 - **Test**: `srv_pay_remind` (20 controlli sul server), `ui_pay_remind` (33).
+
+## 48. «Responsabile» quando crei un cliente da zero (10 novembre 2026)
+
+- **Dove**: «➕ Nuovo cliente» (procedura «Attiva un cliente Kairos», `agents.js`) e «⚡ Nuova attivazione: App e Linea IPTV» → «Nuovo cliente» (`quick-act.js`).
+- **Cosa fa**: c'è la tendina **Responsabile** con «Tu (nessun agente)» e gli agenti attivi. Con un agente il cliente Kairos è subito suo: lo vede e lo gestisce nel suo pannello. La linea sul pannello IPTV resta sul tuo account.
+- **Solo titolare**: gli agenti non vedono la tendina (i loro clienti sono già loro). Senza scelta il cliente resta tuo, come prima.
+- **Corretto**: in «Nuova attivazione» la conferma «Confermare l'attivazione?» finiva sotto la finestra e non si poteva premere (livello 41 contro 40 della conferma). Ora la finestra sta a 39 e la conferma resta sopra.
+- **Test**: `ui_owner_pick` (10 controlli: tendina nei due flussi, `ownerId` mandato solo se scelto, conferma raggiungibile, niente tendina per l'agente).

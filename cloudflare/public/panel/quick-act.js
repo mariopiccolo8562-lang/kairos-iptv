@@ -5,7 +5,7 @@
 (() => {
   const css = document.createElement('style');
   css.textContent = `
-#qaOv{position:fixed;inset:0;z-index:41;display:none;place-items:center;background:rgba(3,4,10,.62);backdrop-filter:blur(8px);padding:16px}#qaOv.on{display:grid}
+#qaOv{position:fixed;inset:0;z-index:39;display:none;place-items:center;background:rgba(3,4,10,.62);backdrop-filter:blur(8px);padding:16px}#qaOv.on{display:grid}
 #qaOv .qa-box{width:min(760px,100%);max-height:94vh;overflow:auto;padding:22px 24px;background:rgba(14,15,34,.94);border:1px solid var(--line);border-radius:18px;animation:pop .35s}
 .qa-steps{display:flex;gap:6px;margin:0 0 14px;flex-wrap:wrap}.qa-steps span{font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;background:#ffffff10;color:var(--mut)}.qa-steps span.on{background:rgba(79,140,255,.22);color:#9dbcff}.qa-steps span.ok{background:rgba(34,197,94,.16);color:#6ee3a6}
 .qa-pn{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:14px}
@@ -60,7 +60,7 @@
 
   async function open(pre) {
     pre = pre || {};
-    Object.assign(S, { step: 1, panel: '', name: '', line: null, res: null, busy: false, wolf: null, arm: null, atx: null, mxDoms: null, dns: null, o: { srv: '', months: 12, mode: 'new', code: '', nmCode: '', dev: '', orbixId: '', host: '', mxDom: '', oxDns: '0', note: '' } });
+    Object.assign(S, { step: 1, panel: '', name: '', line: null, res: null, busy: false, wolf: null, arm: null, atx: null, mxDoms: null, dns: null, o: { srv: '', months: 12, mode: 'new', code: '', nmCode: '', dev: '', orbixId: '', host: '', mxDom: '', oxDns: '0', note: '', owner: 0 } });
     const ok = panels().filter((p) => p[3]);
     if (!ok.length) return toast('Nessun pannello IPTV disponibile per te', 1);
     S.panel = ok.some((p) => p[0] === pre.panel) ? pre.panel : ok[0][0];
@@ -145,7 +145,7 @@
     const nmHost = !ARM[S.panel] && !on('kairos') && !others.some((n) => on('app:' + n)) ? hostField() : '';
     const nm = card('nanomid', 'nm', 'Nanomid', 'Manda la lista sulla TV del cliente con il codice dell\'app Nanomid', `<label class="l">Codice Nanomid (sulla TV del cliente)<input class="inp mono" id="qaNmC" maxlength="16" autocomplete="off" value="${esc(S.o.nmCode)}"></label>${nmHost}`, !isAg(), 'Solo del titolare');
     const kx = card('kairos', 'kx', 'Cliente Kairos', 'App Kairos Pro, TV, Lite, XC…: cliente nuovo o linea aggiunta a uno esistente', `<label class="l">Cliente<select class="inp" id="qaMode"><option value="new"${S.o.mode === 'new' ? ' selected' : ''}>Nuovo cliente</option><option value="ex"${S.o.mode === 'ex' ? ' selected' : ''}>Cliente esistente</option></select></label>
-      ${S.o.mode === 'new' ? `<label class="l">Codice sulla TV${isAg() ? '' : ' (vuoto = lo genera KAIROS)'}<input class="inp mono" id="qaCode" maxlength="9" value="${esc(S.o.code)}" placeholder="KXAB-12CD"></label><label class="l">Durata<select class="inp" id="qaMo">${[1, 3, 6, 12].map((m) => `<option value="${m}"${!S.o.date && +S.o.months === m ? ' selected' : ''}>${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}<option value="date"${S.o.date ? ' selected' : ''}>Data precisa…</option></select></label>${S.o.date ? `<label class="l" style="grid-column:1/-1">Scade il<input class="inp" id="qaDate" type="date" value="${esc(S.o.date)}" min="${new Date().toISOString().slice(0, 10)}"></label>` : ''}`
+      ${S.o.mode === 'new' ? `<label class="l">Codice sulla TV${isAg() ? '' : ' (vuoto = lo genera KAIROS)'}<input class="inp mono" id="qaCode" maxlength="9" value="${esc(S.o.code)}" placeholder="KXAB-12CD"></label><label class="l">Durata<select class="inp" id="qaMo">${[1, 3, 6, 12].map((m) => `<option value="${m}"${!S.o.date && +S.o.months === m ? ' selected' : ''}>${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}<option value="date"${S.o.date ? ' selected' : ''}>Data precisa…</option></select></label>${S.o.date ? `<label class="l" style="grid-column:1/-1">Scade il<input class="inp" id="qaDate" type="date" value="${esc(S.o.date)}" min="${new Date().toISOString().slice(0, 10)}"></label>` : ''}${ownerSel()}`
         : `<label class="l">Quale cliente<input class="inp" id="qaDev" list="qaDevL" value="${esc(S.o.dev)}" placeholder="nome o codice"><datalist id="qaDevL">${devList().slice(0, 3000).map((d) => `<option value="${esc((d.name || 'Senza nome') + ' · ' + d.code)}">`).join('')}</datalist></label><div></div>`}
       ${hostField()}`, can('create'), 'Serve il permesso «Attivare clienti»');
     const ot = others.length ? `<div class="qa-app${others.some((n) => on('app:' + n)) ? ' on' : ''}"><div class="h" style="cursor:default"><span class="qa-ic ot">APP</span><b>Altre app</b><small>${can('lines') ? 'Si segnano in «Appunti App» con i dati della linea' : 'Serve il permesso «Appunti App»'}</small></div>
@@ -153,6 +153,12 @@
       ${others.some((n) => on('app:' + n)) && !S.apps.has('kairos') ? `<div class="b">${hostField()}</div>` : ''}</div>` : '';
     return `<p class="mut" style="margin:0 0 12px;font-size:13px">La linea <b>${esc(S.panel === 'wolf' ? 'WOLF' : ARM[S.panel] || FX[S.panel] || S.panel)}</b>${S.name ? ' per <b>' + esc(S.name) + '</b>' : ''} va su: (puoi sceglierne più di una)</p>${mx}${ox}${orc}${kx}${ot}${isAg() ? '' : nm}
       <div class="qa-ft"><button class="btn" id="qaBack">← Indietro</button><span class="sp"></span><button class="btn qa-red" id="qaGo">⚡ Crea e attiva${S.apps.size ? ' (' + S.apps.size + ')' : ''}</button></div>`;
+  }
+  /* titolare: «Responsabile» del nuovo cliente Kairos, anche un agente già esistente (la linea sul pannello IPTV resta tua) */
+  function ownerSel() {
+    const ags = isAg() ? [] : (D.agents || []).filter((a) => a && a.active !== 0);
+    if (!ags.length) return '';
+    return `<label class="l" style="grid-column:1/-1">Responsabile<select class="inp" id="qaOwn"><option value="0"${S.o.owner ? '' : ' selected'}>Tu (nessun agente)</option>${ags.map((a) => `<option value="${esc(a.id)}"${+S.o.owner === +a.id ? ' selected' : ''}>👤 ${esc(a.username)}</option>`).join('')}</select><small class="mut" style="display:block;margin-top:4px;font-size:12px">Con un agente il cliente Kairos è subito suo. La linea sul pannello IPTV resta sul tuo account.</small></label>`;
   }
   function read2() {
     const g = (id) => ($('#' + id) ? $('#' + id).value : undefined);
@@ -166,6 +172,7 @@
     if (g('qaMo') !== undefined) { if (g('qaMo') === 'date') { if (!S.o.date) S.o.date = addMonths('', 12); } else { S.o.months = +g('qaMo'); S.o.date = ''; } }
     if (g('qaDate') !== undefined) S.o.date = g('qaDate');
     if (g('qaDev') !== undefined) S.o.dev = g('qaDev').trim();
+    if (g('qaOwn') !== undefined) S.o.owner = Math.max(0, +g('qaOwn') || 0);
     if (g('qaH') !== undefined) { if (isAg()) S.o.srv = g('qaH'); else S.o.host = g('qaH').trim(); }
   }
   function check2() {
@@ -209,7 +216,7 @@
         await api('PUT', '/admin/devices/' + d.id, { playlists: [...keep, pl] }); S.o.exDev = null;
         return `Linea aggiunta a ${d.name || d.code}`;
       }
-      const r = await api('POST', '/admin/devices', { code: S.o.code, name, notes: L.ref, expires: S.o.date || addMonths('', +S.o.months || 12), active: true, playlists: [pl] });
+      const r = await api('POST', '/admin/devices', { code: S.o.code, name, notes: L.ref, expires: S.o.date || addMonths('', +S.o.months || 12), active: true, playlists: [pl], ...(!isAg() && S.o.owner ? { ownerId: S.o.owner } : {}) });
       S.o.newCode = (r && r.code) || S.o.code; return `Cliente creato${S.o.newCode ? ' · codice ' + S.o.newCode : ''} · scade ${S.o.date ? 'il ' + S.o.date.split('-').reverse().join('/') : 'tra ' + S.o.months + ' mesi'}`;
     }
     if (k.startsWith('app:')) { await api('POST', '/admin/linked-lines', { app: k.slice(4), username: L.username, password: L.password, dns: isAg() ? '' : L.host || '', note: [name, L.ref].filter(Boolean).join(' · ') }); return 'Segnata in Appunti App'; }
