@@ -13,6 +13,9 @@ KAIROS Ponte collega il pannello KAIROS alla pagina Black IPTV già aperta nel t
 7. Apri Black IPTV e accedi normalmente con il tuo account.
 8. Lascia aperta la scheda Black IPTV: il ponte funziona mentre quella scheda resta aperta.
 
+Nel pannello KAIROS puoi attivare «Leggi la pagina come la vedi tu» per includere i contenuti caricati da JavaScript.
+Questa lettura è più lenta e può richiedere fino a 30 secondi.
+
 In Microsoft Edge, aggiungi `reseller.blkaccess.com` a «Non sospendere mai questi siti» in `edge://settings/system` → «Schede sospese», così Edge non rallenta il ponte quando la scheda è in secondo piano.
 
 Se crei un nuovo codice nel pannello KAIROS, sostituisci quello salvato nell'estensione. Per interrompere il collegamento usa **Scollega il ponte** nel pannello KAIROS.

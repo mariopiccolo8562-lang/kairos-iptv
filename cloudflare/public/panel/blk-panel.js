@@ -16,7 +16,7 @@
   $('#v-dash').after(section);
   TITLES.blk = 'Pannello Black IPTV';
 
-  const state = { data: null, error: '', token: '', busy: false, probing: false, pointerDown: false, probe: null, probeError: '', path: '', post: false, form: '' };
+  const state = { data: null, error: '', token: '', busy: false, probing: false, pointerDown: false, probe: null, probeError: '', path: '', post: false, form: '', render: false };
   const safe = (value) => esc(String(value == null ? '' : value));
   const pill = (text, color) => `<span style="display:inline-block;padding:4px 10px;border-radius:999px;background:${color}22;color:${color};font-weight:700">${safe(text)}</span>`;
   function since(value) {
@@ -110,10 +110,11 @@
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">
         <input class="inp" id="blkPath" placeholder="Percorso pagina (es. /account/users)" value="${safe(state.path)}" style="flex:1;min-width:220px">
         <label class="mut" style="display:flex;gap:6px;align-items:center;white-space:nowrap"><input type="checkbox" id="blkPost" ${state.post ? 'checked' : ''}>Invia come POST</label>
+        <label class="mut" style="display:flex;gap:6px;align-items:center;white-space:nowrap"><input type="checkbox" id="blkRender" ${state.render ? 'checked' : ''}>Leggi la pagina come la vedi tu (più lento)</label>
         <input type="text" class="inp" id="blkForm" placeholder="Parametri POST, es. draw=1&start=0&length=10" value="${safe(state.form)}" style="flex:1;min-width:220px">
         <button class="btn pri sm" data-blk="probe" ${state.busy ? 'disabled' : ''}>Controlla</button>
       </div>
-      ${state.probing ? '<p class="mut" role="status" style="margin-top:10px">Controllo in corso… può servire fino a 45 secondi</p>' : ''}
+      ${state.probing ? `<p class="mut" role="status" style="margin-top:10px">${state.render ? 'Controllo in corso… con la lettura completa può servire fino a 45 secondi' : 'Controllo in corso… può servire fino a 45 secondi'}</p>` : ''}
       ${state.probeError ? `<p class="mut" style="margin-top:10px">${safe(state.probeError)}</p>` : ''}
       ${structureHtml(state.probe)}
     </div>`;
@@ -125,7 +126,7 @@
     } catch (error) {
       state.error = error.message || 'Stato non disponibile';
     }
-    const probeInputFocused = ['#blkPath', '#blkPost', '#blkForm'].some((selector) => document.activeElement === $(selector, section));
+    const probeInputFocused = ['#blkPath', '#blkPost', '#blkRender', '#blkForm'].some((selector) => document.activeElement === $(selector, section));
     if (!state.busy && !state.pointerDown && !probeInputFocused) render();
   }
   async function createToken() {
@@ -170,13 +171,16 @@
     if (state.probing) return;
     if (!path) { state.probeError = 'Inserisci un percorso da controllare.'; render(); return; }
     state.post = !!$('#blkPost', section).checked;
+    state.render = !!$('#blkRender', section).checked;
     state.form = $('#blkForm', section).value;
     state.busy = true;
     state.probing = true;
     state.probeError = '';
     render();
     try {
-      const request = state.post ? { path, method: 'POST', form: state.form } : { path };
+      const request = { path };
+      if (state.post) { request.method = 'POST'; request.form = state.form; }
+      if (state.render) request.render = true;
       state.probe = await api('POST', '/admin/blk/probe', request);
       state.probeError = '';
     } catch (error) {
@@ -216,6 +220,7 @@
   });
   section.addEventListener('change', (event) => {
     if (event.target.matches('#blkPost')) state.post = event.target.checked;
+    if (event.target.matches('#blkRender')) state.render = event.target.checked;
   });
   section.addEventListener('pointerdown', (event) => {
     if (event.target.closest('[data-blk-path], [data-blk="probe"]')) state.pointerDown = true;
