@@ -85,9 +85,9 @@
   $('.topbar').after(bar);
   function renderBar() {
     const s = D.settings || {};
-    const it = (k, label, code, hint) => `<div class="dl ${code ? '' : 'no'}"><i>${k}</i><div><small>${label}</small><b>${code ? esc(code) : hint}</b></div>${code ? `<button class="btn sm" data-dlc="${esc(code)}">Copia</button>` : ''}</div>`;
+    const it = (k, label, code, hint) => `<div class="dl ${code ? '' : 'no'}" data-dlk="${k}"><i>${k}</i><div><small>${label}</small><b>${code ? esc(code) : hint}</b></div>${code ? `<button class="btn sm" data-dlc="${esc(code)}">Copia</button>` : ''}</div>`;
     // senza codice Downloader: l'indirizzo pulito del pannello da scrivere in Downloader (niente nome del titolare)
-    const linkIt = (k, label, url) => `<div class="dl"><i>${k}</i><div><small>${label}</small><b style="font-size:13px;letter-spacing:0">${esc(url.replace(/^https?:\/\//, ''))}</b></div><button class="btn sm" data-dlc="${esc(url)}">Copia</button></div>`;
+    const linkIt = (k, label, url) => `<div class="dl" data-dlk="${k}"><i>${k}</i><div><small>${label}</small><b style="font-size:13px;letter-spacing:0">${esc(url.replace(/^https?:\/\//, ''))}</b></div><button class="btn sm" data-dlc="${esc(url)}">Copia</button></div>`;
     const owner = D.role !== 'agent';
     const linkOf = (key, slug) => { if (owner) return location.protocol === 'file:' ? '' : location.origin + '/get/' + slug + '.apk'; const x = (D.kairosApps || []).find((a) => a.key === key); return x && x.apk ? x.apk : ''; };
     const dl = (k, label, code, key, slug) => { const u = code ? '' : linkOf(key, slug); return u ? linkIt(k, label.replace('Downloader', 'Indirizzo'), u) : it(k, label, code, owner ? 'non impostato (Impostazioni → App e aggiornamenti)' : 'non impostato'); };

@@ -105,7 +105,11 @@
         // WOLF ogni tanto non risponde al primo colpo: un secondo tentativo dopo 4 s prima di segnalare l'errore
         const d = await api('GET', '/admin/wolf/lines').catch(() => new Promise((ok, no) => setTimeout(() => api('GET', '/admin/wolf/lines').then(ok, no), 4000)));
         for (const l of d.lines || []) rows.push({ p: 'WOLF', id: l.id, u: l.username, n: l.note, w: l.watching, v: { on: l.conns > 0, conns: l.conns, max: l.max }, mx: l.max, en: l.enabled }); })().catch(err('WOLF')),
-      !isAg() && (async () => { const st = await api('GET', '/admin/orcp/state'); if (!st.connected) return; const d = await api('GET', '/admin/orcp/data?w=conns');
+      !isAg() && (async () => { const st = await api('GET', '/admin/orcp/state'); if (!st.connected) return;
+        // accesso a ORCP scaduto: prima MirkoTeam spariva in silenzio (o restava l'ultima lista salvata, che sembrava di adesso)
+        if (st.expired) { S.errs.push('MirkoTeam: l\'accesso a ORCP è scaduto, per questo i collegati non si vedono. Vai in Attivazione app → MirkoTeam → Collega e ripassa l\'accesso (con «Remember me»)'); return; }
+        const d = await api('GET', '/admin/orcp/data?w=conns');
+        if (d.warn) S.errs.push(`MirkoTeam: ultimo aggiornamento non riuscito (${d.warn})${d.at ? ` · dati delle ${new Date(d.at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : ''}`);
         // MirkoTeam (ORCP): un rigo per utente; «connessioni» = dispositivi online adesso con quell'utente.
         // ORCP tiene una scheda per ogni installazione dell'app (reinstallata, aggiornata, dati cancellati) e lascia «online» anche
         // quelle vecchie: lo stesso dispositivo (stesso ID, oppure stesso modello sulla stessa rete) si conta una volta sola.

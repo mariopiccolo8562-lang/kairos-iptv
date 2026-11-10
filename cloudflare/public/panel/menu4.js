@@ -41,6 +41,8 @@
 #hub4 button{--c:var(--sc,#4f8cff)}
 #hub4 button .h4n{background:var(--bad);color:#fff;border-radius:9px;padding:0 6px;font-size:11px;font-weight:800;margin-left:2px}
 .h4-hidden{display:none!important}
+#dlBar.dl-st-only>:not([data-dlk="ST"]){display:none!important}
+#dlBar.dl-st-only:not(:has(>[data-dlk="ST"]:not(.no))){display:none!important}
 @media (min-width:701px) and (max-width:1180px){
   #app.on{grid-template-columns:92px 1fr!important}
   #side{position:sticky!important;top:0;height:100vh;inset:auto!important;width:92px!important;transform:none!important;box-shadow:none!important;padding:18px 8px!important;overflow-y:auto;scrollbar-width:none;z-index:15!important}
@@ -118,8 +120,10 @@
       const on = bar.querySelector('.on'); if (on && bar.scrollWidth > bar.clientWidth) on.scrollIntoView({ block: 'nearest', inline: 'center' });
     }
     const tb = $('.topbar'); if (tb) document.documentElement.style.setProperty('--tb4', tb.offsetHeight + 'px');
-    const dl = $('#dlBar'), showDl = v === 'home' || v === 'dlc' || hub?.[0] === 'set';
-    if (dl) dl.classList.toggle('h4-hidden', !showDl);
+    // codici Downloader: tutti in Home, «Codici Downloader» e Solo Master; nelle altre schede di «Oggi» e nella pagina Clienti
+    // solo quello del Kairos Store (codice, oppure indirizzo se il codice non c'è; niente barra se lo Store non è tra le sue app)
+    const dl = $('#dlBar'), showDl = v === 'home' || v === 'dlc' || hub?.[0] === 'set', stOnly = !showDl && (hub?.[0] === 'dash' || v === 'devices');
+    if (dl) { dl.classList.toggle('h4-hidden', !showDl && !stOnly); dl.classList.toggle('dl-st-only', stOnly); }
   }
   let raf = 0; const later = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; sync(); }); };
   new MutationObserver(later).observe(side, { subtree: true, characterData: true, childList: true, attributes: true, attributeFilter: ['class', 'style'] });
