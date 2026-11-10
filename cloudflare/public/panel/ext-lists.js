@@ -133,9 +133,9 @@
     };
     $$('[data-xlrm]', V).forEach((b) => (b.onclick = async () => {
       const x = all.find((y) => y.id === b.dataset.xlrm) || {}, NAME = appLabel(x.app);
-      const effect = x.app === 'max' ? 'l\'account MaxPlayer viene cancellato' : x.app === 'nanomid' ? 'Nanomid elimina tutte le liste della TV associata a questo codice' : 'la lista sparisce dall\'app OrbixPlay';
+      const effect = x.app === 'max' ? 'l\'account MaxPlayer viene cancellato' : x.app === 'nanomid' ? 'la voce sparisce solo da KAIROS (per togliere la lista dalla TV usa «Svuota» con il codice che il cliente vede adesso)' : 'la lista sparisce dall\'app OrbixPlay';
       if (!(await askDanger(`Rimuovere la lista da ${NAME}?`, `${esc(x.name || x.ref || '')}: ${effect}.`, 'ELIMINA', 'Rimuovi'))) return;
-      try { await api('DELETE', '/admin/ext-lists/' + x.id); toast(x.app === 'nanomid' ? 'Liste Nanomid della TV rimosse' : 'Lista rimossa da ' + NAME); loadL(); } catch (e) { toast(e.message, 1); }
+      try { await api('DELETE', '/admin/ext-lists/' + x.id); toast(x.app === 'nanomid' ? 'Voce Nanomid tolta da KAIROS' : 'Lista rimossa da ' + NAME); loadL(); } catch (e) { toast(e.message, 1); }
     }));
   }
   const ra = renderAll;

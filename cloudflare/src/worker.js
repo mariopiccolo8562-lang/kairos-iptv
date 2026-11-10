@@ -747,7 +747,6 @@ async function extListsRoutes(req, env, path, who, ip, ag) {
     if (r && r.app === 'nanomid' && ag) throw new HttpErr(403, 'Nanomid per ora è solo del titolare');
     if (!r || (mine && !mine.includes(+r.owner_id))) throw new HttpErr(404, 'Lista non trovata');
     if (r.app === 'orbix') { let pls = []; try { pls = JSON.parse(r.ext || '[]'); } catch {} for (const x of pls) await orbixCall(env, '/delete-playlist', { playlist_id: /^\d+$/.test(x) ? +x : x }).catch((e) => { if (!/non trovato/i.test(e.message)) throw e; }); }
-    else if (r.app === 'nanomid') await nanomidCall('DELETE', '/' + encodeURIComponent(r.ref)).catch((e) => { if (e.status !== 404) throw e; });
     else if (r.ext) await mxCall(env, 'DELETE', '/users/' + encodeURIComponent(r.ext)).catch((e) => { if (!/non trovato/i.test(e.message)) throw e; });
     await trashPut(env, 'extlist', r.id, `${r.name || r.username} · ${appLabel(r.app)}`, r, null, who);
     await env.DB.prepare('DELETE FROM ext_lists WHERE id = ?').bind(r.id).run();
