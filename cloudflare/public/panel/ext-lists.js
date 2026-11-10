@@ -19,6 +19,7 @@
   document.head.appendChild(css);
   const isAg = () => D.role === 'agent';
   const P = () => D.players || {};
+  const appLabel = (app) => app === 'max' ? 'MaxPlayer' : app === 'nanomid' ? 'Nanomid' : 'OrbixPlay';
   const dynApps = () => KXActApps.dynamicApps(D.activationApps, isAg(), ((D.me || {}).perms) || {});
   let orcpCfg = null, orcpLoading = false, orcpLoaded = false, dnsSaved = [];
   const tiles = () => [
@@ -76,11 +77,21 @@
         ? `<label class="lbl">Incolla la linea (facoltativo)</label><input class="inp" id="xlPaste" placeholder="Incolla il link M3U o il messaggio con server, utente e password" autocomplete="off"><div class="xl-g" style="margin-top:10px"><label>Nome (cliente)<input class="inp" id="xlN" maxlength="60" value="${esc(F.name)}" placeholder="es. Mario Rossi"></label><label>MAC / ID del dispositivo<input class="inp mono" id="xlMac" data-mac value="${esc(F.mac)}" maxlength="64" autocomplete="off"></label><label>Device key (facoltativa)<input class="inp" id="xlKey" value="${esc(F.deviceKey)}" maxlength="120" autocomplete="off"></label><label>Utente<input class="inp" id="xlU" maxlength="120" value="${esc(F.u)}" autocomplete="off"></label><label>Password<input class="inp" id="xlP" maxlength="200" value="${esc(F.p)}" autocomplete="off"></label>${dynamicServer}<label>Note (facoltative)<input class="inp" id="xlNo" maxlength="200" value="${esc(F.note)}"></label></div>`
         : `<label class="lbl">Incolla la linea (facoltativo)</label><input class="inp" id="xlPaste" placeholder="Incolla il link M3U o il messaggio con server, utente e password" autocomplete="off"><div class="xl-g" style="margin-top:10px"><label>Nome (cliente)<input class="inp" id="xlN" maxlength="60" value="${esc(F.name)}" placeholder="es. Mario Rossi"></label>${F.app === 'orbix' ? `<label>ID dispositivo OrbixPlay<input class="inp mono" id="xlI" data-mac maxlength="64" value="${esc(F.id)}" placeholder="es. 00:1A:79:AA:BB:CC"></label>` : ''}<label>Utente<input class="inp" id="xlU" maxlength="120" value="${esc(F.u)}" autocomplete="off"></label><label>Password<input class="inp" id="xlP" maxlength="200" value="${esc(F.p)}" autocomplete="off"></label><label>${F.app === 'orbix' ? 'DNS OrbixPlay' : 'DNS MaxPlayer'}${dnsHtml}</label><label>Note (facoltative)<input class="inp" id="xlNo" maxlength="200" value="${esc(F.note)}"></label></div>`;
     const resultHtml = F.result ? `<div class="xl-result wz-result ok"><b>${esc(F.result.message || '')}</b>${F.result.activationUrl ? `<a class="btn sm act-app-link" href="${esc(F.result.activationUrl)}" target="_blank" rel="noopener">Apri il sito di attivazione ↗</a>` : ''}${F.result.copyText ? '<button type="button" class="btn sm" data-xl-copy>📋 Copia tutto</button>' : ''}${F.result.copyItems && F.result.copyItems.length ? `<div class="wz-copy-items">${F.result.copyItems.map((x, i) => `<button type="button" class="btn sm" data-xl-copyitem="${i}">Copia ${esc(x.label)}</button>`).join('')}</div>` : ''}</div>` : '';
+    const nanomidClearHtml = isAg() ? '' : `<div class="card glass" style="margin:16px 0 0;padding:14px"><div class="hd"><h3>Nanomid: svuota tutte le liste di una TV<small>Elimina tutte le liste del dispositivo, non solo quelle create da KAIROS.</small></h3></div><div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap"><label style="flex:1;min-width:220px">Codice Nanomid sulla TV<input class="inp mono" id="xlNmClearCode" maxlength="16" autocomplete="off" placeholder="Codice mostrato nell'app Nanomid"></label><button type="button" class="btn" id="xlNmClear" ${busy ? 'disabled' : ''}>Svuota</button></div></div>`;
     V.innerHTML = `<div class="card glass"><div class="hd"><h3>Attivazione app<small>Scegli l'app, scrivi i dati della linea e attivala in un attimo</small></h3></div>
       ${available.length ? `<div class="xl-apps">${tilesHtml}</div>${targetFields}<div style="display:flex;gap:10px;align-items:center;margin-top:14px"><button class="btn pri" id="xlGo" ${busy ? 'disabled' : ''}>${busy ? 'Invio…' : '⚡ Attiva app'}</button><span class="mut" id="xlMsg" style="font-size:13px">${esc(F.msg)}</span></div>${resultHtml}` : '<div class="emptyc">Nessuna app disponibile. Chiedi al titolare di abilitarne una.</div>'}
       </div>
       <div class="card glass" style="margin-top:16px"><div class="hd"><h3>Liste create<small>${isAg() ? 'Le tue e quelle dei tuoi sotto-agenti' : 'Tutte, anche quelle create dagli agenti'}. «Rimuovi» la toglie anche dall'app.</small></h3></div>
-      ${!L ? '<p class="mut">Carico…</p>' : L.err ? `<p class="mut">${esc(L.err)}</p>` : all.length ? `<div class="tbl-wrap"><table class="tbl" style="width:100%"><thead><tr><th>Nome</th><th>App</th><th>ID / utente</th><th>DNS</th><th>Creata</th><th>Da</th><th></th></tr></thead><tbody>${all.map((x) => `<tr><td><b>${esc(x.name || '—')}</b>${x.note ? `<br><small class="mut">${esc(x.note)}</small>` : ''}</td><td>${x.app === 'max' ? 'MaxPlayer' : 'OrbixPlay'}</td><td class="mono" style="font-size:12.5px">${esc(x.app === 'max' ? x.ref : x.ref + ' · ' + x.username)}</td><td>${esc(x.dns)}</td><td>${esc(fmt(x.created))}</td><td>${esc(x.by)}</td><td><button class="btn sm" data-xlrm="${esc(x.id)}">Rimuovi</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="emptyc">Nessuna lista creata da qui</div>'}<button type="button" class="btn sm" data-xlappsview style="margin-top:10px">Vedi tutte le attivazioni in Appunti App</button></div>`;
+      ${!L ? '<p class="mut">Carico…</p>' : L.err ? `<p class="mut">${esc(L.err)}</p>` : all.length ? `<div class="tbl-wrap"><table class="tbl" style="width:100%"><thead><tr><th>Nome</th><th>App</th><th>ID / utente</th><th>DNS</th><th>Creata</th><th>Da</th><th></th></tr></thead><tbody>${all.map((x) => `<tr><td><b>${esc(x.name || '—')}</b>${x.note ? `<br><small class="mut">${esc(x.note)}</small>` : ''}</td><td>${appLabel(x.app)}</td><td class="mono" style="font-size:12.5px">${esc(x.app === 'max' ? x.ref : x.ref + ' · ' + x.username)}</td><td>${esc(x.dns)}</td><td>${esc(fmt(x.created))}</td><td>${esc(x.by)}</td><td><button class="btn sm" data-xlrm="${esc(x.id)}">Rimuovi</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="emptyc">Nessuna lista creata da qui</div>'}${nanomidClearHtml}<button type="button" class="btn sm" data-xlappsview style="margin-top:10px">Vedi tutte le attivazioni in Appunti App</button></div>`;
+    if ($('#xlNmClear')) $('#xlNmClear').onclick = async () => {
+      const input = $('#xlNmClearCode'), quickCode = (input && input.value || '').trim();
+      if (!/^[A-Za-z0-9]{4,16}$/.test(quickCode)) return toast('Scrivi il codice che compare nell\'app Nanomid sulla TV del cliente', 1);
+      if (!(await ask('Svuotare tutte le liste Nanomid di questa TV?', `<p>Il codice <b>${esc(quickCode)}</b> identifica la TV. Nanomid eliminerà <b>tutte le liste</b> di quel dispositivo, non solo quelle create da KAIROS.</p>`, 'Svuota tutte'))) return;
+      const button = $('#xlNmClear'); if (button) button.disabled = true;
+      try { await api('POST', '/admin/ext-lists/nanomid-clear', { quickCode }); toast('Tutte le liste Nanomid della TV sono state svuotate'); if (input) input.value = ''; }
+      catch (e) { toast(e.message, 1); }
+      finally { if (button) button.disabled = false; }
+    };
     $$('[data-xla]', V).forEach((b) => (b.onclick = () => { read(); F.app = b.dataset.xla; F.dns = ''; F.result = null; F.msg = ''; draw(); if (F.app === 'max') loadDoms(); }));
     const pi = $('#xlPaste');
     if (pi) {
@@ -121,9 +132,10 @@
       catch (e) { toast(e.message, 1); } finally { busy = false; draw(); }
     };
     $$('[data-xlrm]', V).forEach((b) => (b.onclick = async () => {
-      const x = all.find((y) => y.id === b.dataset.xlrm) || {}, NAME = x.app === 'max' ? 'MaxPlayer' : 'OrbixPlay';
-      if (!(await askDanger(`Rimuovere la lista da ${NAME}?`, `${esc(x.name || x.ref || '')}: ${x.app === 'max' ? 'l\'account MaxPlayer viene cancellato' : 'la lista sparisce dall\'app OrbixPlay'}.`, 'ELIMINA', 'Rimuovi'))) return;
-      try { await api('DELETE', '/admin/ext-lists/' + x.id); toast('Lista rimossa da ' + NAME); loadL(); } catch (e) { toast(e.message, 1); }
+      const x = all.find((y) => y.id === b.dataset.xlrm) || {}, NAME = appLabel(x.app);
+      const effect = x.app === 'max' ? 'l\'account MaxPlayer viene cancellato' : x.app === 'nanomid' ? 'Nanomid elimina tutte le liste della TV associata a questo codice' : 'la lista sparisce dall\'app OrbixPlay';
+      if (!(await askDanger(`Rimuovere la lista da ${NAME}?`, `${esc(x.name || x.ref || '')}: ${effect}.`, 'ELIMINA', 'Rimuovi'))) return;
+      try { await api('DELETE', '/admin/ext-lists/' + x.id); toast(x.app === 'nanomid' ? 'Liste Nanomid della TV rimosse' : 'Lista rimossa da ' + NAME); loadL(); } catch (e) { toast(e.message, 1); }
     }));
   }
   const ra = renderAll;

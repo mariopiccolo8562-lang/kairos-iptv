@@ -648,27 +648,70 @@ function mxDomainBody(u, label) {
   if (!/^[a-z0-9.-]+$/i.test(x.hostname)) throw new HttpErr(400, 'DNS non valido');
   return { domain: x.hostname.toLowerCase(), port, https, label: str(label, 60) };
 }
+function appLabel(app) { return app === 'max' ? 'MaxPlayer' : app === 'orbix' ? 'OrbixPlay' : app === 'nanomid' ? 'Nanomid' : String(app || 'App'); }
+function nanomidHost(value) {
+  const raw = str(value, 200);
+  let x;
+  try { x = new URL(/^https?:\/\//i.test(raw) ? raw : 'http://' + raw); } catch { throw new HttpErr(400, 'Scrivi il DNS della linea (es. http://dns.esempio.com:8080)'); }
+  if (!/^https?:$/.test(x.protocol) || !/^[a-z0-9.-]+$/i.test(x.hostname) || x.username || x.password || !['', '/'].includes(x.pathname) || x.search || x.hash) {
+    throw new HttpErr(400, 'Scrivi il DNS della linea (es. http://dns.esempio.com:8080)');
+  }
+  return { host: x.origin, dns: x.hostname.toLowerCase() };
+}
+async function nanomidCall(method, path, body) {
+  let r;
+  try {
+    r = await fetch('https://nanomid.com/api/Partner/PlayListFromOtp' + path, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch {
+    throw new HttpErr(502, 'Nanomid non risponde: riprova tra poco');
+  }
+  if (r.status === 200) return;
+  if (r.status === 400) throw new HttpErr(400, 'Nanomid ha rifiutato i dati della lista');
+  if (r.status === 404) throw new HttpErr(404, 'Codice Nanomid non valido o scaduto: controlla il codice sulla TV del cliente');
+  throw new HttpErr(502, 'Nanomid: errore ' + r.status);
+}
 
-/* ---------------- «Crea lista»: liste caricate su OrbixPlay / MaxPlayer senza un cliente Kairos ----------------
+/* ---------------- «Crea lista»: liste caricate su OrbixPlay / MaxPlayer / Nanomid senza un cliente Kairos ----------------
    Il titolare le vede tutte; un agente (con «Attivare OrbixPlay e MaxPlayer dal pannello») solo le sue e quelle dei suoi
    sotto-agenti. Le chiavi e gli indirizzi dei DNS restano nel pannello: si sceglie il DNS per nome. */
 async function extListsRoutes(req, env, path, who, ip, ag) {
   const m = req.method, t = now();
   const mine = ag ? ag.tree : null; // null = titolare (tutte)
+  if (path === '/ext-lists/nanomid-clear' && m === 'POST') {
+    if (ag) throw new HttpErr(403, 'Nanomid per ora è solo del titolare');
+    const b = await readJSON(req, 4096), quickCode = str(b.quickCode, 32).replace(/\s+/g, '');
+    if (!/^[A-Za-z0-9]{4,16}$/.test(quickCode)) throw new HttpErr(400, 'Scrivi il codice che compare nell\'app Nanomid sulla TV del cliente');
+    await nanomidCall('DELETE', '/' + encodeURIComponent(quickCode)).catch((e) => { if (e.status !== 404) throw e; });
+    await log(env, 'del', `${who}: liste Nanomid svuotate (codice ${quickCode})`, ip);
+    return json({ ok: true });
+  }
   if (path === '/ext-lists' && m === 'GET') {
-    const rows = ((await env.DB.prepare('SELECT * FROM ext_lists ORDER BY created DESC LIMIT 1000').all()).results || []).filter((r) => !mine || mine.includes(+r.owner_id));
+    const rows = ((await env.DB.prepare('SELECT * FROM ext_lists ORDER BY created DESC LIMIT 1000').all()).results || []).filter((r) => (!mine || mine.includes(+r.owner_id)) && (!ag || r.app !== 'nanomid'));
     const names = new Map((await agentsAll(env)).map((a) => [a.id, a.username]));
-    return json({ lists: rows.map((r) => ({ id: r.id, app: r.app, name: r.name, ref: r.ref, username: r.username, dns: ag && /^(orbix|max)$/.test(r.app) ? agentDnsLabel(r.dns, 0, r.app === 'orbix' ? 'DNS OrbixPlay' : 'DNS MaxPlayer') : r.dns, note: r.note, created: r.created, updated: r.updated, by: +r.owner_id ? names.get(+r.owner_id) || 'agente eliminato' : 'Tu', mine: ag ? +r.owner_id === ag.id : !+r.owner_id })) });
+    return json({ lists: rows.map((r) => ({ id: r.id, app: r.app, name: r.name, ref: r.ref, username: r.username, dns: ag && /^(orbix|max)$/.test(r.app) ? agentDnsLabel(r.dns, 0, 'DNS ' + appLabel(r.app)) : r.dns, note: r.note, created: r.created, updated: r.updated, by: +r.owner_id ? names.get(+r.owner_id) || 'agente eliminato' : 'Tu', mine: ag ? +r.owner_id === ag.id : !+r.owner_id })) });
   }
   if (path === '/ext-lists' && m === 'POST') {
     const b = await readJSON(req, 4096);
-    const app = b.app === 'max' ? 'max' : b.app === 'orbix' ? 'orbix' : '';
-    if (!app) throw new HttpErr(400, 'Scegli OrbixPlay o MaxPlayer');
+    const app = b.app === 'max' ? 'max' : b.app === 'orbix' ? 'orbix' : b.app === 'nanomid' ? 'nanomid' : '';
+    if (!app) throw new HttpErr(400, 'Scegli OrbixPlay, MaxPlayer o Nanomid');
+    if (app === 'nanomid' && ag) throw new HttpErr(403, 'Nanomid per ora è solo del titolare');
     const name = nameClean(b.name, 60), note = nameClean(b.note, 200), username = str(b.username, 120), password = typeof b.password === 'string' ? b.password.slice(0, 200) : '';
     if (!username || !password) throw new HttpErr(400, 'Scrivi utente e password della linea');
     const s = await getSettings(env);
     let ref = '', ext = '', dnsName = '';
-    if (app === 'orbix') {
+    if (app === 'nanomid') {
+      const quickCode = str(b.quickCode, 32).replace(/\s+/g, '');
+      if (!/^[A-Za-z0-9]{4,16}$/.test(quickCode)) throw new HttpErr(400, 'Scrivi il codice che compare nell\'app Nanomid sulla TV del cliente');
+      const { host, dns } = nanomidHost(b.host);
+      const url = host + '/get.php?username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password) + '&type=m3u_plus&output=ts';
+      await nanomidCall('POST', '', { title: name || str(s.brand || 'Kairos', 40), url, quickCode, hiddenInfo: true });
+      ref = quickCode; dnsName = dns;
+    } else if (app === 'orbix') {
       if (!env.ORBIX_KEY) throw new HttpErr(400, 'OrbixPlay non è collegato: aggiungi il segreto ORBIX_KEY su GitHub');
       let orbixId = macNorm(str(b.orbixId, 64));
       if (!ORBIX_ID_RE.test(orbixId)) throw new HttpErr(400, 'Scrivi l\'ID del dispositivo che compare nell\'app OrbixPlay');
@@ -693,19 +736,22 @@ async function extListsRoutes(req, env, path, who, ip, ag) {
     const id = b64url(rand(9));
     await env.DB.prepare('INSERT INTO ext_lists (id, owner_id, app, name, ref, ext, username, pass_seal, dns, note, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .bind(id, ag ? ag.id : 0, app, name, ref, ext, username, await seal(env, [password]), dnsName, note, t, t).run();
-    await llNote(env, { src: app === 'max' ? 'mxp' : 'oxp', app: app === 'max' ? 'MaxPlayer' : 'OrbixPlay', owner: ag ? ag.id : 0, username, password, mac: app === 'orbix' ? ref : '', note: [name, note, dnsName].filter(Boolean).join(' · ') });
-    await log(env, 'new', `${who}: lista creata su ${app === 'max' ? 'MaxPlayer' : 'OrbixPlay'}${name ? ' per ' + name : ''} (${app === 'max' ? 'utente ' + username : 'dispositivo ' + ref}, ${dnsName})`, ip);
+    await llNote(env, { src: app === 'max' ? 'mxp' : app === 'orbix' ? 'oxp' : 'nmd', app: appLabel(app), owner: ag ? ag.id : 0, username, password, mac: app === 'orbix' ? ref : '', note: [name, note, dnsName].filter(Boolean).join(' · ') });
+    const target = app === 'max' ? 'utente ' + username : app === 'orbix' ? 'dispositivo ' + ref : 'codice ' + ref;
+    await log(env, 'new', `${who}: lista creata su ${appLabel(app)}${name ? ' per ' + name : ''} (${target}, ${dnsName})`, ip);
     return json({ ok: true, id, app, ref, dns: dnsName });
   }
   const em = path.match(/^\/ext-lists\/([A-Za-z0-9_-]{6,20})$/);
   if (em && m === 'DELETE') {
     const r = await env.DB.prepare('SELECT * FROM ext_lists WHERE id = ?').bind(em[1]).first();
+    if (r && r.app === 'nanomid' && ag) throw new HttpErr(403, 'Nanomid per ora è solo del titolare');
     if (!r || (mine && !mine.includes(+r.owner_id))) throw new HttpErr(404, 'Lista non trovata');
     if (r.app === 'orbix') { let pls = []; try { pls = JSON.parse(r.ext || '[]'); } catch {} for (const x of pls) await orbixCall(env, '/delete-playlist', { playlist_id: /^\d+$/.test(x) ? +x : x }).catch((e) => { if (!/non trovato/i.test(e.message)) throw e; }); }
+    else if (r.app === 'nanomid') await nanomidCall('DELETE', '/' + encodeURIComponent(r.ref)).catch((e) => { if (e.status !== 404) throw e; });
     else if (r.ext) await mxCall(env, 'DELETE', '/users/' + encodeURIComponent(r.ext)).catch((e) => { if (!/non trovato/i.test(e.message)) throw e; });
-    await trashPut(env, 'extlist', r.id, `${r.name || r.username} · ${r.app === 'max' ? 'MaxPlayer' : 'OrbixPlay'}`, r, null, who);
+    await trashPut(env, 'extlist', r.id, `${r.name || r.username} · ${appLabel(r.app)}`, r, null, who);
     await env.DB.prepare('DELETE FROM ext_lists WHERE id = ?').bind(r.id).run();
-    await log(env, 'del', `${who}: lista tolta da ${r.app === 'max' ? 'MaxPlayer' : 'OrbixPlay'}${r.name ? ' (' + r.name + ')' : ''}`, ip);
+    await log(env, 'del', `${who}: lista tolta da ${appLabel(r.app)}${r.name ? ' (' + r.name + ')' : ''}`, ip);
     return json({ ok: true });
   }
   return null;
@@ -6015,7 +6061,13 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   if (path.startsWith('/atx/')) { need('atx', 'Non puoi usare il pannello Atlantix: chiedilo a chi ti gestisce'); const r = await atxRoutes(req, env, path, who, ip, WOLF_H, { id: A.id }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
   if (/^\/(ro|slt)\//.test(path)) { need(path.split('/')[1], 'Non puoi usare questo pannello IPTV: chiedilo a chi ti gestisce'); const r = await extRoutes(req, env, path, who, ip, WOLF_H, { id: A.id }); if (r) return r; throw new HttpErr(404, 'Funzione non trovata'); }
   // «Crea lista» su OrbixPlay/MaxPlayer senza cliente Kairos: con il permesso di attivarle dal pannello
-  if (path === '/ext-lists' || path.startsWith('/ext-lists/')) { need('players', 'Non puoi creare liste su OrbixPlay e MaxPlayer'); const r = await extListsRoutes(req, env, path, who, ip, { id: A.id, tree: ctree, orbDns: P.orbDns, mxDns: P.mxDns }); if (r) return r; }
+  if (path === '/ext-lists' || path.startsWith('/ext-lists/')) {
+    if (path === '/ext-lists/nanomid-clear' || (path === '/ext-lists' && m === 'POST' && (await readJSON(req.clone(), 4096)).app === 'nanomid')) throw new HttpErr(403, 'Nanomid per ora è solo del titolare');
+    const deleting = m === 'DELETE' && path.match(/^\/ext-lists\/([A-Za-z0-9_-]{6,20})$/);
+    if (deleting && (await env.DB.prepare('SELECT app FROM ext_lists WHERE id = ?').bind(deleting[1]).first())?.app === 'nanomid') throw new HttpErr(403, 'Nanomid per ora è solo del titolare');
+    need('players', 'Non puoi creare liste su OrbixPlay e MaxPlayer');
+    const r = await extListsRoutes(req, env, path, who, ip, { id: A.id, tree: ctree, orbDns: P.orbDns, mxDns: P.mxDns }); if (r) return r;
+  }
   // App → OrbixPlay e MaxPlayer: le liste create sulle app terzi, solo dei suoi clienti
   if (path === '/apps3/lists' && m === 'GET') {
     need('appsOp'); const sc = await scope();
