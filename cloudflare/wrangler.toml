@@ -45,8 +45,9 @@ namespace_id = "7103"
 simple = { limit = 600, period = 60 }
 
 # Pulizia notturna (sessioni scadute, log vecchi, dispositivi abbandonati)
+# Il secondo cron tiene vivo l'accesso MirkoTeam/ORCP ogni sei ore
 [triggers]
-crons = ["17 3 * * *"]
+crons = ["17 3 * * *", "41 */6 * * *"]
 
 [observability]
 enabled = true
