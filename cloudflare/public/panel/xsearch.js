@@ -15,6 +15,8 @@
 .xs-it.seen{border-color:#22c55e88;background:#22c55e14}.xs-it.seen i{font-style:normal;color:#4ade80;font-weight:800}
 .xs-bar .xs-more{color:var(--mut);font-size:12px;cursor:pointer;text-decoration:underline dotted}
 .xs-pin{color:var(--mut);font-size:11.5px;font-weight:400}
+.xs-ck{margin:0;width:15px;height:15px;accent-color:#ff4d4d;cursor:pointer;flex:none}.xs-it.sel{border-color:#ff4d4d;background:#ff4d4d24}
+.xs-tools button.xs-go{background:#e53935;border-color:#e53935;color:#fff}.xs-tools button.xs-go:hover{background:#c62828}
 @media (max-width:700px){.xs-head{flex-direction:column;gap:6px}.xs-tools{flex-wrap:wrap}}`;
   document.head.appendChild(css);
   // casella di ricerca di ogni scheda → pannello (per exQ il pannello è quello della sezione aperta: Realott o SLT)
@@ -22,6 +24,9 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   /* pin: riquadro fisso { q: ricerca di partenza, items, seen: linee già aperte, vals: nomi messi da noi nelle caselle } */
   const S = { q: '', items: null, seq: 0, pre: 0, pin: null, hide: '', more: new Set() };
+  /* caselle (10 novembre 2026): titolare, o agente con il permesso «lineView»; le spunte stanno nel riquadro fisso (pin.sel) */
+  const canSel = () => !!(window.KXLineCard && KXLineCard.can());
+  const selOf = () => (S.pin && S.pin.sel) || null;
   const keyOf = (x) => x.p + ':' + String(x.q || x.t || '').toLowerCase();
   function current() {
     for (const [sel, p] of IN) { const e = document.querySelector(sel); if (!e || !e.offsetParent) continue; const v = e.closest('section.view'); if (!v || !v.classList.contains('on')) continue; return { e, p: p || (v.id === 'v-slt' ? 'slt' : 'ro') }; }
@@ -49,15 +54,17 @@
     const by = new Map(); for (const x of L) { if (!by.has(x.p)) by.set(x.p, []); by.get(x.p).push(x); }
     const order = [...by.keys()].sort((a, c) => (a === cur.p ? -1 : c === cur.p ? 1 : 0));
     const back = pinned && cur.e.value.trim() !== q;
-    const tools = pinned ? `<span class="xs-tools">${back ? `<button type="button" data-xsb="back">↺ Torna a «${esc(q)}»</button>` : ''}<button type="button" data-xsb="x" title="Chiudi la ricerca">✕</button></span>` : '';
+    const sl = canSel() ? selOf() : null, ns = sl ? sl.size : 0;
+    const selTools = canSel() ? (ns ? `<button type="button" class="xs-go" data-xsb="look">👁 Vedi ${ns === 1 ? 'la selezionata' : 'le ' + ns + ' selezionate'}</button><button type="button" data-xsb="none" title="Togli le spunte">Togli</button>` : '') + `<button type="button" data-xsb="all" title="Spunta tutte le linee trovate">Tutte</button>` : '';
+    const tools = pinned || selTools ? `<span class="xs-tools">${selTools}${pinned && back ? `<button type="button" data-xsb="back">↺ Torna a «${esc(q)}»</button>` : ''}${pinned ? '<button type="button" data-xsb="x" title="Chiudi la ricerca">✕</button>' : ''}</span>` : '';
     let html = `<div class="xs-head"><span><b>«${esc(q)}»</b> è presente in <b>${by.size}</b> ${by.size === 1 ? 'pannello' : 'pannelli'}: ${order.map((p) => `<span class="xs-p${p === cur.p ? ' here' : ''}">${esc(N[p] || p)} <em>${by.get(p).length}</em></span>`).join(' · ')}${pinned ? ' <span class="xs-pin">· resta qui mentre apri le linee</span>' : ''}</span>${tools}</div>`, n = 0;
     const items = [];
     for (const p of order) {
       const G = by.get(p), all = S.more.has(p), cut = all ? G.length : 5;
       html += `<div class="xs-grp"><span class="wf-tag g">${esc(N[p] || p)}${p === cur.p ? ' · qui' : ''}</span>`;
       for (const x of G.slice(0, cut)) {
-        const seen = !!(S.pin && S.pin.seen.has(keyOf(x)));
-        html += `<span class="xs-it${p === cur.p ? ' here' : ''}${seen ? ' seen' : ''}" data-xs="${n}" title="${p === cur.p ? 'Vai alla sua scheda' : 'Apri in ' + esc(N[p] || p)}">${seen ? '<i>✓</i>' : ''}<b>${esc(x.t)}</b>${x.s ? `<small title="${esc(x.s)}">${esc(x.s)}</small>` : ''}</span>`;
+        const seen = !!(S.pin && S.pin.seen.has(keyOf(x))), ck = !!(sl && sl.has(keyOf(x)));
+        html += `<span class="xs-it${p === cur.p ? ' here' : ''}${seen ? ' seen' : ''}${ck ? ' sel' : ''}" data-xs="${n}" title="${p === cur.p ? 'Vai alla sua scheda' : 'Apri in ' + esc(N[p] || p)}">${canSel() ? `<input type="checkbox" class="xs-ck" data-xsc="${n}" title="Spunta per vederla insieme alle altre"${ck ? ' checked' : ''}>` : ''}${seen ? '<i>✓</i>' : ''}<b>${esc(x.t)}</b>${x.s ? `<small title="${esc(x.s)}">${esc(x.s)}</small>` : ''}</span>`;
         items[n++] = x;
       }
       if (G.length > cut) html += `<span class="xs-more" data-xsm="${esc(p)}" title="Mostra tutte">+${G.length - cut}</span>`;
@@ -65,19 +72,25 @@
     }
     b._items = items;
     if (!set(b, html)) return;
-    b.querySelectorAll('[data-xs]').forEach((el) => (el.onclick = () => pick(cur, b._items[+el.dataset.xs], q, L)));
+    b.querySelectorAll('[data-xs]').forEach((el) => (el.onclick = (e) => { if (e.target.closest('.xs-ck')) return; pick(cur, b._items[+el.dataset.xs], q, L); }));
+    b.querySelectorAll('[data-xsc]').forEach((el) => (el.onchange = () => { const x = b._items[+el.dataset.xsc]; if (!x) return; pinOn(q, L); const sl2 = S.pin.sel, k = keyOf(x); el.checked ? sl2.set(k, x) : sl2.delete(k); render(current() || cur); }));
     b.querySelectorAll('[data-xsm]').forEach((el) => (el.onclick = () => { S.more.add(el.dataset.xsm); render(current() || cur); }));
     b.querySelectorAll('[data-xsb]').forEach((el) => (el.onclick = () => {
       const c = current() || cur;
       if (el.dataset.xsb === 'x') { S.pin = null; S.hide = c.e.value.trim(); drop(c); return; }
+      if (el.dataset.xsb === 'all') { pinOn(q, L); for (const x of L.slice(0, 60)) S.pin.sel.set(keyOf(x), x); render(c); return; }
+      if (el.dataset.xsb === 'none') { if (S.pin) S.pin.sel.clear(); render(c); return; }
+      if (el.dataset.xsb === 'look') { const sl2 = selOf(); if (sl2 && sl2.size && window.KXLineCard) KXLineCard.open([...sl2.values()]); return; }
       if (S.pin) S.pin.vals.add(S.pin.q.toLowerCase());
       setBox(c, q); render(c);
     }));
   }
   /* clic su un nome: il riquadro diventa fisso con la ricerca di partenza, poi si apre la scheda della linea */
+  /** il riquadro diventa fisso con la ricerca di partenza (anche spuntando una casella) */
+  function pinOn(q, L) { if (!S.pin) S.pin = { q, items: L, seen: new Set(), vals: new Set(), sel: new Map() }; if (!S.pin.sel) S.pin.sel = new Map(); }
   function pick(cur, x, q, L) {
     if (!x) return;
-    if (!S.pin) S.pin = { q, items: L, seen: new Set(), vals: new Set() };
+    pinOn(q, L);
     S.pin.seen.add(keyOf(x));
     const name = String(x.q || x.t || '');
     S.pin.vals.add(name.toLowerCase());

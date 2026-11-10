@@ -896,3 +896,21 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
 - **Solo titolare**: gli agenti non vedono la tendina (i loro clienti sono già loro). Senza scelta il cliente resta tuo, come prima.
 - **Corretto**: in «Nuova attivazione» la conferma «Confermare l'attivazione?» finiva sotto la finestra e non si poteva premere (livello 41 contro 40 della conferma). Ora la finestra sta a 39 e la conferma resta sopra.
 - **Test**: `ui_owner_pick` (10 controlli: tendina nei due flussi, `ownerId` mandato solo se scelto, conferma raggiungibile, niente tendina per l'agente).
+
+## 49. Linee selezionate in primo piano: server, IP e app che le usano (10 novembre 2026)
+
+- **Barra «presente in N pannelli»** (`xsearch.js`):
+  - ogni linea ha una casella; il clic sul nome la apre come prima, la casella la spunta e rende il riquadro fisso;
+  - «Tutte» spunta tutte le linee trovate (massimo 60), «Togli» le toglie;
+  - **«👁 Vedi le N selezionate»** apre la schermata in primo piano (`linecard.js`, livello 38: sotto le finestre di conferma).
+- **Una scheda per linea**:
+  - **Server**: pannello e DNS (il DNS solo al titolare; Armada e Storm lo prendono dalla loro scheda).
+  - **Stato e scadenza**, **collegata ora** (connessioni, canale in onda).
+  - **IP** con provider e segno VPN: dalle connessioni di Realott, SLT e Atlantix, da MirkoTeam e dalle app KAIROS che usano la stessa linea. WOLF, Armada, Storm, MaxPlayer e OrbixPlay l'IP non lo danno.
+  - **App che la usano**: clienti Kairos (con pallino online e canale), MaxPlayer, OrbixPlay, MirkoTeam («Per linea» e liste dei pannelli).
+  - Nota, password nascosta (Mostra/Copia), reseller, creata, pacchetto, ID; per MirkoTeam dispositivo, versione e ultimo accesso; per MaxPlayer le liste.
+  - Pulsanti «Apri in …», «Modifica», «Rinnova» (gli stessi delle schede dei pannelli); «↻ Aggiorna» rilegge connessioni e presenza.
+- **«Tutti i pannelli» → «Consulta»**: la stessa scheda ha in più Server, IP e App che la usano.
+- **Chi la vede**: il titolare. Agenti solo con il permesso nuovo **«Linee selezionate in primo piano»** (`lineView`), spento per tutti.
+- **Niente di nuovo sui pannelli**: usa solo le letture che il pannello fa già (liste, connessioni, presenza delle app).
+- **Test**: `ui_linecard` (26 controlli).

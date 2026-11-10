@@ -96,7 +96,7 @@
         (async () => {
           const c = await api('GET', '/admin/wolf/config'); if (!c || !c.set) return;
           const d = await api('GET', '/admin/wolf/lines');
-          for (const l of d.lines || []) rows.push({ p: 'wolf', id: String(l.id), ref: String(l.id), u: l.username, pw: l.password || '', n: l.note || '', exp: ms(l.exp), en: !!l.enabled, on: (+l.conns || 0) > 0, conns: +l.conns || 0, max: +l.max || 0, w: l.watching || '', owner: l.owner || '', created: ms(l.created), trial: !!l.trial });
+          for (const l of d.lines || []) rows.push({ p: 'wolf', id: String(l.id), ref: String(l.id), u: l.username, pw: l.password || '', n: l.note || '', exp: ms(l.exp), en: !!l.enabled, on: (+l.conns || 0) > 0, conns: +l.conns || 0, max: +l.max || 0, w: l.watching || '', owner: l.owner || '', created: ms(l.created), trial: !!l.trial, dns: l.dns || '' });
         })().catch(err('WOLF')),
         ...['armada', 'storm'].map((k) => (async () => {
           const st = await api('GET', `/admin/${k}/state`); if (!st || !st.connected) return;
@@ -106,17 +106,17 @@
             const exp = ms(x.exp), en = !!x.enabled, live = en && (!exp || exp > Date.now()), u = x.username || x.mac || '';
             // collegato sì/no: come «Online ora terzi» (connessioni attive chieste al server della linea), solo per le linee vive
             const key = live && x.username && x.password && window.KXOnline ? KXOnline.want(st.dns, x.username, x.password) : '';
-            rows.push({ p: k, id: String(x.id), ref: u, u, pw: x.password || '', n: kn[String(u).toLowerCase()] || x.notes || '', exp, en, on: key ? undefined : live ? null : false, key, max: +x.maxConn || 0, owner: x.by || x.owner || '', created: ms(x.created), trial: !!x.trial, tab: x.username ? 'lines' : 'mags' });
+            rows.push({ p: k, id: String(x.id), ref: u, u, pw: x.password || '', n: kn[String(u).toLowerCase()] || x.notes || '', exp, en, on: key ? undefined : live ? null : false, key, max: +x.maxConn || 0, owner: x.by || x.owner || '', created: ms(x.created), trial: !!x.trial, tab: x.username ? 'lines' : 'mags', dns: st.dns || '' });
           }
         })().catch(err(PN[k]))),
         (async () => {
           const d = await api('GET', '/admin/atx/lines?all=1&page=1&q=&status=&reseller=');
-          for (const x of d.rows || d.lines || []) rows.push({ p: 'atx', id: String(x.id), ref: String(x.id), u: x.username, pw: x.password || '', n: x.notes || '', exp: ms(x.exp_date), en: Number(x.enabled) !== 0, on: Number(x.online) > 0, conns: Number(x.online) || 0, max: Number(x.max_connections) || 0, w: x.channel || '', owner: x.reseller || x.owner || x.reseller_username || '', created: ms(x.created_at), trial: Number(x.is_trial) === 1 });
+          for (const x of d.rows || d.lines || []) rows.push({ p: 'atx', id: String(x.id), ref: String(x.id), u: x.username, pw: x.password || '', n: x.notes || '', exp: ms(x.exp_date), en: Number(x.enabled) !== 0, on: Number(x.online) > 0, conns: Number(x.online) || 0, max: Number(x.max_connections) || 0, w: x.channel || '', owner: x.reseller || x.owner || x.reseller_username || '', created: ms(x.created_at), trial: Number(x.is_trial) === 1, dns: x.reseller_dns || '' });
         })().catch(err('Atlantix')),
         ...['ro', 'slt'].map((k) => (async () => {
           const st = await api('GET', `/admin/${k}/state`); if (!st || !st.connected) return;
           const d = await api('GET', `/admin/${k}/lines`);
-          for (const x of d.rows || []) rows.push({ p: k, id: String(x.id || ''), ref: String(x.id || x.username || ''), u: x.username, pw: x.password || '', n: x.notes || '', exp: ms(x.exp), en: !!x.enabled, expired: !!x.expired, on: (+x.conns || 0) > 0, conns: +x.conns || 0, max: +x.max || 0, w: x.stream || '', owner: x.owner || '', created: ms(x.created), trial: !!x.trial, pack: x.type || '' });
+          for (const x of d.rows || []) rows.push({ p: k, id: String(x.id || ''), ref: String(x.id || x.username || ''), u: x.username, pw: x.password || '', n: x.notes || '', exp: ms(x.exp), en: !!x.enabled, expired: !!x.expired, on: (+x.conns || 0) > 0, conns: +x.conns || 0, max: +x.max || 0, w: x.stream || '', owner: x.owner || '', created: ms(x.created), trial: !!x.trial, pack: x.type || '', dns: d.dns || '' });
         })().catch(err(PN[k]))),
       ]);
       S.rows = rows; S.errs = errs; S.t = Date.now();
@@ -242,13 +242,14 @@
     consult('edit');
   }
   /* «Consulta»: le schede delle linee scelte, divise per pannello, con Apri / Modifica / Rinnova */
-  function consult(mode) {
+  function consult(mode, again) {
     const C = chosen(); if (!C.length) return;
+    const keep = again && $('#apOv .ap-box') ? $('#apOv .ap-box').scrollTop : 0;
     closeOv();
     const by = new Map(); for (const p of ORDER) { const rows = C.filter((r) => r.p === p); if (rows.length) by.set(p, rows); }
     const sub = mode === 'renew' ? 'Le linee sono su pannelli diversi: rinnovi un pannello alla volta. WOLF, Armada e Storm le rinnovano tutte insieme; Atlantix, Realott e SLT una linea alla volta.'
       : mode === 'edit' ? 'Ogni linea si modifica nel suo pannello, una alla volta: premi «Modifica» su quella che vuoi.'
-        : 'Tutto quello che il pannello sa delle linee che hai spuntato.';
+        : 'Tutto quello che il pannello sa delle linee che hai spuntato: server, collegamento, IP e app che le usano.';
     const kv = (k, v, c) => `<div${c ? ` class="${c}"` : ''}><span>${k}</span>${v}</div>`; // ap-kv-w: a tutta larghezza sul telefono
     let i = 0; const idx = [];
     let h = `<div class="ap-bh"><h3>${mode === 'renew' ? 'Rinnova' : mode === 'edit' ? 'Modifica' : 'Consulta'} · ${C.length} ${C.length === 1 ? 'linea' : 'linee'}<small>${sub}</small></h3><button class="btn sm" type="button" data-apo="x">✕ Chiudi</button></div>`;
@@ -259,12 +260,15 @@
         idx[i] = r;
         h += `<div class="ap-card"><div class="ap-ch"><span class="ap-cu ${tc}">${esc(r.u || '—')}</span>${stateHtml(r)}${window.KXPay ? KXPay.badge('line', r.p, r.ref) : ''}</div>
           <div class="ap-kv">${kv('Scadenza', `<b class="${tc}">${esc(day(r.exp))}</b> · ${esc(left(r.exp))}`)}${kv('Cliente / nota', r.n ? `<b class="${tc}">${esc(r.n)}</b>` : '<i class="mut">—</i>', 'ap-kv-w')}${kv('Password', r.pw ? `<b class="ap-pw">${pwOn ? esc(r.pw) : '••••••'}</b><button class="btn sm" type="button" data-apo="pw" data-i="${i}">${pwOn ? 'Nascondi' : 'Mostra'}</button><button class="btn sm" type="button" data-apo="cp" data-i="${i}">Copia</button>` : '—', 'ap-kv-w')}
-            ${kv('Connessioni', v && v.on ? `${v.conns || 1}/${r.max || '?'}${r.w ? ' · ▶ ' + esc(r.w) : ''}` : r.max ? `0/${r.max}` : '—')}${r.owner ? kv('Reseller', esc(r.owner)) : ''}${kv('ID', esc(r.id || '—'))}${r.created ? kv('Creata', esc(day(r.created))) : ''}${r.pack ? kv('Pacchetto', esc(r.pack)) : ''}${r.trial ? kv('Prova', 'sì') : ''}</div>
+            ${kv('Connessioni', v && v.on ? `${v.conns || 1}/${r.max || '?'}${r.w ? ' · ▶ ' + esc(r.w) : ''}` : r.max ? `0/${r.max}` : '—')}${r.owner ? kv('Reseller', esc(r.owner)) : ''}${kv('ID', esc(r.id || '—'))}${r.created ? kv('Creata', esc(day(r.created))) : ''}${r.pack ? kv('Pacchetto', esc(r.pack)) : ''}${r.trial ? kv('Prova', 'sì') : ''}${window.KXLineCard ? KXLineCard.kvExtra(r, kv, 'ap-kv-w') : ''}</div>
           <div class="ap-acts"><button class="btn sm" type="button" data-apo="open" data-i="${i}">Apri in ${esc(PN[r.p])}</button><button class="btn sm" type="button" data-apo="edit" data-i="${i}">Modifica</button><button class="btn sm${mode === 'renew' ? ' pri' : ''}" type="button" data-apo="renew" data-i="${i}">Rinnova</button></div></div>`;
         i++;
       }
     }
     const o = document.createElement('div'); o.id = 'apOv'; o.innerHTML = `<div class="ap-box" role="dialog" aria-modal="true">${h}</div>`; document.body.appendChild(o);
+    if (keep) o.querySelector('.ap-box').scrollTop = keep;
+    // IP, app che usano la linea e DNS arrivano dopo: la scheda si ridisegna una volta, nello stesso punto
+    if (!again && window.KXLineCard) { const my = o; KXLineCard.load(C).then(() => { if (my.isConnected) consult(mode, true); }); }
     o.addEventListener('mousedown', (e) => { if (e.target === o) closeOv(); });
     o.addEventListener('click', async (e) => {
       const b = e.target.closest('[data-apo]'); if (!b) return;
@@ -274,7 +278,7 @@
       if (a === 'open') return openLine(r);
       if (a === 'edit') return openLine(r, 'edit');
       if (a === 'renew') return BULK.has(r.p) ? renewGroup(r.p, [r]) : openLine(r, 'renew');
-      if (a === 'pw') { const k = keyOf(r); S.pw.has(k) ? S.pw.delete(k) : S.pw.add(k); const top = o.querySelector('.ap-box').scrollTop; consult(mode); const nb = $('#apOv .ap-box'); if (nb) nb.scrollTop = top; return; }
+      if (a === 'pw') { const k = keyOf(r); S.pw.has(k) ? S.pw.delete(k) : S.pw.add(k); consult(mode, true); return; }
       if (a === 'cp') { try { await navigator.clipboard.writeText(r.pw); toast('Password copiata'); } catch { toast('Copia non consentita dal browser', 1); } }
     });
   }

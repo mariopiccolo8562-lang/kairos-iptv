@@ -40,6 +40,8 @@
   }
   const chip = (a) => `<span class="lm-ch" style="--c:${COL[a] || '#f5b041'}">${esc(a)}</span>`;
   const appsOf = (g) => [...new Set(g.items.map((i) => i.app))];
+  // per la scheda completa della linea (linecard.js): chi usa lo stesso nome utente, con i dati già letti qui
+  window.KXLineMap = { load: (force) => extra(force).catch(() => {}), map: () => build(), of: (u) => build().get(norm(u)) || null, chip, color: (a) => COL[a] || '#f5b041' };
 
   /* ---------- pagina Linee IPTV → «Per linea» ---------- */
   TITLES.lmap = 'Per linea';
