@@ -4,6 +4,8 @@ try { const _as = JSON.parse(sessionStorage.getItem('kxAssist') || 'null'); if (
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// logo animato (index.html): fermo se il dispositivo chiede di ridurre il movimento
+try { if (matchMedia('(prefers-reduced-motion: reduce)').matches) $$('svg.kx-logo').forEach((s) => s.pauseAnimations && s.pauseAnimations()); } catch {}
 const ss = { get(k) { try { return sessionStorage.getItem(k); } catch { return null; } }, set(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch {} } };
 const THEMES = { cinema: ['#e5202b', '#ff5a36', '#b3121b'], aurora: ['#22e1ff', '#7b5cff', '#ff3df2'], plasma: ['#ff3d8b', '#ff7a3d', '#ffd23d'], matrix: ['#3dffb0', '#22e1ff', '#3d7bff'], solar: ['#ffb23d', '#ff3d6e', '#b13dff'], ice: ['#9ef0ff', '#5d9bff', '#c3b5ff'], oro: ['#f5c542', '#ff9d2e', '#b8860b'], smeraldo: ['#2ee59d', '#13a8a8', '#0b7a4b'], oceano: ['#2f80ed', '#56ccf2', '#1b3a8f'], tramonto: ['#ff6b35', '#f7c548', '#c2185b'], viola: ['#9b5cff', '#d86bff', '#5b2bd1'], rosa: ['#ff5fa2', '#ff9ec7', '#c2185b'] };
 const applyTheme = (n) => { const t = THEMES[n] || THEMES.cinema; ['--a1', '--a2', '--a3'].forEach((v, i) => document.documentElement.style.setProperty(v, t[i])); };
@@ -194,6 +196,9 @@ async function load(quiet) {
   if (aa) aa.innerHTML = (D.apk && D.apk.auto ? `✅ <b>Aggiornamento automatico attivo</b> · versione pubblicata: <b>${esc(D.apk.version || String(D.apk.versionCode))}</b>` : D.apk && D.apk.versionCode ? `✍️ Versione impostata a mano: <b>${esc(D.apk.version || String(D.apk.versionCode))}</b>${fd ? ' (più nuova di quella automatica ' + esc(fd.version) + ')' : ' (aggiornamento automatico non attivo)'}` : '⚠️ Aggiornamento automatico non attivo: nessuna versione pubblicata') + older + noUrl;
   applyTheme(D.settings.accent);
   $$('.brandName').forEach((e) => (e.textContent = (D.settings.brand || 'KAIROS').toUpperCase()));
+  // sotto il nome: il ruolo di chi è entrato (in assistenza quello dell'agente). Agente creato dal titolare = Reseller, creato da un agente = Sub reseller
+  const roleTxt = D.role !== 'agent' ? 'Master' : D.me && D.me.parentId ? 'Sub reseller' : 'Reseller';
+  $$('.brandRole').forEach((e) => { if (e.textContent !== roleTxt) e.textContent = roleTxt; });
   $('#av').textContent = (D.user || 'A')[0].toUpperCase();
   const pend = D.devices.filter((d) => d.status === 'pending' && !d.parent).length;
   $('#pendB').style.display = pend ? '' : 'none'; $('#pendB').textContent = pend;
