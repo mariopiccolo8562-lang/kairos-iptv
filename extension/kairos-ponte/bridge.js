@@ -3,7 +3,7 @@ const TARGET_ORIGIN = 'https://reseller.blkaccess.com';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const FETCH_TIMEOUT_MS = 10000;
 const FRAME_LOAD_TIMEOUT_MS = 10000;
-const FRAME_STABLE_TIMEOUT_MS = 20000;
+const FRAME_STABLE_TIMEOUT_MS = 30000;
 const FRAME_MIN_WAIT_MS = 1500;
 const FRAME_POLL_MS = 500;
 let generation = 0;
@@ -104,12 +104,13 @@ async function readWithIframe(path, reason) {
       const doc = getDocument();
       html = doc.documentElement ? doc.documentElement.outerHTML : '';
       const rows = doc.querySelectorAll('tbody tr').length;
+      const tableStillLoading = doc.querySelectorAll('thead th').length > 0 && rows === 0;
       if (html.length === previousLength && rows === previousRows) unchanged++;
       else unchanged = 0;
       previousLength = html.length;
       previousRows = rows;
       const elapsed = Date.now() - started;
-      if ((elapsed >= FRAME_MIN_WAIT_MS && unchanged >= 2) || elapsed >= FRAME_STABLE_TIMEOUT_MS) break;
+      if (elapsed >= FRAME_STABLE_TIMEOUT_MS || (!tableStillLoading && elapsed >= FRAME_MIN_WAIT_MS && unchanged >= 2)) break;
       await sleep(Math.min(FRAME_POLL_MS, FRAME_STABLE_TIMEOUT_MS - elapsed));
     }
     html = getDocument().documentElement?.outerHTML || html;
@@ -148,35 +149,47 @@ async function run(myGeneration) {
             const method = String(job.method || 'GET').toUpperCase();
             if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) throw new Error('Metodo non consentito');
             const headers = safeHeaders(job.headers);
+            const renderHeader = Object.keys(headers).find((key) => key.toLowerCase() === 'x-kairos-render');
+            const renderIframe = renderHeader && headers[renderHeader] === 'iframe';
+            if (renderIframe) delete headers[renderHeader];
             const body = ['GET', 'HEAD'].includes(method) ? undefined : (job.body == null ? undefined : String(job.body));
             if (method === 'GET') {
-              let reason = '';
-              const controller = new AbortController();
-              const fetchTimer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-              try {
-                const response = await fetch(target.href, {
-                  method,
-                  headers,
-                  credentials: 'include',
-                  redirect: 'manual',
-                  signal: controller.signal,
-                });
-                if (response.type === 'opaqueredirect') reason = 'reindirizzata';
-                else {
-                  const text = await response.text();
-                  result = { type: 'result', ...config, id: job.id, status: response.status, body: text.slice(0, 900001), via: 'fetch' };
-                }
-              } catch (error) {
-                reason = `rete: ${String(error && error.message || error).slice(0, 160)}`;
-              } finally {
-                clearTimeout(fetchTimer);
-              }
-              if (!result) {
+              if (renderIframe) {
                 try {
-                  const page = await readWithIframe(target.pathname + target.search, reason || 'reindirizzata');
+                  const page = await readWithIframe(target.pathname + target.search, 'richiesta con pagina nascosta');
                   result = { type: 'result', ...config, id: job.id, ...page };
                 } catch (error) {
                   result = { type: 'result', ...config, id: job.id, err: String(error && error.message || error).slice(0, 200) };
+                }
+              } else {
+                let reason = '';
+                const controller = new AbortController();
+                const fetchTimer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+                try {
+                  const response = await fetch(target.href, {
+                    method,
+                    headers,
+                    credentials: 'include',
+                    redirect: 'manual',
+                    signal: controller.signal,
+                  });
+                  if (response.type === 'opaqueredirect') reason = 'reindirizzata';
+                  else {
+                    const text = await response.text();
+                    result = { type: 'result', ...config, id: job.id, status: response.status, body: text.slice(0, 900001), via: 'fetch' };
+                  }
+                } catch (error) {
+                  reason = `rete: ${String(error && error.message || error).slice(0, 160)}`;
+                } finally {
+                  clearTimeout(fetchTimer);
+                }
+                if (!result) {
+                  try {
+                    const page = await readWithIframe(target.pathname + target.search, reason || 'reindirizzata');
+                    result = { type: 'result', ...config, id: job.id, ...page };
+                  } catch (error) {
+                    result = { type: 'result', ...config, id: job.id, err: String(error && error.message || error).slice(0, 200) };
+                  }
                 }
               }
             } else {

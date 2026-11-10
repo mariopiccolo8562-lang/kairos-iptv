@@ -335,6 +335,7 @@ export async function blkRoutes(req, env, path, who, ip, H) {
     const headers = probeMethod === 'POST'
       ? { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' }
       : target.includes('?') ? { 'X-Requested-With': 'XMLHttpRequest' } : {};
+    if (probeMethod === 'GET' && body.render === true) headers['X-Kairos-Render'] = 'iframe';
     const result = await relayFetch(env, H, {
       method: probeMethod, path: target, headers,
       body: probeMethod === 'POST' ? body.form || '' : undefined,
