@@ -65,7 +65,7 @@
       const s = window.KXDashLines?.homeSummary?.();
       const total = s?.total || { active: 0, soon: 0, expired: 0 };
       const waiting = !s?.at;
-      const chips = (s?.panels || []).map((p) => `<span>${esc(p.name)} · ${p.active}</span>`).join('');
+      const chips = (s?.panels || []).map((p) => `<span>${esc(p.name)} · ${p.active}${p.cr ? ` · 💳 ${esc(p.cr)}` : ''}</span>`).join('');
       return `<div class="h4-home-metrics">${metric(waiting ? '…' : total.active, 'Linee attive')}${metric(waiting ? '…' : total.soon, 'Scadono · 7 g')}${metric(waiting ? '…' : total.expired, 'Scadute')}</div>${chips ? `<div class="h4-home-panels">${chips}</div>` : ''}`;
     }
     if (id === 'att') {

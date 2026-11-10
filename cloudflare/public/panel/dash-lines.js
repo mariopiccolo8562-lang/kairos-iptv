@@ -34,8 +34,14 @@
   const PCOL = { wolf: '#e0524f', armada: '#2f7fd6', storm: '#7c4dff', atx: '#1fa0b6', ro: '#e08a1e', slt: '#2a9d5c' };
   const APP_COL = { maxplayer: '#d6336c', orbixplay: '#6f42c1', mirkoteam: '#0ca678', oraplayer: '#e08a1e' };
   const ORDER = Object.keys(PANEL), canonical = { maxplayer: 'MaxPlayer', orbixplay: 'OrbixPlay', mirkoteam: 'MirkoTeam', oraplayer: 'Ora Player', iboone: 'Ibo One', iboplayer: 'Ibo Player', duplexpro: 'Duplex Pro' };
-  const cache = { at: 0, panels: [], apps: [] };
+  const cache = { at: 0, panels: [], apps: [], cr: {} };
   let busy = false;
+  /* crediti dell'account collegato a ogni pannello: WOLF, Armada e Storm arrivano con le linee (KXLinePick.credits),
+     Atlantix dal riepilogo dell'account. Agente Armada/Storm: «rimasti di quelli del mese». Realott e SLT non li danno */
+  const crNum = (v) => v != null && String(v).trim() !== '' && Number.isFinite(+v) ? +v : null;
+  const crFmt = (v) => typeof v === 'number' ? v.toLocaleString('it-IT', { maximumFractionDigits: 2 }) : String(v);
+  const crText = (c, short) => !c ? '' : c.wait ? '…' : c.of != null ? (short ? `${crFmt(c.v)}/${crFmt(c.of)}` : `${crFmt(c.v)} di ${crFmt(c.of)} questo mese`) : crFmt(c.v);
+  const crPill = (p) => { const t = crText(cache.cr[p]); return t ? `<span class="kx-dl-cr" style="display:inline-flex;align-items:center;gap:5px;margin-top:8px;padding:3px 10px;border-radius:999px;background:rgba(0,0,0,.25);font-size:12.5px;font-weight:700;max-width:100%">💳 Crediti: ${esc(t)}</span>` : ''; };
   const nameKey = (s) => String(s || '').trim().toLowerCase().replace(/[\s._-]+/g, '');
   const canSeeApps = () => D.role !== 'agent' || !!((D.me || {}).perms || {}).lines;
   const panelStats = (rows) => KXStats.calc(rows, {
@@ -50,12 +56,12 @@
   function panelTiles() {
     return ORDER.filter((p) => cache.panels.some((l) => l.p === p)).map((p) => {
       const s = panelStats(cache.panels.filter((l) => l.p === p));
-      return { k: `panel-${p}`, v: s.active, c: PCOL[p] || 'red', label: label(`Linee attivate su ${PANEL[p]}`, `scadono 7 g: ${s.soon} · scadute: ${s.expired}`) };
+      return { k: `panel-${p}`, v: s.active, c: PCOL[p] || 'red', label: label(`Linee attivate su ${PANEL[p]}`, `scadono 7 g: ${s.soon} · scadute: ${s.expired}`) + crPill(p) };
     });
   }
   function homeSummary() {
     const total = panelStats(cache.panels);
-    const panels = ORDER.filter((p) => cache.panels.some((l) => l.p === p)).map((p) => ({ id: p, name: PANEL[p], ...panelStats(cache.panels.filter((l) => l.p === p)) }));
+    const panels = ORDER.filter((p) => cache.panels.some((l) => l.p === p)).map((p) => ({ id: p, name: PANEL[p], ...panelStats(cache.panels.filter((l) => l.p === p)), cr: crText(cache.cr[p], true) }));
     return { total, panels, apps: cache.apps.length, canSeeApps: canSeeApps(), at: cache.at };
   }
   function appTiles() {
@@ -114,6 +120,20 @@
       canSeeApps() ? api('GET', '/admin/linked-lines').then((r) => r.items || []).catch(() => []) : Promise.resolve([])
     ]);
     cache.panels = panels || []; cache.apps = apps || []; cache.at = Date.now(); busy = false;
+    cache.cr = window.KXLinePick.credits ? window.KXLinePick.credits() : {};
+    // Atlantix: i crediti stanno nel riepilogo dell'account (lo stesso della pagina Atlantix); arrivano dopo le linee
+    if (cache.panels.some((l) => l.p === 'atx')) {
+      const at = cache.at; cache.cr.atx = { wait: true };
+      api('GET', '/admin/atx/overview').then((d) => {
+        const m = (d && d.member) || {};
+        return [true, 1, '1', 'true'].includes(m.unlimited) ? { v: '∞' } : crNum(m.credits) != null ? { v: Math.trunc(+m.credits) } : null;
+      }).catch(() => null).then((c) => {
+        if (at !== cache.at) return; // nel frattempo è ripartito il caricamento
+        if (c) cache.cr.atx = c; else delete cache.cr.atx;
+        if (root.classList.contains('on') || appView.classList.contains('on')) render(false);
+        window.dispatchEvent(new Event('kxlines:update'));
+      });
+    }
     if (dashOn || appOn) render(false);
     window.dispatchEvent(new Event('kxlines:update'));
   }

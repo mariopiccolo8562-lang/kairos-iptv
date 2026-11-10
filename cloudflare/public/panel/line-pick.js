@@ -1,5 +1,13 @@
 (() => {
-  const cache = { t: 0, items: [], busy: null };
+  const cache = { t: 0, items: [], busy: null, cr: {} };
+  /* crediti già presenti nelle risposte che si scaricano comunque (nessuna chiamata in più): WOLF nelle linee,
+     Armada/Storm nello stato. Agente Armada/Storm: crediti rimasti del mese su quelli che gli hai dato */
+  const crNum = (v) => v != null && String(v).trim() !== '' && Number.isFinite(+v) ? +v : null;
+  const crArm = (s) => {
+    if (!s) return null;
+    if (s.budget && crNum(s.budget.limit) != null) return { v: crNum(s.budget.left) || 0, of: crNum(s.budget.limit) };
+    const c = crNum(s.reseller && s.reseller.credits); return c == null ? null : { v: c };
+  };
   const dnsCache = { t: 0, rows: [] };
   const can = (k) => D.role !== 'agent' || !!(((D.me || {}).perms || {})[k]);
   const expiryTime = (v) => {
@@ -37,10 +45,11 @@
     if (cache.busy) return cache.busy;
     if (!force && Date.now() - cache.t < 180e3) return Promise.resolve(cache.items);
     cache.busy = (async () => {
-      const out = [], tasks = [];
-      if (can('wolf')) tasks.push(api('GET', '/admin/wolf/lines').then((r) => (r.lines || []).forEach((l) => add(out, 'wolf', 'WOLF', l, l.dns || r.dns))).catch(() => {}));
+      const out = [], tasks = [], cr = {};
+      if (can('wolf')) tasks.push(api('GET', '/admin/wolf/lines').then((r) => { if (crNum(r && r.credits) != null) cr.wolf = { v: crNum(r.credits) }; (r.lines || []).forEach((l) => add(out, 'wolf', 'WOLF', l, l.dns || r.dns)); }).catch(() => {}));
       for (const [p, tag] of [['armada', 'ARMADA'], ['storm', 'STORM']]) if (can(p)) {
         tasks.push(Promise.all([api('GET', `/admin/${p}/lines`).catch(() => null), api('GET', `/admin/${p}/state`).catch(() => null)]).then(([r, s]) => {
+          const c = crArm(s); if (c) cr[p] = c;
           (r && Array.isArray(r.lines) ? r.lines : []).filter((l) => D.role !== 'agent' || l.self === true).forEach((l) => add(out, p, tag, l, l.dns || l.host || (r && r.dns) || (s && s.dns)));
         }).catch(() => {}));
       }
@@ -50,7 +59,7 @@
         (Array.isArray(rows) ? rows : []).forEach((l) => add(out, 'atx', 'ATLANTIX', l, l.dns || (r && r.dns)));
       }).catch(() => {}));
       await Promise.all(tasks);
-      cache.items = out; cache.t = Date.now();
+      cache.items = out; cache.cr = cr; cache.t = Date.now();
       return out;
     })().finally(() => { cache.busy = null; });
     return cache.busy;
@@ -142,6 +151,6 @@
   }
   const linePickStyle = document.getElementById('kx-line-pick-style');
   if (linePickStyle) linePickStyle.textContent += '.kx-line-dns{margin:8px 0;padding:10px 12px;border:1px solid #705c32;border-radius:10px;background:#211d15}.kx-line-dns label{display:block;color:#f0c36a;font-size:12px;font-weight:600}.kx-line-dns .inp{margin-top:6px}';
-  window.KXLinePick = { load, find, mount, mountDns, expiryDate };
+  window.KXLinePick = { load, find, mount, mountDns, expiryDate, credits: () => ({ ...cache.cr }) };
   window.KXLineSync = { apply: syncExpiries };
 })();

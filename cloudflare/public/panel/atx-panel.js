@@ -9,6 +9,11 @@
     const sec = document.createElement('section'); sec.className = 'view'; sec.id = 'v-atx'; $('#v-dash').after(sec);
   }
   TITLES.atx = 'Pannello Atlantix';
+  if (!document.getElementById('kxAtxNoteCss')) {
+    const s = document.createElement('style'); s.id = 'kxAtxNoteCss';
+    s.textContent = '.ax-note{display:block;width:100%;min-width:150px;max-width:250px;padding:6px 10px;border:1px solid rgba(236,192,111,.3);border-radius:10px;background:rgba(236,192,111,.07);color:#ecc06f;font:inherit;font-size:12.5px;font-weight:600;line-height:1.35;text-align:left;white-space:normal;cursor:pointer;transition:background .15s}.ax-note:hover{background:rgba(236,192,111,.15)}.ax-note span{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}';
+    document.head.appendChild(s);
+  }
   const isAg = () => D.role === 'agent';
   const TABS = [['lines', 'Linee'], ['subs', 'Sub-reseller'], ['conns', 'Connessioni'], ['overview', 'Panoramica'], ['log', '📜 Registro']];
   const A = { st: null, tab: 'lines', page: 1, q: '', status: '', reseller: '', sort: '', days: 0, resellers: [], data: null, err: '', busy: false, edit: false };
@@ -45,7 +50,9 @@
       r.reseller ? esc(r.reseller) : mut,
       ];
       cells.push(
-      `<button class="btn sm" data-a="note" data-i="${i}" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.notes ? esc(r.notes) : '+ nota'}</button>`,
+      // nota leggibile: va a capo (fino a 3 righe, intera passandoci sopra) e si apre al clic. Prima stava in un pulsante
+      // centrato su una riga sola e le note lunghe venivano tagliate a destra e a sinistra («cenzo cognato paolo 01/10 0»)
+      r.notes ? `<button type="button" class="ax-note" data-a="note" data-i="${i}" title="${esc(r.notes)}"><span>📝 ${esc(r.notes)}</span></button>` : `<button class="btn sm" data-a="note" data-i="${i}">+ nota</button>`,
       `<div style="display:flex;gap:5px;flex-wrap:wrap;min-width:330px">${btn('edit', i, 'Modifica')}${btn('renew', i, 'Rinnova')}${window.KXPay && KXPay.canEdit() ? `<button class="btn sm act-pay" data-kxpay-open data-kind="line" data-panel="atx" data-ref="${esc(r.id)}" data-label="${esc(r.username)}" data-auto-line="${esc(r.id)}" data-panel-note="${esc(r.notes || '')}">💰 Pagamento</button>` : ''}${Number(r.enabled) === 0 ? btn('on', i, 'Attiva') : btn('off', i, 'Disattiva')}${m3u(r) ? btn('m3u', i, 'M3U') : ''}${window.KXMxpNew && (!window.KXMxpCan || KXMxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('mxp', i, 'MaxPlayer') : ''}${window.KXOxpNew && (!window.KXOxpCan || KXOxpCan() || isAg() && !!(((D.me || {}).perms || {}).players)) ? btn('oxp', i, 'OrbixPlay') : ''}${window.KXOrcpNew && (!isAg() || KXOrcpAgentCan()) ? btn('orcp', i, KXOrcpName()) : ''}${btn('del', i, 'Elimina')}</div>`
       );
       return tr(cells);
