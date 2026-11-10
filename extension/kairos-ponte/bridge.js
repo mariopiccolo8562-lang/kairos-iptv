@@ -46,12 +46,10 @@ async function run(myGeneration) {
       await saveStatus({ lastError: 'Non configurato' });
       return;
     }
-    let delay = failures >= 5 ? 10000 : 2000;
     try {
       const poll = await sendToKairos({ type: 'poll', ...config });
       if (!poll || !poll.ok) throw new Error(poll && poll.error || 'Collegamento a KAIROS non riuscito');
       failures = 0;
-      delay = 2000;
       await saveStatus({ lastPoll: Date.now(), lastError: '' });
       const job = poll.data && poll.data.job;
       if (job) {
@@ -84,10 +82,9 @@ async function run(myGeneration) {
       }
     } catch (error) {
       failures++;
-      delay = failures >= 5 ? 10000 : 2000;
       await saveStatus({ lastError: String(error && error.message || error).slice(0, 200) });
+      await sleep(failures >= 5 ? 10000 : 2000);
     }
-    await sleep(delay);
   }
 }
 

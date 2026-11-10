@@ -55,6 +55,7 @@ function safePath(path) {
 }
 
 export async function relayPublic(req, env, path, H) {
+  const started = Date.now();
   if (path !== '/api/relay/poll' && path !== '/api/relay/result') return null;
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (req.method !== 'POST') return corsJSON(H, { error: 'Metodo non consentito' }, 405);
@@ -66,14 +67,20 @@ export async function relayPublic(req, env, path, H) {
       await putSetting(env, 'blk:relay:seen', String(now));
       await env.DB.prepare("UPDATE relay_jobs SET state = 'failed', err = 'scaduta', done = ? WHERE state IN ('pending', 'taken') AND created < ?")
         .bind(now, now - 90).run();
-      const job = await env.DB.prepare("UPDATE relay_jobs SET state = 'taken', taken = ? WHERE id = (SELECT id FROM relay_jobs WHERE state = 'pending' ORDER BY created, id LIMIT 1) AND state = 'pending' RETURNING id, method, path, headers, body")
-        .bind(now).first();
-      return corsJSON(H, job ? {
-        job: {
-          id: job.id, method: job.method, path: job.path,
-          headers: jsonField(job.headers, {}), body: job.body,
-        },
-      } : {});
+      const deadline = started + 8000;
+      while (true) {
+        const job = await env.DB.prepare("UPDATE relay_jobs SET state = 'taken', taken = ? WHERE id = (SELECT id FROM relay_jobs WHERE state = 'pending' ORDER BY created, id LIMIT 1) AND state = 'pending' RETURNING id, method, path, headers, body")
+          .bind(nowSec()).first();
+        if (job) return corsJSON(H, {
+          job: {
+            id: job.id, method: job.method, path: job.path,
+            headers: jsonField(job.headers, {}), body: job.body,
+          },
+        });
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) return corsJSON(H, {});
+        await sleep(Math.min(500, remaining));
+      }
     }
     const id = typeof body.id === 'string' ? body.id.slice(0, 80) : '';
     if (!id) return corsJSON(H, { ok: true });
