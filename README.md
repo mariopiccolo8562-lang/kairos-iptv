@@ -590,3 +590,24 @@ Il riquadro in alto a destra del lettore, «FHD · 1080p · 50 fps», compare qu
   - `v270` (pannello): catalogo, «per tutte le app», battito e registrazione, valori non validi, voce tolta, profilo di una sola app e del singolo cliente, impronta.
   - `ui_qbox` (card del pannello in Chromium).
   - `p_qbox_pro` (interfaccia Pro).
+
+## 36. Aspetto del pannello: Futuro, Misto, Classico (10 novembre 2026)
+
+Cambia **solo la grafica** del pannello. Server, database, clienti, linee, crediti, agenti, permessi, impostazioni e attivazione restano uguali. Il file è `cloudflare/public/panel/look.js`, caricato per ultimo.
+
+- **Come si sceglie**: tocca il cerchio con l'iniziale in alto a destra → *Aspetto del pannello*. Ci sono tre scelte:
+  - **Futuro** (predefinito): barra a icone (il nome compare passandoci sopra), in alto «KAIROS» con ruolo e orologio, titoli con scritte spaziate, sfondo con aurora, griglia e stelle.
+  - **Misto**: stessi colori e stessa console, menu con le scritte, sfondo calmo.
+  - **Classico**: il pannello com'era prima, identico (verificato pixel per pixel).
+  
+  La scelta vale per il dispositivo (`localStorage` `kxLook`) e resta dopo il ricaricamento. Anche gli agenti partono da Futuro e possono cambiarla.
+- **Home, console di attivazione**: si scrive il codice della TV e si preme *Attiva*. Si apre la stessa attivazione di «Nuovo cliente», con il codice già nel suo campo; la ricerca della linea collegata ai pannelli è quella di sempre. Attorno al logo compaiono i pannelli delle linee già caricate.
+  - Sul telefono, in Futuro, c'è un grande pulsante rotondo «ATTIVA» che apre l'attivazione.
+  - La console compare solo a chi può attivare clienti. Il campo del codice compare solo a chi ha il permesso «Creare».
+- **Home, stato del servizio**:
+  - Mostra clienti attivi, online adesso e linee attive, con i numeri che il pannello ha già.
+  - *Energia crediti* mostra i crediti dei pannelli già presenti nel riepilogo delle linee.
+  - Non fa nessuna chiamata nuova al server.
+- **«Riduci movimento»** del sistema: tutte le animazioni restano ferme.
+- **Copia del pannello di prima**: ramo `backup-pannello-classico`. Per togliere tutto basta eliminare la riga `<script src="look.js">` da `index.html`.
+- **Test**: `ui_look` (35 controlli) e tutti i test UI precedenti passano anche in Futuro.
