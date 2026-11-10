@@ -74,7 +74,9 @@
     }
     if (id === 'pay') {
       const due = window.KXPay?.dueSummary?.() || { n: 0, text: '0 €' };
-      return `<div class="h4-home-metrics">${metric(due.n, 'Da pagare')}${metric(due.text, 'Totale da riscuotere')}</div>`;
+      // anche gli agenti che ti devono soldi o crediti (registro), e per l'agente quanto deve lui al fornitore: visibili subito in Home
+      const ag = !isAgent() ? window.KXPay?.agentDebtSummary?.() : null, own = isAgent() ? window.KXPay?.ownDebtText?.() : '';
+      return `<div class="h4-home-metrics">${metric(due.n, 'Da pagare')}${metric(due.text, 'Totale da riscuotere')}${ag && ag.n ? metric(ag.short || ag.text, ag.n === 1 ? 'Ti deve 1 agente' : `Ti devono ${ag.n} agenti`) : ''}${own ? metric(own, 'Devi al fornitore') : ''}</div>`;
     }
     if (id === 'ag') {
       if (isAgent()) return '';

@@ -47,6 +47,15 @@
 #lxPick .x-sw-c::before{content:'';position:absolute;left:0;top:0;bottom:0;width:20px;background:#0c172a;border-right:1px solid #1d2b42}
 #lxPick .x-sw-c::after{content:'';position:absolute;left:26px;top:9px;width:30px;height:22px;border-radius:4px;background:#101c30;border:1px solid #1d2b42;box-shadow:inset 3px 0 0 #2dd4bf}
 #lxPick p{font-size:12px;color:#8b9bb4;margin:10px 6px 2px;line-height:1.4}
+/* pulsante «Aspetto» sotto il logo, in tutti e tre gli aspetti (così si torna sempre indietro) */
+#lxStyleBtn{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:8px;margin:-8px 10px 14px;padding:8px 11px;border-radius:11px;border:1px solid #22344f;background:#0d1828;color:#c7d2e2;font:600 12.5px ${SANS};white-space:nowrap;flex:none}
+#lxStyleBtn svg{width:16px;height:16px;flex:none;color:#67e8f9}
+#lxStyleBtn .x-sv2{font-weight:700;color:#f1f5fb}
+#lxStyleBtn .x-car{margin-left:auto;width:14px;height:14px;color:#8b9bb4}
+#lxStyleBtn .x-sh{display:none}
+#lxStyleBtn:hover{border-color:#2dd4bf;color:#fff}
+#lxStyleBtn:focus-visible{outline:2px solid #22d3ee;outline-offset:2px}
+@media (min-width:701px) and (max-width:1180px){#lxStyleBtn{width:64px;flex-direction:column;gap:3px;margin:-8px auto 14px;padding:7px 0;font-size:10.5px;justify-content:center}#lxStyleBtn .x-sl,#lxStyleBtn .x-sv2,#lxStyleBtn .x-car{display:none}#lxStyleBtn .x-sh{display:block}}
 
 /* elementi propri: nascosti finché l'aspetto non è Futuro o Misto */
 #lxSky,#lxBrand,#lxHome{display:none}
@@ -187,6 +196,36 @@ html.lx .ks-strip+.pay-panel-tile{margin-top:12px}
   html.lx .wf-row>.wf-act{grid-column:1/-1;justify-content:flex-start;padding-left:82px}
 }
 
+/* pulsanti animati: si alzano e si illuminano al passaggio, si schiacciano al clic, onda di luce al tocco, lampo sui principali */
+html.lx .btn,html.lx .icb,html.lx .hubbar button,html.lx .fchip,html.lx .seg button,html.lx .pay-panel-tile,html.lx #lxStyleBtn,html.lx .avatar,html.lx #lxHome .x-mgo{transition:transform .2s cubic-bezier(.2,.8,.2,1),box-shadow .25s,background-color .2s,border-color .2s,color .2s,filter .2s}
+html.lx .btn:not(:disabled):hover,html.lx .icb:hover,html.lx .hubbar button:hover,html.lx .fchip:hover,html.lx .pay-panel-tile:hover,html.lx #lxStyleBtn:hover,html.lx #lxHome .x-mgo:hover{transform:translateY(-2px);box-shadow:0 12px 26px -14px rgba(34,211,238,.8),0 0 0 1px rgba(34,211,238,.28)}
+html.lx .btn:not(:disabled):active,html.lx .icb:active,html.lx .hubbar button:active,html.lx .fchip:active,html.lx .seg button:active,html.lx .pay-panel-tile:active,html.lx #lxStyleBtn:active,html.lx #lxHome .x-mgo:active,html.lx .avatar:active{transform:scale(.95);transition-duration:.08s}
+html.lx .btn:focus-visible,html.lx .icb:focus-visible,html.lx .hubbar button:focus-visible,html.lx .avatar:focus-visible{outline:2px solid #67e8f9;outline-offset:2px}
+html.lx .btn.pri:not(#newDev){position:relative;overflow:hidden}
+html.lx .btn.pri:not(#newDev)::after{content:'';position:absolute;top:0;bottom:0;left:-60%;width:45%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);transform:skewX(-20deg);pointer-events:none;opacity:0}
+html.lx .btn.pri:not(#newDev):hover::after{opacity:1;animation:lxSweep .8s ease-out}
+@keyframes lxSweep{from{left:-60%}to{left:130%}}
+html.lx .avatar:hover{box-shadow:0 0 0 4px rgba(34,211,238,.14),0 0 18px -2px rgba(34,211,238,.7)}
+html.lx .h4-home-icon,html.lx .h4-home-icon svg{transition:transform .35s cubic-bezier(.34,1.56,.64,1)}
+html.lx .h4-home-tile:hover .h4-home-icon{transform:translateY(-2px) scale(1.08)}
+html.lx .h4-home-tile:hover .h4-home-icon svg{transform:rotate(-8deg)}
+html.lx .h4-home-tile:active{transform:scale(.985)!important}
+html.lx #hub4side .nav svg{transition:transform .3s cubic-bezier(.34,1.56,.64,1),color .2s}
+html.lx #hub4side .nav:hover svg{transform:scale(1.14)}
+html.lx #hub4side .nav:active{transform:scale(.94)}
+html.lx #kcTab button svg{transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
+html.lx #kcTab button:active svg{transform:scale(.85)}
+html.lx #kcTab button.on svg{animation:lxPop .35s cubic-bezier(.34,1.56,.64,1)}
+@keyframes lxPop{from{transform:scale(.8)}to{transform:scale(1)}}
+html.lx-f #kcTab button.plus span.p{animation:lxBreath 3s ease-in-out infinite}
+@keyframes lxBreath{0%,100%{box-shadow:0 0 0 4px rgba(34,211,238,.08),0 12px 30px -6px rgba(34,211,238,.6)}50%{box-shadow:0 0 0 8px rgba(34,211,238,.13),0 12px 36px -4px rgba(34,211,238,.95)}}
+.x-rh{position:relative}
+.x-rbox{position:absolute;inset:0;border-radius:inherit;overflow:hidden;pointer-events:none}
+.x-rip{position:absolute;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.42),rgba(255,255,255,.12) 55%,transparent 70%);transform:scale(0);animation:lxRip .6s ease-out forwards;pointer-events:none}
+@keyframes lxRip{to{transform:scale(1);opacity:0}}
+html.lx #lxStyleBtn{background:rgba(8,14,30,.75);border-color:rgba(125,211,252,.22)}
+@media (min-width:1181px){html.lx-f #lxStyleBtn{width:64px;flex-direction:column;gap:3px;margin:-6px auto 16px;padding:7px 0;font-size:10.5px;justify-content:center;border-radius:12px}html.lx-f #lxStyleBtn .x-sl,html.lx-f #lxStyleBtn .x-sv2,html.lx-f #lxStyleBtn .x-car{display:none}html.lx-f #lxStyleBtn .x-sh{display:block}}
+
 /* Home: riquadri dei gruppi */
 html.lx #v-home .h4-home-head{display:none}
 html.lx .h4-home-tile{background:linear-gradient(160deg,var(--lx-c1),var(--lx-c2))!important;border:1px solid var(--lx-line)!important;border-radius:20px;transition:transform .3s cubic-bezier(.16,1,.3,1),box-shadow .3s,border-color .3s}
@@ -202,6 +241,27 @@ html.lx #lxHome.on{display:block;max-width:1500px;margin:0 auto 18px}
 #lxHome .x-gr h2{margin:0;font-size:clamp(22px,2.2vw,28px);font-weight:800;letter-spacing:-.01em;line-height:1.2}
 #lxHome .x-gr h2 em{font-style:normal;color:#2dd4bf}
 #lxHome .x-gr small{display:block;margin-top:4px;color:var(--mut);font-size:13px}
+#lxHome .x-money{display:flex;align-items:center;gap:12px 18px;flex-wrap:wrap;margin:0 0 16px;padding:14px 16px;border-radius:18px;background:linear-gradient(160deg,var(--lx-c1),var(--lx-c2));border:1px solid var(--lx-line)}
+#lxHome .x-mico{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;flex:none;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.38);color:#fcd34d}
+#lxHome .x-mico svg{width:22px;height:22px}
+#lxHome .x-mk{flex:none;font:700 11.5px ${MONO};letter-spacing:.2em;text-transform:uppercase;color:#fcd34d}
+#lxHome .x-mitems{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 24px;flex:1 1 320px;min-width:0;font-size:14px;color:#dbe7f7;line-height:1.4}
+#lxHome .x-mit b{color:#fde68a;font-weight:800;font-size:15px}
+#lxHome .x-mit small{color:#93a4c3;margin-left:6px;font-size:12.5px}
+#lxHome .x-mok{color:#6ee7b7;font-weight:600}
+#lxHome .x-mwait{color:#93a4c3}
+#lxHome .x-mgo{all:unset;box-sizing:border-box;cursor:pointer;flex:none;display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:12px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.42);color:#fde68a;font:700 13px ${SANS}}
+#lxHome .x-mgo svg{width:15px;height:15px}
+#lxHome .x-money.is-due{border-color:rgba(251,191,36,.35);box-shadow:0 18px 44px -34px rgba(251,191,36,.7)}
+#lxHome .x-money.is-due .x-mico{animation:lxCoin 2.8s ease-in-out infinite}
+@keyframes lxCoin{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,0)}50%{box-shadow:0 0 18px 2px rgba(251,191,36,.45)}}
+#lxHome .x-money.is-ok .x-mico{background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.35);color:#6ee7b7}
+#lxHome .x-money.is-ok .x-mk{color:#6ee7b7}
+#lxHome .x-money.is-ok .x-mgo{background:rgba(148,163,184,.08);border-color:rgba(148,163,184,.3);color:#cbd5e1}
+#lxHome .x-mit.own b{color:#fda4af}
+html.lx-m #lxHome .x-mk{font:700 15px ${SANS};letter-spacing:0;text-transform:none;color:#f1f6ff}
+html.lx-m #lxHome .x-money.is-ok .x-mk{color:#f1f6ff}
+@media (max-width:700px){#lxHome .x-money{padding:14px;gap:10px 12px}#lxHome .x-mitems{flex-basis:100%;order:3}#lxHome .x-mgo{order:4;width:100%;justify-content:center}}
 #lxHome .x-r1{display:grid;grid-template-columns:minmax(0,1.62fr) minmax(330px,1fr);gap:18px;align-items:stretch}
 #lxHome .x-r1:has(>.x-con[hidden]){grid-template-columns:minmax(0,1fr)}
 #lxHome .x-con{position:relative;box-sizing:border-box;padding:28px;border-radius:24px;display:flex;flex-wrap:wrap;gap:20px 24px;align-items:center;min-height:330px;min-width:0}
@@ -382,7 +442,8 @@ html.lx-m #hub4side .nav.on svg{color:#67e8f9!important}
 
 /* «riduci movimento»: tutto fermo */
 @media (prefers-reduced-motion:reduce){
-  #lxSky *,#lxHome *,#lxHome *::before,#lxHome *::after,html.lx #newDev::after,html.lx-f #lxHome .x-con{animation:none!important;transition:none!important}
+  #lxSky *,#lxHome *,#lxHome *::before,#lxHome *::after,html.lx #newDev::after,html.lx-f #lxHome .x-con,html.lx .btn,html.lx .btn::after,html.lx .icb,html.lx .hubbar button,html.lx .fchip,html.lx .seg button,html.lx .pay-panel-tile,html.lx .avatar,#lxStyleBtn,html.lx .h4-home-icon,html.lx .h4-home-icon svg,html.lx #hub4side .nav svg,html.lx #kcTab button svg,html.lx #kcTab button.plus span.p{animation:none!important;transition:none!important}
+  .x-rip{display:none!important}
 }
 `;
   document.head.appendChild(css);
@@ -443,6 +504,8 @@ html.lx-m #hub4side .nav.on svg{color:#67e8f9!important}
   }
 
   /* ---------------- Home: console di attivazione e stato del servizio ---------------- */
+  const ICO_COIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 9c-.7-.9-1.9-1.4-3.4-1.4-1.7 0-2.9.8-2.9 2 0 3.1 6.4 1.2 6.4 4.6 0 1.4-1.3 2.4-3.2 2.4-1.6 0-2.9-.6-3.7-1.6M12 5.5v13"/></svg>';
+  const ICO_ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
   const ICO_BOLT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>';
   const SLOTS = [[58, 46], [282, 46], [58, 224], [282, 224]];
   const FLOW = ['#34d399', '#67e8f9', '#67e8f9', '#a78bfa'];
@@ -461,6 +524,12 @@ html.lx-m #hub4side .nav.on svg{color:#67e8f9!important}
     homeBox = document.createElement('div');
     homeBox.id = 'lxHome';
     homeBox.innerHTML = `<div class="x-gr"><h2></h2><small></small></div>
+<section class="x-money" aria-label="Soldi da incassare" hidden>
+  <i class="x-mico">${ICO_COIN}</i>
+  <div class="x-mk"><span class="x-kf">Da incassare</span><span class="x-km">Soldi da incassare</span></div>
+  <div class="x-mitems"></div>
+  <button type="button" class="x-mgo">Apri Soldi ${ICO_ARROW}</button>
+</section>
 <div class="x-r1">
   <section class="x-con" aria-labelledby="lxConT">
     <i class="x-cn x-tl"></i><i class="x-cn x-tr"></i><i class="x-cn x-bl"></i><i class="x-cn x-br"></i>
@@ -515,6 +584,7 @@ html.lx-m #hub4side .nav.on svg{color:#67e8f9!important}
     q('form', homeBox).addEventListener('submit', (e) => { e.preventDefault(); startActivation(inp.value); });
     q('.x-only', homeBox).addEventListener('click', () => startActivation(''));
     q('.x-orb', homeBox).addEventListener('click', () => startActivation(''));
+    q('.x-mgo', homeBox).addEventListener('click', () => { if (window.KXHub) KXHub('pay'); });
     if (reduce()) q('.x-orbit svg', homeBox).pauseAnimations?.();
     return homeBox;
   }
@@ -565,6 +635,7 @@ html.lx-m #hub4side .nav.on svg{color:#67e8f9!important}
     const day = new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
     setHtml(q('.x-gr h2', box), `${hi}${who ? `, <em>${h(who)}</em>` : ''}`);
     setText(q('.x-gr small', box), day + (window.KXRoleTxt ? ' · ' + window.KXRoleTxt : ''));
+    paintMoney(box);
     // console: solo per chi può aprire l'attivazione; il campo del codice solo per chi attiva clienti Kairos
     const con = q('.x-con', box), code = canCode();
     con.hidden = !canWizard();
@@ -632,8 +703,44 @@ html.lx-m #hub4side .nav.on svg{color:#67e8f9!important}
     }, { lx: true });
   }
 
+  /* soldi da incassare, subito in prima pagina: clienti che devono pagare e agenti che ti devono soldi o crediti
+     (per l'agente: i suoi clienti e quanto deve lui al fornitore). Solo dati già caricati dal pannello. */
+  function paintMoney(box) {
+    const sec = q('.x-money', box), P = window.KXPay;
+    const show = !!P && !!window.KXHub && KXHub.has('pay');
+    sec.hidden = !show; if (!show) return;
+    const ready = typeof P.ready === 'function' ? P.ready() : true;
+    const due = P.dueSummary ? P.dueSummary() : { n: 0, text: '0 €', oldest: 0 };
+    const ag = !isAgent() && P.agentDebtSummary ? P.agentDebtSummary() : { n: 0 };
+    const own = isAgent() && P.ownDebtText ? P.ownDebtText() : '';
+    const items = [];
+    if (due.n) items.push(`<span class="x-mit"><b>${due.n}</b> ${due.n === 1 ? 'cliente deve pagare' : 'clienti devono pagare'} · <b>${h(due.text)}</b>${due.oldest ? `<small>il più vecchio da ${due.oldest} ${due.oldest === 1 ? 'giorno' : 'giorni'}</small>` : ''}</span>`);
+    if (ag.n) items.push(`<span class="x-mit"><b>${ag.n}</b> ${ag.n === 1 ? 'agente ti deve' : 'agenti ti devono'} <b>${h(ag.text)}</b></span>`);
+    if (own) items.push(`<span class="x-mit own">Devi pagare <b>${h(own)}</b> al tuo fornitore</span>`);
+    const st = items.length ? 'due' : ready ? 'ok' : 'wait';
+    setHtml(q('.x-mitems', sec), items.length ? items.join('') : ready ? '<span class="x-mok">✓ Nessuno ti deve soldi</span>' : '<span class="x-mwait">Controllo i pagamenti…</span>');
+    sec.classList.toggle('is-due', st === 'due'); sec.classList.toggle('is-ok', st === 'ok');
+  }
+
   /* ---------------- scelta dell'aspetto ---------------- */
-  let pick = null;
+  let pick = null, anchor = null;
+  const NAMES = { futuro: 'Futuro', misto: 'Misto', classico: 'Classico' };
+  const ICO_PAL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.7-.9 1.4-1.9l-.3-1c-.3-1 .4-2.1 1.5-2.1H17a4 4 0 0 0 4-4c0-4.9-4-9-9-9z"/><circle cx="7.5" cy="11" r="1.3"/><circle cx="10" cy="7" r="1.3"/><circle cx="15" cy="7.5" r="1.3"/></svg>';
+  /* pulsante «Aspetto» sotto il logo (anche nel Classico, così si torna sempre indietro) */
+  function styleBtn() {
+    let b = q('#lxStyleBtn');
+    const br = q('#side .brand');
+    if (!b && br) {
+      b = document.createElement('button');
+      b.type = 'button'; b.id = 'lxStyleBtn'; b.title = 'Aspetto del pannello';
+      b.setAttribute('aria-haspopup', 'dialog'); b.setAttribute('aria-expanded', 'false');
+      b.innerHTML = `${ICO_PAL}<span class="x-sl">Aspetto:</span><b class="x-sv2"></b><span class="x-sh">Stile</span><svg class="x-car" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
+      b.addEventListener('click', (e) => { e.stopPropagation(); if (pick && pick.classList.contains('on') && anchor === b) close(); else open(b); });
+      br.after(b);
+    }
+    if (b) { const t = q('.x-sv2', b); if (t.textContent !== NAMES[look]) t.textContent = NAMES[look]; b.setAttribute('aria-label', 'Aspetto del pannello: ' + NAMES[look]); }
+    return b;
+  }
   function picker() {
     if (pick) return pick;
     pick = document.createElement('div');
@@ -646,34 +753,37 @@ html.lx-m #hub4side .nav.on svg{color:#67e8f9!important}
     document.body.appendChild(pick);
     qa('[data-lx]', pick).forEach((b) => b.addEventListener('click', () => { setLook(b.dataset.lx); close(); }));
     pick.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { close(); q('#av')?.focus(); }
+      if (e.key === 'Escape') { const a = anchor; close(); (a && a.isConnected ? a : q('#av'))?.focus(); }
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const bs = qa('[data-lx]', pick), i = bs.indexOf(document.activeElement); bs[(i + (e.key === 'ArrowDown' ? 1 : bs.length - 1)) % bs.length].focus(); }
     });
-    document.addEventListener('click', (e) => { if (pick.classList.contains('on') && !pick.contains(e.target) && !e.target.closest('#av')) close(); }, true);
+    document.addEventListener('click', (e) => { if (pick.classList.contains('on') && !pick.contains(e.target) && !e.target.closest('#av,#lxStyleBtn')) close(); }, true);
     addEventListener('resize', () => { if (pick.classList.contains('on')) place(); });
     return pick;
   }
   function place() {
-    const a = q('#av'); if (!a || !pick) return;
-    const r = a.getBoundingClientRect(), w = pick.offsetWidth;
-    pick.style.top = Math.round(r.bottom + 10) + 'px';
-    pick.style.left = Math.round(Math.max(12, Math.min(innerWidth - w - 12, r.right - w))) + 'px';
+    const a = anchor && anchor.isConnected ? anchor : q('#av'); if (!a || !pick) return;
+    const r = a.getBoundingClientRect(), w = pick.offsetWidth, hh = pick.offsetHeight;
+    let top = r.bottom + 10, left = r.right - w;
+    if (a.id === 'lxStyleBtn') { if (innerWidth > 700) { left = r.right + 12; top = r.top - 8; } else left = r.left; }
+    pick.style.top = Math.round(Math.max(12, Math.min(innerHeight - hh - 12, top))) + 'px';
+    pick.style.left = Math.round(Math.max(12, Math.min(innerWidth - w - 12, left))) + 'px';
   }
-  function open() {
+  function open(from) {
+    anchor = from && from.nodeType === 1 ? from : q('#av');
     picker();
     qa('[data-lx]', pick).forEach((b) => { const on = b.dataset.lx === look; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
     pick.classList.add('on'); place();
     (q('[data-lx].on', pick) || q('[data-lx]', pick)).focus();
-    q('#av')?.setAttribute('aria-expanded', 'true');
+    anchor.setAttribute('aria-expanded', 'true');
   }
-  function close() { if (pick) pick.classList.remove('on'); q('#av')?.setAttribute('aria-expanded', 'false'); }
+  function close() { if (pick) pick.classList.remove('on'); ['#av', '#lxStyleBtn'].forEach((s) => q(s)?.setAttribute('aria-expanded', 'false')); }
   function hookAvatar() {
     const a = q('#av'); if (!a || a.dataset.lx) return;
     a.dataset.lx = '1';
     a.title = 'Aspetto del pannello'; a.setAttribute('role', 'button'); a.tabIndex = 0;
     a.setAttribute('aria-haspopup', 'dialog'); a.setAttribute('aria-expanded', 'false');
-    a.addEventListener('click', () => (pick && pick.classList.contains('on') ? close() : open()));
-    a.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    a.addEventListener('click', () => (pick && pick.classList.contains('on') && anchor === a ? close() : open(a)));
+    a.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(a); } });
   }
 
   /* ---------------- applica ---------------- */
@@ -684,7 +794,7 @@ html.lx-m #hub4side .nav.on svg{color:#67e8f9!important}
     root.classList.toggle('lx-m', look === 'misto');
     if (look !== 'classico') { fonts(); sky(); brand(); tick(); paintHome(); }
     else if (homeBox) homeBox.classList.remove('on');
-    railTitles();
+    railTitles(); styleBtn();
   }
   function setLook(v) {
     if (!LOOKS.includes(v) || v === look) return;
@@ -706,6 +816,20 @@ html.lx-m #hub4side .nav.on svg{color:#67e8f9!important}
   if (box4) new MutationObserver(() => { if (look === 'futuro') railTitles(); }).observe(box4, { subtree: true, attributes: true, attributeFilter: ['title'] });
   setInterval(tick, 1000);
   document.addEventListener('visibilitychange', tick);
+
+  /* onda di luce dove tocchi un pulsante (Futuro e Misto, mai con «riduci movimento») */
+  const RIP = '.btn,.icb,.hubbar button,.fchip,.seg button,.pay-panel-tile,.ks-tile.ks-act,.h4-home-tile,#lxHome .x-go,#lxHome .x-mgo,#lxStyleBtn,#kcTab button:not(.plus)';
+  document.addEventListener('pointerdown', (e) => {
+    if (look === 'classico' || e.button > 0 || reduce()) return;
+    const el = e.target.closest && e.target.closest(RIP); if (!el || el.disabled) return;
+    const r = el.getBoundingClientRect(); if (!r.width || !r.height) return;
+    if (getComputedStyle(el).position === 'static') el.classList.add('x-rh');
+    const d = Math.max(r.width, r.height) * 2.2, box = document.createElement('span'), dot = document.createElement('span');
+    box.className = 'x-rbox'; dot.className = 'x-rip';
+    dot.style.cssText = `width:${d}px;height:${d}px;left:${e.clientX - r.left - d / 2}px;top:${e.clientY - r.top - d / 2}px`;
+    box.appendChild(dot); el.appendChild(box);
+    setTimeout(() => box.remove(), 650);
+  }, { passive: true });
 
   window.KXLook = { get: () => look, set: setLook, open };
 })();

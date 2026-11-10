@@ -595,7 +595,7 @@ Il riquadro in alto a destra del lettore, «FHD · 1080p · 50 fps», compare qu
 
 Cambia **solo la grafica** del pannello. Server, database, clienti, linee, crediti, agenti, permessi, impostazioni e attivazione restano uguali. Il file è `cloudflare/public/panel/look.js`, caricato per ultimo.
 
-- **Come si sceglie**: tocca il cerchio con l'iniziale in alto a destra → *Aspetto del pannello*. Ci sono tre scelte:
+- **Come si sceglie**: ci sono due punti, il pulsante **«Aspetto»** sotto il logo (nella barra a icone si chiama «Stile») e il cerchio con l'iniziale in alto a destra. Il pulsante sotto il logo c'è anche nel Classico, così si torna sempre indietro. Ci sono tre scelte:
   - **Futuro** (predefinito): barra a icone (il nome compare passandoci sopra), in alto «KAIROS» con ruolo e orologio, titoli con scritte spaziate, sfondo con aurora, griglia e stelle.
   - **Misto**: stessi colori e stessa console, menu con le scritte, sfondo calmo.
   - **Classico**: il pannello com'era prima, identico (verificato pixel per pixel).
@@ -608,6 +608,21 @@ Cambia **solo la grafica** del pannello. Server, database, clienti, linee, credi
   - Mostra clienti attivi, online adesso e linee attive, con i numeri che il pannello ha già.
   - *Energia crediti* mostra i crediti dei pannelli già presenti nel riepilogo delle linee.
   - Non fa nessuna chiamata nuova al server.
+- **Pulsanti animati** (Futuro e Misto):
+  - si alzano e si illuminano al passaggio del mouse e si schiacciano al clic;
+  - un'onda di luce parte dal punto toccato;
+  - un lampo attraversa i pulsanti principali;
+  - le icone dei riquadri e del menu si muovono;
+  - il pulsante centrale del telefono «respira».
+  
+  Il Classico non ha animazioni.
+- **Soldi da incassare subito in Home** (Futuro e Misto): sopra la console c'è la riga «Da incassare».
+  - Mostra i clienti che devono pagare, con il totale e il più vecchio, e gli agenti che ti devono euro o crediti, presi dal registro.
+  - Il pulsante *Apri Soldi* porta alla pagina dei pagamenti.
+  - Quando nessuno deve niente compare «✓ Nessuno ti deve soldi».
+  - L'agente vede i suoi clienti e quanto deve al fornitore.
+  
+  Anche il riquadro *Soldi* della Home, in tutti gli aspetti, mostra gli agenti che ti devono. Sono solo dati già caricati: `KXPay.agentDebtSummary`, `KXPay.ready`.
 - **«Riduci movimento»** del sistema: tutte le animazioni restano ferme.
 - **Colori dei pannelli IPTV** (solo Futuro e Misto), per un contrasto giusto. Prima i riquadri erano blocchi pieni con testo bianco su azzurro, verde acqua e arancio, con contrasto fra 2,7:1 e 4:1.
   - I riquadri delle statistiche (WOLF, Armada, Storm, Atlantix, Realott, SLT e il riepilogo «Linee attivate») ora sono in vetro scuro, con numeri ed etichette a contrasto da 7:1 in su.
@@ -617,4 +632,4 @@ Cambia **solo la grafica** del pannello. Server, database, clienti, linee, credi
   - «Nuova attivazione: App e Linea IPTV» usa un rosso più profondo (testo bianco 4,7:1 e più).
   - Nelle righe WOLF, sotto i 1920 px, i pulsanti vanno sotto i dati, così utente, scadenza e stato non si accavallano.
 - **Copia del pannello di prima**: ramo `backup-pannello-classico`. Per togliere tutto basta eliminare la riga `<script src="look.js">` da `index.html`.
-- **Test**: `ui_look` (44 controlli, anche contrasto e colori dei riquadri WOLF) e tutti i test UI precedenti passano anche in Futuro.
+- **Test**: `ui_look` (68 controlli: Classico identico, console, scelta dell'aspetto e pulsante sotto il logo, soldi in Home, pulsanti animati, contrasto dei riquadri WOLF, telefono, «riduci movimento») e tutti i test UI precedenti passano anche in Futuro.
