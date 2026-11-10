@@ -4035,6 +4035,26 @@ async function latestFor(env, s, app) {
   const a = await latestApk(env, s); return a && a.version ? { version: a.version, versionCode: a.versionCode } : null;
 }
 const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', prem: 'Kairos Premium', lite: 'Kairos Lite', xc: 'Kairos XC', plus: 'Kairos Plus', nova: 'Kairos Nova', vega: 'Kairos per Fire TV (Vega OS)' };
+/* ---------------- «🔒 Repo privati» (10 novembre 2026, solo titolare) ----------------
+   Per ogni app: quanti clienti (visti negli ultimi 30 giorni) hanno già l'ultima versione e chi manca. Quando un'app è
+   aggiornata da tutti, il suo repository GitHub si può rendere privato: i download passano da store-k.download con il token. */
+const REPO_OF = [['tv', 'kairos-store', 'Kairos Pro'], ['ktv', 'kairos-tv', 'Kairos TV'], ['prem', 'kairos-premium', 'Kairos Premium'], ['lite', 'kairos-lite', 'Kairos Lite'], ['xc', 'kairos-xc', 'Kairos XC'], ['plus', 'kairos-flutter', 'Kairos Plus'], ['nova', 'Lairos-nova', 'Kairos Nova']];
+async function repoReady(env) {
+  const s = await getSettings(env), t = now(), DAYS = 30, L = {};
+  const [rowsR] = await Promise.all([
+    env.DB.prepare('SELECT p.device_id AS id, p.ver, p.t, d.name, d.code, d.app FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ?').bind(t - DAYS * 864e5).all(),
+    ...REPO_OF.map(async ([a]) => { L[a] = await latestFor(env, s, a).catch(() => null); }),
+  ]);
+  const by = Object.fromEntries(REPO_OF.map(([a]) => [a, { total: 0, ok: 0, old: [] }]));
+  for (const r of (rowsR && rowsR.results) || []) {
+    const b = by[appOfVer(r.ver, r.app)]; if (!b) continue;
+    b.total++;
+    const lat = L[appOfVer(r.ver, r.app)];
+    if (lat && lat.version && !verBehind(r.ver, lat.version)) b.ok++;
+    else if (b.old.length < 200) b.old.push({ id: r.id, name: str(r.name || r.code, 60), code: r.code, ver: str(r.ver, 30), seen: +r.t || 0 });
+  }
+  return { days: DAYS, token: !!ghTok(env), t, apps: REPO_OF.map(([a, repo, name]) => { const b = by[a]; b.old.sort((x, y) => y.seen - x.seen); return { app: a, repo, name, latest: (L[a] && L[a].version) || '', total: b.total, ok: b.ok, old: b.old }; }) };
+}
 
 /* ====================================================================== */
 /* Controllo remoto delle app                                              */
@@ -6652,6 +6672,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
 
   /* ---------- utenti online ---------- */
   if (path === '/presence' && m === 'GET') return json(await adminPresence(env));
+  /* ---------- «🔒 Repo privati»: chi deve ancora aggiornare le app (solo titolare) ---------- */
+  if (path === '/repo-ready' && m === 'GET') { if (!ses || ses.agent) throw new HttpErr(403, 'Riservato al titolare'); return json(await repoReady(env)); }
   /* ---------- «Eventi ora» ---------- */
   if (path === '/events' && m === 'GET') return json(await panelEvents(env, ctx));
   if (path === '/events/chans' && m === 'GET') return json(await eventsChans(env));

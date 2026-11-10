@@ -951,3 +951,14 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
   - la MotoGP conta 4 richieste nel limite di 40 per giro.
 - **Chi**: il titolare; gli agenti solo con il permesso nuovo **«Eventi ora»**, spento per tutti.
 - **Test**: `srv_events` (18 controlli sul server), `ui_events` (27).
+
+## 52. «🔒 Repo privati» nella Home, solo per il titolare (10 novembre 2026)
+
+- **Cosa**: promemoria per rendere privati i repository GitHub delle app (`repo-ready.js`, `GET /admin/repo-ready`, solo titolare).
+- **Per ogni app**: quanti clienti visti negli ultimi 30 giorni hanno già l'ultima versione, con la barra, e **«Chi manca»** (nome, codice, versione, ultimo accesso; clic → la sua scheda).
+  - Repository: Kairos Pro → kairos-store (lì c'è il suo APK), Kairos TV → kairos-tv, Premium → kairos-premium, Lite → kairos-lite, XC → kairos-xc, Plus → kairos-flutter, Nova → Lairos-nova.
+  - Quando un'app è aggiornata da tutti: **«✅ Ora puoi rendere privato …»**.
+- **Token**: in alto lo stato di `GH_RELEASES_TOKEN`. Senza token, con un repo privato, store-k.download non legge più gli APK.
+- **Passi**: token e cambio di visibilità, nella parte che si apre. Nota sui minuti: 2.000 al mese gratis per tutti i repo privati insieme; il pannello per ultimo.
+- **«Riduci»** lascia solo il titolo (resta ridotto); gli agenti non lo vedono e il server glielo nega.
+- **Test**: `ui_repo_ready` (13 controlli).
