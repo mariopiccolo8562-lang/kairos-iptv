@@ -4049,12 +4049,17 @@ async function latestFor(env, s, app) {
 const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', prem: 'Kairos Premium', lite: 'Kairos Lite', xc: 'Kairos XC', plus: 'Kairos Plus', nova: 'Kairos Nova', vega: 'Kairos per Fire TV (Vega OS)' };
 /* ---------------- «🔒 Repo privati» (10 novembre 2026, solo titolare) ----------------
    Per ogni app: quanti clienti (visti negli ultimi 30 giorni) hanno già l'ultima versione e chi manca. Quando un'app è
-   aggiornata da tutti, il suo repository GitHub si può rendere privato: i download passano da store-k.download con il token. */
+   aggiornata da tutti, il suo repository GitHub si può rendere privato: i download passano da store-k.download con il token.
+   Il Kairos Store sta nello stesso repository della Pro (kairos-store): la sua riga conta gli store visti negli ultimi 30
+   giorni con la versione che hanno mandato all'apertura (store_seen; «web» = browser, non conta). Gli store più vecchi della
+   1.0.132 si aggiornano solo dalle release di GitHub: kairos-store si può chiudere quando sono pronte tutte e due le righe. */
 const REPO_OF = [['tv', 'kairos-store', 'Kairos Pro'], ['ktv', 'kairos-tv', 'Kairos TV'], ['prem', 'kairos-premium', 'Kairos Premium'], ['lite', 'kairos-lite', 'Kairos Lite'], ['xc', 'kairos-xc', 'Kairos XC'], ['plus', 'kairos-flutter', 'Kairos Plus'], ['nova', 'Lairos-nova', 'Kairos Nova']];
 async function repoReady(env) {
-  const s = await getSettings(env), t = now(), DAYS = 30, L = {};
-  const [rowsR] = await Promise.all([
-    env.DB.prepare('SELECT p.device_id AS id, p.ver, p.t, d.name, d.code, d.app FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ?').bind(t - DAYS * 864e5).all(),
+  const s = await getSettings(env), t = now(), DAYS = 30, L = {}, since = t - DAYS * 864e5;
+  const [rowsR, storeR, storeL] = await Promise.all([
+    env.DB.prepare('SELECT p.device_id AS id, p.ver, p.t, d.name, d.code, d.app FROM presence p JOIN devices d ON d.id = p.device_id WHERE p.t > ?').bind(since).all(),
+    env.DB.prepare("SELECT device, country, version, last_seen FROM store_seen WHERE last_seen > ? AND version <> '' AND version <> 'web' ORDER BY last_seen DESC LIMIT 5000").bind(since).all().catch(() => null),
+    dlFeed(env, 'store').catch(() => null),
     ...REPO_OF.map(async ([a]) => { L[a] = await latestFor(env, s, a).catch(() => null); }),
   ]);
   const by = Object.fromEntries(REPO_OF.map(([a]) => [a, { total: 0, ok: 0, old: [] }]));
@@ -4065,7 +4070,16 @@ async function repoReady(env) {
     if (lat && lat.version && !verBehind(r.ver, lat.version)) b.ok++;
     else if (b.old.length < 200) b.old.push({ id: r.id, name: str(r.name || r.code, 60), code: r.code, ver: str(r.ver, 30), seen: +r.t || 0 });
   }
-  return { days: DAYS, token: !!ghTok(env), t, apps: REPO_OF.map(([a, repo, name]) => { const b = by[a]; b.old.sort((x, y) => y.seen - x.seen); return { app: a, repo, name, latest: (L[a] && L[a].version) || '', total: b.total, ok: b.ok, old: b.old }; }) };
+  const apps = REPO_OF.map(([a, repo, name]) => { const b = by[a]; b.old.sort((x, y) => y.seen - x.seen); return { app: a, repo, name, latest: (L[a] && L[a].version) || '', total: b.total, ok: b.ok, old: b.old }; });
+  // Kairos Store: gli store (non i clienti) con la loro versione; nessuna scheda da aprire, solo modello e paese
+  const sl = storeL && storeL.version ? String(storeL.version) : '', st = { total: 0, ok: 0, old: [] };
+  for (const r of (storeR && storeR.results) || []) {
+    st.total++;
+    if (sl && !verBehind(r.version, sl)) st.ok++;
+    else if (st.old.length < 200) st.old.push({ id: '', name: str(r.device, 60) || 'Store', code: str(r.country, 4), ver: str(r.version, 30), seen: +r.last_seen || 0 });
+  }
+  apps.splice(apps.findIndex((x) => x.app === 'tv') + 1, 0, { app: 'store', repo: 'kairos-store', name: 'Kairos Store', latest: sl, total: st.total, ok: st.ok, old: st.old, store: true });
+  return { days: DAYS, token: !!ghTok(env), t, apps };
 }
 
 /* ====================================================================== */

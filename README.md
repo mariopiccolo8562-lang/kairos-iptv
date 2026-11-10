@@ -958,10 +958,12 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
 - **Per ogni app**: quanti clienti visti negli ultimi 30 giorni hanno già l'ultima versione, con la barra, e **«Chi manca»** (nome, codice, versione, ultimo accesso; clic → la sua scheda).
   - Repository: Kairos Pro → kairos-store (lì c'è il suo APK), Kairos TV → kairos-tv, Premium → kairos-premium, Lite → kairos-lite, XC → kairos-xc, Plus → kairos-flutter, Nova → Lairos-nova.
   - Quando un'app è aggiornata da tutti: **«✅ Ora puoi rendere privato …»**.
+  - **Kairos Store** (aggiunto il 10 novembre): riga a parte, subito dopo la Pro, con gli store visti negli ultimi 30 giorni e la versione che mandano all'apertura (`store_seen`; i browser, «web», non contano). Chi manca: modello, paese, versione, ultima apertura (nessuna scheda da aprire). Serve perché gli store più vecchi della 1.0.132 si aggiornano solo dalle release di GitHub.
+  - Un repository con più righe (kairos-store: Pro e Store) è pronto solo quando lo sono tutte: la riga pronta dice «✅ Aggiornata da tutti · per kairos-store aspetta …».
 - **Token**: in alto lo stato di `GH_RELEASES_TOKEN`. Senza token, con un repo privato, store-k.download non legge più gli APK.
 - **Passi**: token e cambio di visibilità, nella parte che si apre. Nota sui minuti: 2.000 al mese gratis per tutti i repo privati insieme; il pannello per ultimo.
 - **«Riduci»** lascia solo il titolo (resta ridotto); gli agenti non lo vedono e il server glielo nega.
-- **Test**: `ui_repo_ready` (13 controlli).
+- **Test**: `ui_repo_ready` (19 controlli).
 
 ## 53. Aggiornamenti delle app solo dal dominio dei download, con riserve (10 novembre 2026)
 
@@ -971,6 +973,9 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
   - **Link dell'APK**: nei feed chiesti al pannello e in `/api/player/update` (Pro e le altre) il link è sul dominio dei download. Se la richiesta arriva da un dominio dei download resta su quello.
   - **Senza `DL_HOSTS`** (prove locali) resta tutto come prima.
 - **App Kotlin** (Kairos TV, Premium, XC, Lite; `UpdFeed.kt`): le basi sono `DL_BASE` (store-k.download), poi `DL_BASE2` (variabile `KAIROS_DL_BASE2` del repository, vuota finché non c'è), poi i «mirrors» ricordati (`Store.dlMirrors`), al massimo 4. Tolti `PANEL`, `UPDATE_URL_FALLBACK` e `APK_URL_FALLBACK` (GitHub).
+- **Kairos Plus e Nova** (`app_updater.dart`): stessa logica; `KAIROS_DL_BASE2` arriva con `--dart-define`, i «mirrors» restano in `dl_mirrors`. Plus 0.1.26 e Nova 1.0.25.
+- **Kairos Store** (`StoreLinks.java`, 1.0.133): pagina, `/get/store.json` e app Kairos solo dalle basi dei download (le riserve imparate valgono dall'apertura dopo); tolti il pannello e la release di GitHub. Nella pagina (`docs/index.html`) i link `/get/…` delle app Kairos sono relativi sul dominio dei download e sulle riserve, di `https://store-k.download` dal pannello, da GitHub Pages e dalla copia nell'APK.
+- **Kairos Pro**: nessuna versione nuova, l'APK arriva già dal link di `/api/player/update` (store-k.download).
 - **Quando compri il dominio di riserva**:
   1. aggiungilo a Cloudflare;
   2. va aggiunto a `routes` e a `DL_HOSTS` in `wrangler.toml` (`routes` resta su una riga);
