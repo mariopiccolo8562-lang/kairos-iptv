@@ -875,3 +875,16 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
 - **Aggiornamento**: segue il pulsante «Auto» (la pagina è nell'elenco di quelle che si rileggono da sole). Presenza KAIROS e connessioni ORCP si rileggono a ogni giro; le liste di MaxPlayer e OrbixPlay al massimo ogni 2 minuti; il controllo delle linee ha la sua cache di 90 secondi.
 - **Telefono**: barra a due colonne, riquadri 2 per riga, righe a due colonne, scheda nello schermo.
 - **Test**: `ui_appsonline` (43 controlli; «Disconnetti» e «Spegni VPN» vengono annullati e il test verifica che non parta niente).
+
+## 47. Promemoria dei pagamenti con più opzioni, decisi dal titolare; «📋 Incolla» nello store (10 novembre 2026)
+
+- **Finestra 💰 Pagamento → 🔔 Promemoria**: al posto dell'interruttore «ogni 2 giorni» ci sono **Spento · Una volta sola · Ogni giorno · Ogni 2 giorni · Ogni 3 giorni · Ogni settimana** e **Da quando**: da oggi (o «da adesso») oppure **dal giorno…** scelto, es. «paga il 15». «Una volta sola» vuole un giorno (proposto domani). Il riepilogo lo scrive per esteso («Ti ricordo ogni 3 giorni dal 20 dic 2026 finché non paga»).
+- **Dove arriva** (nel pannello): la fascia in alto mostra i clienti il cui promemoria è arrivato e che su quel browser non sono ancora comparsi (ogni cliente col suo ritmo; prima un solo avviso ogni 48 ore per tutti). In **Pagamenti** ci sono l'elenco **«🔔 Da ricordare oggi»** e, sotto ogni cliente, ogni quanto e il prossimo promemoria. Rinnovi automatici non riusciti e debito verso il fornitore restano ogni 48 ore.
+- **Solo Master → Impostazioni → «🔔 Promemoria pagamenti»** (`pay-remind.js`), si salva a ogni scelta:
+  - **Per te**: il promemoria proposto quando segni «deve pagare» (anche «Spento»). Tu hai sempre tutte le opzioni.
+  - **Per gli agenti, uguale per tutti**: interruttore generale e un interruttore per ogni opzione (una volta, ogni giorno, ogni 2, ogni 3, ogni settimana, «dal giorno…»), ognuno con «Se lo accendi / Se lo spegni». **Partono tutti spenti**; ⭐ consigliati: ogni 2 giorni, ogni settimana, «dal giorno…» (pulsante «Attiva le consigliate»). La pagina dice quanti agenti hanno il permesso «Gestire i pagamenti» e riassume cosa possono usare.
+  - **Il server controlla**: un agente non usa mai un'opzione spenta (si adatta alla prima accesa, o niente promemoria). Senza indicazioni vale quello proposto. Gli agenti non possono cambiare queste impostazioni.
+  - **Da sapere**: da ora gli agenti non hanno promemoria finché non li accendi (prima avevano sempre «ogni 2 giorni»).
+- **Database**: migrazione `0048_pay_remind.sql` (`remind_days`, `remind_from`); i promemoria già salvati restano «ogni 2 giorni».
+- **Store → App dello store**: **📋 Incolla** accanto al link dell'APK e al codice Downloader. Dal link prende solo l'indirizzo, dal codice solo le cifre, anche da un messaggio intero; se negli appunti non c'è niente di utile la casella non cambia e lo dice.
+- **Test**: `srv_pay_remind` (20 controlli sul server), `ui_pay_remind` (33).

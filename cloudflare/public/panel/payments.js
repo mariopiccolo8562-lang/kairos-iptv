@@ -3,6 +3,7 @@
   const escP = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const addMonths = (n, base = localDay()) => { const d = new Date(base + 'T00:00:00'), day = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + n); d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())); return localDay(d); }; // dal 31 +1 mese = ultimo giorno del mese dopo
+  const addDays = (n, base = localDay()) => { const d = new Date(base + 'T00:00:00'); d.setDate(d.getDate() + n); return localDay(d); };
   const amountText = (v) => v == null || v === '' ? '' : `${Number(v).toLocaleString('it-IT', { maximumFractionDigits: 2 })} €`;
   const dateText = (v) => v ? new Date(v + 'T00:00:00').toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   const effective = (r, today = localDay()) => {
@@ -58,6 +59,68 @@
   }
   const isAgent = () => typeof D !== 'undefined' && D.role === 'agent';
   const canEdit = () => !isAgent() || !!((D.me || {}).perms || {}).payments;
+  /* ---------- promemoria (10 novembre 2026): ogni quanto e da quale giorno ----------
+     -1 = spento, 0 = una volta sola, 1/2/3/7 = ogni N giorni. Il titolare ha tutte le opzioni; gli agenti solo quelle che
+     il titolare accende in Impostazioni → Promemoria pagamenti (il server le controlla comunque). */
+  const RD = [[0, 'Una volta sola'], [1, 'Ogni giorno'], [2, 'Ogni 2 giorni'], [3, 'Ogni 3 giorni'], [7, 'Ogni settimana']];
+  const RD_ALL = RD.map(([d]) => d);
+  const rdText = (d) => (d < 0 ? 'nessun promemoria' : d === 0 ? 'una volta sola' : d === 1 ? 'ogni giorno' : d === 7 ? 'ogni settimana' : `ogni ${d} giorni`);
+  function remindCfg(v) { // impostazioni salvate (titolare): { def, ag: { on, d0, d1, d2, d3, d7, from } }
+    const o = v && typeof v === 'object' ? v : {}, a = o.ag && typeof o.ag === 'object' ? o.ag : {}, d = o.def === undefined || o.def === null || o.def === '' ? NaN : Number(o.def);
+    return { def: d === -1 || RD_ALL.includes(d) ? d : 2, ag: Object.fromEntries(['on', 'd0', 'd1', 'd2', 'd3', 'd7', 'from'].map((k) => [k, a[k] === true])) };
+  }
+  /** cosa può usare chi è collegato adesso */
+  function remindOpts() {
+    if (!isAgent()) return { on: true, days: RD_ALL, from: true, def: remindCfg((typeof D !== 'undefined' && D.settings || {}).payRemind).def };
+    const p = (D.me && D.me.payRemind) || {};
+    return { on: !!p.on, days: Array.isArray(p.days) ? p.days.filter((d) => RD_ALL.includes(d)) : [], from: !!p.from, def: RD_ALL.includes(p.def) ? p.def : -1 };
+  }
+  const dn = (s) => { const [y, m, d] = String(s).split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / 864e5); };
+  const dayOf = (n) => new Date(n * 864e5).toISOString().slice(0, 10);
+  /** ogni quanto per questa riga ({ d, from } o null); per gli agenti valgono solo le opzioni accese */
+  function remindOf(r) {
+    if (!r || r.status !== 'due' || +r.remind === 0) return null;
+    let d = r.remind_days === undefined || r.remind_days === null ? 2 : +r.remind_days, from = /^\d{4}-\d{2}-\d{2}$/.test(r.remind_from || '') ? r.remind_from : '';
+    if (!RD_ALL.includes(d)) d = 2;
+    if (isAgent()) { const o = remindOpts(); if (!o.on) return null; if (!o.days.includes(d)) d = o.def >= 0 ? o.def : o.days[0]; if (!o.from) from = ''; }
+    return { d, from };
+  }
+  /* giorni di promemoria: dal giorno scelto, oppure dopo N giorni da quando deve pagare; poi ogni N giorni */
+  function remFirst(r, m) { return m.from ? dn(m.from) : dn(localDay(new Date(sinceMs(r) || Date.now()))) + (m.d || 1); }
+  function lastRemDay(r, today = localDay()) { // l'ultimo giorno di promemoria già arrivato (o null)
+    const m = remindOf(r); if (!m) return null;
+    const t = dn(today), first = remFirst(r, m);
+    if (t < first) return null;
+    return m.d === 0 ? first : first + Math.floor((t - first) / m.d) * m.d;
+  }
+  function nextRemDay(r, today = localDay()) { // il prossimo (oggi compreso), o null se «una volta sola» è già passata
+    const m = remindOf(r); if (!m) return null;
+    const t = dn(today), first = remFirst(r, m);
+    if (t <= first) return first;
+    if (m.d === 0) return null;
+    const last = first + Math.floor((t - first) / m.d) * m.d;
+    return last === t ? t : last + m.d;
+  }
+  function remindText(r) {
+    const m = remindOf(r);
+    if (!m) return isAgent() && !remindOpts().on ? '' : '🔕 nessun promemoria';
+    const t = dn(localDay()), nx = nextRemDay(r), when = nx === null ? '' : nx === t ? 'oggi' : nx === t + 1 ? 'domani' : dateText(dayOf(nx));
+    return `🔔 ${rdText(m.d)}${m.from ? ' dal ' + dateText(m.from) : ''}${m.d === 0 ? (nx === null ? ' · già ricordato' : ' · ' + when) : ' · prossimo: ' + when}`;
+  }
+  /* «visti»: su questo browser, l'ultimo giorno in cui il promemoria di ogni cliente è comparso */
+  const seenKey = () => `kx-pay-seen-${isAgent() ? 'agent-' + agentId() : 'owner'}`;
+  const seenGet = () => { try { const o = JSON.parse(localStorage.getItem(seenKey()) || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; } };
+  const seenSet = (o) => { try { localStorage.setItem(seenKey(), JSON.stringify(o)); } catch {} };
+  /** da ricordare oggi: promemoria di oggi, arrivato e non ancora visto, oppure già comparso oggi */
+  function remindToday() {
+    const seen = seenGet(), t = dn(localDay()), out = [];
+    for (const r of dueRows()) {
+      const last = lastRemDay(r); if (last === null) continue;
+      const k = rowKey(r.kind, r.panel, r.ref), sn = +seen[k] || 0;
+      if (last === t || last > sn || sn === t) out.push(r);
+    }
+    return out;
+  }
   const dispatch = () => window.dispatchEvent(new CustomEvent('kxpay:update'));
   async function loadLedger(force = false) {
     if (!force && Date.now() - ledgerCache.at < 60e3) return ledgerCache;
@@ -76,6 +139,7 @@
   const css = document.createElement('style');
   css.textContent = `.pay-badge{display:inline-flex;align-items:center;max-width:100%;width:max-content;padding:3px 8px;border-radius:999px;font-size:11px;line-height:1.35;font-weight:700;white-space:normal}.pay-badge.due{background:rgba(239,68,68,.16);border:1px solid rgba(239,68,68,.42);color:#ff9a9a}.pay-badge.paid{background:rgba(34,197,94,.13);border:1px solid rgba(34,197,94,.32);color:#79e6a0}.pay-panel-tile{display:inline-flex;align-items:center;padding:9px 13px;border-radius:11px;border:1px solid rgba(239,68,68,.45);background:rgba(239,68,68,.14);color:#ffaaaa;font-weight:700;cursor:pointer;white-space:nowrap}.kxpay-veil{position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,.68);display:grid;place-items:center;padding:14px}.kxpay-box{width:min(500px,100%);max-height:90vh;overflow:auto;background:#151923;border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 20px 80px #0009}.kxpay-box h3{margin:0 0 6px}.kxpay-tabs{display:flex;gap:8px;margin:16px 0}.kxpay-tabs button{flex:1}.kxpay-tabs .on{background:var(--pri,#367bf5);color:#fff;border-color:transparent}.kxpay-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.kxpay-grid label{display:grid;gap:5px;font-size:12px;color:var(--mut)}.kxpay-full{grid-column:1/-1}.kxpay-paid-fields{display:grid;grid-template-columns:1fr;gap:10px}.kxpay-box textarea{resize:vertical}.kxpay-actions{display:flex;justify-content:space-between;gap:8px;margin-top:18px}.kxpay-actions>span{display:flex;gap:8px}.kxpay-box .ck{margin-top:12px}.kxpay-auto{display:grid;gap:8px;margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:11px}.kxpay-switch{display:flex!important;align-items:center;gap:8px}.kxpay-summary{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:11px;font-size:13px;line-height:1.55}.kxpay-summary>div{margin-top:4px}.pay-edit{white-space:nowrap}@media(max-width:500px){.kxpay-grid{grid-template-columns:1fr}.kxpay-full{grid-column:auto}}`;
   css.textContent += `.kxpay-grid label.ck{display:flex;align-items:center;gap:8px;margin:0;padding:4px 0}.kxpay-grid label.ck input{margin:0}`;
+  css.textContent += `.kxpay-rd,.kxpay-rf{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.kxpay-rd button,.kxpay-rf button{min-height:34px;padding:0 11px;border-radius:10px;border:1px solid #80631e;background:#2c2416;color:#f5e5b8;font:inherit;font-size:13px;font-weight:700;cursor:pointer}.kxpay-rd button.on,.kxpay-rf button.on{background:#f59e0b;border-color:#fcd34d;color:#1a1204}.kxpay-rd button[data-rd="-1"].on{background:#475569;border-color:#94a3b8;color:#fff}.kxpay-rf>span{font-size:12.5px;color:#f5e5b8cc;margin-right:2px}.kxpay-rf .inp{width:auto;max-width:170px;margin:0;min-height:34px;padding:4px 8px}.kxpay-remind small{color:#f5e5b8cc;line-height:1.4}.pay-rem{display:block;margin-top:3px;font-size:12px;color:#fcd34d}.pay-rem.off{color:var(--mut)}.pay-today{margin:6px 0 14px;padding:12px 14px;border-radius:12px;border:1px solid #80631e;border-left:3px solid #fbbf24;background:linear-gradient(115deg,#3b2c13,#28251d);color:#f5e5b8}.pay-today b{display:block;margin-bottom:6px}.pay-today .chips{display:flex;flex-wrap:wrap;gap:6px}.pay-today button{border:1px solid #80631e;background:#2c2416;color:#fde68a;border-radius:9px;padding:4px 9px;font:inherit;font-size:12.5px;cursor:pointer}`;
   css.textContent += `.kxpay-box{border-color:#35445c;border-radius:20px;background:linear-gradient(145deg,#171e2b,#111620)}.kxpay-box button{border-radius:11px}.kxpay-tabs{gap:9px}.kxpay-tabs button{min-height:42px;border-radius:12px;background:#202a39;color:#aebbd0;border-color:#364258}.kxpay-tabs [data-st="due"].on{background:linear-gradient(135deg,#fb923c,#ef4444);color:#fff;border-color:transparent;box-shadow:0 5px 18px #ef444433}.kxpay-tabs [data-st="paid"].on{background:linear-gradient(135deg,#22c55e,#059669);color:#fff;border-color:transparent;box-shadow:0 5px 18px #10b98133}.kxpay-field-card{padding:12px;border:1px solid #344156;border-left:3px solid #60a5fa;border-radius:13px;background:rgba(24,33,48,.78)}.kxpay-date-card{border-left-color:#60a5fa}.kxpay-amount-card{border-left-color:#fbbf24}.kxpay-note-card{border-left-color:#94a3b8}.kxpay-month-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:10px}.kxpay-month-row>label{display:grid;gap:6px}.kxpay-quick-months{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding-bottom:1px}.kxpay-quick-months button{min-width:34px;height:32px;padding:0 8px;background:#1e2b41;color:#bfdbfe;border:1px solid #3c5274}.kxpay-quick-months button.on{background:#2563eb;color:#fff;border-color:#60a5fa}.kxpay-amount-input{display:flex;overflow:hidden;border:1px solid #46546a;border-radius:10px;background:#10151e}.kxpay-amount-input>span{display:grid;place-items:center;min-width:40px;background:#283244;color:#fcd34d;font-weight:800;border-right:1px solid #46546a}.kxpay-amount-input input{min-width:0;flex:1;border:0!important;border-radius:0!important;background:transparent!important}.kxpay-auto{border-color:#176d72;border-left:3px solid #2dd4bf;background:linear-gradient(115deg,#0d3439aa,#152431)}.kxpay-switch{position:relative;display:flex!important;align-items:center;gap:10px;cursor:pointer}.kxpay-switch input{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 44px;width:44px;height:25px;margin:0;border:1px solid #66758a!important;border-radius:999px!important;background:#394456;cursor:pointer;transition:background .18s,border-color .18s}.kxpay-switch input::before{content:"";position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;background:#e2e8f0;box-shadow:0 1px 4px #0008;transition:transform .18s}.kxpay-switch input:checked{background:#0d9488;border-color:#5eead4!important}.kxpay-switch input:checked::before{transform:translateX(19px)}.kxpay-switch input:focus-visible{outline:2px solid #5eead4;outline-offset:2px}.kxpay-summary{padding:15px;border-radius:15px;transition:background .18s,border-color .18s}.kxpay-summary.due{background:linear-gradient(120deg,#421f2a,#241923);border-color:#b94c55}.kxpay-summary.paid{background:linear-gradient(120deg,#12382f,#172a2b);border-color:#319b74}.kxpay-summary>b{font-size:14px}.kxpay-summary #kpSummaryText{font-size:15px;line-height:1.65;color:#f1f5f9}.kxpay-note-preview{display:grid;gap:5px;margin-top:11px;padding:10px 11px;border:1px solid #475569;border-radius:11px;background:#111722;color:#cbd5e1;font-size:12.5px;line-height:1.5;overflow-wrap:anywhere}.kxpay-note-preview b{color:#e2e8f0}.kxpay-actions{align-items:center;gap:10px}.kxpay-actions button{min-height:40px;padding:8px 14px;border-radius:12px}.kxpay-actions #kpDelete{color:#ff8f8f;background:transparent;border:1px solid #a94450}.kxpay-actions #kpDelete:not(:disabled):hover{background:#7f1d2b33}.kxpay-actions #kpSave.due{background:linear-gradient(135deg,#3b82f6,#2563eb);border-color:transparent;color:#fff}.kxpay-actions #kpSave.paid{background:linear-gradient(135deg,#22c55e,#059669);border-color:transparent;color:#fff}.kxpay-remind{border-color:#80631e!important;border-left:3px solid #fbbf24!important;background:linear-gradient(115deg,#3b2c13,#28251d)!important;color:#f5e5b8}@media(max-width:420px){.kxpay-veil{padding:7px}.kxpay-box{width:100%;max-height:94vh;padding:14px;border-radius:16px}.kxpay-box h3{font-size:18px}.kxpay-tabs{gap:6px;margin:13px 0}.kxpay-tabs button{min-height:40px;padding:7px 5px;font-size:12px}.kxpay-grid{grid-template-columns:1fr;gap:9px}.kxpay-month-row{grid-template-columns:1fr;gap:8px}.kxpay-quick-months{justify-content:flex-start}.kxpay-actions{flex-wrap:wrap}.kxpay-actions>span{width:100%;justify-content:flex-end}.kxpay-actions #kpDelete{margin-right:auto}.kxpay-summary #kpSummaryText{font-size:14px}.kxpay-note-preview{font-size:12px}}`;
   document.head.appendChild(css);
   const PANEL_NAMES = { wolf: 'WOLF', armada: 'Armada', storm: 'Storm', atx: 'Atlantix', ora: 'ORA', ro: 'Realott', slt: 'SLT', orcp: 'MirkoTeam', mxp: 'MaxPlayer', oxp: 'OrbixPlay' };
@@ -96,6 +160,10 @@
     load().then(async () => {
       const old = get(kind, panel, ref), status = ['due', 'paid'].includes(initialStatus) ? initialStatus : (old && old.status) || 'due';
       const row = old || {};
+      // promemoria: quello del cliente, oppure quello proposto (per gli agenti solo le opzioni accese dal titolare)
+      const ro = remindOpts(), m0 = old ? remindOf({ ...row, status: 'due' }) : null;
+      let rd = !ro.on ? -1 : old ? (m0 ? m0.d : -1) : ro.def, rf0 = ro.from && old && m0 && m0.from ? m0.from : '', rfMode = rf0 ? 'd' : '';
+      if (ro.on && rd >= 0 && !ro.days.includes(rd)) rd = ro.def;
       const supportedAuto = kind === 'device' || kind === 'line' && ['wolf', 'armada', 'storm', 'atx', 'ro', 'slt'].includes(panel);
       const canAuto = supportedAuto && (!isAgent() || !!((D.me || {}).perms || {}).autoRenew);
       const packageTarget = kind === 'line' && ['wolf', 'ro', 'slt'].includes(panel);
@@ -118,7 +186,8 @@
         <label class="kxpay-field-card kxpay-amount-card">Importo (facoltativo)<span class="kxpay-amount-input"><span>€</span><input class="inp" id="kpAmount" type="number" min="0" max="100000" step="0.01" value="${row.amount == null ? '' : escP(row.amount)}" placeholder="es. 10"></span></label>
         <label class="kxpay-full kxpay-field-card kxpay-note-card">Nota<textarea class="inp" id="kpNote" maxlength="200" rows="2" placeholder="es. Mario Rossi">${escP(row.note || '')}</textarea></label>
         ${autoControl}
-        <div class="kxpay-auto kxpay-full kxpay-remind" id="kpRemindWrap" style="${status === 'due' ? '' : 'display:none'}"><b>🔔 Promemoria</b><label class="ck kxpay-switch"><input id="kpRemind" type="checkbox"${row.remind === 0 ? '' : ' checked'}><span>Ricordamelo ogni 2 giorni finché non paga</span></label></div></div>
+        <div class="kxpay-auto kxpay-full kxpay-remind" id="kpRemindWrap" style="${status === 'due' ? '' : 'display:none'}"><b>🔔 Promemoria</b>${ro.on ? `<div class="kxpay-rd" role="radiogroup" aria-label="Ogni quanto"><button type="button" data-rd="-1">Spento</button>${RD.filter(([d]) => ro.days.includes(d)).map(([d, l]) => `<button type="button" data-rd="${d}">${l}</button>`).join('')}</div>
+          <div class="kxpay-rf" id="kpRfWrap"><span>Da quando</span><button type="button" data-rf="">${old ? 'Da adesso' : 'Da oggi'}</button>${ro.from ? `<button type="button" data-rf="d">Dal giorno…</button><input class="inp" id="kpRemFrom" type="date" value="${escP(rf0)}">` : ''}</div>` : '<small>Promemoria non attivi: li decide il titolare (Impostazioni → Promemoria pagamenti).</small>'}</div></div>
         <div class="kxpay-summary ${status}" id="kpSummary"><b>Riepilogo</b><div id="kpSummaryText"></div>${kind === 'line' ? `<div class="kxpay-note-preview"><b id="kpPanelNoteLabel"></b><span id="kpPanelNote"></span></div>` : ''}</div>
         <div class="kxpay-actions"><button type="button" class="btn danger" id="kpDelete"${old ? '' : ' disabled'}>Togli</button><span><button type="button" class="btn" id="kpCancel">Annulla</button><button type="button" class="btn pri" id="kpSave">Salva</button></span></div></div>`;
       document.body.appendChild(veil);
@@ -147,6 +216,21 @@
         const count = monthsPerRenewal && Number.isFinite(untilMs) ? Math.max(0, Math.ceil((untilMs - todayMs) / (monthsPerRenewal * 30.4375 * 864e5))) : 0;
         autoHelp.textContent = `Quando la linea scade, KAIROS la rinnova di ${period} alla volta, fino al ${until}.${monthsPerRenewal ? ` (circa ${count} rinnovi)` : ''} Usa i tuoi crediti.`;
       };
+      const remFromVal = () => { const f = $('#kpRemFrom', veil); return ro.from && rfMode === 'd' && f && /^\d{4}-\d{2}-\d{2}$/.test(f.value) ? f.value : ''; };
+      function paintRemind() {
+        $$('[data-rd]', veil).forEach((b) => { const on = +b.dataset.rd === rd; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
+        $$('[data-rf]', veil).forEach((b) => b.classList.toggle('on', b.dataset.rf === rfMode));
+        const w = $('#kpRfWrap', veil); if (w) w.style.display = rd < 0 ? 'none' : '';
+        const f = $('#kpRemFrom', veil); if (f) f.style.display = rfMode === 'd' ? '' : 'none';
+        const now0 = $('[data-rf=""]', veil); if (now0) now0.style.display = rd === 0 && ro.from ? 'none' : '';
+      }
+      function remindSummary() {
+        if (!ro.on) return 'Nessun promemoria.';
+        if (rd < 0) return 'Promemoria spento.';
+        const from = remFromVal(), fromTxt = from ? (from === localDay() ? 'da oggi' : 'dal ' + dateText(from)) : '';
+        if (rd === 0) return `Te lo ricordo una volta sola, ${from ? (from === localDay() ? 'oggi' : 'il ' + dateText(from)) : 'domani'}.`;
+        return `Ti ricordo ${rdText(rd)}${fromTxt ? ' ' + fromTxt : ''} finché non paga.`;
+      }
       const updateSummary = () => {
         const n = Number(months.value) || 0, av = $('#kpAmount', veil).value.trim(), amount = av && Number.isFinite(Number(av)) ? Number(av) : null;
         const monthText = `${n} ${n === 1 ? 'mese' : 'mesi'}`, money = amount === null ? '' : ` (${amountText(amount)})`;
@@ -154,7 +238,7 @@
         const autoMonthsValue = +($('#kpAutoMonths', veil)?.value || row.auto_months || 0), autoOptValue = $('#kpAutoOpt', veil)?.value || row.auto_opt || '';
         const autoOn = $('#kpAutoOn', veil)?.checked ?? autoOn0;
         if (curStatus === 'paid' && autoOn && supportedAuto) text += ` La linea si rinnova da sola di ${selectedAutoPeriod()} alla volta fino al ${date.value ? dateText(date.value) : '—'}. Usa i tuoi crediti.`;
-        if (curStatus === 'due') text += $('#kpRemind', veil).checked ? ' Ti ricordo ogni 2 giorni.' : ' Promemoria disattivato.';
+        if (curStatus === 'due') text += ' ' + remindSummary();
         if (kind === 'line') {
           const paidUntil = curStatus === 'paid' ? date.value || addMonths(n) : '';
           const tag = noteTag(curStatus, n, amount, paidUntil, autoOn && (autoMonthsValue > 0 || !!autoOptValue));
@@ -197,6 +281,10 @@
       });
       const autoCtl = $('#kpAutoMonths', veil) || $('#kpAutoOpt', veil);
       if (autoCtl) autoCtl.disabled = !$('#kpAutoOn', veil).checked;
+      paintRemind();
+      $$('[data-rd]', veil).forEach((b) => { b.onclick = () => { rd = +b.dataset.rd; if (rd === 0 && ro.from && !rfMode) { rfMode = 'd'; const f = $('#kpRemFrom', veil); if (f && !f.value) f.value = addDays(1); } paintRemind(); updateSummary(); }; });
+      $$('[data-rf]', veil).forEach((b) => { b.onclick = () => { rfMode = b.dataset.rf; const f = $('#kpRemFrom', veil); if (rfMode === 'd' && f && !f.value) f.value = addDays(1); paintRemind(); updateSummary(); if (rfMode === 'd' && f) f.focus(); }; });
+      $('#kpRemFrom', veil)?.addEventListener('input', () => { rfMode = 'd'; paintRemind(); updateSummary(); });
       updateSummary();
       $('#kpCancel', veil).onclick = close;
       veil.onclick = (e) => { if (e.target === veil) close(); };
@@ -227,7 +315,7 @@
           } : {};
           if (autoOn && kind === 'line' && !autoBody.autoLine) return toast('Linea non valida per il rinnovo automatico', 1);
           if (autoOn && packageTarget && !autoBody.autoOpt) return toast('Scegli il pacchetto per il rinnovo automatico', 1);
-          const result = await api('PUT', '/admin/payments', { kind, panel, ref, ownerId, label, status: curStatus, months: n, amount, note, paidUntil, remind: curStatus === 'due' ? $('#kpRemind', veil).checked : row.remind !== 0, ...autoBody });
+          const result = await api('PUT', '/admin/payments', { kind, panel, ref, ownerId, label, status: curStatus, months: n, amount, note, paidUntil, ...(curStatus === 'due' && ro.on ? { remind: rd >= 0, ...(rd >= 0 ? { remindDays: rd, remindFrom: remFromVal() } : {}) } : { remind: row.remind !== 0 }), ...autoBody });
           cache.at = 0; await load(true); close();
           if (result.panelNote?.ok && result.panelNote.where === 'panel') toast(`Nota scritta anche su ${result.panelNote.panelName}`);
           else if (result.panelNote?.ok) toast(`Nota salvata in KAIROS (${result.panelNote.panelName} non ha le note)`);
@@ -312,20 +400,29 @@
       info.textContent = r ? `${amountText(r.amount) || 'Importo non indicato'}${r.note ? ' · ' + r.note : ''}` : 'Nessun debito registrato.';
     }
   }
+  /* fascia rossa in alto: i clienti il cui promemoria è arrivato (ognuno col suo ritmo: una volta, ogni 1/2/3/7 giorni, dal
+     giorno scelto) e che su questo browser non sono ancora comparsi; rinnovi automatici non riusciti e debito verso il
+     fornitore restano ogni 48 ore come prima */
   function maybeRemind() {
-    const list = dueRows().filter((r) => r.remind !== 0);
+    const seen = seenGet(), t = dn(localDay()), fresh = [], dueKeys = new Set();
+    for (const r of dueRows()) {
+      const k = rowKey(r.kind, r.panel, r.ref); dueKeys.add(k);
+      const last = lastRemDay(r); if (last !== null && last > (+seen[k] || 0)) fresh.push({ r, k });
+    }
     const failures = rows().filter((r) => String(r.last_result || '').startsWith('Errore') && Date.now() - (+r.updated || 0) < 48 * 3600e3);
     const balance = isAgent() && ledgerCache.own && ledgerCache.own.balance;
     const debt = ledgerHasDebt(balance);
-    if (!list.length && !failures.length && !debt) { $('#kxPayBanner')?.remove(); return; }
-    const k = `kx-pay-remind-${isAgent() ? 'agent-' + agentId() : 'owner'}`;
-    let seen = 0; try { seen = +localStorage.getItem(k) || 0; } catch {}
-    if (Date.now() - seen < 48 * 3600e3) return;
-    const total = list.reduce((a, r) => a + (+r.amount || 0), 0);
-    const paymentText = debt
-      ? `Devi pagare ${ledgerPositiveText(balance)} al tuo fornitore`
-      : list.length ? `💰 ${list.length} clienti devono ancora pagare (totale ${amountText(total) || '0 €'})` : '';
-    const text = [paymentText, failures.length ? `${failures.length} rinnovi automatici non riusciti` : ''].filter(Boolean).join(' · ');
+    const k48 = `kx-pay-remind-${isAgent() ? 'agent-' + agentId() : 'owner'}`;
+    let seen48 = 0; try { seen48 = +localStorage.getItem(k48) || 0; } catch {}
+    const other = (failures.length > 0 || debt) && Date.now() - seen48 >= 48 * 3600e3;
+    if (!fresh.length && !other) { if (!dueKeys.size && !failures.length && !debt) $('#kxPayBanner')?.remove(); return; }
+    const total = fresh.reduce((a, x) => a + (+x.r.amount || 0), 0);
+    const names = fresh.slice(0, 3).map((x) => x.r.label || x.r.ref).join(', ') + (fresh.length > 3 ? ` e altri ${fresh.length - 3}` : '');
+    const text = [
+      other && debt ? `Devi pagare ${ledgerPositiveText(balance)} al tuo fornitore` : '',
+      fresh.length ? `🔔 Promemoria: ${fresh.length === 1 ? '1 cliente deve' : fresh.length + ' clienti devono'} ancora pagare (${names}${total ? ' · totale ' + (amountText(total) || '0 €') : ''})` : '',
+      other && failures.length ? `${failures.length} rinnovi automatici non riusciti` : '',
+    ].filter(Boolean).join(' · ');
     let b = $('#kxPayBanner');
     if (!b) {
       b = document.createElement('div'); b.id = 'kxPayBanner';
@@ -335,7 +432,12 @@
     b.innerHTML = `<b style="flex:1;min-width:220px">${escP(text)}</b><button class="btn sm" id="kxPayOpen">Apri Pagamenti</button><button class="icb" id="kxPayClose" aria-label="Chiudi">×</button>`;
     $('#kxPayOpen').onclick = () => { const n = $('.nav[data-v="payments"]'); if (n) n.click(); };
     $('#kxPayClose').onclick = () => b.remove();
-    try { localStorage.setItem(k, String(Date.now())); } catch {}
+    if (fresh.length) { for (const x of fresh) seen[x.k] = t; for (const k of Object.keys(seen)) if (!dueKeys.has(k)) delete seen[k]; seenSet(seen); }
+    if (other) try { localStorage.setItem(k48, String(Date.now())); } catch {}
+  }
+  function todayBox() {
+    const L = remindToday(); if (!L.length) return '';
+    return `<div class="pay-today"><b>🔔 Da ricordare oggi · ${L.length}</b><div class="chips">${L.map((r) => `<button type="button" data-today="${escP(rowKey(r.kind, r.panel, r.ref))}" title="${escP(remindText(r))}">${escP(r.label || r.ref)}${r.amount != null ? ' · ' + escP(amountText(r.amount)) : ''}</button>`).join('')}</div></div>`;
   }
   function typeText(r) { return r.kind === 'device' ? 'Cliente KAIROS' : r.kind === 'agent' ? 'Ti deve' : (r.panel || '').toUpperCase(); }
   function rowFromKey(key) { const [kind, panel, ...rest] = String(key).split('|'); return get(kind, panel, rest.join('|')); }
@@ -344,7 +446,7 @@
     return `<div class="tbl-wrap"><table class="tbl"><thead><tr>${due ? '<th>Tipo / pannello</th><th>Cliente o linea</th><th>Mesi</th><th>Importo</th><th>Da</th><th></th>' : '<th>Cliente o linea</th><th>Importo</th><th>Pagato fino al</th><th>Scadenza</th><th></th>'}</tr></thead><tbody>${list.map((r) => {
       const key = escP(rowKey(r.kind, r.panel, r.ref));
       const editable = canEdit() && (!isAgent() || r.kind !== 'agent');
-      if (due) return `<tr><td>${escP(typeText(r))}</td><td><b>${escP(r.label || r.ref)}</b>${r.note ? `<small style="display:block;margin-top:3px;color:var(--mut)">${escP(r.note)}</small>` : ''}</td><td>${+r.months || 0}</td><td>${amountText(r.amount) || '—'}</td><td>${daysSince(r)} ${daysSince(r) === 1 ? 'giorno' : 'giorni'}</td><td style="white-space:nowrap">${editable ? `<button class="btn sm pri" data-paid="${key}">Ha pagato</button> <button class="btn sm" data-remind="${key}">Togli promemoria</button>` : ''}</td></tr>`;
+      if (due) { const rt = remindText(r); return `<tr><td>${escP(typeText(r))}</td><td><b>${escP(r.label || r.ref)}</b>${r.note ? `<small style="display:block;margin-top:3px;color:var(--mut)">${escP(r.note)}</small>` : ''}${rt ? `<span class="pay-rem${remindOf(r) ? '' : ' off'}">${escP(rt)}</span>` : ''}</td><td>${+r.months || 0}</td><td>${amountText(r.amount) || '—'}</td><td>${daysSince(r)} ${daysSince(r) === 1 ? 'giorno' : 'giorni'}</td><td style="white-space:nowrap">${editable ? `<button class="btn sm pri" data-paid="${key}">Ha pagato</button> ${remindOf(r) ? `<button class="btn sm" data-remind="${key}">Togli promemoria</button>` : ''}` : ''}</td></tr>`; }
       const left = daysLeft(r.paid_until), remaining = left == null ? '—' : left === 0 ? 'oggi' : remainingText(r.paid_until);
       return `<tr><td><b>${escP(r.label || r.ref)}</b><small style="display:block;margin-top:3px;color:var(--mut)">${escP(typeText(r))}${r.note ? ' · ' + escP(r.note) : ''}</small></td><td>${amountText(r.amount) || '—'}</td><td>${escP(dateText(r.paid_until) || '—')}</td><td>${remaining}</td><td>${editable ? `<button class="btn sm" data-edit="${key}">Modifica</button>` : ''}</td></tr>`;
     }).join('')}</tbody></table></div>`;
@@ -378,7 +480,7 @@
     if (pageTab === 'agents' && !master) pageTab = 'due';
     V.innerHTML = `${debtBox}<div class="card glass"><div class="hd"><h3>💰 Pagamenti<small>Così sai sempre chi deve pagare e chi ha già pagato</small></h3></div>
       <div class="filters"><button class="fchip ${pageTab === 'due' ? 'on' : ''}" data-pt="due">Da pagare <span>${due.length}</span></button><button class="fchip ${pageTab === 'paid' ? 'on' : ''}" data-pt="paid">Pagati <span>${paid.length}</span></button>${master ? `<button class="fchip ${pageTab === 'agents' ? 'on' : ''}" data-pt="agents">Agenti <span>${ledgerCache.summary.length}</span></button>` : `<button class="fchip ${pageTab === 'ledger' ? 'on' : ''}" data-pt="ledger">Storico <span>${ledgerCache.own?.entries?.length || 0}</span></button>`}<button class="fchip ${pageTab === 'auto' ? 'on' : ''}" data-pt="auto">🔁 Rinnovi automatici <span>${autoRows.length}</span></button></div>
-      ${pageTab === 'due' ? `<div style="margin:8px 0 12px"><b>Totale da riscuotere: ${amountText(total) || '0 €'}</b></div>${table(due, true)}` : pageTab === 'paid' ? table(paid, false) : pageTab === 'auto' ? autoTable(autoRows) : master ? agentRows() : ledgerHistory(ledgerCache.own?.entries || [])}</div>`;
+      ${pageTab === 'due' ? `${todayBox()}<div style="margin:8px 0 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="flex:1">Totale da riscuotere: ${amountText(total) || '0 €'}</b>${master ? '<button class="btn sm" id="payRemSet" type="button">⚙ Promemoria: impostazioni</button>' : ''}</div>${table(due, true)}` : pageTab === 'paid' ? table(paid, false) : pageTab === 'auto' ? autoTable(autoRows) : master ? agentRows() : ledgerHistory(ledgerCache.own?.entries || [])}</div>`;
     $$('[data-pt]', V).forEach((b) => { b.onclick = () => { pageTab = b.dataset.pt; renderPage(); }; });
     $$('[data-paid]', V).forEach((b) => { b.onclick = () => { const r = rowFromKey(b.dataset.paid); if (r) open(r.kind, r.panel, r.ref, r.label, r.owner_id, 'paid'); }; });
     $$('[data-edit]', V).forEach((b) => { b.onclick = () => { const r = rowFromKey(b.dataset.edit); if (r) open(r.kind, r.panel, r.ref, r.label, r.owner_id); }; });
@@ -388,6 +490,8 @@
     $$('[data-agent-ledger-pay]', V).forEach((b) => { b.onclick = () => { const agent = (D.agents || []).find((x) => String(x.id) === b.dataset.agentLedgerPay); if (agent) promptLedgerEntry(agent, 'pay'); }; });
     $$('[data-agent-ledger-history]', V).forEach((b) => { b.onclick = () => { const agent = (D.agents || []).find((x) => String(x.id) === b.dataset.agentLedgerHistory); if (agent) openAgentLedger(agent); }; });
     $('#payLedgerHistory') && ($('#payLedgerHistory').onclick = () => { pageTab = 'ledger'; renderPage(); });
+    $('#payRemSet') && ($('#payRemSet').onclick = () => view('set-pay'));
+    $$('[data-today]', V).forEach((b) => { b.onclick = () => { const r = rowFromKey(b.dataset.today); if (r) open(r.kind, r.panel, r.ref, r.label, r.owner_id); }; });
   }
   function openOwnLedgerHistory() {
     const n = $('.nav[data-v="payments"]'); if (n) n.click();
@@ -407,7 +511,7 @@
     $('#kxAgentDebtHistory', box).onclick = openOwnLedgerHistory;
   }
   function saveDue(kind, panel, ref, label, ownerId, months = 1, amount = null, note = '') {
-    return api('PUT', '/admin/payments', { kind, panel, ref, label, ownerId, status: 'due', months, amount, note, remind: true }).then(async (r) => { cache.at = 0; await load(true); return r; });
+    return api('PUT', '/admin/payments', { kind, panel, ref, label, ownerId, status: 'due', months, amount, note }).then(async (r) => { cache.at = 0; await load(true); return r; });
   }
   function duePrompt(prefix, months = 1) {
     if (!canEdit()) return '';
@@ -462,7 +566,7 @@
   window.addEventListener('kxledger:update', renderAgentDebtDash);
   const dash = $('#v-dash'); if (dash) new MutationObserver(renderAgentDebtDash).observe(dash, { childList: true });
   Object.assign(TITLES, { payments: 'Pagamenti' });
-  window.KXPay = { bulkPayHead, bulkPayRow, bulkPayBind, markPaid, afterBulk, paidUntilFrom, load, loadLedger, ledgerHistory, get, ready: () => !!cache.at && !!ledgerCache.at, hasRows: () => cache.rows.length > 0 || !!(ledgerCache.own && ledgerCache.own.entries && ledgerCache.own.entries.length), effective, badge, open, isDue, filterDue, daysSince, amountText, dateText, remainingText, canEdit, saveDue, duePrompt, readDuePrompt, panelTile, renderPage, dueSummary: () => { const due = rows().filter((r) => r.kind !== 'agent' && r.status === 'due'), total = due.reduce((a, r) => a + (+r.amount || 0), 0); return { n: due.length, total, text: amountText(total) || '0 €', oldest: due.reduce((m, r) => Math.max(m, daysSince(r)), 0) }; }, agentDebtSummary: () => { const s = (ledgerCache.summary || []).filter((x) => +x.eur > 0 || Object.values(x.credits || {}).some((v) => +v > 0)); const eur = s.reduce((n, x) => n + Math.max(0, +x.eur || 0), 0), credits = s.reduce((n, x) => n + Object.values(x.credits || {}).reduce((m, v) => m + Math.max(0, +v || 0), 0), 0); return { n: s.length, eur, credits, text: [eur > 0 ? amountText(eur) : '', credits > 0 ? `${ledgerNumber(credits)} crediti` : ''].filter(Boolean).join(' e '), short: [eur > 0 ? amountText(eur) : '', credits > 0 ? `${ledgerNumber(credits)} cr` : ''].filter(Boolean).join(' + ') }; }, ownDebtText: () => { const balance = isAgent() && ledgerCache.own && ledgerCache.own.balance; return ledgerHasDebt(balance) ? ledgerPositiveText(balance) : ''; }, openOwnLedgerHistory };
+  window.KXPay = { remindCfg, remindOpts, remindText, remindToday, RD, bulkPayHead, bulkPayRow, bulkPayBind, markPaid, afterBulk, paidUntilFrom, load, loadLedger, ledgerHistory, get, ready: () => !!cache.at && !!ledgerCache.at, hasRows: () => cache.rows.length > 0 || !!(ledgerCache.own && ledgerCache.own.entries && ledgerCache.own.entries.length), effective, badge, open, isDue, filterDue, daysSince, amountText, dateText, remainingText, canEdit, saveDue, duePrompt, readDuePrompt, panelTile, renderPage, dueSummary: () => { const due = rows().filter((r) => r.kind !== 'agent' && r.status === 'due'), total = due.reduce((a, r) => a + (+r.amount || 0), 0); return { n: due.length, total, text: amountText(total) || '0 €', oldest: due.reduce((m, r) => Math.max(m, daysSince(r)), 0) }; }, agentDebtSummary: () => { const s = (ledgerCache.summary || []).filter((x) => +x.eur > 0 || Object.values(x.credits || {}).some((v) => +v > 0)); const eur = s.reduce((n, x) => n + Math.max(0, +x.eur || 0), 0), credits = s.reduce((n, x) => n + Object.values(x.credits || {}).reduce((m, v) => m + Math.max(0, +v || 0), 0), 0); return { n: s.length, eur, credits, text: [eur > 0 ? amountText(eur) : '', credits > 0 ? `${ledgerNumber(credits)} crediti` : ''].filter(Boolean).join(' e '), short: [eur > 0 ? amountText(eur) : '', credits > 0 ? `${ledgerNumber(credits)} cr` : ''].filter(Boolean).join(' + ') }; }, ownDebtText: () => { const balance = isAgent() && ledgerCache.own && ledgerCache.own.balance; return ledgerHasDebt(balance) ? ledgerPositiveText(balance) : ''; }, openOwnLedgerHistory };
   renderAgentDebtDash();
   document.addEventListener('click', (e) => {
     const del = e.target.closest('[data-kxpay-delete]');

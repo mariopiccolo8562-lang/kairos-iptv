@@ -52,6 +52,7 @@
 #v-stapps .sa-g3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px 14px;margin-top:10px}
 #v-stapps .sa-g2{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-top:10px}
 #v-stapps .sa-f{margin-top:10px}
+#v-stapps .sa-in{display:flex;gap:6px;align-items:center}#v-stapps .sa-in .inp{flex:1;min-width:0}#v-stapps .sa-paste{flex:none;white-space:nowrap}
 #v-stapps .inp.err{border-color:var(--bad)!important}
 #v-stapps .sa-col{display:flex;align-items:center;gap:8px}
 #v-stapps .sa-col input[type=color]{width:44px;height:38px;border:1px solid var(--line);border-radius:9px;background:transparent;padding:2px;cursor:pointer}
@@ -176,9 +177,9 @@
           <div><label>Colore del bagliore</label><div class="sa-col"><input type="color" data-f="glow" data-i="${i}" value="${esc(glowOf(a))}"${dis}><span class="mut">${esc(glowOf(a))}</span></div></div>
         </div>
         <div class="sa-f"><label>Descrizione (si vede nello store)</label><textarea class="inp" data-f="description" data-i="${i}" rows="3" maxlength="1000"${dis}>${esc(a.description || '')}</textarea></div>
-        <div class="sa-f"><label>Link diretto all'APK * (deve scaricare il file, non aprire una pagina)</label><input class="inp${a.url && !validUrl(a.url) ? ' err' : ''}" type="url" data-f="url" data-i="${i}" value="${esc(a.url || '')}" placeholder="https://…/app.apk" maxlength="500" spellcheck="false"${dis}></div>
+        <div class="sa-f"><label>Link diretto all'APK * (deve scaricare il file, non aprire una pagina)</label><div class="sa-in"><input class="inp${a.url && !validUrl(a.url) ? ' err' : ''}" type="url" data-f="url" data-i="${i}" value="${esc(a.url || '')}" placeholder="https://…/app.apk" maxlength="500" spellcheck="false"${dis}>${ro ? '' : `<button type="button" class="btn sm sa-paste" data-act="paste" data-f="url" data-i="${i}" title="Incolla il link copiato">📋 Incolla</button>`}</div></div>
         <div class="sa-g2">
-          <div><label>Codice Downloader (promemoria, non si vede nello store)</label><input class="inp" data-f="code" data-i="${i}" value="${esc(a.code || '')}" maxlength="12" inputmode="numeric" placeholder="es. 1234567"${dis}>${!ro && pc && pc !== codeOf(a) ? `<button type="button" class="sa-use" data-act="dluse" data-i="${i}">${codeOf(a) ? 'Nel pannello è' : 'Il pannello lo conosce:'} <b>${esc(pc)}</b> · usa questo</button>` : ''}</div>
+          <div><label>Codice Downloader (promemoria, non si vede nello store)</label><div class="sa-in"><input class="inp" data-f="code" data-i="${i}" value="${esc(a.code || '')}" maxlength="12" inputmode="numeric" placeholder="es. 1234567"${dis}>${ro ? '' : `<button type="button" class="btn sm sa-paste" data-act="paste" data-f="code" data-i="${i}" title="Incolla il codice copiato">📋 Incolla</button>`}</div>${!ro && pc && pc !== codeOf(a) ? `<button type="button" class="sa-use" data-act="dluse" data-i="${i}">${codeOf(a) ? 'Nel pannello è' : 'Il pannello lo conosce:'} <b>${esc(pc)}</b> · usa questo</button>` : ''}</div>
           <div><label>Nome pacchetto Android (facoltativo, per «Disinstalla»)</label><input class="inp" data-f="pkg" data-i="${i}" value="${esc(a.pkg || '')}" placeholder="com.esempio.player" maxlength="100" spellcheck="false"${dis}></div>
         </div>
         <div class="sa-icrow">
@@ -313,6 +314,17 @@
       A.splice(i, 1); S.open = -1; render(); return;
     }
     if (act === 'upload') { S.upFor = i; const fi = $('#saFile'); fi.value = ''; fi.click(); return; }
+    // «📋 Incolla»: dal link prende solo l'indirizzo, dal codice solo le cifre (anche da un messaggio intero)
+    if (act === 'paste' && A[i] && S.canSave) {
+      const f = t.dataset.f, input = V.querySelector(`[data-f="${f}"][data-i="${i}"]`);
+      let txt = '';
+      try { txt = String((await navigator.clipboard.readText()) || '').trim(); } catch { if (input) input.focus(); return toast('Il browser non mi lascia leggere gli appunti: tieni premuto nella casella e scegli «Incolla»', 1); }
+      let v = '';
+      if (f === 'url') { const m = txt.match(/https?:\/\/[^\s"'<>]+/i); v = m ? m[0].replace(/[),.;:!?»]+$/, '') : ''; if (!v) return toast('Negli appunti non c\'è un link (deve iniziare con https://)', 1); }
+      else { const m = txt.match(/\d{4,12}/); v = m ? m[0] : okCode(txt); if (!v) return toast('Negli appunti non c\'è un codice Downloader (solo cifre)', 1); }
+      if (input) { input.value = v; input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); }
+      return toast(f === 'url' ? 'Link incollato: ricordati di salvare' : `Codice ${v} incollato: ricordati di salvare`);
+    }
     if (act === 'dluse' && A[i] && S.canSave) { const c = panelCode(A[i]); if (c) { A[i].code = c; S.open = i; render(); } }
   });
 

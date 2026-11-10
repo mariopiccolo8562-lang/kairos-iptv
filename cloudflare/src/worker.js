@@ -887,6 +887,23 @@ async function llNote(env, o) {
 const llAutoOff = (env, d, src) => env.DB.prepare('DELETE FROM linked_lines WHERE device_id = ? AND source = ?').bind(d.id, src).run();
 const PAY_PANELS = new Set(['wolf', 'armada', 'storm', 'atx', 'ora', 'ro', 'slt', 'orcp', 'mxp', 'oxp']);
 const AUTO_PAY_PANELS = new Set(['wolf', 'armada', 'storm', 'atx', 'ro', 'slt']);
+/* Promemoria dei pagamenti (10 novembre 2026). remind_days: 0 = una volta sola, 1/2/3/7 = ogni N giorni; remind_from = giorno
+   da cui partono ('' = da quando deve pagare); remind = 0 spento. Impostazioni → Promemoria pagamenti (payRemind):
+   def = promemoria proposto quando si segna «deve pagare» (-1 = spento); ag = cosa possono usare gli agenti, tutto spento
+   finché il titolare non lo accende. Il server non lascia mai a un agente un'opzione spenta. */
+const PAY_REMIND_DAYS = [0, 1, 2, 3, 7];
+function payRemindCfg(s) {
+  const o = s && s.payRemind && typeof s.payRemind === 'object' && !Array.isArray(s.payRemind) ? s.payRemind : {};
+  const a = o.ag && typeof o.ag === 'object' && !Array.isArray(o.ag) ? o.ag : {};
+  const d = o.def === null || o.def === undefined || o.def === '' ? NaN : Number(o.def);
+  return { def: d === -1 || PAY_REMIND_DAYS.includes(d) ? d : 2, ag: { on: a.on === true, d0: a.d0 === true, d1: a.d1 === true, d2: a.d2 === true, d3: a.d3 === true, d7: a.d7 === true, from: a.from === true } };
+}
+/** quello che può usare un agente: frequenze accese, «dal giorno…», e quella proposta (la tua se l'hai accesa, sennò la prima accesa) */
+function payRemindAgent(s) {
+  const c = payRemindCfg(s), a = c.ag, days = a.on ? PAY_REMIND_DAYS.filter((d) => a['d' + d]) : [];
+  const def = days.includes(c.def) ? c.def : [2, 7, 3, 1, 0].find((d) => days.includes(d));
+  return { on: days.length > 0, days, from: days.length > 0 && a.from, def: def === undefined ? -1 : def };
+}
 const paymentToday = () => new Date().toISOString().slice(0, 10);
 function paymentEffective(row, today = paymentToday()) {
   if (row.status === 'paid' && row.paid_until && row.paid_until < today)
@@ -899,6 +916,7 @@ function paymentAddMonths(months, base = paymentToday()) {
   d.setUTCDate(Math.min(day, new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate())); // dal 31 gennaio +1 mese = 28/29 febbraio (prima 3 marzo)
   return d.toISOString().slice(0, 10);
 }
+const paymentAddDays = (n, base = paymentToday()) => new Date(Date.parse(base + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
 async function paymentDeviceOwner(env, id) {
   const d = await env.DB.prepare('SELECT id, parent, owner_id FROM devices WHERE id = ?').bind(id).first();
   if (!d) return null;
@@ -1263,16 +1281,30 @@ async function paymentsRoutes(req, env, who, ip, ag) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(paidUntil) || !DATE_RE.test(paidUntil)) throw new HttpErr(400, 'Data «Pagato fino al» non valida');
   }
   const label = str(b.label, 160) || (old && old.label) || ref;
-  const remind = b.remind === undefined ? (old ? +old.remind : 1) : (b.remind === true || b.remind === 1 ? 1 : 0);
+  // promemoria: interruttore, ogni quanto e da quale giorno. Senza indicazioni vale quello proposto nelle impostazioni
+  const prS = await getSettings(env), prA = ag ? payRemindAgent(prS) : null, prDef = ag ? prA.def : payRemindCfg(prS).def;
+  let remind = b.remind === undefined ? (old ? +old.remind : prDef >= 0 ? 1 : 0) : (b.remind === true || b.remind === 1 ? 1 : 0);
+  const rdIn = b.remindDays === undefined || b.remindDays === null || b.remindDays === '' ? null : Number(b.remindDays);
+  if (rdIn !== null && !PAY_REMIND_DAYS.includes(rdIn)) throw new HttpErr(400, 'Promemoria non valido: scegli una volta, ogni 1, 2, 3 o 7 giorni');
+  let remindDays = rdIn !== null ? rdIn : old && old.remind_days !== undefined && old.remind_days !== null ? +old.remind_days : prDef >= 0 ? prDef : 2;
+  let remindFrom = b.remindFrom === undefined ? String((old && old.remind_from) || '') : str(b.remindFrom, 10);
+  if (remindFrom && (!/^\d{4}-\d{2}-\d{2}$/.test(remindFrom) || !DATE_RE.test(remindFrom))) throw new HttpErr(400, 'Giorno del promemoria non valido');
+  if (prA) { // agente: solo le opzioni che il titolare ha acceso (le altre si adattano, mai oltre quello che ha deciso)
+    if (!prA.on) remind = 0;
+    else if (!prA.days.includes(remindDays)) remindDays = prA.def >= 0 ? prA.def : prA.days[0];
+    if (!prA.from) remindFrom = '';
+  }
+  if (remindDays === 0 && remind && !remindFrom) remindFrom = paymentAddDays(1); // «una volta sola» senza giorno: domani
   const t = now();
   // resta «deve pagare» (cambiano nota, importo o avviso): i giorni contano da quando deve pagare, non dall'ultima modifica
   const was = old ? paymentEffective(old) : null, since = status === 'due' && was && was.status === 'due' && +was.since > 0 ? +was.since : t;
-  await env.DB.prepare(`INSERT INTO payments (kind, panel, ref, owner_id, label, status, months, amount, note, since, paid_until, remind, updated, auto_months, auto_opt, auto_line)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  await env.DB.prepare(`INSERT INTO payments (kind, panel, ref, owner_id, label, status, months, amount, note, since, paid_until, remind, updated, auto_months, auto_opt, auto_line, remind_days, remind_from)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(kind, panel, ref) DO UPDATE SET owner_id = excluded.owner_id, label = excluded.label, status = excluded.status,
     months = excluded.months, amount = excluded.amount, note = excluded.note, since = excluded.since, paid_until = excluded.paid_until,
-    remind = excluded.remind, updated = excluded.updated, auto_months = excluded.auto_months, auto_opt = excluded.auto_opt, auto_line = excluded.auto_line`)
-    .bind(kind, panel, ref, ownerId, label, status, months, amount, note, since, paidUntil, remind, t, autoMonths, autoOpt, autoLine).run();
+    remind = excluded.remind, updated = excluded.updated, auto_months = excluded.auto_months, auto_opt = excluded.auto_opt, auto_line = excluded.auto_line,
+    remind_days = excluded.remind_days, remind_from = excluded.remind_from`)
+    .bind(kind, panel, ref, ownerId, label, status, months, amount, note, since, paidUntil, remind, t, autoMonths, autoOpt, autoLine, remindDays, remindFrom).run();
   let panelNote = null;
   if (kind === 'line') {
     const payment = { status, months, amount, note, paid_until: paidUntil, auto_months: autoMonths, auto_opt: autoOpt };
@@ -1280,7 +1312,7 @@ async function paymentsRoutes(req, env, who, ip, ag) {
   }
   const noteResult = panelNote ? ` · nota ${panelNote.ok ? panelNote.where === 'panel' ? 'scritta su ' + panelNote.panelName : 'salvata in KAIROS' : 'non scritta'}` : '';
   await log(env, 'edit', `${who}: pagamento ${status === 'due' ? 'da riscuotere' : 'segnato pagato'} (${panel || kind})${noteResult}`, ip).catch(() => {});
-  return json({ ok: true, row: paymentEffective({ kind, panel, ref, owner_id: ownerId, label, status, months, amount, note, since, paid_until: paidUntil, remind, updated: t, auto_months: autoMonths, auto_opt: autoOpt, auto_line: autoLine, last_renew: old?.last_renew || '', last_result: old?.last_result || '' }), ...(panelNote ? { panelNote } : {}) });
+  return json({ ok: true, row: paymentEffective({ kind, panel, ref, owner_id: ownerId, label, status, months, amount, note, since, paid_until: paidUntil, remind, remind_days: remindDays, remind_from: remindFrom, updated: t, auto_months: autoMonths, auto_opt: autoOpt, auto_line: autoLine, last_renew: old?.last_renew || '', last_result: old?.last_result || '' }), ...(panelNote ? { panelNote } : {}) });
 }
 const LINE_SYNC_PANELS = new Set(['wolf', 'armada', 'storm', 'atx', 'ro', 'slt']);
 function lineSyncDate(v) {
@@ -6119,7 +6151,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const { password: _pw, ...meSafe } = meOut;
     const sNames = canAg ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
     const activationCatalog = await activationApps(env, s);
-    return stateJson(req, { role: 'agent', user: A.username, me: { ...meSafe, storeCode: await sellerAgentCode(env, A), perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
+    return stateJson(req, { role: 'agent', user: A.username, me: { ...meSafe, storeCode: await sellerAgentCode(env, A), perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients, payRemind: payRemindAgent(s) }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: agList,
       activationApps: activationCatalog.filter((x) => activationAppAllowed(P, x)).map((x) => ({ key: x.key, name: x.name, aliases: activationAliases(x), enabled: activationAppEnabled(s, x), link: x.link ? x.link.url : '' })),
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { ...x, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
@@ -7020,6 +7052,16 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     if (b.aiDaily !== undefined) { const n = parseInt(b.aiDaily, 10); if (!(n >= 0 && n <= 1000)) throw new HttpErr(400, 'Domande al giorno: da 0 a 1000'); s.aiDaily = n; }
     if (b.aiProvider !== undefined) { if (!AI_PROVIDERS.includes(b.aiProvider)) throw new HttpErr(400, 'Servizio non valido'); s.aiProvider = b.aiProvider; }
     if (b.dlCodes !== undefined) s.dlCodes = cleanDlCodes(b.dlCodes);
+    if (b.payRemind !== undefined) { // Impostazioni → Promemoria pagamenti
+      const v = b.payRemind;
+      if (!v || typeof v !== 'object' || Array.isArray(v)) throw new HttpErr(400, 'Impostazioni dei promemoria non valide');
+      const d = Number(v.def);
+      if (v.def !== undefined && !(d === -1 || PAY_REMIND_DAYS.includes(d))) throw new HttpErr(400, 'Promemoria proposto non valido');
+      const a = v.ag && typeof v.ag === 'object' && !Array.isArray(v.ag) ? v.ag : {};
+      for (const [k, x] of Object.entries(a)) if (!['on', 'd0', 'd1', 'd2', 'd3', 'd7', 'from'].includes(k) || typeof x !== 'boolean') throw new HttpErr(400, 'Opzione dei promemoria non valida');
+      const cur = payRemindCfg(s);
+      s.payRemind = payRemindCfg({ payRemind: { def: v.def === undefined ? cur.def : d, ag: { ...cur.ag, ...a } } });
+    }
     if (b.storeOwnerCode !== undefined) {
       const c = sellerNorm(b.storeOwnerCode);
       if (!SELLER_RE.test(c)) throw new HttpErr(400, 'Codice venditore: da 3 a 8 lettere o cifre');
