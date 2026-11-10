@@ -307,6 +307,186 @@ export function pageStructure(html, path, status, trunc, via) {
   };
 }
 
+const BLK_USERS_PATH = '/TOmnO8fxP3rl/users.php';
+const BLK_LINES_KEY = 'blk:lines';
+const BLK_LINES_TMP_KEY = 'blk:lines:tmp';
+const BLK_MAX_PAGES = 200;
+const BLK_MAX_ROWS = 20000;
+const blkHeaderKey = (value) => String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function blkDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const validDate = (year, month, day) => {
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+      ? date.toISOString().slice(0, 10) : '';
+  };
+  let match = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T]\d{2}:\d{2}(?::\d{2})?)?$/);
+  if (match) return validDate(+match[1], +match[2], +match[3]) || raw;
+  match = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$/);
+  if (match) return validDate(+match[3], +match[2], +match[1]) || raw;
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString().slice(0, 10) : raw;
+}
+function blkTotal(html) {
+  const value = textOnly(html);
+  const match = value.match(/\b(?:total|totale)\s*[:\-]?\s*([\d.,]+)/i)
+    || value.match(/\b(?:of|di)\s+([\d.,]+)(?:\s+(?:entries|entry|voci|righe|record|elementi)\b)?/i);
+  if (!match) return null;
+  const total = Number(String(match[1]).replace(/[^\d]/g, ''));
+  return Number.isSafeInteger(total) ? total : null;
+}
+function blkPageNumber(text, tag) {
+  const value = textOnly(text);
+  if (/^\d{1,5}$/.test(value)) return +value;
+  const index = attr(tag, 'data-page');
+  if (/^\d{1,5}$/.test(index)) return +index;
+  const dtIndex = attr(tag, 'data-dt-idx');
+  return /^\d{1,5}$/.test(dtIndex) ? +dtIndex + 1 : 0;
+}
+function blkPagination(html, path, rowsOnPage) {
+  const current = new URL(path, ORIGIN);
+  const pages = {}, numbers = new Set(), direct = [], links = [], params = new Set();
+  const anchors = [...String(html || '').matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi)];
+  for (const anchor of anchors) {
+    const tag = `<a${anchor[1]}>`, href = attr(tag, 'href'), page = blkPageNumber(anchor[2], tag);
+    let url = null;
+    if (href && !/^javascript:/i.test(href)) {
+      try { url = new URL(href, ORIGIN + path); } catch {}
+    }
+    const fallback = attr(tag, 'data-href') || attr(tag, 'data-url') || attr(tag, 'data-page-url');
+    if ((!url || url.origin !== ORIGIN || url.pathname !== current.pathname || !url.search) && fallback) {
+      try { url = new URL(fallback, ORIGIN + path); } catch { url = null; }
+    }
+    const pageLink = page > 0 && page <= 10000 && (
+      /^\d+$/.test(attr(tag, 'data-page')) || /^\d+$/.test(attr(tag, 'data-dt-idx'))
+      || /^#/.test(href) || /^javascript:/i.test(href)
+      || url && url.origin === ORIGIN && url.pathname === current.pathname
+      || !href && !!fallback
+    );
+    if (pageLink) {
+      numbers.add(page);
+      if (href || fallback) links.push(href || fallback);
+    }
+    if (pageLink && url && url.origin === ORIGIN && url.pathname === current.pathname && url.search) {
+      const nextPath = `${url.pathname}${url.search}`;
+      pages[page] = nextPath;
+      direct.push({ page, url });
+      for (const key of url.searchParams.keys()) params.add(key);
+    }
+  }
+  for (const key of current.searchParams.keys()) params.add(key);
+  let pageParam = [...params].find((key) => /^(?:page|p|start|offset)$/i.test(key));
+  if (!pageParam) {
+    pageParam = [...params].find((key) => direct.some(({ url }) => /^\d+$/.test(url.searchParams.get(key) || '')));
+  }
+  if (pageParam) {
+    const template = direct.find(({ url }) => url.searchParams.has(pageParam))?.url || current;
+    for (const anchor of anchors) {
+      const tag = `<a${anchor[1]}>`, href = attr(tag, 'href');
+      const page = blkPageNumber(anchor[2], tag);
+      if (!page || page > 10000 || pages[page] || !href || (!/^#/.test(href) && !/^javascript:/i.test(href)) || !template.searchParams.has(pageParam)) continue;
+      const url = new URL(template.href);
+      const value = /^(?:start|offset)$/i.test(pageParam) && rowsOnPage > 0 ? String((page - 1) * rowsOnPage) : String(page);
+      url.searchParams.set(pageParam, value);
+      const nextPath = `${url.pathname}${url.search}`;
+      if (safePath(nextPath)) pages[page] = nextPath;
+    }
+  }
+  const safeParams = new Set(), safeHrefs = new Set();
+  const redactHref = (href) => {
+    if (/^javascript:/i.test(href)) return 'javascript:[redacted]';
+    try {
+      const url = new URL(href, ORIGIN + path);
+      if (url.origin !== ORIGIN) return '[external]';
+      if (url.pathname !== current.pathname) return '[other-path]';
+      const pathOnly = url.pathname.replace(/\d/g, 'N');
+      const keys = [...url.searchParams.keys()].map((key) => key.replace(/\d/g, 'N').replace(/[^A-Za-z0-9_.~-]/g, 'N'));
+      keys.forEach((key) => safeParams.add(key));
+      return `${pathOnly}${keys.length ? '?' + keys.map((key) => `${key}=N`).join('&') : ''}`;
+    } catch { return '#'; }
+  };
+  for (const href of links.slice(0, 40)) safeHrefs.add(redactHref(href));
+  const paginationNumbers = [...numbers].sort((a, b) => a - b);
+  return {
+    pages, numbers: paginationNumbers,
+    shape: { params: [...safeParams].slice(0, 20), hrefs: [...safeHrefs].slice(0, 40) },
+  };
+}
+export function blkUsersPage(html, path = BLK_USERS_PATH) {
+  let tableHtml = '', headerCells = [], bodyRows = [];
+  for (const table of String(html || '').matchAll(/<table\b[^>]*>([\s\S]*?)<\/table\s*>/gi)) {
+    const content = table[1], allRows = [...content.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)];
+    const headRows = [...((content.match(/<thead\b[^>]*>([\s\S]*?)<\/thead\s*>/i) || [])[1] || '').matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)];
+    const headerRow = headRows[0] || allRows.find((row) => /<th\b/i.test(row[1]));
+    if (!headerRow) continue;
+    const cells = [...headerRow[1].matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]\s*>/gi)];
+    const headers = cells.map((cell) => blkHeaderKey(textOnly(cell[1])));
+    if (!headers.includes('username') || !headers.includes('scadenza')) continue;
+    tableHtml = content; headerCells = headers;
+    const tbody = (content.match(/<tbody\b[^>]*>([\s\S]*?)<\/tbody\s*>/i) || [])[1];
+    bodyRows = tbody != null
+      ? [...tbody.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)]
+      : allRows.filter((row) => row !== headerRow);
+    break;
+  }
+  const aliases = {
+    id: ['id'], username: ['username', 'user'], password: ['password', 'pass'], reseller: ['reseller'],
+    status: ['stato', 'status'], online: ['online'], test: ['test'],
+    created: ['creazione', 'created', 'creation'], expires: ['scadenza', 'expires', 'expiry'],
+    active: ['attive', 'active'], maxConn: ['maxconn', 'maxconnections'], lastConn: ['ultimaconnessione', 'lastconn', 'lastconnection'],
+  };
+  const columns = Object.fromEntries(Object.entries(aliases).map(([key, names]) => [key, headerCells.findIndex((name) => names.includes(name))]));
+  const rows = [];
+  for (const row of bodyRows) {
+    const cells = [...row[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]\s*>/gi)].map((cell) => cell[1]);
+    if (!cells.length) continue;
+    const get = (key) => {
+      const index = columns[key], htmlCell = index >= 0 ? cells[index] || '' : '';
+      let value = textOnly(htmlCell);
+      if (!value && ['status', 'online', 'test'].includes(key)) {
+        value = [...htmlCell.matchAll(/<[a-z][^>]*>/gi)].map((tag) => attr(tag[0], 'title') || attr(tag[0], 'alt')).filter(Boolean).join(' ');
+      }
+      return value;
+    };
+    const item = {
+      id: get('id'), username: get('username'), password: get('password'), reseller: get('reseller'),
+      status: get('status'), online: get('online'), test: get('test'), created: blkDate(get('created')),
+      expires: blkDate(get('expires')), active: get('active'), maxConn: get('maxConn'), lastConn: get('lastConn'),
+    };
+    if (item.username) rows.push(item);
+  }
+  const pagination = blkPagination(html, path, rows.length);
+  const result = { rows, pages: pagination.pages };
+  const total = blkTotal(html);
+  if (total != null) result.total = total;
+  return result;
+}
+function blkDeduplicate(rows, incoming) {
+  const ids = new Set(), usernames = new Set(), result = [...rows];
+  for (const row of result) {
+    if (row.id) ids.add(String(row.id));
+    if (row.username) usernames.add(String(row.username).trim().toLowerCase());
+  }
+  for (const row of incoming) {
+    const id = String(row.id || ''), username = String(row.username || '').trim().toLowerCase();
+    if (!username || id && ids.has(id) || usernames.has(username)) continue;
+    result.push(row);
+    if (id) ids.add(id);
+    usernames.add(username);
+  }
+  return result;
+}
+function blkSafeRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    id: String(row && row.id || ''), username: String(row && row.username || ''), password: String(row && row.password || ''),
+    reseller: String(row && (row.reseller ?? row.owner) || ''), status: String(row && row.status || ''),
+    online: String(row && row.online || ''), test: String(row && row.test || ''), created: blkDate(row && row.created),
+    expires: blkDate(row && (row.expires || row.exp)), active: String(row && row.active != null ? row.active : row && row.conns != null ? row.conns : ''),
+    maxConn: String(row && row.maxConn != null ? row.maxConn : ''), lastConn: String(row && (row.lastConn || row.last_conn) || ''),
+  })).filter((row) => row.username).slice(0, BLK_MAX_ROWS);
+}
+
 export async function blkRoutes(req, env, path, who, ip, H) {
   if (!path.startsWith('/blk/')) return null;
   const method = req.method;
@@ -331,6 +511,64 @@ export async function blkRoutes(req, env, path, who, ip, H) {
     await H.log(env, 'edit', `${who}: scollegato il ponte Black IPTV`, ip).catch(() => {});
     return H.json({ ok: true });
   }
+  if (path === '/blk/lines/sync' && method === 'POST') {
+    const body = await H.readJSON(req, 8192), hasPath = Object.prototype.hasOwnProperty.call(body, 'path');
+    let requestPath = BLK_USERS_PATH, stage = { rows: [], pages: 0, total: null, next: null };
+    if (hasPath) {
+      if (typeof body.path !== 'string' || !safePath(body.path)) throw new H.HttpErr(400, 'Percorso Black IPTV non valido');
+      let url;
+      try { url = new URL(body.path, ORIGIN); } catch { throw new H.HttpErr(400, 'Percorso Black IPTV non valido'); }
+      if (url.origin !== ORIGIN || url.pathname !== BLK_USERS_PATH) throw new H.HttpErr(400, 'Percorso Black IPTV non valido');
+      requestPath = `${url.pathname}${url.search}`;
+      const saved = await setting(env, BLK_LINES_TMP_KEY);
+      try { stage = saved ? await H.unseal(env, saved) : null; } catch { stage = null; }
+      if (!stage || !Array.isArray(stage.rows) || stage.next !== requestPath) throw new H.HttpErr(409, 'La sincronizzazione Black è scaduta: riparti dalla prima pagina');
+    } else await deleteSetting(env, BLK_LINES_TMP_KEY);
+    const page = (+stage.pages || 0) + 1;
+    if (page > BLK_MAX_PAGES) throw new H.HttpErr(413, 'Elenco Black oltre il limite di 200 pagine');
+    const response = await relayFetch(env, H, {
+      path: requestPath, headers: { 'X-Kairos-Render': 'iframe' }, timeout: 45000, label: 'Lettura linee Black IPTV',
+    });
+    if (response.status < 200 || response.status >= 400) throw new H.HttpErr(502, `Black IPTV ha risposto HTTP ${response.status}`);
+    const parsed = blkUsersPage(response.txt, requestPath);
+    const pagination = blkPagination(response.txt, requestPath, parsed.rows.length);
+    stage.rows = blkDeduplicate(stage.rows || [], parsed.rows);
+    if (stage.rows.length > BLK_MAX_ROWS) throw new H.HttpErr(413, 'Elenco Black oltre il limite di 20000 linee');
+    stage.pages = page;
+    stage.total = parsed.total ?? stage.total ?? null;
+    const next = pagination.pages[page + 1] || null;
+    const hasLaterPage = pagination.numbers.some((n) => n > page);
+    const paginationUnknown = !next && hasLaterPage;
+    const result = { page, rows: parsed.rows.length, next, collected: stage.rows.length, total: stage.total };
+    if (paginationUnknown) {
+      result.paginationUnknown = true;
+      result.paginationShape = pagination.shape;
+    }
+    if (next) {
+      if (page >= BLK_MAX_PAGES) throw new H.HttpErr(413, 'Elenco Black oltre il limite di 200 pagine');
+      stage.next = next;
+      await putSetting(env, BLK_LINES_TMP_KEY, await H.seal(env, stage));
+    } else {
+      await putSetting(env, BLK_LINES_KEY, await H.seal(env, { rows: stage.rows, updated: nowSec(), pages: stage.pages }));
+      await deleteSetting(env, BLK_LINES_TMP_KEY);
+      await H.log(env, 'edit', `Linee Black IPTV sincronizzate: ${stage.rows.length} linee in ${stage.pages} pagine`, ip).catch(() => {});
+    }
+    return H.json(result);
+  }
+  if (path === '/blk/lines' && method === 'GET') {
+    let saved = null;
+    try {
+      const value = await setting(env, BLK_LINES_KEY);
+      saved = value ? await H.unseal(env, value) : null;
+    } catch {}
+    const data = saved && typeof saved === 'object' ? saved : {};
+    const dns = H.dnsList ? await H.dnsList(env) : [];
+    const blackDns = (Array.isArray(dns) ? dns : []).find((row) => String(row && row.name || '').trim().toLowerCase() === 'black');
+    return H.json({
+      rows: blkSafeRows(data.rows), updated: Number(data.updated || data.t) || 0,
+      dns: String(blackDns && blackDns.host || ''),
+    });
+  }
   if (path === '/blk/probe' && method === 'POST') {
     const body = await H.readJSON(req, 32768);
     const target = typeof body.path === 'string' ? body.path : '';
@@ -352,6 +590,6 @@ export async function blkRoutes(req, env, path, who, ip, H) {
     await H.log(env, 'edit', `${who}: controllo struttura pagina Black IPTV (HTTP ${result.status})`, ip).catch(() => {});
     return H.json(summary);
   }
-  if (path === '/blk/state' || path === '/blk/token' || path === '/blk/probe') throw new H.HttpErr(405, 'Metodo non consentito');
+  if (path === '/blk/state' || path === '/blk/token' || path === '/blk/probe' || path === '/blk/lines' || path === '/blk/lines/sync') throw new H.HttpErr(405, 'Metodo non consentito');
   return null;
 }

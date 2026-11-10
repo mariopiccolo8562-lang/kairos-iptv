@@ -104,7 +104,7 @@ async function readJSON(req, max = 64 * 1024) {
 }
 class HttpErr extends Error { constructor(status, msg, extra) { super(msg); this.status = status; this.extra = extra; } }
 // strumenti passati al modulo WOLF (src/wolf.js)
-const WOLF_H = { seal: (...a) => seal(...a), unseal: (...a) => unseal(...a), HttpErr, json, readJSON, str, log: (...a) => log(...a), note: (...a) => llNote(...a), pid: () => b64url(rand(6)), vpnMark: (env, rows, fields) => vpnMark(env, rows, fields, WOLF_H), notifyOwnersText: (env, text) => notifyOwnersText(env, notifyH(env), text), plsChanged: () => { srcMem.map = null; } };
+const WOLF_H = { seal: (...a) => seal(...a), unseal: (...a) => unseal(...a), HttpErr, json, readJSON, str, log: (...a) => log(...a), note: (...a) => llNote(...a), dnsList: (...a) => dnsList(...a), pid: () => b64url(rand(6)), vpnMark: (env, rows, fields) => vpnMark(env, rows, fields, WOLF_H), notifyOwnersText: (env, text) => notifyOwnersText(env, notifyH(env), text), plsChanged: () => { srcMem.map = null; } };
 const AGM_MSG = 'Pannello in manutenzione: torniamo operativi a breve. Riprova tra poco.';
 
 /* ---------------- password (PBKDF2-SHA256) ---------------- */
