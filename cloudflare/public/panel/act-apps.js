@@ -1,11 +1,11 @@
 (() => {
   const palette = ['#2563eb', '#06b6d4', '#ec4899', '#22c55e', '#8b5cf6', '#f97316', '#14b8a6', '#eab308', '#6366f1', '#ef4444'];
-  const targetColor = (key) => ({ kairos: '#2563eb', max: '#8b5cf6', orbix: '#f97316', orcp: '#0d9488' })[key] || (() => {
+  const targetColor = (key) => ({ kairos: '#2563eb', max: '#8b5cf6', orbix: '#f97316', nanomid: '#a855f7', orcp: '#0d9488' })[key] || (() => {
     let hash = 0;
     for (const char of String(key)) hash = (hash * 31 + char.charCodeAt(0)) | 0;
     return palette[Math.abs(hash) % palette.length];
   })();
-  const targetIcon = (key, label) => ({ kairos: 'K', max: 'M', orbix: 'O', orcp: 'MT' })[key] || String(label || '').trim().split(/\s+/).slice(0, 2).map((x) => x[0] || '').join('').toUpperCase();
+  const targetIcon = (key, label) => ({ kairos: 'K', max: 'M', orbix: 'O', nanomid: 'NM', orcp: 'MT' })[key] || String(label || '').trim().split(/\s+/).slice(0, 2).map((x) => x[0] || '').join('').toUpperCase();
   const hasPermission = (perms, app) => {
     const keys = Array.isArray(app && app.aliases) && app.aliases.length ? app.aliases : [app && app.key];
     return keys.some((key) => (perms && perms.actApps || []).includes(key));
