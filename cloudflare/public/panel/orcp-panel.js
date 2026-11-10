@@ -233,10 +233,10 @@
     if (isAg()) { V.innerHTML = '<p class="mut">Questo pannello è solo del titolare.</p>'; return; }
     const s = R.st;
     if (!s) { V.innerHTML = '<p class="mut">Carico…</p>'; return; }
-    const tabs = `<div class="tabs" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px">${TABS.filter(([k]) => s.connected || k === 'link' || k === 'portals').map(([k, t]) => `<button class="btn sm${R.tab === k ? ' pri' : ''}" data-ortab="${k}">${t}</button>`).join('')}</div>`;
+    const tab = (!s.connected || s.expired) && R.tab !== 'portals' ? 'link' : R.tab;
+    const tabs = `<div class="tabs" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px">${TABS.filter(([k]) => s.connected || k === 'link' || k === 'portals').map(([k, t]) => `<button class="btn sm${tab === k ? ' pri' : ''}" data-ortab="${k}">${t}</button>`).join('')}</div>`;
     const head = `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><div class="mut" style="font-size:13px">${s.connected ? `App <b>${esc(name())}</b> su cp.ottrun.com${s.app && s.app.version ? ' · v' + esc(s.app.version) : ''}` : 'Collega il tuo account ORCP per gestire l\'app da qui.'}</div><div style="display:flex;gap:6px">${s.connected && window.KXQuickAct ? `<button class="btn sm" data-or="qa">Nuova attivazione</button>` : ''}</div></div>`;
     const warn = s.expired ? '<div class="card" style="padding:10px 14px;margin-bottom:10px;border-left:3px solid #ff6b6b">L\'accesso a ORCP è scaduto: vai in «Collega» e ripassa l\'accesso.</div>' : '';
-    const tab = (!s.connected || s.expired) && R.tab !== 'portals' ? 'link' : R.tab;
     const body = { conns, msgs, ann, maint, pin, vpn, portals, link }[tab]();
     const live = s.connected && !s.expired; if (live) need('conns');
     const stats = live && R.data.conns && window.KXStats ? statsHtml(R.data.conns) : '';
@@ -336,7 +336,7 @@
       render();
     }
   }
-  async function open() { if (isAg()) return render(); render(); await state(); if (!R.st.connected || R.tab === 'link') discoverExtension(); render(); }
+  async function open() { if (isAg()) return render(); render(); await state(); if (!R.st.connected || R.st.expired || R.tab === 'link') discoverExtension(); render(); }
 
   /* ---------- per le linee e «Nuova attivazione»: nome dell'app, server dei pannelli, messaggio per il cliente ---------- */
   let cfgP = null;

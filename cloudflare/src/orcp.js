@@ -58,12 +58,14 @@ function parseCookies(s) {
 }
 const remOf = (jar) => Object.keys(jar || {}).find((k) => k.startsWith('remember_web_')) || '';
 
-async function loadSes(env, H) {
-  if (mem.ses !== undefined) return mem.ses;
+async function loadSes(env, H, force = false) {
+  if (!force && mem.ses !== undefined && Date.now() - mem.sesAt <= 30000) return mem.ses;
   let s = null; try { const v = await getRow(env, K); s = v ? await H.unseal(env, v) : null; } catch { s = null; }
-  return (mem.ses = s && s.jar ? s : null);
+  mem.ses = s && s.jar ? s : null;
+  mem.sesAt = Date.now();
+  return mem.ses;
 }
-async function saveSes(env, H, s) { mem.ses = s; await setRow(env, K, await H.seal(env, s)); }
+async function saveSes(env, H, s) { mem.ses = s; await setRow(env, K, await H.seal(env, s)); mem.sesAt = Date.now(); }
 async function cfgOf(env) { if (mem.cfg) return mem.cfg; let c = {}; try { c = JSON.parse((await getRow(env, KC)) || '{}') || {}; } catch { c = {}; } return (mem.cfg = cfgNorm(c)); }
 function cfgNorm(c) {
   const map = {}; for (const p of PANELS) map[p] = typeof (c.map || {})[p] === 'string' ? c.map[p].slice(0, 60) : '';
@@ -121,9 +123,22 @@ async function orcp(env, H, path, o = {}) {
   if (isRequestLogin(r, o) || (o.ajax && r.status === 403)) {
     const rem = remOf(s.jar);
     if (rem) { s.jar = { [rem]: s.jar[rem] }; await go().catch(() => {}); r = await go(); } // il remember apre una sessione nuova
-    if (isRequestLogin(r, o) || (o.ajax && r.status === 403)) { s.bad = 1; await saveSes(env, H, s).catch(() => {}); throw new H.HttpErr(401, 'L\'accesso a ORCP è scaduto: entra su cp.ottrun.com (con «Remember me») e passa di nuovo l\'accesso a KAIROS'); }
+    if (isRequestLogin(r, o) || (o.ajax && r.status === 403)) {
+      const cur = await loadSes(env, H, true);
+      if (cur && cur.jar && cur.at !== s.at) {
+        if (!o._fresh) return orcp(env, H, path, { ...o, _fresh: true });
+        throw new H.HttpErr(401, 'L\'accesso a ORCP è scaduto: entra su cp.ottrun.com (con «Remember me») e passa di nuovo l\'accesso a KAIROS');
+      }
+      s.bad = 1;
+      await saveSes(env, H, s).catch(() => {});
+      throw new H.HttpErr(401, 'L\'accesso a ORCP è scaduto: entra su cp.ottrun.com (con «Remember me») e passa di nuovo l\'accesso a KAIROS');
+    }
   }
   if (s.bad) delete s.bad;
+  if (Date.now() - mem.sesAt > 30000) {
+    const cur = await loadSes(env, H, true);
+    if (!cur || cur.at !== s.at) return r;
+  }
   await saveSes(env, H, s).catch(() => {});
   return r;
 }
@@ -134,18 +149,22 @@ export async function orcpKeepAlive(env, H) {
     await orcp(env, H, '/home');
   } catch (e) {
     if (!e || e.status !== 401) return { error: true };
-    if (s.alert !== 1) {
+    const current = await loadSes(env, H);
+    if (!current) return { expired: true };
+    if (current.alert !== 1) {
       const text = '⚠️ <b>MirkoTeam</b>\nL\'accesso a cp.ottrun.com è scaduto. Entra su cp.ottrun.com dal computer con l\'estensione KAIROS Ponte (con «Remember me»): KAIROS si ricollega da solo. In alternativa ripassa l\'accesso dalla scheda <b>Collega</b>.';
       try { await H.notifyOwnersText(env, text); } catch {}
-      s.alert = 1;
-      await saveSes(env, H, s).catch(() => {});
+      current.alert = 1;
+      await saveSes(env, H, current).catch(() => {});
       await H.log(env, 'off', 'MirkoTeam: accesso a ORCP scaduto, serve ripassare i cookie dalla scheda «Collega»').catch(() => {});
     }
     return { expired: true };
   }
-  s.ping = Date.now();
-  if (s.alert !== undefined) delete s.alert;
-  await saveSes(env, H, s);
+  const current = await loadSes(env, H);
+  if (!current) return { skipped: true };
+  current.ping = Date.now();
+  if (current.alert !== undefined) delete current.alert;
+  await saveSes(env, H, current);
   return { ok: true };
 }
 export async function orcpAcceptCookies(env, H, cookies, src) {
@@ -156,7 +175,7 @@ export async function orcpAcceptCookies(env, H, cookies, src) {
   if (!remOf(jar) && !jar.orcp_ottrun_control_panel_session) {
     throw new H.HttpErr(400, 'Non trovo i cookie di ORCP: servono «remember_web_…» (con «Remember me») o «orcp_ottrun_control_panel_session»');
   }
-  const previous = await loadSes(env, H);
+  const previous = await loadSes(env, H, true);
   const relinked = !previous || !!previous.bad;
   const source = src === 'ext' ? 'ext' : 'manual';
   mem.ses = { jar, at: Date.now(), src: source };
@@ -213,7 +232,8 @@ async function appInfo(env, H, force) {
     if (!app.name) { const o = selectOpts(st.txt, 'select_app')[0]; if (o) app.name = o.t.slice(0, 40); }
   }
   if (!app.appid) { const am = await orcp(env, H, '/addmesview'); const o = selectOpts(am.txt, 'select_app').find((x) => /^\d+$/.test(x.v)); if (o) { app.appid = o.v; if (!app.name) app.name = o.t.slice(0, 40); } app.customerid = app.customerid || inputVal(am.txt, 'customerid'); }
-  s.app = app; await saveSes(env, H, s).catch(() => {});
+  const current = await loadSes(env, H);
+  if (current) { current.app = app; await saveSes(env, H, current).catch(() => {}); }
   return app;
 }
 const devOf = (agent) => { const m = String(agent || '').match(/Android\s*([\d.]+);\s*([^;)]+?)\s*(?:Build|\))/i); return m ? `${m[2].trim()} · Android ${m[1]}` : String(agent || '').slice(0, 60); };
@@ -239,7 +259,8 @@ async function connections(env, H) {
 async function versions(env, H) {
   const s = await loadSes(env, H); if (s && s.vers && Date.now() - s.vers.at < 6 * 3600e3) return s.vers.list;
   const r = await orcp(env, H, '/getversions'); if (r.status !== 200) throw new H.HttpErr(502, unexpectedResponse(r)); const list = rows(r.txt).map((x) => ({ count: +txtOf(x.cells[0]).replace(/\D/g, '') || 0, version: txtOf(x.cells[1]) })).filter((x) => x.version).slice(0, 40);
-  if (s) { s.vers = { at: Date.now(), list }; await saveSes(env, H, s).catch(() => {}); }
+  const current = await loadSes(env, H);
+  if (current) { current.vers = { at: Date.now(), list }; await saveSes(env, H, current).catch(() => {}); }
   return list;
 }
 async function portals(env, H) {
