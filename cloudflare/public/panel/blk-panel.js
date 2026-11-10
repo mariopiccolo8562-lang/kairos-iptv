@@ -16,13 +16,13 @@
   $('#v-dash').after(section);
   TITLES.blk = 'Pannello Black IPTV';
 
-  const state = { data: null, error: '', token: '', busy: false, probing: false, pointerDown: false, probe: null, probeError: '', path: '', post: false, form: '', render: false, lines: [], linesUpdated: 0, linesDns: '', linesLoaded: false, linesLoading: false, linesStop: false, linesProgress: '', linesError: '', linesQuery: '', showPasswords: false };
+  const state = { data: null, error: '', token: '', busy: false, probing: false, pointerDown: false, probe: null, probeError: '', path: '', post: false, form: '', render: false, lines: [], linesUpdated: 0, linesDns: '', linesLoaded: false, linesLoading: false, linesStop: false, linesProgress: '', linesError: '', linesQuery: '', showPasswords: false, linesEmptyDiag: null };
   const safe = (value) => esc(String(value == null ? '' : value));
   const pill = (text, color) => `<span style="display:inline-block;padding:4px 10px;border-radius:999px;background:${color}22;color:${color};font-weight:700">${safe(text)}</span>`;
   if (!document.getElementById('blk-lines-style')) {
     const style = document.createElement('style');
     style.id = 'blk-lines-style';
-    style.textContent = '.blk-line-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:12px 0}.blk-line-stat{padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.025)}.blk-line-stat small{display:block;color:var(--mut);font-size:11px}.blk-line-stat b{font-size:17px}.blk-lines-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0}.blk-lines-search{flex:1;min-width:190px;margin:0}.blk-line-table-wrap{overflow:auto;max-height:58vh;border:1px solid var(--line);border-radius:9px}.blk-line-table{width:100%;min-width:900px;border-collapse:collapse;font-size:12px}.blk-line-table th,.blk-line-table td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}.blk-line-table th{position:sticky;top:0;background:var(--pane);z-index:1;color:var(--mut)}.blk-line-table tr:last-child td{border-bottom:0}.blk-lines-error{color:#ff8f8f;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0}.blk-line-pass{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}@media(max-width:520px){.blk-lines-tools{align-items:stretch}.blk-lines-tools>*{max-width:100%}.blk-lines-search{min-width:100%;width:100%}.blk-line-table-wrap{max-height:55vh}}';
+    style.textContent = '.blk-line-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:12px 0}.blk-line-stat{padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.025)}.blk-line-stat small{display:block;color:var(--mut);font-size:11px}.blk-line-stat b{font-size:17px}.blk-lines-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0}.blk-lines-search{flex:1;min-width:190px;margin:0}.blk-line-table-wrap{overflow:auto;max-height:58vh;border:1px solid var(--line);border-radius:9px}.blk-line-table{width:100%;min-width:900px;border-collapse:collapse;font-size:12px}.blk-line-table th,.blk-line-table td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}.blk-line-table th{position:sticky;top:0;background:var(--pane);z-index:1;color:var(--mut)}.blk-line-table tr:last-child td{border-bottom:0}.blk-lines-error{color:#ff8f8f;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0}.blk-lines-empty{color:#ffbf66;background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.35);border-radius:8px;padding:10px 12px;margin:9px 0}.blk-lines-empty summary{cursor:pointer;font-weight:700}.blk-line-pass{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}@media(max-width:520px){.blk-lines-tools{align-items:stretch}.blk-lines-tools>*{max-width:100%}.blk-lines-search{min-width:100%;width:100%}.blk-line-table-wrap{max-height:55vh}}';
     document.head.appendChild(style);
   }
   function expiryInfo(value) {
@@ -54,10 +54,19 @@
         <div class="blk-lines-tools" style="margin:0"><button class="btn pri sm" data-blk="lines-sync" ${state.linesLoading ? 'disabled' : ''}>Aggiorna elenco</button>${state.linesLoading ? '<button class="btn sm" data-blk="lines-stop">Stop</button>' : ''}</div></div>
       ${state.linesLoading || state.linesProgress ? `<p id="blkLinesProgress" class="mut" role="status" style="margin:9px 0">${safe(state.linesProgress || 'Leggo la pagina 1… (0 linee)')}</p>` : ''}
       ${state.linesError ? `<p class="blk-lines-error">${safe(state.linesError)}</p>` : ''}
+      ${state.linesEmptyDiag ? `<div class="blk-lines-empty" role="status"><div><b>Black ha restituito la pagina senza righe: riprova tra qualche secondo</b></div><details style="margin-top:6px"><summary>Dettagli tecnici</summary>${linesDiagHtml(state.linesEmptyDiag)}</details></div>` : ''}
       <div class="blk-line-stats"><div class="blk-line-stat"><small>Totale</small><b>${rows.length}</b></div><div class="blk-line-stat"><small>Attive</small><b>${activeCount}</b></div><div class="blk-line-stat"><small>Scadute</small><b style="color:#ff747e">${expiredCount}</b></div><div class="blk-line-stat"><small>In scadenza 7 gg</small><b style="color:#ffb84d">${soonCount}</b></div></div>
       <div class="blk-lines-tools"><input class="inp blk-lines-search" id="blkLinesSearch" value="${safe(state.linesQuery)}" placeholder="Cerca username o reseller" aria-label="Cerca username o reseller"><button class="btn sm" data-blk="lines-passwords">${state.showPasswords ? 'Nascondi password' : 'Mostra password'}</button><span class="mut">${matching.length} linee</span></div>
       <div class="blk-line-table-wrap"><table class="blk-line-table"><thead><tr><th>Username</th><th>Password</th><th>Stato</th><th>Scadenza</th><th>Max Conn</th><th>Attive</th><th>Reseller</th><th>Test</th></tr></thead><tbody>${tableRows || `<tr><td colspan="8" class="mut">${query ? 'Nessuna linea corrisponde alla ricerca.' : state.linesLoaded ? 'Nessuna linea disponibile.' : 'Elenco non ancora caricato.'}</td></tr>`}</tbody></table></div>
     </div>`;
+  }
+  function linesDiagHtml(diag) {
+    const tables = (Array.isArray(diag.tables) ? diag.tables : []).slice(0, 10).map((table, index) => `<div class="card" style="padding:8px;margin-top:7px">
+      <b>Tabella ${index + 1}</b> · ${safe(table.rows)} righe
+      <div style="margin-top:4px"><span class="mut">Intestazioni:</span> ${Array.isArray(table.headers) && table.headers.length ? table.headers.map(safe).join(' · ') : 'nessuna'}</div>
+      <div style="margin-top:4px"><span class="mut">Tipo celle prima riga:</span> ${Array.isArray(table.firstRowCellKinds) && table.firstRowCellKinds.length ? table.firstRowCellKinds.map(safe).join(' · ') : 'nessuna'}</div>
+    </div>`).join('') || '<div class="mut" style="margin-top:7px">Nessuna tabella rilevata.</div>';
+    return `<div style="margin-top:8px"><div>Via: ${safe(diag.via || '—')} · HTTP ${safe(diag.status)} · ${safe(diag.bytes)} byte · Placeholder: ${diag.placeholder ? 'sì' : 'no'}</div><div style="margin-top:4px">Titolo: ${safe(diag.title || '—')}</div>${tables}</div>`;
   }
   function since(value) {
     const time = Number(value);
@@ -191,6 +200,7 @@
     state.linesStop = false;
     state.linesError = '';
     state.linesProgress = 'Leggo la pagina 1… (0 linee)';
+    state.linesEmptyDiag = null;
     render();
     let path = null, page = 1, collected = 0, promoted = false, unknownError = '';
     try {
@@ -198,6 +208,11 @@
         const result = await api('POST', '/admin/blk/lines/sync', path ? { path } : {});
         page = Number(result.page) || page;
         collected = Number(result.collected) || collected;
+        if (result.empty) {
+          state.linesEmptyDiag = result.diag || {};
+          state.linesProgress = '';
+          break;
+        }
         state.linesProgress = `Leggo la pagina ${page}… (${collected} linee)`;
         const progress = $('#blkLinesProgress', section);
         if (progress) progress.textContent = state.linesProgress;
