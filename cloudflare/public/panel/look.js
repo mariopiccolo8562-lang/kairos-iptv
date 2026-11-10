@@ -144,6 +144,49 @@ html.lx #hub4side .nav .h4n{background:#fbbf24;color:#1c1300}
 /* accesso */
 html.lx .lcard{background:linear-gradient(160deg,rgba(10,19,40,.94),rgba(6,11,24,.94))!important;border:1px solid rgba(125,211,252,.22)!important;box-shadow:0 40px 90px -40px rgba(34,211,238,.5)!important}
 
+/* riquadri statistiche dei pannelli IPTV (KXStats.strip): vetro scuro con l'accento del colore e numeri chiari
+   (contrasto da 7:1 in su, prima il bianco su azzurro, verde acqua e arancio stava fra 2,7:1 e 4:1).
+   Il colore dice cosa significa il numero: verde attivi, ambra in scadenza, rosa scadute, ciano in diretta. */
+html.lx .ks-tile{--kc:#22d3ee;--kv:#f1f5fb;position:relative;overflow:hidden;background:linear-gradient(155deg,color-mix(in srgb,var(--kc) 17%,#0a1328),#060b18 80%)!important;color:#e6eefb!important;border:1px solid color-mix(in srgb,var(--kc) 36%,transparent);border-radius:14px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 18px 40px -30px color-mix(in srgb,var(--kc) 80%,transparent)!important;transition:transform .2s,border-color .2s,box-shadow .2s}
+html.lx .ks-tile::before{content:'';position:absolute;left:14px;right:14px;top:0;height:2px;border-radius:0 0 2px 2px;background:linear-gradient(90deg,transparent,var(--kc),transparent);opacity:.9}
+html.lx .ks-tile>div:first-child{color:var(--kv)!important;text-shadow:0 0 18px color-mix(in srgb,var(--kc) 45%,transparent)}
+html.lx .ks-tile>div:last-child{color:#b6c3d9!important;opacity:1!important;font-weight:500}
+html.lx .ks-tile.ks-act:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--kc) 72%,transparent);box-shadow:0 22px 46px -24px color-mix(in srgb,var(--kc) 90%,transparent)!important}
+html.lx .ks-tile.ks-act:focus-visible{outline:2px solid var(--kv);outline-offset:2px}
+html.lx .ks-tile[style*="background:#2f7fd6"]{--kc:#3b82f6;--kv:#93c5fd}
+html.lx .ks-tile[style*="background:#1fa0b6"]{--kc:#22d3ee;--kv:#67e8f9}
+html.lx .ks-tile[style*="background:#e08a1e"]{--kc:#f59e0b;--kv:#fcd34d}
+html.lx .ks-tile[style*="background:#e0524f"]{--kc:#fb7185;--kv:#fda4af}
+html.lx .ks-tile[style*="background:#2a9d5c"]{--kc:#34d399;--kv:#6ee7b7}
+html.lx .ks-tile[style*="background:#7c4dff"]{--kc:#8b5cf6;--kv:#c4b5fd}
+html.lx .ks-tile[style*="background:#d6336c"]{--kc:#ec4899;--kv:#f9a8d4}
+html.lx .ks-tile[style*="background:#6f42c1"]{--kc:#8b5cf6;--kv:#c4b5fd}
+html.lx .ks-tile[style*="background:#0ca678"]{--kc:#10b981;--kv:#6ee7b7}
+html.lx .ks-tile[style*="background:#0d1117"]{--kc:#64748b;--kv:#f1f5fb}
+html.lx .ks-tile[data-x="online"]{--kc:#22d3ee;--kv:#67e8f9}
+html.lx .ks-tile[data-x="today"]{--kc:#2dd4bf;--kv:#5eead4}
+html.lx .ks-tile[data-x="month"]{--kc:#818cf8;--kv:#a5b4fc}
+html.lx .ks-tile[data-x="active"]{--kc:#34d399;--kv:#6ee7b7}
+html.lx .ks-tile[data-x="conns"]{--kc:#38bdf8;--kv:#7dd3fc}
+html.lx .ks-tile[data-x="total"]{--kc:#94a3b8;--kv:#f1f5fb}
+html.lx .ks-tile[data-x="soon"]{--kc:#f59e0b;--kv:#fcd34d}
+html.lx .ks-tile[data-x="expired"]{--kc:#fb7185;--kv:#fda4af}
+html.lx .ks-tile[data-x="off"]{--kc:#64748b;--kv:#cbd5e1}
+html.lx .ks-tile[data-x="trial"]{--kc:#c084fc;--kv:#e9d5ff}
+/* «💰 da pagare» dei pannelli: ambra (soldi), grigio quando è 0; «Nuova attivazione» rosso più profondo (testo bianco 4,7:1 e più) */
+html.lx .pay-panel-tile{background:rgba(251,191,36,.08)!important;border:1px solid rgba(251,191,36,.42)!important;color:#fde68a!important;border-radius:12px}
+html.lx .pay-panel-tile:hover{background:rgba(251,191,36,.15)!important}
+html.lx .pay-panel-tile.zero{background:rgba(148,163,184,.06)!important;border-color:rgba(148,163,184,.26)!important;color:#b6c3d9!important}
+html.lx .btn.qa-red{background:linear-gradient(100deg,#e11d48,#9f1239)!important;box-shadow:0 12px 30px -14px rgba(244,63,94,.9)!important}
+
+html.lx .kxpay-tile-wrap{margin-top:12px!important}
+html.lx .ks-strip+.pay-panel-tile{margin-top:12px}
+/* WOLF: sotto i 1920 px i pulsanti della linea vanno su una riga sotto i dati, così utente, scadenza e stato non si accavallano */
+@media (min-width:1001px) and (max-width:1919px){
+  html.lx .wf-row{grid-template-columns:72px minmax(150px,1.2fr) minmax(120px,1fr) minmax(140px,.9fr) minmax(140px,1fr);row-gap:10px}
+  html.lx .wf-row>.wf-act{grid-column:1/-1;justify-content:flex-start;padding-left:82px}
+}
+
 /* Home: riquadri dei gruppi */
 html.lx #v-home .h4-home-head{display:none}
 html.lx .h4-home-tile{background:linear-gradient(160deg,var(--lx-c1),var(--lx-c2))!important;border:1px solid var(--lx-line)!important;border-radius:20px;transition:transform .3s cubic-bezier(.16,1,.3,1),box-shadow .3s,border-color .3s}
@@ -565,6 +608,28 @@ html.lx-m #hub4side .nav.on svg{color:#67e8f9!important}
     const max = Math.max(1, ...crs.map((c) => (Number.isFinite(c.v) && c.of == null ? c.v : 0)));
     q('.x-cr', box).hidden = !crs.length;
     setHtml(q('.x-crl', box), crs.map((c) => { const w = c.v === Infinity ? 1 : c.of ? (c.v || 0) / c.of : (c.v || 0) / max; return `<div class="x-crr"><span>${h(c.n)}</span><b>${h(c.t)}</b><span class="x-bar"><i style="--w:${Math.max(0.02, Math.min(1, w)).toFixed(3)};--k:${c.k}"></i></span></div>`; }).join(''));
+  }
+
+  /* ---------------- riquadri statistiche: significato di ogni numero (data-x) per colorarlo in Futuro e Misto ----------------
+     Solo un attributo in più sull'HTML di KXStats.strip: niente cambia nel Classico, i riquadri restano cliccabili come prima. */
+  const SEM_K = { online: 'online', today: 'today', month: 'month', active: 'active', conns: 'conns', total: 'total', soon: 'soon', expired: 'expired', off: 'off', trial: 'trial' };
+  const SEM_L = [[/^online/i, 'online'], [/create oggi/i, 'today'], [/questo mese/i, 'month'], [/scadono|in scadenza/i, 'soon'], [/scadut/i, 'expired'], [/disattivat/i, 'off'], [/^prov[ae]/i, 'trial'], [/totali/i, 'total'], [/connession/i, 'conns'], [/attiv/i, 'active']];
+  const semOf = (t) => {
+    if (t.k && /^(panel|app)-/.test(t.k)) return '';
+    if (t.k && SEM_K[t.k]) return SEM_K[t.k];
+    const l = String(t.label || '').replace(/<[^>]*>/g, ' ').trim();
+    const m = SEM_L.find(([re]) => re.test(l)); return m ? m[1] : '';
+  };
+  if (window.KXStats && typeof KXStats.strip === 'function' && !KXStats.strip.lx) {
+    const strip0 = KXStats.strip;
+    KXStats.strip = Object.assign(function (tiles, opt) {
+      const html = strip0.apply(this, arguments);
+      try {
+        const T = (tiles || []).filter((t) => t && t.v != null && t.v !== '');
+        let i = 0;
+        return html.replace(/<div class="ks-tile/g, (m) => { const x = T[i++]; const s = x ? semOf(x) : ''; return s ? `<div data-x="${s}" class="ks-tile` : m; });
+      } catch { return html; }
+    }, { lx: true });
   }
 
   /* ---------------- scelta dell'aspetto ---------------- */

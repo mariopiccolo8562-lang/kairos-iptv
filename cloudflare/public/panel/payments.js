@@ -422,7 +422,7 @@
   }
   function panelTile(panel) {
     const n = rows().filter((r) => r.kind === 'line' && r.panel === panel && r.status === 'due').length;
-    return `<button type="button" class="pay-panel-tile" data-kxpay-filter="${escP(panel)}"><span>💰 ${n} da pagare</span></button>`;
+    return `<button type="button" class="pay-panel-tile${n ? '' : ' zero'}" data-kxpay-filter="${escP(panel)}"><span>💰 ${n} da pagare</span></button>`;
   }
   new MutationObserver(() => { if ($('#v-payments')?.classList.contains('on')) renderPage(); }).observe($('#v-payments'), { attributes: true, attributeFilter: ['class'] });
   window.addEventListener('kxpay:update', () => { renderMenuCount(); refreshOpenBoxes(); if ($('#v-payments')?.classList.contains('on')) renderPage(); });

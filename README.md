@@ -609,5 +609,12 @@ Cambia **solo la grafica** del pannello. Server, database, clienti, linee, credi
   - *Energia crediti* mostra i crediti dei pannelli già presenti nel riepilogo delle linee.
   - Non fa nessuna chiamata nuova al server.
 - **«Riduci movimento»** del sistema: tutte le animazioni restano ferme.
+- **Colori dei pannelli IPTV** (solo Futuro e Misto), per un contrasto giusto. Prima i riquadri erano blocchi pieni con testo bianco su azzurro, verde acqua e arancio, con contrasto fra 2,7:1 e 4:1.
+  - I riquadri delle statistiche (WOLF, Armada, Storm, Atlantix, Realott, SLT e il riepilogo «Linee attivate») ora sono in vetro scuro, con numeri ed etichette a contrasto da 7:1 in su.
+  - Il colore dice cosa significa il numero: verde attivi, ciano online, ambra in scadenza, rosa scadute, grigio totali e disattivate, viola prove.
+  - I riquadri dei pannelli nel riepilogo tengono il colore del pannello.
+  - «💰 da pagare» è ambra e diventa grigio quando è 0.
+  - «Nuova attivazione: App e Linea IPTV» usa un rosso più profondo (testo bianco 4,7:1 e più).
+  - Nelle righe WOLF, sotto i 1920 px, i pulsanti vanno sotto i dati, così utente, scadenza e stato non si accavallano.
 - **Copia del pannello di prima**: ramo `backup-pannello-classico`. Per togliere tutto basta eliminare la riga `<script src="look.js">` da `index.html`.
-- **Test**: `ui_look` (35 controlli) e tutti i test UI precedenti passano anche in Futuro.
+- **Test**: `ui_look` (44 controlli, anche contrasto e colori dei riquadri WOLF) e tutti i test UI precedenti passano anche in Futuro.
