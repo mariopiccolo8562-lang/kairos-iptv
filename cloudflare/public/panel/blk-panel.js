@@ -16,9 +16,49 @@
   $('#v-dash').after(section);
   TITLES.blk = 'Pannello Black IPTV';
 
-  const state = { data: null, error: '', token: '', busy: false, probing: false, pointerDown: false, probe: null, probeError: '', path: '', post: false, form: '', render: false };
+  const state = { data: null, error: '', token: '', busy: false, probing: false, pointerDown: false, probe: null, probeError: '', path: '', post: false, form: '', render: false, lines: [], linesUpdated: 0, linesDns: '', linesLoaded: false, linesLoading: false, linesStop: false, linesProgress: '', linesError: '', linesQuery: '', showPasswords: false };
   const safe = (value) => esc(String(value == null ? '' : value));
   const pill = (text, color) => `<span style="display:inline-block;padding:4px 10px;border-radius:999px;background:${color}22;color:${color};font-weight:700">${safe(text)}</span>`;
+  if (!document.getElementById('blk-lines-style')) {
+    const style = document.createElement('style');
+    style.id = 'blk-lines-style';
+    style.textContent = '.blk-line-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin:12px 0}.blk-line-stat{padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.025)}.blk-line-stat small{display:block;color:var(--mut);font-size:11px}.blk-line-stat b{font-size:17px}.blk-lines-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0}.blk-lines-search{flex:1;min-width:190px;margin:0}.blk-line-table-wrap{overflow:auto;max-height:58vh;border:1px solid var(--line);border-radius:9px}.blk-line-table{width:100%;min-width:900px;border-collapse:collapse;font-size:12px}.blk-line-table th,.blk-line-table td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}.blk-line-table th{position:sticky;top:0;background:var(--pane);z-index:1;color:var(--mut)}.blk-line-table tr:last-child td{border-bottom:0}.blk-lines-error{color:#ff8f8f;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0}.blk-line-pass{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}@media(max-width:520px){.blk-lines-tools{align-items:stretch}.blk-lines-tools>*{max-width:100%}.blk-lines-search{min-width:100%;width:100%}.blk-line-table-wrap{max-height:55vh}}';
+    document.head.appendChild(style);
+  }
+  function expiryInfo(value) {
+    const raw = String(value || '').trim();
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const parsed = match ? new Date(+match[1], +match[2] - 1, +match[3]) : new Date(raw);
+    if (!raw || Number.isNaN(parsed.getTime())) return { label: raw || '—', days: null };
+    const today = new Date();
+    const days = Math.floor((Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()) - Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000);
+    return { label: parsed.toLocaleDateString('it-IT'), days };
+  }
+  function linesCard() {
+    const rows = Array.isArray(state.lines) ? state.lines : [];
+    const query = state.linesQuery.trim().toLowerCase();
+    const matching = rows.filter((row) => !query || `${row.username || ''} ${row.reseller || ''}`.toLowerCase().includes(query));
+    const expired = (row) => { const e = expiryInfo(row.expires || row.exp); return e.days != null && e.days < 0 || /scadut|expired/i.test(String(row.status || '')); };
+    const disabled = (row) => /disabil|sospes|disabled|inactive|bann/i.test(String(row.status || ''));
+    const activeCount = rows.filter((row) => !expired(row) && !disabled(row)).length;
+    const expiredCount = rows.filter(expired).length;
+    const soonCount = rows.filter((row) => { const days = expiryInfo(row.expires || row.exp).days; return !expired(row) && days != null && days >= 0 && days <= 7; }).length;
+    const tableRows = matching.map((row) => {
+      const expiry = expiryInfo(row.expires || row.exp);
+      const expColor = expired(row) ? '#ff747e' : expiry.days != null && expiry.days <= 7 ? '#ffb84d' : '';
+      return `<tr><td>${safe(row.username || '—')}</td><td class="blk-line-pass">${safe(state.showPasswords ? row.password || '—' : '••••••••')}</td><td>${safe(row.status || '—')}</td><td${expColor ? ` style="color:${expColor};font-weight:700"` : ''}>${safe(expiry.label)}</td><td>${safe(row.maxConn || '—')}</td><td>${safe(row.active ?? '—')}</td><td>${safe(row.reseller || '—')}</td><td>${safe(row.test || '—')}</td></tr>`;
+    }).join('');
+    const updated = state.linesUpdated ? new Date(state.linesUpdated * 1000).toLocaleString('it-IT') : 'mai';
+    return `<div class="card glass blk-lines-card" style="margin-bottom:14px">
+      <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><div><b>Linee Black IPTV</b><div class="mut" style="margin-top:4px">Ultimo aggiornamento: ${safe(updated)}${state.linesDns ? ` · DNS: ${safe(state.linesDns)}` : ''}</div></div>
+        <div class="blk-lines-tools" style="margin:0"><button class="btn pri sm" data-blk="lines-sync" ${state.linesLoading ? 'disabled' : ''}>Aggiorna elenco</button>${state.linesLoading ? '<button class="btn sm" data-blk="lines-stop">Stop</button>' : ''}</div></div>
+      ${state.linesLoading || state.linesProgress ? `<p id="blkLinesProgress" class="mut" role="status" style="margin:9px 0">${safe(state.linesProgress || 'Leggo la pagina 1… (0 linee)')}</p>` : ''}
+      ${state.linesError ? `<p class="blk-lines-error">${safe(state.linesError)}</p>` : ''}
+      <div class="blk-line-stats"><div class="blk-line-stat"><small>Totale</small><b>${rows.length}</b></div><div class="blk-line-stat"><small>Attive</small><b>${activeCount}</b></div><div class="blk-line-stat"><small>Scadute</small><b style="color:#ff747e">${expiredCount}</b></div><div class="blk-line-stat"><small>In scadenza 7 gg</small><b style="color:#ffb84d">${soonCount}</b></div></div>
+      <div class="blk-lines-tools"><input class="inp blk-lines-search" id="blkLinesSearch" value="${safe(state.linesQuery)}" placeholder="Cerca username o reseller" aria-label="Cerca username o reseller"><button class="btn sm" data-blk="lines-passwords">${state.showPasswords ? 'Nascondi password' : 'Mostra password'}</button><span class="mut">${matching.length} linee</span></div>
+      <div class="blk-line-table-wrap"><table class="blk-line-table"><thead><tr><th>Username</th><th>Password</th><th>Stato</th><th>Scadenza</th><th>Max Conn</th><th>Attive</th><th>Reseller</th><th>Test</th></tr></thead><tbody>${tableRows || `<tr><td colspan="8" class="mut">${query ? 'Nessuna linea corrisponde alla ricerca.' : state.linesLoaded ? 'Nessuna linea disponibile.' : 'Elenco non ancora caricato.'}</td></tr>`}</tbody></table></div>
+    </div>`;
+  }
   function since(value) {
     const time = Number(value);
     if (!time) return 'Mai';
@@ -70,6 +110,7 @@
     const data = state.data || {};
     const fresh = !!(data.installed && data.lastSeen && Date.now() / 1000 - data.lastSeen < 20);
     const status = fresh ? pill('Ponte collegato', '#3dffb0') : data.installed ? pill('Ponte non collegato', '#ffcc4d') : pill('Codice non creato', '#9ca8c5');
+    const cachedLines = D.role === 'agent' ? '' : linesCard();
     section.innerHTML = `<div class="card glass" style="margin-bottom:14px">
       <h2 style="font-size:20px;margin-bottom:8px">Pannello Black IPTV</h2>
       <p class="mut">Black IPTV richiede una sessione del browser e non è raggiungibile direttamente dal Worker KAIROS. Il ponte usa la scheda Chrome o Edge in cui hai già effettuato l'accesso: non prova a superare controlli o protezioni del sito.</p>
@@ -103,6 +144,7 @@
       </ol>
       <p class="mut" style="margin-top:8px">La guida completa è nella cartella dell'estensione, nel file LEGGIMI.md.</p>
     </div>
+    ${cachedLines}
     <div class="card glass">
       <b>Controllo pagine</b>
       <p class="mut" style="margin:5px 0 12px">Il controllo restituisce solo titolo, intestazioni, numero di righe e tipi di campi. Non mostra né salva i valori delle celle o i dati dei clienti.</p>
@@ -126,8 +168,55 @@
     } catch (error) {
       state.error = error.message || 'Stato non disponibile';
     }
-    const probeInputFocused = ['#blkPath', '#blkPost', '#blkRender', '#blkForm'].some((selector) => document.activeElement === $(selector, section));
+    const probeInputFocused = ['#blkPath', '#blkPost', '#blkRender', '#blkForm', '#blkLinesSearch'].some((selector) => document.activeElement === $(selector, section));
     if (!state.busy && !state.pointerDown && !probeInputFocused) render();
+  }
+  async function loadLines(force = false) {
+    if (D.role === 'agent' || !force && state.linesLoaded) return;
+    try {
+      const result = await api('GET', '/admin/blk/lines');
+      state.lines = Array.isArray(result.rows) ? result.rows : [];
+      state.linesUpdated = Number(result.updated) || 0;
+      state.linesDns = String(result.dns || '');
+      state.linesLoaded = true;
+      state.linesError = '';
+    } catch (error) {
+      state.linesError = error.message || 'Elenco Black non disponibile';
+    }
+    render();
+  }
+  async function syncLines() {
+    if (state.linesLoading || D.role === 'agent') return;
+    state.linesLoading = true;
+    state.linesStop = false;
+    state.linesError = '';
+    state.linesProgress = 'Leggo la pagina 1… (0 linee)';
+    render();
+    let path = null, page = 1, collected = 0, promoted = false, unknownError = '';
+    try {
+      while (!state.linesStop) {
+        const result = await api('POST', '/admin/blk/lines/sync', path ? { path } : {});
+        page = Number(result.page) || page;
+        collected = Number(result.collected) || collected;
+        state.linesProgress = `Leggo la pagina ${page}… (${collected} linee)`;
+        const progress = $('#blkLinesProgress', section);
+        if (progress) progress.textContent = state.linesProgress;
+        if (result.paginationUnknown) unknownError = `Paginazione non riconosciuta. Invia al supporto questa struttura: ${JSON.stringify(result.paginationShape || {})}`;
+        if (!result.next) { promoted = true; break; }
+        path = result.next;
+        page++;
+      }
+      if (state.linesStop) state.linesProgress = `Sincronizzazione interrotta dopo la pagina ${page}`;
+      else if (promoted) state.linesProgress = `Sincronizzazione completata · ${collected} linee`;
+    } catch (error) {
+      state.linesError = error.message || 'Sincronizzazione Black non riuscita';
+    } finally {
+      state.linesLoading = false;
+      state.linesStop = false;
+      if (promoted) await loadLines(true);
+      if (unknownError) state.linesError = unknownError;
+      render();
+    }
   }
   async function createToken() {
     state.busy = true;
@@ -204,10 +293,13 @@
       return;
     }
     switch (target.dataset.blk) {
-      case 'refresh': void loadState(); break;
+      case 'refresh': void loadState(); void loadLines(true); break;
       case 'create': void createToken(); break;
       case 'disconnect': void disconnect(); break;
       case 'copy': void copyToken(); break;
+      case 'lines-sync': void syncLines(); break;
+      case 'lines-stop': state.linesStop = true; state.linesProgress = 'Interruzione richiesta…'; { const progress = $('#blkLinesProgress', section); if (progress) progress.textContent = state.linesProgress; } break;
+      case 'lines-passwords': state.showPasswords = !state.showPasswords; render(); break;
       case 'probe':
         state.path = $('#blkPath', section).value.trim();
         void probe(state.path);
@@ -217,6 +309,13 @@
   section.addEventListener('input', (event) => {
     if (event.target.matches('#blkPath')) state.path = event.target.value;
     if (event.target.matches('#blkForm')) state.form = event.target.value;
+    if (event.target.matches('#blkLinesSearch')) {
+      const position = event.target.selectionStart;
+      state.linesQuery = event.target.value;
+      render();
+      const input = $('#blkLinesSearch', section);
+      if (input) { input.focus(); input.setSelectionRange(position, position); }
+    }
   });
   section.addEventListener('change', (event) => {
     if (event.target.matches('#blkPost')) state.post = event.target.checked;
@@ -231,7 +330,7 @@
   const view0 = view;
   window.view = view = function (key) {
     const result = view0.apply(this, arguments);
-    if (key === 'blk' && D.role !== 'agent') void loadState();
+    if (key === 'blk' && D.role !== 'agent') { void loadState(); if (!state.linesLoaded) void loadLines(); }
     return result;
   };
   setInterval(() => {

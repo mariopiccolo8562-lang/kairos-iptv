@@ -54,6 +54,10 @@
         }).catch(() => {}));
       }
       for (const [p, tag] of [['ro', 'REALOTT'], ['slt', 'SLT']]) if (can(p)) tasks.push(api('GET', `/admin/${p}/lines`).then((r) => (r.rows || []).forEach((l) => add(out, p, tag, l, r.dns))).catch(() => {}));
+      if (D.role !== 'agent') tasks.push(api('GET', '/admin/blk/lines').then((r) => (r.rows || []).forEach((l) => add(out, 'blk', 'BLACK', {
+        username: l.username, password: l.password, exp: l.expires || l.exp, status: l.status, conns: l.active,
+        note: l.reseller ? `Reseller ${l.reseller}` : '',
+      }, r.dns))).catch(() => {}));
       if (can('atx')) tasks.push(api('GET', '/admin/atx/state').then((s) => s && s.connected ? api('GET', '/admin/atx/lines?all=1') : null).then((r) => {
         const rows = r && (r.rows || r.lines || r.items || []);
         (Array.isArray(rows) ? rows : []).forEach((l) => add(out, 'atx', 'ATLANTIX', l, l.dns || (r && r.dns)));
