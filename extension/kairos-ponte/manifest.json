@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "KAIROS Ponte",
+  "version": "1.0.0",
+  "description": "Collega KAIROS al pannello Black IPTV aperto nel tuo Chrome.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://reseller.blkaccess.com/*",
+    "https://panel-kairos.com/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://reseller.blkaccess.com/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_title": "KAIROS Ponte",
+    "default_popup": "popup.html"
+  }
+}
