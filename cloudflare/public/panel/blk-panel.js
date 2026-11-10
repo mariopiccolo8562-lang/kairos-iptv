@@ -16,7 +16,7 @@
   $('#v-dash').after(section);
   TITLES.blk = 'Pannello Black IPTV';
 
-  const state = { data: null, error: '', token: '', busy: false, probing: false, pointerDown: false, probe: null, probeError: '', path: '' };
+  const state = { data: null, error: '', token: '', busy: false, probing: false, pointerDown: false, probe: null, probeError: '', path: '', post: false, form: '' };
   const safe = (value) => esc(String(value == null ? '' : value));
   const pill = (text, color) => `<span style="display:inline-block;padding:4px 10px;border-radius:999px;background:${color}22;color:${color};font-weight:700">${safe(text)}</span>`;
   function since(value) {
@@ -43,11 +43,26 @@
     const forms = (probe.forms || []).map((form, index) => `<div style="margin-top:8px"><b>Modulo ${index + 1}</b> · ${safe(form.method)} · ${safe(form.action)}
       <div class="mut">${(form.fields || []).map((field) => `${safe(field.name || '(senza nome)')} (${safe(field.type)})`).join(' · ') || 'nessun campo'}</div></div>`).join('') || '<div class="mut" style="margin-top:8px">Nessun modulo trovato.</div>';
     const links = (probe.links || []).map((link) => `<li><a href="${safe(link.href)}" data-blk-path="${safe(link.href)}" style="color:var(--a1)">${safe(link.text || '(senza testo)')}</a> · <span class="mono">${safe(link.href)}</span></li>`).join('') || '<li class="mut">Nessun collegamento trovato.</li>';
+    const formatKeys = (keys) => keys && keys.length
+      ? keys.map((key) => `${safe(key.name)} (${safe(key.type)})`).join(' · ')
+      : 'nessuna';
+    const json = probe.json ? `<div class="card" style="padding:12px;margin-top:10px">
+      <b>Risposta in formato JSON</b>
+      <div style="margin-top:6px">Tipo: ${safe(probe.json.kind)} · Elementi/chiavi: ${safe(probe.json.count)}</div>
+      ${probe.json.rowsKey !== undefined ? `<div style="margin-top:4px">Elenco: ${safe(probe.json.rowsKey)} · ${safe(probe.json.rows)} righe</div>` : ''}
+      <div style="margin-top:6px"><span class="mut">Chiavi:</span> ${formatKeys(probe.json.keys)}</div>
+      ${probe.json.rowsKey !== undefined ? `<div style="margin-top:4px"><span class="mut">Chiavi della prima riga:</span> ${formatKeys(probe.json.rowKeys)}</div>` : ''}
+    </div>` : '';
+    const endpoints = probe.endpoints && probe.endpoints.length
+      ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${probe.endpoints.map((endpoint) => `<button class="btn sm" data-blk-path="${safe(endpoint.url)}">${safe(endpoint.url)}</button>`).join('')}</div>`
+      : '<p class="mut" style="margin-top:8px">Nessuna richiesta nascosta trovata.</p>';
+    const details = probe.json ? json : `<div style="margin-top:6px">Titolo pagina: ${safe(probe.title || '—')} · Script: ${safe(probe.scripts)} · Percorso: <span class="mono">${safe(probe.url)}</span></div>
+      ${tables}<div style="margin-top:14px"><b>Moduli e campi</b>${forms}</div>
+      <div style="margin-top:14px"><b>Collegamenti interni</b><ul style="padding-left:20px;margin-top:5px">${links}</ul></div>`;
     return `<div class="card" style="padding:12px;margin-top:12px">
       <b>Risultato · ${statusText}${viaText}</b>
-      <div style="margin-top:6px">Titolo pagina: ${safe(probe.title || '—')} · Script: ${safe(probe.scripts)} · Percorso: <span class="mono">${safe(probe.url)}</span></div>
-      ${tables}<div style="margin-top:14px"><b>Moduli e campi</b>${forms}</div>
-      <div style="margin-top:14px"><b>Collegamenti interni</b><ul style="padding-left:20px;margin-top:5px">${links}</ul></div>
+      ${details}
+      <div style="margin-top:14px"><b>Richieste nascoste della pagina</b>${endpoints}</div>
       <p class="mut" style="margin-top:12px">Qui vedi solo la struttura della pagina, mai i dati dei clienti.</p>
     </div>`;
   }
@@ -92,7 +107,12 @@
       <b>Controllo pagine</b>
       <p class="mut" style="margin:5px 0 12px">Il controllo restituisce solo titolo, intestazioni, numero di righe e tipi di campi. Non mostra né salva i valori delle celle o i dati dei clienti.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">${PRESETS.map((path) => `<button class="btn sm" data-blk-path="${safe(path)}" ${state.probing ? 'disabled' : ''}>${safe(path)}</button>`).join('')}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><input class="inp" id="blkPath" placeholder="Percorso pagina (es. /account/users)" value="${safe(state.path)}" style="flex:1;min-width:220px"><button class="btn pri sm" data-blk="probe" ${state.busy ? 'disabled' : ''}>Controlla</button></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">
+        <input class="inp" id="blkPath" placeholder="Percorso pagina (es. /account/users)" value="${safe(state.path)}" style="flex:1;min-width:220px">
+        <label class="mut" style="display:flex;gap:6px;align-items:center;white-space:nowrap"><input type="checkbox" id="blkPost" ${state.post ? 'checked' : ''}>Invia come POST</label>
+        <input type="text" class="inp" id="blkForm" placeholder="Parametri POST, es. draw=1&start=0&length=10" value="${safe(state.form)}" style="flex:1;min-width:220px">
+        <button class="btn pri sm" data-blk="probe" ${state.busy ? 'disabled' : ''}>Controlla</button>
+      </div>
       ${state.probing ? '<p class="mut" role="status" style="margin-top:10px">Controllo in corso… può servire fino a 45 secondi</p>' : ''}
       ${state.probeError ? `<p class="mut" style="margin-top:10px">${safe(state.probeError)}</p>` : ''}
       ${structureHtml(state.probe)}
@@ -105,7 +125,8 @@
     } catch (error) {
       state.error = error.message || 'Stato non disponibile';
     }
-    if (!state.busy && !state.pointerDown && document.activeElement !== $('#blkPath', section)) render();
+    const probeInputFocused = ['#blkPath', '#blkPost', '#blkForm'].some((selector) => document.activeElement === $(selector, section));
+    if (!state.busy && !state.pointerDown && !probeInputFocused) render();
   }
   async function createToken() {
     state.busy = true;
@@ -148,12 +169,15 @@
   async function probe(path) {
     if (state.probing) return;
     if (!path) { state.probeError = 'Inserisci un percorso da controllare.'; render(); return; }
+    state.post = !!$('#blkPost', section).checked;
+    state.form = $('#blkForm', section).value;
     state.busy = true;
     state.probing = true;
     state.probeError = '';
     render();
     try {
-      state.probe = await api('POST', '/admin/blk/probe', { path });
+      const request = state.post ? { path, method: 'POST', form: state.form } : { path };
+      state.probe = await api('POST', '/admin/blk/probe', request);
       state.probeError = '';
     } catch (error) {
       const message = error.message || 'Il controllo non è riuscito. Verifica che Chrome o Edge siano aperti sulla pagina Black IPTV.';
@@ -188,6 +212,10 @@
   });
   section.addEventListener('input', (event) => {
     if (event.target.matches('#blkPath')) state.path = event.target.value;
+    if (event.target.matches('#blkForm')) state.form = event.target.value;
+  });
+  section.addEventListener('change', (event) => {
+    if (event.target.matches('#blkPost')) state.post = event.target.checked;
   });
   section.addEventListener('pointerdown', (event) => {
     if (event.target.closest('[data-blk-path], [data-blk="probe"]')) state.pointerDown = true;
