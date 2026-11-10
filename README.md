@@ -756,3 +756,15 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
   - `ui_store_dlcodes`, 17 controlli.
   - `ui_logo_role` (tablet: KAIROS e ruolo interi sotto il logo).
   - `ui_look` (Futuro: KAIROS e «Master» sotto il logo, niente doppione in alto).
+
+## 42. «Nuova attivazione» per i reseller: solo i loro pannelli (10 novembre 2026)
+
+- **«⚡ Nuova attivazione: App e Linea IPTV» funziona già per i reseller**, ma solo con i pannelli che il titolare gli accende. I pannelli sono spenti di base. Si accendono da Agenti → l'agente → «Pannello WOLF», «Pannello Armada», «Pannello Storm», «Pannello Realott», «Pannello SLT».
+- **Il reseller trova il pulsante rosso** nella pagina di ogni pannello acceso: WOLF nella scheda Linee; Armada e Storm in «Nuova linea»; Realott e SLT accanto a «+ Nuova linea».
+- **Nel passo «App»**:
+  - MaxPlayer e OrbixPlay chiedono «Attivare OrbixPlay e MaxPlayer dal pannello»;
+  - il cliente Kairos chiede «Attivare clienti nuovi».
+- **Cambiato**: il reseller vede **solo** i suoi pannelli. Prima vedeva anche gli altri in grigio, con il nome («Non disponibile per te»).
+- **Atlantix**: nella procedura rapida resta solo del titolare. Il reseller con Atlantix crea le linee dalla sua pagina Atlantix; lì il pulsante rosso non compare più, perché non portava a niente.
+- Il titolare vede tutto come prima. Il DNS non compare mai al reseller.
+- **Test**: `ui_quick_agent`, 13 controlli.

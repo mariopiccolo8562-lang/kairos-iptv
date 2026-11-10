@@ -108,7 +108,7 @@
         return `<label>${esc(x.label)}${req}<input class="inp" id="${id}" type="${x.type === 'number' ? 'number' : 'text'}" value="${esc(val || '')}" placeholder="${esc(x.ph || '')}"></label>`; };
       f = X.err ? `<p class="mut">${esc(X.err)}</p>` : `<p class="mut" style="font-size:12.5px;margin:0 0 10px">Le stesse opzioni del modulo «Crea linea» di ${FX[p]} (usa i tuoi crediti ${FX[p]}).</p><div class="qa-f">${X.fields.map(inp).join('')}</div>`;
     }
-    return `<div class="qa-pn">${panels().map(([k, n, s, ok]) => `<button type="button" data-qapn="${k}" class="${S.panel === k ? 'on' : ''}" ${ok ? '' : 'disabled'}>${n}<small>${ok ? s : 'Non disponibile per te'}</small></button>`).join('')}</div>
+    return `<div class="qa-pn">${panels().filter((x) => x[3] || !isAg()).map(([k, n, s, ok]) => `<button type="button" data-qapn="${k}" class="${S.panel === k ? 'on' : ''}" ${ok ? '' : 'disabled'}>${n}<small>${ok ? s : 'Non disponibile per te'}</small></button>`).join('')}</div>
       <div class="qa-f" style="margin-bottom:12px"><label class="w">Nome del cliente<input class="inp" id="qaN" maxlength="60" value="${esc(S.name)}" placeholder="es. Mario Rossi — va nella nota della linea e sulle app"></label></div>${f}
       <div class="qa-ft"><button class="btn" id="qaX0">Annulla</button><span class="sp"></span><button class="btn pri" id="qaNext">Avanti: scegli le app →</button></div>`;
   }
@@ -285,6 +285,7 @@
 
   window.KXQuick = { open };
   const BTN = '<button class="btn sm qa-red" data-kxquick title="Crea la linea e mettila subito sulle app">⚡ Nuova attivazione: App e Linea IPTV</button>';
-  window.KXQuick.button = (panel) => BTN.replace('data-kxquick', `data-kxquick="${panel}"`);
+  const usable = (panel) => { try { return panels().some((x) => x[0] === panel && x[3]); } catch { return true; } };
+  window.KXQuick.button = (panel) => (usable(panel) ? BTN.replace('data-kxquick', `data-kxquick="${panel}"`) : '');
   document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('[data-kxquick]'); if (b) { e.preventDefault(); open({ panel: b.dataset.kxquick }); } });
 })();
