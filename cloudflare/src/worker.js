@@ -5232,7 +5232,7 @@ async function adminInner(req, env, url, ip, ctx) {
     if (path === '/health-check' && m === 'GET') throw new HttpErr(403, 'Il controllo generale è riservato al titolare');
     throw new HttpErr(401, 'Sessione scaduta');
   }
-  if (path.startsWith('/blk/') && ses.role === 'agent') throw new HttpErr(403, 'Solo il titolare può usare il Pannello Black IPTV');
+  if (path.startsWith('/blk/') && (!ses || ses.role === 'agent')) throw new HttpErr(403, 'Solo il titolare può usare il Pannello Black IPTV');
   await pre;
   // rinnovo automatico: chi usa il pannello resta collegato (al massimo un aggiornamento ogni 6 ore; in sottofondo)
   if (ses.expires - now() < SESSION_TTL * 1000 - 6 * 3600e3 && path !== '/logout') {

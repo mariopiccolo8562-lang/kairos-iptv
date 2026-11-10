@@ -16,7 +16,7 @@
   $('#v-dash').after(section);
   TITLES.blk = 'Pannello Black IPTV';
 
-  const state = { data: null, error: '', token: '', busy: false, probe: null, probeError: '', path: '' };
+  const state = { data: null, error: '', token: '', busy: false, probing: false, pointerDown: false, probe: null, probeError: '', path: '' };
   const safe = (value) => esc(String(value == null ? '' : value));
   const pill = (text, color) => `<span style="display:inline-block;padding:4px 10px;border-radius:999px;background:${color}22;color:${color};font-weight:700">${safe(text)}</span>`;
   function since(value) {
@@ -90,19 +90,12 @@
     <div class="card glass">
       <b>Controllo pagine</b>
       <p class="mut" style="margin:5px 0 12px">Il controllo restituisce solo titolo, intestazioni, numero di righe e tipi di campi. Non mostra né salva i valori delle celle o i dati dei clienti.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">${PRESETS.map((path) => `<button class="btn sm" data-blk-path="${safe(path)}">${safe(path)}</button>`).join('')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${PRESETS.map((path) => `<button class="btn sm" data-blk-path="${safe(path)}" ${state.probing ? 'disabled' : ''}>${safe(path)}</button>`).join('')}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><input class="inp" id="blkPath" placeholder="Percorso pagina (es. /account/users)" value="${safe(state.path)}" style="flex:1;min-width:220px"><button class="btn pri sm" data-blk="probe" ${state.busy ? 'disabled' : ''}>Controlla</button></div>
+      ${state.probing ? '<p class="mut" role="status" style="margin-top:10px">Controllo in corso… può servire fino a 45 secondi</p>' : ''}
       ${state.probeError ? `<p class="mut" style="margin-top:10px">${safe(state.probeError)}</p>` : ''}
       ${structureHtml(state.probe)}
     </div>`;
-    section.querySelectorAll('[data-blk-path]').forEach((button) => { button.onclick = () => { state.path = button.dataset.blkPath; void probe(state.path); }; });
-    section.querySelector('[data-blk="refresh"]')?.addEventListener('click', () => void loadState());
-    section.querySelector('[data-blk="create"]')?.addEventListener('click', () => void createToken());
-    section.querySelector('[data-blk="disconnect"]')?.addEventListener('click', () => void disconnect());
-    section.querySelector('[data-blk="copy"]')?.addEventListener('click', () => void copyToken());
-    section.querySelector('[data-blk="probe"]')?.addEventListener('click', () => { state.path = $('#blkPath', section).value.trim(); void probe(state.path); });
-    const input = $('#blkPath', section);
-    if (input) input.addEventListener('input', () => { state.path = input.value; });
   }
   async function loadState() {
     try {
@@ -111,7 +104,7 @@
     } catch (error) {
       state.error = error.message || 'Stato non disponibile';
     }
-    render();
+    if (!state.busy && !state.pointerDown && document.activeElement !== $('#blkPath', section)) render();
   }
   async function createToken() {
     state.busy = true;
@@ -152,8 +145,10 @@
     }
   }
   async function probe(path) {
+    if (state.probing) return;
     if (!path) { state.probeError = 'Inserisci un percorso da controllare.'; render(); return; }
     state.busy = true;
+    state.probing = true;
     state.probeError = '';
     render();
     try {
@@ -163,9 +158,38 @@
       state.probeError = error.message || 'Il controllo non è riuscito. Verifica che Chrome sia aperto sulla pagina Black IPTV.';
     } finally {
       state.busy = false;
+      state.probing = false;
       render();
     }
   }
+  section.addEventListener('click', (event) => {
+    const target = event.target.closest('[data-blk-path], [data-blk]');
+    if (!target || !section.contains(target) || target.disabled) return;
+    if (target.matches('[data-blk-path]')) {
+      state.path = target.dataset.blkPath;
+      void probe(state.path);
+      return;
+    }
+    switch (target.dataset.blk) {
+      case 'refresh': void loadState(); break;
+      case 'create': void createToken(); break;
+      case 'disconnect': void disconnect(); break;
+      case 'copy': void copyToken(); break;
+      case 'probe':
+        state.path = $('#blkPath', section).value.trim();
+        void probe(state.path);
+        break;
+    }
+  });
+  section.addEventListener('input', (event) => {
+    if (event.target.matches('#blkPath')) state.path = event.target.value;
+  });
+  section.addEventListener('pointerdown', (event) => {
+    if (event.target.closest('[data-blk-path], [data-blk="probe"]')) state.pointerDown = true;
+  });
+  const releasePointer = () => { state.pointerDown = false; };
+  window.addEventListener('pointerup', releasePointer);
+  window.addEventListener('pointercancel', releasePointer);
   const view0 = view;
   window.view = view = function (key) {
     const result = view0.apply(this, arguments);
