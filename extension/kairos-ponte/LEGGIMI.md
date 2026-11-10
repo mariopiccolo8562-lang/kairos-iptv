@@ -1,6 +1,6 @@
 # KAIROS Ponte
 
-KAIROS Ponte collega il pannello KAIROS alla pagina Black IPTV già aperta nel tuo Chrome. L'estensione usa la sessione del browser: non inviare il codice del ponte a nessuno.
+KAIROS Ponte collega il pannello KAIROS alla pagina Black IPTV già aperta nel tuo Chrome o Edge. L'estensione usa la sessione del browser: non inviare il codice del ponte a nessuno.
 
 ## Installazione in Chrome
 
@@ -17,4 +17,4 @@ In Microsoft Edge, aggiungi `reseller.blkaccess.com` a «Non sospendere mai ques
 
 Se crei un nuovo codice nel pannello KAIROS, sostituisci quello salvato nell'estensione. Per interrompere il collegamento usa **Scollega il ponte** nel pannello KAIROS.
 
-Dopo aver sostituito la cartella con una nuova versione, apri `edge://extensions` o `chrome://extensions` e premi «Ricarica» sulla scheda di KAIROS Ponte.
+Per aggiornare, sostituisci i file nella stessa cartella dell'estensione e premi «Ricarica» in `edge://extensions` o `chrome://extensions`.

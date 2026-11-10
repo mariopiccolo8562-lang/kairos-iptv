@@ -1,6 +1,6 @@
-/* Pannello Black IPTV: il collegamento passa dalla scheda Chrome già autenticata. */
+/* Pannello Black IPTV: il collegamento passa dalla scheda già autenticata. */
 (() => {
-  const PRESETS = ['/TOmnO8fxP3rl/', '/TOmnO8fxP3rl/dashboard', '/TOmnO8fxP3rl/users', '/TOmnO8fxP3rl/lines'];
+  const PRESETS = ['/TOmnO8fxP3rl/', '/TOmnO8fxP3rl/users.php', '/TOmnO8fxP3rl/mags.php', '/TOmnO8fxP3rl/live_connections.php', '/TOmnO8fxP3rl/user_reseller.php'];
   const nav = document.createElement('button');
   nav.className = 'nav';
   nav.dataset.v = 'blk';
@@ -34,6 +34,7 @@
     const statusText = probe.status === 404
       ? 'La pagina ha risposto 404. È normale se il percorso non esiste: puoi provarne un altro.'
       : `Risposta HTTP ${safe(probe.status)} · ${safe(probe.bytes)} byte${probe.trunc ? ' · risposta abbreviata' : ''}`;
+    const viaText = probe.via === 'iframe' ? ' · letta tramite pagina nascosta' : '';
     const tables = (probe.tables || []).map((table) => `<div class="card" style="padding:12px;margin-top:10px">
       <b>Tabella ${safe(Number(table.idx) + 1)}</b> · ${safe(table.rows)} righe
       <div style="margin-top:6px"><span class="mut">Intestazioni:</span> ${table.headers && table.headers.length ? table.headers.map(safe).join(' · ') : 'nessuna'}</div>
@@ -41,9 +42,9 @@
     </div>`).join('') || '<p class="mut" style="margin-top:10px">Nessuna tabella trovata.</p>';
     const forms = (probe.forms || []).map((form, index) => `<div style="margin-top:8px"><b>Modulo ${index + 1}</b> · ${safe(form.method)} · ${safe(form.action)}
       <div class="mut">${(form.fields || []).map((field) => `${safe(field.name || '(senza nome)')} (${safe(field.type)})`).join(' · ') || 'nessun campo'}</div></div>`).join('') || '<div class="mut" style="margin-top:8px">Nessun modulo trovato.</div>';
-    const links = (probe.links || []).map((link) => `<li>${safe(link.text || '(senza testo)')} · <span class="mono">${safe(link.href)}</span></li>`).join('') || '<li class="mut">Nessun collegamento trovato.</li>';
+    const links = (probe.links || []).map((link) => `<li><a href="${safe(link.href)}" data-blk-path="${safe(link.href)}" style="color:var(--a1)">${safe(link.text || '(senza testo)')}</a> · <span class="mono">${safe(link.href)}</span></li>`).join('') || '<li class="mut">Nessun collegamento trovato.</li>';
     return `<div class="card" style="padding:12px;margin-top:12px">
-      <b>Risultato · ${statusText}</b>
+      <b>Risultato · ${statusText}${viaText}</b>
       <div style="margin-top:6px">Titolo pagina: ${safe(probe.title || '—')} · Script: ${safe(probe.scripts)} · Percorso: <span class="mono">${safe(probe.url)}</span></div>
       ${tables}<div style="margin-top:14px"><b>Moduli e campi</b>${forms}</div>
       <div style="margin-top:14px"><b>Collegamenti interni</b><ul style="padding-left:20px;margin-top:5px">${links}</ul></div>
@@ -56,7 +57,7 @@
     const status = fresh ? pill('Ponte collegato', '#3dffb0') : data.installed ? pill('Ponte non collegato', '#ffcc4d') : pill('Codice non creato', '#9ca8c5');
     section.innerHTML = `<div class="card glass" style="margin-bottom:14px">
       <h2 style="font-size:20px;margin-bottom:8px">Pannello Black IPTV</h2>
-      <p class="mut">Black IPTV richiede una sessione del browser e non è raggiungibile direttamente dal Worker KAIROS. Il ponte usa la scheda Chrome in cui hai già effettuato l'accesso: non prova a superare controlli o protezioni del sito.</p>
+      <p class="mut">Black IPTV richiede una sessione del browser e non è raggiungibile direttamente dal Worker KAIROS. Il ponte usa la scheda Chrome o Edge in cui hai già effettuato l'accesso: non prova a superare controlli o protezioni del sito.</p>
     </div>
     <div class="card glass" style="margin-bottom:14px">
       <div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
@@ -80,10 +81,10 @@
       <b>Installa l'estensione</b>
       <ol class="mut" style="padding-left:20px;margin-top:8px;line-height:1.8">
         <li>Scarica la cartella <span class="mono">extension/kairos-ponte</span> sul computer.</li>
-        <li>Apri <span class="mono">chrome://extensions</span> e attiva «Modalità sviluppatore».</li>
-        <li>Scegli «Carica estensione non pacchettizzata» e seleziona la cartella.</li>
+        <li>In Chrome o Edge apri <span class="mono">chrome://extensions</span> o <span class="mono">edge://extensions</span> e attiva «Modalità sviluppatore».</li>
+        <li>Scegli «Carica estensione non pacchettizzata» (Chrome) o «Carica decompressa» (Edge) e seleziona la cartella.</li>
         <li>Apri «KAIROS Ponte», incolla il codice e premi «Salva».</li>
-        <li>Accedi a Black IPTV in Chrome e lascia aperta la scheda.</li>
+        <li>Accedi a Black IPTV in Chrome o Edge e lascia aperta la scheda.</li>
       </ol>
       <p class="mut" style="margin-top:8px">La guida completa è nella cartella dell'estensione, nel file LEGGIMI.md.</p>
     </div>
@@ -155,7 +156,10 @@
       state.probe = await api('POST', '/admin/blk/probe', { path });
       state.probeError = '';
     } catch (error) {
-      state.probeError = error.message || 'Il controllo non è riuscito. Verifica che Chrome sia aperto sulla pagina Black IPTV.';
+      const message = error.message || 'Il controllo non è riuscito. Verifica che Chrome o Edge siano aperti sulla pagina Black IPTV.';
+      state.probeError = /Failed to fetch|reindirizzata/i.test(message)
+        ? `Black IPTV ha bloccato la lettura diretta di questa pagina: ${message}`
+        : message;
     } finally {
       state.busy = false;
       state.probing = false;
@@ -166,6 +170,7 @@
     const target = event.target.closest('[data-blk-path], [data-blk]');
     if (!target || !section.contains(target) || target.disabled) return;
     if (target.matches('[data-blk-path]')) {
+      if (target.matches('a')) event.preventDefault();
       state.path = target.dataset.blkPath;
       void probe(state.path);
       return;

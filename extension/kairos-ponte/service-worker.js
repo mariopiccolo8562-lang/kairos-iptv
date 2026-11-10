@@ -23,7 +23,14 @@ async function requestKairos(message) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(message.type === 'poll'
       ? { token: message.token }
-      : { token: message.token, id: message.id, status: message.status, body: message.body, err: message.err }),
+      : {
+        token: message.token,
+        id: message.id,
+        status: message.status,
+        body: message.body,
+        err: message.err,
+        ...(message.via === 'fetch' || message.via === 'iframe' ? { via: message.via } : {}),
+      }),
     credentials: 'omit',
   });
   let data = {};
