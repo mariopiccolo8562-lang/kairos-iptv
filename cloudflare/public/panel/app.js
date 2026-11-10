@@ -199,6 +199,7 @@ async function load(quiet) {
   // sotto il nome: il ruolo di chi è entrato (in assistenza quello dell'agente). Agente creato dal titolare = Reseller, creato da un agente = Sub reseller
   const roleTxt = D.role !== 'agent' ? 'Master' : D.me && D.me.parentId ? 'Sub reseller' : 'Reseller';
   $$('.brandRole').forEach((e) => { if (e.textContent !== roleTxt) e.textContent = roleTxt; });
+  window.KXRoleTxt = roleTxt;
   $('#av').textContent = (D.user || 'A')[0].toUpperCase();
   const pend = D.devices.filter((d) => d.status === 'pending' && !d.parent).length;
   $('#pendB').style.display = pend ? '' : 'none'; $('#pendB').textContent = pend;

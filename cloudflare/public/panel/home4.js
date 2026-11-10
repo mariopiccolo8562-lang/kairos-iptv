@@ -86,10 +86,12 @@
   function isAgent() { return D.role === 'agent'; }
   function render() {
     if (!window.KXHub?.list) return;
-    const hubs = KXHub.list(), canNew = $('#newDev') && $('#newDev').style.display !== 'none';
-    home.innerHTML = `<div class="h4-home"><div class="h4-home-head"><div><h2>Benvenuto su KAIROS</h2><small>Il tuo pannello, tutto in un posto.</small></div>${canNew ? '<button class="btn pri" data-home-new>＋ Nuovo cliente</button>' : ''}</div>
+    const hubs = KXHub.list();
+    // saluto con nome, data e ruolo (prima: «Benvenuto su KAIROS»); «Nuovo cliente» c'è già in alto (e in basso sul telefono)
+    const h = new Date().getHours(), hi = h < 5 ? 'Buonanotte' : h < 13 ? 'Buongiorno' : h < 18 ? 'Buon pomeriggio' : h < 23 ? 'Buonasera' : 'Buonanotte';
+    const who = (isAgent() && D.me && D.me.username) || D.user || '', day = new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+    home.innerHTML = `<div class="h4-home"><div class="h4-home-head"><div><h2>${hi}${who ? `, <span class="h4-hi">${esc(who)}</span>` : ''}</h2><small>${esc(day)}${window.KXRoleTxt ? ' · ' + esc(window.KXRoleTxt) : ''}</small></div></div>
       <div class="h4-home-grid">${hubs.map((h) => `<button type="button" class="h4-home-tile" data-home-hub="${esc(h.id)}" style="--hc:${esc(h.color)}"><span class="h4-home-title"><i class="h4-home-icon">${h.icon}</i><b>${esc(h.label)}</b>${KXHub.badge(h.id) ? `<span class="h4-home-badge">${KXHub.badge(h.id)}</span>` : ''}</span>${stats(h.id, h.label)}</button>`).join('')}</div></div>`;
-    $('[data-home-new]', home)?.addEventListener('click', () => $('#newDev')?.click());
     $$('[data-home-hub]', home).forEach((b) => b.addEventListener('click', () => KXHub(b.dataset.homeHub)));
   }
   let presenceAt = 0, presenceAttemptAt = 0, presenceRequest = null;
