@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "KAIROS Ponte",
-  "version": "1.0.3",
-  "description": "Collega KAIROS al pannello Black IPTV aperto nel tuo Chrome o Edge.",
-  "permissions": ["storage"],
+  "version": "1.1.0",
+  "description": "Collega KAIROS al pannello Black IPTV e passa l'accesso MirkoTeam dal tuo Chrome o Edge.",
+  "permissions": ["storage", "cookies", "alarms"],
   "host_permissions": [
     "https://reseller.blkaccess.com/*",
-    "https://panel-kairos.com/*"
+    "https://panel-kairos.com/*",
+    "https://cp.ottrun.com/*"
   ],
   "background": {
     "service_worker": "service-worker.js"
@@ -17,6 +18,11 @@
       "js": ["bridge.js"],
       "run_at": "document_idle",
       "all_frames": false
+    },
+    {
+      "matches": ["https://panel-kairos.com/*"],
+      "js": ["pair.js"],
+      "run_at": "document_idle"
     }
   ],
   "action": {

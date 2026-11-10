@@ -135,7 +135,7 @@ export async function orcpKeepAlive(env, H) {
   } catch (e) {
     if (!e || e.status !== 401) return { error: true };
     if (s.alert !== 1) {
-      const text = '⚠️ <b>MirkoTeam</b>\nL\'accesso a cp.ottrun.com è scaduto: in KAIROS apri «App MirkoTeam» → scheda <b>Collega</b> e ripassa l\'accesso (entra su cp.ottrun.com con «Remember me»).';
+      const text = '⚠️ <b>MirkoTeam</b>\nL\'accesso a cp.ottrun.com è scaduto. Entra su cp.ottrun.com dal computer con l\'estensione KAIROS Ponte (con «Remember me»): KAIROS si ricollega da solo. In alternativa ripassa l\'accesso dalla scheda <b>Collega</b>.';
       try { await H.notifyOwnersText(env, text); } catch {}
       s.alert = 1;
       await saveSes(env, H, s).catch(() => {});
@@ -147,6 +147,36 @@ export async function orcpKeepAlive(env, H) {
   if (s.alert !== undefined) delete s.alert;
   await saveSes(env, H, s);
   return { ok: true };
+}
+export async function orcpAcceptCookies(env, H, cookies, src) {
+  if (typeof cookies !== 'string' || cookies.length > 12000) {
+    throw new H.HttpErr(400, 'Non trovo i cookie di ORCP: servono «remember_web_…» (con «Remember me») o «orcp_ottrun_control_panel_session»');
+  }
+  const jar = parseCookies(H.str(cookies, 12000));
+  if (!remOf(jar) && !jar.orcp_ottrun_control_panel_session) {
+    throw new H.HttpErr(400, 'Non trovo i cookie di ORCP: servono «remember_web_…» (con «Remember me») o «orcp_ottrun_control_panel_session»');
+  }
+  const previous = await loadSes(env, H);
+  const relinked = !previous || !!previous.bad;
+  const source = src === 'ext' ? 'ext' : 'manual';
+  mem.ses = { jar, at: Date.now(), src: source };
+  mem.cfg = null;
+  delete mem.connsErr;
+  let app;
+  try {
+    app = await appInfo(env, H, true);
+  } catch (e) {
+    mem.ses = null;
+    throw e instanceof H.HttpErr
+      ? new H.HttpErr(400, 'ORCP non riconosce questo accesso: rientra su cp.ottrun.com con «Remember me» e ripassa l\'accesso')
+      : e;
+  }
+  const session = { ...mem.ses, app, src: source };
+  await saveSes(env, H, session);
+  if (source === 'ext' && relinked) {
+    await H.log(env, 'edit', 'KairosA: pannello ORCP ricollegato dall\'estensione').catch(() => {});
+  }
+  return { ok: true, remember: !!remOf(jar), app: { name: app.name, version: app.version, expires: app.expires } };
 }
 /** POST di un modulo Laravel: prende il _token dalla pagina del modulo; ORCP risponde con un redirect quando va bene */
 async function post(env, H, pagePath, action, form, hid = ['appid', 'customerid']) {
@@ -295,20 +325,16 @@ export async function orcpRoutes(req, env, path, who, ip, H, ctx) {
   const ids = async () => { const a = await appInfo(env, H); if (!a || !a.appid) throw new HttpErr(502, 'ORCP: app non riconosciuta'); return a; };
   if (path === '/orcp/state' && m === 'GET') {
     const s = await loadSes(env, H), cfg = await cfgOf(env);
-    if (!s) return json({ connected: false, cfg });
+    if (!s) return json({ connected: false, src: '', cfg });
     let app = s.app || null; if (!app && !s.bad) { try { app = await appInfo(env, H); } catch {} }
     const remember = !!remOf(s.jar);
-    return json({ connected: true, expired: !!s.bad, remember, at: s.at || 0, ping: s.ping || 0, user: app ? app.user : '', app: app ? { name: app.name || cfg.name, version: app.version, expires: app.expires, apk: app.apk, id: app.appid } : null, cfg: { ...cfg, name: cfg.name || (app && app.name) || '' } });
+    return json({ connected: true, expired: !!s.bad, remember, at: s.at || 0, ping: s.ping || 0, src: s.src || '', user: app ? app.user : '', app: app ? { name: app.name || cfg.name, version: app.version, expires: app.expires, apk: app.apk, id: app.appid } : null, cfg: { ...cfg, name: cfg.name || (app && app.name) || '' } });
   }
   if (path === '/orcp/session' && m === 'PUT') {
-    const b = await H.readJSON(req, 16384), jar = parseCookies(str(b.cookies, 12000));
-    if (!remOf(jar) && !jar.orcp_ottrun_control_panel_session) throw new HttpErr(400, 'Non trovo i cookie di ORCP: servono «remember_web_…» (con «Remember me») o «orcp_ottrun_control_panel_session»');
-    mem.ses = { jar, at: Date.now() }; mem.cfg = null; delete mem.connsErr;
-    let app; try { app = await appInfo(env, H, true); } catch (e) { mem.ses = null; throw e instanceof HttpErr ? new HttpErr(400, 'ORCP non riconosce questo accesso: rientra su cp.ottrun.com con «Remember me» e ripassa i cookie') : e; }
-    await saveSes(env, H, { ...mem.ses, app });
-    if (!remOf(jar)) await H.log(env, 'edit', `${who}: ORCP collegato senza «Remember me» (l'accesso durerà circa 2 ore)`, ip).catch(() => {});
-    else await H.log(env, 'edit', `${who}: pannello ORCP collegato (${app.name || 'app'})`, ip).catch(() => {});
-    return json({ ok: true, remember: !!remOf(jar), app: { name: app.name, version: app.version, expires: app.expires } });
+    const b = await H.readJSON(req, 16384), accepted = await orcpAcceptCookies(env, H, b.cookies, 'manual');
+    if (!accepted.remember) await H.log(env, 'edit', `${who}: ORCP collegato senza «Remember me» (l'accesso durerà circa 2 ore)`, ip).catch(() => {});
+    else await H.log(env, 'edit', `${who}: pannello ORCP collegato (${accepted.app.name || 'app'})`, ip).catch(() => {});
+    return json(accepted);
   }
   if (path === '/orcp/session' && m === 'DELETE') { mem.ses = null; mem.conns = null; delete mem.connsErr; await delRow(env, K); await delRow(env, KCONNS).catch(() => {}); await H.log(env, 'edit', `${who}: pannello ORCP scollegato`, ip).catch(() => {}); return json({ ok: true }); }
   if (path === '/orcp/cfg' && m === 'GET') { const cfg = await cfgOf(env); const s = await loadSes(env, H); return json({ cfg: { ...cfg, name: cfg.name || (s && s.app && s.app.name) || '' }, servers: s && s.servers ? s.servers : [] }); }
