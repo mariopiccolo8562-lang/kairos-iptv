@@ -533,8 +533,14 @@
       }
       if (a === 'link') {
         const k = linkOf(id);
-        const ok = await ask('Cliente KAIROS della linea ' + l.username, `<label class="lbl">Cliente</label><select class="inp" id="wlD">${devOpts(k ? k.device : '')}</select>
+        // scelta del cliente: elenco che si apre subito, con la ricerca (cli-pick.js); senza, la tendina di prima
+        const CP = window.KXCliPick, PO = { grow: false, all: true, none: true };
+        if (CP) CP.reset('wlD');
+        const pick = CP ? CP.html('wlD', { ...PO, value: k ? k.device : '' }) : `<select class="inp" id="wlD">${devOpts(k ? k.device : '')}</select>`;
+        const asked = ask('Cliente KAIROS della linea ' + l.username, `<label class="lbl">Cliente</label>${pick}
           <p class="mut" style="font-size:12.5px;margin:10px 0 0">Se il cliente non ha ancora questa linea, gli viene aggiunta come playlist. Quando cambi utente o password (qui o su WOLF) la sua playlist si aggiorna da sola.</p>`, 'Salva');
+        if (CP) { CP.bind('wlD', PO); CP.open('wlD'); }
+        const ok = await asked;
         if (!ok) return;
         const dv = $('#wlD').value;
         if (!dv) { if (k) { await api('DELETE', '/admin/wolf/links/' + id); toast('Collegamento tolto'); } return loadLines(); }

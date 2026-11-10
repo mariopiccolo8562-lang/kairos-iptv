@@ -54,6 +54,8 @@
       for (const [k, tag] of [['ro', 'REALOTT'], ['slt', 'SLT']]) if (can(k) && live(k)) T.push(api('GET', `/admin/${k}/lines`).then((r) => (r.rows || []).forEach((x) => add({ p: k, tag, t: x.username, s: [x.notes, x.owner, x.status].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.owner, x.id], raw: x, dns: r.dns || '' }))).catch(miss(k)));
       if (!isAg()) T.push(api('GET', '/admin/orcp/state').then((st) => st.connected ? api('GET', '/admin/orcp/data?w=conns') : { list: [] }).then((r) => { const seen = new Set(); (r.list || []).forEach((x) => { const k = String(x.user || '').toLowerCase(); if (!k || seen.has(k)) return; seen.add(k); add({ p: 'orcp', tag: 'MIRKO', t: x.user, s: [x.online ? 'online ora' : 'ultimo accesso ' + (x.last || ''), x.device].filter(Boolean).join(' · '), q: x.user, hay: [x.user, x.device, x.ip], raw: x }); }); }).catch(() => {}));
       if (can('oxp') && live('oxp')) T.push(api('GET', '/admin/oxp/playlists').then((r) => (r.playlists || []).forEach((x) => add({ p: 'oxp', tag: 'ORB', t: x.user || x.name, s: 'dispositivo ' + x.device + (x.name ? ' · ' + x.name : ''), q: x.device, hay: [x.user, x.device, x.name, x.host], raw: x }))).catch(miss('oxp')));
+      // Black IPTV (solo titolare): le linee già lette dalla sua pagina e salvate nel pannello; qui nessuna richiesta a Black
+      if (!isAg() && live('blk')) T.push(api('GET', '/admin/blk/lines').then((r) => (r.rows || []).forEach((x) => { if (x && x.username) add({ p: 'blk', tag: 'BLACK', t: x.username, s: [x.reseller, x.status, x.expires || x.exp].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.reseller, x.status, x.notes], raw: x }); })).catch(miss('blk')));
       await Promise.all(T);
       out.forEach((x) => (x.hay = x.hay.filter(Boolean).join(' ').toLowerCase()));
       EXT.items = out; EXT.t = Date.now(); EXT.busy = null;
@@ -63,7 +65,7 @@
   }
 
   const fits = (hay, toks) => toks.every((t) => hay.includes(t));
-  const PK0 = ['wolf', 'armada', 'storm', 'mxp', 'oxp', 'atx', 'ro', 'slt', 'orcp'], PN0 = ['WOLF', 'Armada', 'Storm', 'MaxPlayer', 'OrbixPlay', 'Atlantix', 'Realott', 'SLT', 'MirkoTeam'];
+  const PK0 = ['wolf', 'armada', 'storm', 'mxp', 'oxp', 'atx', 'ro', 'slt', 'orcp', 'blk'], PN0 = ['WOLF', 'Armada', 'Storm', 'MaxPlayer', 'OrbixPlay', 'Atlantix', 'Realott', 'SLT', 'MirkoTeam', 'Black IPTV'];
   let items = [], sel = 0, seq = 0;
   function pages(toks) {
     return $$('.nav[data-v]').filter((b) => b.style.display !== 'none' && (b.offsetParent !== null || !!b.closest('#side.m4'))).map((b) => ({ v: b.dataset.v, name: (b.textContent || '').replace(/\d+\s*$/, '').trim() }))
@@ -114,7 +116,7 @@
   function rowOf(p, want) {
     const v = document.getElementById('v-' + p);
     // i nomi nel riquadro rosso della ricerca (xsearch.js, .xs-bar) non sono righe: si salta quello e si cerca nella lista
-    const el = v && [...v.querySelectorAll('b, .mono, code')].find((e) => e.offsetParent && !e.closest('.xs-bar') && e.textContent.trim().toLowerCase() === want);
+    const el = v && [...v.querySelectorAll(p === 'blk' ? 'b, .mono, code, td' : 'b, .mono, code')].find((e) => e.offsetParent && !e.closest('.xs-bar') && e.textContent.trim().toLowerCase() === want); // Black IPTV: il nome sta in una cella semplice
     if (!el) return null;
     const row = el.closest('.wf-row, .ar-row, .mx-row, tr, .card') || el;
     return row.getBoundingClientRect().height > 420 ? el.parentElement || el : row;
@@ -135,7 +137,7 @@
     }
     return false;
   }
-  const IN = { wolf: '#wfQ', armada: '#v-armada #arQ', storm: '#v-storm #arQ', mxp: '#mxQ', oxp: '#oxQ', atx: '#axQ', ro: '#exQ', slt: '#exQ', orcp: '#orQ' };
+  const IN = { wolf: '#wfQ', armada: '#v-armada #arQ', storm: '#v-storm #arQ', mxp: '#mxQ', oxp: '#oxQ', atx: '#axQ', ro: '#exQ', slt: '#exQ', orcp: '#orQ', blk: '#blkLinesSearch' };
   async function pick(x) {
     if (!x) return;
     dd.classList.remove('on'); gq.blur();

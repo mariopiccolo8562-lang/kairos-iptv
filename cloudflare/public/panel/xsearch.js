@@ -3,7 +3,9 @@
    nome negli altri pannelli (stesse liste del «Cerca ovunque», omni.js) e un clic apre la scheda giusta. Va dopo omni.js.
    Dal 10 novembre 2026 il riquadro resta fisso dopo il primo clic: tiene i risultati della ricerca (es. «pers») anche
    cambiando pannello, segna con ✓ le linee già aperte, «Torna a «…»» rimette la ricerca intera e ✕ lo chiude.
-   Una nuova ricerca scritta a mano lo fa ripartire. */
+   Una nuova ricerca scritta a mano lo fa ripartire.
+   Dall'11 novembre 2026 anche Black IPTV (solo titolare): la sua casella «Cerca username o reseller» cerca in tutti i
+   pannelli e le sue linee (quelle già lette e salvate dalla sua pagina) compaiono nelle ricerche degli altri. */
 (() => {
   const css = document.createElement('style');
   css.textContent = `.xs-bar{display:flex;flex-direction:column;gap:6px;margin:8px 0 2px;padding:10px 12px;border-radius:12px;background:linear-gradient(150deg,#ff4d4d26,#ffffff06);border:1px solid #ff4d4d88;font-size:12.5px;width:100%}
@@ -20,7 +22,7 @@
 @media (max-width:700px){.xs-head{flex-direction:column;gap:6px}.xs-tools{flex-wrap:wrap}}`;
   document.head.appendChild(css);
   // casella di ricerca di ogni scheda → pannello (per exQ il pannello è quello della sezione aperta: Realott o SLT)
-  const IN = [['#wfQ', 'wolf'], ['#v-armada #arQ', 'armada'], ['#v-storm #arQ', 'storm'], ['#axQ', 'atx'], ['#exQ', null], ['#orQ', 'orcp'], ['#mxQ', 'mxp'], ['#oxQ', 'oxp']];
+  const IN = [['#wfQ', 'wolf'], ['#v-armada #arQ', 'armada'], ['#v-storm #arQ', 'storm'], ['#axQ', 'atx'], ['#exQ', null], ['#orQ', 'orcp'], ['#mxQ', 'mxp'], ['#oxQ', 'oxp'], ['#blkLinesSearch', 'blk']];
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   /* pin: riquadro fisso { q: ricerca di partenza, items, seen: linee già aperte, vals: nomi messi da noi nelle caselle } */
   const S = { q: '', items: null, seq: 0, pre: 0, pin: null, hide: '', more: new Set() };
@@ -100,7 +102,7 @@
     render(cur);
   }
   let tmr = 0;
-  const PV = new Set(['v-wolf', 'v-armada', 'v-storm', 'v-atx', 'v-ro', 'v-slt', 'v-orcp', 'v-mxp', 'v-oxp']);
+  const PV = new Set(['v-wolf', 'v-armada', 'v-storm', 'v-atx', 'v-ro', 'v-slt', 'v-orcp', 'v-mxp', 'v-oxp', 'v-blk']);
   async function tick() {
     const on = document.querySelector('section.view.on');
     if (!on || !PV.has(on.id)) { S.pin = null; S.hide = ''; return; } // uscendo dalle schede dei pannelli il riquadro fisso si scioglie

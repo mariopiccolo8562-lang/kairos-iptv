@@ -20,26 +20,27 @@
 #v-appon .ao-top #aoQ{flex:1;min-width:240px}
 #v-appon .ao-top select.inp{width:auto;max-width:240px}
 #v-appon .ao-info{font-size:12.5px;color:var(--mut);margin-top:8px}
-#v-appon .ao-err{font-size:12.5px;color:#fbbf24;margin-top:6px}
+:is(#v-appon,.kc-ext) .ao-err{font-size:12.5px;color:#fbbf24;margin-top:6px}
 #v-appon .dv-tiles{margin:12px 0 10px}
 #v-appon .dv-tile.all b{color:#e8eef8}
 #v-appon .dv-tile.aw{--c:#22d3ee}#v-appon .dv-tile.aw b{color:#67e8f9}#v-appon .dv-tile.aoff{--c:#94a3b8}#v-appon .dv-tile.aoff b{color:#cbd5e1}
 #v-appon .filters{margin:0 0 8px}
-#v-appon .ao-list{border:1px solid var(--line);border-radius:14px;overflow:hidden}
-#v-appon .ao-row{display:grid;grid-template-columns:118px minmax(0,1.15fr) 168px minmax(0,1.35fr) minmax(0,1fr) minmax(0,1.1fr);gap:10px;align-items:center;padding:10px 12px;border-top:1px solid var(--line);cursor:pointer;font-size:13px}
-#v-appon .ao-row:first-child{border-top:0}
-#v-appon .ao-row:hover,#v-appon .ao-row:focus-visible{background:rgba(255,255,255,.045);outline:none}
-#v-appon .ao-head{cursor:default;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);background:rgba(255,255,255,.02)}
-#v-appon .ao-head:hover{background:rgba(255,255,255,.02)}
-#v-appon .ao-row>div{min-width:0}
-#v-appon .ao-row b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#v-appon .ao-row small{display:block;color:var(--mut);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#v-appon .ao-row .ao-w b{color:#fbbf24}
-#v-appon .ao-row .mono,#aoOv .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-#v-appon .ao-empty{padding:16px;color:var(--mut)}
+:is(#v-appon,.kc-ext) .ao-list{border:1px solid var(--line);border-radius:14px;overflow:hidden}
+:is(#v-appon,.kc-ext) .ao-row{display:grid;grid-template-columns:118px minmax(0,1.15fr) 168px minmax(0,1.35fr) minmax(0,1fr) minmax(0,1.1fr);gap:10px;align-items:center;padding:10px 12px;border-top:1px solid var(--line);cursor:pointer;font-size:13px}
+:is(#v-appon,.kc-ext) .ao-row:first-child{border-top:0}
+:is(#v-appon,.kc-ext) .ao-row:hover,:is(#v-appon,.kc-ext) .ao-row:focus-visible{background:rgba(255,255,255,.045);outline:none}
+:is(#v-appon,.kc-ext) .ao-head{cursor:default;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);background:rgba(255,255,255,.02)}
+:is(#v-appon,.kc-ext) .ao-head:hover{background:rgba(255,255,255,.02)}
+:is(#v-appon,.kc-ext) .ao-row>div{min-width:0}
+:is(#v-appon,.kc-ext) .ao-row b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is(#v-appon,.kc-ext) .ao-row small{display:block;color:var(--mut);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is(#v-appon,.kc-ext) .ao-row .ao-w b{color:#fbbf24}
+:is(#v-appon,.kc-ext) .ao-row .mono,#aoOv .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+:is(#v-appon,.kc-ext) .ao-empty{padding:16px;color:var(--mut)}
 .ao-app{justify-self:start;display:inline-block;max-width:100%;font-size:11.5px;font-weight:800;padding:3px 8px;border-radius:8px;background:color-mix(in srgb,var(--c) 18%,transparent);color:color-mix(in srgb,var(--c) 72%,#fff);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ao-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:999px;margin:3px 4px 0 0;border:1px solid #f59e0b66;background:#78350f55;color:#fcd34d;white-space:nowrap}
 .ao-tag.ok{border-color:#22c55e55;background:#14532d55;color:#86efac}
+.ao-u small.ao-by{font-weight:700;margin-top:1px}.ao-u small.ao-by.me{color:#9cc0ff}.ao-u small.ao-by.ag{color:#fde68a}.ao-u small.ao-by.na{font-weight:500}
 /* sotto le finestre di conferma (#modal, 40): «Disconnetti» e «Spegni VPN» le aprono sopra la scheda */
 #aoOv{position:fixed;inset:0;z-index:38;display:grid;place-items:center;background:rgba(3,4,10,.62);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);padding:16px}
 #aoOv .ao-box{width:min(900px,100%);max-height:92vh;overflow:auto;padding:20px 22px;background:#0e1424;border:1px solid var(--line);border-radius:18px;box-shadow:0 30px 80px #000a}
@@ -61,9 +62,9 @@
   #v-appon .ao-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}#v-appon .ao-top #aoQ{grid-column:1/-1;min-width:0}#v-appon .ao-top select.inp{width:100%!important;max-width:none!important;min-width:0}
   #aoOv .ao-box{padding:16px}#aoOv .ao-kv{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-auto-flow:row dense}#aoOv .ao-kv .ao-kv-w{grid-column:1/-1}}
 @media (max-width:820px){
-  #v-appon .ao-head{display:none}
-  #v-appon .ao-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 12px}
-  #v-appon .ao-row>.ao-app{grid-column:1/-1}
+  :is(#v-appon,.kc-ext) .ao-head{display:none}
+  :is(#v-appon,.kc-ext) .ao-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 12px}
+  :is(#v-appon,.kc-ext) .ao-row>.ao-app{grid-column:1/-1}
 }`;
   document.head.appendChild(css);
 
@@ -172,6 +173,33 @@
     }
     return out;
   }
+  /* chi ha attivato (11 novembre 2026): app KAIROS → l'agente del cliente (o te); app di terzi → il cliente KAIROS collegato,
+     poi chi ha creato la lista («Crea lista», /admin/ext-lists), poi il cliente KAIROS con la stessa linea; altrimenti «non so».
+     r.by = 'Tu' | nome dell'agente | '' (non si sa); se è un agente va anche in r.owner (filtro «reseller») */
+  const XL = { t: 0, m: null };
+  async function extLists(force) {
+    if (!force && XL.m && Date.now() - XL.t < 120e3) return XL.m;
+    try {
+      const r = await api('GET', '/admin/ext-lists'), m = new Map();
+      for (const l of (r && r.lists) || []) { const k = (l.app === 'orbix' ? 'x:' : l.app === 'max' ? 'm:' : '') + String(l.ref || l.username || '').toLowerCase(); if (k.length > 2 && !m.has(k)) m.set(k, l.by || ''); }
+      XL.m = m; XL.t = Date.now();
+    } catch { XL.m = XL.m || new Map(); }
+    return XL.m;
+  }
+  function attribute(rows, XM) {
+    const LM = new Map(); // utente della linea → cliente KAIROS principale
+    for (const d of D.devices || []) { if (d.parent) continue; for (const pl of d.playlists || []) { const u = String(pl.username || '').toLowerCase(); if (u && !LM.has(u)) LM.set(u, d); } }
+    for (const r of rows) {
+      if (r.src === 'kairos') { r.by = r.owner || 'Tu'; continue; }
+      let by = null;
+      if (r.kd) by = ownerOfDev(r.kd) || 'Tu';
+      if (by === null && XM) { const k = r.src === 'oxp' ? 'x:' + String(r.dev || '').toLowerCase() : r.src === 'mxp' ? 'm:' + String(r.mu || '').toLowerCase() : ''; if (k.length > 2 && XM.has(k)) by = XM.get(k) || 'Tu'; }
+      if (by === null) for (const u of r.src === 'orcp' ? [r.name] : (r.lines || []).map((l) => l.user)) { const d = LM.get(String(u || '').toLowerCase()); if (d) { by = ownerOfDev(d) || 'Tu'; break; } }
+      r.by = by || '';
+      if (by && by !== 'Tu' && !r.owner) r.owner = by;
+    }
+  }
+  const byTxt = (r) => (r.by === 'Tu' ? 'attivato da te' : r.by ? 'attivato da ' + r.by : r.src === 'kairos' ? '' : 'attivato da: ?');
   async function load(force) {
     if (!isOwner()) return;
     if (S.busy) return S.busy;
@@ -180,10 +208,11 @@
       const due = force || !S.tx || Date.now() - S.tx > 120e3; // MaxPlayer e OrbixPlay: le liste si rileggono al massimo ogni 2 minuti
       maps(); paint();
       if (window.KXWatch) KXWatch.load().then(() => paint()).catch(() => {});
-      const [k, o, m, x] = await Promise.all([kLoad().catch(err('App KAIROS')), oLoad(errs).catch(err(orcpName())), due ? mLoad().catch(err('MaxPlayer')) : null, due ? xLoad().catch(err('OrbixPlay')) : null]);
+      const [k, o, m, x, XM] = await Promise.all([kLoad().catch(err('App KAIROS')), oLoad(errs).catch(err(orcpName())), due ? mLoad().catch(err('MaxPlayer')) : null, due ? xLoad().catch(err('OrbixPlay')) : null, extLists(due)]);
       // se una lettura non riesce restano i dati di prima (con l'avviso), non spariscono le righe
       if (k) S.src.kairos = k; if (o) S.src.orcp = o; if (m) S.src.mxp = m; if (x) S.src.oxp = x; if (due) S.tx = Date.now();
       S.rows = [].concat(...Object.values(S.src).map((L) => L || [])); S.errs = errs; S.t = Date.now();
+      attribute(S.rows, XM);
     })().finally(() => { S.busy = null; paint(); });
     return S.busy;
   }
@@ -302,6 +331,15 @@
   }
 
   /* ---------- disegno ---------- */
+  const HEAD = '<div class="ao-row ao-head"><span>App</span><span>Utente</span><span>Stato</span><span>Cosa guarda</span><span>IP e luogo</span><span>Dispositivo</span></div>';
+  /** una riga (anche per la scheda «App terze» di «Online ora Kairos»): [i] = posizione nell'elenco di questa pagina, -1 altrove */
+  const rowHtml = (r, i) => `<div class="ao-row" role="button" tabindex="0"${i >= 0 ? ` data-aoi="${i}"` : ''} data-aok="${esc(r.k)}" title="Vedi tutto">
+        ${badge(r)}
+        <div class="ao-u"><b>${esc(r.name)}</b><small>${esc([r.sub, r.owner && r.by !== r.owner ? 'di ' + r.owner : ''].filter(Boolean).join(' · ') || ' ')}</small>${byTxt(r) ? `<small class="ao-by ${r.by === 'Tu' ? 'me' : r.by ? 'ag' : 'na'}"${r.by ? '' : ' title="Non è collegato a un cliente KAIROS e non è stato creato da «Crea lista»"'}>${esc(byTxt(r))}</small>` : ''}</div>
+        <div>${stHtml(r)}<small>${esc(lastSmall(r))}</small></div>
+        <div class="ao-w">${whatHtml(r)}</div>
+        <div class="ao-ip">${ipHtml(r)}</div>
+        <div>${devHtml(r)}</div></div>`;
   function shell() {
     if ($('#aoQ', V)) return;
     V.innerHTML = `<div class="card glass"><div class="hd"><h3>🟢 Online nelle app<small>Chi usa adesso le app KAIROS, <span id="aoOn">${esc(orcpName())}</span>, MaxPlayer e OrbixPlay, e chi le ha usate nelle ultime 24 ore. Tocca una riga per vedere tutto.</small></h3>
@@ -335,13 +373,7 @@
     if (!S.rows) { setH($('#aoList', V), '<div class="ao-empty">Carico…</div>'); setH($('#aoMore', V), ''); return; }
     const L = filtered(), shown = L.slice(0, S.limit);
     S.list = L; S.vis = shown;
-    setH($('#aoList', V), shown.length ? `<div class="ao-row ao-head"><span>App</span><span>Utente</span><span>Stato</span><span>Cosa guarda</span><span>IP e luogo</span><span>Dispositivo</span></div>` + shown.map((r, i) => `<div class="ao-row" role="button" tabindex="0" data-aoi="${i}" data-aok="${esc(r.k)}" title="Vedi tutto">
-        ${badge(r)}
-        <div class="ao-u"><b>${esc(r.name)}</b><small>${esc([r.sub, r.owner ? 'di ' + r.owner : ''].filter(Boolean).join(' · ') || ' ')}</small></div>
-        <div>${stHtml(r)}<small>${esc(lastSmall(r))}</small></div>
-        <div class="ao-w">${whatHtml(r)}</div>
-        <div class="ao-ip">${ipHtml(r)}</div>
-        <div>${devHtml(r)}</div></div>`).join('') : `<div class="ao-empty">${R.length ? 'Nessun utente con questi filtri.' : 'Nessuna app con utenti nelle ultime 24 ore.'}</div>`);
+    setH($('#aoList', V), shown.length ? HEAD + shown.map((r, i) => rowHtml(r, i)).join('') : `<div class="ao-empty">${R.length ? 'Nessun utente con questi filtri.' : 'Nessuna app con utenti nelle ultime 24 ore.'}</div>`);
     setH($('#aoMore', V), L.length > shown.length ? `<button class="btn sm" type="button" id="aoMoreB" style="margin-top:10px">Mostra altri ${Math.min(200, L.length - shown.length)} (${shown.length} su ${L.length})</button>` : '');
   }
 
@@ -352,6 +384,7 @@
     const w = wOf(r), chk = chkOf(r);
     let h = `<div class="ao-bh"><h3>${badge(r)} ${esc(r.name)}<small>${esc([r.sub, r.owner ? 'reseller ' + r.owner : ''].filter(Boolean).join(' · '))}</small></h3><button class="btn sm" type="button" data-aoo="x">✕ Chiudi</button></div>`;
     h += `<div class="ao-kv">${kv('Stato', stHtml(r) + `<small>${esc(lastSmall(r))}</small>`)}${kv('Cosa guarda', w ? `<b>▶ ${esc(w.main)}</b><small>${esc(w.sub)}</small>` : whatHtml(r), true)}`;
+    h += kv('Attivato da', r.by === 'Tu' ? '<b>Tu</b>' : r.by ? `<b>🤝 ${esc(r.by)}</b><small>agente</small>` : '<span class="mut">non si sa: non è collegato a un cliente KAIROS e non è stato creato da «Crea lista»</span>');
     if (chk.length) h += kv('Da controllare', chk.map((m) => `<span class="ao-tag">⚠ ${esc(m)}</span>`).join(''), true);
     if (r.src === 'kairos') {
       const o = r.o, d = r.d, main = d && d.parent ? devById(d.parent) : d;
@@ -450,5 +483,11 @@
   document.addEventListener('kx-online', later);
   const appEl = $('#app');
   if (appEl) new MutationObserver(() => { if (!appEl.classList.contains('on')) { closeOv(); Object.assign(S, { src: { kairos: null, orcp: null, mxp: null, oxp: null }, rows: null, t: 0, tx: 0, errs: [], q: '', app: '', own: '', st: 'on', sort: '' }); V.innerHTML = ''; } }).observe(appEl, { attributes: true, attributeFilter: ['class'] });
-  window.KXAppsOnline = { load, rows: () => S.rows || [] };
+  // per «Online ora Kairos» (kc.js): scheda «App terze» con le stesse righe, la stessa scheda e «attivato da»
+  window.KXAppsOnline = {
+    load, rows: () => S.rows || [], busy: () => !!S.busy, errs: () => S.errs || [], at: () => S.t,
+    ext: (r) => r.src !== 'kairos', isOn, stOf,
+    listHtml: (L) => { gen++; return L.length ? HEAD + L.map((r) => rowHtml(r, -1)).join('') : ''; },
+    open: (k) => openCard((S.rows || []).find((x) => x.k === k)),
+  };
 })();

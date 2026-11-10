@@ -45,12 +45,15 @@
         <div class="hd"><h3>App consigliata<small>Lo Store sceglie l'app adatta al dispositivo del cliente</small></h3></div>
         <div class="mut" style="font-size:12.5px;line-height:1.45;margin-bottom:10px">Nello Store il cliente ha il pulsante «App consigliata per questo dispositivo»: lo Store legge memoria, modello e versione Android e propone l'app giusta con Installa già pronto, con una frase cortese. Scrivi i nomi delle app esattamente come compaiono nello Store.</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 16px">
-          <div><label class="lbl">Fire TV Stick, o chiavetta/box con poca memoria</label><input class="inp" id="rcWeak" placeholder="Kairos Tv" style="margin:0">
+          <div><label class="lbl">Fire TV Stick, o chiavetta/box con poca memoria</label><input class="inp" id="rcWeak" placeholder="Kairos-XC" style="margin:0">
             <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><small class="mut">poca memoria = meno di</small><input class="inp" id="rcMb" type="number" min="256" max="8192" style="margin:0;width:100px"><small class="mut">MB</small></div></div>
           <div><label class="lbl">Android vecchio</label><input class="inp" id="rcOld" placeholder="Kairos-Lite" style="margin:0">
             <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><small class="mut">vecchio = prima di Android</small><input class="inp" id="rcSdk" type="number" min="5" max="14" style="margin:0;width:80px"></div></div>
           <div><label class="lbl">Telefono, tablet o box potente</label><input class="inp" id="rcStrong" placeholder="Kairos Pro" style="margin:0"></div>
           <div style="grid-column:1/-1"><label class="lbl">Frase mostrata al cliente ({app} = nome dell'app)</label><input class="inp" id="rcText" maxlength="300" style="margin:0"></div>
+          <div style="grid-column:1/-1"><label class="lbl">Memoria richiesta da ogni app</label>
+            <div class="mut" style="font-size:12.5px;margin:-2px 0 8px">Sotto l'app consigliata lo Store mostra le app Kairos dalla più leggera, con ✓ se il dispositivo ha abbastanza memoria e ✗ se ne serve di più. Insieme ci sono i dati del dispositivo: processore, RAM, memoria interna, Android, schermo, scheda video, H.265 e 4K.</div>
+            <div id="rcMem" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 14px"></div></div>
         </div>
         <div style="margin-top:10px"><button class="btn" id="rcSave">Salva</button></div>
       </div>
@@ -72,7 +75,7 @@
     const t = Date.now(), dd = 864e5;
     return {
       open: true,
-      settings: { recommend: { weakApp: 'Kairos Tv', weakMb: 1536, oldApp: 'Kairos-Lite', oldSdk: 7, strongApp: 'Kairos Pro', text: 'Per questo dispositivo è consigliata {app}: stesso abbonamento e stesse liste, con la migliore fluidità su questo apparecchio.' } },
+      settings: { recommend: { rv: 2, weakApp: 'Kairos-XC', weakMb: 1536, oldApp: 'Kairos-Lite', oldSdk: 7, strongApp: 'Kairos Pro', text: 'Per questo dispositivo è consigliata {app}: stesso abbonamento e stesse liste, con la migliore fluidità su questo apparecchio.', mem: { 'Kairos-XC': 512, 'Kairos Tv': 1024, 'Kairos-Lite': 1024, 'Kairos Premium': 1536, 'Kairos Plus': 1536, 'Kairos Pro': 2048 } } },
       totals: { installs: 37, open30: 29, open7: 18, open1: 6, new30: 11, new7: 4, opens: 412, dl30: 64, dl7: 21, dl1: 3, users30: 26 },
       apps: [{ app: 'Kairos Pro', n: 31, devs: 18, n7: 10, last: t - 2 * 3600e3 }, { app: 'Kairos Tv', n: 14, devs: 11, n7: 6, last: t - 5 * 3600e3 }, { app: 'IboPro', n: 11, devs: 9, n7: 3, last: t - dd }, { app: 'TiviMate', n: 8, devs: 6, n7: 2, last: t - 3 * dd }],
       recent: [{ app: 'Kairos Pro', device: 'Amazon AFTKA (Fire TV)', country: 'IT · Milano', created: t - 2 * 3600e3 }, { app: 'Kairos Tv', device: 'Amazon AFTSS (Fire TV)', country: 'IT · Napoli', created: t - 5 * 3600e3 }, { app: 'IboPro', device: 'Xiaomi MiTV-AXSO0 (Android TV)', country: 'IT', created: t - dd }],
@@ -118,6 +121,8 @@
       : '<tr><td colspan="5" class="mut">Nessuno store si è ancora aperto con la versione aperta</td></tr>';
     const rc = (d.settings && d.settings.recommend) || {};
     [['rcMb', 'weakMb'], ['rcWeak', 'weakApp'], ['rcSdk', 'oldSdk'], ['rcOld', 'oldApp'], ['rcStrong', 'strongApp'], ['rcText', 'text']].forEach(([id, k]) => { const el = $('#' + id); if (el && document.activeElement !== el && !el.dataset.dirty) el.value = rc[k] ?? ''; });
+    const mb = $('#rcMem'), mem = rc.mem || {};
+    if (mb && !mb.querySelector('input[data-dirty]') && !mb.contains(document.activeElement)) mb.innerHTML = Object.entries(mem).map(([name, n]) => `<div style="display:flex;gap:8px;align-items:center"><span style="flex:1;min-width:0;font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</span><input class="inp" type="number" min="128" max="16384" step="128" data-mem="${esc(name)}" value="${esc(n)}" style="margin:0;width:96px"><small class="mut">MB</small></div>`).join('');
   }
   async function refresh(force) {
     if (D.role === 'agent' || S.busy) return;
@@ -131,12 +136,15 @@
   /* ---------------- azioni ---------------- */
   $('#soReload').onclick = () => refresh(true);
   for (const id of ['rcMb', 'rcWeak', 'rcSdk', 'rcOld', 'rcStrong', 'rcText']) $('#' + id).addEventListener('input', (e) => { e.target.dataset.dirty = '1'; });
+  $('#rcMem').addEventListener('input', (e) => { if (e.target.dataset.mem) e.target.dataset.dirty = '1'; });
   $('#rcSave').onclick = async () => {
     const v = (id) => ($('#' + id).value || '').trim();
     if (!v('rcWeak') || !v('rcOld') || !v('rcStrong')) { toast('Scrivi il nome delle tre app', 1); return; }
     try {
-      const r = await sApi('PUT', '/settings', { recommend: { weakMb: parseInt(v('rcMb'), 10), weakApp: v('rcWeak'), oldSdk: parseInt(v('rcSdk'), 10), oldApp: v('rcOld'), strongApp: v('rcStrong'), text: v('rcText') } });
+      const mem = {}; for (const el of $$('#rcMem [data-mem]')) { const n = parseInt(el.value, 10); if (n >= 128 && n <= 16384) mem[el.dataset.mem] = n; }
+      const r = await sApi('PUT', '/settings', { recommend: { weakMb: parseInt(v('rcMb'), 10), weakApp: v('rcWeak'), oldSdk: parseInt(v('rcSdk'), 10), oldApp: v('rcOld'), strongApp: v('rcStrong'), text: v('rcText'), ...(Object.keys(mem).length ? { mem } : {}) } });
       for (const id of ['rcMb', 'rcWeak', 'rcSdk', 'rcOld', 'rcStrong', 'rcText']) delete $('#' + id).dataset.dirty;
+      for (const el of $$('#rcMem [data-mem]')) delete el.dataset.dirty;
       if (S.data) S.data.settings = r.settings;
       render(); toast('Salvato: lo Store consiglia ' + r.settings.recommend.weakApp + ' sulle chiavette deboli');
     } catch (e) { toast(e.message || 'Errore', 1); }

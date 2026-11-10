@@ -101,12 +101,26 @@ export function storeClosedNow(c, t = Date.now()) {
 
 /* ---------------- impostazioni (tabella settings, chiave "store") ---------------- */
 // «App consigliata»: regole con cui lo Store sceglie l'app adatta al dispositivo del cliente (memoria, modello, versione Android)
-const REC_DEF = { weakApp: 'Kairos Tv', weakMb: 1536, oldApp: 'Kairos-Lite', oldSdk: 7, strongApp: 'Kairos Pro', text: 'Per questo dispositivo è consigliata {app}: stesso abbonamento e stesse liste, con la migliore fluidità su questo apparecchio.' };
+const REC_DEF = { weakApp: 'Kairos-XC', weakMb: 1536, oldApp: 'Kairos-Lite', oldSdk: 7, strongApp: 'Kairos Pro', text: 'Per questo dispositivo è consigliata {app}: stesso abbonamento e stesse liste, con la migliore fluidità su questo apparecchio.' };
+/* memoria richiesta da ogni app (MB, 11 novembre 2026): nello Store le app Kairos si mostrano dalla più leggera, con ✓ se il
+   dispositivo ha abbastanza memoria. A parità di memoria vale quest'ordine (Kairos Tv subito dopo XC, come deciso dal titolare) */
+const MEM_DEF = { 'Kairos-XC': 512, 'Kairos Tv': 1024, 'Kairos-Lite': 1024, 'Kairos Premium': 1536, 'Kairos Plus': 1536, 'Kairos Pro': 2048 };
+function memNorm(m) {
+  const src = m && typeof m === 'object' && !Array.isArray(m) ? m : MEM_DEF, out = {};
+  for (const [k, v] of Object.entries(src).slice(0, 16)) {
+    const name = String(k).replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40), n = parseInt(v, 10);
+    if (name && n >= 128 && n <= 16384) out[name] = n;
+  }
+  return Object.keys(out).length ? out : { ...MEM_DEF };
+}
 function recNorm(r) {
   r = r && typeof r === 'object' ? r : {};
   const s = (k, max = 60) => (typeof r[k] === 'string' && r[k].trim() ? r[k].trim().slice(0, max) : REC_DEF[k]);
   const n = (k, lo, hi) => { const v = parseInt(r[k], 10); return v >= lo && v <= hi ? v : REC_DEF[k]; };
-  return { weakApp: s('weakApp'), weakMb: n('weakMb', 256, 8192), oldApp: s('oldApp'), oldSdk: n('oldSdk', 5, 14), strongApp: s('strongApp'), text: s('text', 300) };
+  // rv 2 (11 novembre 2026): sulle chiavette deboli Kairos-XC al posto di Kairos Tv, la scelta di prima salvata si aggiorna;
+  // da qui in poi vale quella che il titolare salva (anche Kairos Tv, se la rimette)
+  const weak = +r.rv >= 2 ? s('weakApp') : s('weakApp') === 'Kairos Tv' ? 'Kairos-XC' : s('weakApp');
+  return { rv: 2, weakApp: weak, weakMb: n('weakMb', 256, 8192), oldApp: s('oldApp'), oldSdk: n('oldSdk', 5, 14), strongApp: s('strongApp'), text: s('text', 300), mem: memNorm(r.mem) };
 }
 async function getStoreSettings(env) {
   const row = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('store').first();

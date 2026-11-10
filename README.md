@@ -982,3 +982,36 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
   3. dal deploy dopo, i feed lo annunciano e le app lo imparano al primo controllo;
   4. facoltativo: mettilo anche nella variabile `KAIROS_DL_BASE2` dei repository delle app, per le installazioni nuove.
 - **Test**: `srv_dl_mirrors` (7 controlli); `UpdFeedTest` nelle quattro app (gira a ogni build su GitHub).
+
+## 54. Scelta del cliente con la ricerca nei pannelli e ricerca in tutti i pannelli con Black IPTV (11 novembre 2026)
+
+- **WOLF «Collega cliente»**: al posto della tendina l'elenco con la ricerca (`cli-pick.js`, come in «Collega a un cliente»). Si apre già aperto, con la ricerca pronta; in cima «— nessuno —» per togliere il collegamento; ci sono anche le TV collegate e quelle in attesa, come prima.
+- **Armada «Aggiungila a un cliente»** (dopo «Crea linea»): stesso elenco con la ricerca al posto del campo con suggerimenti; «Apri la scheda» apre il cliente con la linea già tra le playlist.
+- Il titolare vede tutti i clienti, l'agente solo i suoi (`D.devices` arriva già filtrato dal server).
+- **Ricerca in tutti i pannelli**: la barra «Trovato anche su…» sotto le caselle di ricerca dei pannelli (`xsearch.js`) e «Cerca ovunque» (`omni.js`) ora comprendono **Black IPTV** (solo titolare): le sue linee sono quelle già lette e salvate dalla sua pagina (`GET /admin/blk/lines`), nessuna richiesta in più a Black. Anche la casella di Black IPTV cerca negli altri pannelli.
+- **Test**: `ui_panel_cli_pick` (16 controlli), `ui_xsearch_blk` (8).
+
+## 55. «➕ Dispositivo» su ogni cliente e «🏠 Casa di …» (11 novembre 2026)
+
+- **Pulsante «➕ Dispositivo»** nella riga di ogni cliente (tabella e schede), per il titolare e per gli agenti con «Collegare altri dispositivi» (`add-dev.js`). La finestra ha tre strade:
+  - **TV in attesa adesso**: le TV che hanno appena aperto l'app; un clic su «Collega». Si aggiorna da sola ogni 5 secondi. Quelle della stessa rete del cliente sono in cima con «🏠 stessa rete»;
+  - **Codice della TV** (KXAB-12CD, anche in minuscolo e senza trattino);
+  - **Codice a 6 cifre** se la TV è a casa del cliente.
+  - Cliente pieno: «Aumenta i dispositivi a N» acceso, fino a 20 per il titolare e fino a «Connessioni per cliente» per l'agente. Nome della TV facoltativo.
+- **«🏠 Casa di …»** nell'elenco «Da attivare» (solo titolare): una TV in attesa collegata dallo stesso IP di un cliente (IPv6: stessa rete /64) mostra «Collega a …», un clic. Se il cliente è pieno chiede prima di aumentare.
+- **Server**: `GET /admin/devices/near` (titolare: suggerimenti per tutte le TV in attesa) e `GET /admin/devices/near?for=<cliente>` (TV in attesa delle ultime 48 ore, quelle della stessa rete prima). L'agente: solo per un suo cliente, solo TV della stessa rete viste nelle ultime 6 ore. Con più di 2 clienti sullo stesso IP (rete condivisa) nessun suggerimento. Gli IP restano sul server.
+- **Test**: `srv_add_dev` (13 controlli), `ui_add_dev` (20).
+
+## 56. «Online ora Kairos»: «Attivato da» e schede per chi ha attivato (11 novembre 2026)
+
+- Ogni utente mostra **«Attivato da te»** o **«Attivato da <agente>»** (l'agente del cliente principale).
+- Sopra «Collegati ora / Offline» le schede **Tutti · 👤 I miei clienti · 🤝 Clienti agenti** (con il filtro e il numero per ogni agente) **· 🧩 App terze**.
+- **App terze**: MaxPlayer, OrbixPlay e MirkoTeam, tuoi e degli agenti, con le stesse righe e la stessa scheda di «Online nelle app». Si leggono solo aprendo questa scheda.
+- **Chi ha attivato un'app terza** (`appsonline.js`): il cliente KAIROS collegato, poi chi ha creato la lista («Crea lista», `/admin/ext-lists`), poi il cliente KAIROS con la stessa linea; altrimenti «attivato da: ?». Vale anche in «Online nelle app» (filtro reseller e scheda).
+- **Test**: `ui_live_groups` (16 controlli); `ui_appsonline` aggiornato.
+
+## 57. «App consigliata» dello Store: scheda del dispositivo, app per memoria e XC sulle chiavette deboli (11 novembre 2026)
+
+- **Pannello** (Download store → App consigliata): l'app per le chiavette deboli di serie è **Kairos-XC** (dove era salvata Kairos Tv, una volta sola diventa Kairos-XC; poi vale la scelta del titolare). Nuova voce **«Memoria richiesta da ogni app»**: di serie XC 512 MB · Tv 1 GB · Lite 1 GB · Premium 1,5 GB · Plus 1,5 GB · Pro 2 GB (`store.js`, `recommend.mem`).
+- **Store** (kairos-store, 1.0.134): sotto l'app consigliata la scheda del dispositivo e le app Kairos dalla più leggera, con ✓/✗ secondo la memoria.
+- **Test**: `srv_store_rec` (7 controlli), `ui_store_rec` (5).

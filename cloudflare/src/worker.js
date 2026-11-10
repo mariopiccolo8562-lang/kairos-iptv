@@ -6042,6 +6042,49 @@ async function agentsAdmin(req, env, path, who, ip, top) {
 const AGENT_SELF = /^\/(logout|logout-all|password|totp\/(setup|enable|disable|recovery))$/;
 /** dispositivo "libero": comparso sulla TV ma mai toccato dal pannello (né dal proprietario né da altri agenti) */
 const FREE_DEV = "owner_id = 0 AND parent = '' AND active = 0 AND playlists = '' AND name = '' AND notes = '' AND expires = ''";
+/* ---------------- «Aggiungi dispositivo» e «stessa rete» (11 novembre 2026) ----------------
+   Una TV nuova in attesa (codice libero, FREE_DEV) collegata dallo stesso IP di un cliente (IPv6: stessa rete /64) è
+   probabilmente della sua casa. Gli IP restano qui: al pannello arrivano solo nomi, codici e modelli.
+   - per un cliente ([forId]): le TV in attesa delle ultime 48 ore, quelle della stessa rete per prime («same»).
+     Il titolare le vede tutte; l'agente solo quelle della stessa rete di un suo cliente, viste nelle ultime 6 ore;
+   - senza cliente (solo titolare): per ogni TV in attesa i clienti della stessa rete.
+   Con più di 2 clienti sullo stesso IP (rete condivisa, es. operatore mobile) la rete non conta: niente suggerimento. */
+function ipNet(ip) {
+  ip = String(ip || '').trim().toLowerCase().replace(/^::ffff:(?=\d+\.)/, '');
+  if (!ip) return '';
+  if (!ip.includes(':')) return /^\d{1,3}(\.\d{1,3}){3}$/.test(ip) ? ip : '';
+  const [a, b = ''] = ip.split('::'), A = a ? a.split(':') : [], B = b ? b.split(':') : [];
+  const full = ip.includes('::') ? [...A, ...Array(Math.max(0, 8 - A.length - B.length)).fill('0'), ...B] : A;
+  if (full.length !== 8 || full.some((x) => !/^[0-9a-f]{1,4}$/.test(x))) return '';
+  return full.slice(0, 4).map((x) => x.replace(/^0+(?=.)/, '')).join(':') + '::/64';
+}
+async function devicesNear(env, forId, agentId) {
+  const t = now(), SINCE_TV = t - 48 * 36e5, SINCE_CL = t - 14 * 864e5;
+  const [tvR, devR, preR] = await Promise.all([
+    env.DB.prepare(`SELECT id, code, model, last_seen, last_ip FROM devices WHERE ${FREE_DEV} AND last_seen > ? ORDER BY last_seen DESC LIMIT 300`).bind(SINCE_TV).all(),
+    env.DB.prepare(`SELECT id, parent, name, code, last_ip, last_seen, active, expires, playlists FROM devices WHERE last_seen > ? AND NOT (${FREE_DEV})`).bind(SINCE_CL).all(),
+    env.DB.prepare('SELECT device_id, ip, ip2, t FROM presence WHERE t > ?').bind(SINCE_CL).all(),
+  ]);
+  const tvs = (tvR && tvR.results) || [], devs = (devR && devR.results) || [];
+  // rete → clienti principali visti di recente (la TV collegata conta per il suo principale)
+  const mainOf = new Map(), nets = new Map(), names = new Map();
+  for (const d of devs) { mainOf.set(d.id, d.parent || d.id); if (!d.parent) names.set(d.id, { id: d.id, name: d.name || d.code, code: d.code, real: !!(+d.active || d.expires || d.playlists) }); }
+  const addNet = (ip, devId) => { const n = ipNet(ip), m = mainOf.get(devId); if (!n || !m) return; if (!nets.has(n)) nets.set(n, new Set()); nets.get(n).add(m); };
+  for (const d of devs) addNet(d.last_ip, d.id);
+  for (const p of (preR && preR.results) || []) { addNet(p.ip, p.device_id); if (p.ip2 && t - (+p.t || 0) < 864e5) addNet(p.ip2, p.device_id); }
+  // solo clienti veri (con abbonamento) e reti con al massimo 2 clienti
+  const near = (ip) => { const set = nets.get(ipNet(ip)); if (!set) return []; const L = [...set].map((id) => names.get(id)).filter((x) => x && x.real); return L.length <= 2 ? L : []; };
+  const tvOut = (d, same) => ({ id: d.id, code: d.code, model: str(d.model || '', 60), seen: +d.last_seen || 0, same: !!same });
+  if (forId) {
+    const C = names.get(forId) || await env.DB.prepare('SELECT id, name, code, parent FROM devices WHERE id = ?').bind(forId).first().then((r) => (r && !r.parent ? { id: r.id, name: r.name || r.code, code: r.code } : null));
+    if (!C) throw new HttpErr(404, 'Cliente non trovato');
+    const L = tvs.map((d) => tvOut(d, near(d.last_ip).some((x) => x.id === C.id)))
+      .filter((x) => !agentId || (x.same && t - x.seen < 6 * 36e5));
+    L.sort((a, b) => (b.same - a.same) || (b.seen - a.seen));
+    return { client: { id: C.id, name: C.name }, tvs: L.slice(0, 30) };
+  }
+  return { pend: tvs.map((d) => ({ id: d.id, near: near(d.last_ip).map((x) => ({ id: x.id, name: x.name, code: x.code })) })).filter((x) => x.near.length) };
+}
 async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const m = req.method;
   const all = await agentsAll(env);
@@ -6407,6 +6450,13 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     await log(env, 'new', `${who}: creato dispositivo ${str(b.name, 60) || code}`, ip); // per gli agenti /devices non lo scrive (il controllo del limite viene dopo)
     return json(j);
   }
+  // «Aggiungi dispositivo» (11 novembre 2026): solo per un proprio cliente e solo le TV in attesa della sua stessa rete
+  if (path === '/devices/near' && m === 'GET') {
+    need('link', 'Non puoi gestire i collegamenti dei dispositivi');
+    const c = await own(str(url.searchParams.get('for') || '', 20));
+    if (!c || c.parent) throw new HttpErr(404, 'Cliente non trovato');
+    return json(await devicesNear(env, c.id, A.id));
+  }
   const dm = path.match(/^\/devices\/([A-Za-z0-9_-]{6,20})(\/reset|\/kick|\/linkcode|\/unlink|\/link)?$/);
   if (dm) {
     const d = await own(dm[1]);
@@ -6589,6 +6639,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const r = await inactiveClients(env, { days: url.searchParams.get('days'), never: url.searchParams.get('never') === '1', onlyExp: url.searchParams.get('onlyExp') === '1' });
     return json({ days: r.days, count: r.list.length, sample: r.list.slice(0, 20) });
   }
+  // «Aggiungi dispositivo» e «stessa rete» (11 novembre 2026): TV in attesa per un cliente, o i suggerimenti per tutte
+  if (path === '/devices/near' && m === 'GET' && !(ses && ses.agent)) return json(await devicesNear(env, str(url.searchParams.get('for') || '', 20), 0));
   // richieste «da attivare»: eliminarne una o più. Niente cestino: non hanno dati, e se l'app è aperta la richiesta ricompare da sola con lo stesso codice
   if (path === '/devices/pending/delete' && m === 'POST' && !(ses && ses.agent)) {
     const b = await readJSON(req, 32 * 1024);

@@ -37,8 +37,8 @@
   const lower = (s) => String(s || '').trim().toLowerCase();
   const isAg = () => typeof D === 'object' && D && D.role === 'agent';
   const can = () => typeof D === 'object' && !!D && (!isAg() || !!(((D.me || {}).perms || {}).lineView));
-  const PN = { wolf: 'WOLF', armada: 'Armada', storm: 'Storm', atx: 'Atlantix', ro: 'Realott', slt: 'SLT', mxp: 'MaxPlayer', oxp: 'OrbixPlay', orcp: 'MirkoTeam' };
-  const PC = { wolf: '#38bdf8', armada: '#fb923c', storm: '#a78bfa', atx: '#22d3ee', ro: '#4ade80', slt: '#f472b6', mxp: '#fb7185', oxp: '#60a5fa', orcp: '#facc15' };
+  const PN = { wolf: 'WOLF', armada: 'Armada', storm: 'Storm', atx: 'Atlantix', ro: 'Realott', slt: 'SLT', mxp: 'MaxPlayer', oxp: 'OrbixPlay', orcp: 'MirkoTeam', blk: 'Black IPTV' };
+  const PC = { wolf: '#38bdf8', armada: '#fb923c', storm: '#a78bfa', atx: '#22d3ee', ro: '#4ade80', slt: '#f472b6', mxp: '#fb7185', oxp: '#60a5fa', orcp: '#facc15', blk: '#e5e7eb' };
   const LINES = new Set(['wolf', 'armada', 'storm', 'atx', 'ro', 'slt']); // linee con scadenza, Modifica e Rinnova
   const DAY = 864e5;
   const ms = (v) => (window.KXSort ? KXSort.ms(v) : +v || 0);
@@ -91,6 +91,7 @@
       Object.assign(o, { u: r.username || o.u, id: String(r.id || ''), owner: x.acc || '', lists: L, mail: r.email || '', dns: [...new Set(L.map((l) => l.host).filter(Boolean))].join(' · '), on: undefined });
     } else if (p === 'oxp') Object.assign(o, { u: r.user || r.name || o.u, pw: r.pass || '', n: r.notes || '', id: String(r.id || ''), dev: r.device || '', plName: r.name || '', dns: r.host || '', on: undefined });
     else if (p === 'orcp') Object.assign(o, { u: r.user || o.u, on: !!r.online, last: r.last || '', dev: r.device || '', ver: r.version || '', app: r.app || '', ip: r.ip || '', id: String(r.id || '') });
+    else if (p === 'blk') Object.assign(o, { u: r.username || o.u, pw: r.password || '', owner: r.reseller || '', exp: ms(r.expires || r.exp), max: +(r.maxConn || r.max || 0) || 0, conns: +(r.active || r.conns || 0) || 0, on: undefined, st: r.status || '' });
     return o;
   }
 

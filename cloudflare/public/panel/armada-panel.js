@@ -119,8 +119,9 @@ const mkArmadaLike = (cfg) => {
     return `<div class="ar-res"><b>✅ ${x.type === 'mag' ? 'MAG creato' : 'Linea creata'}</b>${x.userId ? ` <span class="mut">· ID ${esc(x.userId)}</span>` : ''}
       <div class="ar-kv" style="margin-top:10px">${x.type === 'mag' ? kv('MAC', x.mac, 'mac') + (isAg() ? '' : kv('Portale', x.url, 'url')) : kv('Utente', x.username, 'username') + kv('Password', x.password, 'password') + (isAg() ? '' : kv('DNS', x.host, 'host') + kv('Link M3U', x.url, 'url'))}</div>
       ${x.type === 'm3u' && x.username ? `<div style="margin-top:14px;display:grid;gap:10px">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b style="font-size:13px">Aggiungila a un cliente:</b><input class="inp" id="arCl" list="arClL" placeholder="nome o codice del cliente" style="margin:0;max-width:280px"><button class="btn sm" id="arToCl">Apri la scheda</button></div>
-        <datalist id="arClL">${(D.devices || []).filter((d) => !d.parent).slice(0, 3000).map((d) => `<option value="${esc((d.name || 'Senza nome') + ' · ' + d.code)}">`).join('')}</datalist>
+        ${window.KXCliPick ? `<div style="display:grid;gap:6px;max-width:560px"><b style="font-size:13px">Aggiungila a un cliente:</b>${KXCliPick.html('arCl', { grow: false, exclude: 'ar:' + (x.userId || x.username || '') })}<button class="btn sm" id="arToCl" style="justify-self:start">Apri la scheda</button></div>`
+          : `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b style="font-size:13px">Aggiungila a un cliente:</b><input class="inp" id="arCl" list="arClL" placeholder="nome o codice del cliente" style="margin:0;max-width:280px"><button class="btn sm" id="arToCl">Apri la scheda</button></div>
+        <datalist id="arClL">${(D.devices || []).filter((d) => !d.parent).slice(0, 3000).map((d) => `<option value="${esc((d.name || 'Senza nome') + ' · ' + d.code)}">`).join('')}</datalist>`}
         ${isAg() ? '' : `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><b style="font-size:13px">Registrala in «Appunti App» con l'app:</b>${apps.map((a) => `<button class="btn sm" data-arapp="${esc(a)}">${esc(a)}</button>`).join('')}</div>`}</div>` : ''}${x.cost ? `<p class="mut" style="margin:10px 0 0;font-size:12.5px">Crediti usati: <b>${fmtC(x.cost)}</b></p>` : ''}</div>`;
   }
 
@@ -218,9 +219,12 @@ const mkArmadaLike = (cfg) => {
     });
     const L = A.last;
     $$('[data-arcp]', V).forEach((b) => (b.onclick = () => copy(L[b.dataset.arcp] || '', { username: 'Utente', password: 'Password', host: 'DNS', url: 'Link', mac: 'MAC' }[b.dataset.arcp] || 'Testo')));
+    // scelta del cliente con l'elenco e la ricerca (cli-pick.js): nella casella nascosta c'è l'id del cliente
+    if (window.KXCliPick && $('#arClBox') && L) KXCliPick.bind('arCl', { grow: false, exclude: 'ar:' + (L.userId || L.username || '') });
     $('#arToCl') && ($('#arToCl').onclick = () => {
-      const t = ($('#arCl').value || '').trim().toLowerCase(); const d = (D.devices || []).find((x) => !x.parent && (((x.name || 'Senza nome') + ' · ' + x.code).toLowerCase() === t || String(x.code).toLowerCase() === t));
-      if (!d) return toast('Cliente non trovato: sceglilo dall\'elenco', 1);
+      const v = ($('#arCl').value || '').trim(), t = v.toLowerCase();
+      const d = (D.devices || []).find((x) => x.id === v) || (D.devices || []).find((x) => !x.parent && (((x.name || 'Senza nome') + ' · ' + x.code).toLowerCase() === t || String(x.code).toLowerCase() === t));
+      if (!d) return toast(window.KXCliPick ? 'Scegli il cliente dall\'elenco' : 'Cliente non trovato: sceglilo dall\'elenco', 1);
       openDrawer(d, false);
       setTimeout(() => { try { edit.playlists.push({ id: 'p' + Date.now(), name: `${N}`, type: 'xtream', url: '', host: L.host, username: L.username, password: L.password }); renderDrawer(); toast('Linea aggiunta alle playlist: controlla e premi Salva'); } catch (e) { toast('Aggiungila a mano con «Incolla linea»', 1); } }, 60);
     });

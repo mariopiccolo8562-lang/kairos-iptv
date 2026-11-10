@@ -119,6 +119,14 @@
 .kc-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.9fr) minmax(0,1.15fr) minmax(0,.9fr) minmax(0,1fr);gap:14px;align-items:center;padding:12px 14px;border-radius:14px;border:1px solid var(--line);margin-bottom:8px;background:rgba(255,255,255,.02)}
 .kc-row:hover{background:rgba(255,255,255,.045)}
 .kc-ltabs{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:2px 0 14px}
+.kc-grp{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.kc-grp button{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:12px;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;color:#dfe5f3;border:1px solid var(--line);background:rgba(255,255,255,.03)}
+.kc-grp button.on{border-color:var(--a1,#4f8cff);background:rgba(79,140,255,.16);color:#fff}
+.kc-grp button span{min-width:24px;padding:1px 8px;border-radius:999px;background:rgba(0,0,0,.28);font-size:12.5px;text-align:center}
+.kc-agf{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 12px}
+.kc-by{display:inline-flex;align-items:center;gap:4px;margin-top:5px;font-size:11.5px;font-weight:700;padding:1px 8px;border-radius:999px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.kc-by.me{background:rgba(79,140,255,.14);color:#9cc0ff}.kc-by.ag{background:rgba(250,204,21,.14);color:#fde68a}
+.kc-ext{border:1px solid var(--line);border-radius:14px;overflow:hidden}.kc-ext .ao-row{cursor:pointer}.kc-ext .ao-head{cursor:default}.kc-ext-note{font-size:12.5px;color:var(--mut);margin:0 0 10px}#v-live .ao-err{font-size:12.5px;color:#fbbf24;margin:0 0 6px}
 .kc-ltabs button{display:flex;align-items:center;gap:9px;padding:10px 16px;border-radius:14px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;color:#eef1f8;border:1px solid var(--c2);background:color-mix(in srgb,var(--c) 12%,transparent)}
 .kc-ltabs button em{font-style:normal;font-weight:500;font-size:12px;opacity:.75}
 .kc-ltabs button span{min-width:26px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.25);font-size:13px;text-align:center}
@@ -323,6 +331,7 @@
 .dvt-ib svg{width:15px;height:15px}
 .dvt-ib:hover{transform:translateY(-1px);filter:brightness(1.25)}
 .dvt-ib.g{color:#4ce3a0;border-color:rgba(76,227,160,.3);background:rgba(76,227,160,.08)}
+.dvt-add{margin-right:2px;padding:5px 10px;font-size:12px;color:#67e8f9;border-color:rgba(34,211,238,.4);background:rgba(34,211,238,.08);white-space:nowrap;vertical-align:middle}
 .dvt-ib.b{color:#6fb7ff;border-color:rgba(111,183,255,.3);background:rgba(111,183,255,.08)}
 .dvt-ib.k{color:#ff6b81;border-color:rgba(255,107,129,.35);background:rgba(255,107,129,.1)}
 .dvt-ib.o{color:#ffb547;border-color:rgba(255,181,71,.3);background:rgba(255,181,71,.08)}
@@ -417,6 +426,10 @@
   const LINE_L = { weak: ['debole', 'bad', 'Linea debole: l\'app usa buffer più lunghi e parte dalla versione più leggera dei canali'], normal: ['normale', '', 'Linea normale'], good: ['ottima', 'ok', 'Linea ottima: buffer corti e qualità piena'] };
   const lineTag = (o) => { const l = LINE_L[o.line]; if (!l) return ''; return `<span class="kc-tag ${l[1]}" title="${esc(l[2])}">linea ${l[0]}${o.bw ? ' · ' + mbps(o.bw) : ''}${o.dev_class === 'D' ? ' · dispositivo debole' : ''}</span>`; };
   const diagTag = (o) => { const d = diagOf(o); return d ? `<span class="kc-tag ${d[0] === 'dispositivo' ? 'bad' : 'warn'}" title="${esc(d[1])}">🔎 probabile problema: ${esc(d[0])}</span>` : ''; };
+  /* «Attivato da» (11 novembre 2026): l'agente del cliente principale, altrimenti tu */
+  const liveOwner = (o) => { const d = D.devices.find((x) => x.id === o.id), m = d && d.parent ? D.devices.find((x) => x.id === d.parent) : d; return m && +m.ownerId ? +m.ownerId : 0; };
+  const liveAgName = (id) => { const a = (D.agents || []).find((x) => +x.id === +id); return a ? a.username || a.name || 'agente' : 'agente #' + id; };
+  const byTag = (o) => { const a = liveOwner(o); return a ? `<span class="kc-by ag" title="Cliente attivato dall'agente ${esc(liveAgName(a))}">🤝 Attivato da ${esc(liveAgName(a))}</span>` : '<span class="kc-by me" title="Cliente attivato da te">👤 Attivato da te</span>'; };
   function liveRow(o) {
     const d = D.devices.find((x) => x.id === o.id);
     const what = o.state === 'idle' ? `<b><span class="kc-dot idle"></span>Nell'app</b><small>${esc(o.screen || 'naviga nei menu')}</small>` : `<b><span class="kc-dot ${esc(o.state)}"></span>${esc(o.title || o.ch || '—')}</b><small>${STATE_L[o.state] || ''}${o.ch && o.title ? ' · ' + esc(o.ch) : ''}${o.grp ? ' · ' + esc(o.grp) : ''}</small>`;
@@ -428,16 +441,47 @@
     const where = `<b class="mono" style="font-size:13px">${esc(o.ip || '—')}</b><small>${esc([o.city, o.country].filter(Boolean).join(', ') || '')}</small>${(o.flags || []).includes('ip') ? '<span class="kc-tag warn" title="Due indirizzi IP diversi in pochi minuti: possibile codice condiviso">⚠ 2 IP</span>' : ''}${(o.flags || []).includes('country') ? '<span class="kc-tag warn">⚠ paese diverso</span>' : ''}`;
     const app = `<b>${esc(o.ver ? 'App ' + o.ver : 'App ?')}</b><small>${esc(o.model || '')}${o.prof ? '<br>Profilo: ' + esc(o.prof) : ''}</small>${o.vpn === 'on' ? '<span class="kc-tag ok">🛡 VPN attiva</span>' : ''}`;
     const vpnBtn = d && !d.parent && +d.vpn ? `<button class="btn sm" data-kvpn="${esc(o.id)}" title="Spegne la VPN su questo abbonamento">Spegni VPN</button>` : '';
-    return `<div class="kc-row"><div><b>${esc(o.name || o.code)}</b><small><span class="mono">${esc(o.code)}</span> · ${o.online ? 'adesso' : ago(Date.now() - o.ago)}</small></div><div>${what}${play}</div><div>${net}</div><div>${where}</div><div>${app}</div><div class="kc-acts">${o.online && o.state !== 'idle' ? `<button class="btn sm danger" data-kkick="${esc(o.id)}" title="Interrompe subito la visione (l'abbonamento resta attivo)">⛔ Disconnetti</button>` : ''}${vpnBtn}<button class="btn sm kc-dati" data-kdati="${esc(o.id)}">📊 Dati</button><button class="btn sm" data-kopen="${esc(o.id)}">Scheda</button></div></div>`;
+    return `<div class="kc-row"><div><b>${esc(o.name || o.code)}</b><small><span class="mono">${esc(o.code)}</span> · ${o.online ? 'adesso' : ago(Date.now() - o.ago)}</small>${byTag(o)}</div><div>${what}${play}</div><div>${net}</div><div>${where}</div><div>${app}</div><div class="kc-acts">${o.online && o.state !== 'idle' ? `<button class="btn sm danger" data-kkick="${esc(o.id)}" title="Interrompe subito la visione (l'abbonamento resta attivo)">⛔ Disconnetti</button>` : ''}${vpnBtn}<button class="btn sm kc-dati" data-kdati="${esc(o.id)}">📊 Dati</button><button class="btn sm" data-kopen="${esc(o.id)}">Scheda</button></div></div>`;
   }
   const offFor = (ms) => { const m = Math.max(1, Math.round(ms / 60e3)); return m < 60 ? m + ' min' : m < 1440 ? Math.floor(m / 60) + ' h' + (m % 60 >= 10 && m < 600 ? ' ' + (m % 60) + ' min' : '') : Math.floor(m / 1440) + ' g'; };
   function offRow(o) {
     const last = o.title || o.ch ? `<b>${o.state === 'live' ? '📺' : o.state === 'series' ? '🎞' : o.state === 'movie' ? '🎬' : ''} ${esc(o.title || o.ch)}</b><small>ultima visione</small>` : '<b class="mut" style="font-weight:500">—</b><small>nessuna visione registrata</small>';
-    return `<div class="kc-row kc-off"><div><b>${esc(o.name || o.code)}</b>${o.name ? `<small><span class="mono">${esc(o.code)}</span></small>` : ''}${o.owner ? `<small>di ${esc(o.owner)}</small>` : ''}</div><div><b class="kc-offt"><span class="kc-dot off"></span>Offline da ${offFor(o.ago)}</b><small>ultimo collegamento alle ${new Date(Date.now() - o.ago).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</small></div><div>${last}</div><div><b class="mono" style="font-size:13px">${esc(o.ip || '—')}</b><small>${esc([o.city, o.country].filter(Boolean).join(', ') || '')}</small></div><div><b>${esc(o.ver ? 'App ' + o.ver : 'App ?')}</b><small>${esc(o.model || '')}</small></div><div class="kc-acts"><button class="btn sm kc-dati" data-kdati="${esc(o.id)}">📊 Dati</button><button class="btn sm" data-kopen="${esc(o.id)}">Scheda</button></div></div>`;
+    return `<div class="kc-row kc-off"><div><b>${esc(o.name || o.code)}</b>${o.name ? `<small><span class="mono">${esc(o.code)}</span></small>` : ''}${o.owner ? `<small>di ${esc(o.owner)}</small>` : ''}${byTag(o)}</div><div><b class="kc-offt"><span class="kc-dot off"></span>Offline da ${offFor(o.ago)}</b><small>ultimo collegamento alle ${new Date(Date.now() - o.ago).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</small></div><div>${last}</div><div><b class="mono" style="font-size:13px">${esc(o.ip || '—')}</b><small>${esc([o.city, o.country].filter(Boolean).join(', ') || '')}</small></div><div><b>${esc(o.ver ? 'App ' + o.ver : 'App ?')}</b><small>${esc(o.model || '')}</small></div><div class="kc-acts"><button class="btn sm kc-dati" data-kdati="${esc(o.id)}">📊 Dati</button><button class="btn sm" data-kopen="${esc(o.id)}">Scheda</button></div></div>`;
+  }
+  /* schede «Tutti» · «I miei clienti» · «Clienti agenti» (con filtro per agente) · «App terze» (11 novembre 2026) */
+  const grpFit = (o) => { const a = liveOwner(o); return KC.liveGrp === 'mine' ? !a : KC.liveGrp === 'agents' ? !!a && (!KC.liveAg || String(a) === KC.liveAg) : true; };
+  const XA = () => window.KXAppsOnline;
+  function extList() {
+    const X = XA(); if (!X) return null;
+    const q = (KC.liveQ || '').trim().toLowerCase();
+    // «Collegati ora»: collegate o in verifica; «Offline»: scollegate o non verificabili (il server della linea non ha risposto)
+    const L = X.rows().filter((r) => X.ext(r)).filter((r) => (KC.liveTab === 'off') === ['off', 'na'].includes(X.stOf(r)));
+    return q ? L.filter((r) => [r.name, r.sub, r.by, r.owner, r.appL, r.ip, ...(r.lines || []).map((l) => l.user)].some((x) => String(x || '').toLowerCase().includes(q))) : L;
+  }
+  function grpBar(P) {
+    const L = KC.liveTab === 'off' ? P.recent : P.online, X = XA(), ext = extList();
+    const n = { all: L.length, mine: L.filter((o) => !liveOwner(o)).length, agents: L.filter((o) => liveOwner(o)).length };
+    const B = [['all', 'Tutti', n.all], ['mine', '👤 I miei clienti', n.mine], ['agents', '🤝 Clienti agenti', n.agents], ['ext', '🧩 App terze', ext && X.at() ? ext.length : '…']];
+    let h = `<div class="kc-grp">${B.map(([k, l, c]) => `<button type="button" data-lgrp="${k}" class="${KC.liveGrp === k ? 'on' : ''}">${l}<span>${c}</span></button>`).join('')}</div>`;
+    if (KC.liveGrp === 'agents') {
+      const by = new Map(); for (const o of L) { const a = liveOwner(o); if (a) by.set(a, (by.get(a) || 0) + 1); }
+      const ags = [...by.entries()].sort((a, b) => b[1] - a[1] || liveAgName(a[0]).localeCompare(liveAgName(b[0]), 'it'));
+      if (KC.liveAg && !by.has(+KC.liveAg)) KC.liveAg = '';
+      h += `<div class="kc-agf">${[['', 'Tutti gli agenti', n.agents], ...ags.map(([id, c]) => [String(id), liveAgName(id), c])].map(([k, l, c]) => `<button type="button" class="fchip ${KC.liveAg === k ? 'on' : ''}" data-lag="${esc(k)}">${esc(l)}<span>${c}</span></button>`).join('')}</div>`;
+    }
+    return h;
   }
   function liveList(P) {
     const q = (KC.liveQ || '').trim().toLowerCase();
-    const fit = (o) => !q || [o.name, o.code, o.owner, o.city].some((x) => String(x || '').toLowerCase().includes(q));
+    const fit = (o) => grpFit(o) && (!q || [o.name, o.code, o.owner, o.city, liveOwner(o) ? liveAgName(liveOwner(o)) : ''].some((x) => String(x || '').toLowerCase().includes(q)));
+    if (KC.liveGrp === 'ext') {
+      const X = XA(); if (!X) return '<p class="mut">Le app terze non sono disponibili in questa pagina.</p>';
+      const L = extList();
+      if (!X.at()) return '<p class="mut">Leggo MaxPlayer, OrbixPlay e MirkoTeam…</p>';
+      const errs = X.errs().map((e) => `<div class="ao-err">⚠ ${esc(e)}</div>`).join('');
+      const note = '<p class="kc-ext-note">MaxPlayer e OrbixPlay non dicono IP e canale: «collegato» è il controllo della linea, il canale solo se la stessa linea è anche su WOLF, Atlantix, Realott o SLT. MirkoTeam dice IP e dispositivo, non il canale. Tocca una riga per vedere tutto.</p>';
+      return errs + note + (L.length ? `<div class="kc-ext">${X.listHtml(L.slice(0, 300))}</div>` : `<p class="mut">${q ? 'Nessun risultato.' : KC.liveTab === 'off' ? 'Nessuna app terza scollegata nelle ultime 24 ore.' : 'Nessuna app terza collegata adesso.'}</p>`);
+    }
     if (KC.liveTab === 'off') {
       const L = P.recent.filter(fit).sort((a, b) => a.ago - b.ago);
       return L.length ? L.slice(0, 200).map(offRow).join('') : `<p class="mut">${q ? 'Nessun risultato.' : 'Nessun dispositivo offline visto nelle ultime 24 ore.'}</p>`;
@@ -445,7 +489,14 @@
     const L = P.online.filter(fit);
     return L.length ? L.map(liveRow).join('') : `<p class="mut">${q ? 'Nessun risultato.' : 'Nessun utente collegato in questo momento.'}</p>`;
   }
+  function extLoad(force) {
+    const X = XA(); if (!X || X.busy()) return;
+    if (!force && X.at() && Date.now() - X.at() < 60e3) return;
+    X.load(force).then(() => { if ($('#v-live').classList.contains('on') && KC.liveRedraw) KC.liveRedraw(); }).catch(() => {});
+  }
+  { let et = 0; document.addEventListener('kx-online', () => { if (et || KC.liveGrp !== 'ext' || !$('#v-live').classList.contains('on')) return; et = setTimeout(() => { et = 0; if (KC.liveRedraw) KC.liveRedraw(); }, 400); }); }
   function liveBind(V) {
+    $$('.kc-ext [data-aok]', V).forEach((x) => { x.onclick = () => XA() && XA().open(x.dataset.aok); x.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); XA() && XA().open(x.dataset.aok); } }; });
     $$('[data-kdati]', V).forEach((x) => (x.onclick = () => window.KXInsight && KXInsight.open(x.dataset.kdati)));
     $$('[data-kopen]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.kopen); d ? openQuick(d) : toast('Dispositivo non trovato', 1); }));
     $$('[data-kkick]', V).forEach((b) => (b.onclick = async () => { const d = D.devices.find((x) => x.id === b.dataset.kkick); if (d && (await kickDev(d))) { b.disabled = true; b.textContent = 'Disconnessione…'; } }));
@@ -455,6 +506,8 @@
     }));
   }
   try { KC.liveTab = sessionStorage.getItem('kc_lt') || 'on'; } catch {}
+  try { KC.liveGrp = sessionStorage.getItem('kc_lg') || 'all'; } catch { KC.liveGrp = 'all'; }
+  KC.liveAg = '';
   let liveT = null;
   async function liveLoad() {
     const V = $('#v-live');
@@ -465,6 +518,7 @@
     V.innerHTML = `<div class="kc-k">${[['Online ora', c.online, 'app aperte negli ultimi 4 minuti', '#4f8cff'], ['Stanno guardando', c.watching, 'canali, film e serie', '#22c55e'], ['Nei menu', c.idle, 'app aperta senza video', '#facc15'], ['Dispositivi totali', c.total, 'registrati nel pannello', 'var(--a1)']].map(([l, v, s, col]) => `<div class="kpi glass"><div class="halo" style="background:${col}"></div><div class="lb"><i style="background:${col};box-shadow:0 0 10px ${col}"></i>${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('')}</div>
       <div class="g2b" style="grid-template-columns:minmax(0,2.4fr) minmax(260px,1fr)">
         <div class="card glass"><div class="hd"><h3>Utenti<small>${window.KXAuto ? (KXAuto.on() ? 'Si aggiorna da solo ogni ' + KXAuto.sec() + ' secondi (pulsante «Auto» in alto)' : 'Aggiornamento automatico spento (pulsante «Auto» in alto)') : 'Si aggiorna da solo ogni 15 secondi'} · dati inviati dalle app 1.8 o successive</small></h3><button class="btn sm" id="kLiveR">Aggiorna</button></div>
+          <div id="kLiveGrp">${grpBar(P)}</div>
           <div class="kc-ltabs"><button class="on-t ${KC.liveTab !== 'off' ? 'on' : ''}" data-ltab="on"><i></i>Collegati ora<span>${P.online.length}</span></button><button class="off-t ${KC.liveTab === 'off' ? 'on' : ''}" data-ltab="off"><i></i>Offline<em>visti nelle ultime 24 ore</em><span>${P.recent.length}</span></button>
             <input class="inp" id="kLiveQ" placeholder="Cerca nome o codice…" value="${esc(KC.liveQ || '')}"></div>
           <div id="kLiveList">${liveList(P)}</div>
@@ -475,8 +529,16 @@
         </div>
       </div>`;
     $('#kLiveR').onclick = liveLoad;
-    const redraw = () => { const L = $('#kLiveList'); L.innerHTML = liveList(P); liveBind(L); };
+    const redraw = () => { const G = $('#kLiveGrp'); if (G) G.innerHTML = grpBar(P); const L = $('#kLiveList'); L.innerHTML = liveList(P); liveBind(L); };
+    KC.liveRedraw = redraw;
     $$('[data-ltab]', V).forEach((b) => (b.onclick = () => { KC.liveTab = b.dataset.ltab; try { sessionStorage.setItem('kc_lt', KC.liveTab); } catch {} $$('[data-ltab]', V).forEach((x) => x.classList.toggle('on', x === b)); redraw(); }));
+    // gruppi e agenti (la barra si ridisegna a ogni cambio: i click arrivano qui)
+    $('#kLiveGrp').onclick = (e) => {
+      const g = e.target.closest('[data-lgrp]'), a = e.target.closest('[data-lag]');
+      if (g) { KC.liveGrp = g.dataset.lgrp; if (KC.liveGrp !== 'agents') KC.liveAg = ''; try { sessionStorage.setItem('kc_lg', KC.liveGrp); } catch {} if (KC.liveGrp === 'ext') extLoad(false); redraw(); }
+      if (a) { KC.liveAg = a.dataset.lag; redraw(); }
+    };
+    if (KC.liveGrp === 'ext') extLoad(false); // le app terze si leggono solo con la loro scheda aperta (niente richieste in più a MaxPlayer, OrbixPlay e MirkoTeam)
     $('#kLiveQ').oninput = (e) => { KC.liveQ = e.target.value; redraw(); };
     liveBind(V);
     clearTimeout(liveT);
@@ -1078,11 +1140,11 @@
         <div class="dv-meta">${info.map(esc).join(' · ')}</div>
         ${kids.length ? `<div class="dv-kids">${kids.map((k) => `<button data-open="${esc(k.id)}" title="${esc(k.code)}${k.own ? ' · gestione indipendente (playlist sue)' : ''}">${liveDot(k)}↳ ${esc(k.name || k.model || k.code)}${k.own ? ' · <em>playlist sue</em>' : ''}</button>`).join('')}</div>` : ''}
         ${d.notes ? `<div class="dv-note">${esc(d.notes.slice(0, 90))}</div>` : ''}
-        <div class="dv-act"><button class="btn sm" data-act="renew">Rinnova</button><button class="btn sm pri" data-act="open">Modifica</button></div>
+        <div class="dv-act">${window.KXAddDev && KXAddDev.can() ? '<button class="btn sm" data-act="adddev" title="Collega e aggiungi un altro dispositivo a questo cliente">➕ Dispositivo</button>' : ''}<button class="btn sm" data-act="renew">Rinnova</button><button class="btn sm pri" data-act="open">Modifica</button></div>
       </div>`;
     }
     function pendCard(d) {
-      return `<div class="dv-pc" data-id="${esc(d.id)}"><div><span class="code big">${esc(d.code)}</span><small>${esc(d.model || 'Dispositivo')} · si è collegato ${esc(ago(d.lastSeen || d.createdAt))}</small></div>
+      return `<div class="dv-pc" data-id="${esc(d.id)}"><div><span class="code big">${esc(d.code)}</span><small>${esc(d.model || 'Dispositivo')} · si è collegato ${esc(ago(d.lastSeen || d.createdAt))}</small>${window.KXAddDev ? KXAddDev.nearHtml(d) : ''}</div>
         <div class="dv-act"><button class="btn sm pri" data-act="activate">Attiva</button><button class="btn sm" data-act="link">Collega a un cliente</button>${pendOwner() ? '<button class="btn sm dvp-x" data-act="delp" title="Elimina la richiesta">🗑</button>' : ''}</div></div>`;
     }
     /* richieste «da attivare»: eliminarle (una o tutte) e farle annullare da sole se non le accetti entro un tempo (solo titolare) */
@@ -1137,13 +1199,15 @@
       const base = sub && p ? p : d, dl = daysLeft(base);
       const exp = base.expires ? `<b>${esc(fmtD(base.expires))}</b><small class="${dl !== null && dl < 0 ? 'bad' : dl !== null && dl <= 14 ? 'warn' : ''}">${dl === null ? '' : dl < 0 ? 'scaduto da ' + -dl + ' g' : dl === 0 ? 'scade oggi' : 'tra ' + dl + ' g'}</small>` : (d.status === 'pending' ? '<span class="mut">—</span>' : '<b>Senza scadenza</b>');
       const pls = sub && !d.own ? '<span class="mut">dal principale</span>' : (d.playlists || []).length ? `${(d.playlists || []).length} · <span class="mut">${esc(hostsOf(d).slice(0, 1).join(''))}</span>${sub ? ' <span class="kc-tag" title="Gestione indipendente: playlist e lettore di questa TV">propria</span>' : ''}` : '<span class="mut">nessuna</span>';
+      // «➕ Dispositivo» (add-dev.js, 11 novembre 2026): collega un'altra TV a questo cliente, per titolare e agenti con il permesso
+      const addDev = window.KXAddDev && KXAddDev.can() ? '<button class="btn sm dvt-add" data-act="adddev" title="Collega e aggiungi un altro dispositivo a questo cliente">➕ Dispositivo</button>' : '';
       const acts = d.status === 'pending' && !sub
         ? '<button class="btn sm pri" data-act="activate">Attiva</button><button class="btn sm" data-act="link">Collega</button>' + (pendOwner() ? ib('del', 'r', 'Elimina la richiesta') : '')
         : sub ? ib('kick', 'k', 'Disconnetti') + ib('edit', 'e', 'Apri scheda')
-        : ib('ext1', 'g', '+1 mese') + ib('ext12', 'b', '+12 mesi') + (d.status === 'active' ? ib('kick', 'k', 'Disconnetti: interrompe la visione in corso') : '') + (d.active ? ib('off', 'o', 'Disattiva') : ib('on', 'g', 'Riattiva')) + ib('edit', 'e', 'Apri scheda') + ib('del', 'r', 'Elimina');
+        : addDev + ib('ext1', 'g', '+1 mese') + ib('ext12', 'b', '+12 mesi') + (d.status === 'active' ? ib('kick', 'k', 'Disconnetti: interrompe la visione in corso') : '') + (d.active ? ib('off', 'o', 'Disattiva') : ib('on', 'g', 'Riattiva')) + ib('edit', 'e', 'Apri scheda') + ib('del', 'r', 'Elimina');
       return `<tr data-id="${esc(d.id)}" class="${sub ? 'sub' : ''} ${st.sel.has(d.id) ? 'sel' : ''}">
         <td class="c">${sub ? '' : `<input type="checkbox" data-sel="${esc(d.id)}" ${st.sel.has(d.id) ? 'checked' : ''}>`}</td>
-        <td><div class="dvt-u">${sub ? '<span class="dvt-sub">↳</span>' : ''}<div><b>${liveDot(d)}${esc(d.name || (sub ? d.model || 'Dispositivo' : '') || '— senza nome —')}</b><span class="dvt-code" data-copy="${esc(d.code)}" title="Copia il codice">${esc(d.code)} ${IC.copy}</span></div></div></td>
+        <td><div class="dvt-u">${sub ? '<span class="dvt-sub">↳</span>' : ''}<div><b>${liveDot(d)}${esc(d.name || (sub ? d.model || 'Dispositivo' : '') || '— senza nome —')}</b><span class="dvt-code" data-copy="${esc(d.code)}" title="Copia il codice">${esc(d.code)} ${IC.copy}</span>${!sub && d.status === 'pending' && window.KXAddDev ? KXAddDev.nearHtml(d) : ''}</div></div></td>
         <td>${stPill(d.status)}</td>
         <td class="dvt-exp">${exp}${window.KXPay ? KXPay.badge('device', '', base.id) : ''}</td>
         <td class="c mono">${sub || d.status === 'pending' ? '—' : `${1 + kids.length}/${esc(d.maxConn || 1)}`}</td>
@@ -1274,6 +1338,8 @@
           return;
         }
         if (a === 'activate') return openDrawer(d, true);
+        if (a === 'adddev') return window.KXAddDev && KXAddDev.open(d);
+        if (a === 'nearlink') return window.KXAddDev && KXAddDev.nearLink(d, (e.target.closest('[data-near]') || {}).dataset?.near);
         if (a === 'link') { openDrawer(d, false); setTimeout(() => linkPick(), 350); return; }
         if (a === 'edit') return openDrawer(d, d.status === 'pending');
         if (!e.target.closest('button,input')) return openQuick(d);
@@ -1285,6 +1351,8 @@
       if (act === 'renew') { const box = c.querySelector('.dv-act'); box.innerHTML = [1, 3, 6, 12].map((m) => `<button class="btn sm" data-act="ext${m}">+${m} ${m === 1 ? 'mese' : 'mesi'}</button>`).join('') + '<button class="btn sm dv-x" data-act="renewx" title="Annulla">✕</button>'; return; }
       if (act === 'renewx') return renderDevices();
       if (act === 'delp') return delPend([d]);
+      if (act === 'adddev') return window.KXAddDev && KXAddDev.open(d);
+      if (act === 'nearlink') return window.KXAddDev && KXAddDev.nearLink(d, (e.target.closest('[data-near]') || {}).dataset?.near);
       const em = /^ext(\d+)$/.exec(act || ''); if (em) return extend(d, +em[1]);
       if (act === 'kick') return kickDev(d);
       if (act === 'tog') { if (d.active && !(await ask('Disattivare il cliente?', `<b>${esc(d.name || d.code)}</b> non potrà più guardare finché non lo riattivi.`, 'Disattiva'))) return; if (await save(d, { active: !d.active })) toast(d.active ? 'Cliente disattivato' : 'Cliente riattivato'); return; }
