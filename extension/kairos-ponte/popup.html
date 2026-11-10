@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KAIROS Ponte</title>
+  <style>
+    :root{color-scheme:dark;--bg:#10131b;--card:#191e2a;--line:#2a3141;--text:#eef2ff;--muted:#9ca8c5;--cyan:#22e1ff;--green:#3dffb0;--red:#ff718a}
+    *{box-sizing:border-box}
+    body{width:340px;margin:0;padding:18px;background:radial-gradient(circle at top left,#202947,var(--bg) 58%);color:var(--text);font:14px/1.45 system-ui,sans-serif}
+    h1{margin:0 0 12px;font-size:19px;letter-spacing:.02em}
+    .card{padding:13px;margin:10px 0;border:1px solid var(--line);border-radius:14px;background:rgba(25,30,42,.9)}
+    .state{font-size:16px;font-weight:700}.ok{color:var(--green)}.off{color:var(--red)}
+    .muted{color:var(--muted);font-size:12px}.value{margin-top:4px;overflow-wrap:anywhere}
+    label{display:block;margin:12px 0 5px;color:var(--muted);font-size:12px}
+    input{width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;background:#0c0f16;color:var(--text);font:inherit}
+    button{width:100%;margin-top:14px;padding:11px;border:0;border-radius:10px;background:linear-gradient(100deg,var(--cyan),#8b78ff);color:#07111b;font-weight:800;cursor:pointer}
+    #message{min-height:18px;margin-top:8px;color:var(--muted);font-size:12px}
+  </style>
+</head>
+<body>
+  <h1>KAIROS Ponte</h1>
+  <div class="card">
+    <div id="state" class="state off">Ponte spento</div>
+    <div class="muted" style="margin-top:8px">Ultimo controllo</div>
+    <div id="lastPoll" class="value">Mai</div>
+    <div class="muted" style="margin-top:8px">Richieste servite</div>
+    <div id="jobs" class="value">0</div>
+    <div class="muted" style="margin-top:8px">Ultimo errore</div>
+    <div id="lastError" class="value">Nessuno</div>
+  </div>
+  <div class="card">
+    <label for="kairosUrl">Indirizzo KAIROS</label>
+    <input id="kairosUrl" type="url" value="https://panel-kairos.com" autocomplete="url">
+    <label for="token">Codice del ponte</label>
+    <input id="token" type="password" autocomplete="off" placeholder="Incolla il codice mostrato una volta">
+    <button id="save">Salva</button>
+    <div id="message"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

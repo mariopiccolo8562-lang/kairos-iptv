@@ -15,6 +15,7 @@ import { oraRoutes } from './orapanel.js';
 import { orcpRoutes, orcpAgentConfig, setOrcpDownloader, ovpnFile, orcpRemoteHosts } from './orcp.js'; // Pannello ORCP (cp.ottrun.com): l'app brandizzata OTTRUN, accesso passato dal titolare
 import { vpnMark as vpnMarkRows } from './vpn-mark.js';
 import { extRoutes } from './extpanels.js'; // Pannelli Realott e SLT (accesso diretto senza API), solo titolare // Pannello ORA (panel.oraplayers.com), accesso passato dal titolare
+import { blkRoutes, relayPublic } from './relay.js';
 import { orbixFetch, orbixOutageMessage, oxpRoutes } from './orbixpanel.js'; // playlist OrbixPlay gestite da KAIROS (sezione «Pannello OrbixPlay»)
 import { mxpRoutes } from './mxpanel.js'; // account MaxPlayer gestiti da KAIROS (sezione «Pannello MaxPlayer»)
 import { tgHook, notifyNew, notifyDecided, notifyActivated, notifyAdmin } from './notify.js'; // avvisi su Telegram e notifiche del pannello
@@ -4933,6 +4934,10 @@ async function route(req, env, ctx) {
 
   if (path === '/' || path === '/panel') return Response.redirect(url.origin + '/panel/', 302);
 
+  if (path.startsWith('/api/relay/')) {
+    const r = await relayPublic(req, env, path, WOLF_H);
+    if (r) return r;
+  }
   /* ---------- API app (pubblica) ---------- */
   if (path.startsWith('/api/player/')) {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204 });
@@ -5227,6 +5232,7 @@ async function adminInner(req, env, url, ip, ctx) {
     if (path === '/health-check' && m === 'GET') throw new HttpErr(403, 'Il controllo generale è riservato al titolare');
     throw new HttpErr(401, 'Sessione scaduta');
   }
+  if (path.startsWith('/blk/') && ses.role === 'agent') throw new HttpErr(403, 'Solo il titolare può usare il Pannello Black IPTV');
   await pre;
   // rinnovo automatico: chi usa il pannello resta collegato (al massimo un aggiornamento ogni 6 ore; in sottofondo)
   if (ses.expires - now() < SESSION_TTL * 1000 - 6 * 3600e3 && path !== '/logout') {
@@ -6130,6 +6136,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path.startsWith('/atx/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello Atlantix'); const r = await atxRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
   if (path.startsWith('/ora/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello ORA'); const r = await oraRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
   if (/^\/(ro|slt)\//.test(path)) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare questo pannello'); const r = await extRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
+  if (path.startsWith('/blk/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello Black IPTV'); const r = await blkRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
   if (path.startsWith('/orcp/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello ORCP'); const r = await orcpRoutes(req, env, path, who, ip, WOLF_H, ctx); if (r) return r; }
   if (path.startsWith('/mxp/')) { if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare può usare il Pannello MaxPlayer'); const r = await mxpRoutes(req, env, path, who, ip, WOLF_H); if (r) return r; }
   if (path === '/online' && m === 'POST') { if (!ses || ses.agent) throw new HttpErr(403, 'Funzione disponibile solo dal pannello'); return onlineRoute(req); }
