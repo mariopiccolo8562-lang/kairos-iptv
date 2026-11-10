@@ -26,6 +26,8 @@
     ['ag', 'Agenti', '#38bdf8', S('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14a5 5 0 0 1 3 6"/>'), ['agents']],
     // Store (solo titolare): le app dello store (prima in un pannello a parte), il riepilogo e App Kairos, tutto in un posto
     ['sto', 'Store', '#a78bfa', S('<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>'), ['stapps', 'store', 'appk']],
+    // Eventi ora (10 novembre 2026): sport in diretta e dove vederli (events.js); agenti solo con il permesso
+    ['ev', 'Eventi ora', '#22c55e', S('<circle cx="12" cy="12" r="9"/><path d="m12 7 4.3 3.1-1.6 5H9.3l-1.6-5z"/><path d="M12 3v4M21 10.1l-4.7 0M17.6 19.3l-2.9-4.2M6.4 19.3l2.9-4.2M3 10.1h4.7"/>'), ['events']],
     ['set', 'Solo Master', '#f5b041', S('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l-.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'), ['dns', 'vod', 'activity', 'reports', 'creq', 'areq', 'reqai', 'apperr', 'rctl', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-pay', 'set-sec', 'api', 'sec']]
   );
   const css = document.createElement('style');

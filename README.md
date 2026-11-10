@@ -928,3 +928,26 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
   - gli agenti con «Collegare altri dispositivi», solo con i loro clienti e solo fino a «Connessioni per cliente» che decide il titolare; oltre vedono «chiedi al titolare» (anche il server rifiuta);
   - l'agente collega con il codice della TV: il server lo accetta solo per le TV nuove, e «cerca codice» non gli dà l'id.
 - **Test**: `srv_link_grow` (13 controlli sul server), `ui_link_pick` (28).
+
+## 51. «⚽ Eventi ora»: sport in diretta, dove vederli e striscia che scorre (10 novembre 2026)
+
+- **Voce del menu** subito dopo lo Store (`events.js`, `menu4.js`).
+- **Pagina**:
+  - gli stessi eventi della Pro (`/api/player/events`) per **tutti** gli sport: calcio (Serie A, Champions, Europa e Conference League, Coppa Italia, Premier, LaLiga, Bundesliga, Ligue 1), F1, **MotoGP**, tennis ATP/WTA, NBA, NFL, UFC, rugby;
+  - sezioni **🔴 In diretta** (minuto e risultato), **Più tardi** (entro 36 ore), **Finiti da poco**; filtri per sport con i conteggi;
+  - **«Di solito su»**: le emittenti italiane, le stesse di «Dove vederla» della Pro (es. Serie A → DAZN, Sky Sport);
+  - **«Sulla tua lista»**: i canali della lista più usata dai clienti con quel nome o gruppo, prima FHD; esclusi quelli di un altro sport (Sky Sport MotoGP non va per una partita);
+  - **«🔍 Guida TV»** legge cosa va in onda su quei canali e mette ✓ dove il titolo cita le squadre o il GP.
+  - Si aggiorna da sola ogni minuto.
+- **Striscia in alto su ogni pagina**:
+  - gli eventi in diretta e delle prossime 12 ore scorrono da destra a sinistra;
+  - col mouse sopra si ferma; con la **rotellina**, trascinando col mouse o **col dito** si va avanti e indietro, poi riparte da sola;
+  - clic → la pagina; ✕ la nasconde (resta nascosta), «Striscia in alto» nella pagina la riaccende;
+  - con «riduci movimento» del sistema non scorre da sola.
+- **MotoGP**: dall'API pubblica del sito ufficiale (`api.motogp.pulselive.com`, senza chiavi e senza documentazione: se cambia, sparisce solo la MotoGP). Si legge il GP in corso o il prossimo, con prove, pre-qualifiche, qualifiche, sprint, warm up e gara. Nelle app la MotoGP è **spenta** finché il titolare non la accende in Impostazioni → Eventi sportivi nella Home; la Pro è già pronta a mostrarla.
+- **Server**:
+  - `GET /admin/events`, `/admin/events/chans` (solo nome e gruppo dei canali, mai indirizzi o credenziali), `/admin/events/epg?ids=` (al massimo 12 canali);
+  - le app e il pannello usano le stesse righe di cache, che non si cancellano più a vicenda;
+  - la MotoGP conta 4 richieste nel limite di 40 per giro.
+- **Chi**: il titolare; gli agenti solo con il permesso nuovo **«Eventi ora»**, spento per tutti.
+- **Test**: `srv_events` (18 controlli sul server), `ui_events` (27).

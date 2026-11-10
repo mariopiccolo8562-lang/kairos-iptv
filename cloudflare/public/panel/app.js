@@ -870,11 +870,11 @@ function renderSettings() {
   preview();
 }
 /* sport degli «Eventi sportivi nella Home» (stessi nomi del server: SPORTS in worker.js); non impostati = tutti */
-const SPORTS_UI = [['calcio', 'Calcio'], ['f1', 'Formula 1'], ['tennis', 'Tennis'], ['basket', 'Basket NBA'], ['nfl', 'Football americano NFL'], ['ufc', 'UFC'], ['rugby', 'Rugby']];
+const SPORTS_UI = [['calcio', 'Calcio'], ['f1', 'Formula 1'], ['motogp', 'MotoGP'], ['tennis', 'Tennis'], ['basket', 'Basket NBA'], ['nfl', 'Football americano NFL'], ['ufc', 'UFC'], ['rugby', 'Rugby']];
 function renderSports(s) {
   const box = $('#sSpCk'); if (!box) return;
   if (box.dataset.dirty !== '1') {
-    const on = Array.isArray(s.sports) ? s.sports : SPORTS_UI.map((x) => x[0]);
+    const on = Array.isArray(s.sports) ? s.sports : SPORTS_UI.map((x) => x[0]).filter((k) => k !== 'motogp'); // MotoGP (arrivata dopo): spenta finché non la accendi
     box.innerHTML = SPORTS_UI.map(([k, l]) => `<label><input type="checkbox" data-sp="${k}"${on.includes(k) ? ' checked' : ''}><span>${l}</span></label>`).join('');
   }
   $('#sSports').classList.toggle('off', !$('#sFoot').classList.contains('on'));

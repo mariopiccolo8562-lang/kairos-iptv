@@ -2512,15 +2512,18 @@ const EV_SRC = [
   { sport: 'rugby', key: 'rugby/270557', label: 'URC', kind: 'team', days: 3 },
   { sport: 'rugby', key: 'rugby/271937', label: 'Champions Cup', kind: 'team', days: 3 },
   { sport: 'rugby', key: 'rugby/289234', label: 'Test match', kind: 'team', days: 3 },
+  // MotoGP (10 novembre 2026): non c'è su ESPN, si legge dal sito ufficiale (motogpBoard)
+  { sport: 'motogp', key: 'motogp', label: 'MotoGP', kind: 'motogp', days: 0 },
 ];
 for (const s of EV_SRC) if (!s.path) s.path = s.key;
 /** sport che il titolare accende e spegne dal pannello (impostazione «sports»; non impostata = tutti) */
-const SPORTS = ['calcio', 'f1', 'tennis', 'basket', 'nfl', 'ufc', 'rugby'];
-const sportsOf = (s) => (s.showFootball === false ? [] : Array.isArray(s.sports) ? SPORTS.filter((k) => s.sports.includes(k)) : SPORTS.slice());
+const SPORTS = ['calcio', 'f1', 'motogp', 'tennis', 'basket', 'nfl', 'ufc', 'rugby'];
+// nelle app la MotoGP (arrivata dopo) resta spenta finché il titolare non la accende negli sport della Home
+const sportsOf = (s) => (s.showFootball === false ? [] : Array.isArray(s.sports) ? SPORTS.filter((k) => s.sports.includes(k)) : SPORTS.filter((k) => k !== 'motogp'));
 const EV_FETCH_MAX = 40;   // richieste a ESPN per giro (il piano gratuito ne permette 50 in tutto)
 const EV_MAX = 30;         // eventi nella risposta v2
 const EV_MIN = 2;          // posti garantiti a ogni sport presente
-const EV_CAP = { f1: 5, tennis: 6, basket: 4, nfl: 4, ufc: 2, rugby: 5 }; // al massimo per sport (il calcio riempie il resto)
+const EV_CAP = { f1: 5, motogp: 4, tennis: 6, basket: 4, nfl: 4, ufc: 2, rugby: 5 }; // al massimo per sport (il calcio riempie il resto)
 
 /* lettura difensiva: un campo mancante o di tipo sbagliato fa scartare l'evento, mai un'eccezione */
 const evArr = (x) => (Array.isArray(x) ? x : []);
@@ -2709,7 +2712,44 @@ function evMma(j, src) {
   return out;
 }
 const EV_PARSE = { team: evTeam, race: evRace, tennis: evTennis, mma: evMma };
+/* MotoGP: API pubblica del sito ufficiale (la usa motogp.com; senza chiavi ma senza documentazione: se cambia, la MotoGP
+   resta vuota e il resto va avanti). Stagione corrente → classe MotoGP → GP in corso o prossimo → sessioni con l'orario.
+   Un solo GP alla volta, come il calendario corrente della F1. Stagione e classe restano in memoria un giorno. */
+const MGP_API = 'https://api.motogp.pulselive.com/motogp/v1/results';
+const MGP_SES = { FP: 'Prove libere', PR: 'Pre-qualifiche', Q: 'Qualifiche', SPR: 'Sprint', WUP: 'Warm up', RAC: 'Gara' };
+const MGP_MIN = { FP: 45, PR: 60, Q: 15, SPR: 45, WUP: 10, RAC: 50 };
+let mgpMem = { t: 0, sid: '', cat: '' };
+async function motogpBoard() {
+  const get = async (p) => { const r = await fetch(MGP_API + p, { headers: { 'User-Agent': 'Mozilla/5.0 KairosPanel', Accept: 'application/json' }, signal: AbortSignal.timeout(8000) }); if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status }); return r.json(); };
+  const t = now();
+  if (!mgpMem.sid || t - mgpMem.t > 86400e3) {
+    const seasons = evArr(await get('/seasons')).map(evObj), yr = new Date(t).getUTCFullYear();
+    const season = seasons.find((x) => x.current === true) || seasons.find((x) => +x.year === yr);
+    const sid = season ? evS(season.id, 60) : '';
+    if (!sid) return [];
+    const cat = evArr(await get('/categories?seasonUuid=' + encodeURIComponent(sid))).map(evObj).find((c) => /^motogp/i.test(evS(c.name, 40)));
+    if (!cat || !evS(cat.id, 60)) return [];
+    mgpMem = { t, sid, cat: evS(cat.id, 60) };
+  }
+  const day = (v) => { const x = Date.parse(evS(v, 40)); return isFinite(x) ? x : NaN; };
+  const L = evArr(await get('/events?seasonUuid=' + encodeURIComponent(mgpMem.sid) + '&isFinished=false')).map(evObj)
+    .filter((e) => evS(e.id, 60) && e.test !== true).map((e) => ({ e, a: day(e.date_start), b: day(e.date_end) })).filter((x) => isFinite(x.a)).sort((x, y) => x.a - y.a);
+  const cur = L.find((x) => (isFinite(x.b) ? x.b : x.a) + 86400e3 > t);
+  if (!cur) return [];
+  const gp = evS(cur.e.name, 80) || evS(cur.e.sponsored_name, 80), ci = evObj(cur.e.circuit), venue = [evS(ci.name, 80), evS(ci.place, 40)].filter(Boolean).join(', ');
+  const out = [];
+  for (const x of evArr(await get('/sessions?eventUuid=' + encodeURIComponent(evS(cur.e.id, 60)) + '&categoryUuid=' + encodeURIComponent(mgpMem.cat))).map(evObj)) {
+    const ty = evS(x.type, 10).toUpperCase(), num = parseInt(x.number, 10) || 0, start = evDate(x.date);
+    if (!MGP_SES[ty] || !start) continue;
+    const st0 = Date.parse(start), end = st0 + (MGP_MIN[ty] || 45) * 60e3 + 20 * 60e3, status = evS(x.status, 30).toLowerCase();
+    const done = /finish|complete|official|ended/.test(status) || t > end, live = !done && t >= st0;
+    const name = MGP_SES[ty] + (num && (ty === 'FP' || ty === 'Q') ? ' ' + num : '');
+    out.push({ id: evS(x.id, 60) || `${evS(cur.e.id, 60)}-${ty}${num}`, sport: 'motogp', league: 'MotoGP', start, live, state: live ? 'in' : done ? 'post' : 'pre', clock: '', title: `${gp} · ${name}`, gp, session: name, venue, round: name });
+  }
+  return out;
+}
 async function espnBoard(src, day) {
+  if (src.kind === 'motogp') return motogpBoard();
   const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${src.path}/scoreboard${day ? '?dates=' + day : ''}`, { headers: { 'User-Agent': 'Mozilla/5.0 KairosPanel' } });
   if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status });
   return EV_PARSE[src.kind](await r.json(), src);
@@ -2741,26 +2781,29 @@ function evWanted(on, t = now()) {
 }
 /* ESPN si interroga un giorno alla volta per ogni fonte; ogni «fonte+giorno» viene salvato in D1 (la cache di Cloudflare
    non funziona su workers.dev) e riscaricato solo quando è vecchio, prima oggi, al massimo EV_FETCH_MAX richieste per giro */
-let evMem = { t: 0, sig: '', have: null, out: {} };
+let evMem = { t: 0, sigs: new Set(), have: null, out: {} };
+// richieste che costa una fonte: la MotoGP fino a 4 (stagione, classe, GP, sessioni), le altre 1
+const evCost = (w) => (w.src.kind === 'motogp' ? 4 : 1);
 async function evData(env, ctx, on) {
-  const sig = on.join();
-  if (evMem.have && evMem.sig === sig && now() - evMem.t < 3 * 60e3) return evMem;
-  const rows = ((await env.DB.prepare("SELECT k, v FROM settings WHERE k LIKE 'ev:%'").all()).results) || [];
-  const have = new Map(rows.map((r) => { try { return [r.k, JSON.parse(r.v)]; } catch { return [r.k, null]; } }));
+  const sig = on.join(), fresh = evMem.have && now() - evMem.t < 3 * 60e3;
+  if (fresh && evMem.sigs.has(sig)) return evMem;
+  // le app (sport accesi) e il pannello («Eventi ora», tutti gli sport) usano le stesse righe: entro 3 minuti niente nuova lettura
+  const have = fresh ? evMem.have : new Map(((((await env.DB.prepare("SELECT k, v FROM settings WHERE k LIKE 'ev:%'").all()).results) || [])).map((r) => { try { return [r.k, JSON.parse(r.v)]; } catch { return [r.k, null]; } }));
   const wanted = evWanted(on);
   const todo = wanted.filter((w) => { const h = have.get(w.k); return !h || now() - (+h.t || 0) > evTtl(w.src, w.di, h); }).sort((a, b) => a.di - b.di);
-  const got = await Promise.all(todo.slice(0, EV_FETCH_MAX).map(async (w) => { try { return { ...w, ev: await espnBoard(w.src, w.day) }; } catch (e) { return { ...w, err: +(e && e.status) || 1 }; } }));
+  const go = []; let cost = 0; for (const w of todo) { if (cost + evCost(w) > EV_FETCH_MAX) break; cost += evCost(w); go.push(w); }
+  const got = await Promise.all(go.map(async (w) => { try { return { ...w, ev: await espnBoard(w.src, w.day) }; } catch (e) { return { ...w, err: +(e && e.status) || 1 }; } }));
   const writes = [], put = (k, v) => env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(k, JSON.stringify(v));
   for (const g of got) {
     // errore (ESPN giù, campionato sparito): si tengono gli eventi di prima e si riprova più tardi, senza insistere a ogni giro
     const old = have.get(g.k), v = g.err ? { t: now(), ev: (old && old.ev) || [], err: g.err } : { t: now(), ev: g.ev };
     have.set(g.k, v); writes.push(put(g.k, v));
   }
-  // via le righe che non servono più: giorni passati, sport spenti dal pannello
-  const want = new Set(wanted.map((w) => w.k));
+  // via le righe che non servono più: giorni passati e fonti sparite (quelle degli sport spenti nelle app restano per «Eventi ora»)
+  const want = new Set(evWanted(SPORTS).map((w) => w.k));
   for (const k of [...have.keys()]) if (!want.has(k)) { writes.push(env.DB.prepare('DELETE FROM settings WHERE k = ?').bind(k)); have.delete(k); }
   if (writes.length) { const w = env.DB.batch(writes).catch(() => {}); ctx && ctx.waitUntil ? ctx.waitUntil(w) : await w; }
-  evMem = { t: now(), sig, have, out: {} };
+  evMem = { t: fresh ? evMem.t : now(), sigs: new Set([...(fresh ? evMem.sigs : []), sig]), have, out: {} };
   return evMem;
 }
 const evOrd = (a, b) => (+!!b.live - +!!a.live) || (Date.parse(a.start) - Date.parse(b.start));
@@ -2816,6 +2859,52 @@ async function sportsEvents(env, ctx, v = 1) {
   }
   mem.out[key] = body;
   return body;
+}
+/* ---------------- «Eventi ora» nel pannello (10 novembre 2026) ----------------
+   Gli stessi eventi della Pro (ESPN e MotoGP), tutti gli sport: in diretta, finiti da poco e da giocare entro 36 ore, con le
+   emittenti italiane di solito (le stesse di «Dove vederla» della Pro). Canali della lista e guida TV a parte (eventsChans). */
+const EV_TV = [
+  [/serie a/i, ['DAZN', 'Sky Sport']], [/champions/i, ['Sky Sport', 'Prime Video', 'Canale 5']], [/europa|conference/i, ['Sky Sport', 'DAZN', 'TV8']],
+  [/premier/i, ['Sky Sport']], [/laliga|la liga|liga/i, ['DAZN']], [/bundesliga/i, ['Sky Sport']], [/ligue/i, ['DAZN']], [/serie b/i, ['DAZN', 'Sky Sport']], [/coppa italia/i, ['Canale 5', 'Italia 1']],
+  ['f1', ['Sky Sport F1', 'TV8']], ['motogp', ['Sky Sport MotoGP', 'TV8']], ['tennis', ['Sky Sport Tennis', 'SuperTennis']], ['basket', ['Sky Sport NBA']], ['nfl', ['DAZN']], ['ufc', ['DAZN']], ['rugby', ['Sky Sport']],
+];
+const evTv = (e) => { const r = e.sport && e.sport !== 'calcio' ? EV_TV.find(([k]) => k === e.sport) : EV_TV.find(([k]) => k instanceof RegExp && k.test(e.league || '')); return r ? r[1] : []; };
+async function panelEvents(env, ctx) {
+  const mem = await evData(env, ctx, SPORTS);
+  const t = now(), seen = new Set(), all = [];
+  for (const val of mem.have.values()) for (const e of (val && val.ev) || []) {
+    const sp = e.sport || 'calcio';
+    if (!SPORTS.includes(sp) || seen.has(sp + ':' + e.id)) continue;
+    seen.add(sp + ':' + e.id); all.push(sp === e.sport ? e : { ...e, sport: sp });
+  }
+  const ok = all.filter((e) => { const st = Date.parse(e.start); if (!isFinite(st)) return false; if (e.live) return st > t - 12 * 3600e3; if (e.state === 'post') return st > t - 5 * 3600e3 && st <= t; return st > t - 3 * 3600e3 && st < t + 36 * 3600e3; });
+  return { v: 1, events: ok.sort(evOrd).slice(0, 150).map((e) => ({ ...evOut(e), tv: evTv(e) })), sports: SPORTS, updated: t };
+}
+/** canali sportivi della lista più usata dai clienti (solo nome e gruppo, mai indirizzi o credenziali), per «dove vederla» */
+const EV_CH_RX = /sport|calcio|dazn|eurosport|serie ?a\b|football|formula ?1|\bf1\b|motogp|tennis|\bnba\b|\bufc\b|basket|rugby|champions|premier|liga|bundesliga|ligue|tv8|canale 5|italia 1|rai ?sport|prime/i;
+async function eventsSource(env) {
+  let best = null;
+  for (const src of (await catalogSources(env)).values()) if (!best || src.devices > best.devices) best = src;
+  return best;
+}
+async function eventsChans(env) {
+  const src = await eventsSource(env);
+  if (!src) return { src: '', chans: [] };
+  const data = await xtreamCatalog(env, src, 'live');
+  const cats = new Map((data.cats || []).map((c) => [c.id, c.name]));
+  const chans = [];
+  for (const x of data.items || []) { const g = cats.get(x.cat) || ''; if (EV_CH_RX.test(x.name) || EV_CH_RX.test(g)) chans.push({ id: x.id, name: x.name, group: g }); if (chans.length >= 800) break; }
+  return { src: src.key, chans };
+}
+/** guida TV (ora e prossimi) di pochi canali della lista, per confermare dove va in onda un evento */
+async function eventsEpg(env, ids) {
+  const src = await eventsSource(env);
+  if (!src) return { epg: {} };
+  const out = {};
+  await Promise.all(ids.slice(0, 12).map(async (id) => {
+    try { const r = await xtreamInfo(env, src, 'live', id); out[id] = (r.epg || []).slice(0, 4).map((p) => ({ title: p.title, start: p.start, end: p.end })); } catch { out[id] = []; }
+  }));
+  return { epg: out };
 }
 async function log(env, type, text, ip = '') {
   await env.DB.prepare('INSERT INTO activity (t, type, text, ip) VALUES (?, ?, ?, ?)').bind(now(), type, String(text).slice(0, 300), ip).run();
@@ -5477,7 +5566,7 @@ async function adminInner(req, env, url, ip, ctx) {
    AGENTI (reseller): entrano nel pannello con le loro credenziali (2FA facoltativa) e vedono SOLO i propri clienti
    e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
    ====================================================================== */
-const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'lineView', 'account', 'ai',
+const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'lineView', 'events', 'account', 'ai',
   'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'payments', 'autoRenew', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt', 'atx', 'orcpApp'];
 const ORCP_SERVER_KEYS = ['portal', 'portal2', 'portal3', 'portal4', 'portal5'];
 function checkedOrcpServers(value) {
@@ -5486,7 +5575,7 @@ function checkedOrcpServers(value) {
   }
   return value;
 }
-const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, lineView: false, account: false, ai: false,
+const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, lineView: false, events: false, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
   storeAll: false, subClients: true, maint: false, players: false, payments: false, autoRenew: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, atx: false, mxp: false, oxp: false, oxpNew: false, orcpApp: false, orcpSrv: [], actApps: [], addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
@@ -6020,6 +6109,14 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   }
   if (path === '/agent-ledger' || path.startsWith('/agent-ledger/')) throw new HttpErr(403, 'Il registro debiti è riservato al titolare');
   if (path === '/health-check' && m === 'GET') throw new HttpErr(403, 'Il controllo generale è riservato al titolare');
+  if (path === '/events' || path.startsWith('/events/')) {
+    need('events', '«Eventi ora» non è attivo per te: chiedi al titolare');
+    if (m !== 'GET') throw new HttpErr(405, 'Metodo non consentito');
+    if (path === '/events') return json(await panelEvents(env, ctx));
+    if (path === '/events/chans') return json(await eventsChans(env));
+    if (path === '/events/epg') return json(await eventsEpg(env, String(url.searchParams.get('ids') || '').split(',').map((x) => x.trim()).filter((x) => /^[A-Za-z0-9_-]{1,20}$/.test(x))));
+    throw new HttpErr(404, 'Non trovato');
+  }
   if (path === '/payments') {
     if (m === 'PUT') need('payments', 'Non puoi gestire i pagamenti');
     return paymentsRoutes(req, env, who, ip, { id: A.id, tree: ctree, own, autoRenew: !!P.autoRenew });
@@ -6555,6 +6652,10 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
 
   /* ---------- utenti online ---------- */
   if (path === '/presence' && m === 'GET') return json(await adminPresence(env));
+  /* ---------- «Eventi ora» ---------- */
+  if (path === '/events' && m === 'GET') return json(await panelEvents(env, ctx));
+  if (path === '/events/chans' && m === 'GET') return json(await eventsChans(env));
+  if (path === '/events/epg' && m === 'GET') return json(await eventsEpg(env, String(url.searchParams.get('ids') || '').split(',').map((x) => x.trim()).filter((x) => /^[A-Za-z0-9_-]{1,20}$/.test(x))));
   /* ---------- controllo remoto delle app: solo il titolare, dal pannello ---------- */
   if (path === '/rctl' || path.startsWith('/rctl/')) {
     if (!ses || ses.agent) throw new HttpErr(403, 'Il controllo remoto delle app è riservato al titolare');
