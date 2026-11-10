@@ -1409,20 +1409,21 @@ body.agent .foot{display:none}
     const showKairos = !agent || can('create');
     const showMax = !agent || (!!players().max && can('players'));
     const showOrbix = !agent || (!!players().orbix && can('players'));
+    const showNanomid = !agent;
     const dynamicApps = KXActApps.dynamicApps(D.activationApps, agent, P);
     let orcpCfg = null;
-    const availableTargets = () => new Set([...(showKairos ? ['kairos'] : []), ...(showMax ? ['max'] : []), ...(showOrbix ? ['orbix'] : []), ...(orcpCfg && orcpCfg.servers && orcpCfg.servers.length ? ['orcp'] : []), ...dynamicApps.map((x) => x.key)]);
+    const availableTargets = () => new Set([...(showKairos ? ['kairos'] : []), ...(showMax ? ['max'] : []), ...(showOrbix ? ['orbix'] : []), ...(showNanomid ? ['nanomid'] : []), ...(orcpCfg && orcpCfg.servers && orcpCfg.servers.length ? ['orcp'] : []), ...dynamicApps.map((x) => x.key)]);
     const initialTargets = Array.isArray(preset.targets) ? preset.targets.filter((k) => availableTargets().has(k) || k === 'orcp') : [showKairos ? 'kairos' : (dynamicApps[0] && dynamicApps[0].key)].filter(Boolean);
     const st = {
       targets: new Set(initialTargets), code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1), payDue: false, payMonths: 1, payAmount: '',
       durationMode: 'months', durationN: '', durationUnit: 'd',
       pl: { serverId: (servers[0] || {}).id || '', username: '', password: '', host: '', ref: '', note: '', panel: '', picked: null }, expSource: '',
-      name: '', nameAuto: '', maxConn: 1, mxDomain: '', orbixId: '', oxDns: '0', orcpServer: '', appData: {}, busy: false, running: '', results: [],
+      name: '', nameAuto: '', maxConn: 1, mxDomain: '', orbixId: '', nmCode: '', oxDns: '0', orcpServer: '', appData: {}, busy: false, running: '', results: [],
       owner: !agent && +preset.ownerId > 0 ? +preset.ownerId : 0, // titolare: agente responsabile del nuovo cliente Kairos (0 = tu)
     };
     const showLinePick = canLoadLines(P);
     const APPS_W = [['tv', 'Kairos Pro'], ['prem', 'Kairos Premium'], ['ktv', 'Kairos TV'], ['plus', 'Kairos Plus'], ['xc', 'Kairos XC'], ['lite', 'Kairos Lite'], ['nova', 'Kairos Nova']];
-    const targets = () => [['kairos', 'App Kairos'], ['max', 'MaxPlayer'], ['orbix', 'OrbixPlay'], ...(orcpCfg && orcpCfg.servers && orcpCfg.servers.length ? [['orcp', 'MirkoTeam']] : []), ...dynamicApps.map((x) => [x.key, x.name])];
+    const targets = () => [['kairos', 'App Kairos'], ['max', 'MaxPlayer'], ['orbix', 'OrbixPlay'], ...(showNanomid ? [['nanomid', 'Nanomid']] : []), ...(orcpCfg && orcpCfg.servers && orcpCfg.servers.length ? [['orcp', 'MirkoTeam']] : []), ...dynamicApps.map((x) => [x.key, x.name])];
     const targetNames = () => Object.fromEntries(targets().map(([k, n]) => [k, n]));
     const targetColor = KXActApps.targetColor, targetIcon = KXActApps.targetIcon;
     const preselectOrcp = () => {
@@ -1446,10 +1447,11 @@ body.agent .foot{display:none}
     const okCode = () => /^KX[A-Z0-9]{2}-[A-Z0-9]{4}$/.test(st.code);
     const codeOk = () => !has('kairos') || (okCode() && st.look && !st.look.taken && !st.look.mine && st.look.ok !== false);
     const lineCredentialsOk = () => !!(st.pl.username.trim() && st.pl.password);
-    const lineOk = () => lineCredentialsOk() && (!has('kairos') || (agent ? !!st.pl.serverId : !!st.pl.host.trim()));
+    const lineOk = () => lineCredentialsOk() && (agent ? (!has('kairos') || !!st.pl.serverId) : (!(has('kairos') || has('nanomid')) || !!st.pl.host.trim()));
     const durationOk = () => !has('kairos') || (st.durationMode === 'months' ? st.months > 0 : st.durationMode === 'date' ? !!st.expires : Number.isInteger(+st.durationN) && +st.durationN >= 1 && +st.durationN <= 999);
     const targetsOk = () => st.targets.size > 0 && [...st.targets].every((k) => availableTargets().has(k)) &&
       (!has('kairos') || codeOk()) &&
+      (!has('nanomid') || /^[A-Za-z0-9]{4,16}$/.test(String(st.nmCode || '').replace(/\s+/g, ''))) &&
       (!has('max') || (!mxLoading && (mxDomains && mxDomains.length ? !!st.mxDomain : !!mxError))) &&
       (!has('orbix') || (!!String(st.orbixId || '').trim() && !!orbDns.length && !!orbDns[+st.oxDns]));
     const ago = (t) => { if (!t) return ''; const s = Math.max(0, (Date.now() - t) / 1000); return s < 90 ? 'adesso' : s < 3600 ? Math.round(s / 60) + ' min fa' : s < 86400 ? Math.round(s / 3600) + ' ore fa' : Math.round(s / 86400) + ' giorni fa'; };
@@ -1487,10 +1489,11 @@ body.agent .foot{display:none}
       const out = [];
       if (!st.targets.size || [...st.targets].some((k) => !availableTargets().has(k))) return ['scegli un’app disponibile'];
       if (has('kairos') && !codeOk()) out.push(!okCode() ? 'il codice della TV' : st.look && (st.look.taken || st.look.mine) ? 'un codice non ancora attivato' : 'il controllo del codice');
+      if (has('nanomid') && !/^[A-Za-z0-9]{4,16}$/.test(String(st.nmCode || '').replace(/\s+/g, ''))) out.push('il codice Nanomid');
       if (has('kairos') && !durationOk()) out.push('la durata');
       if (!lineCredentialsOk()) out.push('la linea (utente e password)');
       if (has('kairos') && agent && !st.pl.serverId) out.push('il server');
-      if (has('kairos') && !agent && !st.pl.host.trim()) out.push('il DNS della linea');
+      if ((has('kairos') || has('nanomid')) && !agent && !st.pl.host.trim()) out.push('il DNS della linea');
       if (has('max') && mxLoading) out.push('il caricamento dei DNS MaxPlayer');
       if (has('max') && !mxLoading && mxDomains && mxDomains.length && !st.mxDomain) out.push('il DNS MaxPlayer');
       if (has('max') && !mxLoading && mxDomains && !mxDomains.length && !mxError) out.push('un DNS MaxPlayer configurato');
@@ -1516,6 +1519,7 @@ body.agent .foot{display:none}
       if (get('wzConn')) st.maxConn = Math.max(1, Math.min(maxC, +get('wzConn').value || 1));
       if (get('wzMxDom')) st.mxDomain = get('wzMxDom').value;
       if (get('wzOrbixId')) st.orbixId = get('wzOrbixId').value;
+      if (get('wzNmCode')) st.nmCode = get('wzNmCode').value;
       if (get('wzOxDns')) st.oxDns = get('wzOxDns').value;
       if (get('wzOrcpSrv')) st.orcpServer = get('wzOrcpSrv').value;
       for (const app of dynamicApps) {
@@ -1645,6 +1649,8 @@ body.agent .foot{display:none}
         <div class="wz-fields"><input class="inp" id="wzOrbixId" data-mac placeholder="Codice dispositivo OrbixPlay" autocomplete="off" value="${esc(st.orbixId)}">
         <select class="inp" id="wzOxDns" ${orbDns.length ? '' : 'disabled'}><option value="">Scegli il DNS OrbixPlay…</option>${orbDns.map((x, i) => `<option value="${i}"${String(st.oxDns) === String(i) ? ' selected' : ''}>${esc(x.name || 'DNS ' + (i + 1))}${!agent && x.host ? ' — ' + esc(x.host) : ''}</option>`).join('')}</select></div>
         ${!orbDns.length ? '<div class="wz-st warn">Non hai DNS OrbixPlay disponibili per il tuo account.</div>' : ''}</div>` : '';
+      const nanomid = has('nanomid') ? `<div class="wz-st wz-app-st" style="--wzt:${targetColor('nanomid')}"><b>Nanomid</b><p class="wz-help">Scrivi il codice che il cliente vede sulla TV nell'app Nanomid: la lista arriva da sola, con utente e password nascosti.</p>
+        <input class="inp" id="wzNmCode" maxlength="16" autocomplete="off" placeholder="Codice Nanomid sulla TV" value="${esc(st.nmCode)}"></div>` : '';
       const orcp = has('orcp') ? `<div class="wz-st wz-app-st" style="--wzt:${targetColor('orcp')}"><b>MirkoTeam</b><p class="wz-help">Scegli il server e scrivi solo utente e password della linea.</p>
         <label class="lbl">Server<select class="inp" id="wzOrcpSrv"><option value="">Scegli il server…</option>${((orcpCfg && orcpCfg.servers) || []).map((x) => `<option value="${esc(x.n)}"${String(st.orcpServer) === String(x.n) ? ' selected' : ''}>Server ${esc(x.n)} · ${esc(x.name)}</option>`).join('')}</select></label></div>` : '';
       const apps = dynamicApps.filter((x) => has(x.key)).map((x) => {
@@ -1673,7 +1679,7 @@ body.agent .foot{display:none}
           ${(!agent || can('payments')) ? `<label class="ck" style="margin-top:14px"><input type="checkbox" id="wzPayDue"${st.payDue ? ' checked' : ''}><span>Non ha ancora pagato</span></label><div class="wz-fields" id="wzPayFields" style="${st.payDue ? '' : 'display:none'}"><input class="inp" type="number" id="wzPayMonths" min="0" max="120" value="${st.payMonths}" placeholder="Mesi"><input class="inp" type="number" id="wzPayAmount" min="0" max="100000" step="0.01" value="${esc(st.payAmount)}" placeholder="Importo € (facoltativo)"></div>` : ''}` : ''}</div></div>`;
       return `<div class="wz">
         <div class="wz-s${targetsOk() ? ' ok' : ''}" id="wzS1"><span class="n">${targetsOk() ? '✓' : '1'}</span><div><h4>Dove lo attivi</h4><p class="hint">Puoi attivare il cliente in una o più app. Scegli almeno un’app.</p>
-          <div class="wz-targets">${targetButtons}</div>${kairos}${max}${orbix}${orcp}${apps}</div></div>
+          <div class="wz-targets">${targetButtons}</div>${kairos}${max}${orbix}${nanomid}${orcp}${apps}</div></div>
         <div class="wz-s${lineOk() ? ' ok' : ''}" id="wzS2"><span class="n">${lineOk() ? '✓' : '2'}</span><div><h4>Linea del cliente</h4>
           <p class="hint">Scegli una linea già creata, incollala oppure inserisci i dati a mano. Utente e password servono per tutte le app.</p>
           ${picker}${dnsFallback}${paste}<div id="wzPasteSt"></div>
@@ -1705,7 +1711,7 @@ body.agent .foot{display:none}
       }
       const paste = $('#wzPaste');
       if (paste) { paste.addEventListener('paste', () => setTimeout(() => pasteGo(true), 0)); paste.oninput = () => { if (/\S{6,}/.test(paste.value)) pasteGo(true); }; }
-      ['wzDurN', 'wzDurUnit', 'wzSrv', 'wzHost', 'wzUser', 'wzPass', 'wzName', 'wzOwner', 'wzConn', 'wzMxDom', 'wzOrbixId', 'wzOxDns', 'wzOrcpSrv'].forEach((id) => {
+      ['wzDurN', 'wzDurUnit', 'wzSrv', 'wzHost', 'wzUser', 'wzPass', 'wzName', 'wzOwner', 'wzConn', 'wzMxDom', 'wzOrbixId', 'wzNmCode', 'wzOxDns', 'wzOrcpSrv'].forEach((id) => {
         const el = $('#' + id);
         if (el && id === 'wzDurN') el.addEventListener('input', updateDuration);
         else if (el && id !== 'wzDurUnit') el.addEventListener('input', () => { syncForm(); if (id === 'wzUser' || id === 'wzPass') detachChangedLine(); foot(); });
@@ -1794,6 +1800,10 @@ body.agent .foot{display:none}
         await api('POST', '/admin/ext-lists', { app: 'orbix', name, orbixId: st.orbixId.trim(), username, password: st.pl.password, dns: +st.oxDns || 0, note });
         return 'Linea inviata a OrbixPlay';
       }
+      if (k === 'nanomid') {
+        await api('POST', '/admin/ext-lists', { app: 'nanomid', name, quickCode: st.nmCode.replace(/\s+/g, ''), host: st.pl.host.trim(), username, password: st.pl.password, note });
+        return 'Lista inviata a Nanomid';
+      }
       if (k === 'orcp') {
         return KXActApps.submitOrcp({ cfg: orcpCfg, serverNumber: st.orcpServer, username, password: st.pl.password, registerLinked: !agent || can('lines') });
       }
@@ -1833,7 +1843,7 @@ body.agent .foot{display:none}
   }
   window.KXNewClient = (preset) => {
     const targets = preset && Array.isArray(preset.targets) ? preset.targets : ['kairos'];
-    const P = (me().perms || {}), allowed = (k) => k === 'kairos' ? can('create') : ['max', 'orbix'].includes(k) ? can('players') : k === 'orcp' ? !!P.orcpApp && Array.isArray(P.orcpSrv) && P.orcpSrv.length > 0 : (D.activationApps || []).some((x) => x.key === k && x.enabled && KXActApps.hasPermission(P, x));
+    const P = (me().perms || {}), allowed = (k) => k === 'kairos' ? can('create') : ['max', 'orbix'].includes(k) ? can('players') : k === 'nanomid' ? !isAgent() : k === 'orcp' ? !!P.orcpApp && Array.isArray(P.orcpSrv) && P.orcpSrv.length > 0 : (D.activationApps || []).some((x) => x.key === k && x.enabled && KXActApps.hasPermission(P, x));
     if (isAgent() && (!targets.length || targets.some((k) => !allowed(k)))) {
       return toast('Non hai il permesso per attivare questi target', 1);
     }

@@ -369,7 +369,7 @@ const DEFAULT_SETTINGS = {
 };
 const actAppSlug = (name) => String(name || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
 const actAppCompact = (name) => actAppSlug(name).replace(/-/g, '');
-const actAppExcluded = (name) => /^(?:kairos\b|max\s*-?player\b|orbix\s*play\b|mirkoteam\b)/i.test(String(name || '').trim());
+const actAppExcluded = (name) => /^(?:kairos\b|max\s*-?player\b|orbix\s*play\b|mirkoteam\b|nanomid\b)/i.test(String(name || '').trim());
 const activationAliases = (app) => Array.isArray(app && app.aliases) && app.aliases.length ? app.aliases : [app && app.key].filter(Boolean);
 const activationAppEnabled = (settings, app) => activationAliases(app).some((key) => settings && settings.actApps && settings.actApps[key] === true);
 const activationAppAllowed = (perms, app) => activationAliases(app).some((key) => Array.isArray(perms && perms.actApps) && perms.actApps.includes(key));
