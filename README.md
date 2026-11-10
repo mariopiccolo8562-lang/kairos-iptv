@@ -914,3 +914,17 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
 - **Chi la vede**: il titolare. Agenti solo con il permesso nuovo **«Linee selezionate in primo piano»** (`lineView`), spento per tutti.
 - **Niente di nuovo sui pannelli**: usa solo le letture che il pannello fa già (liste, connessioni, presenza delle app).
 - **Test**: `ui_linecard` (26 controlli).
+
+## 50. «Collega a un cliente»: elenco con ricerca e «aumenta i dispositivi» (10 novembre 2026)
+
+- **Elenco al posto della tendina** (`cli-pick.js`): si apre sempre, con la ricerca in alto (nome, codice, nota, linea, agente; frecce e Invio). Ogni riga: nome, dispositivi usati («1 di 1 · pieno»), codice, scadenza e, per il titolare, l'agente. Scelto il cliente, il pulsante mostra nome, codice e dispositivi.
+- **Dove**:
+  - scheda di un dispositivo in attesa → «🔗 Collega a un cliente»; dalla lista dei dispositivi in attesa «Collega» apre la scheda con l'elenco già aperto;
+  - scheda di un cliente → «↪ Metti sotto un altro cliente»;
+  - «➕ Nuovo cliente» con il codice di una TV nuova → **«È la TV di un cliente che hai già? Collegala a lui»**.
+- **Cliente pieno**: si può scegliere. Compare la voce **«Vuoi aumentare i dispositivi a N per collegare questo cliente?»**, accesa. La conferma lo ripete («Aumenta a 2 e collega») e il server aumenta i dispositivi insieme al collegamento (`grow`), senza aprire il cliente principale. Spenta la voce, «Collega» non parte. Nel registro: «dispositivi portati da 1 a 2».
+- **Chi**:
+  - il titolare, fino a 20 dispositivi;
+  - gli agenti con «Collegare altri dispositivi», solo con i loro clienti e solo fino a «Connessioni per cliente» che decide il titolare; oltre vedono «chiedi al titolare» (anche il server rifiuta);
+  - l'agente collega con il codice della TV: il server lo accetta solo per le TV nuove, e «cerca codice» non gli dà l'id.
+- **Test**: `srv_link_grow` (13 controlli sul server), `ui_link_pick` (28).

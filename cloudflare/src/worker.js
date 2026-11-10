@@ -6268,10 +6268,20 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
       // collegare una TV nuova (codice libero) a un proprio cliente
       if (dm[2] === '/link' && m === 'POST') {
         need('link', 'Non puoi gestire i collegamenti dei dispositivi');
-        const t = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(dm[1]).first();
-        const b = await readJSON(req, 1024);
-        if (!t || !(await env.DB.prepare(`SELECT 1 AS x FROM devices WHERE id = ? AND ${FREE_DEV}`).bind(t.id).first()) || !(await own(str(b.primary, 20)))) throw new HttpErr(404, 'Dispositivo non trovato');
-        return forward('POST', '/devices/' + t.id + '/link', { primary: str(b.primary, 20), name: typeof b.name === 'string' ? str(b.name, 60) : '' });
+        // la TV nuova si indica con il suo id oppure con il codice che il cliente vede (KXAB-12CD, da «Nuovo cliente»)
+        const t = await env.DB.prepare('SELECT * FROM devices WHERE id = ?').bind(dm[1]).first() || (CODE_RE.test(codeNorm(dm[1])) ? await env.DB.prepare('SELECT * FROM devices WHERE code = ?').bind(codeNorm(dm[1])).first() : null);
+        const b = await readJSON(req, 1024), pd = await own(str(b.primary, 20));
+        if (!t || !(await env.DB.prepare(`SELECT 1 AS x FROM devices WHERE id = ? AND ${FREE_DEV}`).bind(t.id).first()) || !pd || pd.parent) throw new HttpErr(404, 'Dispositivo non trovato');
+        // cliente pieno: l'agente può aumentare i dispositivi solo fino al tetto che gli dà il titolare («Connessioni per cliente»)
+        let grow = false;
+        if (b.grow === true) {
+          const used = await connCount(env, pd), max = pd.max_conn ?? 1;
+          if (used + 1 > max) {
+            if (used + 1 > P.maxConn) throw new HttpErr(403, `Il tuo limite è ${P.maxConn} ${P.maxConn === 1 ? 'dispositivo' : 'dispositivi'} per cliente: chiedi al titolare di aumentarlo`);
+            grow = true;
+          }
+        }
+        return forward('POST', '/devices/' + t.id + '/link', { primary: pd.id, name: typeof b.name === 'string' ? str(b.name, 60) : '', ...(grow ? { grow: true } : {}) });
       }
       throw new HttpErr(404, 'Dispositivo non trovato');
     }
@@ -7306,7 +7316,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const app = appOfVer(p && p.ver, d.app);
     const info = { app, appName: APP_NAME[app] || 'Kairos', model: str(d.model, 60), seen: +(p && p.t) || +d.created_at || 0 };
     const free = await env.DB.prepare(`SELECT 1 AS x FROM devices WHERE id = ? AND ${FREE_DEV}`).bind(d.id).first();
-    if (free) return json({ ok: true, code, found: true, free: true, ...info });
+    if (free) return json({ ok: true, code, found: true, free: true, id: d.id, ...info });
     if (!+d.owner_id) return json({ ok: true, code, found: true, mine: true, id: d.id, name: d.name, ...info });
     return json({ ok: true, code, found: true, taken: true });
   }
@@ -7409,14 +7419,19 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       if (!move && (await connCount(env, d)) > 1) throw new HttpErr(400, 'Il dispositivo ha già altre connessioni collegate');
       if (statusOf(P, await unseal(env, P.playlists).catch(() => [])) === 'pending') throw new HttpErr(400, 'Il cliente scelto non ha ancora un abbonamento');
       const used = await connCount(env, P), max = P.max_conn ?? 1, add = 1 + kids.length;
-      if (used + add > max) throw new HttpErr(400, `Connessioni esaurite (${used} di ${max}${add > 1 ? `, ne servono altre ${add}` : ''}): aumenta "Connessioni massime" del cliente`);
+      // grow (10 novembre 2026): il cliente principale è pieno e chi collega ha scelto «aumenta i dispositivi»: si portano a quelli che servono
+      // (gli agenti arrivano qui solo entro il loro tetto, controllato prima di inoltrare)
+      const growTo = b.grow === true && used + add > max ? used + add : 0;
+      if (growTo > MAX_CONN) throw new HttpErr(400, `Servono ${growTo} dispositivi: il massimo è ${MAX_CONN}`);
+      if (used + add > max && !growTo) throw new HttpErr(400, `Connessioni esaurite (${used} di ${max}${add > 1 ? `, ne servono altre ${add}` : ''}): aumenta "Connessioni massime" del cliente`);
       const name = typeof b.name === 'string' && b.name.trim() ? str(b.name, 60) : d.name;
       const ok = await env.DB.prepare("UPDATE devices SET parent = ?, name = ?, active = 0, expires = '', playlists = ?, profiles = '', own = ? WHERE id = ? AND parent = '' RETURNING id").bind(P.id, name, keep ? d.playlists : '', keep ? 1 : 0, d.id).first();
       if (!ok) throw new HttpErr(409, 'Il dispositivo è appena stato collegato: ricarica');
+      if (growTo) await env.DB.prepare('UPDATE devices SET max_conn = MAX(COALESCE(max_conn, 1), ?) WHERE id = ?').bind(growTo, P.id).run();
       if (move) await env.DB.batch([...kids.map((k) => env.DB.prepare('UPDATE devices SET parent = ? WHERE id = ? AND parent = ?').bind(P.id, k.id, d.id)), env.DB.prepare('DELETE FROM link_pins WHERE device_id = ?').bind(d.id)]);
       if (myPls.length) srcMem.map = null;
-      await log(env, 'on', `${who}: ${name || label} ${move ? 'messo sotto' : 'collegato come connessione di'} ${P.name || P.code} (${used + add} di ${max})${kids.length ? ` con le sue ${kids.length} connessioni` : ''}${keep ? ', linee sue' : ''}`, ip);
-      return json({ ok: true });
+      await log(env, 'on', `${who}: ${name || label} ${move ? 'messo sotto' : 'collegato come connessione di'} ${P.name || P.code} (${used + add} di ${growTo || max}${growTo ? `, dispositivi portati da ${max} a ${growTo}` : ''})${kids.length ? ` con le sue ${kids.length} connessioni` : ''}${keep ? ', linee sue' : ''}`, ip);
+      return json({ ok: true, ...(growTo ? { grown: growTo } : {}) });
     }
     if (m === 'PUT' && d.parent) {
       // connessione di un altro cliente: abbonamento, profili, permessi e limiti si cambiano dal principale.

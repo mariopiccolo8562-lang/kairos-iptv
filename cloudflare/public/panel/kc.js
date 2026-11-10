@@ -1,6 +1,8 @@
 /* KAIROS Control 2.0 — pagine: Online ora, Segnalazioni, Richieste contenuti, Videoteca, Server DNS e VPN; Dispositivi a schede, Impostazioni a schede.
    Usa le funzioni di app.js ($, $$, esc, api, toast, ask, ago, D, TITLES, view, openDrawer, load). In demo usa dati di esempio. */
 (() => {
+  /* «Collega» di un dispositivo in attesa: si apre la scheda e subito l'elenco dei clienti con la ricerca (cli-pick.js) */
+  const linkPick = () => { const b = document.getElementById('eLinkToBtn'); if (b && window.KXCliPick) { b.scrollIntoView({ block: 'center' }); KXCliPick.open('eLinkTo'); return; } const s = document.getElementById('eLinkTo'); if (s) { s.scrollIntoView({ block: 'center' }); s.focus(); } };
   const KC = (window.KC = { vpnLocs: [], live: null, req: { report: null, content: null }, dns: null, cat: { src: '', kind: 'movies', cat: '', q: '', page: 1 } });
   Object.assign(TITLES, { live: 'Online ora Kairos', reports: 'Segnalazioni', creq: 'Richieste contenuti', vod: 'Videoteca', dns: 'Server DNS e VPN', api: 'API e integrazioni' });
 
@@ -1272,7 +1274,7 @@
           return;
         }
         if (a === 'activate') return openDrawer(d, true);
-        if (a === 'link') { openDrawer(d, false); setTimeout(() => { const s2 = $('#eLinkTo'); if (s2) { s2.scrollIntoView({ block: 'center' }); s2.focus(); } }, 350); return; }
+        if (a === 'link') { openDrawer(d, false); setTimeout(() => linkPick(), 350); return; }
         if (a === 'edit') return openDrawer(d, d.status === 'pending');
         if (!e.target.closest('button,input')) return openQuick(d);
         return;
@@ -1287,7 +1289,7 @@
       if (act === 'kick') return kickDev(d);
       if (act === 'tog') { if (d.active && !(await ask('Disattivare il cliente?', `<b>${esc(d.name || d.code)}</b> non potrà più guardare finché non lo riattivi.`, 'Disattiva'))) return; if (await save(d, { active: !d.active })) toast(d.active ? 'Cliente disattivato' : 'Cliente riattivato'); return; }
       if (act === 'activate') return openDrawer(d, true);
-      if (act === 'link') { openDrawer(d, false); setTimeout(() => { const s = $('#eLinkTo'); if (s) { s.scrollIntoView({ block: 'center' }); s.focus(); } }, 350); return; }
+      if (act === 'link') { openDrawer(d, false); setTimeout(() => linkPick(), 350); return; }
       if (act === 'open') return openDrawer(d, d.status === 'pending');
       if (!e.target.closest('button')) openQuick(d);
     });

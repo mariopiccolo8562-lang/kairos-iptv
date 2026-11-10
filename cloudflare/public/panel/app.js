@@ -560,15 +560,15 @@ function renderDrawer() {
   const maxP = Math.max(0, +edit.maxProfiles || 0);
   const effVpn = linked ? (P ? +P.vpn || 0 : 0) : +edit.vpn || 0;
   const ownConf = edit.vpnConf && !edit.vpnConfClear;
+  // «Collega a un cliente» (10 novembre 2026): elenco con ricerca (cli-pick.js) e, se il cliente è pieno, «aumenta i dispositivi»
   const linkBox = !pendingFree ? '' : (() => {
-    const opts = D.devices.filter((x) => !x.parent && x.id !== edit.id && x.status !== 'pending').map((x) => { const u = 1 + kidsOf(x.id).length, mx = x.maxConn || 1; return `<option value="${esc(x.id)}" ${u >= mx ? 'disabled' : ''}>${esc(x.name || x.code)} · ${u} di ${esc(mx)} connessioni${u >= mx ? ' (pieno)' : ''}</option>`; }).join('');
-    return `<div class="lnk"><b>🔗 È il dispositivo di un cliente che hai già?</b><small>Collegalo al suo abbonamento come connessione in più: userà le sue playlist, la sua scadenza e i suoi profili (dopo, con «Gestione indipendente», puoi dargli playlist e lettore suoi).</small>${opts ? `<div class="row"><select class="inp" id="eLinkTo"><option value="">Scegli il cliente…</option>${opts}</select><button class="btn" id="eLinkGo">Collega a un cliente</button></div><input class="inp" id="eLinkName" maxlength="60" style="margin-top:8px" placeholder="Nome di questa TV (es. Camera da letto)" value="${esc(edit.name || '')}">` : '<small>Nessun cliente con abbonamento a cui collegarlo.</small>'}</div>`;
+    const has = window.KXCliPick && KXCliPick.list(edit.id).length;
+    return `<div class="lnk"><b>🔗 È il dispositivo di un cliente che hai già?</b><small>Collegalo al suo abbonamento come connessione in più: userà le sue playlist, la sua scadenza e i suoi profili (dopo, con «Gestione indipendente», puoi dargli playlist e lettore suoi).</small>${has ? `${KXCliPick.html('eLinkTo', { exclude: edit.id, add: 1 })}<div class="row" style="margin-top:8px"><input class="inp" id="eLinkName" maxlength="60" placeholder="Nome di questa TV (es. Camera da letto)" value="${esc(edit.name || '')}"><button class="btn pri" id="eLinkGo">🔗 Collega a un cliente</button></div>` : '<small>Nessun cliente con abbonamento a cui collegarlo.</small>'}</div>`;
   })();
   const moveBox = isNew || linked || pendingFree ? '' : (() => {
     const kn = kids.length;
-    const opts = D.devices.filter((x) => !x.parent && x.id !== edit.id && x.status !== 'pending').map((x) => { const u = 1 + kidsOf(x.id).length, mx = x.maxConn || 1, full = u + 1 + kn > mx; return `<option value="${esc(x.id)}" ${full ? 'disabled' : ''}>${esc(x.name || x.code)} · ${u} di ${esc(mx)} connessioni${full ? ' (pieno)' : ''}</option>`; }).join('');
-    if (!opts) return '';
-    return `<details class="lnk" id="eMoveBox"><summary style="cursor:pointer"><b>↪ Metti sotto un altro cliente</b></summary><small>Questo cliente diventa una connessione di un altro: userà la sua scadenza e i suoi profili.${kn ? ` Anche le sue ${kn} connessioni passano sotto il nuovo cliente.` : ''}</small><div class="row"><select class="inp" id="eMoveTo"><option value="">Scegli il cliente…</option>${opts}</select><button class="btn" id="eMoveGo">Metti sotto</button></div><input class="inp" id="eMoveName" maxlength="60" style="margin-top:8px" placeholder="Nome di questa TV sotto il nuovo cliente" value="${esc(edit.name || '')}"><div class="tog on" id="eMoveKeep" style="margin-top:8px"><div><b>Tieni le sue linee</b><small>Resta con le sue playlist (gestione indipendente). Se lo spegni usa quelle del nuovo cliente.</small></div><i></i></div></details>`;
+    if (!window.KXCliPick || !KXCliPick.list(edit.id).length) return '';
+    return `<details class="lnk" id="eMoveBox"${edit._moveOpen ? ' open' : ''}><summary style="cursor:pointer"><b>↪ Metti sotto un altro cliente</b></summary><small>Questo cliente diventa una connessione di un altro: userà la sua scadenza e i suoi profili.${kn ? ` Anche le sue ${kn} connessioni passano sotto il nuovo cliente.` : ''}</small>${KXCliPick.html('eMoveTo', { exclude: edit.id, add: 1 + kn })}<div class="row" style="margin-top:8px"><input class="inp" id="eMoveName" maxlength="60" placeholder="Nome di questa TV sotto il nuovo cliente" value="${esc(edit.name || '')}"><button class="btn" id="eMoveGo">Metti sotto</button></div><div class="tog on" id="eMoveKeep" style="margin-top:8px"><div><b>Tieni le sue linee</b><small>Resta con le sue playlist (gestione indipendente). Se lo spegni usa quelle del nuovo cliente.</small></div><i></i></div></details>`;
   })();
   const linkedBox = !linked ? '' : `<div class="lnk"><b>🔗 Connessione di ${esc(P ? P.name || P.code : 'un cliente eliminato')}</b><small>${edit.own ? 'Abbonamento, scadenza, profili e limiti sono quelli del cliente principale; <span style="color:var(--txt);font-weight:700">playlist e lettore sono di questa TV</span>' : 'Abbonamento, scadenza, playlist, profili e limiti sono quelli del cliente principale'}${P ? ` (${1 + kidsOf(P.id).length} di ${esc(P.maxConn || 1)} connessioni)` : ''}.</small><div style="display:flex;gap:8px">${P ? '<button class="btn sm" id="eOpenP">Apri il cliente principale</button>' : ''}<button class="btn sm danger" id="eUnlink">Scollega</button></div></div>
     <div class="tog ${edit.own ? 'on' : ''}" id="eOwn" style="margin-top:10px"><div><b>Gestione indipendente</b><small>${edit.own ? 'Questa TV usa le sue playlist e il suo lettore (sezioni qui sotto). Resta collegata: stessa scadenza, stessi profili, conta nelle connessioni del cliente.' : 'Accendila per dare a questa TV playlist e lettore suoi (es. un\'altra linea o un\'altra app), lasciandola collegata al cliente principale.'}</small></div><i></i></div>`;
@@ -743,19 +743,27 @@ function renderDrawer() {
     if (!k || !(await ask('Scollegare il dispositivo?', `<b class="mono">${esc(k.code)}</b> non userà più questo abbonamento e tornerà “in attesa”.`, 'Scollega'))) return;
     try { sync(); await api('POST', '/admin/devices/' + k.id + '/unlink'); await load(); renderDrawer(); toast('Dispositivo scollegato'); } catch (e) { toast(e.message, 1); }
   }));
+  if ($('#eLinkToBox')) KXCliPick.bind('eLinkTo', { exclude: edit.id, add: 1 });
+  if ($('#eMoveToBox')) KXCliPick.bind('eMoveTo', { exclude: edit.id, add: 1 + kidsOf(edit.id).length });
+  if ($('#eMoveBox')) $('#eMoveBox').ontoggle = () => { edit._moveOpen = $('#eMoveBox').open; };
+  /** cliente pieno: con «aumenta» acceso il collegamento porta i dispositivi a quelli che servono (grow), altrimenti si ferma */
+  const growOf = (id, p) => { const g = KXCliPick.info(id); if (!g || !g.full) return { ok: true, grow: false }; if (!g.canGrow) { toast(g.why, 1); return { ok: false }; } if (!g.growOn) { toast(`${p.name || p.code} ha già ${g.used} di ${g.max} dispositivi: accendi «aumenta i dispositivi» o scegli un altro cliente`, 1); return { ok: false }; } return { ok: true, grow: true, g }; };
   $('#eLinkGo') && ($('#eLinkGo').onclick = async () => {
     const pid = $('#eLinkTo').value, p = D.devices.find((x) => x.id === pid);
-    if (!p) return toast('Scegli il cliente a cui collegarlo', 1);
-    if (!(await ask('Collegare a un cliente?', `<b class="mono">${esc(edit.code)}</b> diventerà una connessione di <b>${esc(p.name || p.code)}</b> e userà il suo abbonamento.`, 'Collega'))) return;
-    try { await api('POST', '/admin/devices/' + edit.id + '/link', { primary: pid, name: $('#eLinkName') ? $('#eLinkName').value.trim() : '' }); closeDrawer(); await load(); toast('Dispositivo collegato a ' + (p.name || p.code)); } catch (e) { toast(e.message, 1); }
+    if (!p) { toast('Scegli il cliente a cui collegarlo', 1); KXCliPick.open('eLinkTo'); return; }
+    const gr = growOf('eLinkTo', p); if (!gr.ok) return;
+    const pn = esc(p.name || p.code), msg = gr.grow ? `<b>${pn}</b> ha già ${gr.g.used} di ${gr.g.max} dispositivi. Vuoi portarli a <b>${gr.g.need}</b> per collegare <b class="mono">${esc(edit.code)}</b>? Userà il suo abbonamento.` : `<b class="mono">${esc(edit.code)}</b> diventerà una connessione di <b>${pn}</b> e userà il suo abbonamento.`;
+    if (!(await ask(gr.grow ? 'Aumentare i dispositivi e collegare?' : 'Collegare a un cliente?', msg, gr.grow ? `Aumenta a ${gr.g.need} e collega` : 'Collega'))) return;
+    try { await api('POST', '/admin/devices/' + edit.id + '/link', { primary: pid, name: $('#eLinkName') ? $('#eLinkName').value.trim() : '', ...(gr.grow ? { grow: true } : {}) }); closeDrawer(); await load(); toast('Dispositivo collegato a ' + (p.name || p.code) + (gr.grow ? ` · ora ha ${gr.g.need} dispositivi` : '')); } catch (e) { toast(e.message, 1); }
   });
   $('#eMoveKeep') && ($('#eMoveKeep').onclick = () => $('#eMoveKeep').classList.toggle('on'));
   $('#eMoveGo') && ($('#eMoveGo').onclick = async () => {
     const pid = $('#eMoveTo').value, p = D.devices.find((x) => x.id === pid);
-    if (!p) return toast('Scegli il cliente sotto cui metterlo', 1);
+    if (!p) { toast('Scegli il cliente sotto cui metterlo', 1); KXCliPick.open('eMoveTo'); return; }
+    const gr = growOf('eMoveTo', p); if (!gr.ok) return;
     const keep = $('#eMoveKeep').classList.contains('on'), name = $('#eMoveName').value.trim(), kn = kidsOf(edit.id).length, pn = esc(p.name || p.code);
-    if (!(await askDanger('Mettere sotto un altro cliente?', `<b>${esc(edit.name || edit.code)}</b> diventa una connessione di <b>${pn}</b>. La sua scadenza${edit.expires ? ' (' + esc(fmtD(edit.expires)) + ')' : ''} e i suoi profili vengono sostituiti da quelli di ${pn}. ${keep ? 'Le sue linee restano sue.' : 'Userà le linee di ' + pn + '.'}${kn ? ` Anche le sue ${kn} connessioni passano sotto ${pn}.` : ''}`, edit.code, 'Metti sotto', false))) return;
-    try { await api('POST', '/admin/devices/' + edit.id + '/link', { primary: pid, name, move: true, keep }); closeDrawer(); await load(); toast('Ora è sotto ' + (p.name || p.code)); } catch (e) { toast(e.message, 1); }
+    if (!(await askDanger('Mettere sotto un altro cliente?', `<b>${esc(edit.name || edit.code)}</b> diventa una connessione di <b>${pn}</b>. La sua scadenza${edit.expires ? ' (' + esc(fmtD(edit.expires)) + ')' : ''} e i suoi profili vengono sostituiti da quelli di ${pn}. ${keep ? 'Le sue linee restano sue.' : 'Userà le linee di ' + pn + '.'}${kn ? ` Anche le sue ${kn} connessioni passano sotto ${pn}.` : ''}${gr.grow ? ` <b>${pn} ha già ${gr.g.used} di ${gr.g.max} dispositivi: li porto a ${gr.g.need}.</b>` : ''}`, edit.code, gr.grow ? `Aumenta a ${gr.g.need} e metti sotto` : 'Metti sotto', false))) return;
+    try { await api('POST', '/admin/devices/' + edit.id + '/link', { primary: pid, name, move: true, keep, ...(gr.grow ? { grow: true } : {}) }); closeDrawer(); await load(); toast('Ora è sotto ' + (p.name || p.code) + (gr.grow ? ` · ${gr.g.need} dispositivi` : '')); } catch (e) { toast(e.message, 1); }
   });
   $('#dSave').onclick = async () => {
     sync();

@@ -209,7 +209,7 @@ body.agent .foot{display:none}
   const FL = [['create', 'Attivare clienti nuovi', 'Con il codice che il cliente vede sulla TV'], ['renew', 'Rinnovare e cambiare la scadenza', ''], ['disable', 'Attivare e disattivare il servizio', ''],
     ['playlists', 'Cambiare server, utente e password', 'Solo tra i server che gli assegni'], ['kick', 'Disconnettere il cliente', 'Interrompe la visione in corso'], ['delete', 'Eliminare clienti', ''],
     ['clientPerms', 'Cambiare i permessi dell\'app', 'Cosa può fare il cliente nell\'app'], ['vpn', 'Cambiare la VPN del cliente', ''],
-    ['link', 'Collegare altri dispositivi', 'Codice a 6 cifre, sblocca, scollega'], ['lineView', 'Linee selezionate in primo piano', 'Nella ricerca dentro i pannelli: server, collegamento, IP e app che usano le sue linee'], ['subClients', 'Vedere i clienti dei suoi sotto-agenti', 'Se spento vede e gestisce solo i clienti attivati da lui'], ['players', 'Inviare le linee a OrbixPlay e MaxPlayer', 'Solo per i suoi clienti, con le tue chiavi (che non vede)'], ['payments', 'Gestire i pagamenti dei clienti', 'Segnare chi deve pagare e chi ha pagato, solo sui suoi clienti'], ['autoRenew', 'Rinnovo automatico', 'Rinnova da solo le sue linee già pagate, con i suoi crediti'], ['account', 'Profili, lettore e visioni contemporanee', 'Entro le connessioni che gli concedi'], ['ai', 'Assistente IA dei clienti', 'Quale IA, domande al giorno, domande extra']];
+    ['link', 'Collegare altri dispositivi', 'Codice a 6 cifre, sblocca, scollega e «Collega a un cliente» in Nuovo cliente (dispositivi in più fino a «Connessioni per cliente»)'], ['lineView', 'Linee selezionate in primo piano', 'Nella ricerca dentro i pannelli: server, collegamento, IP e app che usano le sue linee'], ['subClients', 'Vedere i clienti dei suoi sotto-agenti', 'Se spento vede e gestisce solo i clienti attivati da lui'], ['players', 'Inviare le linee a OrbixPlay e MaxPlayer', 'Solo per i suoi clienti, con le tue chiavi (che non vede)'], ['payments', 'Gestire i pagamenti dei clienti', 'Segnare chi deve pagare e chi ha pagato, solo sui suoi clienti'], ['autoRenew', 'Rinnovo automatico', 'Rinnova da solo le sue linee già pagate, con i suoi crediti'], ['account', 'Profili, lettore e visioni contemporanee', 'Entro le connessioni che gli concedi'], ['ai', 'Assistente IA dei clienti', 'Quale IA, domande al giorno, domande extra']];
   // pagine del pannello: sempre e solo con i dati dei suoi clienti
   const FP = [['dash', 'Dashboard', 'Riepilogo dei suoi clienti', 'dash'], ['errors', 'Errori applicazione', 'Dei suoi clienti', 'apperr'],
     ['reports', 'Segnalazioni', 'Dei suoi clienti', 'reports'], ['contentReq', 'Richieste contenuti', 'Dei suoi clienti', 'creq'], ['addonReq', 'Richieste temi', 'Assegna solo gli add-on che gli concedi', 'areq'],
@@ -1420,7 +1420,9 @@ body.agent .foot{display:none}
       pl: { serverId: (servers[0] || {}).id || '', username: '', password: '', host: '', ref: '', note: '', panel: '', picked: null }, expSource: '',
       name: '', nameAuto: '', maxConn: 1, mxDomain: '', orbixId: '', nmCode: '', oxDns: '0', orcpServer: '', appData: {}, busy: false, running: '', results: [],
       owner: !agent && +preset.ownerId > 0 ? +preset.ownerId : 0, // titolare: agente responsabile del nuovo cliente Kairos (0 = tu)
+      linkOpen: false, linkName: '', // TV nuova di un cliente che c'è già: «Collega a un cliente» (cli-pick.js)
     };
+    if (window.KXCliPick) KXCliPick.reset('wzLinkTo');
     const showLinePick = canLoadLines(P);
     const APPS_W = [['tv', 'Kairos Pro'], ['prem', 'Kairos Premium'], ['ktv', 'Kairos TV'], ['plus', 'Kairos Plus'], ['xc', 'Kairos XC'], ['lite', 'Kairos Lite'], ['nova', 'Kairos Nova']];
     const targets = () => [['kairos', 'App Kairos'], ['max', 'MaxPlayer'], ['orbix', 'OrbixPlay'], ...(showNanomid ? [['nanomid', 'Nanomid']] : []), ...(orcpCfg && orcpCfg.servers && orcpCfg.servers.length ? [['orcp', 'MirkoTeam']] : []), ...dynamicApps.map((x) => [x.key, x.name])];
@@ -1473,6 +1475,38 @@ body.agent .foot{display:none}
       st.pl.panel = ''; st.pl.picked = null;
       resetAgentExpiry();
     };
+    /* TV nuova di un cliente che hai già (10 novembre 2026): la colleghi a lui come dispositivo in più, senza linea nuova.
+       Titolare sempre; agente con «Collegare altri dispositivi» (i dispositivi in più solo fino al suo tetto) */
+    const canLink = () => !!window.KXCliPick && (!agent || can('link')) && KXCliPick.list('').length > 0;
+    const linkBlock = () => {
+      if (!canLink()) return '';
+      if (!st.linkOpen) return '<div style="margin-top:8px"><button type="button" class="btn sm" id="wzLinkOpen">🔗 È la TV di un cliente che hai già? Collegala a lui</button></div>';
+      return `<div class="lnk" style="margin-top:10px"><b>🔗 Collega questa TV a un cliente che hai già</b><small>Diventa un dispositivo in più del cliente: userà le sue linee, la sua scadenza e i suoi profili. Non serve scegliere una linea qui sotto.</small>${KXCliPick.html('wzLinkTo', { exclude: '', add: 1 })}<div class="row" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><input class="inp" id="wzLinkName" maxlength="60" style="flex:1;min-width:180px;margin:0" placeholder="Nome di questa TV (es. Camera da letto)" value="${esc(st.linkName)}"><button type="button" class="btn pri" id="wzLinkGo">🔗 Collega</button><button type="button" class="btn" id="wzLinkNo">Annulla</button></div></div>`;
+    };
+    const statusAgain = () => { const s2 = $('#wzCodeSt'); if (s2) s2.innerHTML = codeStatus(); bindOpen(); foot(); };
+    const linkGo = async () => {
+      const L = st.look; if (!L || !L.free) return toast('Controlla prima il codice della TV', 1);
+      const g = KXCliPick.info('wzLinkTo'); if (!g) { toast('Scegli il cliente a cui collegarla', 1); KXCliPick.open('wzLinkTo'); return; }
+      if (g.full && !g.canGrow) return toast(g.why, 1);
+      if (g.full && !g.growOn) return toast(`${g.c.name} ha già ${g.used} di ${g.max} dispositivi: accendi «aumenta i dispositivi» o scegli un altro cliente`, 1);
+      const who = esc(g.c.name), code = esc(st.code);
+      const msg = g.full ? `<b>${who}</b> ha già ${g.used} di ${g.max} dispositivi. Vuoi portarli a <b>${g.need}</b> per collegare la TV <b class="mono">${code}</b>? Userà le sue linee, la sua scadenza e i suoi profili.`
+        : `La TV <b class="mono">${code}</b> diventa un dispositivo in più di <b>${who}</b> (${g.used + 1} di ${g.max}) e userà le sue linee, la sua scadenza e i suoi profili.`;
+      if (!(await ask(g.full ? 'Aumentare i dispositivi e collegare?' : 'Collegare la TV al cliente?', msg, g.full ? `Aumenta a ${g.need} e collega` : 'Collega'))) return;
+      // il titolare usa l'id della TV (da «Controlla codice»); l'agente il codice, che il server accetta solo per le TV nuove
+      const ref = agent ? st.code : L.id || ((D.devices || []).find((d) => d.code === st.code) || {}).id || st.code;
+      try {
+        await api('POST', '/admin/devices/' + encodeURIComponent(ref) + '/link', { primary: g.c.id, name: (st.linkName || '').trim(), ...(g.full ? { grow: true } : {}) });
+        alive = false; closePage(); await load(); toast(`TV collegata a ${g.c.name}${g.full ? ` · ora ha ${g.need} dispositivi` : ''}`);
+      } catch (e) { toast(e.message, 1); }
+    };
+    const bindLink = () => {
+      const o = $('#wzLinkOpen'); if (o) o.onclick = () => { st.linkOpen = true; statusAgain(); KXCliPick.open('wzLinkTo'); };
+      if ($('#wzLinkToBox')) KXCliPick.bind('wzLinkTo', { exclude: '', add: 1 });
+      const nm = $('#wzLinkName'); if (nm) nm.oninput = () => { st.linkName = nm.value; };
+      const no = $('#wzLinkNo'); if (no) no.onclick = () => { st.linkOpen = false; statusAgain(); };
+      const go = $('#wzLinkGo'); if (go) go.onclick = linkGo;
+    };
     const codeStatus = () => {
       if (!has('kairos')) return '';
       const L = st.look;
@@ -1482,7 +1516,7 @@ body.agent .foot{display:none}
       if (L.ok === false) return `<div class="wz-st bad">${esc(L.error || 'Codice non valido')}</div>`;
       if (L.taken) return '<div class="wz-st bad">Questo codice è già usato da un altro venditore. Controlla quello nella foto.</div>';
       if (L.mine) return `<div class="wz-st warn">Questa TV è già un tuo cliente${L.name ? ` (<b>${esc(L.name)}</b>)` : ''}. Per cambiarla aprila dall’elenco Clienti. <button class="btn sm" data-wzopen="${esc(L.id)}" style="margin-left:6px">Apri il cliente</button></div>`;
-      if (L.free) return `<div class="wz-st good">✓ TV trovata: <b>${esc(L.appName || 'Kairos')}</b>${L.model ? ` su <b>${esc(L.model)}</b>` : ''}${L.seen ? ` · aperta ${esc(ago(L.seen))}` : ''}. Ora scegli la linea.</div>`;
+      if (L.free) return `<div class="wz-st good">✓ TV trovata: <b>${esc(L.appName || 'Kairos')}</b>${L.model ? ` su <b>${esc(L.model)}</b>` : ''}${L.seen ? ` · aperta ${esc(ago(L.seen))}` : ''}. Ora scegli la linea.</div>${linkBlock()}`;
       return '<div class="wz-st warn">Non trovo questa TV. Controlla il codice mentre l’app è aperta. Se sei sicuro che sia corretto, puoi attivarla lo stesso: si sbloccherà quando l’app si collega.</div>';
     };
     const missing = () => {
@@ -1570,7 +1604,7 @@ body.agent .foot{display:none}
       };
       if (now) run(); else lkT = setTimeout(run, 300);
     };
-    const bindOpen = () => $$('[data-wzopen]').forEach((b) => (b.onclick = () => { const x = (D.devices || []).find((y) => y.id === b.dataset.wzopen); if (x) openClient(x); }));
+    const bindOpen = () => { $$('[data-wzopen]').forEach((b) => (b.onclick = () => { const x = (D.devices || []).find((y) => y.id === b.dataset.wzopen); if (x) openClient(x); })); bindLink(); };
     const fillLine = async (r, label) => {
       const sv = agent && r.p ? await matchLineServer(r.host, servers, r.p) : null;
       st.pl.username = r.username || '';
