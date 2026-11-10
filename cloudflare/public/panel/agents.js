@@ -1418,6 +1418,7 @@ body.agent .foot{display:none}
       durationMode: 'months', durationN: '', durationUnit: 'd',
       pl: { serverId: (servers[0] || {}).id || '', username: '', password: '', host: '', ref: '', note: '', panel: '', picked: null }, expSource: '',
       name: '', nameAuto: '', maxConn: 1, mxDomain: '', orbixId: '', oxDns: '0', orcpServer: '', appData: {}, busy: false, running: '', results: [],
+      owner: !agent && +preset.ownerId > 0 ? +preset.ownerId : 0, // titolare: agente responsabile del nuovo cliente Kairos (0 = tu)
     };
     const showLinePick = canLoadLines(P);
     const APPS_W = [['tv', 'Kairos Pro'], ['prem', 'Kairos Premium'], ['ktv', 'Kairos TV'], ['plus', 'Kairos Plus'], ['xc', 'Kairos XC'], ['lite', 'Kairos Lite'], ['nova', 'Kairos Nova']];
@@ -1434,6 +1435,13 @@ body.agent .foot{display:none}
     let mxDomains = null, mxError = '', mxLoading = showMax, dnsSaved = [], alive = true;
     let lkT = 0, lkN = 0;
     const has = (k) => st.targets.has(k);
+    /* titolare: «Responsabile» del nuovo cliente Kairos, anche un agente già esistente (il server lo accetta solo dal titolare) */
+    const ownerPick = () => {
+      const ags = !agent && has('kairos') ? (D.agents || []).filter((a) => a && a.active !== 0) : [];
+      if (!ags.length) return '';
+      return `<label class="lbl" style="margin-top:12px">Responsabile</label><select class="inp" id="wzOwner" style="max-width:340px;margin:0"><option value="0"${st.owner ? '' : ' selected'}>Tu (nessun agente)</option>${ags.map((a) => `<option value="${esc(a.id)}"${+st.owner === +a.id ? ' selected' : ''}>👤 ${esc(a.username)}</option>`).join('')}</select>
+        <p class="wz-help">Con un agente il cliente Kairos è subito suo: lo vede e lo gestisce nel suo pannello. La linea sul pannello IPTV resta sul tuo account.</p>`;
+    };
     const fmtCode = (v) => { let c = String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); if (c.length === 6 && !c.startsWith('KX')) c = 'KX' + c; return c.length > 4 ? c.slice(0, 4) + '-' + c.slice(4) : c; };
     const okCode = () => /^KX[A-Z0-9]{2}-[A-Z0-9]{4}$/.test(st.code);
     const codeOk = () => !has('kairos') || (okCode() && st.look && !st.look.taken && !st.look.mine && st.look.ok !== false);
@@ -1504,6 +1512,7 @@ body.agent .foot{display:none}
       if (get('wzUser')) st.pl.username = get('wzUser').value;
       if (get('wzPass')) st.pl.password = get('wzPass').value;
       if (get('wzName')) st.name = get('wzName').value;
+      if (get('wzOwner')) st.owner = Math.max(0, +get('wzOwner').value || 0);
       if (get('wzConn')) st.maxConn = Math.max(1, Math.min(maxC, +get('wzConn').value || 1));
       if (get('wzMxDom')) st.mxDomain = get('wzMxDom').value;
       if (get('wzOrbixId')) st.orbixId = get('wzOrbixId').value;
@@ -1652,6 +1661,7 @@ body.agent .foot{display:none}
       const extra = `<div class="wz-s" id="wzS3"><span class="n">3</span><div><h4>Nome del cliente</h4>
         <p class="hint">Facoltativo: se lo lasci vuoto userò il nome utente della linea.</p>
         <input class="inp" id="wzName" maxlength="60" placeholder="es. Mario Rossi" value="${esc(st.name)}" style="margin:0">
+        ${ownerPick()}
         ${has('kairos') ? `${agent
           ? `<div class="wz-exp">Scade il <b id="wzExpT">${esc(dateIt(st.expires))}</b><span id="wzExpSource">${st.expSource ? ` · come la linea ${esc(st.expSource)}` : ''}</span></div>
             <p class="wz-help" id="wzExpHint">La scadenza la prende dalla linea del pannello IPTV che scegli qui sopra (se scrivi la linea a mano: 1 mese).</p><div id="wzExpWarn"></div>`
@@ -1695,7 +1705,7 @@ body.agent .foot{display:none}
       }
       const paste = $('#wzPaste');
       if (paste) { paste.addEventListener('paste', () => setTimeout(() => pasteGo(true), 0)); paste.oninput = () => { if (/\S{6,}/.test(paste.value)) pasteGo(true); }; }
-      ['wzDurN', 'wzDurUnit', 'wzSrv', 'wzHost', 'wzUser', 'wzPass', 'wzName', 'wzConn', 'wzMxDom', 'wzOrbixId', 'wzOxDns', 'wzOrcpSrv'].forEach((id) => {
+      ['wzDurN', 'wzDurUnit', 'wzSrv', 'wzHost', 'wzUser', 'wzPass', 'wzName', 'wzOwner', 'wzConn', 'wzMxDom', 'wzOrbixId', 'wzOxDns', 'wzOrcpSrv'].forEach((id) => {
         const el = $('#' + id);
         if (el && id === 'wzDurN') el.addEventListener('input', updateDuration);
         else if (el && id !== 'wzDurUnit') el.addEventListener('input', () => { syncForm(); if (id === 'wzUser' || id === 'wzPass') detachChangedLine(); foot(); });
@@ -1764,7 +1774,7 @@ body.agent .foot{display:none}
         const playlist = agent
           ? { serverId: st.pl.serverId, name: plName, username, password: st.pl.password }
           : { id: 'p' + Date.now(), name: plName, type: 'xtream', url: '', host: st.pl.host.trim(), username, password: st.pl.password };
-        const created = await api('POST', '/admin/devices', { code: st.code, name, notes: note, expires: st.expires, playlists: [playlist], active: true, maxConn: st.maxConn, app: st.app });
+        const created = await api('POST', '/admin/devices', { code: st.code, name, notes: note, expires: st.expires, playlists: [playlist], active: true, maxConn: st.maxConn, app: st.app, ...(!agent && st.owner ? { ownerId: st.owner } : {}) });
         let linkWarning = '';
         if ((!agent || P.create || P.renew) && st.pl.panel) {
           try { await api('PUT', '/admin/line-sync', { deviceId: created.id, panel: st.pl.panel, username }); }
