@@ -77,7 +77,7 @@
 
   function cfgForm(c) {
     if (isAg()) return `<div class="wf-f" style="margin-top:12px">
-      <label>Pannello WOLF<input class="inp mono" value="${esc(c.url || '')}" readonly></label>
+      <label>Pannello WOLF<input class="inp" value="${esc(c.url || 'Quello di chi ti gestisce')}" readonly></label>
       <label>Il tuo utente WOLF<input class="inp" id="wfUser" value="${esc(c.user || '')}" autocomplete="off"></label>
       <label>La tua password WOLF<input class="inp" id="wfPass" type="password" autocomplete="new-password" placeholder="${c.set ? 'lascia vuoto per non cambiarla' : ''}"></label></div>
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" id="wfSave">${c.set ? 'Salva' : 'Collega il mio account'}</button>${c.set ? '<button class="btn sm ghost" id="wfOff">Scollega</button>' : ''}</div>`;

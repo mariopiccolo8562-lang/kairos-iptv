@@ -5,14 +5,14 @@
   css.textContent = `
 .dlc-top{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px}.dlc-top .inp{margin:0;flex:1;min-width:220px;max-width:420px}
 .dlc-g{margin-bottom:24px}.dlc-g h3{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:0 0 10px}
-.dlc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.dlc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:12px}.dlc-grid>*{min-width:0}
 .dlc-c{background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 .dlc-h{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap}.dlc-h b{font-size:15px;white-space:nowrap}.dlc-tag{font-size:11px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(224,164,49,.16);color:#ecc06f}
 .dlc-tag.new{background:rgba(52,199,123,.15);color:#6ee3a6}
 .dlc-warn,.app-warn{display:inline-flex;align-items:center;gap:4px;width:max-content;max-width:100%;padding:3px 8px;border:1px solid rgba(245,176,65,.48);border-radius:999px;background:rgba(245,176,65,.14);color:#f2c46c;font-size:11.5px;font-weight:600;line-height:1.35}
 .dlc-code{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.dlc-code .n{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;letter-spacing:.06em;flex:1;min-width:120px}
 .dlc-code small{display:block;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--mut);font-weight:400;letter-spacing:0;margin-top:2px;word-break:break-all}
-.dlc-l{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:7px;background:#1a1d22;border:1px solid var(--line);font-size:12.5px}
+.dlc-l{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:7px;background:#1a1d22;border:1px solid var(--line);font-size:12.5px;min-width:0}.dlc-l a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dlc-l>span,.dlc-l .btn{flex:none}.dlc-code .n{min-width:0;overflow-wrap:anywhere}.dlc-top .inp{min-width:0;max-width:100%}
 .dlc-l span{color:var(--mut);flex:0 0 auto}.dlc-l a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8fb3ff;text-decoration:none}
 .dlc-e{display:grid;grid-template-columns:130px 1fr 110px 1fr auto;gap:8px;align-items:start;padding:10px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--glass)}
 .dlc-e .inp,.dlc-e textarea{margin:0}.dlc-e textarea{grid-column:2/5;min-height:54px;font-family:'JetBrains Mono',monospace;font-size:12px}
@@ -37,7 +37,7 @@
     const l = linkOf(x), nw = /^nuova$/i.test(x.note);
     return `<div class="dlc-c"><div class="dlc-h"><b>${esc(x.name)}</b>${x.note ? `<span class="dlc-tag ${nw ? 'new' : ''}">${esc(x.note)}</span>` : ''}</div>${x.warn ? `<span class="dlc-warn">⚠ ${esc(x.warn)}</span>` : ''}
       ${x.code ? `<div class="dlc-code"><div class="n">${esc(x.code)}<small>${esc(l.replace(/^https?:\/\//, ''))}</small></div><button class="btn sm pri" data-cc="${i}">Copia codice</button><button class="btn sm" data-cl="${i}">Copia link</button></div>` : ''}
-      ${(x.links || []).map((k, j) => `<div class="dlc-l"><span>${esc(k.label)}</span><a href="${esc(k.url)}" target="_blank" rel="noopener">${esc(k.url.replace(/^https?:\/\//, ''))}</a><button class="btn sm" data-ck="${i}:${j}">Copia</button></div>`).join('')}</div>`;
+      ${(x.links || []).map((k, j) => `<div class="dlc-l"><span>${esc(k.label)}</span><a href="${esc(k.url)}" title="${esc(k.url)}" target="_blank" rel="noopener">${esc(k.url.replace(/^https?:\/\//, ''))}</a><button class="btn sm" data-ck="${i}:${j}">Copia</button></div>`).join('')}</div>`;
   }
   function render() {
     const el = $('#v-dlc'); if (!el) return;

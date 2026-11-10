@@ -292,7 +292,7 @@ function drawChart() {
     };
     line(tot, a1, a2, true); line(act, a3, a2, false);
     if (prog >= 1) { const px = X(n - 1), py = Y(tot[n - 1]); x.fillStyle = a1; x.shadowBlur = 0; x.beginPath(); x.arc(px, py, 5, 0, 7); x.fill(); x.shadowBlur = 0; }
-    if (prog < 1) requestAnimationFrame(frame);
+    if (prog < 1 && cv.offsetParent) requestAnimationFrame(frame); // pagina cambiata: l'animazione si ferma (all'avvio girava nascosta per 1 s)
   }
   requestAnimationFrame(frame);
 }

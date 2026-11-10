@@ -25,12 +25,20 @@ body{overscroll-behavior-y:none}
   #av{order:5}
   .topbar .search{order:10;flex:1 1 100%!important;min-width:0!important;margin:0}
   #agLedgerBox{margin:0 8px 18px!important}
-  #dlBar{flex-wrap:nowrap!important;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;margin:0 -14px 14px!important;padding:0 14px 4px;scrollbar-width:none}
+  #dlBar{flex-wrap:nowrap!important;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;scroll-padding:0 14px;margin:0 -14px 14px!important;padding:0 14px 4px;scrollbar-width:none}
   #dlBar::-webkit-scrollbar{display:none}
   #dlBar .dl{flex:0 0 auto;scroll-snap-align:start}
   .mtbar{margin:0 0 14px!important}
   .qa-g{grid-template-columns:1fr!important}
   .g2,.g2b,.st-g,.ai-g,.mt-g,.ag-g{grid-template-columns:1fr!important}
+  /* niente pagina che scorre di lato sul telefono: le schede non si allargano per una tabella o un link lungo */
+  .g2>*,.g2b>*,.st-g>*,.ai-g>*,.mt-g>*,.ag-g>*{min-width:0}
+  #dvApp{flex:0 1 auto;max-width:100%;min-width:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  #dvApp::-webkit-scrollbar{display:none}
+  #dvApp>button{flex:none}
+  table.kc-ep{display:block;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  select.inp{max-width:100%}
+  .card .hd>div{min-width:0;max-width:100%}
   .st-save{left:0!important;right:0!important;bottom:0!important;border-radius:0!important;padding-bottom:calc(12px + env(safe-area-inset-bottom))!important}
   .card{border-radius:14px}
   .tbl-wrap,.dvt-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -94,6 +102,7 @@ body{overscroll-behavior-y:none}
   .dv-tiles::-webkit-scrollbar{display:none}
   .dv-grid{grid-template-columns:1fr!important}
   #dlBar .dl{max-width:82vw}
+  #dlBar .dl>div{min-width:0}#dlBar .dl b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#dlBar .dl>i,#dlBar .dl>.btn{flex:none}
   .op-f,.op-f.mx{grid-template-columns:1fr!important}
   .ai-k{grid-template-columns:1fr!important}
   .card .hd:has(> h3 > small){flex-wrap:wrap}
@@ -187,4 +196,13 @@ body{overscroll-behavior-y:none}
   }
   setTimeout(addInstall, 3000);
   addEventListener('appinstalled', () => { const b = $('#qaInstall'); if (b) b.remove(); });
+  // barra dei codici Downloader sul telefono: parte dal primo codice (aggiungendo le schede dopo, l'aggancio la portava in fondo e il primo restava tagliato)
+  const dlb = $('#dlBar');
+  if (dlb) {
+    let mine = false; const me = () => (mine = true);
+    dlb.addEventListener('pointerdown', me, { passive: true }); dlb.addEventListener('wheel', me, { passive: true });
+    const start = () => { if (!mine && dlb.scrollLeft) dlb.scrollLeft = 0; };
+    new MutationObserver(() => requestAnimationFrame(start)).observe(dlb, { childList: true });
+    addEventListener('load', () => setTimeout(start, 50));
+  }
 })();

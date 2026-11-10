@@ -456,7 +456,7 @@
   async function liveLoad() {
     const V = $('#v-live');
     if (!KC.live) V.innerHTML = '<div class="card glass"><p class="mut">Caricamento…</p></div>';
-    if (!KC.errs) { try { KC.errs = await kapi('GET', '/admin/app-errors?hours=24'); errBadge(); } catch {} }
+    if (!KC.errs) { try { KC.errs = await kapi('GET', '/admin/app-errors?hours=24'); KC.errN = null; errBadge(); } catch {} }
     try { KC.live = await kapi('GET', '/admin/presence'); } catch (e) { V.innerHTML = `<div class="card glass"><p class="mut">${esc(e.message)}</p></div>`; return; }
     const P = KC.live, c = P.counts;
     V.innerHTML = `<div class="kc-k">${[['Online ora', c.online, 'app aperte negli ultimi 4 minuti', '#4f8cff'], ['Stanno guardando', c.watching, 'canali, film e serie', '#22c55e'], ['Nei menu', c.idle, 'app aperta senza video', '#facc15'], ['Dispositivi totali', c.total, 'registrati nel pannello', 'var(--a1)']].map(([l, v, s, col]) => `<div class="kpi glass"><div class="halo" style="background:${col}"></div><div class="lb"><i style="background:${col};box-shadow:0 0 10px ${col}"></i>${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('')}</div>
@@ -486,15 +486,25 @@
   KC.errF = { q: '', p: '', o: '', ow: '', hours: 168 };
   async function errLoad(quiet) {
     const V = $('#v-apperr');
+    // in sottofondo con le pagine degli errori chiuse basta il numero dei nuovi (prima: elenco completo fino a 2000 righe ogni 30 secondi)
+    const onV = (id) => { const x = document.getElementById(id); return !!x && x.classList.contains('on'); };
+    if (quiet && KC.errs && !onV('v-apperr') && !onV('v-buff') && !onV('v-live')) {
+      try {
+        const r = await kapi('GET', '/admin/app-errors?hours=' + KC.errF.hours + '&count=1');
+        if (r && Array.isArray(r.items)) { KC.errs = r; KC.errN = null; } else if (r && typeof r.newCount === 'number') KC.errN = r.newCount;
+        errBadge();
+      } catch {}
+      return;
+    }
     if (!quiet && !KC.errs) V.innerHTML = '<div class="card glass"><p class="mut">Caricamento…</p></div>';
-    try { KC.errs = await kapi('GET', '/admin/app-errors?hours=' + KC.errF.hours); } catch (e) { if (!quiet) V.innerHTML = `<div class="card glass"><p class="mut">${esc(e.message)}</p></div>`; return; }
+    try { KC.errs = await kapi('GET', '/admin/app-errors?hours=' + KC.errF.hours); KC.errN = null; } catch (e) { if (!quiet) V.innerHTML = `<div class="card glass"><p class="mut">${esc(e.message)}</p></div>`; return; }
     errBadge();
     if (quiet && !V.classList.contains('on')) return;
-    if (!quiet && KC.errs.newCount) { kapi('POST', '/admin/app-errors/seen').then(() => { KC.errs.newCount = 0; errBadge(); }).catch(() => {}); }
+    if (!quiet && KC.errs.newCount) { kapi('POST', '/admin/app-errors/seen').then(() => { KC.errs.newCount = 0; KC.errN = null; errBadge(); }).catch(() => {}); }
     errRender();
   }
   function errBadge() {
-    const n = (KC.errs && KC.errs.newCount) || 0, e = $('#nb_apperr');
+    const n = KC.errN != null ? KC.errN : (KC.errs && KC.errs.newCount) || 0, e = $('#nb_apperr');
     if (e) { e.textContent = n; e.classList.toggle('on', n > 0); }
   }
   function errRender() {
@@ -554,7 +564,7 @@
     const V = $('#v-buff');
     if (!KC.errs) V.innerHTML = '<div class="card glass"><p class="mut">Caricamento…</p></div>';
     try {
-      if (!KC.errs || KC.errF.hours !== KC.buffH) { KC.errF.hours = KC.buffH; KC.errs = await kapi('GET', '/admin/app-errors?hours=' + KC.buffH); errBadge(); }
+      if (!KC.errs || KC.errF.hours !== KC.buffH) { KC.errF.hours = KC.buffH; KC.errs = await kapi('GET', '/admin/app-errors?hours=' + KC.buffH); KC.errN = null; errBadge(); }
     } catch (e) { V.innerHTML = `<div class="card glass"><p class="mut">${esc(e.message)}</p></div>`; return; }
     buffRender();
   }
@@ -1278,7 +1288,8 @@
     $('#dvQ').addEventListener('input', () => { st.limit = st.view === 'table' ? 100 : 60; renderDevices(); });
     $('#dvSort').onchange = (e) => { st.sort = e.target.value; try { localStorage.setItem('kc_dvs', st.sort); } catch {} renderDevices(); };
     const orig = window.renderDevices;
-    window.renderDevices = renderDevices = function () { orig(); render(); };
+    // la vecchia tabella (nascosta con schede/tabella nuova) non va riempita: con 1500 clienti erano 37.000 elementi in più
+    window.renderDevices = renderDevices = function () { const cv = st.view !== 'list'; V.classList.toggle('dv-cardsview', cv); if (cv) { const r = $('#rows'); if (r && r.firstChild) r.textContent = ''; } orig(); render(); };
     KC.dvRender = render;
     // demo: elimina richieste e annullamento automatico come sul server
     if (typeof DEMO !== 'undefined') {

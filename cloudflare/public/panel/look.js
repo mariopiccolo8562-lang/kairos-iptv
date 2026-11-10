@@ -69,17 +69,14 @@ html.lx-m{--lx-c1:#0d182c;--lx-c2:#0a1322;--bg:#070d19!important;--pane:#08101e!
 html.lx,html.lx body{background:var(--bg)!important}
 html.lx main{background:transparent!important}
 html.lx #lxSky{display:block;position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
-#lxSky .x-au{position:absolute;border-radius:50%;animation:lxAu 22s ease-in-out infinite}
+#lxSky .x-au{position:absolute;border-radius:50%}
 #lxSky .x-au1{left:-15%;top:-38%;width:75vw;height:780px;background:radial-gradient(closest-side,rgba(34,211,238,.2),transparent)}
 #lxSky .x-au2{right:-22%;top:-12%;width:66vw;height:720px;background:radial-gradient(closest-side,rgba(139,92,246,.17),transparent);animation-delay:-8s}
 #lxSky .x-au3{left:22%;bottom:-34%;width:60vw;height:640px;background:radial-gradient(closest-side,rgba(45,212,191,.11),transparent);animation-delay:-15s}
 #lxSky .x-floor{position:absolute;left:-25%;right:-25%;bottom:-6%;height:520px;perspective:720px;-webkit-mask-image:linear-gradient(to top,#000 15%,transparent 88%);mask-image:linear-gradient(to top,#000 15%,transparent 88%)}
 #lxSky .x-plane{position:absolute;inset:0;transform:rotateX(66deg);transform-origin:center bottom;overflow:hidden;opacity:.42}
-#lxSky .x-lines{position:absolute;left:0;right:0;top:-56px;bottom:0;background-image:linear-gradient(rgba(34,211,238,.24) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,.2) 1px,transparent 1px);background-size:56px 56px;animation:lxGrid 3.2s linear infinite}
-#lxSky .x-star{position:absolute;display:block;border-radius:50%;background:#cffafe;box-shadow:0 0 6px #67e8f9;opacity:.15;animation:lxTw 3.6s ease-in-out infinite}
-@keyframes lxAu{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(6%,5%) scale(1.15)}}
-@keyframes lxGrid{to{transform:translateY(56px)}}
-@keyframes lxTw{0%,100%{opacity:.12}50%{opacity:.85}}
+#lxSky .x-lines{position:absolute;left:0;right:0;top:-56px;bottom:0;background-image:linear-gradient(rgba(34,211,238,.24) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,.2) 1px,transparent 1px);background-size:56px 56px}
+#lxSky .x-star{position:absolute;display:block;border-radius:50%;background:#cffafe;box-shadow:0 0 6px #67e8f9;opacity:.15}
 html.lx-m #lxSky .x-floor,html.lx-m #lxSky .x-star{display:none}
 html.lx-m #lxSky .x-au{animation:none;opacity:.55}
 
@@ -340,10 +337,12 @@ html.lx-f .lcard h1.grad{background:linear-gradient(90deg,#f0fdff,#67e8f9 45%,#a
 html.lx-f .h4-home-title b{font:700 12.5px ${MONO};letter-spacing:.18em;text-transform:uppercase;color:#dff7ff}
 html.lx-f .h4-home-metric small{font-family:${MONO};font-size:10.5px;letter-spacing:.04em}
 html.lx-f #lxHome .x-go{text-transform:uppercase;letter-spacing:.1em}
-/* console: bordo che gira, angoli da mirino */
+/* console: bordo luminoso (gira solo mentre ci scrivi, sul computer: un bordo che gira sempre ridisegnava la console a ogni fotogramma), angoli da mirino */
 @property --lxa{syntax:'<angle>';initial-value:0deg;inherits:false}
-@keyframes lxRot{to{--lxa:360deg}}
-html.lx-f #lxHome .x-con{border:1px solid transparent;background:linear-gradient(160deg,#0a1328,#060b18) padding-box,conic-gradient(from var(--lxa),rgba(34,211,238,.95),rgba(139,92,246,.75),rgba(45,212,191,.06) 38%,rgba(45,212,191,.06) 62%,rgba(34,211,238,.95)) border-box;animation:lxRot 7s linear infinite;box-shadow:0 40px 90px -40px rgba(34,211,238,.45)}
+@keyframes lxRot{from{--lxa:320deg}to{--lxa:680deg}}
+@keyframes lxSpin{to{transform:rotate(360deg)}}
+html.lx-f #lxHome .x-con{border:1px solid transparent;background:linear-gradient(160deg,#0a1328,#060b18) padding-box,conic-gradient(from var(--lxa),rgba(34,211,238,.95),rgba(139,92,246,.75),rgba(45,212,191,.06) 38%,rgba(45,212,191,.06) 62%,rgba(34,211,238,.95)) border-box;--lxa:320deg;box-shadow:0 40px 90px -40px rgba(34,211,238,.45)}
+@media (hover:hover) and (pointer:fine){html.lx-f #lxHome .x-con:focus-within{animation:lxRot 7s linear infinite}}
 html.lx-f #lxHome .x-tl{left:14px;top:14px;border-left:2px solid #67e8f9;border-top:2px solid #67e8f9;border-radius:4px 0 0 0}
 html.lx-f #lxHome .x-tr{right:14px;top:14px;border-right:2px solid #67e8f9;border-top:2px solid #67e8f9;border-radius:0 4px 0 0}
 html.lx-f #lxHome .x-bl{left:14px;bottom:14px;border-left:2px solid #a78bfa;border-bottom:2px solid #a78bfa;border-radius:0 0 0 4px}
@@ -430,7 +429,7 @@ html.lx-m #hub4side .nav.on svg{color:#67e8f9!important}
   html.lx-f #lxHome .x-con{justify-content:center;padding:26px 18px}
   html.lx-f #lxHome .x-cl{display:none}
   html.lx-f #lxHome .x-orb{all:unset;box-sizing:border-box;cursor:pointer;position:relative;display:grid;place-items:center;width:212px;height:212px;margin:4px auto;border-radius:50%;text-align:center;-webkit-tap-highlight-color:transparent}
-  html.lx-f #lxHome .x-orb::before{content:'';position:absolute;inset:0;border-radius:50%;padding:3px;background:conic-gradient(from var(--lxa),#22d3ee,#8b5cf6,#2dd4bf,#22d3ee);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:lxRot 6s linear infinite;box-shadow:0 0 40px -6px rgba(34,211,238,.6)}
+  html.lx-f #lxHome .x-orb::before{content:'';position:absolute;inset:0;border-radius:50%;padding:3px;background:conic-gradient(from var(--lxa),#22d3ee,#8b5cf6,#2dd4bf,#22d3ee);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:lxSpin 6s linear infinite;will-change:transform;box-shadow:0 0 40px -6px rgba(34,211,238,.6)}
   html.lx-f #lxHome .x-orb::after{content:'';position:absolute;inset:14px;border-radius:50%;background:radial-gradient(circle at 50% 35%,rgba(34,211,238,.28),rgba(5,9,20,.95) 70%);box-shadow:inset 0 0 40px rgba(34,211,238,.25)}
   html.lx-f #lxHome .x-orb>span{position:relative;z-index:1;display:grid;justify-items:center;gap:6px}
   html.lx-f #lxHome .x-orb svg{width:34px;height:34px;color:#a5f3fc;filter:drop-shadow(0 0 10px #22d3ee)}
@@ -464,7 +463,7 @@ html.lx-m #hub4side .nav.on svg{color:#67e8f9!important}
     const s = document.createElement('div');
     s.id = 'lxSky'; s.setAttribute('aria-hidden', 'true');
     s.innerHTML = '<i class="x-au x-au1"></i><i class="x-au x-au2"></i><i class="x-au x-au3"></i><div class="x-floor"><div class="x-plane"><div class="x-lines"></div></div></div>' +
-      STARS.map(([x, y, r], i) => `<i class="x-star" style="left:${x}%;top:${y}%;width:${r}px;height:${r}px;animation-delay:${-(i * 0.37 % 3.6).toFixed(2)}s"></i>`).join('');
+      STARS.map(([x, y, r], i) => `<i class="x-star" style="left:${x}%;top:${y}%;width:${r}px;height:${r}px;opacity:${(0.22 + (i * 0.37 % 0.6)).toFixed(2)}"></i>`).join('');
     document.body.prepend(s);
   }
 
@@ -480,15 +479,17 @@ html.lx-m #hub4side .nav.on svg{color:#67e8f9!important}
     }
     return b;
   }
+  // orologio in alto (solo Futuro sul computer): niente calcolo dell'impaginazione e formati pronti, gira ogni secondo
+  const WIDE = matchMedia('(min-width:1181px)'), F_T = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), F_D = new Intl.DateTimeFormat('it-IT', { weekday: 'short', day: 'numeric', month: 'short' });
   function tick() {
-    if (look !== 'futuro' || document.hidden) return;
-    const b = q('#lxBrand'); if (!b || !b.offsetParent) return;
+    if (look !== 'futuro' || document.hidden || !WIDE.matches) return;
+    const b = q('#lxBrand'); if (!b) return;
     const now = new Date();
     const rl = q('.x-rl', b), ck = q('.x-clk', b), dt = q('.x-dt', b);
     const role = window.KXRoleTxt || 'Master';
     if (rl.textContent !== role) rl.textContent = role;
-    ck.textContent = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const d = '· ' + now.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '');
+    ck.textContent = F_T.format(now);
+    const d = '· ' + F_D.format(now).replace(/\./g, '');
     if (dt.textContent !== d) dt.textContent = d;
   }
 

@@ -596,7 +596,7 @@ Il riquadro in alto a destra del lettore, «FHD · 1080p · 50 fps», compare qu
 Cambia **solo la grafica** del pannello. Server, database, clienti, linee, crediti, agenti, permessi, impostazioni e attivazione restano uguali. Il file è `cloudflare/public/panel/look.js`, caricato per ultimo.
 
 - **Come si sceglie**: ci sono due punti, il pulsante **«Aspetto»** sotto il logo (nella barra a icone si chiama «Stile») e il cerchio con l'iniziale in alto a destra. Il pulsante sotto il logo c'è anche nel Classico, così si torna sempre indietro. Ci sono tre scelte:
-  - **Futuro** (predefinito): barra a icone (il nome compare passandoci sopra), in alto «KAIROS» con ruolo e orologio, titoli con scritte spaziate, sfondo con aurora, griglia e stelle.
+  - **Futuro** (predefinito): barra a icone (il nome compare passandoci sopra), in alto «KAIROS» con ruolo e orologio, titoli con scritte spaziate, sfondo con aurora, griglia e stelle (fermo: vedi §37).
   - **Misto**: stessi colori e stessa console, menu con le scritte, sfondo calmo.
   - **Classico**: il pannello com'era prima, identico (verificato pixel per pixel).
   
@@ -633,3 +633,37 @@ Cambia **solo la grafica** del pannello. Server, database, clienti, linee, credi
   - Nelle righe WOLF, sotto i 1920 px, i pulsanti vanno sotto i dati, così utente, scadenza e stato non si accavallano.
 - **Copia del pannello di prima**: ramo `backup-pannello-classico`. Per togliere tutto basta eliminare la riga `<script src="look.js">` da `index.html`.
 - **Test**: `ui_look` (68 controlli: Classico identico, console, scelta dell'aspetto e pulsante sotto il logo, soldi in Home, pulsanti animati, contrasto dei riquadri WOLF, telefono, «riduci movimento») e tutti i test UI precedenti passano anche in Futuro.
+
+## 37. Controllo del 10 novembre 2026: sicurezza, velocità, telefono
+
+Controllo completo del pannello come titolare, reseller e sub reseller, su computer, tablet e telefono: 252 pagine visitate, 89 indirizzi del server provati da ogni agente.
+
+- **Reseller e sub reseller non vedono dati altrui**.
+  - Il server non dà a un agente DNS, server, clienti, messaggi, pagamenti o pannelli del titolare o di un altro agente. L'unica eccezione voluta è il codice che l'agente stesso scrive nella ricerca del codice.
+  - **WOLF**: all'agente non arrivano più né l'indirizzo del pannello WOLF del titolare né il suo DNS. Prima l'indirizzo compariva nel modulo «collega il tuo account» e il DNS tornava indietro dopo il collegamento. Il server usa comunque l'indirizzo del titolare.
+  - **Stessa scheda del browser**: se esce un account ed entra un altro senza ricaricare, la pagina si ricarica da sola. Così in memoria non resta nulla del primo, per esempio le linee dei pannelli o la ricerca.
+- **Sicurezza**:
+  - **Link di accesso rigenerato**: chi era entrato con il link vecchio viene scollegato subito. Prima restava dentro fino a 30 giorni. Si scollegano anche le altre sessioni dell'agente, che rientra con il link nuovo o con la password.
+  - Già presenti e verificati:
+    - sessione con cookie `HttpOnly`, `Secure` e `SameSite=Strict`, che scade dopo 30 giorni senza uso;
+    - protezione CSRF;
+    - blocco dell'IP dopo 5 errori;
+    - Turnstile, se configurato, e 2FA;
+    - intestazioni di sicurezza (CSP, HSTS, frame vietati);
+    - agenti che vedono solo ciò che è loro permesso;
+    - service worker senza cache dei dati.
+- **Velocità**, misurata con 1500 clienti e un telefono lento simulato (processore 4 volte più lento):
+  - **Futuro fluido**: lo sfondo (aurora, griglia, stelle) ora è fermo. Il bordo della console gira solo mentre scrivi il codice, sul computer. L'anello del pulsante «ATTIVA» del telefono gira con la scheda grafica. Risultato: da 27-37 a 60 fotogrammi al secondo; l'aspetto è lo stesso.
+  - **Pagina Clienti**: la vecchia tabella nascosta non si riempie più. Con le schede si vedono comunque le prime 60, poi «Mostra altri». Prima c'erano 37.000 elementi in più. Apertura sul telefono lento da 0,9-1,4 s a 0,3-0,4 s; scorrimento da 46 a 60 fotogrammi al secondo.
+  - **Errori delle app**: con la pagina chiusa, il controllo ogni 30 secondi chiede solo quanti sono i nuovi (`/admin/app-errors?count=1`). Prima scaricava l'elenco completo, fino a 2000 righe. L'elenco si scarica aprendo la pagina.
+  - **Ricerca globale**: i pannelli che rispondono «non collegato» non si richiedono più per 10 minuti. Prima erano 6 richieste a vuoto ogni volta.
+  - All'avvio, il grafico nascosto non si anima più e l'orologio in alto non ricalcola la pagina.
+- **Telefono**:
+  - Nessuna pagina scorre più di lato. Prima scorrevano di lato *Codici downloader*, il *Riepilogo store*, *Clienti* (barra delle app), *API* e la *Videoteca*.
+  - Le schede dei codici Downloader non escono dallo schermo: i link lunghi finiscono con «…» e il pulsante «Copia» copia il testo completo.
+  - La barra dei codici in alto parte dal primo codice. Prima partiva tagliata a metà.
+- **Test**:
+  - `v300`: WOLF senza indirizzo né DNS per l'agente, link rigenerato che scollega, numero dei nuovi errori uguale all'elenco per titolare e agente.
+  - `ui_audit` (19 controlli): tabella nascosta vuota, Futuro fermo e fluido, nessuna pagina più larga del telefono, controllo errori leggero, ricarica al cambio di account.
+  - Passano tutti i test dell'interfaccia e del server, tranne 5 test vecchi che aspettano risultati superati da modifiche precedenti: v26, v32, v45, v55, v161.
+

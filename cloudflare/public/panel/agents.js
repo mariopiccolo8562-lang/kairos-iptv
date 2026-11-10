@@ -316,6 +316,13 @@ body.agent .foot{display:none}
     const asAt = window.__assist || null;
     const r = await origApi(m, p, b);
     if (p === '/admin/state' && m === 'GET' && (window.__assist || null) !== asAt) throw new Error('Pannello cambiato nel frattempo');
+    if (p === '/admin/state' && m === 'GET' && r && !asAt && !window.__assist) {
+      // è entrato un altro account nella stessa scheda (uscita e nuovo accesso senza ricaricare): si ricarica la pagina,
+      // così nessun elenco già scaricato (linee dei pannelli, ricerca, pagine) del primo account resta in memoria
+      const who = (r.role === 'agent' ? 'a:' : 'o:') + String(r.user || '');
+      if (window.__kxWho && window.__kxWho !== who) { try { sessionStorage.removeItem('kc_page'); } catch {} location.reload(); await new Promise(() => {}); }
+      window.__kxWho = who;
+    }
     if (p === '/admin/state' && m === 'GET' && r) {
       D.role = r.role === 'agent' ? 'agent' : 'owner'; D.agents = r.agents || []; D.me = r.me || null; D.servers = r.servers || [];
       D.storeAppNames = r.storeAppNames || []; D.activationApps = Array.isArray(r.activationApps) ? r.activationApps : []; D.maintMe = r.maint || null; D.maintAg = r.maintAg || []; D.appLinks = Array.isArray(r.appLinks) ? r.appLinks : []; D.kairosApps = Array.isArray(r.kairosApps) ? r.kairosApps : [];
@@ -739,7 +746,7 @@ body.agent .foot{display:none}
     const bind = () => $$('#mB [data-lk]').forEach((b) => (b.onclick = async () => {
       const k = b.dataset.lk;
       if (k === 'url' || k === 'code') return navigator.clipboard.writeText(L[k]).then(() => toast(k === 'url' ? 'Link copiato' : 'Codice copiato'), () => toast('Copia non consentita', 1));
-      if ((k === 'del' || (k === 'new' && L.on)) && !confirm(k === 'del' ? 'Revocare il link? Smette subito di funzionare e l\'agente viene scollegato.' : 'Rigenerare? Link e codice vecchi smettono subito di funzionare.')) return;
+      if ((k === 'del' || (k === 'new' && L.on)) && !confirm(k === 'del' ? 'Revocare il link? Smette subito di funzionare e l\'agente viene scollegato.' : 'Rigenerare? Link e codice vecchi smettono subito di funzionare e l\'agente viene scollegato.')) return;
       try { if (k === 'del') { await api('DELETE', P); L = { on: false }; toast('Link revocato'); } else { L = await api('POST', P); toast('Link e codice pronti: copiali e mandali all\'agente'); } $('#mB').innerHTML = html(); bind(); } catch (e) { toast(e.message, 1); }
     }));
     const pr = ask('Link accesso · ' + a.username, html(), 'Chiudi'); bind(); await pr;

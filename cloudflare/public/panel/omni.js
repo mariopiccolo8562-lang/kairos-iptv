@@ -22,32 +22,34 @@
   const isAg = () => D.role === 'agent';
   const can = (k) => !isAg() || !!(((D.me || {}).perms || {})[k]);
   const EXT = { t: 0, items: [], busy: null };
+  // pannelli che hanno risposto «non collegato»: nelle ricerche in anticipo si saltano per 10 minuti (prima ogni volta 6 richieste a vuoto)
+  const OFF = {}, live = (k) => !(OFF[k] && Date.now() - OFF[k] < 600e3), miss = (k) => (e) => { if (/collega prima|non è collegat/i.test((e && e.message) || '')) OFF[k] = Date.now(); };
   function loadExt() {
     if (EXT.busy) return EXT.busy;
     if (Date.now() - EXT.t < 180e3) return Promise.resolve(EXT.items);
     EXT.busy = (async () => {
       const out = [], T = [], add = (x) => out.push(x);
-      if (can('wolf')) T.push(api('GET', '/admin/wolf/lines').then((r) => (r.lines || []).forEach((l) => add({ p: 'wolf', tag: 'WOLF', t: l.username, s: [l.note, l.owner, l.enabled ? '' : 'disattivata'].filter(Boolean).join(' · '), q: l.username, hay: [l.username, l.note, l.owner, l.id] }))).catch(() => {}));
-      if (can('armada')) {
-        T.push(api('GET', '/admin/armada/lines').then((r) => (r.lines || []).forEach((x) => add({ p: 'armada', tab: 'lines', tag: 'ARM', t: x.username, s: [x.notes, x.by || x.owner].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.by, x.owner] }))).catch(() => {}));
-        T.push(api('GET', '/admin/armada/mags').then((r) => (r.mags || []).forEach((x) => add({ p: 'armada', tab: 'mags', tag: 'MAG', t: x.mac, s: [x.notes, x.by || x.owner].filter(Boolean).join(' · '), q: x.mac, hay: [x.mac, x.notes, x.by, x.owner] }))).catch(() => {}));
+      if (can('wolf') && live('wolf')) T.push(api('GET', '/admin/wolf/lines').then((r) => (r.lines || []).forEach((l) => add({ p: 'wolf', tag: 'WOLF', t: l.username, s: [l.note, l.owner, l.enabled ? '' : 'disattivata'].filter(Boolean).join(' · '), q: l.username, hay: [l.username, l.note, l.owner, l.id] }))).catch(miss('wolf')));
+      if (can('armada') && live('armada')) {
+        T.push(api('GET', '/admin/armada/lines').then((r) => (r.lines || []).forEach((x) => add({ p: 'armada', tab: 'lines', tag: 'ARM', t: x.username, s: [x.notes, x.by || x.owner].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.by, x.owner] }))).catch(miss('armada')));
+        T.push(api('GET', '/admin/armada/mags').then((r) => (r.mags || []).forEach((x) => add({ p: 'armada', tab: 'mags', tag: 'MAG', t: x.mac, s: [x.notes, x.by || x.owner].filter(Boolean).join(' · '), q: x.mac, hay: [x.mac, x.notes, x.by, x.owner] }))).catch(miss('armada')));
       }
-      if (can('storm')) {
-        T.push(api('GET', '/admin/storm/lines').then((r) => (r.lines || []).forEach((x) => add({ p: 'storm', tab: 'lines', tag: 'STORM', t: x.username, s: [x.notes, x.by || x.owner].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.by, x.owner] }))).catch(() => {}));
-        T.push(api('GET', '/admin/storm/mags').then((r) => (r.mags || []).forEach((x) => add({ p: 'storm', tab: 'mags', tag: 'ST-MAG', t: x.mac, s: [x.notes, x.by || x.owner].filter(Boolean).join(' · '), q: x.mac, hay: [x.mac, x.notes, x.by, x.owner] }))).catch(() => {}));
+      if (can('storm') && live('storm')) {
+        T.push(api('GET', '/admin/storm/lines').then((r) => (r.lines || []).forEach((x) => add({ p: 'storm', tab: 'lines', tag: 'STORM', t: x.username, s: [x.notes, x.by || x.owner].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.by, x.owner] }))).catch(miss('storm')));
+        T.push(api('GET', '/admin/storm/mags').then((r) => (r.mags || []).forEach((x) => add({ p: 'storm', tab: 'mags', tag: 'ST-MAG', t: x.mac, s: [x.notes, x.by || x.owner].filter(Boolean).join(' · '), q: x.mac, hay: [x.mac, x.notes, x.by, x.owner] }))).catch(miss('storm')));
       }
-      if (can('mxp')) T.push(api('GET', '/admin/mxp/accounts').then(async (r) => {
+      if (can('mxp') && live('mxp')) T.push(api('GET', '/admin/mxp/accounts').then(async (r) => {
         for (const a of (r.accounts || []).slice(0, 5)) {
           const u = await api('GET', `/admin/mxp/a/${encodeURIComponent(a.id)}/users`).catch(() => ({ users: [] }));
           (u.users || []).forEach((x) => add({ p: 'mxp', tag: 'MAX', t: x.username || 'ID ' + x.id, s: (x.lists || []).map((l) => l.user).join(', '), q: x.username || String(x.id), hay: [x.id, x.username, x.email, ...(x.lists || []).map((l) => l.user + ' ' + l.fqdn)] }));
         }
-      }).catch(() => {}));
+      }).catch(miss('mxp')));
       // Atlantix, Realott, SLT e MirkoTeam (ORCP): stesse risposte delle loro schede
       const arr = (d) => (Array.isArray(d) ? d : d && typeof d === 'object' ? (['rows', 'items', 'lines', 'users', 'list', 'data'].map((k) => d[k]).find(Array.isArray) || []) : []);
-      if (can('atx')) T.push(api('GET', '/admin/atx/lines?all=1&page=1&q=&status=&reseller=').then((r) => arr(r).forEach((x) => add({ p: 'atx', tag: 'ATX', t: x.username, s: [x.notes, x.reseller || x.owner || x.reseller_username, Number(x.enabled) === 0 ? 'disattivata' : ''].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.id, x.reseller, x.owner, x.reseller_username] }))).catch(() => {}));
-      for (const [k, tag] of [['ro', 'REALOTT'], ['slt', 'SLT']]) if (can(k)) T.push(api('GET', `/admin/${k}/lines`).then((r) => (r.rows || []).forEach((x) => add({ p: k, tag, t: x.username, s: [x.notes, x.owner, x.status].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.owner, x.id] }))).catch(() => {}));
+      if (can('atx') && live('atx')) T.push(api('GET', '/admin/atx/lines?all=1&page=1&q=&status=&reseller=').then((r) => arr(r).forEach((x) => add({ p: 'atx', tag: 'ATX', t: x.username, s: [x.notes, x.reseller || x.owner || x.reseller_username, Number(x.enabled) === 0 ? 'disattivata' : ''].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.id, x.reseller, x.owner, x.reseller_username] }))).catch(miss('atx')));
+      for (const [k, tag] of [['ro', 'REALOTT'], ['slt', 'SLT']]) if (can(k) && live(k)) T.push(api('GET', `/admin/${k}/lines`).then((r) => (r.rows || []).forEach((x) => add({ p: k, tag, t: x.username, s: [x.notes, x.owner, x.status].filter(Boolean).join(' · '), q: x.username, hay: [x.username, x.notes, x.owner, x.id] }))).catch(miss(k)));
       if (!isAg()) T.push(api('GET', '/admin/orcp/state').then((st) => st.connected ? api('GET', '/admin/orcp/data?w=conns') : { list: [] }).then((r) => { const seen = new Set(); (r.list || []).forEach((x) => { const k = String(x.user || '').toLowerCase(); if (!k || seen.has(k)) return; seen.add(k); add({ p: 'orcp', tag: 'MIRKO', t: x.user, s: [x.online ? 'online ora' : 'ultimo accesso ' + (x.last || ''), x.device].filter(Boolean).join(' · '), q: x.user, hay: [x.user, x.device, x.ip] }); }); }).catch(() => {}));
-      if (can('oxp')) T.push(api('GET', '/admin/oxp/playlists').then((r) => (r.playlists || []).forEach((x) => add({ p: 'oxp', tag: 'ORB', t: x.user || x.name, s: 'dispositivo ' + x.device + (x.name ? ' · ' + x.name : ''), q: x.device, hay: [x.user, x.device, x.name, x.host] }))).catch(() => {}));
+      if (can('oxp') && live('oxp')) T.push(api('GET', '/admin/oxp/playlists').then((r) => (r.playlists || []).forEach((x) => add({ p: 'oxp', tag: 'ORB', t: x.user || x.name, s: 'dispositivo ' + x.device + (x.name ? ' · ' + x.name : ''), q: x.device, hay: [x.user, x.device, x.name, x.host] }))).catch(miss('oxp')));
       await Promise.all(T);
       out.forEach((x) => (x.hay = x.hay.filter(Boolean).join(' ').toLowerCase()));
       EXT.items = out; EXT.t = Date.now(); EXT.busy = null;

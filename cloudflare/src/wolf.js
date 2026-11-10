@@ -368,7 +368,7 @@ async function routes(req, env, path, who, ip, H, ag) {
   if (ag && (path.startsWith('/wolf/links') || path.startsWith('/wolf/agents'))) throw new HttpErr(403, 'Funzione riservata al titolare');
   if (path === '/wolf/config' && m === 'GET') {
     const c = await wolfCfg(env, H, K), own = ag ? await wolfCfg(env, H) : c;
-    return json({ set: !!c, url: own ? own.url : '', user: c ? c.user : '', dns: ag ? '' : own ? own.dns || '' : '', agent: !!ag, ownerSet: !!own });
+    return json({ set: !!c, url: ag ? '' : own ? own.url : '', user: c ? c.user : '', dns: ag ? '' : own ? own.dns || '' : '', agent: !!ag, ownerSet: !!own }); // all'agente niente indirizzo né DNS del titolare
   }
   if (path === '/wolf/config' && m === 'PUT') {
     const b = await H.readJSON(req, 4096), old = (await wolfCfg(env, H, K)) || {};
@@ -387,7 +387,7 @@ async function routes(req, env, path, who, ip, H, ag) {
     if (!user || !pass) throw new HttpErr(400, 'Scrivi utente e password di WOLF');
     const cfg = await connectAcc(env, H, K, url, user, pass, dns, !ag);
     await H.log(env, 'edit', `${who}: pannello WOLF collegato (${ag ? 'account ' + user : url})`, ip);
-    return json({ ok: true, dns: cfg.dns });
+    return json({ ok: true, dns: ag ? '' : cfg.dns });
   }
   if (path === '/wolf/config' && m === 'DELETE') {
     await env.DB.prepare('DELETE FROM settings WHERE k IN (?, ?)').bind(K, K + ':ses').run(); memOf(K, true);
