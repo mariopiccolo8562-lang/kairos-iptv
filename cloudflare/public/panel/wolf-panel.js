@@ -213,8 +213,8 @@
       ['Stato', (l) => (!l.enabled ? 'Disattivata' : l.exp && l.exp < Date.now() ? 'Scaduta' : 'Attiva')], ['Prova', (l) => (l.trial ? 'sì' : '')], ['Collegata ora', (l) => (l.conns > 0 ? 'sì' : 'no')],
       ['Nota', (l) => l.note], ['Reseller', (l) => l.owner], ['Cliente KAIROS', (l) => (linkOf(l.id) || {}).name || ''], ['Link M3U', (l) => m3u(l)]], L);
   }
-  async function bulkExt() {
-    const selected = selOf(); if (!selected.length) return;
+  async function bulkExt(pre) { // pre: id delle linee scelte da «Tutti i pannelli» (altrimenti le spuntate qui)
+    const selected = Array.isArray(pre) ? ((W.data && W.data.lines) || []).filter((l) => pre.includes(String(l.id))) : selOf(); if (!selected.length) return;
     const selectedIds = selected.map((l) => l.id);
     const [, fresh] = await Promise.all([loadPk(), loadLines(true)]);
     if (!W.pk.length) return toast('Non trovo i pacchetti su WOLF', 1);
@@ -564,5 +564,14 @@
   const sec = $('#v-wolf');
   if (sec) new MutationObserver(() => { if (sec.classList.contains('on') && !sec.innerHTML.trim()) open(); }).observe(sec, { attributes: true, attributeFilter: ['class'] });
   window.addEventListener('kxpay:filter', (e) => { if (e.detail.panel === 'wolf') { W.days = 'due'; W.limit = 100; show(); } });
+  /* «Tutti i pannelli» → Rinnova: il rinnovo di massa di sempre con quelle linee già spuntate (si conferma qui) */
+  window.KXWolfRenew = async (ids) => {
+    ids = (ids || []).map(String); if (!ids.length) return;
+    W.tab = 'lines'; view('wolf');
+    for (let i = 0; i < 70 && !(W.data && Array.isArray(W.data.lines)); i++) await new Promise((r) => setTimeout(r, 150));
+    if (!(W.data && Array.isArray(W.data.lines))) return toast('WOLF non risponde: riprova tra poco', 1);
+    W.sel = new Set(ids); show();
+    return bulkExt(ids);
+  };
   window.addEventListener('kxpay:update', () => { if ($('#v-wolf')?.classList.contains('on')) show(); });
 })();

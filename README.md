@@ -820,3 +820,26 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
 - **Clienti**: la riga «Scadono entro 4 · 7 · 14 · 30 giorni» ora sta sotto i riquadri, anche sul telefono.
 - **Non fatto, per scelta**: note e scadenze scritte in KAIROS non vengono copiate da sole su WOLF, Atlantix, Realott e SLT. Quei pannelli non hanno un'API ufficiale, e per la scadenza servirebbe rinnovare, cioè spendere crediti. Il verso opposto c'è già: il cliente KAIROS «allineato» prende la scadenza dal pannello.
 - **Test**: `ui_allpanels` (20 controlli), `ui_scadenze` (32).
+
+## 45. «Tutti i pannelli» come WOLF: barra completa, spunte, riquadro di ricerca fisso (10 novembre 2026)
+
+- **Barra in alto, come in WOLF** (`allpanels.js`):
+  - cerca per utente, ID o nota;
+  - stato: Tutte, Attive, Quasi scadute (4 giorni), In scadenza (7 giorni), Scadute, Disattivate, Collegate ora, Scollegate;
+  - ordine del pannello e le altre 8 voci di ordinamento (scadenza, nome, connessioni, stato, reseller, create);
+  - scadenze: tutte, entro 2 · 3 · 4 · 5 · 7 giorni, «💰 Deve pagare»;
+  - reseller (compare solo se le linee hanno un reseller), con il nome del reseller sotto l'utente.
+  - I riquadri e i pannelli contano con il reseller scelto; il riquadro sceglie anche lo stato nel menu.
+- **Spunte e «Seleziona tutte (N)»**: prende tutte le linee filtrate, anche oltre le prime 200 mostrate. Con le linee spuntate:
+  - **Consulta**: le schede delle linee, divise per pannello (scadenza, nota, password con Mostra/Copia, connessioni e canale, reseller, ID, creata, pacchetto, prova), con «Apri», «Modifica», «Rinnova». Esc o ✕ chiudono.
+  - **Rinnova**: se le linee sono tutte di WOLF, Armada o Storm si apre il **rinnovo di massa di quel pannello con quelle linee già scelte** (note e mesi pagati come sempre). Una sola linea di Atlantix, Realott o SLT: si apre il suo «Rinnova». Linee di pannelli diversi: le schede, con «Rinnova tutte le N su WOLF/Armada/Storm» per gruppo e «Rinnova» linea per linea.
+  - **Modifica**: una linea apre la sua finestra «Modifica» (per Armada e Storm la nota, che è l'unica cosa modificabile); più linee: le schede, una alla volta.
+  - Nessuna conferma è saltata: ogni rinnovo o modifica passa dalla finestra di sempre del pannello, dove si annulla o si conferma. Qui non si scrive niente sui pannelli.
+- **Riquadro rosso della ricerca fisso** (`xsearch.js`): dopo il primo clic su un nome il riquadro resta con la ricerca di partenza (es. «pers») anche cambiando pannello.
+  - le linee già aperte hanno la ✓;
+  - «↺ Torna a «…»» rimette la ricerca intera nella casella;
+  - ✕ lo chiude;
+  - una nuova ricerca scritta a mano, o l'uscita dalle schede dei pannelli, lo fa ripartire.
+- **Correzione**: aprendo una linea da un'altra scheda, l'evidenziazione cadeva sul nome nel riquadro rosso invece che sulla riga della lista (`omni.js`). Ora salta il riquadro, e «Modifica»/«Rinnova» premono il pulsante della riga giusta.
+- **Telefono**: barra a due colonne, riquadri 2×2, spunta a sinistra di ogni riga, schede di «Consulta» su due colonne.
+- **Test**: `ui_allpanels` (57 controlli; ogni finestra viene annullata e il test verifica che non parta nessuna scrittura verso i pannelli).

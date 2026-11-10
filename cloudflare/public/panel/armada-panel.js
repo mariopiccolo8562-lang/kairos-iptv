@@ -296,8 +296,8 @@ const mkArmadaLike = (cfg) => {
       ['Connessioni', (x) => x.maxConn || ''], ['Paese', (x) => x.country], ['Ultima attività', (x) => x.lastActivity], ['Note', (x) => x.notes], ['Reseller', (x) => x.by || x.owner],
       ...(ln ? [['Link M3U', (x) => m3u(x.username, x.password)]] : [])], L);
   }
-  async function bulkRen() {
-    const chosen = selX(); if (!chosen.length) return;
+  async function bulkRen(pre) { // pre: id delle linee scelte da «Tutti i pannelli» (altrimenti le spuntate qui)
+    const chosen = Array.isArray(pre) ? (A.lines || []).filter((x) => pre.includes(String(x.id))) : selX(); if (!chosen.length) return;
     const chosenIds = chosen.map((x) => String(x.id));
     await loadState(); await loadTab(true);
     const current = A.tab === 'lines' ? A.lines : A.mags;
@@ -393,6 +393,17 @@ const mkArmadaLike = (cfg) => {
   const v0 = view;
   window.view = view = function (v) { v0(v); if (v === K) { render(); loadState().then(() => loadTab()); } };
   window.addEventListener('kxpay:filter', (e) => { if (e.detail.panel === CFG.k) { A.F.days = 'due'; A.limit = 100; render(); } });
+  /* «Tutti i pannelli» → Rinnova: il rinnovo di massa di sempre con quelle linee già spuntate (si conferma qui) */
+  (window.KXArmRenew = window.KXArmRenew || {})[K] = async (ids) => {
+    ids = (ids || []).map(String); if (!ids.length) return;
+    A.tab = 'lines'; view(K);
+    if (!A.st) await loadState();
+    if (!A.st || !A.st.connected) return toast(N + ' non è collegato', 1);
+    if (!Array.isArray(A.lines)) await loadTab(true);
+    if (!Array.isArray(A.lines)) return toast(N + ' non risponde: riprova tra poco', 1);
+    A.sel = new Set(ids.map((id) => 'l' + id)); render();
+    return bulkRen(ids);
+  };
   window.addEventListener('kxpay:update', () => { if (document.getElementById(VIEW)?.classList.contains('on')) render(); });
 
   // demo

@@ -110,15 +110,21 @@
     draw([...base, ...extOf(L)], false);
   }
   /* la «scheda» della linea: porta in vista la sua riga nel pannello e la evidenzia per un attimo */
+  /* riga della linea nel pannello aperto (la cerca per nome esatto) */
+  function rowOf(p, want) {
+    const v = document.getElementById('v-' + p);
+    // i nomi nel riquadro rosso della ricerca (xsearch.js, .xs-bar) non sono righe: si salta quello e si cerca nella lista
+    const el = v && [...v.querySelectorAll('b, .mono, code')].find((e) => e.offsetParent && !e.closest('.xs-bar') && e.textContent.trim().toLowerCase() === want);
+    if (!el) return null;
+    const row = el.closest('.wf-row, .ar-row, .mx-row, tr, .card') || el;
+    return row.getBoundingClientRect().height > 420 ? el.parentElement || el : row;
+  }
   async function focusLine(p, name, again) {
     const want = String(name || '').trim().toLowerCase(); if (!want) return false;
     await new Promise((r) => setTimeout(r, 300)); // il pannello ridisegna la lista dopo la ricerca: prima si aspetta quella
     for (let i = 0; i < 25; i++) {
-      const v = document.getElementById('v-' + p);
-      const el = v && [...v.querySelectorAll('b, .mono, code')].find((e) => e.offsetParent && e.textContent.trim().toLowerCase() === want);
-      if (el) {
-        let row = el.closest('.wf-row, .ar-row, .mx-row, tr, .card') || el;
-        if (row.getBoundingClientRect().height > 420) row = el.parentElement || el;
+      const row = rowOf(p, want);
+      if (row) {
         row.scrollIntoView({ block: 'center', behavior: 'smooth' });
         row.classList.remove('kx-hl'); void row.offsetWidth; row.classList.add('kx-hl');
         setTimeout(() => row.classList.remove('kx-hl'), 4200);
@@ -145,7 +151,20 @@
       await new Promise((r) => setTimeout(r, 150));
     }
     document.querySelectorAll('[data-ox-done]').forEach((t) => delete t.dataset.oxDone);
-    focusLine(x.p, x.t || x.q);
+    const ok = await focusLine(x.p, x.t || x.q);
+    // «Modifica» o «Rinnova» chiesti da «Tutti i pannelli»: si preme lo stesso pulsante della riga (stessa finestra di sempre)
+    if (ok && x.act) {
+      // Armada e Storm: la nota («+ nota» / «Modifica nota») arriva nella riga poco dopo (line-notes.js), quindi si riprova per 2 secondi
+      const want = x.act === 'edit' ? ['Modifica', 'Modifica nota', '+ nota'] : ['Rinnova'];
+      let b = null;
+      for (let i = 0; i < 10 && !b; i++) {
+        await new Promise((r) => setTimeout(r, i ? 200 : 450));
+        const row = rowOf(x.p, String(x.t || x.q).trim().toLowerCase()), bs = row ? [...row.querySelectorAll('button')] : [];
+        for (const w of want) { b = bs.find((e) => e.textContent.trim() === w); if (b) break; } // prima «Modifica» (tutta la linea), poi la sola nota
+      }
+      if (b) b.click(); else toast(x.act === 'edit' ? 'Questa linea non ha «Modifica» nel suo pannello' : 'Rinnova la linea dal suo pannello', 1);
+    }
+    return ok;
   }
   /* per la ricerca incrociata nelle schede dei pannelli (xsearch.js): stesse liste, stessa apertura del risultato */
   window.KXOmni = { preload: () => loadExt().catch(() => []), find: async (q) => { const toks = String(q || '').toLowerCase().split(/\s+/).filter(Boolean); if (!toks.length) return []; const L = await loadExt(); return L.filter((x) => fits(x.hay, toks)); }, pick: (x) => pick({ ...x, k: 'ext' }), focus: focusLine, names: Object.fromEntries(PK0.map((k, i) => [k, PN0[i]])) };
