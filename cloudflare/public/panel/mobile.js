@@ -202,7 +202,8 @@ body{overscroll-behavior-y:none}
     let mine = false; const me = () => (mine = true);
     dlb.addEventListener('pointerdown', me, { passive: true }); dlb.addEventListener('wheel', me, { passive: true });
     const start = () => { if (!mine && dlb.scrollLeft) dlb.scrollLeft = 0; };
-    new MutationObserver(() => requestAnimationFrame(start)).observe(dlb, { childList: true });
+    // anche quando cambia quali codici si vedono (Clienti: solo lo Store; Home e Solo Master: tutti): l'aggancio la spostava in fondo
+    new MutationObserver(() => requestAnimationFrame(start)).observe(dlb, { childList: true, attributes: true, attributeFilter: ['class'] });
     addEventListener('load', () => setTimeout(start, 50));
   }
 })();

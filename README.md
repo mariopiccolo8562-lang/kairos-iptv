@@ -694,3 +694,20 @@ Controllo completo del pannello come titolare, reseller e sub reseller, su compu
 - **Futuro**: sugli schermi bassi dei portatili la barra a icone è più compatta, così entrano tutte le voci con «Esci».
 - **Test**: `v301` (server, GitHub finto), `ui_store_apps` (19 controlli), `ui_store_menu` (35).
 
+## 39. Verifica in due passaggi facile anche da iPhone (10 novembre 2026)
+
+- **Problema**: a ogni clic su «Attiva» nasceva una chiave nuova. Il telefono restava con quella vecchia e il codice risultava «non valido». La chiave andava anche scritta a mano, 32 caratteri.
+- **Ora**, in Sicurezza e account (Solo Master per il titolare, Sicurezza per gli agenti):
+  - **QR da inquadrare**: app Password dell'iPhone → *Imposta codice di verifica* → *Scansiona codice QR*, oppure Google Authenticator. Il QR è disegnato nel browser da `qr.js` (standard ISO 18004, versioni 1–10): la chiave non va a servizi esterni.
+  - **«Aggiungi al telefono»**: è un link `otpauth://`. Sul telefono compare per primo e apre l'app dei codici; il QR resta in «QR per un altro telefono».
+  - **«Copia chiave»** copia la chiave senza spazi; la chiave mostrata va a capo solo fra i gruppi di 4.
+  - **La chiave resta la stessa** finché non confermi (`/admin/totp/setup` la riusa). «Chiave nuova» (`fresh: true`) la cambia.
+  - Gli aggiornamenti automatici del pannello non chiudono più il riquadro né cancellano il codice scritto.
+  - Il campo del codice ha `autocomplete="one-time-code"`: l'iPhone suggerisce il codice sopra la tastiera.
+  - Se il codice è sbagliato, il pannello spiega cosa controllare: la chiave di adesso sul telefono e l'ora automatica.
+- **Telefono**: la barra dei codici Downloader resta sul primo codice anche cambiando pagina.
+- **Test**:
+  - `v302`: chiave riusata, «Chiave nuova», codice vecchio rifiutato, per titolare e agente.
+  - `ui_totp`, 17 controlli: il QR si legge con OpenCV e contiene il link giusto, poi copia, riquadro stabile, attivazione e accesso con il codice.
+  - In più, 62 QR di prova da 1 a 213 caratteri, tutti letti.
+

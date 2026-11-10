@@ -7118,8 +7118,12 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
 
   if (path === '/totp/setup' && m === 'POST') {
     if (ses.totp_on) throw new HttpErr(400, '2FA già attiva');
-    const secret = b32enc(rand(20));
-    await env.DB.prepare('UPDATE admins SET totp_secret = ? WHERE id = ?').bind(secret, ses.admin_id).run();
+    // la chiave non ancora confermata resta la stessa: premendo di nuovo «Attiva» il telefono non resta con una chiave vecchia
+    // (prima ne nasceva una nuova a ogni clic e il codice del telefono smetteva di valere). «Chiave nuova» (fresh) la cambia
+    const tb = await readJSON(req, 512).catch(() => ({}));
+    const cur = await env.DB.prepare('SELECT totp_secret FROM admins WHERE id = ?').bind(ses.admin_id).first();
+    let secret = tb.fresh !== true && cur && /^[A-Z2-7]{32}$/.test(cur.totp_secret || '') ? cur.totp_secret : '';
+    if (!secret) { secret = b32enc(rand(20)); await env.DB.prepare('UPDATE admins SET totp_secret = ? WHERE id = ?').bind(secret, ses.admin_id).run(); }
     const s = await getSettings(env);
     const label = encodeURIComponent(`${s.brand || 'KAIROS'}:${who}`);
     return json({ secret, uri: `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(s.brand || 'KAIROS')}&digits=6&period=30` });

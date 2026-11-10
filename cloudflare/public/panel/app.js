@@ -900,20 +900,48 @@ function renderSecurity() {
     row(x.access, 'Cloudflare Access', x.access ? 'Il pannello è dietro Zero Trust' : 'Non configurato (vedi guida)'),
     row(true, 'Codici legati al dispositivo', 'Un codice copiato su un\'altra TV non funziona'),
   ].join('') + `<p class="mut" style="font-size:12px;margin-top:8px">Sessioni aperte: ${x.sessions ?? 1}</p>`;
-  $('#totpBox').innerHTML = x.totp
+  // verifica in due passaggi: mentre la stai configurando (o disattivando) gli aggiornamenti del pannello non toccano il riquadro
+  const tb = $('#totpBox');
+  if (tb.querySelector('#tConf, #tOffC')) return;
+  tb.innerHTML = x.totp
     ? '<button class="btn sm danger" id="tOff">Disattiva verifica in due passaggi</button>'
     : '<button class="btn sm pri" id="tOn">Attiva verifica in due passaggi</button>';
-  $('#tOn') && ($('#tOn').onclick = async () => {
-    try {
-      const r = await api('POST', '/admin/totp/setup');
-      $('#totpBox').innerHTML = `<p class="mut" style="font-size:13px">Apri Google Authenticator, Microsoft Authenticator o Authy, scegli <b>Inserisci chiave</b> e scrivi questo codice:</p><div class="secret">${esc(r.secret.replace(/(.{4})/g, '$1 ').trim())}</div><div class="row"><input class="inp mono" id="tCode" inputmode="numeric" maxlength="6" placeholder="Codice a 6 cifre"><button class="btn pri" id="tConf">Conferma</button></div>`;
-      $('#tConf').onclick = async () => { try { await api('POST', '/admin/totp/enable', { code: $('#tCode').value }); toast('Verifica in due passaggi attivata'); await load(); } catch (e) { toast(e.message, 1); } };
-    } catch (e) { toast(e.message, 1); }
-  });
+  $('#tOn') && ($('#tOn').onclick = () => totpSetup(false));
   $('#tOff') && ($('#tOff').onclick = () => {
-    $('#totpBox').innerHTML = '<div class="row"><input class="inp" type="password" id="tPw" placeholder="Password" autocomplete="current-password"><input class="inp mono" id="tCode" maxlength="6" placeholder="Codice 2FA"></div><button class="btn sm danger" id="tOffC">Conferma disattivazione</button>';
-    $('#tOffC').onclick = async () => { try { await api('POST', '/admin/totp/disable', { password: $('#tPw').value, code: $('#tCode').value }); toast('Verifica in due passaggi disattivata'); await load(); } catch (e) { toast(e.message, 1); } };
+    tb.innerHTML = '<div class="row"><input class="inp" type="password" id="tPw" placeholder="Password" autocomplete="current-password"><input class="inp mono" id="tCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Codice 2FA"></div><button class="btn sm danger" id="tOffC">Conferma disattivazione</button> <a href="#" id="tCancel" class="mut" style="font-size:12.5px;margin-left:8px">Annulla</a>';
+    $('#tCancel').onclick = (e) => { e.preventDefault(); tb.innerHTML = ''; renderSecurity(); };
+    $('#tOffC').onclick = async () => { try { await api('POST', '/admin/totp/disable', { password: $('#tPw').value, code: $('#tCode').value }); tb.innerHTML = ''; toast('Verifica in due passaggi disattivata'); await load(); } catch (e) { toast(e.message, 1); } };
   });
+}
+/* configurazione con QR da inquadrare (fotocamera o app Password dell'iPhone, Google Authenticator…), tasto per aggiungerla
+   dal telefono stesso e chiave da copiare. La chiave resta la stessa finché non confermi («Chiave nuova» la cambia) */
+async function totpSetup(fresh) {
+  const tb = $('#totpBox');
+  try {
+    const r = await api('POST', '/admin/totp/setup', fresh ? { fresh: true } : {});
+    const key = String(r.secret || ''), grp = key.replace(/(.{4})/g, '$1 ').trim();
+    let qr = ''; try { qr = window.KXQR && r.uri ? KXQR.svg(r.uri, 4) : ''; } catch {}
+    // sul telefono il QR è sullo stesso schermo: prima il tasto che apre l'app dei codici (Password dell'iPhone, Google Authenticator)
+    const touch = matchMedia('(pointer:coarse)').matches, add = `<a class="btn sm${touch ? ' pri' : ''}" id="tUri" href="${esc(r.uri || '')}">Aggiungi al telefono</a>`;
+    const step1 = touch
+      ? `<p><b>1.</b> Tocca ${add}: si apre l'app dei codici (sull'iPhone <b>Password</b>, oppure Google Authenticator) e salvi il codice. Se non si apre nulla: <b>Copia chiave</b> qui sotto, poi app <b>Password</b> → il tuo accesso al pannello (oppure <b>+</b>) → <b>Imposta codice di verifica</b> → <b>Inserisci chiave di configurazione</b> e incolla.</p>`
+      : `<p><b>1. Sul telefono</b> aggiungi il codice inquadrando questo QR.<br><b>iPhone</b>: app <b>Password</b> → il tuo accesso al pannello (oppure <b>+</b>) → <b>Imposta codice di verifica</b> → <b>Scansiona codice QR</b>. Con <b>Google Authenticator</b>: <b>+</b> → <b>Scansiona un codice QR</b>.</p><p class="mut">Hai il pannello aperto sul telefono? ${add}</p>`;
+    tb.innerHTML = `<div class="tf">${qr && !touch ? `<div class="tf-qr">${qr}</div>` : ''}<div class="tf-t">
+      ${step1}
+      <p class="mut">Oppure scrivi la chiave a mano: <span class="secret tf-key">${esc(grp)}</span><button class="btn sm" id="tCopy" type="button">Copia chiave</button></p>
+      <p><b>2.</b> Scrivi qui il codice di 6 cifre che compare sul telefono e premi <b>Conferma</b>.</p>
+      <div class="row"><input class="inp mono" id="tCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Codice a 6 cifre"><button class="btn pri" id="tConf" type="button">Conferma</button></div>
+      <p class="mut tf-small">La chiave resta questa finché non confermi, anche se esci e torni. Salvala in un posto sicuro: serve se cambi telefono. <a href="#" id="tNew">Chiave nuova</a> · <a href="#" id="tCancel">Annulla</a></p>
+      ${qr && touch ? `<details class="tf-more"><summary class="mut">QR per un altro telefono</summary><div class="tf-qr">${qr}</div></details>` : ''}
+    </div></div>`;
+    $('#tCopy').onclick = () => navigator.clipboard.writeText(key).then(() => toast('Chiave copiata'), () => toast('Copia non consentita dal browser', 1));
+    $('#tNew').onclick = async (e) => { e.preventDefault(); if (await ask('Chiave nuova?', 'Quella di adesso smette di valere: sul telefono cancella la voce vecchia e aggiungi quella nuova.', 'Chiave nuova')) totpSetup(true); };
+    $('#tCancel').onclick = (e) => { e.preventDefault(); tb.innerHTML = ''; renderSecurity(); };
+    $('#tConf').onclick = async () => {
+      try { await api('POST', '/admin/totp/enable', { code: $('#tCode').value }); tb.innerHTML = ''; toast('Verifica in due passaggi attivata'); await load(); }
+      catch (e) { toast(/non valido/i.test(e.message || '') ? 'Codice non valido: sul telefono deve esserci la chiave di adesso (cancella le voci vecchie) e l\'ora del telefono deve essere automatica' : e.message, 1); }
+    };
+  } catch (e) { toast(e.message, 1); }
 }
 $('#killSes').onclick = async () => { try { await api('POST', '/admin/logout-all'); toast('Altre sessioni chiuse'); await load(); } catch (e) { toast(e.message, 1); } };
 $('#aSave').onclick = async () => { try { await api('PUT', '/admin/password', { user: $('#aUser').value.trim(), current: $('#aCur').value, next: $('#aNew').value }); $('#aCur').value = $('#aNew').value = ''; toast('Credenziali aggiornate'); } catch (e) { toast(e.message, 1); } };
