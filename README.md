@@ -793,3 +793,30 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
   
   Il pulsante compare solo a chi può gestire i pagamenti.
 - **Test**: `ui_scadenze`, 31 controlli.
+
+## 44. «Tutti i pannelli» e ricerca che porta alla scheda della linea (10 novembre 2026)
+
+- **Linee IPTV → «🌐 Tutti i pannelli»**: è la prima scheda, prima di WOLF, e la vede solo il titolare (`allpanels.js`).
+  - **Riquadri da cliccare**:
+    - **Online ora** (collegate adesso);
+    - **Quasi scadute** (4 giorni o meno);
+    - **Scadute**;
+    - **Tutte le linee**.
+  - **Sotto c'è un elenco unico** con le linee di WOLF, Armada, Storm, Atlantix, Realott e SLT. Per ogni linea:
+    - pannello;
+    - utente e nome del cliente, colorati come nelle liste;
+    - scadenza con «tra N g»;
+    - stato, e per chi è collegato cosa sta guardando;
+    - bollino del pagamento.
+  - Ci sono anche la ricerca e il filtro per pannello.
+  - **Toccando una riga** si apre la linea nel suo pannello: la lista si restringe su di lei e la riga si evidenzia.
+  - **Solo letture**, le stesse delle schede dei pannelli e di «Online ora terzi». Per Armada e Storm «collegato» è il controllo delle connessioni attive di sempre. Black IPTV non c'è.
+  - I dati restano 2 minuti; «Aggiorna» li rilegge. Gli agenti non vedono la scheda.
+- **Ricerca «presente in N pannelli»** (sotto la casella di ricerca dei pannelli):
+  - il nome del pannello aperto ora si può toccare: la lista si restringe su quella linea e la sua riga si evidenzia;
+  - i nomi degli altri pannelli aprono quel pannello e evidenziano la riga.
+  
+  Vale anche per «Cerca ovunque».
+- **Clienti**: la riga «Scadono entro 4 · 7 · 14 · 30 giorni» ora sta sotto i riquadri, anche sul telefono.
+- **Non fatto, per scelta**: note e scadenze scritte in KAIROS non vengono copiate da sole su WOLF, Atlantix, Realott e SLT. Quei pannelli non hanno un'API ufficiale, e per la scadenza servirebbe rinnovare, cioè spendere crediti. Il verso opposto c'è già: il cliente KAIROS «allineato» prende la scadenza dal pannello.
+- **Test**: `ui_allpanels` (20 controlli), `ui_scadenze` (32).

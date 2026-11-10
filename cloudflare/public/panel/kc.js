@@ -254,7 +254,7 @@
 .dv-tile:hover{background:rgba(255,255,255,.06)}.dv-tile i{font-style:normal;font-size:20px;width:40px;height:40px;display:grid;place-items:center;border-radius:12px;background:rgba(255,255,255,.06);flex:none}
 .dv-tile b{display:block;font-size:24px;line-height:1}.dv-tile em{display:block;font-style:normal;font-weight:700;font-size:14px;margin-top:3px}.dv-tile small{display:block;color:var(--mut);font-size:11.5px}
 .dv-tile.on{border-color:rgba(255,90,60,.55);background:linear-gradient(135deg,rgba(255,60,60,.16),rgba(255,255,255,.03));box-shadow:0 0 24px rgba(255,60,60,.12)}
-.dv-soon{grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:-2px}.dv-soon>span{color:var(--mut);font-size:13px;margin-right:2px}.dv-soon .fchip{margin:0}
+.dv-soon{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-4px 0 14px}.dv-soon>span{color:var(--mut);font-size:13px;margin-right:2px}.dv-soon .fchip{margin:0}
 .dv-tile.pending b{color:#ffd37a}.dv-tile.soon b{color:#ffd37a}.dv-tile.expired b,.dv-tile.disabled b{color:#ff8f96}.dv-tile.active b{color:#7ef0ab}
 .dv-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .dv-q{flex:1;min-width:240px;position:relative}.dv-q svg{position:absolute;left:14px;top:50%;width:18px;height:18px;transform:translateY(-50%);color:var(--mut)}.dv-q .inp{margin:0;padding-left:42px}
@@ -1042,7 +1042,7 @@
   /* ---------- Dispositivi (2.0): riquadri-filtro, clienti in schede, dispositivi da attivare in evidenza ---------- */
   (function devicesCards() {
     const V = $('#v-devices'); if (!V) return;
-    V.insertAdjacentHTML('afterbegin', `<div class="dv-tiles" id="dvTiles"></div>
+    V.insertAdjacentHTML('afterbegin', `<div class="dv-tiles" id="dvTiles"></div><div id="dvSoon"></div>
       <div class="dv-bar"><div class="dv-q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input class="inp" id="dvQ" placeholder="Cerca per nome, codice, note o modello"></div>
         <select class="inp" id="dvSort"><option value="exp">Scadenza più vicina</option><option value="name">Nome A–Z</option><option value="seen">Ultimo accesso</option><option value="new">Aggiunti di recente</option></select>
         <button class="btn" id="dvMass" type="button" title="Cambia lettore, permessi, VPN… a tanti clienti insieme" style="display:none">⚙ Modifica in massa</button><div class="seg" id="dvView"><button data-dv="cards" title="Schede grandi: comode con pochi clienti">Schede</button><button data-dv="table" title="Tabella compatta con azioni rapide e selezione multipla: comoda con tanti clienti">Tabella</button><button data-dv="list" title="Elenco semplice di prima">Elenco</button></div></div>
@@ -1207,8 +1207,8 @@
         : `<div class="card glass dv-pend"><div class="hd"><h3>🆕 Da attivare <span class="cnt">${pend.length}</span><small>Il cliente apre l'app e ti legge il codice: premi <b>Attiva</b>, scegli durata e playlist. Se è una TV in più di un cliente che hai già, usa <b>Collega a un cliente</b>.</small></h3>${pendTools(pend)}</div><div class="dv-pgrid">${pend.slice(0, 24).map(pendCard).join('')}</div></div>`;
       $('#dvPend').innerHTML = pendingHtml;
       const sd = kxSoonDays();
-      $('#dvTiles').innerHTML = TILES.map(([k, l, ic, sub]) => `<button class="dv-tile ${k} ${f === k && !(codeOnly && k === 'pending') ? 'on' : ''}" data-fl2="${k}"><span><b>${D.devices.filter((d) => fit(d, k)).length}</b><em>${l}</em><small>${k === 'soon' ? `Entro ${sd} giorni` : sub}</small></span></button>`).join('')
-        + (f === 'soon' ? `<div class="dv-soon"><span>Scadono entro</span>${SOON_OPTS.map((n) => `<button type="button" class="fchip ${sd === n ? 'on' : ''}" data-soon="${n}">${n} giorni</button>`).join('')}</div>` : '');
+      $('#dvTiles').innerHTML = TILES.map(([k, l, ic, sub]) => `<button class="dv-tile ${k} ${f === k && !(codeOnly && k === 'pending') ? 'on' : ''}" data-fl2="${k}"><span><b>${D.devices.filter((d) => fit(d, k)).length}</b><em>${l}</em><small>${k === 'soon' ? `Entro ${sd} giorni` : sub}</small></span></button>`).join('');
+      $('#dvSoon').innerHTML = f === 'soon' ? `<div class="dv-soon"><span>Scadono entro</span>${SOON_OPTS.map((n) => `<button type="button" class="fchip ${sd === n ? 'on' : ''}" data-soon="${n}">${n} giorni</button>`).join('')}</div>` : '';
       $$('#dvView [data-dv]').forEach((b) => b.classList.toggle('on', b.dataset.dv === st.view));
       V.classList.toggle('dv-cardsview', st.view !== 'list');
       if (st.view === 'list') { if (!codeOnly) $('#dvPend').innerHTML = ''; $('#dvCards').innerHTML = $('#dvMore').innerHTML = $('#dvTbl').innerHTML = ''; bulkBar(); return; }

@@ -14,7 +14,11 @@
 .ox-it{display:flex;gap:10px;align-items:center;padding:8px 10px;border-radius:10px;cursor:pointer}.ox-it.on,.ox-it:hover{background:#ffffff12}
 .ox-it i{font-style:normal;flex:none;min-width:34px;text-align:center;font-size:10.5px;font-weight:800;padding:3px 6px;border-radius:7px;background:#4f8cff26;color:#8fb3ff}
 .ox-it b{font-weight:700}.ox-it small{display:block;color:var(--mut);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:470px}
-.ox-mut{padding:10px;color:var(--mut);font-size:13px}`;
+.ox-mut{padding:10px;color:var(--mut);font-size:13px}
+.kx-hl{animation:kxHl 4s ease-out;border-radius:12px}tr.kx-hl>td{animation:kxHlBg 4s ease-out}
+@keyframes kxHl{0%,40%{box-shadow:0 0 0 2px #fbbf24,0 0 26px rgba(251,191,36,.45);background:rgba(251,191,36,.08)}100%{box-shadow:0 0 0 0 transparent;background:transparent}}
+@keyframes kxHlBg{0%,40%{background:rgba(251,191,36,.16)}100%{background:transparent}}
+@media (prefers-reduced-motion:reduce){.kx-hl,tr.kx-hl>td{animation-duration:.01s}}`;
   document.head.appendChild(css);
   const wrap = gq.parentElement; wrap.style.position = 'relative';
   const dd = document.createElement('div'); dd.className = 'ox-dd'; wrap.appendChild(dd);
@@ -105,6 +109,26 @@
     const L = await loadExt(); if (my !== seq) return;
     draw([...base, ...extOf(L)], false);
   }
+  /* la «scheda» della linea: porta in vista la sua riga nel pannello e la evidenzia per un attimo */
+  async function focusLine(p, name, again) {
+    const want = String(name || '').trim().toLowerCase(); if (!want) return false;
+    await new Promise((r) => setTimeout(r, 300)); // il pannello ridisegna la lista dopo la ricerca: prima si aspetta quella
+    for (let i = 0; i < 25; i++) {
+      const v = document.getElementById('v-' + p);
+      const el = v && [...v.querySelectorAll('b, .mono, code')].find((e) => e.offsetParent && e.textContent.trim().toLowerCase() === want);
+      if (el) {
+        let row = el.closest('.wf-row, .ar-row, .mx-row, tr, .card') || el;
+        if (row.getBoundingClientRect().height > 420) row = el.parentElement || el;
+        row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        row.classList.remove('kx-hl'); void row.offsetWidth; row.classList.add('kx-hl');
+        setTimeout(() => row.classList.remove('kx-hl'), 4200);
+        if (!again) setTimeout(() => { if (!row.isConnected) focusLine(p, name, true); }, 900); // lista ridisegnata di nuovo: si rievidenzia
+        return true;
+      }
+      await new Promise((r) => setTimeout(r, 160));
+    }
+    return false;
+  }
   const IN = { wolf: '#wfQ', armada: '#v-armada #arQ', storm: '#v-storm #arQ', mxp: '#mxQ', oxp: '#oxQ', atx: '#axQ', ro: '#exQ', slt: '#exQ', orcp: '#orQ' };
   async function pick(x) {
     if (!x) return;
@@ -121,9 +145,10 @@
       await new Promise((r) => setTimeout(r, 150));
     }
     document.querySelectorAll('[data-ox-done]').forEach((t) => delete t.dataset.oxDone);
+    focusLine(x.p, x.t || x.q);
   }
   /* per la ricerca incrociata nelle schede dei pannelli (xsearch.js): stesse liste, stessa apertura del risultato */
-  window.KXOmni = { preload: () => loadExt().catch(() => []), find: async (q) => { const toks = String(q || '').toLowerCase().split(/\s+/).filter(Boolean); if (!toks.length) return []; const L = await loadExt(); return L.filter((x) => fits(x.hay, toks)); }, pick: (x) => pick({ ...x, k: 'ext' }), names: Object.fromEntries(PK0.map((k, i) => [k, PN0[i]])) };
+  window.KXOmni = { preload: () => loadExt().catch(() => []), find: async (q) => { const toks = String(q || '').toLowerCase().split(/\s+/).filter(Boolean); if (!toks.length) return []; const L = await loadExt(); return L.filter((x) => fits(x.hay, toks)); }, pick: (x) => pick({ ...x, k: 'ext' }), focus: focusLine, names: Object.fromEntries(PK0.map((k, i) => [k, PN0[i]])) };
   let tmr = 0;
   gq.addEventListener('input', () => { clearTimeout(tmr); sel = 0; tmr = setTimeout(search, 120); });
   gq.addEventListener('focus', () => { if (gq.value.trim()) search(); });
