@@ -1777,10 +1777,14 @@ const GET_APK = {
   lite: ['kairos-lite/releases/latest/download/kairos-lite.apk', 'kairos-lite.apk'],
   nova: ['Lairos-nova/releases/download/latest/KairosNova-arm64.apk', 'kairos-nova.apk'],
   'nova-arm32': ['Lairos-nova/releases/download/latest/KairosNova-arm32.apk', 'kairos-nova-arm32.apk'],
+  // Kairos Portal e Kairos Smart (11 novembre 2026): un solo repository privato, due APK nella stessa release.
+  // Servono il segreto GH_TOKEN e il repository aggiunto al token dei download; finché manca, qui risponde 502
+  portal: ['kairos-portal-smart/releases/latest/download/kairos-portal.apk', 'kairos-portal.apk'],
+  smart: ['kairos-portal-smart/releases/latest/download/kairos-smart.apk', 'kairos-smart.apk'],
 };
 /** feed degli aggiornamenti (/get/<id>.json): file della stessa release dell'APK di GET_APK[id]. Lo store non ne ha uno:
  *  si ricava dalla sua ultima release (tag v1.0.N con KairosStore.apk) */
-const GET_FEED = { tv: 'kairos-tv.json', premium: 'kairos-premium.json', lite: 'kairos-lite.json', xc: 'kairos-xc.json', ult: 'kairos-ultimate.json', plus: 'kairos-plus.json', nova: 'kairos-nova.json', pro: 'kairos-tv.json', store: '' };
+const GET_FEED = { tv: 'kairos-tv.json', premium: 'kairos-premium.json', lite: 'kairos-lite.json', xc: 'kairos-xc.json', ult: 'kairos-ultimate.json', plus: 'kairos-plus.json', nova: 'kairos-nova.json', pro: 'kairos-tv.json', store: '', portal: 'kairos-portal.json', smart: 'kairos-smart.json' };
 const STORE_PAGES = `https://${GH_OWNER}.github.io/kairos-store/`;
 const GH_UA = 'KairosPanel', GH_API = 'https://api.github.com', GH_V = '2022-11-28';
 const hasKey = (o, k) => Object.prototype.hasOwnProperty.call(o, k);

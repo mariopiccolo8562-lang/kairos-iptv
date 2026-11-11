@@ -1122,3 +1122,14 @@ Quando la linea raggiunge quella data si torna a seguire la linea. Clienti illim
 - **A prova di guasto**: dopo 6 domande di fila senza risposta l'interfaccia si chiude e torna il DNS normale, con un nuovo tentativo dopo 10 minuti. Con la VPN del fornitore accesa resta spento (il DNS passa già nel tunnel); se sul dispositivo c'è un'altra VPN non la tocca. Android chiede il permesso una volta, con la finestra della VPN.
 - L'app mostra lo stato nelle Impostazioni («DNS cifrato · scelto dal tuo fornitore») e lo manda nel battito (`sdns`: `on`, `asking`, `denied`, `error`, `other`, `off`, `vpn`).
 - **Test**: `srv_sdns` (34), `ui_sdns` (9); nelle app `DnsWireTest` (lettura della domanda, costruzione della risposta, somma di controllo).
+
+## 67. Kairos Portal e Kairos Smart: indirizzi di scarico (11 novembre 2026)
+
+- Due app nuove in un solo repository **privato** (`kairos-portal-smart`): stesso motore di Kairos XC, due interfacce.
+- **Indirizzi**: `/get/portal.apk` e `/get/smart.apk`, file degli aggiornamenti `/get/portal.json` e `/get/smart.json`
+  (tabelle `GET_APK` e `GET_FEED` in `worker.js`). Le due app si aggiornano da sole da lì, come le altre.
+- Il repository è privato: serve il segreto `GH_TOKEN` del Worker con **`kairos-portal-smart` aggiunto al token dei download**.
+  Finché manca (o finché non c'è una release) gli indirizzi rispondono 502, senza dettagli.
+- Per ora è solo lo scarico: il pannello non riconosce ancora le due app (si presentano come una Kairos XC, di cui hanno il
+  motore), non hanno schede di impostazioni né riquadri nello Store.
+- **Test**: `srv_get_portal` (17).
