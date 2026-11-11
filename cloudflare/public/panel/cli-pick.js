@@ -57,7 +57,7 @@
     const why = !full ? '' : need > lim ? (isAg() ? `${c.name} ha già ${c.used} di ${c.max} dispositivi e il tuo limite è ${lim} per cliente: chiedi al titolare di aumentarlo, oppure scegli un altro cliente.` : `${c.name} avrebbe ${need} dispositivi: il massimo è ${MAX}.`) : isAg() && c.max > lim ? `I dispositivi di ${c.name} li ha decisi il titolare: chiedi a lui.` : '';
     return { c, used: c.used, max: c.max, need, full, canGrow, growOn: s.growOn, why, cap: lim };
   }
-  const label = (c, s) => c ? `${esc(c.name)}<small>${esc(c.code)}${s && !s.grow ? (c.kid ? ' · collegato a ' + esc(c.kid) : '') : ` · ${c.used} di ${c.max} ${c.max === 1 ? 'dispositivo' : 'dispositivi'}`}</small>`
+  const label = (c, s) => c ? `${esc(c.name)}<small>${esc(c.code)}${s && !s.grow ? (c.kid ? ' · collegato a ' + esc(c.kid) : '') : ` · ${c.max >= 999 ? `${c.used} ${c.used === 1 ? 'dispositivo' : 'dispositivi'} · illimitati` : `${c.used} di ${c.max} ${c.max === 1 ? 'dispositivo' : 'dispositivi'}`}`}</small>`
     : s && s.none ? '— nessuno —' : 'Scegli il cliente…';
   function growHtml(id) {
     if (!st(id).grow) return '';
@@ -76,7 +76,7 @@
     return [...none, ...cut].map((x, i) => {
       if (x.none) return `<button type="button" class="cp-it${!s.value ? ' on' : ''}${i === s.kb ? ' kb' : ''}" role="option" data-cp="" aria-selected="${!s.value}"><b>— nessuno —</b><small class="cp-s">togli il collegamento</small></button>`;
       const full = s.grow && x.used + s.add > x.max;
-      const badge = s.grow ? `<span class="cp-n${full ? ' full' : ''}">${x.used} di ${x.max}${full ? ' · pieno' : ''}</span>` : x.kid ? '<span class="cp-n">collegato</span>' : '<span></span>';
+      const badge = s.grow ? `<span class="cp-n${full ? ' full' : ''}">${x.max >= 999 ? `${x.used} · ∞` : `${x.used} di ${x.max}`}${full ? ' · pieno' : ''}</span>` : x.kid ? '<span class="cp-n">collegato</span>' : '<span></span>';
       return `<button type="button" class="cp-it${x.id === s.value ? ' on' : ''}${i === s.kb ? ' kb' : ''}" role="option" data-cp="${esc(x.id)}" aria-selected="${x.id === s.value}"><b>${esc(x.name)}</b>${badge}<small class="cp-s"><span class="mono">${esc(x.code)}</span> · ${x.kid ? 'collegato a ' + esc(x.kid) + ' · ' : ''}${stTxt(x)}${x.ag ? ' · 👤 ' + esc(x.ag) : ''}</small></button>`;
     }).join('') + (L.length > cut.length ? `<div class="cp-more">… altri ${L.length - cut.length}: scrivi per cercare</div>` : '');
   }

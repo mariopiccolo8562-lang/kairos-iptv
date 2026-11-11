@@ -1013,5 +1013,14 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
 ## 57. «App consigliata» dello Store: scheda del dispositivo, app per memoria e XC sulle chiavette deboli (11 novembre 2026)
 
 - **Pannello** (Download store → App consigliata): l'app per le chiavette deboli di serie è **Kairos-XC** (dove era salvata Kairos Tv, una volta sola diventa Kairos-XC; poi vale la scelta del titolare). Nuova voce **«Memoria richiesta da ogni app»**: di serie XC 512 MB · Tv 1 GB · Lite 1 GB · Premium 1,5 GB · Plus 1,5 GB · Pro 2 GB (`store.js`, `recommend.mem`).
-- **Store** (kairos-store, 1.0.134): sotto l'app consigliata la scheda del dispositivo e le app Kairos dalla più leggera, con ✓/✗ secondo la memoria.
+- **Store** (kairos-store, 1.0.134, pubblicato come 1.0.135): sotto l'app consigliata la scheda del dispositivo e le app Kairos dalla più leggera, con ✓/✗ secondo la memoria.
 - **Test**: `srv_store_rec` (7 controlli), `ui_store_rec` (5).
+
+## 58. Dispositivi scelti dal titolare e «Illimitati» (11 novembre 2026)
+
+- **«➕ Aggiungi un dispositivo»** (`add-dev.js`): al posto della spunta «Aumenta i dispositivi a N» c'è **«📱 Dispositivi di …»** con l'elenco: dal minimo che serve (cliente pieno) o da quelli di adesso fino a 20, più **«♾️ Illimitati»**. La scelta si applica dopo il collegamento (se il collegamento non riesce non cambia nulla) oppure subito, prima del codice a 6 cifre. L'agente sceglie solo fino al suo tetto («Connessioni per cliente»), senza «Illimitati».
+- **Illimitati = 999** nel server (`CONN_UNLIM`, `connIn`): `maxConn` accetta da 1 a 20, 999 o `'unlim'`; i controlli «usati + 1 > massimo» restano quelli di sempre. Solo il titolare (anche con la chiave API); per l'agente 999 si ferma al suo tetto. Nei registri «(23, illimitati)» invece di «23 di 999».
+- **Scheda del cliente** (`app.js`): «Connessioni massime» è un elenco 1-20 più «Illimitate»; nelle righe, nelle schede e nella scelta del cliente compare **∞** («2/∞», «2 dispositivi · illimitati»).
+- **Agente**: se il titolare ha deciso connessioni oltre il suo tetto (anche illimitate), nella scheda le vede come «decise dal titolare» e può salvare il resto (prima il salvataggio veniva rifiutato).
+- **App**: mostrano ancora «2 di 999» finché non arriva la versione che scrive «illimitati».
+- **Test**: `srv_conn_unlim` (15 controlli); `ui_add_dev` aggiornato (24).

@@ -1037,7 +1037,7 @@
       ['GET', '/devices/KXAB-12CD', 'Un dispositivo (codice o id)'],
       ['POST', '/devices', 'Crea un cliente: { code?, name, expires, active, playlists, maxConn, … }'],
       ['POST', '/devices/KXAB-12CD/kick', 'Disconnetti: interrompe la visione in corso entro ~20 s (l\'abbonamento resta attivo). Con ?all=1 anche i dispositivi collegati'],
-      ['PUT', '/devices/KXAB-12CD', 'Modifica: name, notes, expires, active, playlists, maxConn, maxStreams, maxProfiles, plMode, plDefault, player ({live, movie, series}: auto · exo · vlc · "" = sceglie il cliente), perms, vpn, vpnLoc'],
+      ['PUT', '/devices/KXAB-12CD', 'Modifica: name, notes, expires, active, playlists, maxConn (1-20, 999 = illimitati), maxStreams, maxProfiles, plMode, plDefault, player ({live, movie, series}: auto · exo · vlc · "" = sceglie il cliente), perms, vpn, vpnLoc'],
       ['POST', '/devices/KXAB-12CD/activate', 'Attiva: { months | days | expires | unlimited, playlists? }'],
       ['POST', '/devices/KXAB-12CD/extend', 'Rinnova dalla scadenza attuale: { months | days }'],
       ['POST', '/devices/KXAB-12CD/disable', 'Disattiva (enable per riattivare)'],
@@ -1132,7 +1132,7 @@
       const pct = dl === null ? 100 : Math.max(0, Math.min(100, (dl / tot) * 100));
       const tone = d.status !== 'active' ? 'bad' : dl !== null && dl <= 3 ? 'bad' : dl !== null && dl <= 14 ? 'warn' : 'ok';
       const name = d.name || '— senza nome —';
-      const info = [d.model || 'Modello sconosciuto', seenTxt(d), `${1 + kids.length}/${d.maxConn || 1} dispositivi`, (d.playlists || []).length ? (d.playlists || []).length + ((d.playlists || []).length === 1 ? ' playlist' : ' playlist') : 'nessuna playlist'];
+      const info = [d.model || 'Modello sconosciuto', seenTxt(d), `${1 + kids.length}/${+d.maxConn >= 999 ? '∞' : d.maxConn || 1} dispositivi`, (d.playlists || []).length ? (d.playlists || []).length + ((d.playlists || []).length === 1 ? ' playlist' : ' playlist') : 'nessuna playlist'];
       return `<div class="dv-card ${d.status}" data-id="${esc(d.id)}">
         <div class="dv-top"><div class="dv-n"><b>${liveDot(d)}${esc(name)}</b><span class="code">${esc(d.code)}</span></div>${stPill(d.status)}</div>
         <div class="dv-exp ${tone}"><span>${d.expires ? 'Scade il <b>' + esc(fmtD(d.expires)) + '</b>' : '<b>Senza scadenza</b>'}</span><em>${dl === null ? '' : dl < 0 ? 'scaduto da ' + -dl + ' giorni' : dl === 0 ? 'scade oggi' : dl === 1 ? 'domani' : 'tra ' + dl + ' giorni'}</em></div>
@@ -1210,7 +1210,7 @@
         <td><div class="dvt-u">${sub ? '<span class="dvt-sub">↳</span>' : ''}<div><b>${liveDot(d)}${esc(d.name || (sub ? d.model || 'Dispositivo' : '') || '— senza nome —')}</b><span class="dvt-code" data-copy="${esc(d.code)}" title="Copia il codice">${esc(d.code)} ${IC.copy}</span>${!sub && d.status === 'pending' && window.KXAddDev ? KXAddDev.nearHtml(d) : ''}</div></div></td>
         <td>${stPill(d.status)}</td>
         <td class="dvt-exp">${exp}${window.KXPay ? KXPay.badge('device', '', base.id) : ''}</td>
-        <td class="c mono">${sub || d.status === 'pending' ? '—' : `${1 + kids.length}/${esc(d.maxConn || 1)}`}</td>
+        <td class="c mono">${sub || d.status === 'pending' ? '—' : `${1 + kids.length}/${+d.maxConn >= 999 ? '∞' : esc(d.maxConn || 1)}`}</td>
         <td class="dvt-dev"><b>${esc(d.model || '—')}</b><small${d.live ? ' class="dvt-on"' : ''}>${esc(d.live ? 'collegato adesso' : ago(d.lastSeen))}</small></td>
         <td class="dvt-pl">${pls}</td>
         <td class="dvt-note" data-note="${esc(d.id)}">${d.notes ? `<span>${esc(d.notes.slice(0, 60))}</span>` : `<span class="mut">Aggiungi nota</span>`} ${IC.note}</td>

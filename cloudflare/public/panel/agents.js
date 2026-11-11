@@ -1267,7 +1267,7 @@ body.agent .foot{display:none}
         <label class="lbl">Scadenza</label><input class="inp" type="date" id="cExp" value="${esc(e.expires)}" ${roExp ? 'readonly' : ''}>
         ${canLineSync ? '<div id="cSyncInfo"></div>' : ''}
         ${roExp ? '' : periodQuickRow('agent-exp')}
-        <label class="lbl">Connessioni (massimo ${P.maxConn || 1})</label><input class="inp" type="number" id="cConn" min="1" max="${P.maxConn || 1}" value="${Math.min(e.maxConn || 1, P.maxConn || 1)}"></div>
+        ${(e.maxConn || 1) > (P.maxConn || 1) ? `<label class="lbl">Connessioni</label><div class="inp" style="opacity:.8">${+e.maxConn >= 999 ? 'Illimitate' : esc(e.maxConn)} · decise dal titolare</div>` : `<label class="lbl">Connessioni (massimo ${P.maxConn || 1})</label><input class="inp" type="number" id="cConn" min="1" max="${P.maxConn || 1}" value="${Math.min(e.maxConn || 1, P.maxConn || 1)}">`}</div>
       ${lineaCard()}
       ${P.account ? `<div class="ag-c"><h4>Profili e visioni</h4><small>Quanti profili e quante visioni insieme</small>
         <div class="row"><div><label class="lbl">Profili massimi</label><input class="inp" type="number" id="cMaxP" min="0" max="10" value="${e.maxProfiles ?? 3}"></div><div><label class="lbl">Visioni insieme (0 = libere)</label><input class="inp" type="number" id="cMaxS" min="0" max="${P.maxConn || 1}" value="${e.maxStreams || 0}"></div></div></div>` : ''}

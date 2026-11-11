@@ -3292,6 +3292,18 @@ function addonsFor(s, P) {
 }
 const PROFILE_ID_RE = /^[a-z0-9]{4,12}$/;
 const MAX_CONN = 20, MAX_PROFILES = 12;
+// «Illimitati» (11 novembre 2026): dispositivi senza limite per cliente, solo dal titolare (gli agenti restano entro il loro
+// tetto «Connessioni per cliente»). È il numero 999: tutti i controlli «usati + 1 > massimo» restano quelli di sempre
+const CONN_UNLIM = 999;
+/** «3 di 5» per i registri, «3, illimitati» se non c'è limite */
+const connTxt = (used, max) => (max >= CONN_UNLIM ? `${used}, illimitati` : `${used} di ${max}`);
+/** connessioni massime scelte dal titolare: da 1 a [MAX_CONN] oppure «illimitati» ([CONN_UNLIM], anche come 'unlim') */
+const connIn = (v) => {
+  if (v === 'unlim' || v === 'illimitati' || Number(v) === CONN_UNLIM) return CONN_UNLIM;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_CONN) throw new HttpErr(400, `Connessioni massime: scegli un numero da 1 a ${MAX_CONN} oppure «Illimitati»`);
+  return n;
+};
 const intIn = (v, lo, hi, label) => { const n = Number(v); if (!Number.isInteger(n) || n < lo || n > hi) throw new HttpErr(400, `${label}: scegli un numero da ${lo} a ${hi}`); return n; };
 const nameClean = (v, max) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max).trim() : '');
 function newProfileId(taken) { const A = 'abcdefghijklmnopqrstuvwxyz0123456789'; let id; do id = [...rand(8)].map((x) => A[x % 36]).join(''); while (taken.has(id)); return id; }
@@ -3512,7 +3524,7 @@ async function playerLink(req, env, ip, ctx) {
   // il codice si usa una volta sola (se due dispositivi lo inviano insieme, solo uno lo ottiene)
   if (!(await env.DB.prepare('DELETE FROM link_pins WHERE pin_hash = ? AND until > ? RETURNING device_id').bind(h, now()).first())) return fail();
   await env.DB.prepare("UPDATE devices SET parent = ?, active = 0, expires = '', playlists = '', profiles = '', own = 0 WHERE id = ? AND parent = ''").bind(P.id, d.id).run();
-  ctx.waitUntil(log(env, 'on', `${d.code}${d.model ? ' (' + d.model + ')' : ''} collegato come connessione di ${P.name || P.code} (${used + 1} di ${max})`, ip));
+  ctx.waitUntil(log(env, 'on', `${d.code}${d.model ? ' (' + d.model + ')' : ''} collegato come connessione di ${P.name || P.code} (${connTxt(used + 1, max)})`, ip));
   return json({ ok: true });
 }
 /** in pannello: rende di nuovo "in attesa" un dispositivo collegato */
@@ -6496,7 +6508,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
         if (b.playlists !== undefined) { if (!P.playlists) throw new HttpErr(403, 'Non puoi cambiare le playlist'); o.playlists = plsFrom(b.playlists, await unseal(env, d.playlists).catch(() => [])); }
         // connessioni e visioni contano solo se l'agente le cambia davvero (il suo modulo le rimanda sempre): oltre il suo tetto le ha
         // decise il titolare e restano (prima a ogni salvataggio scendevano al tetto, o con più TV collegate il salvataggio falliva)
-        const capped = (v, cur, min, what) => { const n = Math.max(min, parseInt(v, 10) || min); if (n === cur) return undefined; if (cur > P.maxConn) throw new HttpErr(403, `${what} di questo cliente (${cur}) le ha decise il titolare: chiedile a lui`); return Math.min(P.maxConn, n); };
+        const capped = (v, cur, min, what) => { const n = Math.max(min, v === 'unlim' || v === 'illimitati' ? CONN_UNLIM : parseInt(v, 10) || min); if (n === cur) return undefined; if (cur > P.maxConn) throw new HttpErr(403, `${what} di questo cliente (${cur >= CONN_UNLIM ? 'illimitate' : cur}) le ha decise il titolare: chiedile a lui`); return Math.min(P.maxConn, n); };
         if (b.maxConn !== undefined) { const n = capped(b.maxConn, d.max_conn ?? 1, 1, 'Le connessioni'); if (n !== undefined) o.maxConn = n; }
         if (b.addons !== undefined) { if (!Array.isArray(b.addons)) throw new HttpErr(400, 'addons deve essere un elenco'); const keep = addonsList(d.addons).filter((x) => !allowedAddons.has(x)); o.addons = [...keep, ...addonsList(b.addons).filter((x) => allowedAddons.has(x))]; }
         if (b.perms !== undefined) { if (!P.clientPerms) throw new HttpErr(403, 'Non puoi cambiare i permessi dell\'app'); o.perms = b.perms; }
@@ -7601,7 +7613,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       const used = await connCount(env, P), max = P.max_conn ?? 1;
       if (used >= max) throw new HttpErr(400, `Connessioni esaurite (${used} di ${max}): aumenta "Connessioni massime"`);
       const r = await issuePin(env, P);
-      await log(env, 'edit', `${who}: codice di collegamento generato per ${label} (${used} di ${max} connessioni)`, ip);
+      await log(env, 'edit', `${who}: codice di collegamento generato per ${label} (${max >= CONN_UNLIM ? `${used} connessioni, illimitate` : `${used} di ${max} connessioni`})`, ip);
       return json(r);
     }
     if (dm[2] === '/unlink' && m === 'POST') {
@@ -7634,7 +7646,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       if (growTo) await env.DB.prepare('UPDATE devices SET max_conn = MAX(COALESCE(max_conn, 1), ?) WHERE id = ?').bind(growTo, P.id).run();
       if (move) await env.DB.batch([...kids.map((k) => env.DB.prepare('UPDATE devices SET parent = ? WHERE id = ? AND parent = ?').bind(P.id, k.id, d.id)), env.DB.prepare('DELETE FROM link_pins WHERE device_id = ?').bind(d.id)]);
       if (myPls.length) srcMem.map = null;
-      await log(env, 'on', `${who}: ${name || label} ${move ? 'messo sotto' : 'collegato come connessione di'} ${P.name || P.code} (${used + add} di ${growTo || max}${growTo ? `, dispositivi portati da ${max} a ${growTo}` : ''})${kids.length ? ` con le sue ${kids.length} connessioni` : ''}${keep ? ', linee sue' : ''}`, ip);
+      await log(env, 'on', `${who}: ${name || label} ${move ? 'messo sotto' : 'collegato come connessione di'} ${P.name || P.code} (${connTxt(used + add, growTo || max)}${growTo ? `, dispositivi portati da ${max} a ${growTo}` : ''})${kids.length ? ` con le sue ${kids.length} connessioni` : ''}${keep ? ', linee sue' : ''}`, ip);
       return json({ ok: true, ...(growTo ? { grown: growTo } : {}) });
     }
     if (m === 'PUT' && d.parent) {
@@ -7919,7 +7931,7 @@ async function deviceOut(env, d) {
 /** campi "account" inviati dal pannello: connessioni, profili, VPN (cur = valori attuali del dispositivo) */
 async function accountFields(env, b, cur, pls) {
   const o = { max_conn: cur.max_conn ?? 1, max_profiles: cur.max_profiles ?? 3, lock_profiles: cur.lock_profiles ? 1 : 0, vpn: +cur.vpn || 0, vpn_conf: cur.vpn_conf || '', profiles: cur.profiles || '' };
-  if (b.maxConn !== undefined) o.max_conn = intIn(b.maxConn, 1, MAX_CONN, 'Connessioni massime');
+  if (b.maxConn !== undefined) o.max_conn = connIn(b.maxConn);
   if (b.maxProfiles !== undefined) o.max_profiles = intIn(b.maxProfiles, 0, MAX_PROFILES, 'Profili massimi');
   if (typeof b.lockProfiles === 'boolean') o.lock_profiles = b.lockProfiles ? 1 : 0;
   if (b.vpn !== undefined) { const v = Number(b.vpn); if (![0, 1, 2].includes(v)) throw new HttpErr(400, 'Modalità VPN non valida'); o.vpn = v; }

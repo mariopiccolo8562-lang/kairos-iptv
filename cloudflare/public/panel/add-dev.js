@@ -5,8 +5,10 @@
      l'agente solo quelle della stessa rete di un suo cliente (GET /admin/devices/near?for=…). Si aggiorna ogni 5 secondi;
    - «Codice della TV» (KXAB-12CD) se la TV non è nell'elenco;
    - «Codice a 6 cifre» se la TV è a casa del cliente: lo scrive sulla TV nuova («Ho già un abbonamento»), vale 10 minuti.
-   Se il cliente ha già tutti i dispositivi, si aumentano da soli di quelli che servono (spunta accesa), fino a 20 per il
-   titolare e fino a «Connessioni per cliente» per l'agente. Titolare e agenti con «Collegare altri dispositivi».
+   «📱 Dispositivi di …» (11 novembre 2026, sera): quanti dispositivi avrà il cliente li sceglie chi collega, dal minimo che
+   serve (se è pieno) fino a 20, oppure «Illimitati» (solo il titolare: 999, vedi CONN_UNLIM nel server); l'agente fino a
+   «Connessioni per cliente». Si applicano insieme al collegamento (o prima del codice a 6 cifre). Titolare e agenti con
+   «Collegare altri dispositivi».
    Nell'elenco «Da attivare» (solo titolare) ogni TV della stessa rete di un cliente mostra «🏠 Casa di …» con «Collega».
    Usa app.js ($, esc, api, toast, ask, D, load, renderDevices). */
 (() => {
@@ -22,13 +24,19 @@
 #adOv .ad-pin{font-size:38px;font-weight:800;letter-spacing:.25em;text-align:center;margin:8px 0 2px}#adOv .ad-empty{color:var(--mut);font-size:13px;padding:6px 2px}
 #adOv .ad-warn{padding:9px 12px;border-radius:12px;border:1px solid rgba(245,158,11,.45);background:rgba(245,158,11,.1);color:#fcd34d;font-size:13px;margin-top:10px}
 #adOv .tog{margin-top:10px}
+#adOv .ad-max{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 12px;border:1px solid rgba(34,211,238,.35);border-radius:12px;margin-top:10px;background:rgba(34,211,238,.06)}
+#adOv .ad-max>div{flex:1 1 220px;min-width:0}#adOv .ad-max b{display:block;font-size:14px}#adOv .ad-max small{display:block;color:var(--mut);font-size:12px;margin-top:2px}
+#adOv .ad-max select{width:auto;min-width:170px;margin:0;flex:0 0 auto}
 .dvt-ib.a{color:#22d3ee;border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.08)}
 .ad-near{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap;margin-top:6px;font-size:12.5px;color:#86efac}.ad-near b{color:#bbf7d0}.ad-near span{white-space:nowrap}
 .dvt .ad-near{margin:4px 0 0;flex-direction:column;align-items:flex-start}.dvt .ad-near .btn{padding:4px 10px;font-size:12px}
 .dvt .ad-near span,.dvt .ad-near b{display:inline;white-space:nowrap;font-size:12.5px;margin:0}`;
   document.head.appendChild(css);
 
-  const MAX = 20;
+  const MAX = 20, UNLIM = 999;
+  const unl = (m) => +m >= UNLIM;
+  /** «2 di 3 dispositivi» oppure «2 dispositivi · illimitati» */
+  const nTxt = (used, max) => (unl(max) ? `${used} ${used === 1 ? 'dispositivo' : 'dispositivi'} · illimitati` : `${used} di ${max} ${max === 1 ? 'dispositivo' : 'dispositivi'}`);
   const isAg = () => typeof D === 'object' && D && D.role === 'agent';
   const perms = () => ((typeof D === 'object' && D && D.me) || {}).perms || {};
   const can = () => typeof D === 'object' && D && !window.__assist && (!isAg() || !!perms().link);
@@ -39,15 +47,31 @@
   const codeNorm = (v) => { let c = String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); if (c.length === 8) c = c.slice(0, 4) + '-' + c.slice(4); return c; };
   const reload = async () => { try { if (typeof load === 'function') await load(); } catch {} };
 
-  let S = null; // finestra aperta: { c, tvs, err, grow, pin, busy, timer }
+  let S = null; // finestra aperta: { c, tvs, err, want, pin, busy, timer }
   const counts = () => { const c = S.c, used = 1 + kids(c.id), max = +c.maxConn || 1; return { used, max, need: used + 1, full: used + 1 > max }; };
-  function growHtml() {
-    const g = counts(); if (!g.full) return '';
-    if (g.need > cap()) return `<div class="ad-warn">⚠️ ${esc(S.c.name || S.c.code)} ha già ${g.used} di ${g.max} dispositivi e ${isAg() ? `il tuo limite è ${cap()} per cliente: chiedi al titolare di aumentarlo.` : `il massimo è ${MAX}.`}</div>`;
-    if (isAg() && g.max > cap()) return `<div class="ad-warn">⚠️ I dispositivi di ${esc(S.c.name || S.c.code)} li ha decisi il titolare: chiedi a lui di aumentarli.</div>`;
-    return `<div class="tog${S.grow ? ' on' : ''}" data-adgrow><div><b>Aumenta i dispositivi a ${g.need}</b><small>${esc(S.c.name || S.c.code)} ha già ${g.used} di ${g.max} ${g.max === 1 ? 'dispositivo' : 'dispositivi'}: lo faccio insieme al collegamento.</small></div><i></i></div>`;
+  /** dispositivi che si possono scegliere per il cliente: dal minimo che serve (o da quelli di adesso) fino al tetto,
+   *  e per il titolare anche «Illimitati»; nessuna scelta se sono già illimitati o li ha decisi il titolare oltre il tetto dell'agente */
+  function choices(g) {
+    if (unl(g.max) || (isAg() && g.max > cap())) return [];
+    const out = [];
+    for (let k = g.full ? g.need : g.max; k <= cap(); k++) out.push(k);
+    if (!isAg()) out.push(UNLIM);
+    return out;
   }
-  const blocked = () => { const g = counts(); return g.full && (g.need > cap() || (isAg() && g.max > cap()) || !S.grow); };
+  /** scelta della finestra; di serie quelli che servono (cliente pieno) o quelli di adesso */
+  const want = (g) => { const ch = choices(g); return ch.includes(+S.want) ? +S.want : ch.length ? ch[0] : g.max; };
+  function growHtml() {
+    const g = counts(), nm = esc(S.c.name || S.c.code);
+    if (unl(g.max)) return `<div class="ad-max"><div><b>📱 Dispositivi di ${nm}: illimitati</b><small>ne usa ${g.used}: puoi collegarne quanti vuoi</small></div></div>`;
+    if (isAg() && g.full && g.need > cap()) return `<div class="ad-warn">⚠️ ${nm} ha già ${g.used} di ${g.max} dispositivi e il tuo limite è ${cap()} per cliente: chiedi al titolare di aumentarlo.</div>`;
+    if (isAg() && g.max > cap()) return g.full ? `<div class="ad-warn">⚠️ I dispositivi di ${nm} li ha decisi il titolare: chiedi a lui di aumentarli.</div>` : '';
+    const ch = choices(g), w = want(g);
+    const lbl = (k) => (unl(k) ? '♾️ Illimitati' : `${k} ${k === 1 ? 'dispositivo' : 'dispositivi'}${!g.full && k === g.max ? ' · come adesso' : ''}`);
+    const sub = g.full ? `ne ha già ${g.used} di ${g.max}: per collegarne un altro ne servono almeno ${g.need}${g.need > MAX ? ` (oltre ${MAX} solo «Illimitati»)` : ''}` : `ne usa ${g.used} di ${g.max}: se vuoi li aumenti insieme al collegamento`;
+    return `<div class="ad-max"><div><b>📱 Dispositivi di ${nm}</b><small>${sub}</small></div><select class="inp" id="adMax" aria-label="Dispositivi di ${nm}">${ch.map((k) => `<option value="${k}"${k === w ? ' selected' : ''}>${lbl(k)}</option>`).join('')}</select></div>`;
+  }
+  /** cliente pieno e nessuna scelta che basti (agente oltre il suo tetto) */
+  const blocked = () => { const g = counts(); return g.full && !choices(g).length; };
   function tvsHtml() {
     if (!S.tvs) return '<div class="ad-empty">Cerco le TV in attesa…</div>';
     if (!S.tvs.length) return `<div class="ad-empty">${isAg() ? 'Nessuna TV nuova dalla stessa rete di questo cliente.' : 'Nessuna TV in attesa.'} Sulla TV nuova apri l'app: compare un codice e la TV appare qui da sola. Oppure usa una delle strade qui sotto.</div>`;
@@ -55,7 +79,7 @@
   }
   function html() {
     const g = counts(), c = S.c;
-    return `<div class="ad-box" role="dialog" aria-modal="true" aria-labelledby="adT"><div class="ad-hd"><h3 id="adT">➕ Aggiungi un dispositivo a ${esc(c.name || c.code)}<small><span class="mono">${esc(c.code)}</span> · ${g.used} di ${g.max} ${g.max === 1 ? 'dispositivo' : 'dispositivi'}</small></h3><button type="button" class="btn sm" data-adx title="Chiudi">✕</button></div>
+    return `<div class="ad-box" role="dialog" aria-modal="true" aria-labelledby="adT"><div class="ad-hd"><h3 id="adT">➕ Aggiungi un dispositivo a ${esc(c.name || c.code)}<small><span class="mono">${esc(c.code)}</span> · ${nTxt(g.used, g.max)}</small></h3><button type="button" class="btn sm" data-adx title="Chiudi">✕</button></div>
       <div id="adGrow">${growHtml()}</div>
       <div class="ad-sec"><b>📺 TV in attesa adesso<small>${isAg() ? 'solo quelle della stessa rete del cliente' : 'quelle della stessa rete del cliente sono in cima'}</small></b><div id="adTvs">${tvsHtml()}</div></div>
       <div class="ad-sec"><b>⌨️ Codice della TV<small>quello che la TV nuova mostra, es. KXAB-12CD</small></b><div class="ad-row"><input class="inp mono" id="adCode" placeholder="KXAB-12CD" autocomplete="off" spellcheck="false" maxlength="12"><button type="button" class="btn" data-adgo>Collega</button></div></div>
@@ -64,9 +88,15 @@
   }
   function paint(full) {
     const ov = document.getElementById('adOv'); if (!ov || !S) return;
-    if (full) { const nm = ov.querySelector('#adName'), cd = ov.querySelector('#adCode'), keep = [nm && nm.value, cd && cd.value]; ov.innerHTML = html(); if (keep[0]) ov.querySelector('#adName').value = keep[0]; if (keep[1]) ov.querySelector('#adCode').value = keep[1]; return; }
+    if (full) {
+      const nm = ov.querySelector('#adName'), cd = ov.querySelector('#adCode'), keep = [nm && nm.value, cd && cd.value]; ov.innerHTML = html();
+      if (keep[0]) ov.querySelector('#adName').value = keep[0]; if (keep[1]) ov.querySelector('#adCode').value = keep[1];
+      const g0 = ov.querySelector('#adGrow'); if (g0) g0._h = growHtml();
+      return;
+    }
     const t = ov.querySelector('#adTvs'); if (t) { const h = tvsHtml(); if (t._h !== h) { t._h = h; t.innerHTML = h; } }
-    const gr = ov.querySelector('#adGrow'); if (gr) gr.innerHTML = growHtml();
+    // la scelta dei dispositivi si ridisegna solo se cambia (ogni 5 secondi chiuderebbe l'elenco aperto)
+    const gr = ov.querySelector('#adGrow'); if (gr) { const h = growHtml(); if (gr._h !== h) { gr._h = h; gr.innerHTML = h; } }
   }
   async function fetchTvs() {
     if (!S) return;
@@ -80,10 +110,11 @@
   function open(c) {
     if (!c || c.parent || c.status === 'pending' || !can()) return;
     close();
-    S = { c, tvs: null, err: '', grow: true, pin: null, busy: false };
+    S = { c, tvs: null, err: '', want: 0, pin: null, busy: false };
     const ov = document.createElement('div'); ov.id = 'adOv'; document.body.appendChild(ov);
     paint(true);
     ov.addEventListener('click', onClick);
+    ov.addEventListener('change', (e) => { if (e.target.id === 'adMax' && S) { S.want = +e.target.value || 0; const gr = ov.querySelector('#adGrow'); if (gr) gr._h = growHtml(); } });
     ov.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.id === 'adCode') { e.preventDefault(); byCode(); } });
     document.addEventListener('keydown', onKey, true);
     fetchTvs(); S.timer = setInterval(fetchTvs, 5000);
@@ -92,12 +123,19 @@
   /** collega la TV [tv] (id; per l'agente anche il codice) al cliente aperto */
   async function link(tv, label) {
     if (!S || S.busy) return;
-    if (blocked()) { toast(counts().need > cap() || (isAg() && counts().max > cap()) ? 'Il cliente ha già tutti i dispositivi: vedi l\'avviso in alto' : 'Il cliente ha già tutti i dispositivi: accendi «Aumenta i dispositivi»', 1); return; }
-    const g = counts(), c = S.c, name = ((document.getElementById('adName') || {}).value || '').trim();
+    if (blocked()) { toast('Il cliente ha già tutti i dispositivi: vedi l\'avviso in alto', 1); return; }
+    const g = counts(), c = S.c, w = want(g), name = ((document.getElementById('adName') || {}).value || '').trim();
     S.busy = true;
     try {
+      // prima il collegamento (se il cliente è pieno il server porta i dispositivi a quelli che servono), poi la scelta della
+      // finestra se è di più: se il collegamento non riesce non cambia nulla
       const r = await api('POST', '/admin/devices/' + encodeURIComponent(tv) + '/link', { primary: c.id, name, ...(g.full ? { grow: true } : {}) });
-      toast(`📺 ${label || 'TV'} collegata a ${c.name || c.code}: ${g.need} di ${Math.max(g.max, (r && r.grown) || g.need)} dispositivi`);
+      let max = Math.max(g.max, (r && r.grown) || (g.full ? g.need : 0)), warn = '';
+      if (w > max) {
+        try { await api('PUT', '/admin/devices/' + encodeURIComponent(c.id), { maxConn: w }); max = w; c.maxConn = w; }
+        catch (e) { warn = ` (dispositivi non cambiati: ${e.message})`; }
+      }
+      toast(`📺 ${label || 'TV'} collegata a ${c.name || c.code}: ${nTxt(g.need, max)}${warn}`, warn ? 1 : undefined);
       close(); await reload();
     } catch (e) { toast(e.message, 1); if (S) S.busy = false; }
   }
@@ -114,14 +152,14 @@
   async function pin() {
     if (!S || S.busy) return;
     const g = counts(), c = S.c;
-    if (g.full) {
-      if (blocked()) { toast('Il cliente ha già tutti i dispositivi: vedi l\'avviso in alto', 1); return; }
-      if (!(await ask(`Aumentare a ${g.need} i dispositivi di ${c.name || c.code}?`, `Ha già ${g.used} di ${g.max} dispositivi: per il codice ne serve uno libero.`, `Aumenta a ${g.need}`))) return;
-      try { await api('PUT', '/admin/devices/' + c.id, { maxConn: g.need }); c.maxConn = g.need; } catch (e) { toast(e.message, 1); return; }
-    }
+    if (blocked()) { toast('Il cliente ha già tutti i dispositivi: vedi l\'avviso in alto', 1); return; }
+    // per il codice serve un posto libero già adesso: i dispositivi scelti nella finestra si applicano subito
+    const w = want(g);
     S.busy = true;
-    try { S.pin = await api('POST', '/admin/devices/' + c.id + '/linkcode'); paint(true); toast('Codice pronto: dettalo al cliente'); }
-    catch (e) { toast(e.message, 1); }
+    try {
+      if (w > g.max) { await api('PUT', '/admin/devices/' + encodeURIComponent(c.id), { maxConn: w }); c.maxConn = w; }
+      S.pin = await api('POST', '/admin/devices/' + c.id + '/linkcode'); paint(true); toast('Codice pronto: dettalo al cliente');
+    } catch (e) { toast(e.message, 1); paint(true); }
     if (S) S.busy = false;
   }
   function onClick(e) {
@@ -130,7 +168,6 @@
     const t = e.target.closest('[data-adtv]'); if (t) return link(isAg() ? t.dataset.adcode : t.dataset.adtv, t.dataset.adcode);
     if (e.target.closest('[data-adgo]')) return byCode();
     if (e.target.closest('[data-adpin]')) return pin();
-    const gr = e.target.closest('[data-adgrow]'); if (gr) { S.grow = !S.grow; gr.classList.toggle('on', S.grow); }
   }
 
   /* ---------- «stessa rete» nell'elenco «Da attivare» (solo titolare) ---------- */
@@ -163,7 +200,7 @@
     if (full && !(await ask(`Collegare ${tv.model || 'la TV'} a ${c.name || c.code}?`, `<span class="mono">${esc(tv.code)}</span> · ${esc(c.name || c.code)} ha già ${used} di ${max} ${max === 1 ? 'dispositivo' : 'dispositivi'}: li porto a ${used + 1}.`, `Aumenta a ${used + 1} e collega`))) return;
     try {
       const r = await api('POST', '/admin/devices/' + tv.id + '/link', { primary: c.id, name: '', ...(full ? { grow: true } : {}) });
-      toast(`📺 ${tv.model || tv.code} collegata a ${c.name || c.code}: ${used + 1} di ${Math.max(max, (r && r.grown) || used + 1)} dispositivi`);
+      toast(`📺 ${tv.model || tv.code} collegata a ${c.name || c.code}: ${nTxt(used + 1, Math.max(max, (r && r.grown) || used + 1))}`);
       N.t = 0; await reload();
     } catch (e) { toast(e.message, 1); }
   }
