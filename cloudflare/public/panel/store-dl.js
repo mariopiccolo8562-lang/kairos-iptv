@@ -113,7 +113,7 @@
     $('#soApps').innerHTML = apps.length ? apps.map((a) => `<tr><td><b>${esc(a.app)}</b><div class="ss-bar" style="margin-top:4px"><i style="width:${Math.round(((+a.n || 0) / top) * 100)}%"></i></div></td><td>${n(a.n)}</td><td>${n(a.devs)}</td><td>${n(a.n7)}</td><td>${a.last ? esc(ago(a.last)) : '—'}</td></tr>`).join('')
       : '<tr><td colspan="5" class="mut">Nessun download negli ultimi 30 giorni</td></tr>';
     const rec = d.recent || [];
-    $('#soRecent').innerHTML = rec.length ? rec.map((r) => `<div class="so-dl"><span><b>${esc(r.app)}</b><small>${esc([r.device || 'Dispositivo', r.country].filter(Boolean).join(' · '))}</small></span><span style="text-align:right;white-space:nowrap"><small>${esc(when(r.created))}</small><small>${esc(ago(r.created))}</small></span></div>`).join('')
+    $('#soRecent').innerHTML = rec.length ? rec.map((r) => `<div class="so-dl"><span><b>${esc(r.app)}</b><small>${esc([r.device || 'Dispositivo', r.country].filter(Boolean).join(' · '))}</small>${r.code ? `<small style="color:#67e8f9">🔑 ${r.code === 'Tu' ? 'col tuo codice' : 'col codice di ' + esc(r.code)}</small>` : ''}</span><span style="text-align:right;white-space:nowrap"><small>${esc(when(r.created))}</small><small>${esc(ago(r.created))}</small></span></div>`).join('')
       : '<div class="emptyc">Nessun download ancora</div>';
     const st = d.stores || [];
     $('#soStores').innerHTML = st.length ? st.map((x) => `<tr><td><b>${esc(x.device || 'Dispositivo')}</b><br><small class="mut">${esc(x.country || '')}</small></td><td>${esc(x.version || '—')}</td><td>${x.first ? esc(day(x.first)) : '—'}</td><td>${x.last ? esc(ago(x.last)) : '—'}</td><td>${n(x.downloads)}</td></tr>`).join('')

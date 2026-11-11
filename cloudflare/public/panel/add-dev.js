@@ -30,7 +30,8 @@
 .dvt-ib.a{color:#22d3ee;border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.08)}
 .ad-near{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap;margin-top:6px;font-size:12.5px;color:#86efac}.ad-near b{color:#bbf7d0}.ad-near span{white-space:nowrap}
 .dvt .ad-near{margin:4px 0 0;flex-direction:column;align-items:flex-start}.dvt .ad-near .btn{padding:4px 10px;font-size:12px}
-.dvt .ad-near span,.dvt .ad-near b{display:inline;white-space:nowrap;font-size:12.5px;margin:0}`;
+.dvt .ad-near span,.dvt .ad-near b{display:inline;white-space:nowrap;font-size:12.5px;margin:0}
+.ad-near .ad-via,.ad-near .ad-via b{color:#67e8f9}.ad-near .ad-via{flex-basis:100%}`;
   document.head.appendChild(css);
 
   const MAX = 20, UNLIM = 999;
@@ -178,7 +179,7 @@
     if (!force && Date.now() - N.t < 20e3) return Promise.resolve(N.m);
     const had = N.m.size;
     N.busy = api('GET', '/admin/devices/near').then((r) => {
-      const m = new Map(((r && r.pend) || []).map((x) => [x.id, x.near || []]));
+      const m = new Map(((r && r.pend) || []).map((x) => [x.id, { near: x.near || [], via: x.via || null }]));
       const changed = JSON.stringify([...m]) !== JSON.stringify([...N.m]);
       N.m = m; N.t = Date.now();
       if (changed && (m.size || had) && typeof renderDevices === 'function' && document.querySelector('#v-devices.on')) renderDevices();
@@ -190,8 +191,11 @@
   function nearHtml(d) {
     if (isAg() || !d || d.parent || d.status !== 'pending') return '';
     nearLoad(false);
-    const L = N.m.get(d.id) || []; if (!L.length) return '';
-    return `<div class="ad-near">${L.map((c) => `<span>🏠 Casa di <b>${esc(c.name || c.code)}</b>?</span><button type="button" class="btn sm" data-act="nearlink" data-near="${esc(c.id)}">Collega a ${esc(c.name || c.code)}</button>`).join('')}</div>`;
+    const E = N.m.get(d.id) || {}, L = E.near || [], V = E.via;
+    if (!L.length && !V) return '';
+    // «📥 Scaricata col codice di …»: sulla stessa rete un Kairos Store ha usato da poco un codice usa e getta (store-codes.js)
+    const via = V ? `<span class="ad-via">📥 Scaricata ${V.mine ? 'col <b>tuo codice</b>' : `col codice di <b>${esc(V.by || 'un agente')}</b>`}</span>` : '';
+    return `<div class="ad-near">${via}${L.map((c) => `<span>🏠 Casa di <b>${esc(c.name || c.code)}</b>?</span><button type="button" class="btn sm" data-act="nearlink" data-near="${esc(c.id)}">Collega a ${esc(c.name || c.code)}</button>`).join('')}</div>`;
   }
   /** «Collega a …» dalla TV in attesa: collega con un clic; se il cliente è pieno chiede prima di aumentare */
   async function nearLink(tv, cid) {

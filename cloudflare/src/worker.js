@@ -8,7 +8,7 @@
  *  Segreti:  ENC_KEY (base64, 32 byte), ADMIN_BOOTSTRAP_PASS, TURNSTILE_SECRET (opzionale)
  *  Variabili: ACCESS_TEAM_DOMAIN, ACCESS_AUD, TURNSTILE_SITEKEY (opzionali)
  */
-import { storeApi, storeAdmin, storeHeaders, storeHooks, storeDecide, storeAgentAlerts } from './store.js'; // Store aperto: conteggi e compatibilità con gli store vecchi (/api/store/*)
+import { storeApi, storeAdmin, storeCodes, storeCodesOn, storeHeaders, storeHooks, storeDecide, storeAgentAlerts } from './store.js'; // Store aperto: conteggi e compatibilità con gli store vecchi (/api/store/*)
 import { wolfRoutes, wolfCron, sockFetch, wolfCfg } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
 import { atxRoutes, clearAtxAgent } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz)
 import { oraRoutes } from './orapanel.js';
@@ -2033,6 +2033,22 @@ async function novaPolicy(env) {
     return v;
   } catch { return novaPolMem ? novaPolMem.v : null; }
 }
+/* Limite agli scaricamenti in massa degli APK (11 novembre 2026): per indirizzo (IPv6: la rete /64) al massimo APK_PER_MIN
+   download che partono al minuto (limitatore di Cloudflare RL_APK) e APK_PER_HOUR all'ora (contatore dl_hits). Un cliente,
+   un negozio che installa su più TV o gli aggiornamenti delle app restano molto sotto; chi copia tutti gli APK in serie no. */
+const APK_PER_HOUR = 120;
+const apkStart = (req) => { const r = req.headers.get('Range'); return !r || /^bytes=0-/.test(r.trim()); };
+async function apkFlood(env, req) {
+  const key = ipNet(req.headers.get('CF-Connecting-IP') || '');
+  if (!key) return false;
+  if (env.RL_APK && typeof env.RL_APK.limit === 'function') {
+    try { const { success } = await env.RL_APK.limit({ key: 'apk:' + key }); if (!success) return true; } catch {}
+  }
+  try {
+    const r = await env.DB.prepare('INSERT INTO dl_hits (ip, h, n) VALUES (?, ?, 1) ON CONFLICT(ip, h) DO UPDATE SET n = dl_hits.n + 1 RETURNING n').bind(key, Math.floor(now() / 36e5)).first();
+    return !!(r && +r.n > APK_PER_HOUR);
+  } catch { return false; }
+}
 async function cleanLinks(req, env, url, path) {
   const mj = path.match(/^\/get\/([a-z0-9-]{1,24})\.json$/);
   if (mj && req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS', 'Access-Control-Max-Age': '86400' } });
@@ -2050,7 +2066,12 @@ async function cleanLinks(req, env, url, path) {
     return new Response(req.method === 'HEAD' ? null : JSON.stringify(out), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' } });
   }
   const m = path.match(/^\/get\/([a-z0-9-]{1,24})\.apk$/);
-  if (m) return hasKey(GET_APK, m[1]) ? dlApk(req, env, GET_APK[m[1]]) : new Response('Non trovato', { status: 404 });
+  if (m) {
+    if (!hasKey(GET_APK, m[1])) return new Response('Non trovato', { status: 404 });
+    // limite agli scaricamenti in massa (11 novembre 2026): conta solo l'inizio di un download, non i pezzi «Range» né HEAD
+    if (req.method === 'GET' && apkStart(req) && await apkFlood(env, req)) return new Response('Troppi download da questa connessione: riprova tra qualche minuto', { status: 429, headers: { 'Retry-After': '300', 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+    return dlApk(req, env, GET_APK[m[1]]);
+  }
   if (path.startsWith('/get/')) return new Response('Non trovato', { status: 404 });
   if (path === '/store') return Response.redirect(url.origin + '/store/' + url.search, 302);
   let rel = path.slice('/store/'.length);
@@ -5628,7 +5649,7 @@ async function adminInner(req, env, url, ip, ctx) {
    e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
    ====================================================================== */
 const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'lineView', 'events', 'account', 'ai',
-  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'payments', 'autoRenew', 'dlcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt', 'atx', 'orcpApp'];
+  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'payments', 'autoRenew', 'dlcodes', 'stcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt', 'atx', 'orcpApp'];
 const ORCP_SERVER_KEYS = ['portal', 'portal2', 'portal3', 'portal4', 'portal5'];
 function checkedOrcpServers(value) {
   if (!Array.isArray(value) || value.length > ORCP_SERVER_KEYS.length || value.some((x) => typeof x !== 'string' || !ORCP_SERVER_KEYS.includes(x)) || new Set(value).size !== value.length) {
@@ -5638,7 +5659,7 @@ function checkedOrcpServers(value) {
 }
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, lineView: false, events: false, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, payments: false, autoRenew: false, dlcodes: true, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, atx: false, mxp: false, oxp: false, oxpNew: false, orcpApp: false, orcpSrv: [], actApps: [], addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, payments: false, autoRenew: false, dlcodes: true, stcodes: false, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, atx: false, mxp: false, oxp: false, oxpNew: false, orcpApp: false, orcpSrv: [], actApps: [], addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
@@ -6095,7 +6116,15 @@ async function devicesNear(env, forId, agentId) {
     L.sort((a, b) => (b.same - a.same) || (b.seen - a.seen));
     return { client: { id: C.id, name: C.name }, tvs: L.slice(0, 30) };
   }
-  return { pend: tvs.map((d) => ({ id: d.id, near: near(d.last_ip).map((x) => ({ id: x.id, name: x.name, code: x.code })) })).filter((x) => x.near.length) };
+  // «📥 col codice di …» (11 novembre 2026): la TV in attesa è sulla stessa rete di un Kairos Store che nelle ultime 48 ore ha
+  // usato un codice per scaricare: si dice chi l'aveva generato (agente o titolare)
+  const byNet = new Map();
+  try {
+    const R = await env.DB.prepare("SELECT ip, by_id, by_name, used FROM store_codes WHERE used > ? AND ip <> ''").bind(SINCE_TV).all();
+    for (const r of (R && R.results) || []) { const n = ipNet(r.ip); if (!n) continue; const p = byNet.get(n); if (!p || +r.used > p.used) byNet.set(n, { used: +r.used, by: +r.by_id ? r.by_name || 'agente' : '', mine: !+r.by_id }); }
+  } catch {}
+  const viaCode = (d) => { const c = byNet.get(ipNet(d.last_ip)); return c ? { by: c.by, mine: c.mine } : null; };
+  return { pend: tvs.map((d) => ({ id: d.id, near: near(d.last_ip).map((x) => ({ id: x.id, name: x.name, code: x.code })), via: viaCode(d) })).filter((x) => x.near.length || x.via) };
 }
 async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const m = req.method;
@@ -6342,6 +6371,11 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   if (path === '/notify' || path.startsWith('/notify/')) return notifyAdmin(req, env, path, { id: A.id, username: A.username, agent: true }, ip, url.origin, notifyH(env));
   // Store aperto: niente richieste da approvare né store intestati, quindi niente pagina «Download store» per gli agenti
   // (i download dello store non appartengono a nessun agente: li vede solo il titolare nel Riepilogo store)
+  // «Codici per lo Store» (11 novembre 2026): codice usa e getta per scaricare dallo Store, solo con il permesso (spento di serie)
+  if (path === '/store/codes' && (m === 'GET' || m === 'POST')) {
+    need('stcodes', 'Non puoi generare codici per lo Store: chiedi al titolare il permesso «Codici per lo Store»');
+    return storeCodes(req, env, m, { id: A.id, name: A.username }, ip);
+  }
   if (path === '/store' && m === 'GET') return json({ open: true, agent: true, requests: [], pending: 0, devices: [], stores: [], settings: { approval: false, activation: false, open: true }, mail: {} });
   if (path === '/store' || path.startsWith('/store/')) throw new HttpErr(410, 'Lo store è aperto: non ci sono più richieste da approvare');
   // Altre app (OrbixPlay): solo per i suoi clienti e con il permesso
@@ -6403,7 +6437,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const { password: _pw, ...meSafe } = meOut;
     const sNames = canAg ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
     const activationCatalog = await activationApps(env, s);
-    return stateJson(req, { role: 'agent', user: A.username, me: { ...meSafe, storeCode: await sellerAgentCode(env, A), perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients, payRemind: payRemindAgent(s) }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
+    return stateJson(req, { role: 'agent', user: A.username, storeCodesOn: P.stcodes ? await storeCodesOn(env) : false, me: { ...meSafe, storeCode: await sellerAgentCode(env, A), perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients, payRemind: payRemindAgent(s) }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: agList,
       activationApps: activationCatalog.filter((x) => activationAppAllowed(P, x)).map((x) => ({ key: x.key, name: x.name, aliases: activationAliases(x), enabled: activationAppEnabled(s, x), link: x.link ? x.link.url : '' })),
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { ...x, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
@@ -6710,6 +6744,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     return json(j);
   }
   if (path === '/store/summary' && m === 'GET') return storeAdmin(req, env, path, who, ip, 0); // riepilogo dello store aperto (solo titolare)
+  if (path === '/store/codes' && (m === 'GET' || m === 'POST')) return storeCodes(req, env, m, { id: 0, name: 'Titolare' }, ip); // codici usa e getta per lo Store
   if (path === '/store-apps' || path === '/store-apps/icon') return storeApps(req, env, path, m, who, ip); // app dello store (solo titolare)
   if (path === '/store' || path.startsWith('/store/')) return storeAdmin(req, env, path, who, ip, 0, { smsAgentList: () => storeSmsAgentList(env) }); // Download store
   if ((path === '/notify' || path.startsWith('/notify/')) && ses && !ses.agent) return notifyAdmin(req, env, path, { id: ses.admin_id, username: ses.username, agent: false }, ip, url.origin, notifyH(env)); // avvisi Telegram / notifiche
@@ -6747,7 +6782,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p && !p.parent ? p.status : 'pending'; }
     const activity = activityR.results || [], messages = msgGroups(messagesR.results || []).slice(0, 150), agentMsgs = msgGroups(agentMsgsR.results || []).slice(0, 100), sessions = sessionsR ? sessionsR.n : 0;
     return stateJson(req, {
-      settings, devices, activity, messages, agentMsgs, user: who, apk, apkFeed: apkF,
+      settings, devices, activity, messages, agentMsgs, user: who, apk, apkFeed: apkF, storeCodesOn: await storeCodesOn(env),
       wgConf: !!wgR,
       security: { totp: !!(ses && ses.totp_on), rec: ses && ses.totp_on ? await recLeft(env, ses.admin_id) : 0, encryption: !!env.ENC_KEY, access: !!(env.ACCESS_AUD && env.ACCESS_TEAM_DOMAIN), turnstile: !!env.TURNSTILE_SECRET, sessions },
       lite: { apk: settings.liteApkUrl || LITE_APK, feed: liteF },
@@ -8179,6 +8214,8 @@ async function cleanup(env) {
     env.DB.prepare("DELETE FROM devices WHERE active = 0 AND playlists = '' AND parent = '' AND name = '' AND notes = '' AND last_seen < ?").bind(t - 30 * 86400e3),
   ]);
   try { await env.DB.prepare('DELETE FROM messages WHERE until > 0 AND until < ?').bind(t).run(); } catch {}
+  // limite agli scaricamenti degli APK e codici sbagliati dello Store: si tengono solo le ultime ore
+  try { await env.DB.batch([env.DB.prepare('DELETE FROM dl_hits WHERE h < ?').bind(Math.floor(t / 36e5) - 48), env.DB.prepare('DELETE FROM store_code_fail WHERE t < ?').bind(t - 86400e3)]); } catch {}
   try { await env.DB.prepare('DELETE FROM app_errors WHERE t < ?').bind(t - ERR_KEEP_MS).run(); } catch {} // errori dell'app: solo gli ultimi 7 giorni
   try { await env.DB.batch([env.DB.prepare('DELETE FROM link_pins WHERE until < ?').bind(t), env.DB.prepare('DELETE FROM throttle WHERE until < ?').bind(t)]); } catch {}
   // segnalazioni/richieste "fatte" da più di 90 giorni, presenze vecchie di 30 giorni, classifiche di oltre 60 giorni

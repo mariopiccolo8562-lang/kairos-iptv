@@ -44,6 +44,12 @@ name = "RL_HB"
 namespace_id = "7103"
 simple = { limit = 600, period = 60 }
 
+# download degli APK da /get/…: al massimo 20 che partono al minuto per indirizzo (limite agli scaricamenti in massa)
+[[ratelimits]]
+name = "RL_APK"
+namespace_id = "7104"
+simple = { limit = 20, period = 60 }
+
 # Pulizia notturna (sessioni scadute, log vecchi, dispositivi abbandonati)
 # Il secondo cron tiene vivo l'accesso MirkoTeam/ORCP ogni sei ore
 [triggers]

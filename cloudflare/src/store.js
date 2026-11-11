@@ -122,6 +122,20 @@ function recNorm(r) {
   const weak = +r.rv >= 2 ? s('weakApp') : s('weakApp') === 'Kairos Tv' ? 'Kairos-XC' : s('weakApp');
   return { rv: 2, weakApp: weak, weakMb: n('weakMb', 256, 8192), oldApp: s('oldApp'), oldSdk: n('oldSdk', 5, 14), strongApp: s('strongApp'), text: s('text', 300), mem: memNorm(r.mem) };
 }
+/* ---------------- codici usa e getta (11 novembre 2026) ----------------
+   «Download solo con codice» (Riepilogo store): il cliente scrive nello Store un codice di 6 cifre generato dal titolare o da
+   un agente con il permesso «Codici per lo Store». Va scritto entro la durata scelta (30 minuti, 2 ore o 24 ore); al primo
+   uso si lega a quel Kairos Store, che per la stessa durata scarica tutte le app che vuole. Spento = store aperto come prima.
+   Il codice protegge lo Store, non i file: gli APK restano raggiungibili dai link diretti (servono agli aggiornamenti). */
+const CODE_TTLS = [30, 120, 1440];            // minuti che il titolare può scegliere
+const CODE_FAIL_DEV = 5, CODE_FAIL_IP = 20;    // codici sbagliati prima della pausa (dispositivo / indirizzo)
+const CODE_PAUSE = 3600e3;                    // pausa dopo troppi codici sbagliati
+const CODE_PER_HOUR = 60;                     // codici che una persona può generare in un'ora
+function codesNorm(c) {
+  c = c && typeof c === 'object' ? c : {};
+  const ttl = CODE_TTLS.includes(+c.ttl) ? +c.ttl : 30;
+  return { on: c.on === true, ttl };
+}
 async function getStoreSettings(env) {
   const row = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('store').first();
   let s = {}; try { s = row ? JSON.parse(row.v) : {}; } catch {}
@@ -132,7 +146,7 @@ async function getStoreSettings(env) {
   // activation: «solo store attivati»: si scarica solo da store intestati a un venditore (codice scritto una volta), senza conferma
   const storeMax = Number.isInteger(s.storeMax) && s.storeMax >= 0 && s.storeMax <= STORE_MAX_CAP ? s.storeMax : STORE_MAX_DEF;
   // storeGate: codice del venditore all'avvio dello store — 'every' (a ogni avvio, di serie) oppure 'once' (solo finché lo store non è intestato)
-  return { recommend: recNorm(s.recommend), approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, trusted, sms: smsNorm(s.sms), closed: closedNorm(s.closed), agentAlerts: s.agentAlerts === true, activation: s.activation === true, storeMax, storeGate: s.storeGate === 'once' ? 'once' : 'every' };
+  return { codes: codesNorm(s.codes), recommend: recNorm(s.recommend), approval: s.approval !== false, ownerEmail: typeof s.ownerEmail === 'string' ? s.ownerEmail : '', blocked, trusted, sms: smsNorm(s.sms), closed: closedNorm(s.closed), agentAlerts: s.agentAlerts === true, activation: s.activation === true, storeMax, storeGate: s.storeGate === 'once' ? 'once' : 'every' };
 }
 /** numero in formato internazionale (+39…); i numeri italiani scritti senza prefisso vengono completati */
 function phoneNorm(v) {
@@ -238,7 +252,7 @@ async function seenDownload(env, did, device, country, t = now()) {
       downloads = store_seen.downloads + 1, last_seen = excluded.last_seen`).bind(did, device, country, t, t).run().catch(() => {});
 }
 /** risposta di /config: lo store è sempre aperto (anche per le pagine vecchie, che così non mostrano più codice né blocchi) */
-const openCfg = (S) => ({ open: true, recommend: S.recommend, on: false, activation: false, gate: 'none', activated: false, suspended: false, blocked: false, closed: false });
+const openCfg = (S) => ({ open: true, recommend: S.recommend, on: false, activation: false, gate: 'none', activated: false, suspended: false, blocked: false, closed: false, codes: S.codes.on });
 /** una richiesta di download già approvata (per le pagine vecchie dello store): il token vale come prima 30 minuti, un download */
 async function approveNow(env, r, ip) {
   const token = b64url(rand(24)), t = now();
@@ -311,7 +325,9 @@ export async function storeApi(req, env, ctx, url, ip, opts = {}) {
       // con ?did= (pagine vecchie dello store) lo store si conta tra quelli installati
       const did = str(url.searchParams.get('did'), 64);
       if (DID_RE.test(did)) ctx.waitUntil(seenOpen(env, did, '', whereOf(req), ''));
-      return json(openCfg(S));
+      const out = openCfg(S);
+      if (S.codes.on && DID_RE.test(did)) out.codeUntil = await codeWindow(env, did);
+      return json(out);
     }
     if (p === '/hello' && m === 'POST') {
       // la pagina nuova dello store, a ogni apertura: solo per contare gli store installati
@@ -320,9 +336,12 @@ export async function storeApi(req, env, ctx, url, ip, opts = {}) {
       const did = str(b.did, 64);
       if (!DID_RE.test(did)) return json({ ok: false, error: 'Dispositivo non valido' }, 400);
       ctx.waitUntil(seenOpen(env, did, str(b.device, 80), whereOf(req), str(b.v, 20)));
-      return json({ ok: true });
+      // «Download solo con codice»: lo Store mostra «🔑 Serve il codice» e sa se il codice di prima vale ancora
+      const S = await getStoreSettings(env);
+      return json(S.codes.on ? { ok: true, codes: true, codeUntil: await codeWindow(env, did) } : { ok: true, codes: false });
     }
     if (p === '/download' && m === 'POST') return await download(req, env, ctx, ip);
+    if (p === '/code' && m === 'POST') return await useCode(req, env, ctx, ip);
     if (p === '/activate' && m === 'POST') {
       // store vecchio che mostra ancora «Attiva lo store»: passa con qualunque codice (anche vuoto), senza blocchi
       if (await limited(env.RL_DEVICE, 'sact:' + ip)) return json({ error: 'Troppe richieste, riprova tra poco' }, 429);
@@ -375,17 +394,121 @@ async function download(req, env, ctx, ip) {
   if (!app) return json({ ok: false, error: 'App mancante' }, 400);
   if (!DID_RE.test(did)) return json({ ok: false, error: 'Dispositivo non valido' }, 400);
   const t = now(), country = whereOf(req);
+  // «Download solo con codice»: serve un codice già scritto su questo store e ancora valido
+  const S = await getStoreSettings(env);
+  let cr = null;
+  if (S.codes.on) {
+    cr = await env.DB.prepare('SELECT id, by_id, by_name, apps FROM store_codes WHERE did = ? AND until > ? ORDER BY until DESC LIMIT 1').bind(did, t).first();
+    if (!cr) return json({ ok: false, need: 'code', error: 'Per scaricare serve il codice del tuo rivenditore' }, 403);
+  }
   // doppio tocco sullo stesso pulsante: un solo download
   const dup = await env.DB.prepare('SELECT id FROM store_requests WHERE did = ? AND app = ? AND uses > 0 AND created > ? LIMIT 1').bind(did, app, t - DL_DUP).first();
-  if (dup) return json({ ok: true, dup: true });
-  await env.DB.prepare("INSERT INTO store_requests (id, app, app_url, did, device, note, ip, country, code, status, token, via, created, decided, seller, uses, used) VALUES (?, ?, ?, ?, ?, '', ?, ?, '', 'approved', '', 'open', ?, ?, 0, 1, ?)")
-    .bind(b64url(rand(12)), app, appUrl, did, device, ip, country, t, t, t).run();
+  if (dup) return json({ ok: true, dup: true, codes: S.codes.on });
+  await env.DB.prepare("INSERT INTO store_requests (id, app, app_url, did, device, note, ip, country, code, status, token, via, created, decided, seller, uses, used) VALUES (?, ?, ?, ?, ?, '', ?, ?, '', 'approved', '', ?, ?, ?, ?, 1, ?)")
+    .bind(b64url(rand(12)), app, appUrl, did, device, ip, country, cr ? 'code' : 'open', t, t, cr ? +cr.by_id || 0 : 0, t).run();
+  let apps = []; try { apps = JSON.parse((cr && cr.apps) || '[]'); } catch {}
+  if (cr && !apps.includes(app)) apps.push(app);
   ctx.waitUntil(Promise.all([
     b.src === 'web' ? null : seenDownload(env, did, device, country, t), // dal browser: download sì, store installato no
-    log(env, 'edit', `Store: download · ${app} su ${device || 'dispositivo'}${country ? ' · ' + country : ''}`, ip),
+    cr ? env.DB.prepare('UPDATE store_codes SET apps = ?, dls = dls + 1 WHERE id = ?').bind(JSON.stringify(apps.slice(0, 30)), cr.id).run().catch(() => {}) : null,
+    log(env, 'edit', `Store: download · ${app} su ${device || 'dispositivo'}${country ? ' · ' + country : ''}${cr ? ' · ' + codeOf(cr) : ''}`, ip),
     env.DB.prepare('DELETE FROM store_requests WHERE created < ?').bind(t - KEEP).run().catch(() => {}),
   ]));
-  return json({ ok: true });
+  return json({ ok: true, codes: S.codes.on });
+}
+
+const ttlTxt = (min) => (min >= 1440 ? '24 ore' : min >= 120 ? '2 ore' : min + ' minuti');
+const codeOf = (r) => (+r.by_id ? 'codice di ' + (r.by_name || 'un agente') : 'codice del titolare');
+/** fine della finestra di download aperta con un codice su questo store (0 = nessuna) */
+async function codeWindow(env, did) {
+  const r = await env.DB.prepare('SELECT MAX(until) AS u FROM store_codes WHERE did = ? AND until > ?').bind(did, now()).first().catch(() => null);
+  return (r && +r.u) || 0;
+}
+/** troppi codici sbagliati da questo store o da questo indirizzo nell'ultima ora */
+async function codePaused(env, did, ip, t) {
+  const R = (await env.DB.prepare('SELECT k, n, t FROM store_code_fail WHERE k IN (?, ?)').bind('d:' + did, 'i:' + ip).all().catch(() => null));
+  for (const r of (R && R.results) || []) if (t - r.t < CODE_PAUSE && r.n >= (r.k.startsWith('d:') ? CODE_FAIL_DEV : CODE_FAIL_IP)) return true;
+  return false;
+}
+async function codeFail(env, did, ip, t) {
+  const up = 'INSERT INTO store_code_fail (k, n, t) VALUES (?, 1, ?) ON CONFLICT(k) DO UPDATE SET n = CASE WHEN ? - store_code_fail.t > ? THEN 1 ELSE store_code_fail.n + 1 END, t = excluded.t';
+  await env.DB.batch([env.DB.prepare(up).bind('d:' + did, t, t, CODE_PAUSE), env.DB.prepare(up).bind('i:' + ip, t, t, CODE_PAUSE)]).catch(() => {});
+}
+
+/**
+ * POST /api/store/code {did, code, device}: il cliente scrive il codice nello Store. Valido = generato da meno della durata
+ * e mai usato, oppure già legato a questo stesso store con la finestra ancora aperta. Al primo uso si lega allo store.
+ * Risposta { ok, until } (fine della finestra in cui questo store scarica tutte le app che vuole).
+ */
+async function useCode(req, env, ctx, ip) {
+  if (await limited(env.RL_DEVICE, 'scod:' + ip)) return json({ ok: false, error: 'Troppe richieste, riprova tra poco' }, 429);
+  const b = await readBody(req);
+  const did = str(b.did, 64), device = str(b.device, 80), code = String(b.code ?? '').replace(/\D/g, '');
+  if (!DID_RE.test(did)) return json({ ok: false, error: 'Dispositivo non valido' }, 400);
+  const t = now();
+  if (await codePaused(env, did, ip, t)) return json({ ok: false, error: 'Troppi codici sbagliati: riprova tra un\'ora' }, 429);
+  const bad = async () => { await codeFail(env, did, ip, t); return json({ ok: false, error: 'Codice non valido o scaduto: chiedine uno nuovo al tuo rivenditore' }, 403); };
+  if (!/^\d{6}$/.test(code)) return bad();
+  let r = await env.DB.prepare('SELECT * FROM store_codes WHERE code = ? AND ((used = 0 AND expires > ?) OR (did = ? AND until > ?)) ORDER BY id DESC LIMIT 1').bind(code, t, did, t).first();
+  if (!r) return bad();
+  if (!r.used) {
+    const until = t + (+r.ttl || 30 * 60e3), country = whereOf(req);
+    const u = await env.DB.prepare('UPDATE store_codes SET used = ?, did = ?, device = ?, country = ?, ip = ?, until = ? WHERE id = ? AND used = 0').bind(t, did, device, country, ip, until, r.id).run();
+    if (!changed(u)) { // usato un attimo prima da un altro store
+      r = await env.DB.prepare('SELECT * FROM store_codes WHERE id = ?').bind(r.id).first();
+      if (!r || r.did !== did || !(r.until > t)) return bad();
+    } else {
+      r.until = until;
+      ctx.waitUntil(log(env, 'on', `Store: ${codeOf(r)} usato su ${device || 'dispositivo'}${country ? ' · ' + country : ''} (vale ${ttlTxt(Math.round((+r.ttl || 0) / 60e3))})`, ip));
+    }
+  }
+  ctx.waitUntil(env.DB.prepare('DELETE FROM store_code_fail WHERE k = ?').bind('d:' + did).run().catch(() => {}));
+  return json({ ok: true, until: +r.until });
+}
+
+/** «Download solo con codice» acceso? (per lo stato del pannello: pulsante «🔑 Codice Store») */
+export async function storeCodesOn(env) {
+  try { return (await getStoreSettings(env)).codes.on; } catch { return false; }
+}
+
+/**
+ * Codici del pannello: GET = elenco (il titolare tutti, l'agente i suoi) con interruttore e durata; POST = codice nuovo.
+ * [by] = { id: 0 per il titolare o l'id dell'agente, name } (l'agente arriva qui solo con il permesso «Codici per lo Store»).
+ */
+export async function storeCodes(req, env, m, by, ip) {
+  try {
+    const S = await getStoreSettings(env), t = now();
+    if (m === 'POST') {
+      const last = await env.DB.prepare('SELECT COUNT(*) AS n FROM store_codes WHERE by_id = ? AND created > ?').bind(by.id, t - 3600e3).first();
+      if (last && last.n >= CODE_PER_HOUR) throw new StoreErr(429, `Hai già generato ${CODE_PER_HOUR} codici nell'ultima ora: riprova più tardi`);
+      const ttl = S.codes.ttl * 60e3;
+      let code = '';
+      for (let i = 0; i < 12 && !code; i++) {
+        const c = sixDigits();
+        const busy = await env.DB.prepare('SELECT 1 AS x FROM store_codes WHERE code = ? AND ((used = 0 AND expires > ?) OR until > ?) LIMIT 1').bind(c, t, t).first();
+        if (!busy) code = c;
+      }
+      if (!code) throw new StoreErr(503, 'Codice non generato, riprova');
+      await env.DB.prepare('INSERT INTO store_codes (code, created, expires, ttl, by_id, by_name) VALUES (?, ?, ?, ?, ?, ?)').bind(code, t, t + ttl, ttl, by.id, str(by.name, 60)).run();
+      await env.DB.prepare('DELETE FROM store_codes WHERE created < ? AND until < ?').bind(t - KEEP, t).run().catch(() => {});
+      await log(env, 'edit', `${by.name || 'Titolare'}: Store — codice per scaricare generato (vale ${ttlTxt(S.codes.ttl)})`, ip);
+      return json({ code, created: t, expires: t + ttl, ttl: S.codes.ttl, on: S.codes.on });
+    }
+    if (m !== 'GET') throw new StoreErr(405, 'Metodo non consentito');
+    const q = by.id
+      ? env.DB.prepare('SELECT * FROM store_codes WHERE by_id = ? AND created > ? ORDER BY id DESC LIMIT 100').bind(by.id, t - KEEP)
+      : env.DB.prepare('SELECT * FROM store_codes WHERE created > ? ORDER BY id DESC LIMIT 300').bind(t - KEEP);
+    const rows = ((await q.all()).results) || [];
+    const codes = rows.map((r) => {
+      let apps = []; try { apps = JSON.parse(r.apps || '[]'); } catch {}
+      const st = r.used ? (r.until > t ? 'open' : 'used') : r.expires > t ? 'valid' : 'expired';
+      return { id: r.id, code: st === 'valid' || st === 'open' ? r.code : '', st, created: r.created, expires: r.expires, used: r.used, until: r.until, by: by.id ? '' : r.by_id ? r.by_name || 'agente' : '', mine: !by.id && !r.by_id, device: r.device, country: r.country, apps, dls: r.dls };
+    });
+    return json({ on: S.codes.on, ttl: S.codes.ttl, ttls: CODE_TTLS, codes });
+  } catch (e) {
+    if (e instanceof StoreErr) return json({ error: e.message }, e.status);
+    throw e;
+  }
 }
 
 /** POST /api/store/request (store vecchi): approvata subito, senza codice né venditore. Il download si conta poi in /consume */
@@ -397,6 +520,9 @@ async function create(req, env, ctx, url, ip) {
   if (!app) return json({ error: 'App mancante' }, 400);
   if (!DID_RE.test(did)) return json({ error: 'Dispositivo non valido' }, 400);
   if (appUrl && !/^https?:\/\/[^\s]+$/i.test(appUrl)) return json({ error: 'Link non valido' }, 400);
+  // «Download solo con codice»: anche gli store vecchi passano solo con un codice già scritto (le loro pagine non lo chiedono,
+  // ma si aggiornano da sole alla versione che lo chiede)
+  if ((await getStoreSettings(env)).codes.on && !(await codeWindow(env, did))) return json({ status: 'denied', need: 'code', error: 'Per scaricare serve il codice del tuo rivenditore: premi AGGIORNA in alto e riprova' }, 403);
   const t = now(), country = whereOf(req), id = b64url(rand(12)), token = b64url(rand(24));
   await env.DB.prepare("INSERT INTO store_requests (id, app, app_url, did, device, note, ip, country, code, status, token, via, created, decided, seller) VALUES (?, ?, ?, ?, ?, '', ?, ?, '', 'approved', ?, 'open', ?, ?, 0)")
     .bind(id, app, appUrl, did, device, ip, country, token, t, t).run();
@@ -574,14 +700,16 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
           (SELECT COUNT(*) FROM store_requests WHERE uses > 0 AND created > ?) AS dl1, (SELECT COUNT(DISTINCT did) FROM store_requests WHERE uses > 0 AND created > ?) AS users30`)
           .bind(d30, d7, d1, d30, d7, d30, d7, d1, d30).first(),
         env.DB.prepare('SELECT app, COUNT(*) AS n, COUNT(DISTINCT did) AS devs, SUM(CASE WHEN created > ? THEN 1 ELSE 0 END) AS n7, MAX(created) AS last FROM store_requests WHERE uses > 0 AND created > ? GROUP BY app ORDER BY n DESC LIMIT 60').bind(d7, d30).all(),
-        env.DB.prepare('SELECT app, device, country, created FROM store_requests WHERE uses > 0 AND created > ? ORDER BY created DESC LIMIT 60').bind(d30).all(),
+        // via 'code' = scaricata con un codice usa e getta: seller = chi l'ha generato (0 = il titolare)
+        env.DB.prepare("SELECT r.app, r.device, r.country, r.created, r.via, r.seller, a.username AS sname FROM store_requests r LEFT JOIN admins a ON r.seller > 0 AND a.id = r.seller WHERE r.uses > 0 AND r.created > ? ORDER BY r.created DESC LIMIT 60").bind(d30).all(),
         env.DB.prepare('SELECT device, country, version, first_seen, last_seen, opens, downloads FROM store_seen ORDER BY last_seen DESC LIMIT 200').all(),
         // download per giorno (ultimi 14, ora italiana circa: si raggruppa per giorno UTC+1)
         env.DB.prepare("SELECT CAST((created + 3600000) / 86400000 AS INTEGER) AS d, COUNT(*) AS n FROM store_requests WHERE uses > 0 AND created > ? GROUP BY d ORDER BY d").bind(t - 14 * 86400e3).all(),
       ]);
       return json({
         open: true, settings: await getStoreSettings(env), totals: tot || {},
-        apps: (apps && apps.results) || [], recent: (recent && recent.results) || [],
+        apps: (apps && apps.results) || [],
+        recent: ((recent && recent.results) || []).map((x) => ({ app: x.app, device: x.device, country: x.country, created: x.created, code: x.via === 'code' ? (+x.seller ? x.sname || 'agente' : 'Tu') : '' })),
         stores: ((stores && stores.results) || []).map((x) => ({ device: x.device, country: x.country, version: x.version, first: x.first_seen, last: x.last_seen, opens: x.opens, downloads: x.downloads })),
         days: ((days && days.results) || []).map((x) => ({ day: x.d * 86400e3, n: x.n })),
       });
@@ -594,6 +722,12 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       if (typeof b.activation === 'boolean') { s.activation = b.activation; if (b.activation) s.approval = true; }
       if (b.storeGate === 'once' || b.storeGate === 'every') s.storeGate = b.storeGate;
       if (b.recommend && typeof b.recommend === 'object') s.recommend = recNorm({ ...(s.recommend || {}), ...b.recommend });
+      let codesTxt = '';
+      if (b.codes && typeof b.codes === 'object') {
+        if (b.codes.ttl !== undefined && !CODE_TTLS.includes(+b.codes.ttl)) throw new StoreErr(400, 'Durata del codice non valida: 30 minuti, 2 ore o 24 ore');
+        s.codes = codesNorm({ ...s.codes, ...b.codes });
+        codesTxt = s.codes.on ? `download solo con codice (vale ${ttlTxt(s.codes.ttl)})` : 'download liberi, senza codice';
+      }
       if (b.storeMax !== undefined) { const n = parseInt(b.storeMax, 10); if (!(n >= 0 && n <= STORE_MAX_CAP)) throw new StoreErr(400, `Tetto di store non valido (da 0 a ${STORE_MAX_CAP})`); s.storeMax = n; }
       if (b.closed && typeof b.closed === 'object') {
         const c = b.closed;
@@ -619,7 +753,7 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
         smsTxt = ` · SMS ${next.on ? `attivi (${(next.owner ? 1 : 0) + next.agents.filter((a) => a.on).length} numeri, max ${next.perDay}/giorno)` : 'spenti'}`;
       }
       await putStoreSettings(env, s);
-      await log(env, 'settings', `${who}: Store — ${b.recommend ? `app consigliata: ${s.recommend.weakApp} / ${s.recommend.oldApp} / ${s.recommend.strongApp}` : 'impostazioni salvate'} (store aperto: download liberi)${smsTxt}`, ip);
+      await log(env, 'settings', `${who}: Store — ${codesTxt || (b.recommend ? `app consigliata: ${s.recommend.weakApp} / ${s.recommend.oldApp} / ${s.recommend.strongApp}` : 'impostazioni salvate')}${smsTxt}`, ip);
       return json({ settings: s });
     }
     if (path === '/store/sms/test' && m === 'POST') {

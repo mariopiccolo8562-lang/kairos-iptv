@@ -206,7 +206,7 @@ async function load(quiet) {
   if (quiet === true) { const tg = ST_TAG.get(s), sig = tg ? 'e:' + tg : JSON.stringify(s); if (sig === loadSig && Date.now() - loadT < 60e3) return false; loadSig = sig; } else loadSig = '';
   loadT = Date.now();
   D.settings = s.settings; D.devices = s.devices; D.activity = s.activity; D.user = s.user; D.security = s.security || {}; D.apk = s.apk || null; D.messages = s.messages || [];
-  D.apkFeed = s.apkFeed || null; D.wgConf = !!s.wgConf;
+  D.apkFeed = s.apkFeed || null; D.wgConf = !!s.wgConf; D.storeCodesOn = !!s.storeCodesOn; // «Download solo con codice» acceso (store-codes.js)
   const aa = document.getElementById('apkAuto');
   const mv = D.settings.apkVersion || '', mc = verCode(mv), fd = D.apkFeed;
   const older = fd && mc && mc <= fd.versionCode ? `<br><span class="warnx">⚠️ La versione scritta a mano (<b>${esc(mv)}</b>) non è più recente di quella pubblicata in automatico (<b>${esc(fd.version || String(fd.versionCode))}</b>), quindi viene ignorata: puoi svuotare il campo.</span>` : '';
