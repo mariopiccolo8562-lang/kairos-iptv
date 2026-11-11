@@ -736,18 +736,28 @@ body.agent .foot{display:none}
   async function linkBox(a) {
     const P = `/admin/agents/${a.id}/access-link`, day = (t) => (t ? new Date(t).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
     let L; try { L = await api('GET', P); } catch (e) { return toast(e.message, 1); }
+    // dispositivi collegati (11 novembre 2026): browser, città, quando è entrato e ultimo uso, con «Scollega»
+    let SS = null; const loadSS = async () => { try { SS = (await api('GET', `/admin/agents/${a.id}/sessions`)).sessions || []; } catch { SS = null; } };
+    await loadSS();
+    const seen = (t) => { const d = Date.now() - t; return d < 6 * 36e5 ? 'nelle ultime ore' : d < 48 * 36e5 ? 'ieri' : new Date(t).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }); };
+    const devs = () => `<div style="font-size:11px;letter-spacing:.14em;font-weight:800;color:#8fb3ff;margin:20px 0 6px">📱 DISPOSITIVI COLLEGATI${SS && SS.length ? ' · ' + SS.length : ''}</div>
+      ${SS === null ? '<small class="mut">Elenco non disponibile adesso.</small>' : SS.length ? SS.map((x) => `<div class="ag-dev" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)"><div style="flex:1;min-width:0"><b style="font-size:13.5px">${esc(x.dev)}</b><small class="mut" style="display:block;font-size:12px">${esc([x.where, 'entrato il ' + day(x.created), 'ultimo uso ' + seen(x.seen)].filter(Boolean).join(' · '))}</small></div><button type="button" class="btn sm danger" data-lk="kick" data-sid="${esc(x.sid)}" title="Lo scollega subito: per rientrare servono di nuovo link e codice">Scollega</button></div>`).join('') : '<small class="mut">Nessun dispositivo collegato adesso.</small>'}`;
     const html = () => `<div style="font-size:11px;letter-spacing:.14em;font-weight:800;color:#8fb3ff;margin:-6px 0 2px">🔗 ACCESSO PROTETTO</div>
       <p class="mut" style="font-size:12.5px;margin:8px 0 12px">Il link apre il pannello esclusivamente con l'account di <b>${esc(a.username)}</b>. Non contiene username o password: per entrare serve anche il codice di accesso.</p>
       <label class="lbl">Link personale</label><div class="row" style="grid-template-columns:1fr auto"><input class="inp mono" readonly value="${esc(L.on ? L.url : '')}" placeholder="Nessun link generato" style="font-size:12px"><button type="button" class="btn" data-lk="url" ${L.on ? '' : 'disabled'}>⧉ Copia</button></div>
       <small class="mut">${L.on ? `Link attivo · creato ${esc(day(L.created))} · ultimo accesso ${esc(day(L.used))}` : 'Nessun link attivo per questo agente.'}</small>
       ${L.on ? `<label class="lbl" style="margin-top:10px">Codice di accesso</label><div class="row" style="grid-template-columns:1fr auto"><input class="inp mono" readonly value="${esc(L.code)}" style="letter-spacing:.12em"><button type="button" class="btn" data-lk="code">⧉ Copia codice</button></div>
       <small class="mut">Il codice è conservato cifrato e può essere rivisto solo da questa gestione.</small>` : ''}
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap"><button type="button" class="btn danger" data-lk="del" ${L.on ? '' : 'disabled'}>⊘ Revoca</button><button type="button" class="btn" data-lk="new" ${L.on ? '' : 'disabled'}>↻ Rigenera</button>${L.on ? '' : '<button type="button" class="btn pri" data-lk="new">🔗 Genera link</button>'}</div>`;
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap"><button type="button" class="btn danger" data-lk="del" ${L.on ? '' : 'disabled'}>⊘ Revoca</button><button type="button" class="btn" data-lk="new" ${L.on ? '' : 'disabled'}>↻ Rigenera</button>${L.on ? '' : '<button type="button" class="btn pri" data-lk="new">🔗 Genera link</button>'}</div>${devs()}`;
     const bind = () => $$('#mB [data-lk]').forEach((b) => (b.onclick = async () => {
       const k = b.dataset.lk;
+      if (k === 'kick') {
+        try { await api('DELETE', `/admin/agents/${a.id}/sessions/${b.dataset.sid}`); toast('Dispositivo scollegato'); } catch (e) { toast(e.message, 1); }
+        await loadSS(); $('#mB').innerHTML = html(); bind(); return;
+      }
       if (k === 'url' || k === 'code') return navigator.clipboard.writeText(L[k]).then(() => toast(k === 'url' ? 'Link copiato' : 'Codice copiato'), () => toast('Copia non consentita', 1));
       if ((k === 'del' || (k === 'new' && L.on)) && !confirm(k === 'del' ? 'Revocare il link? Smette subito di funzionare e l\'agente viene scollegato.' : 'Rigenerare? Link e codice vecchi smettono subito di funzionare e l\'agente viene scollegato.')) return;
-      try { if (k === 'del') { await api('DELETE', P); L = { on: false }; toast('Link revocato'); } else { L = await api('POST', P); toast('Link e codice pronti: copiali e mandali all\'agente'); } $('#mB').innerHTML = html(); bind(); } catch (e) { toast(e.message, 1); }
+      try { if (k === 'del') { await api('DELETE', P); L = { on: false }; toast('Link revocato'); } else { L = await api('POST', P); toast('Link e codice pronti: copiali e mandali all\'agente'); } await loadSS(); $('#mB').innerHTML = html(); bind(); } catch (e) { toast(e.message, 1); }
     }));
     const pr = ask('Link accesso · ' + a.username, html(), 'Chiudi'); bind(); await pr;
   }
