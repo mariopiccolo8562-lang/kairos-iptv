@@ -168,12 +168,14 @@ test('remote allow values and rotating DNS stay Ultimate-only', () => {
   assert.ok(_internal.RC_CAT.filter(([key]) => key.startsWith('u.')).every(([, , , , apps]) => apps.length === 1 && apps[0] === 'ult'));
 });
 
-test('Ultimate catalog omits settings the app does not implement', () => {
+test('Ultimate catalog exposes implemented settings and omits unsupported Pro-only controls', () => {
   const ultimate = new Set(_internal.RC_CAT.filter(([, , , , apps]) => apps.includes('ult')).map(([key]) => key));
-  for (const key of ['o.startScr', 'o.textSize', 'logos', 'posters', 'intro', 'p.aspect', 'o.autoNext',
-    'o.introAuto', 'o.subSize', 'mergeVar', 'o.autoRem', 'o.showHidden', 'o.sortCats',
-    'o.sortCh', 'o.sortVod', 'o.lockAdult']) {
-    assert.equal(ultimate.has(key), false, `${key} must not be imposed on Ultimate`);
+  for (const key of ['o.startScr', 'o.textSize', 'posters', 'intro', 'p.aspect', 'o.autoNext',
+    'o.subSize', 'mergeVar', 'o.sortCh', 'o.sortVod', 'o.lockAdult']) {
+    assert.equal(ultimate.has(key), true, `${key} must be available to Ultimate`);
+  }
+  for (const key of ['logos', 'o.introAuto', 'o.autoRem', 'o.showHidden', 'o.sortCats']) {
+    assert.equal(ultimate.has(key), false, `${key} must remain Pro-only until Ultimate supports it`);
   }
   assert.equal(ultimate.has('o.resInd'), true);
   assert.equal(ultimate.has('o.epgShift'), true);

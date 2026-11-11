@@ -4308,7 +4308,7 @@ const RC_CAT = [
   /* ---- Generale ---- */
   ['lite', 'Modalità leggera', 'sel', [['auto', 'Automatica'], ['on', 'Sempre attiva'], ['max', 'Leggerissima'], ['off', 'Spenta']], KALL_LITE, 'Niente animazioni ed effetti, immagini e memoria ridotte: per chiavette e TV vecchie. «Leggerissima» toglie anche le transizioni e svuota le cache: la scelta giusta per Fire Stick con poca memoria', '', 'Generale'],
   ['privacy', 'Finestra «Privacy e condizioni»', 'sel', [['show', 'Mostrala al primo avvio'], ['skip', 'Non mostrarla']], ['tv', 'ktv', 'prem', 'lite', 'xc', 'ult', 'plus'], 'Con «Non mostrarla» il cliente non vede più la finestra all\'avvio', '', 'Generale'],
-  ['o.startScr', 'Schermata iniziale', 'sel', [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta'], ['guide', 'Guida TV'], ['lastch', 'Ultimo canale guardato']], KPRO, '', '', 'Generale'],
+  ['o.startScr', 'Schermata iniziale', 'sel', [['home', 'Home'], ['movies', 'Film'], ['series', 'Serie'], ['live', 'In Diretta'], ['guide', 'Guida TV'], ['lastch', 'Ultimo canale guardato']], [...KPRO, 'ult'], '', '', 'Generale'],
   ['o.orient', 'Layout su telefoni e tablet', 'sel', [['auto', 'Automatico'], ['land', 'Sempre orizzontale']], KPRO, 'Sulle TV non cambia nulla', '', 'Generale'],
   ['tvmode', 'Modalità TV', 'sel', [['on', 'Attiva: interfaccia per telecomando'], ['off', 'Spenta']], ['nova'], '', '', 'Generale'],
   // solo nel profilo dell'app (c[8] = 'prof'): per il singolo cliente l'IA si sceglie nella sua scheda, che vince sul profilo
@@ -4327,11 +4327,11 @@ const RC_CAT = [
   ['force', 'Aggiornamento obbligatorio', 'sel', [['off', 'No: il cliente può rimandare'], ['7d', 'Dopo 7 giorni dal primo avviso'], ['3d', 'Dopo 3 giorni dal primo avviso'], ['now', 'Subito']], RC_APPS, 'Scaduto il termine l\'app si apre solo dopo aver installato la versione nuova. Blocca soltanto se l\'APK è già scaricato e verificato sul dispositivo, mai per un problema di rete', 'No: il cliente può rimandare', 'Aggiornamenti'],
   /* ---- Aspetto ---- */
   ['theme', 'Colore dell\'interfaccia', 'sel', [['cinema', 'Cinema (rosso)'], ['aurora', 'Aurora'], ['plasma', 'Plasma'], ['matrix', 'Matrix'], ['solar', 'Solare'], ['ice', 'Ghiaccio'], ['oro', 'Oro'], ['smeraldo', 'Smeraldo'], ['oceano', 'Oceano'], ['tramonto', 'Tramonto'], ['viola', 'Viola'], ['rosa', 'Rosa']], KPRO, 'I temi speciali dello Store restano quelli del cliente', '', 'Aspetto'],
-  ['o.textSize', 'Dimensione testi', 'sel', [['s', 'Piccola'], ['m', 'Media'], ['l', 'Grande'], ['xl', 'Molto grande']], KPRO, '', '', 'Aspetto'],
+  ['o.textSize', 'Dimensione testi', 'sel', [['s', 'Piccola'], ['m', 'Media'], ['l', 'Grande'], ['xl', 'Molto grande']], [...KPRO, 'ult'], '', '', 'Aspetto'],
   ['o.sfx', 'Effetti sonori', 'sel', [['classic', 'Classici'], ['soft', 'Morbidi'], ['futur', 'Futuristici'], ['retro', 'Retrò'], ['off', 'Disattivati']], KPRO, '', '', 'Aspetto'],
   ['logos', 'Loghi dei canali automatici', 'sel', [['on', 'Sì'], ['off', 'No']], KPRO, 'Con «No» l\'app non cerca i loghi mancanti: meno rete e memoria', '', 'Aspetto'],
-  ['posters', 'Locandine', 'sel', [['auto', 'Automatiche (più leggere sulle chiavette da 1 GB)'], ['hi', 'Sempre nitide']], KPRO, 'Automatiche: sulle chiavette da 1 GB (Fire TV Stick/Lite) locandine e sfondi si scaricano più piccoli, un po\' meno nitidi ma con meno memoria. «Sempre nitide»: come sugli altri dispositivi, usa più memoria', '', 'Aspetto'],
-  ['intro', 'Animazione d\'avvio', 'sel', [['auto', 'Automatica'], ['simple', 'Semplice'], ['off', 'Spenta']], KPRO, 'Automatica: completa sui dispositivi forti, senza gli effetti di sfondo pesanti su quelli deboli. Semplice: logo, scritta e barra, senza effetti di sfondo. Spenta: logo fermo e barra. Vale dall\'apertura successiva', '', 'Aspetto'],
+  ['posters', 'Locandine', 'sel', [['auto', 'Automatiche (più leggere sulle chiavette da 1 GB)'], ['hi', 'Sempre nitide']], [...KPRO, 'ult'], 'Automatiche: sulle chiavette da 1 GB (Fire TV Stick/Lite) locandine e sfondi si scaricano più piccoli, un po\' meno nitidi ma con meno memoria. «Sempre nitide»: come sugli altri dispositivi, usa più memoria', '', 'Aspetto'],
+  ['intro', 'Animazione d\'avvio', 'sel', [['auto', 'Automatica'], ['simple', 'Semplice'], ['off', 'Spenta']], [...KPRO, 'ult'], 'Automatica: completa sui dispositivi forti, senza gli effetti di sfondo pesanti su quelli deboli. Semplice: logo, scritta e barra, senza effetti di sfondo. Spenta: logo fermo e barra. Vale dall\'apertura successiva', '', 'Aspetto'],
   // riquadro «FHD · 1080p · 50 fps» del lettore (contratto comune: "full" | "noq" | "off"; vuoto/assente = completo).
   // Gruppo «Aspetto» e non «Lettore»: è una scelta del titolare, non una voce che il cliente può scegliere (niente «:allow»).
   ['qbox', 'Riquadro qualità nel lettore', 'sel', [['full', 'Completo: «FHD · 1080p · 50 fps»'], ['noq', 'Senza sigla: «1080p · 50 fps»'], ['off', 'Nascosto']], RC_APPS, 'Il riquadro in alto a destra quando il cliente apre un canale in diretta, cambia risoluzione o apre la barra informazioni. «Senza sigla» toglie HD, FHD, 4K e SD e lascia risoluzione e FPS. Il permesso «Vedere risoluzione e FPS» del singolo cliente vale comunque', 'Non imposto (completo)', 'Aspetto'],
@@ -4344,24 +4344,24 @@ const RC_CAT = [
   ['o.drainQ', 'Discesa anticipata della qualità', 'sel', YN, KPRO_XC, '', '', 'Lettore'],
   ['p.quality', 'Qualità video', 'sel', [['auto', 'Automatica'], ['max', 'Massima'], ['1080', '1080p'], ['720', '720p'], ['480', '480p']], KPRO_XC, '', '', 'Lettore'],
   ['p.buffer', 'Buffer di rete', 'sel', [['fast', 'Piccolo (veloce)'], ['balanced', 'Normale'], ['stable', 'Grande (stabile)']], ['tv', 'nova', 'xc', 'ult'], 'Veloce: parte prima ma regge meno · Stabile: per Wi-Fi debole o server lenti', '', 'Lettore'],
-  ['p.aspect', 'Formato immagine', 'sel', [['fit', 'Adatta'], ['fill', 'Riempi'], ['zoom', 'Zoom']], KPRO, '', '', 'Lettore'],
-  ['o.autoNext', 'Episodio successivo automatico', 'sel', YN, KPRO, '', '', 'Lettore'],
+  ['p.aspect', 'Formato immagine', 'sel', [['fit', 'Adatta'], ['fill', 'Riempi'], ['zoom', 'Zoom']], [...KPRO, 'ult'], '', '', 'Lettore'],
+  ['o.autoNext', 'Episodio successivo automatico', 'sel', YN, [...KPRO, 'ult'], '', '', 'Lettore'],
   ['o.introAuto', 'Salta l\'intro delle serie', 'sel', YN, KPRO, '', '', 'Lettore'],
   ['o.resInd', 'Indicatore risoluzione', 'sel', YN, [...KPRO, 'ult'], 'È l\'interruttore del cliente nelle Impostazioni della Pro. Per decidere tu in tutte le app usa «Riquadro qualità nel lettore» (Aspetto): con «Nascosto» vince quello', '', 'Lettore'],
-  ['o.subSize', 'Dimensione sottotitoli', 'sel', [['small', 'Piccola'], ['medium', 'Media'], ['large', 'Grande'], ['xl', 'Molto grande']], KPRO, '', '', 'Lettore'],
+  ['o.subSize', 'Dimensione sottotitoli', 'sel', [['small', 'Piccola'], ['medium', 'Media'], ['large', 'Grande'], ['xl', 'Molto grande']], [...KPRO, 'ult'], '', '', 'Lettore'],
   /* ---- TV in diretta e guida TV ---- */
   ['preview', 'Anteprima nella lista canali', 'sel', [['click', 'Al primo OK'], ['off', 'Spenta']], ['ktv', 'prem', 'lite', 'xc', 'ult', 'plus'], 'Spenta: il canale parte subito a schermo intero (meno lavoro per il dispositivo)', '', 'TV in diretta e guida TV'],
   ['o.liveFmt', 'Formato TV in diretta', 'sel', [['ts', 'Veloce (TS)'], ['hls', 'HLS']], ['tv', 'plus'], 'TS è il formato consigliato; HLS solo se il fornitore lo richiede', '', 'TV in diretta e guida TV'],
-  ['mergeVar', 'Versioni dello stesso canale in una voce sola', 'sel', [['off', 'No: ogni versione ha la sua voce'], ['on', 'Sì: una voce, con la versione giusta per la linea']], KPRO, 'Con «Sì» le versioni 4K, FHD, HD e SD dello stesso canale diventano una sola voce nelle liste e nello zapping: l\'app sceglie da sola quella adatta alla linea e al dispositivo. Le versioni si riconoscono dal nome del canale: se nella lista due canali diversi hanno nomi quasi uguali potrebbero finire insieme, per questo di serie è spenta', '', 'TV in diretta e guida TV'],
+  ['mergeVar', 'Versioni dello stesso canale in una voce sola', 'sel', [['off', 'No: ogni versione ha la sua voce'], ['on', 'Sì: una voce, con la versione giusta per la linea']], [...KPRO, 'ult'], 'Con «Sì» le versioni 4K, FHD, HD e SD dello stesso canale diventano una sola voce nelle liste e nello zapping: l\'app sceglie da sola quella adatta alla linea e al dispositivo. Le versioni si riconoscono dal nome del canale: se nella lista due canali diversi hanno nomi quasi uguali potrebbero finire insieme, per questo di serie è spenta', '', 'TV in diretta e guida TV'],
   ['o.autoRem', 'Promemoria automatici', 'sel', YN, KPRO, 'L\'app propone da sola un avviso poco prima dei programmi e delle partite che il cliente guarda spesso, con «Guarda». Il cliente può spegnerli anche dalle Impostazioni', '', 'TV in diretta e guida TV'],
   ['o.epgShift', 'Spostamento orario guida', 'sel', [[0, 'Nessuno'], [1, '+1 ora'], [2, '+2 ore'], [-1, '−1 ora'], [-2, '−2 ore']], [...KPRO, 'ult'], '', '', 'TV in diretta e guida TV'],
   ['o.showHidden', 'Mostra i canali nascosti', 'sel', [[false, 'No'], [true, 'Sì']], KPRO, 'I canali che il cliente ha nascosto tornano visibili', '', 'TV in diretta e guida TV'],
   /* ---- Ordinamento ---- */
   ['o.sortCats', 'Ordina categorie', 'sel', [['pl', 'Come la playlist'], ['az', 'A → Z'], ['za', 'Z → A'], ['custom', 'Ordine personalizzato del cliente']], KPRO, '', '', 'Ordinamento'],
-  ['o.sortCh', 'Ordina canali', 'sel', [['pl', 'Come la playlist'], ['num', 'Per numero'], ['az', 'A → Z'], ['za', 'Z → A'], ['added', 'Aggiunti di recente']], KPRO, '', '', 'Ordinamento'],
-  ['o.sortVod', 'Ordina film e serie', 'sel', [['pl', 'Come la playlist'], ['recent', 'Aggiunti di recente'], ['az', 'A → Z'], ['rating', 'Valutazione']], KPRO, '', '', 'Ordinamento'],
+  ['o.sortCh', 'Ordina canali', 'sel', [['pl', 'Come la playlist'], ['num', 'Per numero'], ['az', 'A → Z'], ['za', 'Z → A'], ['added', 'Aggiunti di recente']], [...KPRO, 'ult'], '', '', 'Ordinamento'],
+  ['o.sortVod', 'Ordina film e serie', 'sel', [['pl', 'Come la playlist'], ['recent', 'Aggiunti di recente'], ['az', 'A → Z'], ['rating', 'Valutazione']], [...KPRO, 'ult'], '', '', 'Ordinamento'],
   /* ---- Controllo genitori ---- */
-  ['o.lockAdult', 'Blocca contenuti per adulti', 'sel', YN, KPRO, 'Con «Sì» le categorie per adulti chiedono il PIN del controllo genitori', '', 'Controllo genitori'],
+  ['o.lockAdult', 'Blocca contenuti per adulti', 'sel', YN, [...KPRO, 'ult'], 'Con «Sì» le categorie per adulti chiedono il PIN del controllo genitori', '', 'Controllo genitori'],
   ['u.theme', 'Tema colore', 'sel', [['tramonto', 'Tramonto'], ['neon', 'Neon'], ['smeraldo', 'Smeraldo'], ['rubino', 'Rubino'], ['ghiaccio', 'Ghiaccio']], ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.neon', 'Scritte neon', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.anim', 'Animazioni', 'sel', [['auto', 'Automatiche'], ['on', 'Accese'], ['off', 'Spente']], ['ult'], '', '', 'KAIROS Ultimate'],
