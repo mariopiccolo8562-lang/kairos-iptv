@@ -6239,6 +6239,7 @@ function rcApply(rc, rcv) {
   S.rc = next; S.rcv = rcv || '';
   try { store.set('rcIntro', rcGet('intro') || ''); } catch {} // «Animazione d'avvio»: vale dall'apertura successiva (lo splash parte prima del pannello)
   if (same) return;
+  try { dnsApply(); } catch {}
   try { rcLiteApply(); } catch {}
   try { applyTheme(rcGet('theme') || store.get('theme') || S.settings.accent || 'cinema'); } catch {}
   try { S.sound = opt('sfx') !== 'off'; applyTextSize(opt('textSize')); if (opt('orient') !== 'auto') applyOrient(opt('orient')); } catch {}
@@ -6646,7 +6647,22 @@ function linkEnterDialog() {
 S.vpn = store.get('vpnCache', null); S.vpnState = 'off'; S.vpnMsg = '';
 const vpnOk = () => !!(NATIVE && NATIVE.vpnStart && (!NATIVE.vpnSupported || NATIVE.vpnSupported()));
 const vpnWanted = () => { const v = S.vpn; return !!(v && v.conf && (v.mode === 'force' || (v.mode === 'allow' && store.get('vpnOn', false)))); };
+/** DNS cifrato (voce «sdns» del pannello: on | off, vuoto = spento). Solo senza la VPN del fornitore, che il DNS lo protegge
+    già. Serve l'app dalla 2.7.6 (NATIVE.dnsStart): con le più vecchie non succede niente */
+const dnsOk = () => !!(NATIVE && NATIVE.dnsStart && NATIVE.dnsStop);
+function dnsApply() {
+  if (!dnsOk()) return;
+  const want = rcGet('sdns') === 'on' && S.status === 'active' && !vpnWanted();
+  try { if (want) NATIVE.dnsStart(); else NATIVE.dnsStop(); } catch {}
+}
+/** stato per il pannello: vuoto se la voce è spenta o l'app non lo sa fare; «vpn» se ci pensa la VPN del fornitore */
+function dnsBeat() {
+  if (!dnsOk() || rcGet('sdns') !== 'on') return '';
+  if (S.vpnState === 'on') return 'vpn';
+  try { return String((NATIVE.dnsState && NATIVE.dnsState()) || 'off'); } catch { return ''; }
+}
 function vpnApply(byUser) {
+  try { dnsApply(); } catch {}
   if (!vpnOk()) return;
   let st = 'off'; try { st = NATIVE.vpnState() || 'off'; } catch {}
   S.vpnState = st;
@@ -7642,7 +7658,7 @@ async function heartbeat(force) {
   const sp = speedLast && isFinite(speedLast.mbps) ? { dl: +(+speedLast.mbps).toFixed(1), ul: speedLast.ul != null && speedLast.ul >= 0 ? +speedLast.ul.toFixed(1) : null, ping: Math.round(speedLast.ping || 0), jitter: Math.round(speedLast.jitter || 0), t: speedLast.t } : null;
   const body = { state, title: it ? (it.k === 'l' ? (n ? n.title : '') : it.name) : '', ch: it && it.k === 'l' ? it.name : '', chId: it ? it.id : '', group: it ? it.group || '' : '', pl: it ? it.pl || '' : '', prof: S.prof ? S.prof.name : '',
     ver: (NATIVE && NATIVE.version && NATIVE.version()) || 'web', ui: (NATIVE && NATIVE.uiVersion && NATIVE.uiVersion()) || window.KX_UI || '', model: (NATIVE && NATIVE.model && NATIVE.model()) || 'browser', screen: ($('.screen.on') || {}).id || '',
-    net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off', cfg: rcSnapshot(), rcv: S.rcv || '', vis: !document.hidden || !!S.inPlayer, ...(S.kickAck ? { kickAck: S.kickAck } : {}), ...hbExtra(it) };
+    net, speed: sp, stats, vpn: S.vpnState === 'on' ? 'on' : 'off', ...(dnsBeat() ? { sdns: dnsBeat() } : {}), cfg: rcSnapshot(), rcv: S.rcv || '', vis: !document.hidden || !!S.inPlayer, ...(S.kickAck ? { kickAck: S.kickAck } : {}), ...hbExtra(it) };
   try {
     hbBusy = true;
     const hbT0 = Date.now(), j = await apiPost('/api/player/heartbeat', body).catch((e) => { hbFail(e); return null; }).finally(() => { hbBusy = false; }); if (!j) return;

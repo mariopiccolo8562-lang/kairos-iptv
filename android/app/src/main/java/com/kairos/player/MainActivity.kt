@@ -880,6 +880,13 @@ class MainActivity : ComponentActivity() {
         if (c != null && res.resultCode == RESULT_OK) KxVpn.start(this, c) else KxVpn.denied()
     }
 
+    /** risposta di Android alla richiesta del DNS cifrato (stessa finestra della VPN) */
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == DnsShield.REQ) DnsShield.onConsent(applicationContext, resultCode == RESULT_OK)
+    }
+
     private fun startVpn(conf: String) {
         val bad = KxVpn.check(conf)
         if (bad != null) { KxVpn.fail(bad); return }
@@ -1245,6 +1252,10 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface fun vpnStart(conf: String) { runOnUiThread { startVpn(conf) } }
         @JavascriptInterface fun vpnStop() { KxVpn.stop() }
         @JavascriptInterface fun vpnState(): String = KxVpn.state
+        // DNS cifrato (voce «sdns» del pannello): l'interfaccia lo accende solo senza la VPN del fornitore (vedi DnsShield.kt)
+        @JavascriptInterface fun dnsStart() { runOnUiThread { if (!isFinishing && !isDestroyed) DnsShield.start(this@MainActivity) } }
+        @JavascriptInterface fun dnsStop() { DnsShield.stop(applicationContext) }
+        @JavascriptInterface fun dnsState(): String = DnsShield.state
 
         /** scarica un indirizzo in un file locale; risposta in window.kxFileCb(id, status, path, error) */
         @JavascriptInterface fun httpFile(id: String, url: String, ua: String) { fetchToFile(id, url, ua) }
