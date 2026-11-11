@@ -877,7 +877,7 @@
           ${dd.saved.map((x) => {
             const h = hosts.find((y) => y.savedId === x.id) || { host: x.host, devices: 0 };
             const altNames = (x.alts || []).map((id) => dd.saved.find((y) => y.id === id)).filter(Boolean).map((y) => y.name);
-            const modeName = x.mode === 'main' ? 'Sempre il principale' : x.mode === 'alt' ? 'Sempre la riserva' : 'Automatico';
+            const modeName = x.mode === 'main' ? 'Sempre il principale' : x.mode === 'alt' ? 'Sempre la riserva' : x.mode === 'rot' ? 'Rotazione per dispositivo' : 'Automatico';
             const saturated = (dd.sat || []).find((y) => dnsKey(y.host) === dnsKey(x.host));
             const until = saturated ? new Date(saturated.until).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '';
             return `<div class="kc-dns-row">
@@ -978,7 +978,7 @@
       const x = dd.saved.find((y) => y.id === b.dataset.dedit); if (!x) return;
       const hasClients = (hosts.find((y) => y.savedId === x.id)?.devices || 0) > 0;
       const order = (x.alts || []).filter((id, i, a) => id !== x.id && a.indexOf(id) === i && dd.saved.some((y) => y.id === id));
-      let mode = ['auto', 'main', 'alt'].includes(x.mode) ? x.mode : 'auto';
+      let mode = ['auto', 'main', 'alt', 'rot'].includes(x.mode) ? x.mode : 'auto';
       const drawAlts = () => {
         const box = $('#dnsAltList');
         if (!box) return;
@@ -989,7 +989,7 @@
         }).join('') || '<p class="mut">Aggiunga altri DNS prima di scegliere una riserva.</p>';
       };
       const hostNote = hasClients ? '<small class="mut">Per spostare i clienti su un altro indirizzo usa "Cambia DNS ai clienti"</small>' : '';
-      const done = ask('Modifica DNS', `<label class="lbl" for="dnsName">Nome</label><input class="inp" id="dnsName" maxlength="40" value="${esc(x.name)}"><label class="lbl" for="dnsHost" style="margin-top:12px">Indirizzo</label><input class="inp mono" id="dnsHost" value="${esc(x.host)}" ${hasClients ? 'readonly' : ''}>${hostNote}<label class="lbl" style="margin-top:12px">Riserve (massimo 4)</label><p class="mut">Vale per l'app Kairos XC: se il server si blocca l'app passa da sola alla riserva.</p><div id="dnsAltList"></div><label class="lbl" for="dnsMode" style="margin-top:12px">Modalità</label><select class="inp" id="dnsMode"><option value="auto">Automatico</option><option value="main">Sempre il principale</option><option value="alt">Sempre la riserva</option></select>`, 'Salva');
+      const done = ask('Modifica DNS', `<label class="lbl" for="dnsName">Nome</label><input class="inp" id="dnsName" maxlength="40" value="${esc(x.name)}"><label class="lbl" for="dnsHost" style="margin-top:12px">Indirizzo</label><input class="inp mono" id="dnsHost" value="${esc(x.host)}" ${hasClients ? 'readonly' : ''}>${hostNote}<label class="lbl" style="margin-top:12px">Riserve (massimo 4)</label><p class="mut">Le app compatibili provano gli indirizzi in ordine; la rotazione assegna un ordine stabile diverso per dispositivo.</p><div id="dnsAltList"></div><label class="lbl" for="dnsMode" style="margin-top:12px">Modalità</label><select class="inp" id="dnsMode"><option value="auto">Automatico</option><option value="main">Sempre il principale</option><option value="alt">Sempre la riserva</option><option value="rot">Rotazione per dispositivo</option></select>`, 'Salva');
       const modal = $('#mB');
       modal.onchange = (e) => {
         if (e.target.id === 'dnsMode') mode = e.target.value;

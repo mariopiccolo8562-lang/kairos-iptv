@@ -152,3 +152,50 @@ test('player metadata preserves the no-key off response', async () => {
   const response = await _internal.playerMeta(new Request(url), {}, '127.0.0.1', url, {});
   assert.deepEqual(await response.json(), { cert: '', extras: [], off: true });
 });
+
+test('remote allow values and rotating DNS stay Ultimate-only', () => {
+  const rc = _internal.rcClean({ 'o.engLive:allow': ['exo', 'vlc'] }, 'ult');
+  assert.deepEqual(rc, { 'o.engLive': 'allow:exo,vlc' });
+  assert.deepEqual(_internal.rcClean(rc, 'ult'), rc);
+  assert.equal(_internal.rcSent(rc, 'tv')['o.engLive'], undefined);
+  assert.ok(Object.values(_internal.rcSent(rc, 'tv')).every((value) => typeof value !== 'string' || !value.startsWith('allow:')));
+  assert.equal(_internal.rcSent(rc, 'ult')['o.engLive'], rc['o.engLive']);
+  assert.equal(_internal.portalModeForApp('rot', 'tv'), 'auto');
+  assert.equal(_internal.portalModeForApp('rot', 'ult'), 'rot');
+  const tvRc = _internal.rcClean({ 'o.engLive:allow': ['exo', 'vlc'] }, 'tv');
+  assert.equal(_internal.rcSent(tvRc, 'tv')['o.engLive'], undefined);
+  assert.ok(_internal.RC_CMDS.some(([key, , , apps]) => key === 'epg' && apps.length === 1 && apps[0] === 'ult'));
+  assert.ok(_internal.RC_CAT.filter(([key]) => key.startsWith('u.')).every(([, , , , apps]) => apps.length === 1 && apps[0] === 'ult'));
+});
+
+test('legacy clients never receive allow values or rot mode', () => {
+  const rc = _internal.rcClean({
+    'o.engLive:allow': ['exo', 'vlc'],
+    'o.autoNext:allow': [true, false],
+    'u.saver:allow': ['off', '20'],
+  });
+  for (const app of ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus']) {
+    const delivered = _internal.rcSent(rc, app);
+    assert.ok(Object.keys(delivered).every((key) => !key.endsWith(':allow')), `${app} received an allow key`);
+    assert.ok(Object.values(delivered).every((value) => typeof value !== 'string' || !value.startsWith('allow:')), `${app} received an allow value`);
+    assert.equal(_internal.portalModeForApp('rot', app), 'auto');
+  }
+  const ultimate = _internal.rcSent(rc, 'ult');
+  assert.equal(ultimate['o.engLive'], 'allow:exo,vlc');
+  assert.equal(ultimate['o.autoNext'], 'allow:true,false');
+  assert.equal(ultimate['u.saver'], 'allow:off,20');
+  assert.equal(_internal.portalModeForApp('rot', 'ult'), 'rot');
+});
+
+test('Ultimate catalog exposes implemented settings and omits unsupported Pro-only controls', () => {
+  const ultimate = new Set(_internal.RC_CAT.filter(([, , , , apps]) => apps.includes('ult')).map(([key]) => key));
+  for (const key of ['o.startScr', 'o.textSize', 'posters', 'intro', 'p.aspect', 'o.autoNext',
+    'o.subSize', 'mergeVar', 'o.sortCh', 'o.sortVod', 'o.lockAdult']) {
+    assert.equal(ultimate.has(key), true, `${key} must be available to Ultimate`);
+  }
+  for (const key of ['logos', 'o.introAuto', 'o.autoRem', 'o.showHidden', 'o.sortCats']) {
+    assert.equal(ultimate.has(key), false, `${key} must remain Pro-only until Ultimate supports it`);
+  }
+  assert.equal(ultimate.has('o.resInd'), true);
+  assert.equal(ultimate.has('o.epgShift'), true);
+});
