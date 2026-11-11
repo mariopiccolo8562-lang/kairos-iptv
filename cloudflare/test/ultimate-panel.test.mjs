@@ -82,3 +82,73 @@ test('reach falls back to sockets, limits hosts and rate-limits per device', asy
   const limited = await postReach(rateEnv, 'KXAB-12CD', rateSecret, 'https://portal.example:8443', rateTransports);
   assert.equal(limited.status, 429);
 });
+
+test('TMDB search metadata returns artwork, rating, plot and Italian providers', async () => {
+  const originalFetch = globalThis.fetch, calls = [];
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input)), path = url.pathname;
+    calls.push(path);
+    let body = {};
+    if (path === '/3/search/movie') body = { results: [{ id: 42, backdrop_path: '/backdrop.jpg', vote_average: 8.27, overview: 'Trama italiana' }] };
+    else if (path === '/3/movie/42/release_dates') body = { results: [] };
+    else if (path === '/3/movie/42/videos') body = { results: [] };
+    else if (path === '/3/movie/42/images') body = { logos: [
+      { iso_639_1: 'en', file_path: '/english.png' },
+      { iso_639_1: 'it', file_path: '/italian.jpg' },
+      { iso_639_1: 'it', file_path: '/italian.png' },
+      { iso_639_1: null, file_path: '/neutral.png' },
+    ] };
+    else if (path === '/3/movie/42/watch/providers') body = { results: {
+      IT: { flatrate: [
+        { provider_name: 'A', logo_path: '/a.png' }, { provider_name: 'Senza logo' },
+        { provider_name: 'C', logo_path: '/c.png' }, { provider_name: 'D', logo_path: '/d.png' },
+        { provider_name: 'Quinto', logo_path: '/e.png' },
+      ] },
+      US: { flatrate: [{ provider_name: 'USA', logo_path: '/us.png' }] },
+    } };
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    const meta = await _internal.metaTmdb({ TMDB_KEY: 'unit-test-key' }, 'Film', 2025, 'movie');
+    assert.equal(meta.logo, 'https://image.tmdb.org/t/p/w500/italian.png');
+    assert.equal(meta.backdrop, 'https://image.tmdb.org/t/p/w1280/backdrop.jpg');
+    assert.equal(meta.vote, 8.3);
+    assert.equal(meta.plot, 'Trama italiana');
+    assert.equal(meta.tmdb, 42);
+    assert.deepEqual(meta.providers, [
+      { n: 'A', logo: 'https://image.tmdb.org/t/p/w92/a.png' },
+      { n: 'C', logo: 'https://image.tmdb.org/t/p/w92/c.png' },
+      { n: 'D', logo: 'https://image.tmdb.org/t/p/w92/d.png' },
+    ]);
+    assert.ok(calls.includes('/3/search/movie'));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('TMDB id lookup skips search', async () => {
+  const originalFetch = globalThis.fetch, calls = [];
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input)), path = url.pathname;
+    calls.push(path);
+    const body = path === '/3/movie/1234567890'
+      ? { id: 1234567890, title: 'Titolo', backdrop_path: '/bg.jpg', vote_average: 7.5, overview: 'Descrizione' }
+      : {};
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    const meta = await _internal.metaTmdb({ TMDB_KEY: 'unit-test-key' }, '', 0, 'movie', '1234567890');
+    assert.equal(meta.tmdb, 1234567890);
+    assert.equal(meta.backdrop, 'https://image.tmdb.org/t/p/w1280/bg.jpg');
+    assert.equal(calls[0], '/3/movie/1234567890');
+    assert.ok(!calls.some((path) => path.startsWith('/3/search/')));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('player metadata preserves the no-key off response', async () => {
+  const url = new URL('https://panel.example/api/player/meta?t=Film');
+  const response = await _internal.playerMeta(new Request(url), {}, '127.0.0.1', url, {});
+  assert.deepEqual(await response.json(), { cert: '', extras: [], off: true });
+});
