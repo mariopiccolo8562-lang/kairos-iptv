@@ -1,0 +1,66 @@
+name: Prova APK (ramo, non pubblica nulla)
+
+# Solo su questo ramo: compila l'APK di Kairos Pro con una chiave temporanea e prova la regola «uccisa dal sistema».
+# Non pubblica e non usa segreti. Si toglie quando il ramo entra in main.
+on:
+  push:
+    branches: [salute-senza-falsi-allarmi]
+
+permissions:
+  contents: read
+
+jobs:
+  prova:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Regola «uccisa dal sistema» (la funzione vera, presa dal sorgente)
+        run: |
+          command -v kotlinc >/dev/null || { echo "::error::kotlinc non c'è su questa macchina"; exit 1; }
+          F=android/app/src/main/java/com/kairos/player/MainActivity.kt
+          { echo 'var fails = 0'
+            awk '/^    fun killedInUse\(/,/^    }$/' "$F"
+            cat <<'KT'
+          fun check(name: String, got: Boolean, want: Boolean) { if (got != want) { println("FAIL $name"); fails++ } else println("ok   $name") }
+          val H = 3_600_000L; val now = 1_800_000_000_000L
+          check("in uso, stesso avvio: si segnala", killedInUse(true, true, 7, 7, now - 5 * H, now - 5 * H), true)
+          check("in sfondo (tasto Home): no", killedInUse(false, true, 7, 7, now - 5 * H, now - 5 * H), false)
+          check("schermo spento (TV in standby): no", killedInUse(true, false, 7, 7, now - 5 * H, now - 5 * H), false)
+          check("in sfondo e schermo spento: no", killedInUse(false, false, 7, 7, now - 5 * H, now - 5 * H), false)
+          check("dispositivo riavviato (TV spenta, corrente): no", killedInUse(true, true, 7, 8, now - 5 * H, now - 60_000L), false)
+          check("riavviato ma con la stessa ora di accensione stimata: decide il numero dell'avvio", killedInUse(true, true, 7, 8, now - 5 * H, now - 5 * H), false)
+          check("senza numero dell'avvio, accensione uguale (±1 min): si segnala", killedInUse(true, true, -1, -1, now - 5 * H, now - 5 * H + 60_000L), true)
+          check("senza numero dell'avvio, accensione spostata di 2 ore: no", killedInUse(true, true, -1, -1, now - 5 * H, now - 3 * H), false)
+          check("numero dell'avvio solo adesso, accensione uguale: si segnala", killedInUse(true, true, -1, 9, now - 5 * H, now - 5 * H), true)
+          check("numero dell'avvio solo adesso, accensione spostata: no", killedInUse(true, true, -1, 9, now - 5 * H, now - 60_000L), false)
+          check("dati della versione precedente (mancano): come prima, si segnala", killedInUse(true, true, -1, 9, 0L, now - 60_000L), true)
+          check("orologio corretto di 4 minuti (stesso avvio, senza numero): si segnala", killedInUse(true, true, -1, -1, now - 5 * H, now - 5 * H - 4 * 60_000L), true)
+          if (fails > 0) kotlin.system.exitProcess(1)
+          println("regola: tutto ok")
+          KT
+          } > "$RUNNER_TEMP/regola.kts"
+          kotlinc -script "$RUNNER_TEMP/regola.kts"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Copia il player nell'app (modalità demo)
+        run: |
+          mkdir -p android/app/src/main/assets/www
+          cp player/index.html android/app/src/main/assets/www/index.html
+          printf 'window.KAIROS_SERVER = "";\nwindow.KX_UI = "prova";\n' > android/app/src/main/assets/www/config.js
+
+      - name: Compila APK (chiave temporanea)
+        env:
+          VERSION_NAME: 0.0.1
+          VERSION_CODE: 1
+        run: gradle -p android assembleRelease --no-daemon --stacktrace
+
+      - run: ls -la android/app/build/outputs/apk/release/

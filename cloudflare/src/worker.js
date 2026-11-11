@@ -3795,12 +3795,17 @@ async function playerErrors(req, env, ip, ctx) {
   const t = now(), model = str(b.model, 80) || d.model || '', ver = str(b.ver, 20);
   const stmts = [];
   const deadNew = new Set();
+  // chiusure dell'app (uccisa dal sistema, errore interno): l'app le rimanda se la consegna non viene confermata, e arrivavano
+  // doppie con la stessa ora. La stessa chiusura (stesso tipo, stessa ora) si salva una volta sola
+  const DUP = ['killed', 'crash'], dup = new Set();
+  if (items.some((x) => x && DUP.includes(x.problem))) { try { for (const e of ((await env.DB.prepare("SELECT t, problem FROM app_errors WHERE device_id = ? AND t > ? AND problem IN ('killed', 'crash')").bind(d.id, t - 86400e3 - 60e3).all()).results) || []) dup.add(e.problem + '|' + e.t); } catch {} }
   for (const x of items) {
     if (!x || typeof x !== 'object') continue;
     const problem = ERR_PROBLEMS.includes(x.problem) ? x.problem : 'error';
     const outcome = ERR_OUTCOMES.includes(x.outcome) ? x.outcome : '';
     // l'orologio del dispositivo può sbagliare: si usa quello dell'app solo se plausibile (ultime 24 h)
     const at = Number.isFinite(+x.t) && +x.t > t - 86400e3 && +x.t <= t + 60e3 ? Math.round(+x.t) : t;
+    if (DUP.includes(problem) && Number.isFinite(+x.t)) { const k = problem + '|' + at; if (dup.has(k)) continue; dup.add(k); }
     const ck = x.k === 'live' ? ckClean(x.ck) : ''; // canale (server|flusso): per i «Canali non funzionanti»
     if (ck && outcome === 'non risolto') deadNew.add(ck);
     const rawErr = str(x.err, 120), isp = str(req.cf?.asOrganization || '?', 80);
@@ -3982,8 +3987,20 @@ function deadFor(o, pls, portalPls) {
   return l.sort();
 }
 const djb = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+/** «server della lista non raggiungibile» superato: dopo quell'esito il dispositivo ha guardato qualcosa, quindi il server lo
+ *  raggiunge (l'app non rifà il controllo durante la visione e il pannello tiene l'esito per 24 ore). Restituisce l'istante
+ *  dell'ultima visione, 0 se l'allarme resta. Prudente: serve una visione almeno 3 minuti dopo (il tempo di visione arriva col
+ *  battito successivo) e nessun errore di visione rimasto senza soluzione da allora (un lettore fermo sull'errore conta come visione) */
+const CHK_NOT_PLAY = ['killed', 'crash', 'restart', 'uierr'];
+function chkSeenAfter(c, lastPlay, errs) {
+  if (!c || c.srv !== 'down') return 0;
+  const from = +c.dn || +c.at || 0, last = +lastPlay || 0;
+  if (!from || last <= from + 3 * 60e3) return 0;
+  if ((errs || []).some((e) => +e.t > from && !CHK_NOT_PLAY.includes(e.problem) && (e.outcome === 'non risolto' || ['error', 'unreach', 'down', 'nonet'].includes(e.problem)))) return 0;
+  return last;
+}
 /** problemi trovati dagli auto-controlli dell'app (vale l'esito delle ultime 24 ore) */
-function chkIssues(p) {
+function chkIssues(p, lastPlay = 0, errs = []) {
   const c = chkParse(p && p.chk), out = [];
   if (!c || (c.at && now() - +c.at > 864e5)) return out;
   const days = (n) => `${n} ${n === 1 ? 'giorno' : 'giorni'}`;
@@ -3991,7 +4008,7 @@ function chkIssues(p) {
   else if (c.acc === 'off') out.push({ sev: 'bad', key: 'line', what: 'Linea disattivata o bloccata sul server della lista (controllo automatico dell\'app)', fix: 'Controlla lo stato della linea sul pannello IPTV' });
   else if (c.acc === 'full') out.push({ sev: 'warn', key: 'line', what: `Connessioni della linea piene${c.con ? ' (' + c.con + ')' : ''}`, fix: 'Qualcun altro usa la stessa linea o un dispositivo è rimasto collegato: controlla le connessioni sul pannello IPTV' });
   if (c.srv === 'auth') out.push({ sev: 'bad', key: 'line', what: 'Il server della lista rifiuta utente e password', fix: 'Linea cancellata o password cambiata: correggi la playlist nella scheda del cliente' });
-  else if (c.srv === 'down') out.push({ sev: 'bad', key: 'srv', what: 'Il dispositivo non raggiunge il server della lista', fix: 'Se succede a più clienti è il server: aggiungi un server di riserva in «Server DNS». Se è solo lui, è la sua rete o il suo operatore' });
+  else if (c.srv === 'down' && !chkSeenAfter(c, lastPlay, errs)) out.push({ sev: 'bad', key: 'srv', what: 'Il dispositivo non raggiunge il server della lista', fix: 'Se succede a più clienti è il server: aggiungi un server di riserva in «Server DNS». Se è solo lui, è la sua rete o il suo operatore' });
   else if (c.srv === 'alt') out.push({ sev: 'warn', key: 'srv', what: 'Server principale della lista non raggiungibile: l\'app usa da sola il server di riserva', fix: 'Controlla il server principale in «Server DNS»' });
   if (typeof c.clk === 'number' && Math.abs(c.clk) >= 10) out.push({ sev: 'warn', key: 'clock', what: `Orologio del dispositivo sbagliato di ${Math.abs(c.clk) >= 120 ? Math.round(Math.abs(c.clk) / 60) + ' ore' : Math.abs(c.clk) + ' minuti'}`, fix: 'Sul dispositivo: Impostazioni › Data e ora › automatiche. Con l\'ora sbagliata la guida TV è sfasata e alcuni server rifiutano il collegamento' });
   if (c.dsk === 'low') out.push({ sev: 'warn', key: 'disk', what: `Poco spazio libero sul dispositivo${typeof c.mb === 'number' ? ' (' + c.mb + ' MB)' : ''}`, fix: 'L\'app ha già pulito da sola le sue cache: se continua, sul dispositivo vanno tolte app o file che non si usano' });
@@ -4046,7 +4063,9 @@ async function playerHeartbeat(req, env, ip, ctx) {
     ...rcSnapshot(b), // impostazioni attuali dell'app e configurazione remota applicata
   };
   // autopilota: esito degli auto-controlli dell'app (arriva quando cambia e ogni 15 minuti), con l'istante del server
-  { const ck0 = chkClean(b.chk); if (ck0) f.chk = ck0.slice(0, -1) + ',"at":' + t + '}'; }
+  // «dn» = da quando il server della lista risulta non raggiungibile: l'app non rifà il controllo durante la visione e rimanda
+  // lo stesso esito ogni 15 minuti, quindi «at» da solo non dice quando è stato visto giù la prima volta (vedi chkSeenAfter)
+  { const ck0 = chkClean(b.chk); if (ck0) { let dn = ''; if (ck0.includes('"srv":"down"')) { const o0 = chkParse(old && old.chk); dn = ',"dn":' + (o0 && o0.srv === 'down' ? +o0.dn || +o0.at || t : t); } f.chk = ck0.slice(0, -1) + dn + ',"at":' + t + '}'; } }
   if (sp) {
     // l'ora della misura arriva dall'orologio del dispositivo: se è sbagliato (nel futuro o più vecchio di un mese) vale quella
     // già salvata per la stessa misura, altrimenti l'ora del server (prima «Online ora» mostrava «speed test» di anni fa)
@@ -4416,6 +4435,12 @@ async function lineProblem(pl) {
 }
 /* soft = «Risolvi tutti» senza riavvii: aggiornamento, impostazioni e controllo linea sì, svuota cache e riavvio no
    (la visione in corso dei clienti non si interrompe) */
+/** ultima visione del dispositivo (serve solo se l'auto-controllo dice «server non raggiungibile»: altrimenti niente lettura) */
+const chkDown = (p) => !!(p && typeof p.chk === 'string' && p.chk.includes('"srv":"down"'));
+async function lastPlayOf(env, id, p, t = now()) {
+  if (!chkDown(p)) return 0;
+  try { return +((await env.DB.prepare('SELECT MAX(last) AS last FROM watch_dev WHERE device_id = ? AND day >= ?').bind(id, dayIT(t - 2 * 864e5)).first()) || {}).last || 0; } catch { return 0; }
+}
 async function fixDevice(env, s, d, who, auto = false, soft = false) {
   const t = now();
   const p = await env.DB.prepare('SELECT * FROM presence WHERE device_id = ?').bind(d.id).first();
@@ -4423,7 +4448,7 @@ async function fixDevice(env, s, d, who, auto = false, soft = false) {
   if (!RC_LINKED.includes(app)) throw new HttpErr(400, `${APP_NAME[app] || 'Questa app'} non si gestisce dal pannello`);
   const errs = ((await env.DB.prepare('SELECT t, problem, outcome, codec, dec FROM app_errors WHERE device_id = ? AND t > ?').bind(d.id, Math.max(t - 864e5, +d.fix_t || 0)).all().catch(() => ({ results: [] }))).results) || [];
   const latest = auto ? null : await latestFor(env, s, app).catch(() => null);
-  const iss = healthIssues(p, errs, latest, app);
+  const iss = healthIssues(p, errs, latest, app, await lastPlayOf(env, d.id, p, t));
   const rc = rcDevOf(d), rc0 = JSON.stringify(rc), cmds = new Set(), done = [], todo = [];
   /* voci già decise dal titolare (su questo cliente o sul profilo dell'app): «Risolvi» automatico non le cambia mai.
      «Modalità leggera: Spenta» non la cambia nemmeno «Risolvi» premuto a mano (lo segnala soltanto), e la modalità leggera non scende mai */
@@ -4467,11 +4492,18 @@ async function fixDevice(env, s, d, who, auto = false, soft = false) {
   if (done.length) await log(env, 'edit', `${who}: «Risolvi»${auto ? ' automatico' : soft ? ' (tutti, senza riavvii)' : ''} su ${d.name || d.code} — ${done.join('; ')}`, '');
   return { ok: true, done, todo, issues: iss.length };
 }
-function healthIssues(p, errs, latest, app) {
+/** quante volte davvero: le segnalazioni a meno di 5 minuti dalla prima del gruppo sono la stessa chiusura (l'app la rimanda
+ *  quando la consegna non viene confermata; un dispositivo che si spegne ne lascia più d'una) */
+function distinctTimes(list, gap = 5 * 60e3) {
+  let n = 0, start = -Infinity;
+  for (const t of list.map((e) => +e.t || 0).sort((a, b) => a - b)) if (t - start > gap) { n++; start = t; }
+  return n;
+}
+function healthIssues(p, errs, latest, app, lastPlay = 0) {
   const out = [];
   const pro = !app || RC_APPS.includes(app);
   if (p && latest && verBehind(p.ver, latest.version)) out.push({ sev: 'warn', key: 'upd', what: `App vecchia: ${APP_NAME[app || 'tv'] || ''} ${String(p.ver || '?').replace(/^(lite|tv|xc|ult|plus|nova)\s+/i, '').replace(/\s+premium$/i, '')} (ultima ${latest.version})`, fix: UPD_HOW[app || 'tv'] || 'Aggiorna l\'app del cliente', ...(pro ? { act: 'upd' } : {}) });
-  const kd = errs.filter((e) => e.problem === 'killed').length, cr = errs.filter((e) => e.problem === 'crash').length;
+  const kd = distinctTimes(errs.filter((e) => e.problem === 'killed')), cr = distinctTimes(errs.filter((e) => e.problem === 'crash'));
   if (kd >= 2) out.push({ sev: 'bad', key: 'killed', what: `Si è chiusa da sola ${kd} volte nelle ultime 24 ore: il sistema l'ha terminata per poca memoria${/fire|aft/i.test((p && p.model) || '') ? ' (tipico dei Fire Stick)' : ''}`, fix: 'L\'app passa da sola alla modalità leggerissima (salvo se l\'hai messa «Spenta»). Fai chiudere le altre app sul dispositivo e riavviarlo; se continua, quel dispositivo ha troppo poca memoria per l\'app: serve un box o una stick con almeno 2 GB' });
   const ue = errs.filter((e) => e.problem === 'uierr').length;
   if (ue >= 1) out.push({ sev: 'warn', key: 'uierr', what: `${ue} ${ue === 1 ? 'errore dell\'interfaccia' : 'errori dell\'interfaccia'} nelle ultime 24 ore`, fix: 'Il dettaglio (messaggio e riga) è in «Errori delle app»: mandalo allo sviluppatore' });
@@ -4485,7 +4517,7 @@ function healthIssues(p, errs, latest, app) {
   if (p && p.state !== 'idle' && +p.stalls_h >= 3) out.push({ sev: 'warn', key: 'stall', what: `${p.stalls_h} blocchi nell'ultima ora`, fix: p.net === 'wifi' && +p.rssi < -70 ? 'Wi-Fi debole: avvicina il router o usa il cavo' : 'Linea o server lenti in questo momento' });
   if (p && p.net === 'wifi' && +p.rssi && +p.rssi < -75) out.push({ sev: 'warn', key: 'wifi', what: `Wi-Fi molto debole (${p.rssi} dBm)`, fix: 'Avvicina il router, usa un ripetitore o il cavo' });
   if (p && +p.speed_dl && +p.speed_dl < 8) out.push({ sev: 'warn', key: 'speed', what: `Connessione lenta (${(+p.speed_dl).toFixed(1)} Mbps)`, fix: 'Per l\'HD servono almeno 8–10 Mbps stabili' });
-  out.push(...chkIssues(p)); // auto-controlli dell'app (linea, server, orologio, spazio, guida)
+  out.push(...chkIssues(p, lastPlay, errs)); // auto-controlli dell'app (linea, server, orologio, spazio, guida)
   return out;
 }
 async function insightFor(env, d, s) {
@@ -4498,6 +4530,7 @@ async function insightFor(env, d, s) {
   const today = dayIT(t), byTitle = new Map(), byDay = new Map();
   for (const w of wd) { const k = w.kind + '|' + w.title, x = byTitle.get(k) || { kind: w.kind, title: w.title, secs: 0, last: 0 }; x.secs += +w.secs; x.last = Math.max(x.last, +w.last); byTitle.set(k, x); byDay.set(w.day, (byDay.get(w.day) || 0) + +w.secs); }
   const online = p && t - (+p.t || 0) <= ONLINE_MS;
+  const lastPlay = wd.reduce((m, w) => Math.max(m, +w.last || 0), 0);
   return {
     id: d.id, name: d.name || '', code: d.code, app, appName: APP_NAME[app] || 'Kairos', model: (p && p.model) || d.model || '',
     online, lastSeen: Math.max(+d.last_seen || 0, p ? +p.t : 0), lastIp: (p && p.ip) || d.last_ip || '', city: p ? [p.city, p.country].filter(Boolean).join(', ') : '',
@@ -4507,8 +4540,8 @@ async function insightFor(env, d, s) {
     net: p ? { type: p.net, rssi: +p.rssi || 0, dl: +p.speed_dl || 0, ul: +p.speed_ul || 0, ping: +p.speed_ping || 0, t: +p.speed_t || 0 } : null,
     watch: { today: byDay.get(today) || 0, week: [...byDay.values()].reduce((a, b) => a + b, 0), days: [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([day, secs]) => ({ day, secs })), top: [...byTitle.values()].sort((a, b) => b.secs - a.secs).slice(0, 15) },
     errors: { n24: errs24.length, n7: errs.length, unresolved24: errs24.filter((e) => e.outcome === 'non risolto').length, list: errs.slice(0, 12) },
-    issues: healthIssues(p, errs24, latest, app),
-    chk: chkParse(p && p.chk), // auto-controlli silenziosi dell'app (autopilota)
+    issues: healthIssues(p, errs24, latest, app, lastPlay),
+    chk: (() => { const c = chkParse(p && p.chk), seen = chkSeenAfter(c, lastPlay, errs24); return c && seen ? { ...c, seen } : c; })(), // auto-controlli silenziosi dell'app (autopilota); «seen» = server raggiunto dopo: ha guardato a quell'ora
   };
 }
 /** riepilogo per il pannello: clienti con problemi (versione vecchia, errori, blocchi), dal più grave */
@@ -4523,13 +4556,16 @@ async function healthList(env, s, ids) {
   ]);
   const rows = (rowsR && rowsR.results) || [];
   const er = new Map(((erR && erR.results) || []).reduce((m, e) => { const a = m.get(e.device_id) || []; a.push(e); m.set(e.device_id, a); return m; }, new Map()));
+  // ultima visione: si legge solo se qualcuno ha «server non raggiungibile» (di solito nessuno), una richiesta per tutti
+  const lp = new Map();
+  if (rows.some(chkDown)) { try { for (const w of ((await env.DB.prepare('SELECT device_id, MAX(last) AS last FROM watch_dev WHERE day >= ? GROUP BY device_id').bind(dayIT(t - 2 * 864e5)).all()).results) || []) lp.set(w.device_id, +w.last || 0); } catch {} }
   const out = []; let hidden = 0;
   const errorKeys = new Set(['killed', 'uierr', 'crash', 'restart', 'err', 'dec']);
   for (const r of rows) {
     if (ids && !ids.has(r.id)) continue;
     let hide = null; try { const h = r.hl_hide ? JSON.parse(r.hl_hide) : null; if (h && Number.isFinite(+h.t) && Array.isArray(h.keys)) hide = h; } catch {}
     const app = appOfVer(r.ver, r.app), errs = (er.get(r.id) || []).filter((e) => +e.t > Math.max(+r.fix_t || 0, hide ? +hide.t : 0));
-    let iss = healthIssues(r, errs, L[app] || null, app);
+    let iss = healthIssues(r, errs, L[app] || null, app, lp.get(r.id) || 0);
     if (hide) iss = iss.filter((i) => !hide.keys.includes(i.key) || errorKeys.has(i.key));
     if (!iss.length) { if (hide) hidden++; continue; }
     out.push({ id: r.id, name: r.name || '', code: r.code, app, appName: APP_NAME[app] || '', canUpd: RC_LINKED.includes(app), ver: r.ver, online: t - +r.t <= ONLINE_MS, lastSeen: +r.t, updSent: +r.upd_req || 0, issues: iss, bad: iss.filter((x) => x.sev === 'bad').length });

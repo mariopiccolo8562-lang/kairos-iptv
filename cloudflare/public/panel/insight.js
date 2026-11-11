@@ -50,7 +50,9 @@
     const row = (k, v, sev) => `<div class="in-row"><span>${k}</span><b style="color:${CHK_C[sev] || 'inherit'}">${v}</b></div>`;
     const L = (grp, v) => (CHK_L[grp] || {})[v];
     const out = [];
-    if (L('srv', c.srv)) out.push(row('Server della lista', esc(L('srv', c.srv)[0]), L('srv', c.srv)[1]));
+    // «seen»: dopo il controllo non riuscito il cliente ha guardato (il pannello lo sa dal tempo di visione): il server lo raggiunge
+    if (c.srv === 'down' && +c.seen) out.push(row('Server della lista', `✓ raggiunto: ha guardato ${esc(when(+c.seen))} <span style="font-weight:400;color:var(--mut)">· il controllo di prima non era riuscito</span>`, 'ok'));
+    else if (L('srv', c.srv)) out.push(row('Server della lista', esc(L('srv', c.srv)[0]), L('srv', c.srv)[1]));
     if (L('acc', c.acc)) out.push(row('Linea', esc((c.acc === 'exp' && typeof c.exp === 'number' && c.exp < 0 ? `scaduta da ${-c.exp} g` : L('acc', c.acc)[0] + (typeof c.exp === 'number' && c.exp >= 0 ? ` · scade tra ${c.exp} g` : '')) + (c.con ? ' · connessioni ' + c.con : '')), L('acc', c.acc)[1]));
     if (L('epg', c.epg)) out.push(row('Guida TV', esc(L('epg', c.epg)[0]), L('epg', c.epg)[1]));
     if (L('dsk', c.dsk)) out.push(row('Spazio libero', esc(L('dsk', c.dsk)[0] + (typeof c.mb === 'number' ? ' · ' + c.mb + ' MB' : '')), L('dsk', c.dsk)[1]));
