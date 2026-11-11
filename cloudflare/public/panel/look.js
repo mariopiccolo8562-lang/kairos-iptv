@@ -136,6 +136,7 @@ html.lx #hub4side .nav .h4n{background:#fbbf24;color:#1c1300}
 
 @media (min-width:701px) and (max-width:1180px){
   html.lx #side .brand b.brandName{font:800 10.5px/1 ${SANS}!important;letter-spacing:.3em!important;margin-right:-.3em;color:#e8f6ff;text-shadow:0 0 12px rgba(34,211,238,.45)}
+  html.lx #side .brand small.brandSub{font:700 7.5px/1 ${SANS};letter-spacing:.42em;margin-right:-.42em;color:#67e8f9;text-shadow:0 0 10px rgba(34,211,238,.5)}
   html.lx #side .brand small.brandRole{padding:3px 5px;border-radius:999px;border:1px solid rgba(167,139,250,.55);background:rgba(139,92,246,.12);color:#ddd6fe;font:700 8px/1.25 ${MONO}!important;letter-spacing:.03em!important;text-transform:uppercase;max-width:78px;overflow:hidden;text-overflow:ellipsis}
 }
 /* telefono: menu a scomparsa scuro e barra in basso con il pulsante luminoso */
@@ -365,6 +366,7 @@ html.lx-f #lxHome .x-km,html.lx-f #lxHome .x-hm{display:none}
   html.lx-f #side .brand{flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 0 16px!important;margin:0}
   html.lx-f #side .brand>div{display:flex!important;flex-direction:column;align-items:center;gap:6px}
   html.lx-f #side .brand .brandName{font:800 11px/1 ${SANS};letter-spacing:.34em;margin-right:-.34em;color:#e8f6ff;text-shadow:0 0 12px rgba(34,211,238,.45)}
+  html.lx-f #side .brand .brandSub{display:block;font:700 7.5px/1 ${SANS};letter-spacing:.29em;margin:-2px -.29em 0 0;color:#67e8f9;text-shadow:0 0 10px rgba(34,211,238,.5)}
   html.lx-f #side .brand .brandRole{display:block;max-width:90px;padding:3px 6px;border-radius:999px;border:1px solid rgba(167,139,250,.55);background:rgba(139,92,246,.12);color:#ddd6fe;font:700 8px/1.25 ${MONO};letter-spacing:.08em;text-transform:uppercase;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:1}
   html.lx-f #side .brand svg.kx-logo{width:56px!important;height:56px!important}
   html.lx-f #hub4side{align-items:center;gap:10px;width:100%}
@@ -382,7 +384,7 @@ html.lx-f #lxHome .x-km,html.lx-f #lxHome .x-hm{display:none}
   html.lx-f #side #logout svg{width:20px;height:20px}
 /* barra a icone sugli schermi bassi (portatili): voci un po' più strette, così entrano tutte con «Esci» */
 @media (min-width:701px) and (max-height:860px){html.lx-f #side .brand svg.kx-logo{width:46px!important;height:46px!important}html.lx-f #side .brand{padding-bottom:12px!important;gap:6px}html.lx-f #side .brand>div{gap:5px}html.lx-f #hub4side{gap:5px}html.lx-f #hub4side .nav{height:46px}html.lx-f #lxStyleBtn{margin-bottom:10px}}
-@media (min-width:701px) and (max-height:700px){html.lx-f #side{padding:12px 0 10px!important}html.lx-f #side .brand svg.kx-logo{width:40px!important;height:40px!important}html.lx-f #side .brand{padding-bottom:8px!important;gap:5px}html.lx-f #side .brand .brandName{font-size:10px}html.lx-f #hub4side{gap:3px}html.lx-f #hub4side .nav{height:40px;width:52px!important;border-radius:13px}html.lx-f #hub4side .nav svg{width:21px!important;height:21px!important}html.lx-f #side #logout{height:38px}html.lx-f #lxStyleBtn{margin:-4px auto 8px;padding:5px 0}}
+@media (min-width:701px) and (max-height:700px){html.lx-f #side{padding:12px 0 10px!important}html.lx-f #side .brand svg.kx-logo{width:40px!important;height:40px!important}html.lx-f #side .brand{padding-bottom:8px!important;gap:5px}html.lx-f #side .brand .brandName{font-size:10px}html.lx-f #side .brand>div{gap:3px}html.lx-f #side .brand .brandSub{font-size:7px;letter-spacing:.27em;margin-right:-.27em}html.lx-f #hub4side{gap:3px}html.lx-f #hub4side .nav{height:40px;width:52px!important;border-radius:13px}html.lx-f #hub4side .nav svg{width:21px!important;height:21px!important}html.lx-f #side #logout{height:38px}html.lx-f #lxStyleBtn{margin:-4px auto 8px;padding:5px 0}}
 @media (min-width:701px) and (max-height:590px){html.lx-f #side{overflow-y:auto!important;scrollbar-width:none}}
   html.lx-f #lxBrand{display:block;flex:none;margin-right:6px}
   html.lx-f #lxBrand .x-wm,html.lx-f #lxBrand .x-rl{display:none}

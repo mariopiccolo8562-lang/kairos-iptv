@@ -53,6 +53,7 @@
   #side .brand{flex-direction:column;justify-content:center;gap:7px;padding:0 0 16px!important}
   #side .brand>div{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;max-width:100%;min-width:0}
   #side .brand b.brandName{font-size:11px!important;letter-spacing:.2em;margin-right:-.2em;line-height:1}
+  #side .brand small.brandSub{margin:-1px -.3em 0 0;font-size:7.5px;letter-spacing:.3em;line-height:1}
   #side .brand small.brandRole{margin:0;font-size:10.5px!important;line-height:1.2;white-space:nowrap;max-width:76px;overflow:hidden;text-overflow:ellipsis}
   #side .foot{display:none!important}
   #hub4side .nav{flex-direction:column;gap:5px;padding:10px 4px;font-size:10.5px;line-height:1.15;text-align:center;justify-content:center}
