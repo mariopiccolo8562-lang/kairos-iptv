@@ -7133,7 +7133,7 @@ function acctCard() {
     <div class="snote">Profili: ${l.length} di ${profMax()}. Ogni profilo ha preferiti, cronologia e blocchi propri. ${profCanEdit() ? 'Premi OK su un profilo per modificarlo.' : 'I profili sono gestiti dal fornitore.'}</div>
     ${l.length > 1 ? `<div class="sr" data-f id="aSw"><span>Cambia profilo</span><b>${S.prof ? esc(S.prof.name) : '›'}</b></div><div class="sr" data-f id="aAsk"><span>Chiedi il profilo all'avvio</span><b>${store.get('askProf', true) === false ? 'No' : 'Sì'}</b></div>` : ''}
     <h3 style="margin-top:24px">Dispositivi collegati</h3>
-    ${a && a.maxConn ? `${kv2('Connessioni usate', `${conns.length || 1} di ${a.maxConn}`)}${conns.map((c) => kv2(`${esc(c.name || c.model || 'Dispositivo')}${c.me ? ' <small class="mut">· questo</small>' : ''}<br><small class="mut">${esc(c.model || '')}${c.seen ? ' · ' + dayTime(c.seen) : ''}</small>`, c.me ? '●' : '')).join('')}
+    ${a && a.maxConn ? `${kv2('Connessioni usate', a.maxConn >= 999 ? `${conns.length || 1} · illimitate` : `${conns.length || 1} di ${a.maxConn}`)}${conns.map((c) => kv2(`${esc(c.name || c.model || 'Dispositivo')}${c.me ? ' <small class="mut">· questo</small>' : ''}<br><small class="mut">${esc(c.model || '')}${c.seen ? ' · ' + dayTime(c.seen) : ''}</small>`, c.me ? '●' : '')).join('')}
       ${a.maxConn > (conns.length || 1) && perm('link') ? `<div class="sbtns"><button class="btn pri" data-f id="aLinkNew">${ICX.link} Collega un altro dispositivo</button></div><div class="snote">Ti verrà mostrato un codice di 6 cifre da inserire sull'altro dispositivo.</div>` : '<div class="snote">Hai usato tutte le connessioni del tuo abbonamento. Per aggiungerne altre contatta il tuo fornitore.</div>'}${a.primary === false ? `<div class="snote">Questo dispositivo usa l'abbonamento di <b>${esc(a.owner || 'un altro dispositivo')}</b>.</div>` : ''}`
       : '<div class="snote">Per usare lo stesso abbonamento su più dispositivi chiedi al tuo fornitore di aumentare le connessioni dal pannello.</div>'}`;
 }
@@ -8073,15 +8073,21 @@ function reportDialog(preset) {
   }));
 }
 
+/** Android 12+ (11 novembre 2026): la versione si installa da sola quando il cliente esce dall'app (Quiet.kt), niente proposta;
+ *  serve l'APK pronto o lo scaricamento in background; dopo 3 giorni senza installarsi (app mai chiusa) torna la proposta */
+function quietOk(a) { try { return !!(a && NATIVE && NATIVE.quietOk && (S.apkReady === a.url || bgUpdOn()) && Date.now() - updFirstSeen(a) < 3 * 86400e3 && NATIVE.quietOk(a.versionCode)); } catch { return false; } }
+/** riga per il «Blocco automatico» dei Samsung se l'installazione senza conferma di questa versione è stata bloccata */
+function quietHint(a) { try { return a && NATIVE && NATIVE.quietBlocked && NATIVE.quietBlocked(a.versionCode) ? '<p class="mut" style="line-height:1.5;margin-top:6px">Se Android blocca l\'installazione: spegni «Blocco automatico» in Impostazioni › Sicurezza e privacy, poi riprova.</p>' : ''; } catch { return ''; } }
 function offerApkUpdate(force) {
   const a = S.apkUpdate; if (!a) return updThen();
   if ($('#updM')) return;
   const skip = store.get('apkSkip', {}), must = updMust();
   updFirstSeen(a); // da qui contano i giorni di grazia
+  if (!must && quietOk(a)) return updThen(); // Android 12+: si installa da sola quando il cliente esce dall'app
   if (!force && !must && skip.v === a.versionCode && Date.now() - skip.t < 12 * 3600e3) return updThen();
   modalPause(); // l'anteprima nativa coprirebbe la finestra
   document.body.insertAdjacentHTML('beforeend', `<div class="speedm on" id="updM"><div class="sbox"><div class="orb mut" style="font-size:12px;letter-spacing:.35em">AGGIORNAMENTO</div>
-    <h2 style="margin:14px 0 8px;font-size:26px">${must ? `Aggiornamento ${esc(a.version || '')} necessario` : S.apkReady === a.url ? `Aggiornamento ${esc(a.version || '')} pronto` : `Nuova versione ${esc(a.version || '')} disponibile`}</h2><p class="mut" style="line-height:1.5">${must ? 'Per continuare a usare l\'app va installata la versione nuova: è già scaricata e verificata, premi Installa e conferma nella schermata di Android. Ci vuole meno di un minuto.' : S.apkReady === a.url ? 'È già scaricato e verificato: premi Installa e conferma nella schermata di Android. Ci vuole meno di un minuto.' : 'Contiene miglioramenti e correzioni. Il download richiede pochi secondi, poi conferma l\'installazione.'}</p>
+    <h2 style="margin:14px 0 8px;font-size:26px">${must ? `Aggiornamento ${esc(a.version || '')} necessario` : S.apkReady === a.url ? `Aggiornamento ${esc(a.version || '')} pronto` : `Nuova versione ${esc(a.version || '')} disponibile`}</h2><p class="mut" style="line-height:1.5">${must ? 'Per continuare a usare l\'app va installata la versione nuova: è già scaricata e verificata, premi Installa e conferma nella schermata di Android. Ci vuole meno di un minuto.' : S.apkReady === a.url ? 'È già scaricato e verificato: premi Installa e conferma nella schermata di Android. Ci vuole meno di un minuto.' : 'Contiene miglioramenti e correzioni. Il download richiede pochi secondi, poi conferma l\'installazione.'}</p>${quietHint(a)}
     <div class="ubar"><i id="uBar"></i></div><div class="mut" id="uTxt" style="font-size:13px;min-height:18px;line-height:1.4"></div>
     <div class="sbtn"><button class="btn pri" data-f id="uGo">${S.apkReady === a.url ? 'Installa ora' : 'Aggiorna ora'}</button>${must ? '' : '<button class="btn" data-f id="uLater">Più tardi</button>'}</div></div></div>`);
   if (must) $('#updM')._lock = true; // il tasto indietro non la chiude

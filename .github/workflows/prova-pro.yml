@@ -1,0 +1,35 @@
+# SOLO PROVA DI COMPILAZIONE di Kairos Pro sul ramo «aggiorna-senza-conferma» (aggiornamento senza conferma, Quiet.kt).
+# Niente chiave di firma, niente artefatti, niente release: ai clienti non arriva nulla.
+# (Si toglie quando il ramo viene unito a main.)
+name: Prova Kairos Pro (ramo aggiorna-senza-conferma, non pubblica)
+
+on:
+  push:
+    branches: [aggiorna-senza-conferma]
+    paths: ['android/**', 'player/**', '.github/workflows/prova-pro.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Copia il player nell'app (modalità demo)
+        run: |
+          mkdir -p android/app/src/main/assets/www
+          cp player/index.html android/app/src/main/assets/www/index.html
+          printf 'window.KAIROS_SERVER = "";\nwindow.KX_UI = "prova";\n' > android/app/src/main/assets/www/config.js
+      - name: Compila (firma temporanea)
+        env:
+          VERSION_NAME: 0.0.1
+          VERSION_CODE: '1'
+        run: gradle -p android assembleRelease --no-daemon --stacktrace

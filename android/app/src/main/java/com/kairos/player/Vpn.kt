@@ -97,6 +97,9 @@ object KxVpn {
     }
 
     fun active(): Boolean = state == "on" || state == "connecting"
+    /** la VPN accesa serve solo a questa app (di serie: IncludedApplications = il pacchetto dell'app); vedi [Quiet.vpnOk] */
+    @Volatile var appOnly = true
+        private set
 
     fun waitingConsent() = set("connecting", "Conferma la richiesta di Android per attivare la VPN")
     fun denied() = set("denied", "Permesso VPN negato: la VPN non è stata attivata")
@@ -112,8 +115,10 @@ object KxVpn {
     private fun parse(conf: String, pkg: String): Config {
         val text = conf.removePrefix("﻿")
         val c = Config.parse(text.byteInputStream())
-        if (pkg.isEmpty()) return c
+        if (pkg.isEmpty()) { appOnly = false; return c }
         val itf = c.getInterface()
+        val inc = itf.getIncludedApplications()
+        appOnly = (inc.isEmpty() && itf.getExcludedApplications().isEmpty()) || (inc.size == 1 && inc.contains(pkg))
         if (itf.getIncludedApplications().isEmpty() && itf.getExcludedApplications().isEmpty()) {
             val lines = text.replace("\r\n", "\n").split("\n").toMutableList()
             val i = lines.indexOfFirst { it.substringBefore('#').trim().equals("[Interface]", ignoreCase = true) }

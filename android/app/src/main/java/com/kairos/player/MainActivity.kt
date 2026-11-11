@@ -155,6 +155,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         prefs = getSharedPreferences("kairos", MODE_PRIVATE)
+        Quiet.watch(application) // Android 12+: aggiornamento senza conferma quando il cliente esce dall'app
         applyOrientation(prefs.getString("orient", "auto") ?: "auto")
         Watch.start(this, prefs) // perché l'app si è chiusa l'ultima volta (errore, uccisa dal sistema, memoria): lo legge l'interfaccia e lo manda al pannello
 
@@ -1219,6 +1220,10 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface fun prefetchApk(url: String) { this@MainActivity.prefetchApk(url) }
         /** true se l'APK di [url] è già scaricato e verificato */
         @JavascriptInterface fun apkReady(url: String): Boolean = apkReadyFor(url)
+        /** Android 12+: la versione [code] si installa da sola quando il cliente esce dall'app, l'interfaccia non la propone (Quiet.kt) */
+        @JavascriptInterface fun quietOk(code: Int): Boolean = Quiet.ok(this@MainActivity, code)
+        /** l'installazione senza conferma di [code] è stata bloccata su un Samsung: la proposta spiega il «Blocco automatico» */
+        @JavascriptInterface fun quietBlocked(code: Int): Boolean = Quiet.blocked(this@MainActivity, code)
         @JavascriptInterface fun speedTest() { runSpeedTest() }
         /** ferma lo speed test in corso (es. finestra chiusa) */
         @JavascriptInterface fun speedStop() { SpeedTest.stop() }
