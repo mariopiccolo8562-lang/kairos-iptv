@@ -1,0 +1,58 @@
+name: Prova release automatica (ramo, non pubblica nulla)
+
+# Solo su questo ramo: prova la regola di versione.sh nell'ambiente di GitHub e compila l'APK con una chiave temporanea.
+# Non pubblica e non usa segreti. Si toglie quando il ramo entra in main.
+on:
+  push:
+    branches: [rilascio-automatico]
+
+permissions:
+  contents: read
+
+jobs:
+  prova:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Copia il player nell'app (modalità demo)
+        run: |
+          mkdir -p android/app/src/main/assets/www
+          cp player/index.html android/app/src/main/assets/www/index.html
+          printf 'window.KAIROS_SERVER = "";\nwindow.KX_UI = "prova";\n' > android/app/src/main/assets/www/config.js
+
+      # lo stesso passaggio di android.yml
+      - name: Versione
+        env:
+          VERSION_FILE: android/versione.txt
+        run: |
+          bash .github/scripts/versione_test.sh .github/scripts/versione.sh
+          TAGS_OK=0; TAGS=""
+          if T="$(git ls-remote --tags origin 2>/dev/null)"; then
+            TAGS="$(printf '%s\n' "$T" | sed 's#.*refs/tags/##; s#\^{}$##')"; TAGS_OK=1
+          fi
+          TAGS="$TAGS" TAGS_OK="$TAGS_OK" bash .github/scripts/versione.sh
+
+      - name: Cosa farebbe su main con la versione nuova (solo calcolo, non pubblica)
+        run: |
+          echo "sul ramo: VERSION_NAME=$VERSION_NAME VERSION_CODE=$VERSION_CODE IS_RELEASE=[$IS_RELEASE] REL_TAG=[$REL_TAG]"
+          [ -z "$IS_RELEASE" ] || { echo "::error::su un ramo non deve mai essere una release"; exit 1; }
+          T="$(git ls-remote --tags origin | sed 's#.*refs/tags/##; s#\^{}$##')"
+          echo 2.7.5 > "$RUNNER_TEMP/v.txt"
+          GITHUB_ENV="$RUNNER_TEMP/env" GITHUB_REF=refs/heads/main GITHUB_EVENT_NAME=push VERSION_FILE="$RUNNER_TEMP/v.txt" TAGS="$T" TAGS_OK=1 bash .github/scripts/versione.sh
+          cat "$RUNNER_TEMP/env"
+          grep -qx 'REL_TAG=v2.7.5' "$RUNNER_TEMP/env" && grep -qx 'VERSION_CODE=20705' "$RUNNER_TEMP/env"
+
+      - name: Compila APK (chiave temporanea)
+        run: gradle -p android assembleRelease --no-daemon --stacktrace
+
+      - run: ls -la android/app/build/outputs/apk/release/

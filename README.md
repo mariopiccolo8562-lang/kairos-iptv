@@ -51,7 +51,7 @@ Ogni volta che modifichi qualcosa e la carichi su GitHub:
 1. Su GitHub: **Settings → Secrets and variables → Actions → Variables**, crea:
    - `KAIROS_SERVER_URL` = l'indirizzo del pannello **senza** `/panel`, ad esempio `https://tv.tuodominio.it`;
    - facoltative: `APP_NAME` (nome sotto l'icona, predefinito "KAIROS") e `APP_ID` (es. `it.miotv.player`, da non cambiare più dopo la prima pubblicazione).
-2. Per pubblicare una versione: **Releases → Draft a new release**, tag `v1.0.0`, poi *Publish*. Dopo pochi minuti l'APK `kairos.apk` compare allegato alla release.
+2. Per pubblicare una versione basta cambiare il numero in `android/versione.txt` su `main` (per esempio da `2.7.4` a `2.7.5`): la compilazione di quella modifica crea il tag e pubblica la release, senza passare da GitHub. La regola sta in `.github/scripts/versione.sh` (provata a ogni compilazione): pubblica solo da `main` e solo se la versione è nuova e più alta dell'ultima; con un numero non valido, più basso o già pubblicato esce solo l'APK di prova, e le altre modifiche a `main` non pubblicano nulla. Vale ancora anche il modo a mano: **Releases → Draft a new release**, tag `v1.0.0`, poi *Publish*. Dopo pochi minuti l'APK `kairos.apk` compare allegato alla release.
 3. Il link fisso all'ultima versione è sempre:
    `https://github.com/TUO-UTENTE/kairos-iptv/releases/latest/download/kairos.apk`
 

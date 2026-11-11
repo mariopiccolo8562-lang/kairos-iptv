@@ -10,6 +10,15 @@ on:
 permissions:
   contents: write
 
+# Per pubblicare una versione di Kairos Pro basta cambiare il numero in android/versione.txt su main: tag e release li crea
+# questa compilazione (regola in .github/scripts/versione.sh: solo da main, solo se la versione è nuova e più alta
+# dell'ultima). Vale ancora anche il tag vX.Y.Z creato a mano. Le altre modifiche compilano solo l'APK di prova.
+
+# su main una compilazione alla volta: due modifiche vicine non pubblicano due volte la stessa versione
+concurrency:
+  group: ${{ github.ref == 'refs/heads/main' && 'rilascio-main' || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -51,16 +60,17 @@ jobs:
             echo "::warning::Nessuna chiave di firma: APK firmato con chiave temporanea (gli aggiornamenti non si installeranno sopra). Esegui il workflow 'Prepara segreti'."
           fi
 
+      # compilazione di prova oppure release (da tag, o da android/versione.txt su main)
       - name: Versione
+        env:
+          VERSION_FILE: android/versione.txt
         run: |
-          if [[ "$GITHUB_REF" =~ ^refs/tags/v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            V="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
-            CODE=$(( BASH_REMATCH[1] * 10000 + BASH_REMATCH[2] * 100 + BASH_REMATCH[3] ))   # es. 1.3.0 → 10300
-          else
-            V="0.0.${GITHUB_RUN_NUMBER}"; CODE=${GITHUB_RUN_NUMBER}                          # build di prova
+          bash .github/scripts/versione_test.sh .github/scripts/versione.sh
+          TAGS_OK=0; TAGS=""
+          if T="$(git ls-remote --tags origin 2>/dev/null)"; then
+            TAGS="$(printf '%s\n' "$T" | sed 's#.*refs/tags/##; s#\^{}$##')"; TAGS_OK=1
           fi
-          echo "VERSION_NAME=$V" >> "$GITHUB_ENV"
-          echo "VERSION_CODE=$CODE" >> "$GITHUB_ENV"
+          TAGS="$TAGS" TAGS_OK="$TAGS_OK" bash .github/scripts/versione.sh
 
       - name: Compila APK
         env:
@@ -79,9 +89,11 @@ jobs:
           path: kairos.apk
 
       - name: Pubblica la release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.IS_RELEASE == '1'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.REL_TAG }}          # da versione.txt il tag non c'è ancora: lo crea la release, su questo commit
+          target_commitish: ${{ github.sha }}
           files: kairos.apk
           make_latest: true
           generate_release_notes: true
@@ -89,7 +101,7 @@ jobs:
       # Aggiornamento automatico: copia l'APK in una release fissa ("kairos-tv") del repository PUBBLICO dello store.
       # Il pannello legge kairos-tv.json e tutte le app installate propongono l'aggiornamento da sole.
       - name: Pubblica l'APK per l'aggiornamento automatico
-        if: startsWith(github.ref, 'refs/tags/v') && env.HAS_STORE_TOKEN == 'true'
+        if: env.IS_RELEASE == '1' && env.HAS_STORE_TOKEN == 'true'
         env:
           GH_TOKEN: ${{ secrets.STORE_TOKEN }}
         run: |
@@ -105,6 +117,6 @@ jobs:
           echo "::notice::APK $VERSION_NAME pubblicato: $URL"
 
       - name: Promemoria aggiornamento automatico
-        if: startsWith(github.ref, 'refs/tags/v') && env.HAS_STORE_TOKEN != 'true'
+        if: env.IS_RELEASE == '1' && env.HAS_STORE_TOKEN != 'true'
         run: |
           echo "::warning::Segreto STORE_TOKEN non impostato, l'APK non è stato pubblicato sullo store e le app non si aggiorneranno da sole (vedi README, Aggiornamento automatico)"
