@@ -4366,7 +4366,8 @@ const RC_CAT = [
   ['o.sortVod', 'Ordina film e serie', 'sel', [['pl', 'Come la playlist'], ['recent', 'Aggiunti di recente'], ['az', 'A → Z'], ['rating', 'Valutazione']], [...KPRO, 'ult'], '', '', 'Ordinamento'],
   /* ---- Controllo genitori ---- */
   ['o.lockAdult', 'Blocca contenuti per adulti', 'sel', YN, [...KPRO, 'ult'], 'Con «Sì» le categorie per adulti chiedono il PIN del controllo genitori', '', 'Controllo genitori'],
-  ['u.theme', 'Tema colore', 'sel', [['tramonto', 'Tramonto'], ['neon', 'Neon'], ['smeraldo', 'Smeraldo'], ['rubino', 'Rubino'], ['ghiaccio', 'Ghiaccio']], ['ult'], '', '', 'KAIROS Ultimate'],
+  ['u.theme', 'Tema colore', 'sel', [['tramonto', 'Tramonto'], ['neon', 'Neon'], ['smeraldo', 'Smeraldo'], ['rubino', 'Rubino'], ['ghiaccio', 'Ghiaccio'], ['aurora', 'Aurora'], ['oceano', 'Oceano'], ['lava', 'Lava'], ['oro', 'Oro'], ['ametista', 'Ametista']], ['ult'], '', '', 'KAIROS Ultimate'],
+  ['u.font', 'Caratteri', 'sel', [['futuro','Futuristico'],['moderno','Moderno'],['cinema','Cinema'],['sport','Sport'],['retro','Retrò']], ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.neon', 'Scritte neon', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.anim', 'Animazioni', 'sel', [['auto', 'Automatiche'], ['on', 'Accese'], ['off', 'Spente']], ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.trailer', 'Trailer', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],

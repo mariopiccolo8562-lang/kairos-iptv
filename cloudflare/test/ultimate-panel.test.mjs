@@ -199,3 +199,20 @@ test('Ultimate catalog exposes implemented settings and omits unsupported Pro-on
   assert.equal(ultimate.has('o.resInd'), true);
   assert.equal(ultimate.has('o.epgShift'), true);
 });
+
+test('Ultimate catalog exposes the ten palettes and font selector only to Ultimate', () => {
+  const theme = _internal.RC_CAT.find(([key]) => key === 'u.theme');
+  assert.deepEqual(theme[3].map(([id]) => id), [
+    'tramonto', 'neon', 'smeraldo', 'rubino', 'ghiaccio', 'aurora', 'oceano', 'lava', 'oro', 'ametista',
+  ]);
+  const font = _internal.RC_CAT.find(([key]) => key === 'u.font');
+  assert.deepEqual(font, [
+    'u.font', 'Caratteri', 'sel',
+    [['futuro', 'Futuristico'], ['moderno', 'Moderno'], ['cinema', 'Cinema'], ['sport', 'Sport'], ['retro', 'Retrò']],
+    ['ult'], '', '', 'KAIROS Ultimate',
+  ]);
+  const legacyRc = _internal.rcClean({ 'u.font': 'retro' }, 'tv');
+  const ultimateRc = _internal.rcClean({ 'u.font': 'retro' }, 'ult');
+  assert.equal(_internal.rcSent(legacyRc, 'tv')['u.font'], undefined);
+  assert.equal(_internal.rcSent(ultimateRc, 'ult')['u.font'], 'retro');
+});
