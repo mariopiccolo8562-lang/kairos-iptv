@@ -3809,7 +3809,7 @@ async function playerErrors(req, env, ip, ctx) {
   if (Math.random() < 0.1) ctx.waitUntil(env.DB.prepare('DELETE FROM app_errors WHERE t < ?').bind(t - ERR_KEEP_MS).run().catch(() => {}));
   return json({ ok: true, saved: stmts.length });
 }
-async function playerReach(req, env) {
+async function playerReach(req, env, transports = {}) {
   let b;
   try { b = await readJSON(req, 4096); } catch (e) { return json({ error: e.message }, e.status || 400); }
   const [d, bad] = await deviceAuth(env, b);
@@ -3826,14 +3826,21 @@ async function playerReach(req, env) {
   const allowed = pls.some((p, i) => matches(hostOf(p)) || (portalPls[i]?.alts || []).some(matches));
   if (!allowed) return json({ ok: false, reason: 'host' }, 403);
   const xtream = pls.some((p, i) => p.type === 'xtream' && (matches(hostOf(p)) || (portalPls[i]?.alts || []).some(matches)));
-  try {
-    const upstream = await fetch(origin + (xtream ? '/player_api.php' : '/'), { redirect: 'manual', signal: AbortSignal.timeout(4000) });
-    const status = upstream.status;
-    if (upstream.body) await upstream.body.cancel().catch(() => {});
-    return json({ ok: true, status });
-  } catch {
-    return json({ ok: false });
-  }
+  const url = origin + (xtream ? '/player_api.php' : '/'), controller = new AbortController();
+  const workerFetch = transports.fetch || fetch, socketFetch = transports.sockFetch || sockFetch;
+  const statusOf = async (response) => {
+    if (!response || !Number.isInteger(response.status)) throw new Error('risposta non valida');
+    try { if (response.body) void response.body.cancel().catch(() => {}); } catch {}
+    return response.status;
+  };
+  const viaFetch = Promise.resolve().then(() => workerFetch(url, { redirect: 'manual', signal: controller.signal })).then(statusOf);
+  const viaSocket = Promise.resolve().then(() => socketFetch(url, { method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0' }, headersOnly: true, signal: controller.signal })).then(statusOf);
+  let timer;
+  const timeout = new Promise((resolve) => { timer = setTimeout(() => resolve(null), 3500); });
+  let status;
+  try { status = await Promise.race([Promise.any([viaFetch, viaSocket]).catch(() => null), timeout]); }
+  finally { clearTimeout(timer); controller.abort(); }
+  return status === null ? json({ ok: false }) : json({ ok: true, status });
 }
 /** ids: dispositivi da guardare (un agente: i suoi clienti) — il filtro è nella query, così i 2000 errori sono i suoi */
 async function adminErrors(req, env, path, url, who, ip, ids = null) {
@@ -4441,7 +4448,7 @@ async function fixDevice(env, s, d, who, auto = false, soft = false) {
 function healthIssues(p, errs, latest, app) {
   const out = [];
   const pro = !app || RC_APPS.includes(app);
-    if (p && latest && verBehind(p.ver, latest.version)) out.push({ sev: 'warn', key: 'upd', what: `App vecchia: ${APP_NAME[app || 'tv'] || ''} ${String(p.ver || '?').replace(/^(lite|tv|xc|ult|plus|nova)\s+/i, '').replace(/\s+premium$/i, '')} (ultima ${latest.version})`, fix: UPD_HOW[app || 'tv'] || 'Aggiorna l\'app del cliente', ...(pro ? { act: 'upd' } : {}) });
+  if (p && latest && verBehind(p.ver, latest.version)) out.push({ sev: 'warn', key: 'upd', what: `App vecchia: ${APP_NAME[app || 'tv'] || ''} ${String(p.ver || '?').replace(/^(lite|tv|xc|ult|plus|nova)\s+/i, '').replace(/\s+premium$/i, '')} (ultima ${latest.version})`, fix: UPD_HOW[app || 'tv'] || 'Aggiorna l\'app del cliente', ...(pro ? { act: 'upd' } : {}) });
   const kd = errs.filter((e) => e.problem === 'killed').length, cr = errs.filter((e) => e.problem === 'crash').length;
   if (kd >= 2) out.push({ sev: 'bad', key: 'killed', what: `Si è chiusa da sola ${kd} volte nelle ultime 24 ore: il sistema l'ha terminata per poca memoria${/fire|aft/i.test((p && p.model) || '') ? ' (tipico dei Fire Stick)' : ''}`, fix: 'L\'app passa da sola alla modalità leggerissima (salvo se l\'hai messa «Spenta»). Fai chiudere le altre app sul dispositivo e riavviarlo; se continua, quel dispositivo ha troppo poca memoria per l\'app: serve un box o una stick con almeno 2 GB' });
   const ue = errs.filter((e) => e.problem === 'uierr').length;
@@ -6458,7 +6465,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { ...x, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
       // codici Downloader e link delle app Kairos: solo quelli che il titolare gli concede (kAllow)
-    settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', ultDownloaderCode: ok('ult') ? s.ultDownloaderCode || '' : '', plusDownloaderCode: ok('plus') ? s.plusDownloaderCode || '' : '', premDownloaderCode: ok('prem') ? s.premDownloaderCode || '' : '', novaDownloaderCode: ok('nova') ? s.novaDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),
+      settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', ultDownloaderCode: ok('ult') ? s.ultDownloaderCode || '' : '', plusDownloaderCode: ok('plus') ? s.plusDownloaderCode || '' : '', premDownloaderCode: ok('prem') ? s.premDownloaderCode || '' : '', novaDownloaderCode: ok('nova') ? s.novaDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),
       // app Kairos per gli agenti: sempre visibili (quali le decide il titolare in kAllow), con il link pulito del pannello
       // (/get/<app>.apk: niente nome del titolare nei link) e il codice Downloader se c'è
       kairosApps: kairosAppsOf(s).filter((x) => storeAppOk(P.kAllow, x.key)).map((x) => { const g = { prem: 'premium' }[x.key] || x.key; return { ...x, apk: GET_APK[g] ? `${url.origin}/get/${g}.apk` : x.apk }; }), permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on), rec: (ses.assist ? A.totp_on : ses.totp_on) ? await recLeft(env, A.id) : 0 }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
@@ -6779,7 +6786,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const settings = await getSettings(env);
     const pendTtl = effectivePendTtl(settings);
     if (pendTtl) await pendSweep(env, false, pendTtl).catch(() => {}); // al più ogni 5 minuti
-      const [rowsR, activityR, messagesR, agentMsgsR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, ultF, plusF, sAppNames, nCounts, onl, agAll, presLast] = await Promise.all([
+    const [rowsR, activityR, messagesR, agentMsgsR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, ultF, plusF, sAppNames, nCounts, onl, agAll, presLast] = await Promise.all([
       env.DB.prepare('SELECT * FROM devices ORDER BY created_at DESC LIMIT 5000').all(),
       env.DB.prepare('SELECT t, type, text, ip FROM activity ORDER BY id DESC LIMIT 200').all(),
       env.DB.prepare('SELECT id, target, title, body, level, created, until, grp FROM messages ORDER BY id DESC LIMIT 3000').all().catch(() => ({ results: [] })),

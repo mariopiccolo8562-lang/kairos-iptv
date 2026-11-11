@@ -97,15 +97,22 @@ async function saveJar(env, H, cfg, jar) { cfg.m.jar = jar; await setRow(env, cf
 /* HTTP/1.1 su socket TCP: fetch() dei Worker aggiunge CF-Connecting-IP (2a06:98c0:3600::103), che il firewall di WOLF blocca */
 class WolfNet extends Error {}
 
-export async function sockFetch(url, { method, headers, body }) {
+export async function sockFetch(url, { method, headers, body, signal, headersOnly = false }) {
   const u = new URL(url), tls = u.protocol === 'https:';
   const enc = new TextEncoder(), data = body ? enc.encode(body) : null;
   let sock;
+  const close = () => { try { sock && sock.close(); } catch {} };
+  const abort = () => close();
+  signal?.addEventListener('abort', abort, { once: true });
   try {
+    if (signal?.aborted) throw new Error('aborted');
     sock = connect({ hostname: u.hostname, port: +u.port || (tls ? 443 : 80) }, { secureTransport: tls ? 'on' : 'off' });
+    if (signal?.aborted) { close(); throw new Error('aborted'); }
     await sock.opened;
-  } catch (e) { try { sock && sock.close(); } catch {} throw Object.assign(new Error('socket'), { early: true }); }
-  const timer = new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 25000));
+    if (signal?.aborted) { close(); throw new Error('aborted'); }
+  } catch (e) { close(); signal?.removeEventListener('abort', abort); throw Object.assign(new Error('socket'), { early: true }); }
+  let timerId;
+  const timer = new Promise((_, no) => { timerId = setTimeout(() => no(new Error('timeout')), 25000); });
   try {
     let head = `${method} ${u.pathname}${u.search} HTTP/1.1\r\nHost: ${u.host}\r\nConnection: close\r\nAccept-Encoding: identity\r\n`;
     for (const [k, v] of Object.entries(headers)) if (v) head += `${k}: ${String(v).replace(/[\r\n]/g, '')}\r\n`;
@@ -130,6 +137,7 @@ export async function sockFetch(url, { method, headers, body }) {
         const t = new Uint8Array(Math.min(7, tail.length + value.length)); const src = cat([tail, value], tail.length + value.length); t.set(src.subarray(src.length - t.length)); tail = t;
       }
       if (meta) {
+        if (headersOnly) break;
         const bodyLen = tot - hEnd - 4;
         if (meta.status === 204 || meta.status === 304) break;
         if (meta.chunked ? bodyLen >= 5 && endsZero(tail) : meta.len >= 0 && bodyLen >= meta.len) break;
@@ -137,12 +145,12 @@ export async function sockFetch(url, { method, headers, body }) {
       if (done) break;
     }
     if (!meta) throw new Error('risposta non valida');
-    let b = cat(parts, tot).subarray(hEnd + 4);
-    if (meta.chunked) b = unchunk(b); else if (meta.len >= 0) b = b.subarray(0, meta.len);
+    let b = headersOnly ? new Uint8Array(0) : cat(parts, tot).subarray(hEnd + 4);
+    if (!headersOnly && meta.chunked) b = unchunk(b); else if (!headersOnly && meta.len >= 0) b = b.subarray(0, meta.len);
     meta.headers.delete('transfer-encoding'); meta.headers.delete('content-length');
-    const nobody = meta.status === 204 || meta.status === 304 || method === 'HEAD';
+    const nobody = headersOnly || meta.status === 204 || meta.status === 304 || method === 'HEAD';
     return new Response(nobody ? null : b, { status: meta.status, headers: meta.headers });
-  } finally { try { sock.close(); } catch {} }
+  } finally { clearTimeout(timerId); signal?.removeEventListener('abort', abort); close(); }
 }
 function parseHead(t) {
   const lines = t.split('\r\n'), st = +((lines[0] || '').match(/^HTTP\/\d(?:\.\d)?\s+(\d{3})/) || [])[1];

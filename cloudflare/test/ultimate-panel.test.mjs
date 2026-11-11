@@ -38,36 +38,47 @@ async function reachEnv() {
   return { env, secret };
 }
 
-const postReach = (env, code, secret, origin) => _internal.playerReach(new Request('https://panel.example/api/player/reach', {
+const postReach = (env, code, secret, origin, transports) => _internal.playerReach(new Request('https://panel.example/api/player/reach', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, secret, origin }),
-}), env);
+}), env, transports);
 
-test('reach only probes an assigned host, hides upstream bodies, and rate-limits per device', async () => {
+test('reach falls back to sockets, limits hosts and rate-limits per device', async () => {
   const { env, secret } = await reachEnv();
-  const originalFetch = globalThis.fetch;
-  const calls = [];
-  globalThis.fetch = async (url, options) => { calls.push([String(url), options]); return new Response('upstream secret body', { status: 503 }); };
-  try {
-    const allowed = await postReach(env, 'KXAB-12CD', secret, 'https://portal.example:8443');
-    assert.equal(allowed.status, 200);
-    assert.deepEqual(await allowed.json(), { ok: true, status: 503 });
-    assert.equal(calls[0][0], 'https://portal.example:8443/player_api.php');
-    assert.equal(calls[0][1].redirect, 'manual');
+  const calls = [], upstreamResponse = new Response('upstream secret body', { status: 503 });
+  const transports = {
+    fetch: async (url, options) => { calls.push(['fetch', String(url), options]); throw new Error('Worker fetch port blocked'); },
+    sockFetch: async (url, options) => { calls.push(['socket', String(url), options]); return upstreamResponse; },
+  };
+  const allowed = await postReach(env, 'KXAB-12CD', secret, 'https://portal.example:8443', transports);
+  assert.equal(allowed.status, 200);
+  assert.deepEqual(await allowed.json(), { ok: true, status: 503 });
+  assert.deepEqual(calls.map(([type, url]) => [type, url]), [
+    ['fetch', 'https://portal.example:8443/player_api.php'],
+    ['socket', 'https://portal.example:8443/player_api.php'],
+  ]);
+  assert.equal(calls[0][2].redirect, 'manual');
+  assert.equal(calls[1][2].method, 'GET');
+  assert.equal(calls[1][2].headers['User-Agent'], 'Mozilla/5.0');
+  assert.equal(calls[1][2].headersOnly, true);
+  assert.equal(calls[0][2].signal.aborted, true);
+  assert.equal(calls[1][2].signal.aborted, true);
+  assert.equal(upstreamResponse.bodyUsed, true);
 
-    const foreign = await postReach(env, 'KXAB-12CD', secret, 'https://foreign.example');
-    assert.equal(foreign.status, 403);
-    assert.deepEqual(await foreign.json(), { ok: false, reason: 'host' });
-    assert.equal(calls.length, 1);
+  const foreign = await postReach(env, 'KXAB-12CD', secret, 'https://foreign.example', transports);
+  assert.equal(foreign.status, 403);
+  assert.deepEqual(await foreign.json(), { ok: false, reason: 'host' });
+  assert.equal(calls.length, 2);
 
-    const badAuth = await postReach(env, 'KXAB-12CD', 'x'.repeat(40), 'https://portal.example:8443');
-    assert.equal(badAuth.status, 401);
-    assert.equal(calls.length, 1);
+  const badAuth = await postReach(env, 'KXAB-12CD', 'x'.repeat(40), 'https://portal.example:8443', transports);
+  assert.equal(badAuth.status, 401);
+  assert.equal(calls.length, 2);
 
-    const { env: rateEnv, secret: rateSecret } = await reachEnv();
-    for (let i = 0; i < 6; i++) assert.equal((await postReach(rateEnv, 'KXAB-12CD', rateSecret, 'https://portal.example:8443')).status, 200);
-    const limited = await postReach(rateEnv, 'KXAB-12CD', rateSecret, 'https://portal.example:8443');
-    assert.equal(limited.status, 429);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  const { env: rateEnv, secret: rateSecret } = await reachEnv();
+  const rateTransports = {
+    fetch: async () => new Response('ok', { status: 200 }),
+    sockFetch: async (_url, { signal }) => new Promise((_, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')))),
+  };
+  for (let i = 0; i < 6; i++) assert.equal((await postReach(rateEnv, 'KXAB-12CD', rateSecret, 'https://portal.example:8443', rateTransports)).status, 200);
+  const limited = await postReach(rateEnv, 'KXAB-12CD', rateSecret, 'https://portal.example:8443', rateTransports);
+  assert.equal(limited.status, 429);
 });
