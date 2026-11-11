@@ -4665,15 +4665,23 @@ const tmdbGet = (env) => {
 /* classificazione americana → fascia italiana più vicina */
 const US_CERT = { G: 'T', 'TV-Y': 'T', 'TV-G': 'T', 'TV-Y7': '6+', PG: '6+', 'TV-PG': '6+', 'PG-13': '14+', 'TV-14': '14+', R: '14+', 'NC-17': '18+', 'TV-MA': '18+' };
 const certIt = (c) => { const x = String(c || '').trim().toUpperCase().replace(/^VM\s*/, ''); if (!x) return ''; if (x === 'T' || x === 'TUTTI') return 'T'; const n = parseInt(x, 10); return n ? n + '+' : ''; };
-async function metaTmdb(env, title, year, kind) {
+async function metaTmdb(env, title, year, kind, id = '') {
   const get = tmdbGet(env), t = kind === 'series' ? 'tv' : 'movie';
   const yq = year ? (t === 'tv' ? '&first_air_date_year=' : '&year=') + year : '';
-  let res = (await get(`/search/${t}?query=${encodeURIComponent(title)}&language=it-IT${yq}`)).results || [];
-  if (!res.length && yq) res = (await get(`/search/${t}?query=${encodeURIComponent(title)}&language=it-IT`)).results || [];
-  const hit = res[0]; if (!hit) return null;
-  const [rd, vids] = await Promise.all([
-    get(t === 'tv' ? `/tv/${hit.id}/content_ratings` : `/movie/${hit.id}/release_dates`).catch(() => ({})),
-    get(`/${t}/${hit.id}/videos?language=it-IT&include_video_language=it,en,null`).catch(() => ({})),
+  let hit;
+  if (id) hit = await get(`/${t}/${id}?language=it-IT`);
+  else {
+    let res = (await get(`/search/${t}?query=${encodeURIComponent(title)}&language=it-IT${yq}`)).results || [];
+    if (!res.length && yq) res = (await get(`/search/${t}?query=${encodeURIComponent(title)}&language=it-IT`)).results || [];
+    hit = res[0];
+  }
+  if (!hit) return null;
+  const hitId = hit.id || id;
+  const [rd, vids, images, watch] = await Promise.all([
+    get(t === 'tv' ? `/tv/${hitId}/content_ratings` : `/movie/${hitId}/release_dates`).catch(() => ({})),
+    get(`/${t}/${hitId}/videos?language=it-IT&include_video_language=it,en,null`).catch(() => ({})),
+    get(`/${t}/${hitId}/images?include_image_language=it,en,null`).catch(() => ({})),
+    get(`/${t}/${hitId}/watch/providers`).catch(() => ({})),
   ]);
   const rows = rd.results || [];
   const country = (cc) => rows.find((r) => r.iso_3166_1 === cc);
@@ -4684,22 +4692,36 @@ async function metaTmdb(env, title, year, kind) {
   const EX = { Featurette: 'Speciale', 'Behind the Scenes': 'Dietro le quinte', Clip: 'Clip', Bloopers: 'Papere', Teaser: 'Teaser', Trailer: 'Trailer' };
   const extras = (vids.results || []).filter((v) => v.site === 'YouTube' && /^[\w-]{11}$/.test(v.key) && EX[v.type]).slice(0, 12)
     .map((v) => ({ yt: v.key, name: String(v.name || '').slice(0, 90), type: EX[v.type] }));
-  return { cert, certSrc: src, extras, tmdb: hit.id };
+  const logos = (Array.isArray(images.logos) ? images.logos : []).filter((image) => typeof image.file_path === 'string' && image.file_path);
+  const logo = ['it', 'en', null].map((lang) => {
+    const group = logos.filter((image) => image.iso_639_1 === lang);
+    return group.find((image) => /\.png$/i.test(image.file_path || '')) || group[0];
+  }).find(Boolean);
+  const providers = (watch.results?.IT?.flatrate || []).slice(0, 4).filter((p) => p.logo_path)
+    .map((p) => ({ n: String(p.provider_name || '').slice(0, 40), logo: 'https://image.tmdb.org/t/p/w92' + p.logo_path }));
+  const vote = Number.isFinite(+hit.vote_average) ? Math.round(+hit.vote_average * 10) / 10 : 0;
+  return {
+    cert, certSrc: src, extras, tmdb: hitId,
+    logo: logo ? 'https://image.tmdb.org/t/p/w500' + logo.file_path : '',
+    backdrop: hit.backdrop_path ? 'https://image.tmdb.org/t/p/w1280' + hit.backdrop_path : '',
+    providers, vote, plot: String(hit.overview || '').slice(0, 600),
+  };
 }
 async function playerMeta(req, env, ip, url, ctx) {
   if (await limited(env.RL_DEVICE, 'mt:' + ip)) return json({ error: 'Troppe richieste' }, 429);
   if (!env.TMDB_KEY) return json({ cert: '', extras: [], off: true });
   const raw = nameClean(url.searchParams.get('t') || '', 160), title = trailerTitle(raw);
   const year = parseInt(url.searchParams.get('y') || '', 10) || yearIn(raw), kind = url.searchParams.get('kind') === 'series' ? 'series' : 'movie';
-  if (title.length < 2) return json({ cert: '', extras: [] });
-  const key = 'mta:' + (await sha256(kind + '|' + title.toLowerCase() + '|' + year)).slice(0, 24);
+  const rawId = url.searchParams.get('id') || '', id = /^\d{1,10}$/.test(rawId) ? rawId : '';
+  if (title.length < 2 && !id) return json({ cert: '', extras: [] });
+  const key = 'mta2:' + (await sha256(id ? kind + '|id:' + id : kind + '|' + title.toLowerCase() + '|' + year)).slice(0, 24);
   const c = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(key).first();
-  if (c) { try { const v = JSON.parse(c.v), age = now() - v.t; if ((v.tmdb ? age < 14 * 864e5 : age < 6 * 3600e3)) return json({ cert: v.cert || '', certSrc: v.certSrc || '', extras: v.extras || [] }); } catch {} }
+  if (c) { try { const v = JSON.parse(c.v), age = now() - v.t; if ((v.tmdb ? age < 14 * 864e5 : age < 6 * 3600e3)) return json({ cert: v.cert || '', certSrc: v.certSrc || '', extras: v.extras || [], logo: v.logo || '', backdrop: v.backdrop || '', providers: v.providers || [], vote: v.vote || 0, plot: v.plot || '', tmdb: v.tmdb || '' }); } catch {} }
   let out = null;
-  try { out = await metaTmdb(env, title, year, kind); } catch { return json({ cert: '', extras: [] }); }
-  const v = { cert: out ? out.cert : '', certSrc: out ? out.certSrc : '', extras: out ? out.extras : [], tmdb: out ? out.tmdb : 0, t: now() };
+  try { out = await metaTmdb(env, title, year, kind, id); } catch { return json({ cert: '', extras: [] }); }
+  const v = { cert: out ? out.cert : '', certSrc: out ? out.certSrc : '', extras: out ? out.extras : [], logo: out ? out.logo : '', backdrop: out ? out.backdrop : '', providers: out ? out.providers : [], vote: out ? out.vote : 0, plot: out ? out.plot : '', tmdb: out ? out.tmdb : 0, t: now() };
   if (await cacheOk(env, url, 'cwm:', !!v.tmdb)) ctx.waitUntil(env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(key, JSON.stringify(v)).run());
-  return json({ cert: v.cert, certSrc: v.certSrc, extras: v.extras });
+  return json({ cert: v.cert, certSrc: v.certSrc, extras: v.extras, logo: v.logo, backdrop: v.backdrop, providers: v.providers, vote: v.vote, plot: v.plot, tmdb: v.tmdb || '' });
 }
 /* ======================================================================
    ASSISTENTE IA: Claude (Anthropic, a pagamento) o Google Gemini (gratis). Gemini di serie; il titolare sceglie Claude
@@ -8703,4 +8725,4 @@ async function cleanup(env) {
 }
 
 // esportati per i test
-export const _internal = { hashPass, checkPass, hotp, checkTotp, b32enc, seal, unseal, cleanTitle, cleanProfiles, semverCode, textToHtml, cleanWg, permsParse, permsJson, hostOf, cleanHost, swapHost, dayIT, PERM_KEYS, appFrom, appOfVer, playerReach, ultFeed, ULT_APK };
+export const _internal = { hashPass, checkPass, hotp, checkTotp, b32enc, seal, unseal, cleanTitle, cleanProfiles, semverCode, textToHtml, cleanWg, permsParse, permsJson, hostOf, cleanHost, swapHost, dayIT, PERM_KEYS, appFrom, appOfVer, playerReach, playerMeta, metaTmdb, ultFeed, ULT_APK };
