@@ -2510,7 +2510,7 @@ async function getSettings(env) {
   const v = (await cfgRows(env)).app;
   let s = {}; try { s = v ? JSON.parse(v) : {}; } catch {}
   const actApps = s.actApps && typeof s.actApps === 'object' && !Array.isArray(s.actApps) ? Object.fromEntries(Object.entries(s.actApps).filter(([k, v]) => validActAppKey(k) && typeof v === 'boolean')) : {};
-  return { ...DEFAULT_SETTINGS, ...s, actApps };
+  return { ...DEFAULT_SETTINGS, ...s, actApps, agSec: agSecNorm(s.agSec) };
 }
 const publicSettings = (s) => ({ brand: s.brand, tagline: s.tagline, accent: s.accent, announcement: s.announcement, supportContact: s.supportContact, allowLocalPlaylists: !!s.allowLocalPlaylists, serverUrl: s.serverUrl || '', showFootball: s.showFootball !== false, price: typeof s.price === 'string' ? s.price : DEFAULT_SETTINGS.price, privacy: typeof s.privacy === 'string' ? s.privacy : '' });
 
@@ -5591,11 +5591,90 @@ async function getSession(req, env) {
   const tok = cookieOf(req);
   if (!tok) return null;
   const id = await sha256('ses:' + tok);
-  const s = await env.DB.prepare('SELECT s.id, s.expires, a.id AS admin_id, a.username, a.totp_on, a.role, a.active, a.last_seen FROM sessions s JOIN admins a ON a.id = s.admin_id WHERE s.id = ?').bind(id).first();
+  const s = await env.DB.prepare('SELECT s.id, s.expires, s.created_at, a.id AS admin_id, a.username, a.totp_on, a.role, a.active, a.last_seen FROM sessions s JOIN admins a ON a.id = s.admin_id WHERE s.id = ?').bind(id).first();
   if (!s || s.expires < now()) return null;
   return s;
 }
 const setCookie = (tok, maxAge) => `${COOKIE}=${tok}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${maxAge}`;
+
+/* ---------------- Accesso degli agenti (11 novembre 2026, Impostazioni → Sicurezza e account) ----------------
+   Tre regole che il titolare accende quando vuole (spente di serie), solo per agenti e sotto-agenti: mai per il titolare
+   né per la sua «Entra per assistenza».
+   - week: l'accesso dura 7 giorni da quando l'agente è entrato, poi rientra con link e codice (o utente e password);
+   - two: al massimo 2 dispositivi per agente; al terzo accesso si chiude la sessione entrata per prima;
+   - geo: accesso e lavoro solo dai Paesi scelti (cc, di serie l'Italia), dal Paese che Cloudflare vede per la connessione.
+   Una sessione chiusa per una regola lascia il motivo in ses_out (8 giorni): il dispositivo scollegato lo mostra all'agente. */
+const AG_WEEK = 7 * 864e5, AG_MAXDEV = 2, SES_OUT_KEEP = 8 * 864e5;
+const CC_RE = /^[A-Z]{2}$/;
+function agSecNorm(x) {
+  x = x && typeof x === 'object' ? x : {};
+  const cc = [...new Set((Array.isArray(x.cc) ? x.cc : []).map((c) => String(c || '').toUpperCase()).filter((c) => CC_RE.test(c)))].slice(0, 60);
+  return { week: x.week === true, two: x.two === true, geo: x.geo === true, cc: cc.length ? cc : ['IT'] };
+}
+/** Paese della connessione visto da Cloudflare (fuori da Cloudflare, nelle prove, dall'intestazione CF-IPCountry) */
+const countryOf = (req) => String((req.cf ? req.cf.country : req.headers.get('CF-IPCountry')) || '').toUpperCase().slice(0, 2);
+const CC_IT = { IT: 'Italia', SM: 'San Marino', VA: 'Città del Vaticano', CH: 'Svizzera', FR: 'Francia', DE: 'Germania', AT: 'Austria', ES: 'Spagna', PT: 'Portogallo', GB: 'Regno Unito', IE: 'Irlanda', BE: 'Belgio', NL: 'Paesi Bassi', LU: 'Lussemburgo', MC: 'Monaco', AD: 'Andorra', LI: 'Liechtenstein', DK: 'Danimarca', SE: 'Svezia', NO: 'Norvegia', FI: 'Finlandia', IS: 'Islanda', PL: 'Polonia', CZ: 'Cechia', SK: 'Slovacchia', HU: 'Ungheria', SI: 'Slovenia', HR: 'Croazia', BA: 'Bosnia ed Erzegovina', RS: 'Serbia', ME: 'Montenegro', MK: 'Macedonia del Nord', AL: 'Albania', XK: 'Kosovo', GR: 'Grecia', MT: 'Malta', CY: 'Cipro', RO: 'Romania', BG: 'Bulgaria', MD: 'Moldavia', UA: 'Ucraina', LT: 'Lituania', LV: 'Lettonia', EE: 'Estonia', TR: 'Turchia', MA: 'Marocco', TN: 'Tunisia', DZ: 'Algeria', EG: 'Egitto', US: 'Stati Uniti', CA: 'Canada', MX: 'Messico', BR: 'Brasile', AR: 'Argentina', AU: 'Australia', AE: 'Emirati Arabi Uniti', CN: 'Cina', IN: 'India', JP: 'Giappone', RU: 'Russia', T1: 'la rete Tor', XX: 'un Paese sconosciuto' };
+const ccName = (c) => CC_IT[c] || (c ? c : 'un Paese sconosciuto');
+const ccList = (L) => L.map(ccName).join(', ').replace(/, ([^,]*)$/, ' e $1');
+// all'agente non si dice quali Paesi sono consentiti (chi ha rubato link e codice saprebbe quale VPN usare)
+const geoMsg = (cc) => `Accesso non consentito dal Paese in cui ti trovi (${ccName(cc)}). Se usi una VPN spegnila; se sei all'estero avvisa il titolare.`;
+const WEEK_MSG = 'Accesso scaduto: sono passati 7 giorni da quando sei entrato. Rientra con il tuo link e il codice (o con utente e password).';
+const TWO_MSG = 'Sei stato scollegato: il tuo account è entrato da un altro dispositivo (al massimo 2). Se non sei stato tu, avvisa subito il titolare.';
+const whenIT = (t) => { try { return new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(+t)); } catch { return ''; } };
+/** browser e sistema in breve (per il registro): «Chrome su Android», «Safari su iPhone»… */
+function uaShort(ua) {
+  ua = String(ua || '');
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : '';
+  const br = /Edg\//.test(ua) ? 'Edge' : /OPR\/|Opera/.test(ua) ? 'Opera' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '';
+  return br && os ? `${br} su ${os}` : br || os || ua.slice(0, 40) || 'dispositivo';
+}
+/** chiude la sessione di un agente per una regola e ne ricorda il motivo */
+async function sesOut(env, id, why, msg) {
+  try { await env.DB.batch([env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(id), env.DB.prepare('INSERT OR REPLACE INTO ses_out (id, why, msg, t) VALUES (?, ?, ?, ?)').bind(id, why, msg, now())]); }
+  catch { await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(id).run(); }
+}
+/** motivo per cui la sessione di questo cookie è stata chiusa da una regola (null = scaduta e basta) */
+async function sesOutOf(req, env) {
+  const tok = cookieOf(req); if (!tok) return null;
+  try { return await env.DB.prepare('SELECT why, msg FROM ses_out WHERE id = ? AND t > ?').bind(await sha256('ses:' + tok), now() - SES_OUT_KEEP).first(); } catch { return null; }
+}
+/** sessioni dell'agente oltre le 2 più recenti: chiuse. Risponde quelle chiuse */
+async function agTrim(env, adminId) {
+  const R = ((await env.DB.prepare('SELECT id, created_at, ua FROM sessions WHERE admin_id = ? ORDER BY created_at DESC, rowid DESC').bind(adminId).all()).results) || [];
+  const out = R.slice(AG_MAXDEV);
+  for (const x of out) await sesOut(env, x.id, 'two', TWO_MSG);
+  return out;
+}
+/** accesso di un agente (utente e password o link e codice): rifiutato fuori dai Paesi consentiti */
+async function agGeoLogin(req, env, a, ip) {
+  const G = agSecNorm((await getSettings(env)).agSec);
+  if (!G.geo) return;
+  const cc = countryOf(req);
+  if (G.cc.includes(cc)) return;
+  await log(env, 'off', `Accesso rifiutato all'agente ${a.username}: collegato da ${ccName(cc)}${CC_RE.test(cc) && CC_IT[cc] ? ' (' + cc + ')' : ''}, consentito solo da ${ccList(G.cc)}`, ip);
+  throw new HttpErr(403, geoMsg(cc), { why: 'geo' });
+}
+/** dopo l'accesso di un agente: con «Massimo 2 dispositivi» si chiude quello entrato per primo */
+async function agTwoAfterLogin(env, a, ip) {
+  const G = agSecNorm((await getSettings(env)).agSec);
+  if (!G.two) return;
+  const out = await agTrim(env, a.id);
+  if (out.length) await log(env, 'auth', `Agente ${a.username}: entrato da un altro dispositivo (al massimo ${AG_MAXDEV}) · scollegato ${out.map((x) => `quello entrato il ${whenIT(x.created_at)} (${uaShort(x.ua)})`).join(', ')}`, ip);
+}
+/** a ogni richiesta di un agente (non in assistenza): accesso di 7 giorni e Paesi consentiti */
+async function agSecCheck(req, env, ses, ip) {
+  const G = agSecNorm((await getSettings(env)).agSec);
+  if (G.week && +ses.created_at && now() - +ses.created_at > AG_WEEK) { await sesOut(env, ses.id, 'week', WEEK_MSG); throw new HttpErr(401, WEEK_MSG, { why: 'week' }); }
+  if (G.geo) {
+    const cc = countryOf(req);
+    if (!G.cc.includes(cc)) {
+      const msg = geoMsg(cc);
+      await sesOut(env, ses.id, 'geo', msg);
+      await log(env, 'off', `Agente ${ses.username}: scollegato, collegato da ${ccName(cc)}${CC_IT[cc] && CC_RE.test(cc) ? ' (' + cc + ')' : ''} (consentito solo da ${ccList(G.cc)})`, ip);
+      throw new HttpErr(401, msg, { why: 'geo' });
+    }
+  }
+}
 
 const RENEW = new WeakMap();
 async function admin(req, env, url, ip, ctx) {
@@ -5625,6 +5704,8 @@ async function adminInner(req, env, url, ip, ctx) {
   const ses = await getSession(req, env);
   if (!ses) {
     if (path === '/health-check' && m === 'GET') throw new HttpErr(403, 'Il controllo generale è riservato al titolare');
+    const out = await sesOutOf(req, env); // chiusa da una regola di «Accesso degli agenti»: l'agente vede perché
+    if (out) throw new HttpErr(401, out.msg, { why: out.why });
     throw new HttpErr(401, 'Sessione scaduta');
   }
   if (path.startsWith('/blk/') && (!ses || ses.role === 'agent')) throw new HttpErr(403, 'Solo il titolare può usare il Pannello Black IPTV');
@@ -6136,6 +6217,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     throw new HttpErr(401, 'Account disattivato');
   }
   if (!ses.assist) { const S1 = await getSettings(env); if (S1.agentHost && S1.agentHostOnly && new URL(req.url).hostname.toLowerCase() !== S1.agentHost) { await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(ses.id).run(); throw new HttpErr(401, 'Accedi dall\'indirizzo del pannello che ti è stato dato'); } }
+  if (!ses.assist) await agSecCheck(req, env, ses, ip); // «Accesso di 7 giorni» e «Solo da questi Paesi»
   if (!ses.assist && path !== '/logout') { const am = (await getSettings(env)).agMaint; if (am && am.on) throw new HttpErr(503, am.msg || AGM_MSG, { maint: true }); } // manutenzione del pannello agenti
   const A = all.find((a) => a.id === ses.admin_id);
   const by = new Map(all.map((a) => [a.id, a]));
@@ -7418,6 +7500,32 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       s.agentHostOnly = b.agentHostOnly;
     }
     if (b.reqWait !== undefined) { const was = JSON.stringify(cleanReqWait(s.reqWait)); s.reqWait = cleanReqWait({ ...cleanReqWait(s.reqWait), ...(b.reqWait && typeof b.reqWait === 'object' ? b.reqWait : {}) }); if (JSON.stringify(s.reqWait) !== was) await log(env, 'edit', `${who}: tempi di attesa delle richieste aggiornati`, ip); }
+    let kicked = 0;
+    if (b.agSec !== undefined) {
+      // «Accesso degli agenti» (Sicurezza e account): 7 giorni, 2 dispositivi, Paesi consentiti
+      const x = b.agSec;
+      if (!x || typeof x !== 'object' || Array.isArray(x) || ['week', 'two', 'geo'].some((k) => x[k] !== undefined && typeof x[k] !== 'boolean')) throw new HttpErr(400, 'Impostazioni di accesso degli agenti non valide');
+      const was = agSecNorm(s.agSec), nx = { ...was };
+      for (const k of ['week', 'two', 'geo']) if (typeof x[k] === 'boolean') nx[k] = x[k];
+      if (x.cc !== undefined) {
+        if (!Array.isArray(x.cc) || x.cc.length > 60 || x.cc.some((c) => typeof c !== 'string' || !CC_RE.test(c.toUpperCase()))) throw new HttpErr(400, 'Paese non valido: usa il codice di 2 lettere (es. IT)');
+        const cc = [...new Set(x.cc.map((c) => c.toUpperCase()))];
+        if (!cc.length) throw new HttpErr(400, 'Scegli almeno un Paese');
+        nx.cc = cc;
+      }
+      s.agSec = nx;
+      const ch = [], ccCh = nx.cc.join() !== was.cc.join();
+      if (nx.week !== was.week) ch.push(nx.week ? 'accesso degli agenti di 7 giorni' : 'accesso degli agenti di 30 giorni dall\'ultimo uso');
+      if (nx.two !== was.two) ch.push(nx.two ? 'massimo 2 dispositivi per agente' : 'dispositivi degli agenti senza limite');
+      if (nx.geo !== was.geo) ch.push(nx.geo ? 'agenti solo da ' + ccList(nx.cc) : 'agenti da qualunque Paese');
+      else if (ccCh) ch.push('Paesi consentiti agli agenti: ' + ccList(nx.cc));
+      if (ch.length) await log(env, 'settings', `${who}: Sicurezza — ${ch.join(' · ')}`, ip);
+      if (nx.two && !was.two) {
+        // accesa adesso: chi ha già più di 2 dispositivi resta collegato solo sui 2 più recenti
+        const many = ((await env.DB.prepare("SELECT a.id, a.username FROM admins a WHERE a.role = 'agent' AND (SELECT COUNT(*) FROM sessions x WHERE x.admin_id = a.id) > ?").bind(AG_MAXDEV).all()).results) || [];
+        for (const a of many) { const out = await agTrim(env, a.id); kicked += out.length; if (out.length) await log(env, 'auth', `Agente ${a.username}: restano i ${AG_MAXDEV} dispositivi più recenti · scollegati ${out.length}`, ip); }
+      }
+    }
     if (b.agMaint !== undefined) {
       const x = b.agMaint && typeof b.agMaint === 'object' ? b.agMaint : {}, was = !!(s.agMaint && s.agMaint.on), on = x.on === true;
       s.agMaint = { on, msg: nameClean(x.msg, 300) || (s.agMaint && s.agMaint.msg) || '', since: on ? (was ? (s.agMaint.since || now()) : now()) : 0 };
@@ -7490,8 +7598,8 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     cfgDirty(env);
     await log(env, 'settings', `${who}: impostazioni aggiornate`, ip);
     // appena scelto il tempo: via subito anche le richieste di adesso che lo hanno già superato
-    if (pendNow) return json({ settings: s, pendDeleted: await pendSweep(env, true, pendNow).catch(() => 0) });
-    return json({ settings: s });
+    if (pendNow) return json({ settings: s, pendDeleted: await pendSweep(env, true, pendNow).catch(() => 0), ...(kicked ? { kicked } : {}) });
+    return json(kicked ? { settings: s, kicked } : { settings: s });
   }
 
   if (path === '/password' && m === 'PUT') {
@@ -8031,6 +8139,7 @@ async function login(req, env, ip, ctx) {
     throw new HttpErr(403, 'Account disattivato: contatta il tuo fornitore');
   }
   if (okHost && a.role === 'agent') { const am = (await getSettings(env)).agMaint; if (am && am.on) throw new HttpErr(503, am.msg || AGM_MSG, { maint: true }); }
+  if (okHost && a.role === 'agent') await agGeoLogin(req, env, a, ip); // «Solo da questi Paesi» (credenziali già giuste)
   if (!okHost) {
     const blocked = await strike();
     await log(env, 'off', `Accesso fallito per "${user.slice(0, 30)}"${ok ? ' (titolare dall\'indirizzo degli agenti)' : ''}${blocked}`, ip);
@@ -8056,6 +8165,7 @@ async function login(req, env, ip, ctx) {
   await env.DB.prepare('INSERT INTO sessions (id, admin_id, expires, ip, ua, created_at) VALUES (?, ?, ?, ?, ?, ?)')
     .bind(await sha256('ses:' + tok), a.id, now() + SESSION_TTL * 1000, ip, str(req.headers.get('User-Agent') || '', 200), now()).run();
   await log(env, 'auth', `Accesso di ${a.username}`, ip);
+  if (a.role === 'agent') await agTwoAfterLogin(env, a, ip); // «Massimo 2 dispositivi per agente»
   ctx.waitUntil(cleanup(env));
   return json({ ok: true, user: a.username, totp: !!a.totp_on, role: a.role === 'agent' ? 'agent' : 'owner' }, 200, { 'Set-Cookie': setCookie(tok, SESSION_TTL) });
 }
@@ -8084,6 +8194,7 @@ async function linkLogin(req, env, ip, ctx) {
   if (S0.agentHost && S0.agentHostOnly && host !== S0.agentHost) throw new HttpErr(403, 'Accedi dall\'indirizzo del pannello che ti è stato dato');
   if (!(await agentChainActive(env, a.id))) { await log(env, 'off', `Accesso rifiutato all'agente ${a.username}: account disattivato`, ip); throw new HttpErr(403, 'Account disattivato: contatta il tuo fornitore'); }
   { const am = S0.agMaint; if (am && am.on) throw new HttpErr(503, am.msg || AGM_MSG, { maint: true }); }
+  await agGeoLogin(req, env, a, ip); // «Solo da questi Paesi» (link e codice già giusti)
   if (a.totp_on) {
     if (!b.totp) return json({ needTotp: true }, 200);
     const rec = recIs(b.totp) ? await recUse(env, a.id, b.totp) : -1;
@@ -8100,6 +8211,7 @@ async function linkLogin(req, env, ip, ctx) {
     .bind(await sha256('ses:' + tok), a.id, now() + SESSION_TTL * 1000, ip, str(req.headers.get('User-Agent') || '', 200), now()).run();
   await env.DB.prepare('UPDATE admins SET link_used = ? WHERE id = ?').bind(now(), a.id).run();
   await log(env, 'auth', `Accesso di ${a.username} con il link personale`, ip);
+  await agTwoAfterLogin(env, a, ip); // «Massimo 2 dispositivi per agente»
   ctx.waitUntil(cleanup(env));
   return json({ ok: true, user: a.username, totp: !!a.totp_on, role: 'agent' }, 200, { 'Set-Cookie': setCookie(tok, SESSION_TTL) });
 }
@@ -8216,6 +8328,7 @@ async function cleanup(env) {
   try { await env.DB.prepare('DELETE FROM messages WHERE until > 0 AND until < ?').bind(t).run(); } catch {}
   // limite agli scaricamenti degli APK e codici sbagliati dello Store: si tengono solo le ultime ore
   try { await env.DB.batch([env.DB.prepare('DELETE FROM dl_hits WHERE h < ?').bind(Math.floor(t / 36e5) - 48), env.DB.prepare('DELETE FROM store_code_fail WHERE t < ?').bind(t - 86400e3)]); } catch {}
+  try { await env.DB.prepare('DELETE FROM ses_out WHERE t < ?').bind(t - SES_OUT_KEEP).run(); } catch {} // motivi delle sessioni chiuse dalle regole degli agenti
   try { await env.DB.prepare('DELETE FROM app_errors WHERE t < ?').bind(t - ERR_KEEP_MS).run(); } catch {} // errori dell'app: solo gli ultimi 7 giorni
   try { await env.DB.batch([env.DB.prepare('DELETE FROM link_pins WHERE until < ?').bind(t), env.DB.prepare('DELETE FROM throttle WHERE until < ?').bind(t)]); } catch {}
   // segnalazioni/richieste "fatte" da più di 90 giorni, presenze vecchie di 30 giorni, classifiche di oltre 60 giorni

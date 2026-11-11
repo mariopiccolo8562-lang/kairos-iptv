@@ -17,6 +17,13 @@
 - Cambiando la password si chiudono le altre sessioni. C'è anche il pulsante "Chiudi le altre sessioni".
 - A ogni accesso viene creato un token nuovo e quello vecchio eventualmente presente nel browser viene annullato.
 
+## Accesso degli agenti (Impostazioni → Sicurezza e account)
+Tre regole che il titolare accende quando vuole (spente di serie). Valgono per agenti e sotto-agenti, mai per il titolare né per la sua «Entra per assistenza».
+- **Accesso di 7 giorni**: 7 giorni dopo l'accesso l'agente deve rientrare con il link e il codice (o utente e password). Senza, l'accesso resta valido 30 giorni dall'ultimo uso.
+- **Massimo 2 dispositivi per agente**: al terzo accesso si chiude la sessione entrata per prima. Rientrare dallo stesso browser non conta come dispositivo nuovo. Accendendola, chi ha più di 2 dispositivi resta collegato solo sui 2 più recenti.
+- **Solo da questi Paesi** (di serie l'Italia): conta il Paese che Cloudflare vede per la connessione, all'accesso e a ogni richiesta. Le reti Tor e i Paesi sconosciuti sono rifiutati. All'agente si dice solo che il suo Paese non è consentito, non quali Paesi lo sono. Una password sbagliata dall'estero riceve sempre «Credenziali errate».
+- Il dispositivo scollegato da una regola mostra all'agente il motivo («sono passati 7 giorni», «il tuo account è entrato da un altro dispositivo», «Paese non consentito»); i motivi restano 8 giorni (tabella `ses_out`). Accessi rifiutati e dispositivi scollegati finiscono in Attività.
+
 ## Dati
 - **Le credenziali delle playlist sono cifrate con AES-256-GCM** nel database D1. La chiave `ENC_KEY` è un segreto del Worker.
 - Gli URL delle playlist vengono controllati: sono ammessi solo `http` e `https`.

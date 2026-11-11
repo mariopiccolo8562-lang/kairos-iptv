@@ -45,7 +45,7 @@ async function apiNet(method, path, body) {
   let j = {}; try { j = txt ? JSON.parse(txt) : {}; } catch {}
   if (st && r.ok) { if (j && j.same === true && ST_MEM.txt) j = JSON.parse(ST_MEM.txt); else { const t = r.headers.get('X-Kairos-Etag'); ST_MEM.tag = t || ''; ST_MEM.txt = t ? txt : ''; } if (ST_MEM.tag && j && typeof j === 'object') ST_TAG.set(j, ST_MEM.tag); }
   if (r.status === 503 && j.maint) { agMaintScreen(j.error); throw new Error(j.error || 'Pannello in manutenzione'); }
-  if (r.status === 401 && path !== '/admin/login' && path !== '/admin/link-login') { showLogin(); throw new Error('Sessione scaduta, accedi di nuovo'); }
+  if (r.status === 401 && path !== '/admin/login' && path !== '/admin/link-login') { showLogin(); if (j.why && j.error) $('#lerr').textContent = j.error; throw new Error('Sessione scaduta, accedi di nuovo'); } // why: chiusa da una regola di «Accesso degli agenti» (7 giorni, altro dispositivo, Paese)
   if (!r.ok) throw new Error(j.error || 'Errore ' + r.status);
   return j;
 }
@@ -1006,16 +1006,18 @@ $('#aSave').onclick = async () => { try { await api('PUT', '/admin/password', { 
     loadTurnstile((await c.json()).turnstileSiteKey);
   } catch { D.demo = true; $('#demoTag').style.display = 'block'; $('#lp').value = 'demo'; $('#lerr').innerHTML = '<span class="mut">Nessun server collegato: premi Accedi per esplorare la demo.</span>'; showLogin(); return; }
   // sessione ancora valida → si entra senza rifare l'accesso; un errore di rete o del server non fa uscire (si riprova)
+  let why = ''; // sessione chiusa da una regola di «Accesso degli agenti»: sotto il modulo di accesso si dice perché
   for (let i = 0; i < 4; i++) {
     const r = await (i ? stGet() : st0);
     // la risposta serve anche alla prima lettura dello stato (non in «Entra per assistenza»: lì lo stato è quello dell'agente)
     if (r && r.ok && !window.__assist) { try { ST_BOOT = { txt: await r.text(), tag: r.headers.get('X-Kairos-Etag') || '', at: Date.now() }; } catch {} }
     if (r && r.ok) { try { return await enter(); } catch { break; } }
     if (r && r.status === 503) { const j = await r.json().catch(() => ({})); if (j.maint) { showLogin(); return agMaintScreen(j.error); } }
-    if (r && r.status === 401) break;
+    if (r && r.status === 401) { try { const j = await r.json(); if (j && j.why && j.error) why = String(j.error); } catch {} break; }
     await new Promise((ok) => setTimeout(ok, 800 * (i + 1)));
   }
   showLogin();
+  if (why) $('#lerr').textContent = why;
 })();
 
 /* Manutenzione del pannello agenti: schermata per l'agente (all'accesso o mentre lavora). Si riapre da sola quando finisce. */

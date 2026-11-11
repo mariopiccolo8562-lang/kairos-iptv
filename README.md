@@ -1044,3 +1044,14 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
 - **Limite agli scaricamenti in massa** da `/get/*.apk` (anche store-k.download): per indirizzo (IPv6: la rete /64) al massimo 20 download che partono al minuto (`RL_APK`) e 120 all'ora (`dl_hits`), poi 429 con Retry-After 300. Il seguito di un download (Range) e HEAD non contano: aggiornamenti e negozi restano molto sotto.
 - **Cosa non fa**: il codice protegge lo Store, non i file. Gli APK restano raggiungibili dai link diretti, che servono agli aggiornamenti delle app.
 - **Test**: `srv_store_codes` (68 controlli), `ui_store_codes`, `store_page_codes` (la pagina vera contro il Worker vero, 33 controlli).
+
+## 61. Accesso degli agenti: 7 giorni, 2 dispositivi, solo dai Paesi scelti (11 novembre 2026)
+
+- **Dove**: Impostazioni → Sicurezza e account → **«Accesso degli agenti»** (`sec-agents.js`, solo titolare). Tre interruttori spenti di serie, ognuno con conferma prima di accenderlo, e i **Paesi consentiti** (Italia di serie; «+ Aggiungi un Paese», × per toglierne uno; almeno uno resta).
+- **Accesso di 7 giorni**: la sessione di un agente vale 7 giorni da quando è entrato (non si rinnova con l'uso), poi rientra con link e codice o utente e password. Spento: 30 giorni dall'ultimo uso, come prima.
+- **Massimo 2 dispositivi per agente**: al terzo accesso (utente e password o link e codice) si chiude la sessione entrata per prima; in Attività «Agente …: entrato da un altro dispositivo · scollegato quello entrato il … (Chrome su Android)». Accendendola, chi ne ha di più resta sui 2 più recenti (la risposta dice quanti `kicked`).
+- **Solo da questi Paesi**: `request.cf.country` all'accesso (dopo le credenziali giuste, prima della 2FA) e a ogni richiesta dell'agente; fuori dai Paesi la sessione si chiude. Il messaggio non elenca i Paesi consentiti.
+- **Il motivo all'agente**: la sessione chiusa da una regola lascia il motivo in `ses_out` (migrazione 0050, 8 giorni); il pannello lo mostra sotto il modulo di accesso (anche riaprendo la pagina) invece di «Sessione scaduta».
+- **Non toccati**: il titolare (da qualunque Paese, nessun limite di dispositivi) e la sua «Entra per assistenza».
+- **Server** (`worker.js`): `agSecNorm`, `agGeoLogin`, `agTwoAfterLogin`, `agSecCheck`, `agTrim`, `sesOut`; `PUT /api/admin/settings { agSec: { week, two, geo, cc } }`; `settings.agSec` sempre completo nello stato. Dettagli in SICUREZZA.md.
+- **Test**: `srv_agent_sec` (42 controlli), `ui_agent_sec`.
