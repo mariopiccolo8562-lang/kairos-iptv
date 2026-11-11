@@ -61,6 +61,8 @@ body{overscroll-behavior-y:none}
   #drawer .df{flex-wrap:wrap;gap:8px;padding-bottom:calc(12px + env(safe-area-inset-bottom))!important}
   #drawer .df .btn{flex:1 1 auto;justify-content:center}
   #drawer .dh,#agPage .ah,#mtPage .ah{padding-top:calc(14px + var(--kx-sat,env(safe-area-inset-top)))!important}
+  /* «App del cliente»: con sette app la riga era più larga del telefono e allargava tutta la scheda (contenuto tagliato a destra) */
+  #eApp{flex-wrap:wrap;max-width:100%}
   #agPage .af,#mtPage .af{flex-wrap:wrap;padding-bottom:calc(12px + env(safe-area-inset-bottom))!important}
   .op-f,.op-f.mx{grid-template-columns:1fr 1fr!important}
   .op-f .btn{justify-content:center}

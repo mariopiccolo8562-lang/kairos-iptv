@@ -4517,6 +4517,7 @@ window.kxPlayerClosed = (r) => {
   jobsResume(); // lettore chiuso: i lavori di fondo rimandati ripartono
   setTimeout(() => heartbeat(true), 800);
   try { r = typeof r === 'string' ? JSON.parse(r) : r; } catch { r = null; }
+  if (r && r.id && +r.height > 0) acPlayed(r.id); // si è visto (immagine decodificata): il server della lista si raggiunge
   if (r && r.id && isLiteVar(r.var)) noteLite(r.id); // chiuso su una versione più leggera: per 24 h il canale riparte già leggero
   if (r && r.kicked) { try { stopPreview(); } catch {} if (!$('#home').classList.contains('on')) go('home', true); return; }
   if (!r) { evReturn(); return; }
@@ -7782,11 +7783,35 @@ function autoChans(list) {
 function chanList(c) { return autoChans(chanList0(c)); }
 
 /* ---- auto-controlli silenziosi (all'avvio e ogni 30 minuti, mai durante la visione) ---- */
-const ACK = { busy: false, res: (store.get('autoChk', null) || {}).r || null, sent: '', sentT: 0, sending: '', bad: [], free: null, freeT: 0, msgT: 0 };
+const ACK = { busy: false, res: (store.get('autoChk', null) || {}).r || null, sent: '', sentT: 0, sending: '', bad: [], free: null, freeT: 0, msgT: 0, playOk: {}, down: [] };
 const AC_EVERY = 30 * 60e3;
 function acPlaylists() { return activePlaylists().map((p) => ({ p, c: xtCreds(p) })).filter((x) => x.c).slice(0, 2); }
 async function acJson(url, ms) { try { return await Promise.race([getJSON(url), sleep(ms).then(() => null)]); } catch { return null; } }
 const xtApi = (host, c) => `${String(host).replace(/\/+$/, '')}/player_api.php?username=${encodeURIComponent(c.username)}&password=${encodeURIComponent(c.password)}`;
+/** il dispositivo ha la rete? Si chiede al pannello (richiesta minima): se non risponde nemmeno lui il dispositivo è senza rete
+    (in standby, Wi-Fi giù) e un server della lista che non risponde non è «giù» */
+async function acPanelUp() {
+  const b = baseServer(); if (!b) return true;
+  try {
+    const st = await Promise.race([(async () => (hasNativeHttp() ? (await nativeFetch(b + '/api/player/ping')).status : (await fetch(b + '/api/player/ping', { cache: 'no-store' })).status))(), sleep(6000).then(() => 0)]);
+    return st > 0 && st < 500;
+  } catch { return false; }
+}
+/** dal lettore: questo contenuto si è visto (immagine decodificata) ⇒ il server della sua lista il dispositivo lo raggiunge.
+    Se l'ultimo controllo diceva «non raggiungibile» per quel server l'esito si corregge subito (il pannello lo sa al prossimo
+    battito) e il controllo si rifà appena l'app è libera: durante la visione non si rifà mai e restava l'esito vecchio */
+function acPlayed(id) {
+  try {
+    const c = xtCreds(xtOf(S.byId && S.byId.get(String(id)))); if (!c) return;
+    const og = plOrigin(c.host); if (!og) return;
+    ACK.playOk[og] = Date.now();
+    if (ACK.res && ACK.res.srv === 'down' && ACK.down.every((h) => h === og)) {
+      ACK.res = { ...ACK.res, srv: 'ok' }; ACK.down = [];
+      store.set('autoChk', { r: ACK.res, t: Date.now() });
+      whenIdle(() => autoCheck('dopo la visione'), 20e3, 5000, 10 * 60e3);
+    }
+  } catch {}
+}
 async function autoCheck(why) {
   if (ACK.busy || S.demo || !NATIVE || !baseServer() || S.status !== 'active') return;
   if (inView() || bootOn()) { whenIdle(() => autoCheck(why), 5000, 3000, 10 * 60e3); return; } // mai durante la visione
@@ -7794,16 +7819,29 @@ async function autoCheck(why) {
   const r = {}, fix = [];
   try {
     /* 1. server e linea Xtream: una sola richiesta piccola (player_api senza azione) per lista */
-    const bad = [];
+    const bad = [], down = []; let net;
     for (const { p, c } of acPlaylists()) {
       let j = await acJson(xtApi(c.host, c), 7000), u = j && j.user_info;
+      if (!u) {
+        // una risposta mancata non basta (server lento, Wi-Fi che si sta svegliando): si riprova una volta, con più tempo
+        await sleep(4000);
+        if (inView()) return; // intanto è partita una visione: il controllo si rifà dopo
+        j = await acJson(xtApi(c.host, c), 9000); u = j && j.user_info;
+      }
       if (!u) {
         // server principale giù: se il pannello ha messo un server di riserva (modalità automatica) si prova quello
         const alts = p.mode && p.mode !== 'auto' ? [] : (Array.isArray(p.alts) ? p.alts : []).slice(0, 3);
         let alt = null;
         for (const a of alts) { const k = await acJson(xtApi(a, c), 7000); if (k && k.user_info && +k.user_info.auth !== 0) { alt = a; j = k; u = k.user_info; break; } }
         if (alt) { bad.push(plOrigin(c.host)); r.srv = 'alt'; fix.push('srv'); }
-        else { r.srv = r.srv === 'alt' ? 'alt' : 'down'; continue; }
+        else {
+          // da questo server si è appena visto un video: lo raggiunge (è la richiesta leggera che non risponde)
+          if (Date.now() - (ACK.playOk[plOrigin(c.host)] || 0) < 30 * 60e3) { if (!r.srv) r.srv = 'ok'; continue; }
+          // dispositivo senza rete: non è il server. Niente esito: si tiene quello di prima e si riprova al prossimo giro
+          if (net === undefined) net = await acPanelUp();
+          if (!net) return;
+          r.srv = r.srv === 'alt' ? 'alt' : 'down'; down.push(plOrigin(c.host)); continue;
+        }
       } else if (!r.srv) r.srv = 'ok';
       if (+u.auth === 0) { r.srv = 'auth'; continue; }
       const st = String(u.status || '').toLowerCase(), exp = +u.exp_date ? +u.exp_date * 1000 : 0;
@@ -7815,7 +7853,7 @@ async function autoCheck(why) {
       const sn = j.server_info && +j.server_info.timestamp_now;
       if (sn > 1e9 && ACK.skew == null) ACK.skewX = Math.round((Date.now() - sn * 1000) / 60e3);
     }
-    ACK.bad = bad;
+    ACK.bad = bad; ACK.down = down;
     /* 2. orologio: differenza con l'ora del pannello (misurata nel battito), altrimenti con il server della lista */
     const sk = ACK.skew != null ? ACK.skew : ACK.skewX;
     if (sk != null) r.clk = sk;

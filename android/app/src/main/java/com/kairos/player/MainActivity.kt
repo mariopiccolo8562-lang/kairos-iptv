@@ -1334,8 +1334,11 @@ class MainActivity : ComponentActivity() {
  * Sorveglianza delle chiusure anomale. Il pannello non può vedere un'app che muore: qui si lascia una traccia e la prossima
  * apertura la consegna all'interfaccia (NATIVE.deaths()), che la manda in «Errori delle app».
  * - errore non gestito → "crash" con il tipo e la prima riga utile dello stack
- * - l'app era viva (battito ogni 20 s) e non è stata chiusa dall'utente → "killed" (uccisa dal sistema: quasi sempre memoria),
- *   con la memoria libera vista all'ultimo battito
+ * - l'app era viva (battito ogni 20 s), in primo piano e con lo schermo acceso, non è stata chiusa dall'utente e il dispositivo
+ *   non si è riavviato → "killed" (uccisa dal sistema mentre il cliente la usava: quasi sempre memoria), con la memoria libera
+ *   vista all'ultimo battito. In sfondo (tasto Home, un'altra app), con lo schermo spento o dopo uno spegnimento (TV spenta,
+ *   chiavetta alimentata dalla TV) Android chiude le app normalmente, e così quando si installa un aggiornamento: non è
+ *   un'anomalia e non si segnala (prima sì: il pannello mostrava «si è chiusa da sola» a chi aveva solo spento la TV)
  * - richieste di memoria del sistema (onTrimMemory) → "trim"
  */
 object Watch {
@@ -1344,6 +1347,26 @@ object Watch {
     private val h = Handler(Looper.getMainLooper())
     private var pingPrefs: android.content.SharedPreferences? = null
     private var ctx: android.content.Context? = null
+    @Volatile private var shown = 0 // schermate dell'app visibili (fra onStart e onStop): 0 = app in sfondo
+
+    /** numero dell'avvio del dispositivo: cambia a ogni riavvio o spegnimento (-1 dove il sistema non lo dà, prima di Android 7) */
+    private fun bootCount(c: android.content.Context): Int =
+        try { if (Build.VERSION.SDK_INT >= 24) Settings.Global.getInt(c.contentResolver, Settings.Global.BOOT_COUNT, -1) else -1 } catch (_: Throwable) { -1 }
+    /** ora in cui il dispositivo si è acceso (ora di sistema meno il tempo dall'accensione): serve dove manca il numero dell'avvio */
+    private fun bootAt(): Long = System.currentTimeMillis() - android.os.SystemClock.elapsedRealtime()
+    private fun screenOn(c: android.content.Context): Boolean =
+        try { (c.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager).isInteractive } catch (_: Throwable) { true }
+
+    /**
+     * L'apertura precedente è finita senza una chiusura voluta: va segnalata come «uccisa dal sistema»? Solo se all'ultimo
+     * battito l'app era in primo piano con lo schermo acceso e da allora il dispositivo non si è riavviato.
+     * Senza il numero dell'avvio si confronta l'ora dell'accensione: si sposta di molto solo se il dispositivo è ripartito.
+     */
+    fun killedInUse(fg: Boolean, screen: Boolean, bootThen: Int, bootNow: Int, bootAtThen: Long, bootAtNow: Long): Boolean {
+        if (!fg || !screen) return false
+        if (bootThen >= 0 && bootNow >= 0) return bootThen == bootNow
+        return bootAtThen <= 0L || Math.abs(bootAtNow - bootAtThen) < 5 * 60_000L
+    }
 
     fun mem(c: android.content.Context): JSONObject {
         val o = JSONObject()
@@ -1377,11 +1400,31 @@ object Watch {
         ctx = c.applicationContext; pingPrefs = p
         if (started) return
         started = true
-        // l'apertura precedente era ancora «viva» e non è stata chiusa dall'utente: uccisa dal sistema (o spenta la TV)
+        // l'apertura precedente era ancora «viva» e non è stata chiusa dall'utente: è un'anomalia solo se è successo mentre il
+        // cliente la usava (in primo piano, schermo acceso, dispositivo mai spento da allora). I dati mancanti (versione
+        // precedente) valgono come «in uso»: il primo avvio dopo l'aggiornamento si comporta come prima
         if (p.getBoolean("alive", false)) {
-            val last = p.getLong("aliveT", 0L); val free = p.getLong("aliveFree", -1L); val low = p.getBoolean("aliveLow", false)
-            note(p, "killed", "memoria libera all'ultimo battito: " + (if (free >= 0) "$free MB" else "?") + (if (low) " (sistema in riserva)" else ""), if (last > 0) last else System.currentTimeMillis())
+            val inUse = killedInUse(p.getBoolean("aliveFg", true), p.getBoolean("aliveOn", true), p.getInt("aliveBoot", -1), bootCount(c), p.getLong("aliveBootAt", 0L), bootAt())
+            // l'installazione di un aggiornamento chiude l'app: versione diversa da quella dell'ultimo battito = niente anomalia
+            val updated = p.getInt("aliveVer", BuildConfig.VERSION_CODE) != BuildConfig.VERSION_CODE
+            if (inUse && !updated) {
+                val last = p.getLong("aliveT", 0L); val free = p.getLong("aliveFree", -1L); val low = p.getBoolean("aliveLow", false)
+                note(p, "killed", "memoria libera all'ultimo battito: " + (if (free >= 0) "$free MB" else "?") + (if (low) " (sistema in riserva)" else ""), if (last > 0) last else System.currentTimeMillis())
+            }
         }
+        // schermate dell'app visibili: quando non ce n'è più nessuna l'app è in sfondo, e si scrive subito (una chiusura un
+        // attimo dopo non deve sembrare «in uso»)
+        try {
+            (c.applicationContext as? android.app.Application)?.registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
+                override fun onActivityStarted(a: android.app.Activity) { shown++; if (shown == 1) mark(true) }
+                override fun onActivityStopped(a: android.app.Activity) { if (shown > 0) shown--; if (shown == 0) mark(false) }
+                override fun onActivityCreated(a: android.app.Activity, b: Bundle?) {}
+                override fun onActivityResumed(a: android.app.Activity) {}
+                override fun onActivityPaused(a: android.app.Activity) {}
+                override fun onActivitySaveInstanceState(a: android.app.Activity, b: Bundle) {}
+                override fun onActivityDestroyed(a: android.app.Activity) {}
+            })
+        } catch (_: Throwable) {}
         // errori non gestiti: traccia, poi il gestore di Android fa il suo (l'app si chiude)
         val prev = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { th, e ->
@@ -1395,11 +1438,20 @@ object Watch {
         ping()
     }
 
+    /** app passata in primo piano o in sfondo: scritto subito, senza aspettare il prossimo battito */
+    private fun mark(fg: Boolean) {
+        val p = pingPrefs ?: return
+        try { p.edit().putBoolean("aliveFg", fg).apply() } catch (_: Exception) {}
+    }
+
     private fun ping() {
         val p = pingPrefs ?: return
         try {
-            val m = ctx?.let { mem(it) } ?: JSONObject()
-            p.edit().putBoolean("alive", true).putLong("aliveT", System.currentTimeMillis()).putLong("aliveFree", m.optLong("freeMb", -1L)).putBoolean("aliveLow", m.optBoolean("low", false)).apply()
+            val c = ctx
+            val m = c?.let { mem(it) } ?: JSONObject()
+            p.edit().putBoolean("alive", true).putLong("aliveT", System.currentTimeMillis()).putLong("aliveFree", m.optLong("freeMb", -1L)).putBoolean("aliveLow", m.optBoolean("low", false))
+                .putBoolean("aliveFg", shown > 0).putBoolean("aliveOn", c?.let { screenOn(it) } ?: true)
+                .putInt("aliveBoot", c?.let { bootCount(it) } ?: -1).putLong("aliveBootAt", bootAt()).putInt("aliveVer", BuildConfig.VERSION_CODE).apply()
         } catch (_: Exception) {}
         h.postDelayed({ ping() }, 20_000L)
     }
