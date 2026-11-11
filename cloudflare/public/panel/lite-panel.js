@@ -8,6 +8,7 @@
 .app-chip.ktv{background:rgba(34,211,238,.15);color:#7fe3f5}
 .app-chip.prem{background:rgba(212,175,55,.18);color:#f5d77a}
 .app-chip.xc{background:rgba(167,139,250,.18);color:#c4b5fd}
+.app-chip.ult{background:rgba(34,211,238,.16);color:#67e8f9}
 .app-chip.plus{background:rgba(192,38,211,.18);color:#f0abfc}
 .lite-note{padding:12px 14px;border-radius:10px;border:1px solid rgba(224,164,49,.45);background:rgba(224,164,49,.08);font-size:13.5px;margin-bottom:14px}
 #dvApp{flex:0 0 auto}`;
@@ -20,9 +21,10 @@
   const isPrem = (d) => appOf(d) === 'prem';
   const isKtv = (d) => appOf(d) === 'ktv' || isPrem(d); // Kairos Premium nasce da Kairos TV: stesse funzioni
   const isXc = (d) => appOf(d) === 'xc';
+  const isUlt = (d) => appOf(d) === 'ult';
   const isPlus = (d) => appOf(d) === 'plus';
   const isNova = (d) => appOf(d) === 'nova';
-  const kindOf = (d) => (isLite(d) ? 'lite' : isPrem(d) ? 'prem' : isKtv(d) ? 'ktv' : isXc(d) ? 'xc' : isPlus(d) ? 'plus' : isNova(d) ? 'nova' : 'tv');
+  const kindOf = (d) => (isLite(d) ? 'lite' : isPrem(d) ? 'prem' : isKtv(d) ? 'ktv' : isUlt(d) ? 'ult' : isXc(d) ? 'xc' : isPlus(d) ? 'plus' : isNova(d) ? 'nova' : 'tv');
   let flt = 'all';
   try { flt = localStorage.getItem('kc_app') || 'all'; } catch {}
 
@@ -32,7 +34,7 @@
     let seg = $('#dvApp');
     if (!seg) { seg = document.createElement('div'); seg.className = 'seg'; seg.id = 'dvApp'; bar.insertBefore(seg, $('#dvView')); }
     const prim = D.devices.filter((d) => !d.parent), n = (k) => prim.filter((d) => k === 'all' || kindOf(d) === k).length;
-    seg.innerHTML = [['all', 'Tutte le app'], ['tv', 'Kairos Pro'], ['ktv', 'Kairos TV'], ['prem', 'Kairos Premium'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova']].map(([k, l]) => `<button data-app="${k}" class="${flt === k ? 'on' : ''}" title="${k === 'tv' ? 'Comprende i dispositivi non ancora collegati' : ''}">${l} <span style="opacity:.6">${n(k)}</span></button>`).join('');
+    seg.innerHTML = [['all', 'Tutte le app'], ['tv', 'Kairos Pro'], ['ktv', 'Kairos TV'], ['prem', 'Kairos Premium'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['ult', 'KAIROS Ultimate'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova']].map(([k, l]) => `<button data-app="${k}" class="${flt === k ? 'on' : ''}" title="${k === 'tv' ? 'Comprende i dispositivi non ancora collegati' : ''}">${l} <span style="opacity:.6">${n(k)}</span></button>`).join('');
     $$('[data-app]', seg).forEach((b) => (b.onclick = () => { flt = b.dataset.app; try { localStorage.setItem('kc_app', flt); } catch {} renderDevices(); }));
   }
   const rd = renderDevices;
@@ -45,14 +47,14 @@
     try { rd(); } finally { D.devices = all; }
     filterBar();
     // etichetta «LITE» / «TV» su schede e tabella
-    const chip = (d) => (isLite(d) ? '<span class="app-chip">LITE</span>' : isPrem(d) ? '<span class="app-chip prem">PREMIUM</span>' : isKtv(d) ? '<span class="app-chip ktv">TV</span>' : isXc(d) ? '<span class="app-chip xc">XC</span>' : isPlus(d) ? '<span class="app-chip plus">PLUS</span>' : isNova(d) ? '<span class="app-chip plus">NOVA</span>' : '');
+    const chip = (d) => (isLite(d) ? '<span class="app-chip">LITE</span>' : isPrem(d) ? '<span class="app-chip prem">PREMIUM</span>' : isKtv(d) ? '<span class="app-chip ktv">TV</span>' : isUlt(d) ? '<span class="app-chip ult">ULTIMATE</span>' : isXc(d) ? '<span class="app-chip xc">XC</span>' : isPlus(d) ? '<span class="app-chip plus">PLUS</span>' : isNova(d) ? '<span class="app-chip plus">NOVA</span>' : '');
     $$('#dvCards .dv-card[data-id]').forEach((c) => { const d = all.find((x) => x.id === c.dataset.id); const b = $('.dv-n b', c); if (b && chip(d) && !$('.app-chip', b)) b.insertAdjacentHTML('beforeend', chip(d)); });
     $$('#dvTbl tbody tr[data-id]').forEach((r) => { const d = all.find((x) => x.id === r.dataset.id); const b = $('.dvt-u b', r); if (b && chip(d) && !$('.app-chip', b)) b.insertAdjacentHTML('beforeend', chip(d)); });
   };
 
   /* ---------- scheda cliente: scelta dell'app e solo le funzioni che Kairos Lite ha ---------- */
   function applyLite() {
-    const on = isLite(edit), xc = isXc(edit), plus = isPlus(edit) || isNova(edit), ktv = isKtv(edit) || xc; // Kairos XC usa le stesse funzioni di Kairos TV/Lite; Kairos Nova quelle di Plus
+    const on = isLite(edit), xc = isXc(edit), ult = isUlt(edit), plus = isPlus(edit) || isNova(edit), ktv = isKtv(edit) || xc || ult; // XC e Ultimate usano le stesse funzioni di Kairos TV/Lite
     for (const id of ['ply', 'add', 'vpn']) { const off = id === 'vpn' ? plus : on || ktv || plus; const sec = $('#ds-' + id); if (sec) sec.style.display = off ? 'none' : ''; const nb = $(`#dBody [data-ds="${id}"]`); if (nb) nb.style.display = off ? 'none' : ''; }
     let k = 0; $$('#dBody .dnav [data-ds]').forEach((b) => { const i = $('i', b); if (i && b.style.display !== 'none') i.textContent = ++k; });
     k = 0; $$('#dBody .dsec').forEach((sec) => { const i = $('.dsh i', sec); if (i && sec.style.display !== 'none') i.textContent = ++k; });
@@ -60,8 +62,9 @@
     for (const sel of ['#eAiProv', '#eAiLim']) { const el = $(sel); if (!el) continue; const box = sel === '#eAiLim' ? el.parentElement : el; box.style.display = on || ktv || plus ? 'none' : ''; const lb = box.previousElementSibling; if (lb && lb.classList.contains('lbl')) lb.style.display = on || ktv || plus ? 'none' : ''; }
     { const hn = $('#eAiHint'); if (hn) hn.style.display = on || ktv || plus ? 'none' : ''; } // spiegazione sotto «Assistente IA»: solo Kairos Pro ha l'assistente
     const note = $('#dBody .lite-note'); if (note) note.style.display = on ? '' : 'none';
-    const kn = $('#dBody .ktv-note'); if (kn) kn.style.display = ktv && !xc && !isPrem(edit) ? '' : 'none';
+    const kn = $('#dBody .ktv-note'); if (kn) kn.style.display = ktv && !xc && !ult && !isPrem(edit) ? '' : 'none';
     const xn = $('#dBody .xc-note'); if (xn) xn.style.display = xc ? '' : 'none';
+    const un = $('#dBody .ult-note'); if (un) un.style.display = ult ? '' : 'none';
     const pn = $('#dBody .plus-note'); if (pn) pn.style.display = plus ? '' : 'none';
     $$('#eApp [data-eapp]').forEach((b) => b.classList.toggle('on', b.dataset.eapp === kindOf(edit)));
   }
@@ -71,13 +74,14 @@
     if (!edit) return;
     const main = $('#dBody .dmain'); if (!main) return;
     if (!$('#eAppBox', main)) {
-      main.insertAdjacentHTML('afterbegin', `<div id="eAppBox" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px"><b style="font-size:13.5px">App del cliente</b><div class="seg" id="eApp"><button data-eapp="tv">Kairos Pro</button><button data-eapp="ktv">Kairos TV</button><button data-eapp="prem">Kairos Premium</button><button data-eapp="lite">Kairos Lite</button><button data-eapp="xc">Kairos XC</button><button data-eapp="plus">Kairos Plus</button></div><small class="mut">Si aggiorna da sola quando l'app si collega</small></div>`);
+      main.insertAdjacentHTML('afterbegin', `<div id="eAppBox" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px"><b style="font-size:13.5px">App del cliente</b><div class="seg" id="eApp"><button data-eapp="tv">Kairos Pro</button><button data-eapp="ktv">Kairos TV</button><button data-eapp="prem">Kairos Premium</button><button data-eapp="lite">Kairos Lite</button><button data-eapp="xc">Kairos XC</button><button data-eapp="ult">KAIROS Ultimate</button><button data-eapp="plus">Kairos Plus</button></div><small class="mut">Si aggiorna da sola quando l'app si collega</small></div>`);
       $$('#eApp [data-eapp]').forEach((b) => (b.onclick = () => { edit.app = b.dataset.eapp; edit._appSet = true; applyLite(); }));
     }
     if (!$('.lite-note', main)) $('#eAppBox', main) ? $('#eAppBox', main).insertAdjacentHTML('afterend', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa: niente lettore a scelta, add-on, assistente IA, registrazioni, speed test e multi-schermo.</div>') : main.insertAdjacentHTML('afterbegin', '<div class="lite-note"><b>Questo cliente usa Kairos Lite.</b> Qui vedi solo quello che Lite usa.</div>');
     if (!$('.ktv-note', main)) $('.lite-note', main).insertAdjacentHTML('afterend', '<div class="lite-note ktv-note"><b>Questo cliente usa Kairos TV.</b> App nativa stile Netflix (veloce come la Lite): qui vedi solo quello che usa (collegamento TV, cambio playlist, profili, VPN).</div>');
     if (!$('.xc-note', main)) $('.ktv-note', main).insertAdjacentHTML('afterend', '<div class="lite-note xc-note"><b>Questo cliente usa Kairos XC.</b> App stile MirkoTeam, leggera e veloce: qui vedi solo quello che usa (collegamento TV, cambio playlist, profili, VPN).</div>');
-    if (!$('.plus-note', main)) $('.xc-note', main).insertAdjacentHTML('afterend', '<div class="lite-note plus-note"><b>Questo cliente usa Kairos Plus.</b> La nuova app stile Netflix per Fire TV e Android TV, con lettore nativo: qui vedi solo quello che usa (playlist, scadenza, collegamento TV, cambio playlist, visioni contemporanee, messaggi, manutenzione e Disconnetti). Niente VPN, profili, add-on e assistente IA.</div>');
+    if (!$('.ult-note', main)) $('.xc-note', main).insertAdjacentHTML('afterend', '<div class="lite-note ult-note"><b>Questo cliente usa KAIROS Ultimate.</b> App TV autonoma: qui vedi solo le funzioni supportate dal pannello e dal suo lettore.</div>');
+    if (!$('.plus-note', main)) $('.ult-note', main).insertAdjacentHTML('afterend', '<div class="lite-note plus-note"><b>Questo cliente usa Kairos Plus.</b> La nuova app stile Netflix per Fire TV e Android TV, con lettore nativo: qui vedi solo quello che usa (playlist, scadenza, collegamento TV, cambio playlist, visioni contemporanee, messaggi, manutenzione e Disconnetti). Niente VPN, profili, add-on e assistente IA.</div>');
     applyLite();
   };
 
@@ -118,6 +122,17 @@
     $('#xcCopy').onclick = () => { const l = (D.xc && ((D.xc.feed && D.xc.feed.url) || D.xc.apk)) || ''; if (!l) return toast('Nessun link ancora: pubblica una release', 1); navigator.clipboard.writeText(l).then(() => toast('Link copiato'), () => toast('Copia non consentita', 1)); };
     for (const id of ['#sXcApk', '#sXcDl']) $(id).addEventListener('input', (e) => (e.target.dataset.ldirty = '1'));
     for (const ev of ['input', 'change']) $('#xcCard').addEventListener(ev, (e) => e.stopPropagation());
+  }
+  if (pane && !$('#ultCard')) {
+    pane.insertAdjacentHTML('beforeend', `<div class="card glass" id="ultCard" style="margin-top:18px"><div class="hd"><h3>KAIROS Ultimate<small>App Android TV e Fire TV, con aggiornamenti dal repository kairos-ultimate</small></h3></div>
+      <div id="ultAuto" class="st-note"></div>
+      <div class="st-row"><div class="st-l"><b>Link per scaricare l'APK di KAIROS Ultimate</b><small>Vuoto = l'ultima release del repository kairos-ultimate</small></div><div class="st-c"><input class="inp mono" id="sUltApk" placeholder="https://github.com/…/kairos-ultimate.apk"></div></div>
+      <div class="st-row"><div class="st-l"><b>Codice Downloader di KAIROS Ultimate</b><small>Compare in alto nel pannello accanto agli altri (anche agli agenti)</small></div><div class="st-c"><input class="inp mono" id="sUltDl" maxlength="20" placeholder="es. 7654321"></div></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px"><button class="btn pri" id="ultSave">Salva KAIROS Ultimate</button><button class="btn" id="ultCopy">Copia link APK</button></div></div>`);
+    $('#ultSave').onclick = async () => { try { await api('PUT', '/admin/settings', { ultApkUrl: $('#sUltApk').value.trim(), ultDownloaderCode: $('#sUltDl').value.trim() }); delete $('#sUltApk').dataset.ldirty; delete $('#sUltDl').dataset.ldirty; const old = $('#dlUlt'); if (old) old.remove(); await load(); toast('KAIROS Ultimate salvata'); } catch (e) { toast(e.message, 1); } };
+    $('#ultCopy').onclick = () => { const l = (D.ult && ((D.ult.feed && D.ult.feed.url) || D.ult.apk)) || ''; if (!l) return toast('Nessun link ancora: pubblica una release', 1); navigator.clipboard.writeText(l).then(() => toast('Link copiato'), () => toast('Copia non consentita', 1)); };
+    for (const id of ['#sUltApk', '#sUltDl']) $(id).addEventListener('input', (e) => (e.target.dataset.ldirty = '1'));
+    for (const ev of ['input', 'change']) $('#ultCard').addEventListener(ev, (e) => e.stopPropagation());
   }
   /* ---------- Impostazioni → App e aggiornamenti: Kairos Plus ---------- */
   if (pane && !$('#plusCard')) {
@@ -182,6 +197,18 @@
       $('#dlXc [data-dlc]').onclick = (e) => navigator.clipboard.writeText(e.target.dataset.dlc).then(() => toast('Codice copiato'), () => toast('Copia non consentita', 1));
     }
   }
+  function renderUlt() {
+    const s = D.settings || {}, U = D.ult || {}, f = U.feed;
+    const n = D.devices.filter((d) => !d.parent && isUlt(d)).length;
+    if ($('#ultAuto')) $('#ultAuto').innerHTML = (f && f.version ? `✅ <b>Versione pubblicata: ${esc(f.version)}</b>${f.date ? ' · ' + esc(String(f.date).slice(0, 10)) : ''} — le app KAIROS Ultimate installate la propongono da sole` : '⚠️ Nessuna release di KAIROS Ultimate trovata (o GitHub non risponde adesso)') + ` · Clienti che usano KAIROS Ultimate: <b>${n}</b>`;
+    if ($('#sUltApk') && !$('#sUltApk').dataset.ldirty && document.activeElement !== $('#sUltApk')) $('#sUltApk').value = s.ultApkUrl || '';
+    if ($('#sUltDl') && !$('#sUltDl').dataset.ldirty && document.activeElement !== $('#sUltDl')) $('#sUltDl').value = s.ultDownloaderCode || '';
+    const bar = $('#dlBar');
+    if (bar && !$('#dlUlt') && s.ultDownloaderCode) {
+      bar.insertAdjacentHTML('beforeend', `<div class="dl" id="dlUlt"><i>ULT</i><div><small>Downloader · KAIROS Ultimate</small><b>${esc(s.ultDownloaderCode)}</b></div><button class="btn sm" data-dlc="${esc(s.ultDownloaderCode)}">Copia</button></div>`);
+      $('#dlUlt [data-dlc]').onclick = (e) => navigator.clipboard.writeText(e.target.dataset.dlc).then(() => toast('Codice copiato'), () => toast('Copia non consentita', 1));
+    }
+  }
   function renderKtv() {
     const s = D.settings || {}, K = D.ktv || {}, f = K.feed;
     const n = D.devices.filter((d) => !d.parent && isKtv(d)).length;
@@ -208,17 +235,17 @@
     }
   }
   const ra = renderAll;
-  window.renderAll = renderAll = function () { ra(); renderLite(); renderKtv(); renderXc(); renderPlus(); renderFixed(); };
+  window.renderAll = renderAll = function () { ra(); renderLite(); renderKtv(); renderXc(); renderUlt(); renderPlus(); renderFixed(); };
   // lo stato porta anche le informazioni di Lite
   const api0 = api;
   window.api = api = async function (m, p, b) {
     // l'app scelta nella scheda del cliente (titolare) viaggia con il salvataggio
     if (edit && edit.app && b && typeof b === 'object' && ((m === 'POST' && p === '/admin/devices' && isNew) || (m === 'PUT' && p === '/admin/devices/' + edit.id && edit._appSet))) b = { ...b, app: edit.app };
-    const r = await api0(m, p, b); if (p === '/admin/state' && m === 'GET' && r) { D.lite = r.lite || null; D.ktv = r.ktv || null; D.xc = r.xc || null; D.plus = r.plus || null; D.prem = r.prem || null; D.nova = r.nova || null; } return r; };
+    const r = await api0(m, p, b); if (p === '/admin/state' && m === 'GET' && r) { D.lite = r.lite || null; D.ktv = r.ktv || null; D.xc = r.xc || null; D.ult = r.ult || null; D.plus = r.plus || null; D.prem = r.prem || null; D.nova = r.nova || null; } return r; };
   if (typeof DEMO !== 'undefined') {
     DEMO.settings.liteDownloaderCode = DEMO.settings.liteDownloaderCode || '5551234';
-    DEMO.devices.forEach((d, i) => { if (!d.parent && d.playlists && d.playlists.length) d.app = i % 5 === 2 ? 'lite' : i % 5 === 3 ? 'ktv' : i % 5 === 4 ? 'xc' : i % 10 === 5 ? 'plus' : i % 10 === 0 ? 'nova' : 'tv'; });
+    DEMO.devices.forEach((d, i) => { if (!d.parent && d.playlists && d.playlists.length) d.app = i % 10 === 6 ? 'ult' : i % 5 === 2 ? 'lite' : i % 5 === 3 ? 'ktv' : i % 5 === 4 ? 'xc' : i % 10 === 5 ? 'plus' : i % 10 === 0 ? 'nova' : 'tv'; });
     const dm = demoApi;
-    window.demoApi = demoApi = async function (m, p, b) { const r = await dm(m, p, b); if (p === '/admin/state' && r && !r.lite) r.lite = { apk: DEMO.settings.liteApkUrl || 'https://github.com/mariopiccolo8562-lang/kairos-lite/releases/latest/download/kairos-lite.apk', feed: { version: '1.0.0', date: '2026-11-03' } }; if (p === '/admin/state' && r && !r.ktv) r.ktv = { apk: 'https://github.com/mariopiccolo8562-lang/kairos-tv/releases/latest/download/kairos-tv.apk', feed: { version: '1.0.0', date: '2026-11-04' } }; if (p === '/admin/state' && r && !r.xc) r.xc = { apk: 'https://github.com/mariopiccolo8562-lang/kairos-xc/releases/latest/download/kairos-xc.apk', feed: { version: '1.0.0', date: '2026-11-05' } }; if (p === '/admin/state' && r && !r.plus) r.plus = { apk: 'https://github.com/mariopiccolo8562-lang/kairos-flutter/releases/latest/download/kairos-plus.apk', feed: { version: '0.1.12', date: '2026-11-05' } }; return r; };
+    window.demoApi = demoApi = async function (m, p, b) { const r = await dm(m, p, b); if (p === '/admin/state' && r && !r.lite) r.lite = { apk: DEMO.settings.liteApkUrl || 'https://github.com/mariopiccolo8562-lang/kairos-lite/releases/latest/download/kairos-lite.apk', feed: { version: '1.0.0', date: '2026-11-03' } }; if (p === '/admin/state' && r && !r.ktv) r.ktv = { apk: 'https://github.com/mariopiccolo8562-lang/kairos-tv/releases/latest/download/kairos-tv.apk', feed: { version: '1.0.0', date: '2026-11-04' } }; if (p === '/admin/state' && r && !r.xc) r.xc = { apk: 'https://github.com/mariopiccolo8562-lang/kairos-xc/releases/latest/download/kairos-xc.apk', feed: { version: '1.0.0', date: '2026-11-05' } }; if (p === '/admin/state' && r && !r.ult) r.ult = { apk: 'https://github.com/mariopiccolo8562-lang/kairos-ultimate/releases/latest/download/kairos-ultimate.apk', feed: { version: '1.0.0', date: '2026-11-05' } }; if (p === '/admin/state' && r && !r.plus) r.plus = { apk: 'https://github.com/mariopiccolo8562-lang/kairos-flutter/releases/latest/download/kairos-plus.apk', feed: { version: '0.1.12', date: '2026-11-05' } }; return r; };
   }
 })();
