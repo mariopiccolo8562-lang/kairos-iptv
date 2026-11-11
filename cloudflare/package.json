@@ -1,0 +1,8 @@
+{
+  "name": "kairos-iptv-cloudflare",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-loader ./test/worker-loader.mjs --test test/*.test.mjs"
+  }
+}

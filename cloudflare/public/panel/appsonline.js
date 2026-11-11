@@ -78,14 +78,14 @@
   const V = $('#v-appon');
 
   /* ---------- app e nomi ---------- */
-  const KAPP = { tv: 'Kairos Pro', ktv: 'Kairos TV', xc: 'Kairos XC', lite: 'Kairos Lite', prem: 'Kairos Premium', plus: 'Kairos Plus', nova: 'Kairos Nova', vega: 'Kairos Vega' };
-  const KCOL = { tv: '#4f8cff', ktv: '#22d3ee', xc: '#a78bfa', lite: '#4ade80', prem: '#f5b041', plus: '#f472b6', nova: '#2dd4bf', vega: '#fb923c' };
+  const KAPP = { tv: 'Kairos Pro', ktv: 'Kairos TV', xc: 'Kairos XC', ult: 'KAIROS Ultimate', lite: 'Kairos Lite', prem: 'Kairos Premium', plus: 'Kairos Plus', nova: 'Kairos Nova', vega: 'Kairos Vega' };
+  const KCOL = { tv: '#4f8cff', ktv: '#22d3ee', xc: '#a78bfa', ult: '#22d3ee', lite: '#4ade80', prem: '#f5b041', plus: '#f472b6', nova: '#2dd4bf', vega: '#fb923c' };
   const XCOL = { orcp: '#e879f9', mxp: '#ef4444', oxp: '#38bdf8' };
   const KORD = Object.keys(KAPP);
   /* quale app KAIROS: prima la versione che manda l'app (come fa il server), poi quella salvata nel cliente */
   const appKey = (ver, saved) => {
     const v = String(ver || '').trim();
-    if (/vega/i.test(v)) return 'vega'; if (/^lite\b/i.test(v)) return 'lite'; if (/^xc\b/i.test(v)) return 'xc'; if (/^plus\b/i.test(v)) return 'plus';
+    if (/vega/i.test(v)) return 'vega'; if (/^lite\b/i.test(v)) return 'lite'; if (/^ult\b/i.test(v)) return 'ult'; if (/^xc\b/i.test(v)) return 'xc'; if (/^plus\b/i.test(v)) return 'plus';
     if (/^nova\b/i.test(v)) return 'nova'; if (/premium/i.test(v)) return 'prem'; if (/^tv\b/i.test(v)) return 'ktv'; if (/^\d+\.\d+/.test(v)) return 'tv';
     const s = String(saved || '').toLowerCase(); return s === 'pro' ? 'tv' : KAPP[s] ? s : 'tv';
   };

@@ -546,7 +546,7 @@
   }
 
   /* ---------- Errori applicazione ---------- */
-  const PROB = { freeze: ['Immagine ferma', '🧊'], stall: ['Caricamento continuo', '⏳'], error: ['Errore del lettore', '⚠'], restart: ['Riavvio per memoria', '🔁'], crash: ['Chiusura per errore interno', '💥'], killed: ['Chiusa dal sistema (memoria)', '🧠'], uierr: ['Errore dell\'interfaccia', '🐞'] };
+  const PROB = { freeze: ['Immagine ferma', '🧊'], stall: ['Caricamento continuo', '⏳'], error: ['Errore del lettore', '⚠'], restart: ['Riavvio per memoria', '🔁'], crash: ['Chiusura per errore interno', '💥'], killed: ['Chiusa dal sistema (memoria)', '🧠'], uierr: ['Errore dell\'interfaccia', '🐞'], inuse: ['Linea già in uso', '⚠'], expired: ['Lista scaduta/sospesa', '⚠'], unreach: ['Server non raggiungibile dalla rete del cliente', '🌐'], down: ['Server della lista spento', '⚠'], nonet: ['Senza internet', '🌐'] };
   const OUTC = { risolto: ['Risolto da solo', 'ok'], 'non risolto': ['Non risolto', 'bad'], chiuso: ['Il cliente è uscito', ''], '': ['—', ''] };
   KC.errF = { q: '', p: '', o: '', ow: '', hours: 168 };
   async function errLoad(quiet) {
