@@ -1024,3 +1024,11 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
 - **Agente**: se il titolare ha deciso connessioni oltre il suo tetto (anche illimitate), nella scheda le vede come «decise dal titolare» e può salvare il resto (prima il salvataggio veniva rifiutato).
 - **App**: mostrano ancora «2 di 999» finché non arriva la versione che scrive «illimitati».
 - **Test**: `srv_conn_unlim` (15 controlli); `ui_add_dev` aggiornato (24).
+
+## 59. Aggiornamenti senza conferma (Android 12+) in tutte le app e nello Store (11 novembre 2026)
+
+- **Come funziona**: la versione nuova si scarica in background come prima; quando il cliente **esce dall'app** (nessuna schermata visibile da 10 secondi) si installa da sola con `PackageInstaller` e `USER_ACTION_NOT_REQUIRED`, senza nessuna schermata. Android lo permette se l'app aggiorna se stessa, ha «Installa app sconosciute», dichiara `UPDATE_PACKAGES_WITHOUT_USER_ACTION` ed è costruita per un Android recente (targetSdk 35: fino ad Android 17).
+- **Mai** durante la visione, con una registrazione in corso (Pro) o con una VPN che serve anche ad altre app; in Nova mai mentre si sente audio. Un tentativo per versione: se Android chiede comunque la conferma o non riesce, torna la proposta di sempre; dopo 3 giorni senza uscire dall'app torna la proposta; l'aggiornamento obbligatorio resta com'era.
+- **Pro** (`android/.../Quiet.kt`): conta le schermate dell'app; l'interfaccia chiede `kx.quietOk(versione)` prima di proporre l'aggiornamento e `kx.quietBlocked(versione)` per la riga sul «Blocco automatico» dei Samsung. «Connessioni usate: N · illimitate».
+- **App native** (TV, Premium, Lite, XC: `Quiet.kt`, `QuietTest`), **Plus e Nova** (`Quiet.kt` nativo, `quiet`/`quietBlocked` in `updateStatus`, `AppUpdater` senza proposta), **Store** (`Quiet.java`: si aggiorna da solo quando il cliente esce dallo store; targetSdk 35 con il tema che lascia la pagina tra le barre di sistema).
+- **Limiti**: il primo aggiornamento chiede ancora la conferma (lo installa la versione vecchia); Fire TV e Android 11 o precedenti restano con un clic; la prima installazione dallo Store chiede sempre la conferma.
