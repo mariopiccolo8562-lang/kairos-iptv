@@ -7,7 +7,14 @@
    - la scadenza del cliente, cioè quella che vede nell'app.
    Se la data della nota e quella della linea sono diverse lo segnala: chi rinnova la linea un mese alla volta ma ha incassato
    più mesi tiene la data vera nella nota, e il cliente (allineato alla linea) nell'app ne vede un'altra.
-   Legge solo dati che il pannello ha già: le liste delle linee (line-pick.js) e le note (line-notes.js). Non modifica nulla.
+   Legge solo dati che il pannello ha già: le liste delle linee (line-pick.js) e le note (line-notes.js).
+   DATA CHE IL CLIENTE VEDE (stesso giorno): il server gli mostra la più avanti fra scadenza della linea, «Pagato fino al»
+   della linea (da solo) e data fissata per quel cliente. Qui:
+   - «Usa il … per il cliente» accanto a «Date diverse», quando la data più avanti è scritta a mano nella nota (non si applica
+     da sola: una data a mano può essere anche «richiamare il 20/12»);
+   - «Torna alla data della linea» per toglierla;
+   - «Metti il …» se il cliente non ha ancora la data giusta (altrimenti arriva da sola con il prossimo allineamento).
+   Sono le uniche cose che modifica (PUT /admin/line-sync/hold); il resto è sola lettura.
    Va dopo line-pick.js, line-notes.js e agents.js. */
 (() => {
   const css = document.createElement('style');
@@ -15,7 +22,8 @@
 .lnc .lnc-n{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.lnc .lnc-n span{color:var(--mut);white-space:nowrap}.lnc .lnc-n b{font-weight:600;color:var(--txt);overflow-wrap:anywhere;white-space:pre-wrap}
 .lnc .lnc-d{display:flex;gap:6px 14px;flex-wrap:wrap;margin-top:7px;color:var(--mut)}.lnc .lnc-d b{color:var(--txt);font-weight:600}
 .lnc .lnc-w{margin-top:8px;padding:8px 10px;border-radius:10px;border:1px solid rgba(245,158,11,.5);background:rgba(245,158,11,.1);color:#fcd34d}.lnc .lnc-w b{color:#fde68a}
-.lnc .lnc-ok{margin-top:7px;color:#86efac}.lnc .lnc-m{margin-top:7px;color:var(--mut)}`;
+.lnc .lnc-ok{margin-top:7px;color:#86efac}.lnc .lnc-ok b{color:#bbf7d0}.lnc .lnc-m{margin-top:7px;color:var(--mut)}
+.lnc .lnc-b{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.lnc .lnc-b .btn{white-space:normal;text-align:left}`;
   document.head.appendChild(css);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const pad = (n) => String(n).padStart(2, '0');
@@ -69,17 +77,39 @@
     return l ? { exp: l.exp || '', note, status: l.status || '' } : (note ? { exp: '', note, status: '', missing: true } : null);
   }
 
-  function html(panel, username, L, cli) {
+  /** K = quello che il server sa del collegamento: { dev, hold, paid, can }. hold = data fissata per il cliente,
+      paid = «Pagato fino al» della linea, can = chi guarda può cambiare la data del cliente */
+  function html(panel, username, L, cli, K) {
     const pn = PANELS[panel] || String(panel || '').toUpperCase();
     if (!L) return `<div class="lnc-n"><span>📝 Nota della linea</span><b style="color:var(--mut);font-weight:500">non trovo <span class="mono">${esc(username)}</span> tra le linee di ${esc(pn)} (eliminata, o il pannello non risponde adesso)</b></div>`;
-    const nd = dateOf(L.note, L.exp), cliTxt = cli ? it(cli) : 'illimitata';
-    const dates = `<div class="lnc-d"><span>Linea su ${esc(pn)}: <b>${L.exp ? it(L.exp) : '—'}</b></span><span>Data nella nota: <b>${nd ? it(nd) : 'nessuna'}</b></span><span>Cliente, nell'app: <b>${esc(cliTxt)}</b></span></div>`;
+    K = K || {};
+    const nd = dateOf(L.note, L.exp), cliTxt = cli ? it(cli) : 'illimitata', le = L.exp || '';
+    const dates = `<div class="lnc-d"><span>Linea su ${esc(pn)}: <b>${le ? it(le) : '—'}</b></span><span>Data nella nota: <b>${nd ? it(nd) : 'nessuna'}</b></span><span>Cliente, nell'app: <b>${esc(cliTxt)}</b></span></div>`;
+    const act = K.dev && K.can && le;
+    const btn = (attr, txt) => `<button type="button" class="btn sm" ${attr}>${txt}</button>`;
+    // la data che il server dà al cliente: la più avanti fra linea, «Pagato fino al» e data fissata
+    let T = le, src = 'line';
+    if (le && K.paid && ms(K.paid) > ms(T)) { T = K.paid; src = 'paid'; }
+    if (le && K.hold && ms(K.hold) > ms(T)) { T = K.hold; src = 'hold'; }
+    const keep = `La linea scade il <b>${it(le)}</b>: continua a rinnovarla, la data del cliente non cambia.`;
+    const wait = cli && T && cli !== T; // il cliente non ha ancora quella data (o nella scheda è stata cambiata a mano)
     let tail = '';
-    if (nd && L.exp && daysApart(nd, L.exp) > 1) {
-      const later = ms(nd) > ms(L.exp);
-      const seen = !cli ? 'Il cliente nell\'app non vede una scadenza (illimitata).' : daysApart(cli, nd) <= 1 ? `Il cliente nell'app vede già il <b>${it(cli)}</b>, la data della nota.` : `Il cliente nell'app vede il <b>${it(cli)}</b>${daysApart(cli, L.exp) <= 1 ? ', quello della linea' : ''}.`;
-      tail = `<div class="lnc-w" data-lnc-warn="1">⚠️ <b>Date diverse</b>: la linea scade il <b>${it(L.exp)}</b>, la nota dice <b>${it(nd)}</b> (${later ? 'più avanti' : 'prima'}). ${seen}</div>`;
-    } else if (nd && L.exp) tail = `<div class="lnc-ok">✓ La data della nota coincide con la scadenza della linea</div>`;
+    if (src !== 'line') {
+      const why = src === 'paid' ? 'è il «Pagato fino al» della linea' : 'data fissata per questo cliente';
+      tail = wait
+        ? `<div class="lnc-w" data-lnc-warn="1" data-lnc-state="${src}-wait">⚠️ Il cliente dovrebbe vedere il <b>${it(T)}</b> (${why}), ma nella scheda c'è il <b>${it(cli)}</b>. Si sistema da sola entro qualche ora${act ? ', oppure subito:' : '.'}${act ? `<div class="lnc-b">${btn('data-lnc-now="1"', 'Metti il ' + it(T))}</div>` : ''}</div>`
+        : `<div class="lnc-ok" data-lnc-state="${src}">${src === 'paid' ? '✓' : '📌'} Il cliente nell'app vede il <b>${it(T)}</b>: ${why}. ${keep}</div>`;
+      const more = [];
+      // la nota a mano adesso dice un'altra data, più avanti della linea: si può passare a quella
+      if (src === 'hold' && nd && ms(nd) > ms(le) && daysApart(nd, T) > 1 && act) more.push(btn(`data-lnc-use="${nd}"`, 'La nota dice ' + it(nd) + ': usa quella'));
+      if (K.hold && act) more.push(btn('data-lnc-clear="1"', src === 'hold' ? 'Torna alla data della linea' : 'Togli la data fissata (' + it(K.hold) + ')'));
+      if (more.length) tail += `<div class="lnc-b">${more.join('')}</div>`;
+    } else if (nd && le && daysApart(nd, le) > 1) {
+      const later = ms(nd) > ms(le);
+      const seen = !cli ? 'Il cliente nell\'app non vede una scadenza (illimitata).' : daysApart(cli, nd) <= 1 ? `Il cliente nell'app vede già il <b>${it(cli)}</b>, la data della nota.` : `Il cliente nell'app vede il <b>${it(cli)}</b>${daysApart(cli, le) <= 1 ? ', quello della linea' : ''}.`;
+      const use = later && act && cli && ms(nd) > ms(today()) ? `<div class="lnc-b">${btn(`data-lnc-use="${nd}"`, 'Usa il ' + it(nd) + ' per il cliente')}</div>` : '';
+      tail = `<div class="lnc-w" data-lnc-warn="1" data-lnc-state="diff">⚠️ <b>Date diverse</b>: la linea scade il <b>${it(le)}</b>, la nota dice <b>${it(nd)}</b> (${later ? 'più avanti' : 'prima'}). ${seen}${use}</div>`;
+    } else if (nd && le) tail = `<div class="lnc-ok">✓ La data della nota coincide con la scadenza della linea</div>`;
     else if (L.note) tail = `<div class="lnc-m">Nella nota non c'è una data.</div>`;
     return `<div class="lnc-n"><span>📝 Nota della linea</span><b>${L.note ? esc(L.note) : '<span style="color:var(--mut);font-weight:500">nessuna nota</span>'}</b></div>${dates}${tail}`;
   }
@@ -88,6 +118,16 @@
   const SPOTS = [['#eSyncInfo', '#eExp'], ['#cSyncInfo', '#cExp']];
   const CODES = { WOLF: 'wolf', ARMADA: 'armada', STORM: 'storm', ATX: 'atx', RO: 'ro', SLT: 'slt' };
   let seq = 0;
+  const info = new Map(); // cliente → { hold, paid } dal server
+  const canRenew = () => typeof D === 'undefined' || !D || D.role !== 'agent' || !!(((D.me || {}).perms || {}).renew);
+  const say = (m, bad) => { try { toast(m, bad); } catch {} };
+  function linkInfo(dev) {
+    if (!dev) return null;
+    if (info.has(dev)) return info.get(dev);
+    info.set(dev, { hold: '', paid: '', loading: true });
+    api('GET', '/admin/line-sync?deviceId=' + encodeURIComponent(dev)).then((r) => { const l = (r && r.link) || {}; info.set(dev, { hold: l.hold || '', paid: l.paid || '' }); later(); }).catch(() => { info.set(dev, { hold: '', paid: '', failed: true }); });
+    return info.get(dev);
+  }
   function sync() {
     for (const [sel, expSel] of SPOTS) {
       const host = document.querySelector(sel);
@@ -96,16 +136,50 @@
       const b = host.querySelector('b'), pm = b && (host.textContent || '').match(/linea\s+([A-Z]+)\s/), panel = pm && CODES[pm[1]], username = b ? b.textContent.trim() : '';
       if (!panel || !username) { if (box) box.remove(); continue; }
       const expEl = document.querySelector(expSel), cli = expEl && /^\d{4}-\d{2}-\d{2}$/.test(expEl.value) ? expEl.value : '';
-      const key = panel + '|' + username.toLowerCase() + '|' + cli;
-      if (!box) { box = document.createElement('div'); box.className = 'lnc'; box.setAttribute('data-lnc', sel); host.after(box); }
+      const dev = (b.dataset && b.dataset.lsDev) || '';
+      if (!box) { box = document.createElement('div'); box.className = 'lnc'; box.setAttribute('data-lnc', sel); host.after(box); info.delete(dev); /* scheda appena aperta: dati freschi */ }
+      const I = linkInfo(dev) || {}, K = { dev, hold: I.hold || '', paid: I.paid || '', can: canRenew() };
+      const key = [panel, username.toLowerCase(), cli, dev, K.hold, K.paid, K.can ? 1 : 0].join('|');
       if (box.dataset.key === key) continue;
       const first = box.dataset.line !== panel + '|' + username.toLowerCase();
       box.dataset.key = key; box.dataset.line = panel + '|' + username.toLowerCase();
+      box.dataset.panel = panel; box.dataset.user = username; box.dataset.dev = dev; box.dataset.exp = expSel;
       if (first) box.innerHTML = '<div class="lnc-n"><span>📝 Nota della linea</span><b style="color:var(--mut);font-weight:500">carico…</b></div>';
       const my = ++seq; box.dataset.seq = String(my);
-      lineOf(panel, username).then((L) => { if (box.isConnected && box.dataset.seq === String(my)) box.innerHTML = html(panel, username, L, cli); }).catch(() => {});
+      lineOf(panel, username).then((L) => { if (box.isConnected && box.dataset.seq === String(my)) { box.dataset.le = (L && L.exp) || ''; box.innerHTML = html(panel, username, L, cli, K); } }).catch(() => {});
     }
   }
+  /* i tasti: fissano (o tolgono) la data del cliente e la mettono subito, anche nel campo della scheda: così «Salva» non
+     rimette quella di prima */
+  document.addEventListener('click', async (e) => {
+    const bt = e.target && e.target.closest && e.target.closest('.lnc [data-lnc-use], .lnc [data-lnc-clear], .lnc [data-lnc-now]');
+    if (!bt) return;
+    e.preventDefault();
+    const box = bt.closest('.lnc'), dev = box.dataset.dev, le = box.dataset.le || '';
+    if (!dev || bt.disabled) return;
+    const body = { deviceId: dev, lineExp: le };
+    if (bt.hasAttribute('data-lnc-use')) body.date = bt.getAttribute('data-lnc-use');
+    else if (bt.hasAttribute('data-lnc-clear')) body.date = '';
+    bt.disabled = true;
+    try {
+      const r = await api('PUT', '/admin/line-sync/hold', body);
+      info.set(dev, { hold: r.hold || '', paid: r.paid || '' });
+      const expEl = document.querySelector(box.dataset.exp);
+      if (expEl && r.expires && /^\d{4}-\d{2}-\d{2}$/.test(r.expires)) { expEl.value = r.expires; expEl.dispatchEvent(new Event('input', { bubbles: true })); expEl.dispatchEvent(new Event('change', { bubbles: true })); }
+      try { const d = typeof D !== 'undefined' && D && Array.isArray(D.devices) ? D.devices.find((x) => x.id === dev) : null; if (d && r.expires) d.expires = r.expires; } catch {}
+      // il riquadro «Scadenza» in cima alla scheda (si ridisegna solo riaprendola): lo si porta alla data nuova
+      try {
+        const sm = r.expires && [...document.querySelectorAll('#dBody .qsum small, #agPage .qsum small')].find((x) => x.textContent.trim() === 'Scadenza');
+        if (sm) {
+          const bb = sm.parentElement.querySelector('b'), em = sm.parentElement.querySelector('em'), n = Math.round((ms(r.expires) - ms(today())) / 864e5);
+          if (bb) bb.textContent = typeof fmtD === 'function' ? fmtD(r.expires) : it(r.expires);
+          if (em) { em.textContent = n < 0 ? 'scaduto da ' + -n + ' g' : n + ' giorni'; em.style.color = n < 0 ? 'var(--bad)' : n <= 14 ? 'var(--warn)' : ''; }
+        }
+      } catch {}
+      say(r.expires ? `Fatto: il cliente ora vede il ${it(r.expires)} (già salvato)` : 'Fatto');
+    } catch (err) { say((err && err.message) || 'Non riuscito', 1); bt.disabled = false; }
+    box.dataset.key = ''; later();
+  });
   let t = 0;
   const later = () => { clearTimeout(t); t = setTimeout(sync, 80); };
   new MutationObserver(later).observe(document.body, { childList: true, subtree: true });

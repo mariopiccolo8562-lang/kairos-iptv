@@ -1093,3 +1093,23 @@ Funzionano come nel pannello a parte dello store, per il titolare e per gli agen
 - **Nota della linea nella scheda del cliente** (`line-note-box.js`, titolare `#eSyncInfo` e agente `#cSyncInfo`): sotto «🔗 Allineata alla linea …» compare la nota che la linea ha nel suo pannello (WOLF, Atlantix, Realott, SLT; per Armada e Storm la nota tenuta in KAIROS) e tre date a confronto: scadenza della linea, data scritta nella nota (`[K: PAGATO fino al …]`, altrimenti l'ultima data messa a mano: `21/02/2027`, `21/02/27`, `21/02`, `21-02-2027`, `21.02.2027`, `2027-02-21`, «21 febbraio»), scadenza che il cliente vede nell'app. **«⚠️ Date diverse»** quando nota e linea differiscono di più di un giorno. Legge solo liste e note che il pannello ha già (`KXLinePick`, `KXLineNotes`); non modifica nulla.
 - **Telefono**: il selettore «App del cliente» (7 app) va a capo (`#eApp{flex-wrap:wrap}`): allargava l'intera scheda del cliente oltre lo schermo.
 - **Test**: `srv_health_false` (32), `ui_line_note` (22), `p_chk.js` per l'interfaccia Pro (15).
+
+## 65. Data che il cliente vede quando la linea si rinnova un mese alla volta (11 novembre 2026)
+
+Il cliente «🔗 allineato a una linea» prendeva sempre la scadenza della linea. Chi incassa più mesi e rinnova la linea ogni mese gli mostrava nell'app la data sbagliata (quella del mese). Ora il cliente vede **la più avanti** fra tre date (`worker.js` → `lineSyncTarget`, usata da `applyLineSync`, cioè da tutti gli allineamenti: pagine delle linee, programmato ogni 6 ore, tasti della scheda):
+
+1. la scadenza della linea sul pannello;
+2. il **«Pagato fino al»** registrato per quella linea (💶): vale **da solo**. `linePaidMap`/`linePaidFor` lo leggono ogni volta da `payments` (niente copie): solo pagamenti «pagato» non ancora passati; la linea si riconosce dal nome utente (etichetta del pagamento; su Armada, Storm, Realott e SLT anche il riferimento; su WOLF e Atlantix il riferimento è il numero della linea e non si usa come nome); fra più pagamenti con lo stesso nome vale quello di chi ha il cliente, e se sono di persone diverse e nessuno è suo non vale nessuno. Appena si salva il pagamento il cliente sale subito a quella data (`linePaidApplyNow`, risposta `clientDate`); a scendere (data abbassata, pagamento tolto, «deve pagare») ci pensa il prossimo allineamento, che conosce la scadenza della linea;
+3. la **data fissata per quel cliente** (`line_sync.hold`, migrazione `0053`): per le date scritte a mano nella nota, che non si applicano da sole (una data a mano può essere «richiamare il 20/12»).
+
+Quando la linea raggiunge quella data si torna a seguire la linea. Clienti illimitati e dispositivi aggiunti non si toccano; agenti: solo i propri clienti, massimo 3 anni.
+
+- **`PUT /api/admin/line-sync/hold`** `{ deviceId, date?, lineExp? }`: `date` = giorno futuro (titolare fino a 10 anni, agente 3), `''` = torna a seguire la linea, assente = non cambia la data fissata e rimette solo la data giusta. Con `lineExp` (la scadenza della linea, che il pannello ha già) la data del cliente si ricalcola subito. Risponde `{ hold, paid, expires }`. Agenti: serve «Rinnovare» (collegare a una linea resta possibile anche con il solo «Creare»). `GET /api/admin/line-sync?deviceId=` riporta anche `hold` e `paid`. Ricollegare la stessa linea conserva la data fissata, un'altra linea la toglie.
+- **Scheda del cliente** (`line-note-box.js`; `app.js` e `agents.js` mettono solo l'id del cliente accanto al nome della linea, `data-ls-dev`):
+  - nota a mano più avanti della linea → «⚠️ Date diverse» con **«Usa il gg/mm/aaaa per il cliente»**;
+  - data fissata → «📌 Il cliente nell'app vede il …: data fissata per questo cliente. La linea scade il …: continua a rinnovarla» con **«Torna alla data della linea»** (e «La nota dice …: usa quella» se la nota è cambiata);
+  - «Pagato fino al» → «✓ Il cliente nell'app vede il …: è il «Pagato fino al» della linea»; se il cliente è rimasto indietro (pagamento registrato prima di questa novità, data cambiata a mano) lo dice e offre **«Metti il …»**;
+  - nota con una data precedente alla linea → solo l'avviso.
+  I tasti salvano subito e aggiornano il campo «Scadenza» e il riquadro in cima: «Salva» non rimette la data di prima.
+- **Registro**: «Scadenza di … allineata alla linea …: data (pagato fino al; la linea scade il …)», «data del cliente … fissata al …», «… torna a seguire la scadenza», «… portata al «Pagato fino al» della linea …».
+- **Test**: `srv_line_hold` (65), `ui_line_hold` (33: titolare, telefono Classico, agente).

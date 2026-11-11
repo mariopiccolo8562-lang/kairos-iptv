@@ -476,7 +476,7 @@ function openDrawer(d, activating) {
   $('#shade').classList.add('on'); $('#drawer').classList.add('on');
 }
 function closeDrawer() { $('#shade').classList.remove('on'); $('#drawer').classList.remove('on'); }
-function lineSyncInfoHtml() { const link = edit && edit.lineSync; return link ? `🔗 Allineata alla linea ${esc(String(link.panel || '').toUpperCase())} <b>${esc(link.username)}</b> · <button class="btn sm" id="eSyncUnlink">Scollega</button>` : ''; }
+function lineSyncInfoHtml() { const link = edit && edit.lineSync; return link ? `🔗 Allineata alla linea ${esc(String(link.panel || '').toUpperCase())} <b data-ls-dev="${esc(edit.id || '')}">${esc(link.username)}</b> · <button class="btn sm" id="eSyncUnlink">Scollega</button>` : ''; }
 function bindLineSyncUnlink() {
   const b = $('#eSyncUnlink');
   if (b) b.onclick = async () => {

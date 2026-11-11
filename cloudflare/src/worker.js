@@ -1372,9 +1372,12 @@ async function paymentsRoutes(req, env, who, ip, ag) {
     const payment = { status, months, amount, note, paid_until: paidUntil, auto_months: autoMonths, auto_opt: autoOpt };
     panelNote = await trySetPanelLineNote(env, panel, ref, (current) => paymentNoteText(current, payment), ownerId, ag ? ag.tree : null);
   }
+  // il cliente allineato a questa linea vede subito il «Pagato fino al», se è più avanti della scadenza che ha adesso
+  let clientDate = 0;
+  if (kind === 'line' && status === 'paid') clientDate = await linePaidApplyNow(env, panel, ref, label, ag).catch(() => 0);
   const noteResult = panelNote ? ` · nota ${panelNote.ok ? panelNote.where === 'panel' ? 'scritta su ' + panelNote.panelName : 'salvata in KAIROS' : 'non scritta'}` : '';
   await log(env, 'edit', `${who}: pagamento ${status === 'due' ? 'da riscuotere' : 'segnato pagato'} (${panel || kind})${noteResult}`, ip).catch(() => {});
-  return json({ ok: true, row: paymentEffective({ kind, panel, ref, owner_id: ownerId, label, status, months, amount, note, since, paid_until: paidUntil, remind, remind_days: remindDays, remind_from: remindFrom, updated: t, auto_months: autoMonths, auto_opt: autoOpt, auto_line: autoLine, last_renew: old?.last_renew || '', last_result: old?.last_result || '' }), ...(panelNote ? { panelNote } : {}) });
+  return json({ ok: true, row: paymentEffective({ kind, panel, ref, owner_id: ownerId, label, status, months, amount, note, since, paid_until: paidUntil, remind, remind_days: remindDays, remind_from: remindFrom, updated: t, auto_months: autoMonths, auto_opt: autoOpt, auto_line: autoLine, last_renew: old?.last_renew || '', last_result: old?.last_result || '' }), ...(panelNote ? { panelNote } : {}), ...(clientDate ? { clientDate } : {}) });
 }
 const LINE_SYNC_PANELS = new Set(['wolf', 'armada', 'storm', 'atx', 'ro', 'slt']);
 function lineSyncDate(v) {
@@ -1385,6 +1388,43 @@ function lineSyncDate(v) {
   const d = new Date(n < 1e12 ? n * 1000 : n);
   return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
 }
+/* Data che il cliente allineato a una linea vede nell'app. Di base è la scadenza della linea; ma chi rinnova la linea un mese
+   alla volta e ha incassato più mesi mostrerebbe al cliente la data sbagliata. Quindi vale la più avanti fra:
+   - la scadenza della linea sul pannello;
+   - il «Pagato fino al» registrato per quella linea (💶, lo stesso che finisce nella nota come «[K: PAGATO fino al …]»);
+   - la data fissata a mano per quel cliente (line_sync.hold: di solito quella scritta nella nota della linea).
+   Quando la linea raggiunge quella data si torna a seguire la linea. */
+async function linePaidMap(env, panel) {
+  const rows = ((await env.DB.prepare("SELECT ref, label, owner_id, paid_until FROM payments WHERE kind = 'line' AND panel = ? AND status = 'paid' AND paid_until <> ''").bind(panel).all()).results) || [];
+  const today = paymentToday(), map = new Map();
+  // il riferimento del pagamento è il nome utente su Armada/Storm (e a volte su Realott/SLT); su WOLF e Atlantix è il numero
+  // della linea, e il nome utente sta nell'etichetta
+  const byRef = panel === 'armada' || panel === 'storm' || panel === 'ro' || panel === 'slt';
+  for (const r of rows) {
+    if (!DATE_RE.test(String(r.paid_until)) || r.paid_until < today) continue; // scaduto: è di nuovo «deve pagare»
+    const ref = String(r.ref || '').trim().toLowerCase(), label = String(r.label || '').trim().toLowerCase();
+    const keys = new Set();
+    if (label && (byRef || label !== ref)) keys.add(label);
+    if (byRef && ref) keys.add(ref);
+    for (const k of keys) { if (!map.has(k)) map.set(k, []); map.get(k).push({ owner: +r.owner_id || 0, until: r.paid_until }); }
+  }
+  return map;
+}
+function linePaidFor(map, username, ownerId) {
+  const list = map.get(String(username || '').trim().toLowerCase()) || [];
+  if (!list.length) return '';
+  // prima il pagamento di chi ha il cliente; se non c'è e tutti i pagamenti con quel nome sono della stessa persona, quello
+  const mine = list.filter((x) => x.owner === (+ownerId || 0));
+  const pick = mine.length ? mine : new Set(list.map((x) => x.owner)).size === 1 ? list : [];
+  return pick.reduce((a, x) => (x.until > a ? x.until : a), '');
+}
+function lineSyncTarget(exp, paid, hold) {
+  let date = exp, src = 'line';
+  if (paid && DATE_RE.test(paid) && paid > date) { date = paid; src = 'paid'; }
+  if (hold && DATE_RE.test(hold) && hold > date) { date = hold; src = 'hold'; }
+  return { date, src };
+}
+const LINE_SYNC_WHY = { paid: 'pagato fino al', hold: 'data fissata dalla nota' };
 async function applyLineSync(env, panel, lines, ownerId, ag) {
   if (!LINE_SYNC_PANELS.has(panel)) throw new HttpErr(400, 'Pannello non valido');
   if (!Array.isArray(lines) || lines.length > 5000) throw new HttpErr(400, 'Elenco linee non valido');
@@ -1397,16 +1437,41 @@ async function applyLineSync(env, panel, lines, ownerId, ag) {
     ? env.DB.prepare('SELECT * FROM line_sync WHERE panel = ?').bind(panel)
     : env.DB.prepare('SELECT * FROM line_sync WHERE panel = ? AND owner_id = ?').bind(panel, ownerId);
   const links = ((await query.all()).results) || [];
+  const paid = links.length && expiry.size ? await linePaidMap(env, panel) : new Map();
   let changed = 0;
   for (const link of links) {
     const exp = expiry.get(String(link.username || '').trim().toLowerCase());
     if (!exp) continue;
+    const want = lineSyncTarget(exp, linePaidFor(paid, link.username, link.owner_id), link.hold);
     const device = await env.DB.prepare('SELECT id, name, expires, parent FROM devices WHERE id = ?').bind(link.device_id).first();
-    if (!device || !device.expires || device.parent || device.expires === exp) continue;
+    if (!device || !device.expires || device.parent || device.expires === want.date) continue;
     if (ag && !(await ag.own(device.id))) continue;
-    if (ag && Date.parse(exp + 'T00:00:00Z') - now() > 3 * 366 * 864e5) continue; // agenti: scadenza massima 3 anni, come dalla scheda del cliente
-    await env.DB.prepare('UPDATE devices SET expires = ? WHERE id = ?').bind(exp, device.id).run();
-    await log(env, 'edit', `Scadenza di ${device.name || device.id} allineata alla linea ${panel} ${link.username}: ${exp}`, '').catch(() => {});
+    if (ag && Date.parse(want.date + 'T00:00:00Z') - now() > 3 * 366 * 864e5) continue; // agenti: scadenza massima 3 anni, come dalla scheda del cliente
+    await env.DB.prepare('UPDATE devices SET expires = ? WHERE id = ?').bind(want.date, device.id).run();
+    await log(env, 'edit', `Scadenza di ${device.name || device.id} allineata alla linea ${panel} ${link.username}: ${want.date}${want.src === 'line' ? '' : ` (${LINE_SYNC_WHY[want.src]}; la linea scade il ${exp})`}`, '').catch(() => {});
+    changed++;
+  }
+  return changed;
+}
+/** appena si registra un «Pagato fino al» su una linea, il cliente allineato vede subito quella data (solo in avanti: se la
+    data scende o il pagamento si toglie, ci pensa il prossimo allineamento, che conosce la scadenza della linea) */
+async function linePaidApplyNow(env, panel, ref, label, ag) {
+  if (!LINE_SYNC_PANELS.has(panel)) return 0;
+  const names = [...new Set([String(label || '').trim().toLowerCase(), String(ref || '').trim().toLowerCase()].filter(Boolean))];
+  if (!names.length) return 0;
+  const links = ((await env.DB.prepare(`SELECT * FROM line_sync WHERE panel = ? AND lower(username) IN (${names.map(() => '?').join(',')})`).bind(panel, ...names).all()).results) || [];
+  if (!links.length) return 0;
+  const paid = await linePaidMap(env, panel);
+  let changed = 0;
+  for (const link of links) {
+    const until = linePaidFor(paid, link.username, link.owner_id);
+    if (!until) continue;
+    const device = await env.DB.prepare('SELECT id, name, expires, parent FROM devices WHERE id = ?').bind(link.device_id).first();
+    if (!device || !device.expires || device.parent || device.expires >= until) continue;
+    if (ag && !(await ag.own(device.id))) continue;
+    if (ag && Date.parse(until + 'T00:00:00Z') - now() > 3 * 366 * 864e5) continue;
+    await env.DB.prepare('UPDATE devices SET expires = ? WHERE id = ?').bind(until, device.id).run();
+    await log(env, 'edit', `Scadenza di ${device.name || device.id} portata al «Pagato fino al» della linea ${panel} ${link.username}: ${until}`, '').catch(() => {});
     changed++;
   }
   return changed;
@@ -1419,13 +1484,45 @@ async function lineSyncRoutes(req, env, path, who, ip, ag, ownerFilter) {
     const changed = await applyLineSync(env, panel, b.lines, ownerFilter, ag);
     return json({ ok: true, changed });
   }
+  if (path === '/line-sync/hold') {
+    // data fissata per il cliente (di solito quella scritta a mano nella nota della linea); date '' = torna a seguire la
+    // linea; senza date = non cambia nulla, rimette solo subito la data giusta sul cliente
+    if (m !== 'PUT') throw new HttpErr(405, 'Metodo non consentito');
+    const b = await readJSON(req, 4096), deviceId = str(b.deviceId, 40);
+    if (!deviceId) throw new HttpErr(400, 'Cliente non valido');
+    const device = await env.DB.prepare('SELECT id, name, expires, parent FROM devices WHERE id = ?').bind(deviceId).first();
+    if (!device || ag && !(await ag.own(deviceId))) throw new HttpErr(404, 'Cliente non trovato');
+    const link = await env.DB.prepare('SELECT * FROM line_sync WHERE device_id = ?').bind(deviceId).first();
+    if (!link) throw new HttpErr(400, 'Questo cliente non è allineato a una linea');
+    const set = b.date !== undefined && b.date !== null;
+    if (set && typeof b.date !== 'string') throw new HttpErr(400, 'Data non valida');
+    const date = set ? b.date.trim().slice(0, 10) : String(link.hold || '');
+    if (set && date) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !DATE_RE.test(date)) throw new HttpErr(400, 'Data non valida');
+      if (date <= paymentToday()) throw new HttpErr(400, 'La data deve essere futura');
+      if (Date.parse(date + 'T00:00:00Z') - now() > (ag ? 3 : 10) * 366 * 864e5) throw new HttpErr(400, ag ? 'Scadenza massima: 3 anni' : 'Data troppo lontana: controlla l’anno');
+    }
+    if (set) {
+      await env.DB.prepare('UPDATE line_sync SET hold = ?, updated = ? WHERE device_id = ?').bind(date, now(), deviceId).run();
+      await log(env, 'edit', `${who}: ${date ? `data del cliente ${device.name || device.id} fissata al ${date}` : `il cliente ${device.name || device.id} torna a seguire la scadenza`} (linea ${link.panel} ${link.username})`, ip).catch(() => {});
+    }
+    // subito sul cliente: con la scadenza della linea (la manda il pannello, come per l'allineamento) si ricalcola la data giusta
+    const lineExp = lineSyncDate(b.lineExp);
+    if (lineExp) await applyLineSync(env, String(link.panel), [{ username: link.username, exp: lineExp }], ownerFilter, ag);
+    else if (set && date && device.expires && !device.parent && date > device.expires) await env.DB.prepare('UPDATE devices SET expires = ? WHERE id = ?').bind(date, deviceId).run();
+    const after = await env.DB.prepare('SELECT expires FROM devices WHERE id = ?').bind(deviceId).first();
+    const paid = LINE_SYNC_PANELS.has(String(link.panel)) ? linePaidFor(await linePaidMap(env, String(link.panel)), link.username, link.owner_id) : '';
+    return json({ ok: true, hold: date, paid, expires: (after && after.expires) || '' });
+  }
   if (path !== '/line-sync') throw new HttpErr(404, 'Non trovato');
   if (m === 'GET') {
     const deviceId = str(url.searchParams.get('deviceId'), 40);
     if (!deviceId) throw new HttpErr(400, 'Cliente non valido');
     const device = await env.DB.prepare('SELECT id FROM devices WHERE id = ?').bind(deviceId).first();
     if (!device || ag && !(await ag.own(deviceId))) throw new HttpErr(404, 'Cliente non trovato');
-    const link = await env.DB.prepare('SELECT panel, username, owner_id, updated FROM line_sync WHERE device_id = ?').bind(deviceId).first();
+    const link = await env.DB.prepare('SELECT panel, username, owner_id, updated, hold FROM line_sync WHERE device_id = ?').bind(deviceId).first();
+    // paid = «Pagato fino al» della linea, se c'è: è la data che il cliente vede quando è più avanti della scadenza della linea
+    if (link) link.paid = LINE_SYNC_PANELS.has(String(link.panel)) ? linePaidFor(await linePaidMap(env, String(link.panel)), link.username, link.owner_id) : '';
     return json({ link: link || null });
   }
   if (m === 'PUT') {
@@ -1436,7 +1533,8 @@ async function lineSyncRoutes(req, env, path, who, ip, ag, ownerFilter) {
     if (device.parent) throw new HttpErr(400, 'Collega solo il cliente principale');
     const ownerId = +device.owner_id || 0;
     await env.DB.prepare(`INSERT INTO line_sync (device_id, panel, username, owner_id, updated) VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(device_id) DO UPDATE SET panel = excluded.panel, username = excluded.username, owner_id = excluded.owner_id, updated = excluded.updated`)
+      ON CONFLICT(device_id) DO UPDATE SET hold = CASE WHEN line_sync.panel = excluded.panel AND lower(line_sync.username) = lower(excluded.username) THEN line_sync.hold ELSE '' END,
+        panel = excluded.panel, username = excluded.username, owner_id = excluded.owner_id, updated = excluded.updated`)
       .bind(deviceId, panel, username, ownerId, now()).run();
     return json({ ok: true });
   }
@@ -6655,9 +6753,9 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     return paymentsRoutes(req, env, who, ip, { id: A.id, tree: ctree, own, autoRenew: !!P.autoRenew });
   }
   if (path === '/line-sync' || path.startsWith('/line-sync/')) {
-    if (m === 'PUT') {
+    if (m === 'PUT' && path === '/line-sync') {
       if (!P.create && !P.renew) throw new HttpErr(403, 'Non puoi gestire l’allineamento delle scadenze');
-    } else need('renew', 'Non puoi gestire l’allineamento delle scadenze');
+    } else need('renew', 'Non puoi gestire l’allineamento delle scadenze'); // anche fissare la data del cliente (/line-sync/hold) è un rinnovo
     const ownerFilter = /^auto-renew-\d+$/.test(String(ses.id || '')) ? A.id : undefined;
     return lineSyncRoutes(req, env, path, who, ip, { own }, ownerFilter);
   }
