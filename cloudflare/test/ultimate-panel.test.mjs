@@ -168,6 +168,25 @@ test('remote allow values and rotating DNS stay Ultimate-only', () => {
   assert.ok(_internal.RC_CAT.filter(([key]) => key.startsWith('u.')).every(([, , , , apps]) => apps.length === 1 && apps[0] === 'ult'));
 });
 
+test('legacy clients never receive allow values or rot mode', () => {
+  const rc = _internal.rcClean({
+    'o.engLive:allow': ['exo', 'vlc'],
+    'o.autoNext:allow': [true, false],
+    'u.saver:allow': ['off', '20'],
+  });
+  for (const app of ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus']) {
+    const delivered = _internal.rcSent(rc, app);
+    assert.ok(Object.keys(delivered).every((key) => !key.endsWith(':allow')), `${app} received an allow key`);
+    assert.ok(Object.values(delivered).every((value) => typeof value !== 'string' || !value.startsWith('allow:')), `${app} received an allow value`);
+    assert.equal(_internal.portalModeForApp('rot', app), 'auto');
+  }
+  const ultimate = _internal.rcSent(rc, 'ult');
+  assert.equal(ultimate['o.engLive'], 'allow:exo,vlc');
+  assert.equal(ultimate['o.autoNext'], 'allow:true,false');
+  assert.equal(ultimate['u.saver'], 'allow:off,20');
+  assert.equal(_internal.portalModeForApp('rot', 'ult'), 'rot');
+});
+
 test('Ultimate catalog exposes implemented settings and omits unsupported Pro-only controls', () => {
   const ultimate = new Set(_internal.RC_CAT.filter(([, , , , apps]) => apps.includes('ult')).map(([key]) => key));
   for (const key of ['o.startScr', 'o.textSize', 'posters', 'intro', 'p.aspect', 'o.autoNext',
