@@ -4368,9 +4368,9 @@ const RC_CAT = [
   /* ---- Rete ---- */
   // DNS cifrato (DNS su HTTPS): voce «sdns» on | off, vuota = spento; non è una scelta del cliente (niente «:allow»).
   // Nelle app (DnsShield): interfaccia locale di Android che vale solo per l'app e solo per le domande DNS, inoltrate su https a
-  // 1.1.1.1 / 8.8.8.8 / 9.9.9.9; se non rispondono si chiude e torna il DNS normale. Solo le app che la capiscono: le altre
-  // si aggiungono qui quando esce la loro versione (prima il pannello offrirebbe una voce che l'app ignora)
-  ['sdns', 'DNS cifrato', 'sel', [['on', 'Acceso'], ['off', 'Spento']], ['ktv', 'prem', 'lite', 'xc'], 'L\'app chiede gli indirizzi dei server a un DNS pubblico dentro una connessione protetta, invece che al DNS dell\'operatore: l\'operatore non legge la domanda e non può cambiare la risposta. Passano di lì solo le domande DNS: video e liste vanno diretti come prima, quindi non rallenta. Android chiede il permesso una volta, con la stessa finestra della VPN. Se il servizio non risponde l\'app torna da sola al DNS normale; con la VPN accesa non serve e resta spento. Serve Kairos XC 3.4.6, Kairos TV 2.4.7, Kairos Lite 1.5.7 o Kairos Premium 1.7.6', 'Non imposto (spento)', 'Rete'],
+  // 1.1.1.1 / 8.8.8.8 / 9.9.9.9; se non rispondono si chiude e torna il DNS normale. Dal 12 novembre 2026 tutte le app:
+  // Kairos Pro dalla 2.7.6 (le più vecchie ignorano la voce), Plus e Nova dalla versione di quel giorno, Ultimate dalla prima
+  ['sdns', 'DNS cifrato', 'sel', [['on', 'Acceso'], ['off', 'Spento']], ['tv', 'ktv', 'prem', 'lite', 'xc', 'ult', 'plus', 'nova'], 'L\'app chiede gli indirizzi dei server a un DNS pubblico dentro una connessione protetta, invece che al DNS dell\'operatore: l\'operatore non legge la domanda e non può cambiare la risposta. Passano di lì solo le domande DNS: video e liste vanno diretti come prima, quindi non rallenta. Android chiede il permesso una volta, con la stessa finestra della VPN. Se il servizio non risponde l\'app torna da sola al DNS normale; con la VPN accesa non serve e resta spento. Serve Kairos XC 3.4.6, Kairos TV 2.4.7, Kairos Lite 1.5.7 o Kairos Premium 1.7.6', 'Non imposto (spento)', 'Rete'],
 ];
 // comandi: [chiave, nome, spiegazione, app che li eseguono]
 const RC_CMDS = [

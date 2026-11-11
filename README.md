@@ -1117,10 +1117,11 @@ Quando la linea raggiunge quella data si torna a seguire la linea. Clienti illim
 ## 66. DNS cifrato deciso dal pannello (11 novembre 2026)
 
 - **Voce «DNS cifrato»** nel catalogo del controllo remoto (`RC_CAT`, chiave `sdns`: `on` | `off`, vuota = spento; sezione «Rete», niente «lascia scegliere al cliente»). Si imposta per tutte le app, per una sola o per il singolo cliente, come le altre voci.
-- **Solo per le app che la capiscono**: Kairos TV 2.4.7, Kairos Premium 1.7.6, Kairos Lite 1.5.7, Kairos XC 3.4.6. Kairos Pro, Plus e Nova si aggiungono all'elenco della voce quando esce la loro versione: prima il pannello offrirebbe una voce che l'app ignora.
+- **Tutte le app** (dal 12 novembre 2026): Kairos TV 2.4.7, Premium 1.7.6, Lite 1.5.7, XC 3.4.6; Kairos Pro dalla 2.7.6 (le più vecchie ignorano la voce); Kairos Plus e Kairos Nova dalla versione del 12 novembre; KAIROS Ultimate dalla prima versione pubblicata; Kairos Portal e Smart (stesso motore di XC).
 - **Nelle app** (`DnsShield.kt`, `DnsWire.kt`): un'interfaccia locale di Android (`VpnService`) che vale solo per l'app e instrada solo l'indirizzo finto del DNS. Ci passano le domande DNS, inoltrate così come sono su https (RFC 8484) a `1.1.1.1`, poi `8.8.8.8`, poi `9.9.9.9`; video, liste e immagini vanno diretti come prima. Vale per tutto quello che l'app apre, VLC compreso.
 - **A prova di guasto**: dopo 6 domande di fila senza risposta l'interfaccia si chiude e torna il DNS normale, con un nuovo tentativo dopo 10 minuti. Con la VPN del fornitore accesa resta spento (il DNS passa già nel tunnel); se sul dispositivo c'è un'altra VPN non la tocca. Android chiede il permesso una volta, con la finestra della VPN.
 - L'app mostra lo stato nelle Impostazioni («DNS cifrato · scelto dal tuo fornitore») e lo manda nel battito (`sdns`: `on`, `asking`, `denied`, `error`, `other`, `off`, `vpn`).
+- **Pro, Plus e Nova** hanno un'interfaccia propria: lì `DnsShield.kt` è la versione autonoma (`start`, `stop`, `state`) e quando accenderlo lo decide l'interfaccia (in Kairos Pro `dnsApply()` in `player/index.html`, solo senza la VPN del fornitore; in Plus e Nova la parte Flutter).
 - **Test**: `srv_sdns` (34), `ui_sdns` (9); nelle app `DnsWireTest` (lettura della domanda, costruzione della risposta, somma di controllo).
 
 ## 67. Kairos Portal e Kairos Smart: indirizzi di scarico (11 novembre 2026)
