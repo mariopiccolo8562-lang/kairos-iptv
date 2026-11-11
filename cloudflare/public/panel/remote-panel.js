@@ -98,11 +98,13 @@
   }
   const ADULT_WORDS = ['adult', 'xxx', '18+', '+18', 'porn', 'erotic', 'hentai', 'playboy', 'brazzers', 'hustler', 'onlyfans', 'red light', 'x-rated', 'vm18', 'sexy', 'milf'];
   const READER_DEFAULTS = { 'o.engLive': 'auto', 'o.engMovie': 'auto', 'o.engSeries': 'auto', 'o.hw': 'auto', 'o.adaptQ': true, 'o.drainQ': true, 'p.quality': 'auto', 'p.buffer': 'balanced' };
-  const isReader = (c) => c && c[2] === 'sel' && c[7] === 'Lettore';
+  const isReader = (c) => c && c[2] === 'sel' && c[0] !== 'qbox';
   const hasRcKey = (rc, key) => Object.prototype.hasOwnProperty.call(rc || {}, key);
   const policyOf = (c, rc = {}) => {
-    const key = c[0], allowed = rc[`${key}:allow`];
-    if (hasRcKey(rc, key)) return { mode: 'impose', value: rc[key], allowed: [] };
+    const key = c[0], encoded = typeof rc[key] === 'string' && rc[key].startsWith('allow:') ? rc[key].slice(6).split(',') : null;
+    const allowed = Array.isArray(rc[`${key}:allow`]) ? rc[`${key}:allow`] : encoded;
+    if (encoded) rc = { ...rc, [key]: undefined };
+    if (hasRcKey(rc, key) && !encoded) return { mode: 'impose', value: rc[key], allowed: [] };
     if (Array.isArray(allowed)) {
       const values = c[3].filter(([v]) => allowed.some((x) => String(x) === String(v))).map(([v]) => v);
       if (values.length >= c[3].length && values.length) return { mode: 'free', value: null, allowed: values };

@@ -598,7 +598,7 @@ function renderDrawer() {
   const pl = edit.player || {};
   const playerBox = linked && !edit.own ? '' : [['live', 'TV in diretta', '📡'], ['movie', 'Film', '🎬'], ['series', 'Serie TV', '🎞️']].map(([k, l, ic]) => `<div class="pl-eng"><span class="ic">${ic}</span><b>${l}</b><div class="seg">${[['', 'Sceglie il cliente'], ['auto', 'Automatico'], ['exo', 'ExoPlayer'], ['vlc', 'VLC']].map(([v, t]) => `<button class="${(pl[k] || '') === v ? 'on' : ''}" data-peng="${k}" data-v="${v}">${t}</button>`).join('')}</div></div>`).join('');
   const extraBox = linked ? '' : `
-    <div class="perms">${PERM_L.map(([k, l, d]) => `<div class="tog ${!edit.perms || edit.perms[k] !== false ? 'on' : ''}" data-perm="${k}"><div><b>${l}</b><small>${d}</small></div><i></i></div>`).join('')}</div>
+    <div class="perms">${PERM_L.filter(([k]) => !(String(edit.app || '').toLowerCase() === 'ult' && (k === 'ai' || k === 'rec'))).map(([k, l, d]) => `<div class="tog ${!edit.perms || edit.perms[k] !== false ? 'on' : ''}" data-perm="${k}"><div><b>${l}</b><small>${d}</small></div><i></i></div>`).join('')}</div>
     ${isNew ? '' : `<label class="lbl">Collegare un altro dispositivo</label><button class="btn" id="eLinkCode" style="width:100%">🔗 Genera codice di collegamento (6 cifre)</button><small class="mut" style="display:block;margin-top:6px;font-size:12px">Sulla nuova TV il cliente sceglie «Ho già un abbonamento» e scrive il codice. Vale 10 minuti.</small>`}`;
   // scheda a sezioni numerate, con un menu rapido in alto per saltare alla sezione
   const sec = (id, n, t, sub, html) => html.trim() ? `<section class="dsec" id="ds-${id}"><div class="dsh"><i>${n}</i><div><b>${t}</b>${sub ? `<small>${sub}</small>` : ''}</div></div>${html}</section>` : '';

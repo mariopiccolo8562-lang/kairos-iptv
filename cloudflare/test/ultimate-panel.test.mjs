@@ -152,3 +152,29 @@ test('player metadata preserves the no-key off response', async () => {
   const response = await _internal.playerMeta(new Request(url), {}, '127.0.0.1', url, {});
   assert.deepEqual(await response.json(), { cert: '', extras: [], off: true });
 });
+
+test('remote allow values and rotating DNS stay Ultimate-only', () => {
+  const rc = _internal.rcClean({ 'o.engLive:allow': ['exo', 'vlc'] }, 'ult');
+  assert.deepEqual(rc, { 'o.engLive': 'allow:exo,vlc' });
+  assert.deepEqual(_internal.rcClean(rc, 'ult'), rc);
+  assert.equal(_internal.rcSent(rc, 'tv')['o.engLive'], undefined);
+  assert.ok(Object.values(_internal.rcSent(rc, 'tv')).every((value) => typeof value !== 'string' || !value.startsWith('allow:')));
+  assert.equal(_internal.rcSent(rc, 'ult')['o.engLive'], rc['o.engLive']);
+  assert.equal(_internal.portalModeForApp('rot', 'tv'), 'auto');
+  assert.equal(_internal.portalModeForApp('rot', 'ult'), 'rot');
+  const tvRc = _internal.rcClean({ 'o.engLive:allow': ['exo', 'vlc'] }, 'tv');
+  assert.equal(_internal.rcSent(tvRc, 'tv')['o.engLive'], undefined);
+  assert.ok(_internal.RC_CMDS.some(([key, , , apps]) => key === 'epg' && apps.length === 1 && apps[0] === 'ult'));
+  assert.ok(_internal.RC_CAT.filter(([key]) => key.startsWith('u.')).every(([, , , , apps]) => apps.length === 1 && apps[0] === 'ult'));
+});
+
+test('Ultimate catalog omits settings the app does not implement', () => {
+  const ultimate = new Set(_internal.RC_CAT.filter(([, , , , apps]) => apps.includes('ult')).map(([key]) => key));
+  for (const key of ['o.startScr', 'o.textSize', 'logos', 'posters', 'intro', 'p.aspect', 'o.autoNext',
+    'o.introAuto', 'o.subSize', 'mergeVar', 'o.autoRem', 'o.showHidden', 'o.sortCats',
+    'o.sortCh', 'o.sortVod', 'o.lockAdult']) {
+    assert.equal(ultimate.has(key), false, `${key} must not be imposed on Ultimate`);
+  }
+  assert.equal(ultimate.has('o.resInd'), true);
+  assert.equal(ultimate.has('o.epgShift'), true);
+});
