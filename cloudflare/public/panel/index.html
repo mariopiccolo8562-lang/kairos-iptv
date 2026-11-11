@@ -257,6 +257,103 @@ canvas{display:block;width:100%}
   .tbl td.hm{display:none}
 }
 </style>
+<style id="lxLoginCss">
+/* ===== pagina di accesso futuristica (11 novembre 2026): due colonne, vetro scuro, neon ciano e viola ===== */
+#login{padding:28px;overflow:auto;place-items:center}
+.lx-login{position:relative;display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr);width:min(1120px,100%);min-height:620px;border-radius:30px;isolation:isolate;
+  background:linear-gradient(150deg,rgba(9,15,32,.92),rgba(5,8,18,.95));box-shadow:0 50px 120px -50px rgba(34,225,255,.45),0 0 0 1px rgba(125,211,252,.10) inset;animation:pop .8s cubic-bezier(.2,.8,.2,1)}
+.lx-login::before{content:'';pointer-events:none;position:absolute;inset:-1px;border-radius:inherit;padding:1.5px;background:conic-gradient(from var(--ang),transparent 0 60%,var(--a1),var(--a2),var(--a3),transparent);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:ang 5s linear infinite;z-index:2}
+.lx-hero{position:relative;overflow:hidden;padding:46px 46px 34px;display:flex;flex-direction:column;border-radius:30px 0 0 30px;
+  background:radial-gradient(120% 80% at 0% 0%,rgba(34,225,255,.16),transparent 55%),radial-gradient(90% 70% at 100% 100%,rgba(123,92,255,.20),transparent 60%),linear-gradient(160deg,#0a1328,#060a16);border-right:1px solid rgba(125,211,252,.10)}
+.lx-hero::before{content:'';position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(125,211,252,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(125,211,252,.06) 1px,transparent 1px);background-size:34px 34px;
+  -webkit-mask-image:radial-gradient(120% 90% at 30% 30%,#000,transparent 70%);mask-image:radial-gradient(120% 90% at 30% 30%,#000,transparent 70%)}
+.lx-scan{position:absolute;left:0;right:0;top:-30%;height:30%;pointer-events:none;background:linear-gradient(180deg,transparent,rgba(34,225,255,.07),transparent);animation:lxScan 6s linear infinite}
+@keyframes lxScan{to{transform:translateY(430%)}}
+.lx-corner{position:absolute;width:22px;height:22px;border:2px solid rgba(34,225,255,.55);pointer-events:none}
+.lx-corner.tl{left:16px;top:16px;border-right:0;border-bottom:0;border-radius:8px 0 0 0}.lx-corner.tr{right:16px;top:16px;border-left:0;border-bottom:0;border-radius:0 8px 0 0}
+.lx-corner.bl{left:16px;bottom:16px;border-right:0;border-top:0;border-radius:0 0 0 8px}.lx-corner.br{right:16px;bottom:16px;border-left:0;border-top:0;border-radius:0 0 8px 0}
+.lx-brand{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:12px;margin-bottom:34px}
+.lx-brand .hex{width:92px;height:92px;margin:0;position:relative;z-index:1}
+.lx-login [hidden]{display:none!important}
+.lx-orbit{position:absolute;left:-74px;top:-74px;width:240px;height:240px;pointer-events:none;-webkit-mask-image:linear-gradient(180deg,#000 47%,transparent 62%);mask-image:linear-gradient(180deg,#000 47%,transparent 62%)}
+.lx-orbit i{position:absolute;left:50%;top:50%;border-radius:50%;border:1px solid rgba(34,225,255,.24);transform:translate(-50%,-50%)}
+.lx-orbit i:nth-child(1){width:124px;height:124px;border-style:dashed;animation:lxRot 26s linear infinite}
+.lx-orbit i:nth-child(2){width:172px;height:172px;border-color:rgba(123,92,255,.22);animation:lxRot 40s linear infinite reverse}
+.lx-orbit i:nth-child(3){width:228px;height:228px;border-color:rgba(255,61,242,.12)}
+.lx-orbit i:nth-child(1)::after,.lx-orbit i:nth-child(2)::after{content:'';position:absolute;top:-3px;left:50%;width:6px;height:6px;border-radius:50%;background:var(--a1);box-shadow:0 0 12px var(--a1)}
+.lx-orbit i:nth-child(2)::after{background:var(--a2);box-shadow:0 0 12px var(--a2);top:auto;bottom:-3px}
+@keyframes lxRot{to{transform:translate(-50%,-50%) rotate(360deg)}}
+.lx-name{display:flex;flex-direction:column;line-height:1;font-family:Orbitron,sans-serif;position:relative;z-index:1}
+.lx-name span{font-weight:900;font-size:22px;letter-spacing:.42em;background:linear-gradient(90deg,#f0fdff,#67e8f9 55%,#a78bfa);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lx-name b{font-weight:700;font-size:11.5px;letter-spacing:.78em;color:#7dd3fc;margin-top:7px}
+.lx-tag{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:#64748b;position:relative;z-index:1}
+.lx-kick{display:inline-flex;align-items:center;gap:8px;font:700 11px 'JetBrains Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:#7dd3fc;margin-bottom:14px}
+.lx-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#34d399;box-shadow:0 0 0 0 rgba(52,211,153,.6);animation:lxPulse 2s infinite}
+@keyframes lxPulse{70%{box-shadow:0 0 0 9px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+.lx-h{font-family:Orbitron,sans-serif;font-weight:800;font-size:clamp(28px,3.1vw,40px);line-height:1.12;letter-spacing:.01em;color:#f1f5ff;margin:0 0 14px}
+.lx-h span{display:block;background:linear-gradient(90deg,var(--a1),var(--a2) 60%,var(--a3));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(34,225,255,.25))}
+.lx-p{color:#94a3b8;font-size:15px;line-height:1.6;margin:0 0 24px;max-width:430px}
+.lx-feat{list-style:none;margin:0 0 auto;padding:0;display:grid;gap:10px}
+.lx-feat li{display:flex;align-items:center;gap:13px;padding:12px 14px;border-radius:14px;background:linear-gradient(120deg,rgba(255,255,255,.045),rgba(255,255,255,.015));border:1px solid rgba(125,211,252,.10);transition:.25s}
+.lx-feat li:hover{border-color:rgba(34,225,255,.35);transform:translateX(3px)}
+.lx-feat li>i{flex:none;width:38px;height:38px;border-radius:11px;display:grid;place-items:center;color:#a5f3fc;background:linear-gradient(140deg,rgba(34,225,255,.18),rgba(123,92,255,.18));border:1px solid rgba(34,225,255,.25)}
+.lx-feat li>i svg{width:19px;height:19px}
+.lx-feat b{display:block;font-size:14px;color:#e2e8f0}.lx-feat small{display:block;font-size:12.5px;color:#7c8aa5;margin-top:2px;line-height:1.4}
+.lx-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:26px;font:600 11px 'JetBrains Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:#5b6b85}
+.lx-foot>span:first-child{display:inline-flex;align-items:center;gap:8px}
+html body .lx-login form.lcard{width:auto;max-width:none;margin:0;padding:52px 50px 30px;text-align:left;border-radius:0 30px 30px 0;background:transparent!important;border:0!important;box-shadow:none!important;backdrop-filter:none;-webkit-backdrop-filter:none;animation:none;display:flex;flex-direction:column;justify-content:center;overflow:visible}
+html body .lx-login form.lcard::before{display:none}
+.lx-mini{display:none}
+.lx-kick2{display:inline-flex;align-items:center;gap:8px;font:800 11px 'JetBrains Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#7dd3fc;margin-bottom:10px}
+.lx-kick2 i{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:rgba(34,225,255,.12);border:1px solid rgba(34,225,255,.3)}.lx-kick2 i svg{width:15px;height:15px}
+.lx-title{font-family:Orbitron,sans-serif;font-weight:800;font-size:32px;letter-spacing:.02em;margin:2px 0 4px;color:#f8fafc}
+.lx-login form.lcard p.mut{margin:0 0 26px;font-size:13.5px}
+.lx-l{display:block;font:700 11px 'JetBrains Mono',monospace;letter-spacing:.16em;text-transform:uppercase;color:#8b9bb8;margin:0 0 7px}
+.lx-f{position:relative;margin-bottom:16px}
+.lx-f .lx-ic{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:20px;height:20px;color:#64748b;pointer-events:none;z-index:1;transition:color .2s}
+.lx-f .lx-ic svg{width:20px;height:20px;display:block}
+.lx-f:focus-within .lx-ic{color:var(--a1)}
+html body .lx-login .lx-f .inp{margin:0;padding:15px 16px 15px 46px;background:rgba(2,6,16,.6);border:1px solid rgba(125,211,252,.16);border-radius:14px}
+html body .lx-login .lx-f .inp:focus{border-color:var(--a1);box-shadow:0 0 0 4px rgba(34,225,255,.14),0 0 24px -6px rgba(34,225,255,.55)}
+.lx-f .pw-wrap>.inp{padding-right:48px}
+.lx-code .lx-hint{display:block;margin:-8px 0 14px;font-size:12px;color:#7c8aa5}
+.lx-code:not([hidden]){animation:lxIn .35s ease-out}
+@keyframes lxIn{from{opacity:0;transform:translateY(-6px)}}
+html body .lx-login #lt{margin:0 0 16px;background:rgba(2,6,16,.6);border:1px solid rgba(125,211,252,.16)}
+.lx-chk{display:flex;align-items:flex-start;gap:11px;margin:2px 0 16px;cursor:pointer;user-select:none}
+.lx-chk input{position:absolute;opacity:0;width:1px;height:1px}
+.lx-box{flex:none;width:20px;height:20px;margin-top:1px;border-radius:6px;border:1.5px solid rgba(125,211,252,.4);background:rgba(2,6,16,.6);display:grid;place-items:center;transition:.2s}
+.lx-chk input:checked+.lx-box{background:linear-gradient(135deg,var(--a1),var(--a2));border-color:transparent;box-shadow:0 0 14px -2px rgba(34,225,255,.7)}
+.lx-chk input:checked+.lx-box::after{content:'';width:9px;height:5px;border:2.2px solid #04111a;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
+.lx-chk input:focus-visible+.lx-box{outline:2px solid var(--a1);outline-offset:2px}
+.lx-chk b{display:block;font-size:13.5px;color:#e2e8f0}.lx-chk small{display:block;font-size:12px;color:#7c8aa5;margin-top:1px}
+html body .lx-login .lx-go{position:relative;overflow:hidden;width:100%;justify-content:space-between;padding:16px 20px;margin-top:4px;font-size:15px;letter-spacing:.04em;border-radius:15px}
+.lx-go svg{width:20px;height:20px;padding:6px;box-sizing:content-box;border-radius:9px;background:rgba(255,255,255,.22)}
+.lx-go::after{content:'';position:absolute;top:0;bottom:0;left:-40%;width:35%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);transform:skewX(-20deg);animation:lxShine2 3.6s ease-in-out infinite;pointer-events:none}
+@keyframes lxShine2{0%,55%{left:-40%}100%{left:130%}}
+.lx-or{display:flex;flex-direction:column;gap:12px;margin-top:16px}
+.lx-or>span{display:flex;align-items:center;gap:12px;font:700 10.5px 'JetBrains Mono',monospace;letter-spacing:.22em;text-transform:uppercase;color:#5b6b85}
+.lx-or>span::before,.lx-or>span::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(125,211,252,.25),transparent)}
+html body .lx-login .lx-pk{width:100%;padding:14px 18px;border-radius:15px;border:1px solid rgba(34,225,255,.35);background:rgba(34,225,255,.06);color:#cffafe}
+.lx-pk svg{width:22px;height:22px;color:var(--a1)}
+html body .lx-login .lx-pk:hover{background:rgba(34,225,255,.14);box-shadow:0 0 24px -8px rgba(34,225,255,.8)}
+.lx-login #lerr{margin-top:12px;min-height:18px;text-align:center}
+.lx-sec{display:flex;justify-content:space-between;gap:10px;margin-top:22px;padding-top:16px;border-top:1px solid rgba(125,211,252,.10);font:600 11px 'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#5b6b85}
+.lx-sec span{display:inline-flex;align-items:center;gap:7px}.lx-sec i{width:14px;height:14px;color:#34d399}.lx-sec i svg{width:14px;height:14px;display:block}
+@media (max-width:980px){
+  #login{padding:16px;place-items:start center}
+  .lx-login{grid-template-columns:1fr;min-height:0;max-width:520px}
+  .lx-hero{display:none}
+  html body .lx-login form.lcard{border-radius:30px;padding:34px 26px 24px}
+  .lx-mini{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+  .lx-mini .hex{width:56px;height:56px;margin:0}
+  .lx-mini .lx-name span{font-size:17px}.lx-mini .lx-name b{font-size:10px}
+  .lx-title{font-size:26px}
+}
+@media (max-height:700px) and (min-width:981px){.lx-login{min-height:0}.lx-hero{padding:32px 40px 26px}.lx-brand{margin-bottom:20px}.lx-p{margin-bottom:16px}}
+@media (prefers-reduced-motion:reduce){.lx-login,.lx-login::before,.lx-scan,.lx-orbit i,.lx-dot,.lx-go::after{animation:none!important}}
+</style>
 </head>
 <body>
 <div class="bgfx"><i></i><i></i><i></i></div>
@@ -267,17 +364,50 @@ canvas{display:block;width:100%}
 <!-- LOGIN -->
 <div id="chk" style="position:fixed;inset:0;display:grid;place-items:center;z-index:6;color:#9aa0b8;font:600 14px Inter,system-ui,sans-serif;letter-spacing:.2em">CARICAMENTO…</div>
 <section id="login" style="display:none">
-  <form class="lcard glass" id="lform">
-    <div class="hex"><svg class="kx-logo" viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="kxlb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset=".5" stop-color="#38bdf8"/><stop offset="1" stop-color="#2563eb"/><animateTransform attributeName="gradientTransform" type="rotate" values="0 .5 .5;360 .5 .5" dur="9s" repeatCount="indefinite"/></linearGradient><radialGradient id="kxlc" cx=".42" cy=".52" r=".62"><stop offset="0" stop-color="#3b1c2b"/><stop offset=".55" stop-color="#191526"/><stop offset="1" stop-color="#0b1120"/></radialGradient><radialGradient id="kxlg"><stop offset="0" stop-color="#a5f3fc" stop-opacity=".95"/><stop offset=".4" stop-color="#22d3ee" stop-opacity=".45"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></radialGradient><filter id="kxlf" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5"/></filter></defs><rect x="14" y="14" width="92" height="92" rx="25" fill="#22d3ee" filter="url(#kxlf)" opacity=".35"><animate attributeName="opacity" values=".22;.5;.22" dur="4s" repeatCount="indefinite"/></rect><rect x="13" y="13" width="94" height="94" rx="25" fill="#0a0e17" stroke="url(#kxlb)" stroke-width="3"/><g transform="matrix(1.14 0 0 1.14 -8.4 -8.4)"><polygon points="60,29 86.85,44.5 86.85,75.5 60,91 33.15,75.5 33.15,44.5" fill="url(#kxlc)" stroke="url(#kxlb)" stroke-width="3" stroke-linejoin="round"/><ellipse cx="60" cy="60" rx="11" ry="27" fill="none" stroke="#1e5a8c" stroke-width="2.2"><animateTransform attributeName="transform" type="rotate" values="-14 60 60;346 60 60" dur="16s" repeatCount="indefinite"/></ellipse><circle cx="60" cy="60" r="17" fill="url(#kxlg)"><animate attributeName="r" values="15;19.5;15" dur="3s" repeatCount="indefinite"/><animate attributeName="opacity" values=".7;1;.7" dur="3s" repeatCount="indefinite"/></circle><g transform="rotate(-48 60 60)"><ellipse cx="60" cy="60" rx="34" ry="12.5" fill="none" stroke="#22d3ee" stroke-width="2.4"/><circle r="4.2" fill="#fff"><animateMotion dur="7s" repeatCount="indefinite" path="M94,60A34,12.5 0 1 1 26,60A34,12.5 0 1 1 94,60"/></circle><circle r="3.4" fill="#fb923c"><animateMotion dur="7s" begin="-3.5s" repeatCount="indefinite" path="M94,60A34,12.5 0 1 1 26,60A34,12.5 0 1 1 94,60"/></circle></g><polygon points="60,49 67.5,60 60,71 52.5,60" fill="#fff"/></g></svg></div>
-    <h1 class="grad">KAIROS</h1>
-    <p class="mut">Control Center · accesso amministratore e agenti</p>
-    <input class="inp" id="lu" placeholder="Utente" value="admin" autocomplete="username">
-    <input class="inp" id="lp" type="password" placeholder="Password" autocomplete="current-password">
-    <input class="inp mono" id="lt" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Codice a 6 cifre dell'app di autenticazione" style="display:none;text-align:center;letter-spacing:.4em">
-    <div id="ts" style="display:flex;justify-content:center;margin:4px 0 10px"></div>
-    <button class="btn pri" style="width:100%;margin-top:6px;padding:15px">Accedi <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
-    <div class="err" id="lerr"></div>
-  </form>
+  <!-- pagina di accesso «futuristica» (11 novembre 2026): a sinistra il pannello, a destra l'accesso. ID dei campi come prima -->
+  <div class="lx-login">
+    <aside class="lx-hero">
+      <span class="lx-corner tl"></span><span class="lx-corner tr"></span><span class="lx-corner bl"></span><span class="lx-corner br"></span>
+      <div class="lx-scan" aria-hidden="true"></div>
+      <div class="lx-brand">
+        <div class="lx-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="hex"><svg class="kx-logo" viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="kxhb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset=".5" stop-color="#38bdf8"/><stop offset="1" stop-color="#2563eb"/><animateTransform attributeName="gradientTransform" type="rotate" values="0 .5 .5;360 .5 .5" dur="9s" repeatCount="indefinite"/></linearGradient><radialGradient id="kxhc" cx=".42" cy=".52" r=".62"><stop offset="0" stop-color="#3b1c2b"/><stop offset=".55" stop-color="#191526"/><stop offset="1" stop-color="#0b1120"/></radialGradient><radialGradient id="kxhg"><stop offset="0" stop-color="#a5f3fc" stop-opacity=".95"/><stop offset=".4" stop-color="#22d3ee" stop-opacity=".45"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></radialGradient><filter id="kxhf" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5"/></filter></defs><rect x="14" y="14" width="92" height="92" rx="25" fill="#22d3ee" filter="url(#kxhf)" opacity=".35"><animate attributeName="opacity" values=".22;.5;.22" dur="4s" repeatCount="indefinite"/></rect><rect x="13" y="13" width="94" height="94" rx="25" fill="#0a0e17" stroke="url(#kxhb)" stroke-width="3"/><g transform="matrix(1.14 0 0 1.14 -8.4 -8.4)"><polygon points="60,29 86.85,44.5 86.85,75.5 60,91 33.15,75.5 33.15,44.5" fill="url(#kxhc)" stroke="url(#kxhb)" stroke-width="3" stroke-linejoin="round"/><ellipse cx="60" cy="60" rx="11" ry="27" fill="none" stroke="#1e5a8c" stroke-width="2.2"><animateTransform attributeName="transform" type="rotate" values="-14 60 60;346 60 60" dur="16s" repeatCount="indefinite"/></ellipse><circle cx="60" cy="60" r="17" fill="url(#kxhg)"><animate attributeName="r" values="15;19.5;15" dur="3s" repeatCount="indefinite"/><animate attributeName="opacity" values=".7;1;.7" dur="3s" repeatCount="indefinite"/></circle><g transform="rotate(-48 60 60)"><ellipse cx="60" cy="60" rx="34" ry="12.5" fill="none" stroke="#22d3ee" stroke-width="2.4"/><circle r="4.2" fill="#fff"><animateMotion dur="7s" repeatCount="indefinite" path="M94,60A34,12.5 0 1 1 26,60A34,12.5 0 1 1 94,60"/></circle><circle r="3.4" fill="#fb923c"><animateMotion dur="7s" begin="-3.5s" repeatCount="indefinite" path="M94,60A34,12.5 0 1 1 26,60A34,12.5 0 1 1 94,60"/></circle></g><polygon points="60,49 67.5,60 60,71 52.5,60" fill="#fff"/></g></svg></div>
+        <div class="lx-name"><span>KAIROS</span><b>CONTROL</b></div>
+        <small class="lx-tag">Centro di controllo</small>
+      </div>
+      <div class="lx-kick"><span class="lx-dot"></span>Centro di comando · in linea</div>
+      <h2 class="lx-h">Il tuo mondo IPTV.<span>Sotto controllo.</span></h2>
+      <p class="lx-p">Clienti, linee, app, store e agenti in un'unica console, in tempo reale.</p>
+      <ul class="lx-feat">
+        <li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4.5 6v5.6c0 4.6 3.1 8.2 7.5 9.4 4.4-1.2 7.5-4.8 7.5-9.4V6z"/><path d="m9 12 2.1 2.1L15.2 10"/></svg></i><div><b>Accesso blindato</b><small>Codice di accesso, dispositivi ricordati, impronta o Face ID</small></div></li>
+        <li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.9 19.1a10 10 0 0 1 0-14.2M19.1 4.9a10 10 0 0 1 0 14.2M7.8 16.2a6 6 0 0 1 0-8.4M16.2 7.8a6 6 0 0 1 0 8.4"/><circle cx="12" cy="12" r="2"/></svg></i><div><b>In tempo reale</b><small>Chi guarda, chi scade, cosa succede: adesso</small></div></li>
+        <li><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M17.5 14v7M14 17.5h7"/></svg></i><div><b>Tutto collegato</b><small>App Kairos, store e pannelli IPTV in un solo posto</small></div></li>
+      </ul>
+      <div class="lx-foot"><span><span class="lx-dot"></span>Sistemi operativi</span><span>Kairos Control</span></div>
+    </aside>
+    <form class="lcard glass" id="lform">
+      <div class="lx-mini"><div class="hex"><svg class="kx-logo" viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="kxlb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset=".5" stop-color="#38bdf8"/><stop offset="1" stop-color="#2563eb"/><animateTransform attributeName="gradientTransform" type="rotate" values="0 .5 .5;360 .5 .5" dur="9s" repeatCount="indefinite"/></linearGradient><radialGradient id="kxlc" cx=".42" cy=".52" r=".62"><stop offset="0" stop-color="#3b1c2b"/><stop offset=".55" stop-color="#191526"/><stop offset="1" stop-color="#0b1120"/></radialGradient><radialGradient id="kxlg"><stop offset="0" stop-color="#a5f3fc" stop-opacity=".95"/><stop offset=".4" stop-color="#22d3ee" stop-opacity=".45"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></radialGradient><filter id="kxlf" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5"/></filter></defs><rect x="14" y="14" width="92" height="92" rx="25" fill="#22d3ee" filter="url(#kxlf)" opacity=".35"><animate attributeName="opacity" values=".22;.5;.22" dur="4s" repeatCount="indefinite"/></rect><rect x="13" y="13" width="94" height="94" rx="25" fill="#0a0e17" stroke="url(#kxlb)" stroke-width="3"/><g transform="matrix(1.14 0 0 1.14 -8.4 -8.4)"><polygon points="60,29 86.85,44.5 86.85,75.5 60,91 33.15,75.5 33.15,44.5" fill="url(#kxlc)" stroke="url(#kxlb)" stroke-width="3" stroke-linejoin="round"/><ellipse cx="60" cy="60" rx="11" ry="27" fill="none" stroke="#1e5a8c" stroke-width="2.2"><animateTransform attributeName="transform" type="rotate" values="-14 60 60;346 60 60" dur="16s" repeatCount="indefinite"/></ellipse><circle cx="60" cy="60" r="17" fill="url(#kxlg)"><animate attributeName="r" values="15;19.5;15" dur="3s" repeatCount="indefinite"/><animate attributeName="opacity" values=".7;1;.7" dur="3s" repeatCount="indefinite"/></circle><g transform="rotate(-48 60 60)"><ellipse cx="60" cy="60" rx="34" ry="12.5" fill="none" stroke="#22d3ee" stroke-width="2.4"/><circle r="4.2" fill="#fff"><animateMotion dur="7s" repeatCount="indefinite" path="M94,60A34,12.5 0 1 1 26,60A34,12.5 0 1 1 94,60"/></circle><circle r="3.4" fill="#fb923c"><animateMotion dur="7s" begin="-3.5s" repeatCount="indefinite" path="M94,60A34,12.5 0 1 1 26,60A34,12.5 0 1 1 94,60"/></circle></g><polygon points="60,49 67.5,60 60,71 52.5,60" fill="#fff"/></g></svg></div><div class="lx-name"><span>KAIROS</span><b>CONTROL</b></div></div>
+      <div class="lx-kick2"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4.5 6v5.6c0 4.6 3.1 8.2 7.5 9.4 4.4-1.2 7.5-4.8 7.5-9.4V6z"/><path d="m9 12 2.1 2.1L15.2 10"/></svg></i>Accesso riservato</div>
+      <h1 class="lx-title">Bentornato.</h1>
+      <p class="mut">Control Center · accesso amministratore e agenti</p>
+      <label class="lx-l" for="lu">Utente</label>
+      <div class="lx-f"><span class="lx-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.2 8-6.2s8 2.2 8 6.2"/></svg></span><input class="inp" id="lu" placeholder="Utente" value="admin" autocomplete="username"></div>
+      <label class="lx-l" for="lp">Password</label>
+      <div class="lx-f"><span class="lx-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5V7.4a4 4 0 0 1 8 0v3.1"/></svg></span><input class="inp" id="lp" type="password" placeholder="Password" autocomplete="current-password"></div>
+      <div class="lx-code" id="lcW" hidden>
+        <label class="lx-l" for="lc">Codice di accesso</label>
+        <div class="lx-f"><span class="lx-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4"/><path d="m10.4 12.6 9.1-9.1M16.5 6.5l2.6 2.6M13.6 9.4l2 2"/></svg></span><input class="inp mono" id="lc" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="40" placeholder="Il tuo codice di accesso"></div>
+        <small class="lx-hint">Serve solo su un dispositivo nuovo: se lo fai ricordare, qui non te lo chiede più.</small>
+      </div>
+      <input class="inp mono" id="lt" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Codice a 6 cifre dell'app di autenticazione" style="display:none;text-align:center;letter-spacing:.4em">
+      <label class="lx-chk" id="lremW"><input type="checkbox" id="lrem" checked><span class="lx-box" aria-hidden="true"></span><span><b>Ricorda questo dispositivo</b><small>Per 90 giorni qui il codice di accesso non serve</small></span></label>
+      <div id="ts" style="display:flex;justify-content:center;margin:4px 0 10px"></div>
+      <button class="btn pri lx-go">Accedi <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      <div class="lx-or" id="lpkW" hidden><span>oppure</span><button type="button" class="btn lx-pk" id="lpk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 4.6A9 9 0 0 1 21 12.5v1"/><path d="M3.5 9.5A9 9 0 0 1 5 6.8"/><path d="M3 13.5v-1"/><path d="M6.2 19.5A11.6 11.6 0 0 0 7.5 12.5a4.5 4.5 0 0 1 9 0c0 1.6-.1 3.1-.4 4.6"/><path d="M12 12.5c0 3.4-.6 6.4-2 8.9"/><path d="M15 21c.4-.9.7-1.9.9-2.9"/><path d="M19.6 17c.3-1.4.4-2.9.4-4.5"/></svg>Entra con impronta o Face ID</button></div>
+      <div class="err" id="lerr"></div>
+      <div class="lx-sec"><span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5V7.4a4 4 0 0 1 8 0v3.1"/></svg></i>Connessione protetta</span><span>Kairos Control</span></div>
+    </form>
+  </div>
 </section>
 
 <!-- APP -->
@@ -470,6 +600,7 @@ canvas{display:block;width:100%}
 <script src="act-apps.js"></script>
 <script src="agents.js"></script>
 <script src="sec-agents.js"></script>
+<script src="owner-sec.js"></script>
 <script src="drawer-acc.js"></script>
 <script src="nav2.js"></script>
 <script src="paste-line.js"></script>

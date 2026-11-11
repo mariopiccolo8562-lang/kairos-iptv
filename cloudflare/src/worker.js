@@ -8,6 +8,7 @@
  *  Segreti:  ENC_KEY (base64, 32 byte), ADMIN_BOOTSTRAP_PASS, TURNSTILE_SECRET (opzionale)
  *  Variabili: ACCESS_TEAM_DOMAIN, ACCESS_AUD, TURNSTILE_SITEKEY (opzionali)
  */
+import { b64u as pkB64, unb64u as pkUnb64, cbor as pkCbor, parseAuthData as pkAuthData, coseToJwk as pkJwk, verifySig as pkVerify, sha as pkSha, same as pkSame, concat as pkCat } from './passkey.js'; // accesso del titolare con impronta o Face ID
 import { storeApi, storeAdmin, storeCodes, storeCodesOn, storeHeaders, storeHooks, storeDecide, storeAgentAlerts } from './store.js'; // Store aperto: conteggi e compatibilità con gli store vecchi (/api/store/*)
 import { wolfRoutes, wolfCron, sockFetch, wolfCfg } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
 import { atxRoutes, clearAtxAgent } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz)
@@ -5397,7 +5398,10 @@ async function route(req, env, ctx) {
   /* ---------- config pubblica del pannello ---------- */
   if (path === '/api/public/config' && req.method === 'GET') {
     if (!(await verifyAccess(req, env))) return json({ error: 'Accesso negato' }, 403);
-    return json({ turnstileSiteKey: env.TURNSTILE_SITEKEY || '' });
+    // pk: il pulsante «Entra con impronta o Face ID» (non dall'indirizzo degli agenti)
+    let pk = false;
+    try { const S = await getSettings(env), host = new URL(req.url).hostname.toLowerCase(); pk = !(S.agentHost && host === S.agentHost) && !!(await env.DB.prepare('SELECT 1 AS x FROM passkeys LIMIT 1').first()); } catch {}
+    return json({ turnstileSiteKey: env.TURNSTILE_SITEKEY || '', pk });
   }
 
   /* ---------- API di integrazione (chiave API) ---------- */
@@ -5681,6 +5685,199 @@ async function agTwoAfterLogin(req, env, a, ip, ctx) {
   const here = [uaShort(req.headers.get('User-Agent')), geoOf(req)].filter(Boolean).join(', ');
   agTg(env, ctx, G, `📱 <b>Nuovo dispositivo</b>\nL'agente <b>${tgEsc(a.username)}</b> è entrato da ${tgEsc(here)}; è stato scollegato ${tgEsc(gone)}. Se non è stato lui, rigenera il suo link e il codice (Agenti → Link accesso).`);
 }
+/* ---------------- Il tuo accesso (titolare, 11 novembre 2026, Impostazioni → Sicurezza e account) ----------------
+   - codice di accesso (admins.acc_seal, cifrato; '' = spento): chiesto solo sui dispositivi che il pannello non ricorda;
+   - «Ricorda questo dispositivo»: cookie __Host-kxtd (HttpOnly, 90 giorni) e la sua impronta in trusted_devices;
+   - avviso su Telegram (admins.acc_tg): accesso da un dispositivo nuovo, codice sbagliato dopo la password giusta,
+     passkey aggiunta;
+   - impronta o Face ID (passkey, WebAuthn, passkey.js): chiavi pubbliche in passkeys, sfide usa e getta in pk_chal.
+   Con la passkey non servono password, codice e 2FA: è già «qualcosa che hai» più impronta o volto. Solo per il titolare. */
+const TD_COOKIE = '__Host-kxtd', TD_MS = 90 * 864e5, PK_TTL = 5 * 60e3, PK_MAX = 10;
+const tdCookieOf = (req) => (req.headers.get('Cookie') || '').match(/(?:^|;\s*)__Host-kxtd=([A-Za-z0-9_-]{20,80})/)?.[1] || '';
+const tdSet = (tok, sec) => `${TD_COOKIE}=${tok}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${sec}`;
+const devWhere = (req) => [uaShort(req.headers.get('User-Agent')), geoOf(req)].filter(Boolean).join(', ');
+/** dispositivo ricordato per questo titolare (riga di trusted_devices) o null */
+async function trustOf(req, env, adminId) {
+  const t = tdCookieOf(req);
+  if (!t) return null;
+  try { return await env.DB.prepare('SELECT * FROM trusted_devices WHERE id = ? AND admin_id = ? AND expires > ?').bind(await sha256('td:' + t), adminId, now()).first(); } catch { return null; }
+}
+/** ricorda questo dispositivo per 90 giorni: risponde il valore del cookie */
+async function trustNew(req, env, adminId) {
+  const tok = b64url(rand(32)), t = now();
+  await env.DB.prepare('INSERT INTO trusted_devices (id, admin_id, ua, geo, created, used, expires) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(await sha256('td:' + tok), adminId, str(req.headers.get('User-Agent') || '', 200), geoOf(req), t, t, t + TD_MS).run();
+  return tok;
+}
+function ownTg(env, ctx, a, text) {
+  if (!a || !+a.acc_tg) return;
+  const p = notifyOwnersText(env, notifyH(env), text).catch(() => 0);
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(p);
+}
+/** dopo l'accesso del titolare: dispositivo ricordato (si segna l'uso) o nuovo (registro, avviso, ricordato se chiesto).
+ *  Risponde il cookie del dispositivo da aggiungere alla risposta ('' = nessuno) */
+async function ownAfterLogin(req, env, a, ip, ctx, trust, remember, how) {
+  if (trust) { ctx.waitUntil(env.DB.prepare('UPDATE trusted_devices SET used = ? WHERE id = ?').bind(now(), trust.id).run().catch(() => {})); return ''; }
+  const tok = remember ? await trustNew(req, env, a.id) : '', where = devWhere(req);
+  await log(env, 'auth', `${a.username}: accesso${how ? ' ' + how : ''} da un dispositivo nuovo (${where})${tok ? ' · ricordato per 90 giorni' : ''}`, ip);
+  ownTg(env, ctx, a, `🔐 <b>Accesso al pannello</b>\nIl titolare <b>${tgEsc(a.username)}</b> è entrato${how ? ' ' + tgEsc(how) : ''} da un dispositivo nuovo: ${tgEsc(where)}. Se non eri tu, cambia subito password e codice di accesso (Sicurezza e account).`);
+  return tok;
+}
+const pkUser = async (id) => pkB64((await pkSha(enc.encode('pkuser:' + id))).slice(0, 16));
+const pkDec = (s) => { const raw = pkUnb64(s); return { raw, obj: JSON.parse(dec.decode(raw)) }; };
+/** sfida usa e getta: si cancella mentre si controlla (una sola volta, entro 5 minuti) */
+async function pkTake(env, id, kind, adminId) {
+  const t = now();
+  const r = await env.DB.prepare(`DELETE FROM pk_chal WHERE id = ? AND kind = ? AND t > ?${kind === 'reg' ? ' AND admin_id = ?' : ''} RETURNING id`).bind(...[str(id, 100), kind, t - PK_TTL, ...(kind === 'reg' ? [adminId] : [])]).first().catch(() => null);
+  return !!r;
+}
+async function pkNewChallenge(env, kind, adminId) {
+  const ch = pkB64(rand(32)), t = now();
+  await env.DB.batch([env.DB.prepare('DELETE FROM pk_chal WHERE t < ?').bind(t - PK_TTL), env.DB.prepare('INSERT INTO pk_chal (id, admin_id, kind, t) VALUES (?, ?, ?, ?)').bind(ch, adminId || 0, kind, t)]);
+  return ch;
+}
+/** POST /api/admin/passkey/login-options (senza sessione): sfida per «Entra con impronta o Face ID» */
+async function pkLoginOptions(req, env, ip) {
+  if (await limited(env.RL_LOGIN, 'pko:' + ip)) throw new HttpErr(429, 'Troppi tentativi, attendi un minuto');
+  const host = new URL(req.url).hostname.toLowerCase(), S = await getSettings(env);
+  if (S.agentHost && host === S.agentHost) throw new HttpErr(403, 'Da questo indirizzo non si entra con impronta o Face ID');
+  return json({ challenge: await pkNewChallenge(env, 'auth', 0), rpId: host, timeout: 120000, userVerification: 'required' });
+}
+/** POST /api/admin/passkey/login: firma della passkey verificata → sessione del titolare (senza password, codice e 2FA) */
+async function pkLogin(req, env, ip, ctx) {
+  if (await limited(env.RL_LOGIN, 'login:' + ip)) throw new HttpErr(429, 'Troppi tentativi, attendi un minuto');
+  const fail = await env.DB.prepare('SELECT * FROM login_fail WHERE ip = ?').bind(ip).first();
+  if (fail && fail.until > now()) throw new HttpErr(429, `Accesso bloccato per sicurezza. Riprova tra ${Math.ceil((fail.until - now()) / 60000)} minuti`);
+  const b = await readJSON(req, 16384), url = new URL(req.url), host = url.hostname.toLowerCase();
+  const bad = async (why) => {
+    const c = (fail && fail.until <= now() && now() - fail.updated > 3600e3 ? 0 : (fail ? fail.count : 0)) + 1, until = c >= 5 ? now() + 15 * 60e3 : 0;
+    await env.DB.prepare('INSERT INTO login_fail (ip, count, until, updated) VALUES (?, ?, ?, ?) ON CONFLICT(ip) DO UPDATE SET count = excluded.count, until = excluded.until, updated = excluded.updated').bind(ip, until ? 0 : c, until, now()).run();
+    await log(env, 'off', `Accesso con impronta o Face ID non riuscito: ${why}${until ? ' — IP bloccato 15 min' : ''}`, ip);
+    return new HttpErr(401, 'Impronta o Face ID non riconosciuti: entra con la password');
+  };
+  const id = str(b.id, 600);
+  if (!/^[A-Za-z0-9_-]{16,600}$/.test(id)) throw await bad('credenziale non valida');
+  const pk = await env.DB.prepare('SELECT * FROM passkeys WHERE id = ?').bind(id).first();
+  if (!pk) throw await bad('passkey sconosciuta');
+  let cd, ad, sig;
+  try { cd = pkDec(b.clientDataJSON); ad = pkUnb64(b.authenticatorData); sig = pkUnb64(b.signature); } catch { throw await bad('risposta del dispositivo non valida'); }
+  if (!(await pkTake(env, cd.obj.challenge, 'auth'))) throw await bad('sfida scaduta o già usata'); // usa e getta, anche se poi qualcosa non va
+  if (cd.obj.type !== 'webauthn.get' || cd.obj.origin !== url.origin) throw await bad('origine non valida');
+  let A; try { A = pkAuthData(ad); } catch { throw await bad('dati del dispositivo non validi'); }
+  if (!pkSame(A.rpIdHash, await pkSha(enc.encode(host)))) throw await bad('indirizzo del pannello diverso');
+  if (!A.up || !A.uv) throw await bad('impronta o volto non verificati');
+  let key; try { key = JSON.parse(pk.jwk); } catch { throw await bad('chiave salvata non valida'); }
+  if (!(await pkVerify(key, +pk.alg, pkCat(ad, await pkSha(cd.raw)), sig))) throw await bad('firma non valida');
+  if ((A.count > 0 || +pk.count > 0) && A.count <= +pk.count) throw await bad('contatore della passkey non valido (copia?)');
+  const a = await env.DB.prepare('SELECT * FROM admins WHERE id = ?').bind(pk.admin_id).first();
+  if (!a || a.role === 'agent') throw await bad('account non valido');
+  if (b.userHandle && str(b.userHandle, 200) !== (await pkUser(a.id))) throw await bad('utente diverso');
+  const S0 = await getSettings(env);
+  if (S0.agentHost && host === S0.agentHost) throw await bad('indirizzo degli agenti');
+  await env.DB.prepare('DELETE FROM login_fail WHERE ip = ?').bind(ip).run();
+  const old = cookieOf(req);
+  if (old) await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(await sha256('ses:' + old)).run();
+  const tok = b64url(rand(32));
+  await env.DB.prepare('INSERT INTO sessions (id, admin_id, expires, ip, ua, created_at, geo) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(await sha256('ses:' + tok), a.id, now() + SESSION_TTL * 1000, ip, str(req.headers.get('User-Agent') || '', 200), now(), geoOf(req)).run();
+  await env.DB.prepare('UPDATE passkeys SET count = ?, used = ? WHERE id = ?').bind(A.count, now(), pk.id).run();
+  await log(env, 'auth', `Accesso di ${a.username} con impronta o Face ID (${pk.name || 'passkey'})`, ip);
+  const td = await ownAfterLogin(req, env, a, ip, ctx, await trustOf(req, env, a.id), b.remember === true, 'con impronta o Face ID');
+  ctx.waitUntil(cleanup(env));
+  const res = json({ ok: true, user: a.username, totp: !!a.totp_on, role: 'owner', passkey: true }, 200, { 'Set-Cookie': setCookie(tok, SESSION_TTL) });
+  if (td) res.headers.append('Set-Cookie', tdSet(td, TD_MS / 1000));
+  return res;
+}
+/** «Il tuo accesso» (Sicurezza e account): codice, dispositivi ricordati, passkey, avvisi. Solo il titolare */
+async function ownSec(req, env, url, path, m, ses, who, ip, ctx) {
+  const a = await env.DB.prepare('SELECT * FROM admins WHERE id = ?').bind(ses.admin_id).first();
+  if (!a || a.role === 'agent') throw new HttpErr(403, 'Solo il titolare');
+  const host = url.hostname.toLowerCase();
+  if (path === '/own-sec' && m === 'GET') {
+    const here = await trustOf(req, env, a.id);
+    const [D, P, T] = await Promise.all([
+      env.DB.prepare('SELECT * FROM trusted_devices WHERE admin_id = ? AND expires > ? ORDER BY used DESC').bind(a.id, now()).all(),
+      env.DB.prepare('SELECT id, name, created, used FROM passkeys WHERE admin_id = ? ORDER BY created DESC').bind(a.id).all(),
+      env.DB.prepare('SELECT tg_chat FROM notify_links WHERE admin_id = ?').bind(a.id).first().catch(() => null),
+    ]);
+    return json({
+      code: { on: !!a.acc_seal, value: a.acc_seal ? String(await unseal(env, a.acc_seal).catch(() => '')) : '' },
+      tg: !!+a.acc_tg, tgLinked: !!(T && T.tg_chat), days: TD_MS / 864e5, here: here ? String(here.id).slice(0, 16) : '',
+      devices: ((D && D.results) || []).map((d) => ({ id: String(d.id).slice(0, 16), dev: uaShort(d.ua), where: d.geo || '', created: +d.created, used: +d.used, expires: +d.expires })),
+      passkeys: ((P && P.results) || []).map((x) => ({ id: String(x.id).slice(0, 16), name: x.name, created: +x.created, used: +x.used })),
+    });
+  }
+  if (path === '/own-sec' && m === 'PUT') {
+    const b = await readJSON(req, 4096);
+    let td = '';
+    if (b.code !== undefined) {
+      if (!(await checkPass(str(b.password, 200), a.pass_hash))) throw new HttpErr(400, 'Password attuale errata');
+      const c = typeof b.code === 'string' ? b.code.trim() : '';
+      if (c && !/^[\x21-\x7e]{6,40}$/.test(c)) throw new HttpErr(400, 'Il codice di accesso va da 6 a 40 caratteri, senza spazi né lettere accentate');
+      await env.DB.prepare('UPDATE admins SET acc_seal = ? WHERE id = ?').bind(c ? await seal(env, c) : '', a.id).run();
+      await log(env, 'settings', `${who}: Sicurezza — codice di accesso ${c ? (a.acc_seal ? 'cambiato' : 'attivato') : 'spento'}`, ip);
+      if (c && !(await trustOf(req, env, a.id))) td = await trustNew(req, env, a.id); // da qui il codice non serve: questo dispositivo resta ricordato
+    }
+    if (typeof b.tg === 'boolean' && b.tg !== !!+a.acc_tg) {
+      await env.DB.prepare('UPDATE admins SET acc_tg = ? WHERE id = ?').bind(b.tg ? 1 : 0, a.id).run();
+      await log(env, 'settings', `${who}: Sicurezza — avvisi su Telegram per i tuoi accessi ${b.tg ? 'accesi' : 'spenti'}`, ip);
+    }
+    const res = json({ ok: true, trusted: !!td });
+    if (td) res.headers.append('Set-Cookie', tdSet(td, TD_MS / 1000));
+    return res;
+  }
+  const odm = path.match(/^\/own-sec\/devices(?:\/([A-Za-z0-9_-]{16}))?$/);
+  if (odm && m === 'DELETE') {
+    const rows = ((await env.DB.prepare('SELECT id FROM trusted_devices WHERE admin_id = ?').bind(a.id).all()).results) || [];
+    const del = odm[1] ? rows.filter((r) => String(r.id).slice(0, 16) === odm[1]) : rows;
+    if (odm[1] && !del.length) throw new HttpErr(404, 'Dispositivo non trovato');
+    const here = await trustOf(req, env, a.id), mine = !!here && del.some((r) => r.id === here.id);
+    if (del.length) await env.DB.batch(del.map((r) => env.DB.prepare('DELETE FROM trusted_devices WHERE id = ?').bind(r.id)));
+    await log(env, 'settings', `${who}: Sicurezza — ${odm[1] ? 'dimenticato un dispositivo' : `dimenticati tutti i dispositivi (${del.length})`}: lì il codice di accesso servirà di nuovo`, ip);
+    return json({ ok: true, n: del.length }, 200, mine ? { 'Set-Cookie': tdSet('', 0) } : {});
+  }
+  if (path === '/passkey/options' && m === 'POST') {
+    const mine = ((await env.DB.prepare('SELECT id FROM passkeys WHERE admin_id = ?').bind(a.id).all()).results) || [];
+    if (mine.length >= PK_MAX) throw new HttpErr(400, `Hai già ${PK_MAX} passkey: togline una prima di aggiungerne un'altra`);
+    const S = await getSettings(env), brand = `${S.brand || 'Kairos'} Control`;
+    return json({
+      challenge: await pkNewChallenge(env, 'reg', a.id), rp: { name: brand, id: host },
+      user: { id: await pkUser(a.id), name: a.username, displayName: `${a.username} · ${brand}` },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }], timeout: 120000, attestation: 'none',
+      authenticatorSelection: { residentKey: 'required', requireResidentKey: true, userVerification: 'required' },
+      excludeCredentials: mine.map((x) => ({ type: 'public-key', id: x.id })),
+    });
+  }
+  if (path === '/passkey/register' && m === 'POST') {
+    const b = await readJSON(req, 16384);
+    let cd, att;
+    try { cd = pkDec(b.clientDataJSON); att = pkCbor(pkUnb64(b.attestationObject)).v; } catch { throw new HttpErr(400, 'Risposta del dispositivo non valida'); }
+    if (!(await pkTake(env, cd.obj.challenge, 'reg', a.id))) throw new HttpErr(400, 'Tempo scaduto: riprova'); // usa e getta, anche se poi qualcosa non va
+    if (cd.obj.type !== 'webauthn.create' || cd.obj.origin !== url.origin) throw new HttpErr(400, 'Origine non valida');
+    let A; try { A = pkAuthData(att instanceof Map ? att.get('authData') : null); } catch { throw new HttpErr(400, 'Risposta del dispositivo non valida'); }
+    if (!pkSame(A.rpIdHash, await pkSha(enc.encode(host)))) throw new HttpErr(400, 'Indirizzo del pannello diverso');
+    if (!A.up || !A.uv || !A.at || !A.credId) throw new HttpErr(400, 'Impronta o volto non verificati: riprova');
+    let K; try { K = pkJwk(A.cose); } catch { throw new HttpErr(400, 'Questo dispositivo usa una chiave non supportata'); }
+    const id = pkB64(A.credId);
+    if (b.id !== undefined && str(b.id, 600) !== id) throw new HttpErr(400, 'Risposta del dispositivo non valida');
+    if (await env.DB.prepare('SELECT 1 AS x FROM passkeys WHERE id = ?').bind(id).first()) throw new HttpErr(400, 'Questa passkey c\'è già');
+    const name = str(b.name, 60) || devWhere(req) || 'Passkey', t = now();
+    await env.DB.prepare('INSERT INTO passkeys (id, admin_id, name, jwk, alg, count, created, used) VALUES (?, ?, ?, ?, ?, ?, ?, 0)').bind(id, a.id, name, JSON.stringify(K.jwk), K.alg, A.count, t).run();
+    await log(env, 'settings', `${who}: Sicurezza — aggiunta una passkey (impronta o Face ID): ${name}`, ip);
+    ownTg(env, ctx, a, `🔑 <b>Passkey aggiunta</b>\nSul pannello è stata aggiunta una passkey (impronta o Face ID) per <b>${tgEsc(a.username)}</b>: ${tgEsc(name)}. Se non sei stato tu, toglila da Sicurezza e account e cambia la password.`);
+    return json({ ok: true, passkey: { id: id.slice(0, 16), name, created: t, used: 0 } });
+  }
+  const pkm = path.match(/^\/passkey\/([A-Za-z0-9_-]{16})$/);
+  if (pkm && m === 'DELETE') {
+    const rows = ((await env.DB.prepare('SELECT id, name FROM passkeys WHERE admin_id = ?').bind(a.id).all()).results) || [];
+    const x = rows.find((r) => String(r.id).slice(0, 16) === pkm[1]);
+    if (!x) throw new HttpErr(404, 'Passkey non trovata');
+    await env.DB.prepare('DELETE FROM passkeys WHERE id = ?').bind(x.id).run();
+    await log(env, 'settings', `${who}: Sicurezza — tolta la passkey ${x.name || ''}`.trim(), ip);
+    return json({ ok: true });
+  }
+  throw new HttpErr(404, 'Funzione non trovata');
+}
 /** a ogni richiesta di un agente (non in assistenza): accesso di 7 giorni e Paesi consentiti */
 async function agSecCheck(req, env, ses, ip, ctx) {
   const G = agSecNorm((await getSettings(env)).agSec);
@@ -5719,6 +5916,8 @@ async function adminInner(req, env, url, ip, ctx) {
 
   if (path === '/login' && m === 'POST') return login(req, env, ip, ctx);
   if (path === '/link-login' && m === 'POST') return linkLogin(req, env, ip, ctx);
+  if (path === '/passkey/login-options' && m === 'POST') return pkLoginOptions(req, env, ip); // impronta o Face ID (titolare)
+  if (path === '/passkey/login' && m === 'POST') return pkLogin(req, env, ip, ctx);
 
   // la sessione e, nello stesso viaggio, impostazioni e agenti (servono quasi a ogni richiesta del pannello)
   const pre = cookieOf(req) ? Promise.all([cfgRows(env), agentsAll(env)]).catch(() => {}) : null;
@@ -6858,6 +7057,11 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path === '/store' || path.startsWith('/store/')) return storeAdmin(req, env, path, who, ip, 0, { smsAgentList: () => storeSmsAgentList(env) }); // Download store
   if ((path === '/notify' || path.startsWith('/notify/')) && ses && !ses.agent) return notifyAdmin(req, env, path, { id: ses.admin_id, username: ses.username, agent: false }, ip, url.origin, notifyH(env)); // avvisi Telegram / notifiche
 
+  // «Il tuo accesso» (Sicurezza e account): codice, dispositivi ricordati, passkey, avvisi — solo il titolare
+  if (path === '/own-sec' || path.startsWith('/own-sec/') || path === '/passkey/options' || path === '/passkey/register' || /^\/passkey\/[A-Za-z0-9_-]{16}$/.test(path)) {
+    if (!ses || ses.agent) throw new HttpErr(403, 'Solo il titolare, dal pannello');
+    return ownSec(req, env, url, path, m, ses, who, ip, ctx);
+  }
   if (path === '/logout' && m === 'POST') {
     await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(ses.id).run();
     return json({ ok: true }, 200, { 'Set-Cookie': setCookie('', 0) });
@@ -8194,6 +8398,19 @@ async function login(req, env, ip, ctx) {
     await log(env, 'off', `Accesso fallito per "${user.slice(0, 30)}"${ok ? ' (titolare dall\'indirizzo degli agenti)' : ''}${blocked}`, ip);
     throw new HttpErr(401, 'Credenziali errate');
   }
+  // il titolare: codice di accesso sui dispositivi che il pannello non ricorda (Sicurezza e account → Il tuo accesso)
+  const trust = a.role !== 'agent' ? await trustOf(req, env, a.id) : null;
+  if (a.role !== 'agent' && a.acc_seal && !trust) {
+    const code = str(b.code, 64).trim();
+    if (!code) return json({ needCode: true }, 200);
+    const want = String(await unseal(env, a.acc_seal).catch(() => ''));
+    if (!want || !safeEq(code, want)) {
+      const blocked = await strike();
+      await log(env, 'off', `Codice di accesso errato per ${a.username}${blocked}`, ip);
+      ownTg(env, ctx, a, `⚠️ <b>Codice di accesso sbagliato</b>\nQualcuno ha scritto la password giusta del titolare <b>${tgEsc(a.username)}</b> ma il codice di accesso sbagliato, da ${tgEsc(devWhere(req))}. Se non eri tu, cambia subito la password (Sicurezza e account).`);
+      throw new HttpErr(401, 'Codice di accesso errato');
+    }
+  }
   if (a.totp_on) {
     if (!b.totp) return json({ needTotp: true }, 200);
     const rec = recIs(b.totp) ? await recUse(env, a.id, b.totp) : -1;
@@ -8215,8 +8432,11 @@ async function login(req, env, ip, ctx) {
     .bind(await sha256('ses:' + tok), a.id, now() + SESSION_TTL * 1000, ip, str(req.headers.get('User-Agent') || '', 200), now(), geoOf(req)).run();
   await log(env, 'auth', `Accesso di ${a.username}`, ip);
   if (a.role === 'agent') await agTwoAfterLogin(req, env, a, ip, ctx); // «Massimo 2 dispositivi per agente»
+  const td = a.role !== 'agent' ? await ownAfterLogin(req, env, a, ip, ctx, trust, b.remember === true, '') : ''; // «Ricorda questo dispositivo»
   ctx.waitUntil(cleanup(env));
-  return json({ ok: true, user: a.username, totp: !!a.totp_on, role: a.role === 'agent' ? 'agent' : 'owner' }, 200, { 'Set-Cookie': setCookie(tok, SESSION_TTL) });
+  const res = json({ ok: true, user: a.username, totp: !!a.totp_on, role: a.role === 'agent' ? 'agent' : 'owner' }, 200, { 'Set-Cookie': setCookie(tok, SESSION_TTL) });
+  if (td) res.headers.append('Set-Cookie', tdSet(td, TD_MS / 1000));
+  return res;
 }
 
 /** accesso di un agente con il link personale (…/panel/?k=token) + codice di accesso, senza utente e password */
@@ -8378,6 +8598,7 @@ async function cleanup(env) {
   // limite agli scaricamenti degli APK e codici sbagliati dello Store: si tengono solo le ultime ore
   try { await env.DB.batch([env.DB.prepare('DELETE FROM dl_hits WHERE h < ?').bind(Math.floor(t / 36e5) - 48), env.DB.prepare('DELETE FROM store_code_fail WHERE t < ?').bind(t - 86400e3)]); } catch {}
   try { await env.DB.prepare('DELETE FROM ses_out WHERE t < ?').bind(t - SES_OUT_KEEP).run(); } catch {} // motivi delle sessioni chiuse dalle regole degli agenti
+  try { await env.DB.batch([env.DB.prepare('DELETE FROM trusted_devices WHERE expires < ?').bind(t), env.DB.prepare('DELETE FROM pk_chal WHERE t < ?').bind(t - PK_TTL)]); } catch {} // dispositivi ricordati scaduti, sfide delle passkey
   try { await env.DB.prepare('DELETE FROM app_errors WHERE t < ?').bind(t - ERR_KEEP_MS).run(); } catch {} // errori dell'app: solo gli ultimi 7 giorni
   try { await env.DB.batch([env.DB.prepare('DELETE FROM link_pins WHERE until < ?').bind(t), env.DB.prepare('DELETE FROM throttle WHERE until < ?').bind(t)]); } catch {}
   // segnalazioni/richieste "fatte" da più di 90 giorni, presenze vecchie di 30 giorni, classifiche di oltre 60 giorni

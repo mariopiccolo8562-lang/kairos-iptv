@@ -46,7 +46,7 @@ async function apiNet(method, path, body) {
   if (st && r.ok) { if (j && j.same === true && ST_MEM.txt) j = JSON.parse(ST_MEM.txt); else { const t = r.headers.get('X-Kairos-Etag'); ST_MEM.tag = t || ''; ST_MEM.txt = t ? txt : ''; } if (ST_MEM.tag && j && typeof j === 'object') ST_TAG.set(j, ST_MEM.tag); }
   if (r.status === 503 && j.maint) { agMaintScreen(j.error); throw new Error(j.error || 'Pannello in manutenzione'); }
   if (r.status === 403 && j.mustTotp && window.KXMustTotp) KXMustTotp(j.error); // verifica in due passaggi obbligatoria (sec-agents.js)
-  if (r.status === 401 && path !== '/admin/login' && path !== '/admin/link-login') { showLogin(); if (j.why && j.error) $('#lerr').textContent = j.error; throw new Error('Sessione scaduta, accedi di nuovo'); } // why: chiusa da una regola di «Accesso degli agenti» (7 giorni, altro dispositivo, Paese)
+  if (r.status === 401 && path !== '/admin/login' && path !== '/admin/link-login' && !path.startsWith('/admin/passkey/login')) { showLogin(); if (j.why && j.error) $('#lerr').textContent = j.error; throw new Error('Sessione scaduta, accedi di nuovo'); } // why: chiusa da una regola di «Accesso degli agenti» (7 giorni, altro dispositivo, Paese)
   if (!r.ok) throw new Error(j.error || 'Errore ' + r.status);
   return j;
 }
@@ -158,9 +158,12 @@ function ask(title, body, yes = 'Conferma') { return new Promise((res) => { $('#
 $('#lform').addEventListener('submit', async (e) => {
   e.preventDefault(); $('#lerr').textContent = '';
   try {
-    const j = await api('POST', '/admin/login', { user: $('#lu').value.trim(), pass: $('#lp').value, totp: $('#lt').value.trim(), turnstile: tsToken() });
+    const lc = $('#lc'), rem = $('#lrem');
+    const j = await api('POST', '/admin/login', { user: $('#lu').value.trim(), pass: $('#lp').value, totp: $('#lt').value.trim(), code: lc ? lc.value.trim() : '', remember: !!(rem && rem.checked), turnstile: tsToken() });
+    // dispositivo nuovo: il codice di accesso del titolare (Sicurezza e account → Il tuo accesso)
+    if (j.needCode) { const w = $('#lcW'); if (w) w.hidden = false; $('#lerr').innerHTML = '<span class="mut">Dispositivo nuovo: scrivi il tuo codice di accesso</span>'; if (lc) lc.focus(); tsReset(); return; }
     if (j.needTotp) { kxTotpAsk(); return; }
-    $('#lp').value = ''; $('#lt').value = ''; await enter();
+    $('#lp').value = ''; $('#lt').value = ''; if (lc) lc.value = ''; await enter();
   } catch (err) { tsReset(); $('#lerr').textContent = D.demo ? '' : err.message; $('.lcard').animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-10px)' }, { transform: 'translateX(10px)' }, { transform: 'translateX(0)' }], { duration: 300 }); }
 });
 /* dopo la password: il codice dell'app oppure, con il link sotto il campo, un codice di recupero (telefono perso) */
@@ -182,7 +185,7 @@ function kxTotpMode(rec) {
   $('#lerr').innerHTML = '<span class="mut">' + (rec ? 'Scrivi uno dei codici di recupero (vale una volta sola)' : 'Inserisci il codice dell\'app di autenticazione') + '</span>';
 }
 let poll;
-function showLogin() { clearInterval(poll); ST_BOOT = null; const c = $('#chk'); if (c) c.remove(); $('#app').classList.remove('on'); $('#login').style.display = 'grid'; $('#lt').style.display = 'none'; if ($('#ltRec')) { kxTotpMode(false); $('#ltRec').style.display = 'none'; $('#lerr').textContent = ''; } tsReset(); }
+function showLogin() { clearInterval(poll); ST_BOOT = null; const c = $('#chk'); if (c) c.remove(); $('#app').classList.remove('on'); $('#login').style.display = 'grid'; $('#lt').style.display = 'none'; if ($('#ltRec')) { kxTotpMode(false); $('#ltRec').style.display = 'none'; $('#lerr').textContent = ''; } const cw = $('#lcW'); if (cw) { cw.hidden = true; $('#lc').value = ''; } tsReset(); }
 async function logout() { try { await api('POST', '/admin/logout'); } catch {} showLogin(); }
 $('#logout').onclick = logout;
 
@@ -1004,7 +1007,9 @@ $('#aSave').onclick = async () => { try { await api('PUT', '/admin/password', { 
   try {
     const c = await fetch('/api/public/config', { credentials: 'same-origin' });
     if (!c.ok || !(c.headers.get('content-type') || '').includes('json')) throw 0;
-    loadTurnstile((await c.json()).turnstileSiteKey);
+    const cfg = await c.json();
+    loadTurnstile(cfg.turnstileSiteKey);
+    if (cfg.pk && window.KXPk) KXPk.offer(); // «Entra con impronta o Face ID» (owner-sec.js)
   } catch { D.demo = true; $('#demoTag').style.display = 'block'; $('#lp').value = 'demo'; $('#lerr').innerHTML = '<span class="mut">Nessun server collegato: premi Accedi per esplorare la demo.</span>'; showLogin(); return; }
   // sessione ancora valida → si entra senza rifare l'accesso; un errore di rete o del server non fa uscire (si riprova)
   let why = ''; // sessione chiusa da una regola di «Accesso degli agenti»: sotto il modulo di accesso si dice perché

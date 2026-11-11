@@ -17,6 +17,13 @@
 - Cambiando la password si chiudono le altre sessioni. C'è anche il pulsante "Chiudi le altre sessioni".
 - A ogni accesso viene creato un token nuovo e quello vecchio eventualmente presente nel browser viene annullato.
 
+## Il tuo accesso (titolare, Impostazioni → Sicurezza e account)
+- **Codice di accesso**: dopo la password, solo sui dispositivi che il pannello non ricorda. Si attiva, cambia o spegne con la password attuale; è salvato cifrato. Un codice sbagliato conta come tentativo fallito.
+- **Dispositivi ricordati**: con «Ricorda questo dispositivo» il browser riceve un cookie `__Host-kxtd` (HttpOnly, non leggibile dagli script, 90 giorni); nel database c'è solo la sua impronta. Password e codice non vengono mai salvati nel browser. Si dimenticano uno per uno o tutti da Sicurezza.
+- **Impronta o Face ID (passkey)**: la chiave privata resta nel telefono o nel computer; il pannello conserva solo la chiave pubblica. Ogni accesso firma una sfida usa e getta di 5 minuti legata all'indirizzo del pannello; il contatore delle firme blocca le copie. Con la passkey non servono password, codice e 2FA.
+- **Avvisi su Telegram**: accesso da un dispositivo nuovo, codice sbagliato dopo la password giusta, passkey aggiunta.
+- **Codice dimenticato**: si cambia da un dispositivo ricordato o entrando con la passkey; altrimenti dalla console D1 di Cloudflare (`UPDATE admins SET acc_seal = '' …`).
+
 ## Accesso degli agenti (Impostazioni → Sicurezza e account)
 Regole che il titolare accende quando vuole (spente di serie). Valgono per agenti e sotto-agenti, mai per il titolare né per la sua «Entra per assistenza».
 - **Accesso di 7 giorni**: 7 giorni dopo l'accesso l'agente deve rientrare con il link e il codice (o utente e password). Senza, l'accesso resta valido 30 giorni dall'ultimo uso.
