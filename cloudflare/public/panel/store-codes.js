@@ -9,28 +9,37 @@
    Usa app.js ($, $$, esc, api, toast, D). */
 (() => {
   const css = document.createElement('style');
-  css.textContent = `#scOv{position:fixed;inset:0;z-index:39;background:rgba(5,8,16,.62);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding:8vh 16px;overflow:auto}
-#scOv .sc-box{width:min(460px,100%);background:var(--pane,#0e1424);border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 30px 80px rgba(0,0,0,.5)}
-#scOv .sc-hd{display:flex;align-items:center;gap:10px}#scOv .sc-hd h3{flex:1;margin:0;font-size:18px}
+  css.textContent = `#scOv,#scPk{position:fixed;inset:0;z-index:39;background:rgba(5,8,16,.62);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding:8vh 16px;overflow:auto}
+#scOv .sc-box,#scPk .sc-box{width:min(460px,100%);background:var(--pane,#0e1424);border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+#scOv .sc-hd,#scPk .sc-hd{display:flex;align-items:center;gap:10px}#scOv .sc-hd h3,#scPk .sc-hd h3{flex:1;margin:0;font-size:18px}
 #scOv .sc-code{font-size:44px;font-weight:800;letter-spacing:.18em;text-align:center;margin:16px 0 6px;color:#e0f7fb}
 #scOv .sc-left{text-align:center;font-size:13px;color:var(--mut);margin-bottom:12px}#scOv .sc-left b{color:#67e8f9}
-#scOv p{font-size:13.5px;line-height:1.5;margin:0 0 10px;color:var(--mut)}#scOv p b{color:var(--txt)}
-#scOv .sc-btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px}
+#scOv p,#scPk p{font-size:13.5px;line-height:1.5;margin:0 0 10px;color:var(--mut)}#scOv p b,#scPk p b{color:var(--txt)}
+#scOv .sc-btns,#scPk .sc-btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px}
 #scOv .sc-mine{margin-top:14px;border-top:1px solid var(--line);padding-top:10px;font-size:12.5px}
 #scOv .sc-mine div{display:flex;justify-content:space-between;gap:10px;padding:3px 0;color:var(--mut)}#scOv .sc-mine b{color:var(--txt)}
 .sc-warn{padding:9px 12px;border-radius:12px;border:1px solid rgba(245,158,11,.45);background:rgba(245,158,11,.1);color:#fcd34d;font-size:13px;margin:6px 0 4px}
 #scCard .sc-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 4px}#scCard .sc-row .inp{width:auto;margin:0}
+#scCard .sc-who{margin:8px 0 12px}#scCard .sc-who b{font-weight:600;font-size:13.5px;flex:1;min-width:180px}#scCard .sc-who .lbl{white-space:nowrap}
+#scPk .sc-pk-all{display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid var(--line);cursor:pointer}#scPk .sc-pk-all small{margin-left:auto;color:var(--mut);font-size:12.5px}
+#scPk .sc-pk-list{max-height:min(46vh,420px);overflow:auto;margin:4px 0 2px}
+#scPk .sc-pk-it{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;cursor:pointer}#scPk .sc-pk-it:hover{background:rgba(255,255,255,.04)}
+#scPk .sc-pk-it span{min-width:0}#scPk .sc-pk-it b{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#scPk .sc-pk-it small{display:block;color:var(--mut);font-size:12px}#scPk .sc-pk-it small.w{color:#fcd34d}
+#scPk input[type=checkbox]{width:18px;height:18px;flex:none;accent-color:#22d3ee}#scPk #scPkQ{margin:0 0 6px}
 #scCard .tog{margin-top:6px}#scCard td small{display:block;color:var(--mut)}
 .sc-st{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:1px 8px}
 .sc-st.valid{background:rgba(34,211,238,.14);color:#67e8f9}.sc-st.open{background:rgba(34,197,94,.15);color:#86efac}.sc-st.used{background:rgba(148,163,184,.15);color:#cbd5e1}.sc-st.expired{background:rgba(239,68,68,.12);color:#fca5a5}
 .dlbar .dl.sc-pill b{font-family:inherit;font-size:13px;font-weight:600;letter-spacing:0}.dlbar .dl.sc-pill i{font-size:16px}#scBtn{white-space:nowrap}
 /* menu4.js: in Clienti la riga mostra solo il codice dello Store; la voce dei codici usa e getta resta con lui */
 #dlBar.dl-st-only>#scPill{display:flex!important}#dlBar.dl-st-only:has(>#scPill){display:flex!important}
+/* telefono: la riga dei codici scorre di lato e questa voce sarebbe la terza, fuori dallo schermo: qui viene per prima */
+@media (max-width:700px){#dlBar>#scPill{order:-1}}
 .so-open.sc-lock{border-color:rgba(34,211,238,.45);background:rgba(34,211,238,.08)}.so-open.sc-lock b{color:#67e8f9}.so-open.sc-lock .dot{background:#22d3ee;box-shadow:0 0 12px #22d3ee}`;
   document.head.appendChild(css);
 
   const isAg = () => typeof D === 'object' && D && D.role === 'agent';
-  const can = () => typeof D === 'object' && D && !window.__assist && (!isAg() || !!(((D.me || {}).perms || {}).stcodes));
+  // in assistenza il titolare vede quello che vede l'agente: il pulsante c'è se l'agente ha il permesso (il codice risulta suo)
+  const can = () => typeof D === 'object' && D && (!isAg() || !!(((D.me || {}).perms || {}).stcodes));
   const isOn = () => !!(typeof D === 'object' && D && D.storeCodesOn);
   const ttlTxt = (m) => (m >= 1440 ? '24 ore' : m >= 120 ? '2 ore' : `${m} minuti`);
   const hm = (t) => new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
@@ -132,6 +141,79 @@
 
   /* ---------------- Riepilogo store (solo titolare) ---------------- */
   const V = document.getElementById('v-store');
+  /* ---------------- «Chi può generarli»: gli agenti con il permesso «Codici per lo Store», scelti da qui ---------------- */
+  const ags = () => (typeof D === 'object' && D && Array.isArray(D.agents) ? D.agents : []);
+  const agName = (a) => a.username || 'Agente ' + a.id;
+  const hasSc = (a) => !!((a.perms || {}).stcodes);
+  // un sotto-agente lo usa solo se ce l'ha anche chi lo gestisce (come nel server); «need» = il primo sopra di lui che non ce l'ha
+  const needOf = (a, by, has) => { for (let x = by.get(a.parentId), n = 0; x && n < 20; x = by.get(x.parentId), n++) if (!has(x)) return x; return null; };
+  function whoTxt() {
+    const L = ags(), by = new Map(L.map((a) => [a.id, a]));
+    if (!L.length) return 'Solo tu (non hai agenti)';
+    const yes = L.filter((a) => hasSc(a) && !needOf(a, by, hasSc)), names = yes.map(agName);
+    if (!yes.length) return `Solo tu: nessun agente su ${L.length}`;
+    return `Tu e ${yes.length === 1 ? '1 agente' : yes.length + ' agenti'} su ${L.length}: ${names.slice(0, 5).join(', ')}${names.length > 5 ? ` +${names.length - 5}` : ''}`;
+  }
+  let PK = null; // { sel: Set di id, by }
+  function pkClose() { const ov = document.getElementById('scPk'); if (ov) ov.remove(); PK = null; document.removeEventListener('keydown', pkKey, true); }
+  const pkKey = (e) => { if (e.key === 'Escape' && PK) { e.preventDefault(); e.stopPropagation(); pkClose(); } };
+  function pkPaint() {
+    const ov = document.getElementById('scPk'); if (!ov || !PK) return;
+    const q = ((ov.querySelector('#scPkQ') || {}).value || '').trim().toLowerCase(), has = (a) => PK.sel.has(a.id);
+    let shown = 0, on = 0;
+    ov.querySelectorAll('.sc-pk-it').forEach((row) => {
+      const a = PK.by.get(+row.dataset.id), hide = !!q && !row.dataset.n.includes(q);
+      row.hidden = hide; row.style.display = hide ? 'none' : '';
+      const c = row.querySelector('input'); c.checked = has(a);
+      if (!hide) { shown++; if (c.checked) on++; }
+      const up = PK.by.get(a.parentId), need = c.checked ? needOf(a, PK.by, has) : null, sm = row.querySelector('small');
+      sm.textContent = need ? `Vale quando lo dai anche a ${agName(need)}` : up ? `Sotto ${agName(up)}` : '';
+      sm.className = need ? 'w' : ''; sm.style.display = sm.textContent ? '' : 'none';
+    });
+    const all = ov.querySelector('#scPkAll'); all.checked = shown > 0 && on === shown; all.indeterminate = on > 0 && on < shown;
+    ov.querySelector('#scPkN').textContent = `${PK.sel.size} su ${PK.by.size}`;
+  }
+  function pick() {
+    const L = ags(); if (!L.length || PK) return;
+    const by = new Map(L.map((a) => [a.id, a])), cmp = (a, b) => agName(a).localeCompare(agName(b), 'it');
+    // ogni agente seguito dai suoi sotto-agenti
+    const flat = [], walk = (pid, lvl) => L.filter((a) => (a.parentId || 0) === pid).sort(cmp).forEach((a) => { flat.push([a, lvl]); if (lvl < 20) walk(a.id, lvl + 1); });
+    walk(0, 0); L.forEach((a) => { if (!flat.some((x) => x[0] === a)) flat.push([a, 0]); });
+    PK = { sel: new Set(L.filter(hasSc).map((a) => a.id)), by };
+    const ov = document.createElement('div'); ov.id = 'scPk';
+    ov.innerHTML = `<div class="sc-box" role="dialog" aria-modal="true" aria-labelledby="scPkT"><div class="sc-hd"><h3 id="scPkT">🔑 Chi può generare i codici</h3><button type="button" class="btn sm" data-pkx title="Chiudi">✕</button></div>
+      <p style="margin-top:10px">Gli agenti spuntati trovano <b>«🔑 Codice usa e getta · Genera»</b> nel loro pannello. Tu li generi sempre.</p>
+      ${flat.length > 8 ? '<input class="inp" id="scPkQ" placeholder="Cerca agente" autocomplete="off" aria-label="Cerca agente">' : ''}
+      <label class="sc-pk-all"><input type="checkbox" id="scPkAll"><b>Tutti gli agenti</b><small id="scPkN"></small></label>
+      <div class="sc-pk-list">${flat.map(([a, lvl]) => `<label class="sc-pk-it" data-id="${a.id}" data-n="${esc(agName(a).toLowerCase())}" style="padding-left:${10 + Math.min(lvl, 3) * 20}px"><input type="checkbox"><span><b>${esc(agName(a))}</b><small></small></span></label>`).join('')}</div>
+      <div class="sc-btns"><button type="button" class="btn" data-pkx>Annulla</button><button type="button" class="btn pri" id="scPkSave">Salva</button></div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click', (e) => { if (e.target === ov || e.target.closest('[data-pkx]')) pkClose(); });
+    ov.querySelectorAll('.sc-pk-it input').forEach((c) => (c.onchange = () => { const id = +c.closest('.sc-pk-it').dataset.id; if (c.checked) PK.sel.add(id); else PK.sel.delete(id); pkPaint(); }));
+    ov.querySelector('#scPkAll').onchange = (e) => { ov.querySelectorAll('.sc-pk-it').forEach((row) => { if (row.hidden) return; const id = +row.dataset.id; if (e.target.checked) PK.sel.add(id); else PK.sel.delete(id); }); pkPaint(); };
+    const q = ov.querySelector('#scPkQ'); if (q) q.oninput = pkPaint;
+    ov.querySelector('#scPkSave').onclick = pkSave;
+    document.addEventListener('keydown', pkKey, true);
+    pkPaint();
+  }
+  async function pkSave() {
+    if (!PK) return;
+    const L = ags(), sel = PK.sel, add = L.filter((a) => sel.has(a.id) && !hasSc(a)).map((a) => a.id), del = L.filter((a) => !sel.has(a.id) && hasSc(a)).map((a) => a.id);
+    if (!add.length && !del.length) return pkClose();
+    const btn = document.getElementById('scPkSave'); btn.disabled = true;
+    try {
+      let skipped = 0;
+      if (D.demo) L.forEach((a) => { a.perms = { ...(a.perms || {}), stcodes: sel.has(a.id) }; });
+      else {
+        for (const [ids, v] of [[add, true], [del, false]]) for (let i = 0; i < ids.length; i += 200) { const r = await api('POST', '/admin/agents/bulk', { ids: ids.slice(i, i + 200), flags: { stcodes: v } }); skipped += ((r && r.skipped) || []).length; }
+        try { const r = await api('GET', '/admin/agents'); D.agents = r.agents || []; } catch {}
+      }
+      pkClose(); render();
+      const n = ags().filter(hasSc).length;
+      toast(skipped ? `Salvato, ma ${skipped} ${skipped === 1 ? 'agente non è stato cambiato' : 'agenti non sono stati cambiati'}` : n ? `Codici per lo Store: oltre a te ${n === 1 ? 'li genera 1 agente' : 'li generano ' + n + ' agenti'}` : 'Codici per lo Store: ora li generi solo tu', skipped ? 1 : 0);
+    } catch (e) { btn.disabled = false; toast(e.message || 'Errore', 1); }
+  }
+
   const S = { d: null, busy: false, t: 0 };
   function card() {
     if (!V || document.getElementById('scCard')) return;
@@ -140,10 +222,12 @@
     el.innerHTML = `<div class="hd"><h3>🔑 Codici per lo Store<small>Per scaricare dallo Store serve un codice di 6 cifre che dai tu o un agente</small></h3><button class="btn sm pri" id="scGen" type="button">Genera codice</button></div>
       <div class="tog" id="scOn"><div><b>Download solo con codice</b><small>Spento: lo Store resta aperto come adesso. Acceso: chi preme Installa scrive il codice; vale su quel dispositivo per tutte le app, per la durata scelta qui sotto.</small></div><i></i></div>
       <div class="sc-row"><label class="lbl" for="scTtl" style="margin:0">Il codice vale</label><select class="inp" id="scTtl"><option value="30">30 minuti</option><option value="120">2 ore</option><option value="1440">24 ore</option></select><small class="mut">per scriverlo nello Store e, dopo, per scaricare su quel dispositivo</small></div>
+      <div class="sc-row sc-who"><span class="lbl" style="margin:0">Chi può generarli</span><b id="scWho">Tu</b><button class="btn sm" type="button" id="scPick">Scegli agenti</button></div>
       <div class="tbl-wrap"><table class="tbl" style="width:100%"><thead><tr><th>Codice</th><th>Generato da</th><th>Creato</th><th>Stato</th><th>Dispositivo</th><th>App scaricate</th></tr></thead><tbody id="scList"><tr><td colspan="6" class="mut">Caricamento…</td></tr></tbody></table></div>
-      <small class="mut" style="display:block;margin-top:8px">Gli agenti generano i codici solo con il permesso «Codici per lo Store» (Agenti → scheda dell'agente). Il codice protegge lo Store, non i file: gli APK restano raggiungibili dai link diretti, che servono agli aggiornamenti delle app.</small>`;
+      <small class="mut" style="display:block;margin-top:8px">Gli agenti generano i codici solo con il permesso «Codici per lo Store»: lo dai qui sopra con «Scegli agenti», oppure da Agenti → scheda dell'agente. Il codice protegge lo Store, non i file: gli APK restano raggiungibili dai link diretti, che servono agli aggiornamenti delle app.</small>`;
     first.after(el);
     el.querySelector('#scGen').onclick = gen;
+    el.querySelector('#scPick').onclick = pick;
     el.querySelector('#scOn').onclick = async () => {
       const on = !(S.d && S.d.on);
       try { const r = await setApi({ on }); const c = (r.settings && r.settings.codes) || { on, ttl: S.d ? S.d.ttl : 30 }; if (S.d) { S.d.on = c.on; S.d.ttl = c.ttl; } D.storeCodesOn = c.on; render(); pill(); toast(c.on ? `Download solo con codice: acceso (vale ${ttlTxt(c.ttl)})` : 'Download liberi: lo Store è aperto come prima'); }
@@ -169,6 +253,8 @@
     const el = document.getElementById('scCard'); if (!el) return;
     el.querySelector('#scOn').classList.toggle('on', !!d.on);
     const sel = el.querySelector('#scTtl'); if (document.activeElement !== sel) sel.value = String(d.ttl || 30);
+    const who = whoTxt(); if (el.querySelector('#scWho').textContent !== who) el.querySelector('#scWho').textContent = who;
+    el.querySelector('#scPick').hidden = !ags().length;
     const L = d.codes || [];
     el.querySelector('#scList').innerHTML = L.length ? L.map((r) => `<tr><td>${r.code ? `<b class="mono">${esc(fmt(r.code))}</b>` : '<span class="mono mut">••• •••</span>'}</td><td>${esc(r.mine ? 'Tu' : r.by || '—')}</td><td>${esc(when(r.created))}</td><td><span class="sc-st ${esc(r.st)}">${esc(stName[r.st] || r.st)}</span><small>${esc(stSub(r))}</small></td><td>${r.device || r.country ? `${esc(r.device || 'Dispositivo')}<small>${esc(r.country || '')}</small>` : '<span class="mut">—</span>'}</td><td>${r.apps && r.apps.length ? esc(r.apps.join(', ')) : '<span class="mut">—</span>'}</td></tr>`).join('')
       : '<tr><td colspan="6" class="mut">Nessun codice negli ultimi 30 giorni</td></tr>';
@@ -187,5 +273,5 @@
     setInterval(() => { if (V.classList.contains('on') && !document.hidden) refresh(); }, 30000);
   }
 
-  window.KXStoreCodes = { gen, close, refresh };
+  window.KXStoreCodes = { gen, close, refresh, pick };
 })();

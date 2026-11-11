@@ -6738,7 +6738,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   // «Codici per lo Store» (11 novembre 2026): codice usa e getta per scaricare dallo Store, solo con il permesso (spento di serie)
   if (path === '/store/codes' && (m === 'GET' || m === 'POST')) {
     need('stcodes', 'Non puoi generare codici per lo Store: chiedi al titolare il permesso «Codici per lo Store»');
-    return storeCodes(req, env, m, { id: A.id, name: A.username }, ip);
+    return storeCodes(req, env, m, { id: A.id, name: A.username, log: ses.assist ? who : '' }, ip); // in assistenza il codice è dell'agente, ma nel registro si legge chi l'ha generato
   }
   if (path === '/store' && m === 'GET') return json({ open: true, agent: true, requests: [], pending: 0, devices: [], stores: [], settings: { approval: false, activation: false, open: true }, mail: {} });
   if (path === '/store' || path.startsWith('/store/')) throw new HttpErr(410, 'Lo store è aperto: non ci sono più richieste da approvare');

@@ -11,11 +11,11 @@ body{overscroll-behavior-y:none}
 #kcTab{display:none}
 @media (max-width:900px){
   #app.on{grid-template-columns:1fr!important}
-  aside{position:fixed!important;inset:0 auto 0 0;width:min(300px,86vw)!important;z-index:45!important;transform:translateX(-102%);transition:transform .28s ease;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-top:calc(18px + env(safe-area-inset-top))!important;padding-bottom:calc(24px + env(safe-area-inset-bottom))!important;background:#0e1015!important}
+  aside{position:fixed!important;inset:0 auto 0 0;width:min(300px,86vw)!important;z-index:45!important;transform:translateX(-102%);transition:transform .28s ease;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-top:calc(18px + var(--kx-sat,env(safe-area-inset-top)))!important;padding-bottom:calc(24px + env(safe-area-inset-bottom))!important;background:#0e1015!important}
   aside.open{transform:none;box-shadow:20px 0 60px rgba(0,0,0,.6)}
   .menu-b{display:inline-grid!important}
   main{min-width:0;padding:0 14px calc(28px + env(safe-area-inset-bottom))!important}
-  .topbar{position:sticky;top:0;z-index:20;flex-wrap:wrap;gap:8px;margin:0 -14px 14px;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;background:rgba(11,12,16,.9);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+  .topbar{position:sticky;top:0;z-index:20;flex-wrap:wrap;gap:8px;margin:0 -14px 14px;padding:calc(10px + var(--kx-sat,env(safe-area-inset-top))) 14px 10px;background:rgba(11,12,16,.9);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
   .topbar .sp{display:none}
   #vTitle{order:1;flex:1;min-width:0;font-size:19px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .menu-b{order:0}
@@ -60,7 +60,7 @@ body{overscroll-behavior-y:none}
   #drawer.full,#agPage,#mtPage{left:0!important}
   #drawer .df{flex-wrap:wrap;gap:8px;padding-bottom:calc(12px + env(safe-area-inset-bottom))!important}
   #drawer .df .btn{flex:1 1 auto;justify-content:center}
-  #drawer .dh,#agPage .ah,#mtPage .ah{padding-top:calc(14px + env(safe-area-inset-top))!important}
+  #drawer .dh,#agPage .ah,#mtPage .ah{padding-top:calc(14px + var(--kx-sat,env(safe-area-inset-top)))!important}
   #agPage .af,#mtPage .af{flex-wrap:wrap;padding-bottom:calc(12px + env(safe-area-inset-bottom))!important}
   .op-f,.op-f.mx{grid-template-columns:1fr 1fr!important}
   .op-f .btn{justify-content:center}

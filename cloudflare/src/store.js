@@ -491,7 +491,7 @@ export async function storeCodes(req, env, m, by, ip) {
       if (!code) throw new StoreErr(503, 'Codice non generato, riprova');
       await env.DB.prepare('INSERT INTO store_codes (code, created, expires, ttl, by_id, by_name) VALUES (?, ?, ?, ?, ?, ?)').bind(code, t, t + ttl, ttl, by.id, str(by.name, 60)).run();
       await env.DB.prepare('DELETE FROM store_codes WHERE created < ? AND until < ?').bind(t - KEEP, t).run().catch(() => {});
-      await log(env, 'edit', `${by.name || 'Titolare'}: Store — codice per scaricare generato (vale ${ttlTxt(S.codes.ttl)})`, ip);
+      await log(env, 'edit', `${by.log || by.name || 'Titolare'}: Store — codice per scaricare generato (vale ${ttlTxt(S.codes.ttl)})`, ip);
       return json({ code, created: t, expires: t + ttl, ttl: S.codes.ttl, on: S.codes.on });
     }
     if (m !== 'GET') throw new StoreErr(405, 'Metodo non consentito');

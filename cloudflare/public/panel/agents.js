@@ -1988,11 +1988,39 @@ body.agent .foot{display:none}
   }
   /* «Entra per assistenza»: il titolare opera nel pannello di un suo agente. Un banner fisso lo ricorda e permette di uscire.
      Tutte le richieste portano l'header X-Assist (vedi api() in app.js); le azioni restano registrate come assistenza. */
+  // pagine e finestre a tutto schermo: in assistenza iniziano sotto la barra (altrimenti titolo e ✕ ci finiscono sotto)
+  const ASSIST_UNDER = ['#agPage', '#mtPage', '#drawer', '#modal', '#scOv', '#adOv', '#adPv', '#apOv', '#aoOv', '#insM', '.kc-det', '#lcOv', '#massM', '#qaOv', '#rcM', '.kxpay-veil'];
+  const ASSIST_CSS = `
+#assistBar{position:fixed;top:0;left:0;right:0;z-index:99999;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:calc(9px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 9px max(16px,env(safe-area-inset-left));background:linear-gradient(90deg,#b45309,#d97706);color:#fff;font-size:13.5px;font-weight:600;line-height:1.3;box-shadow:0 2px 12px #0007}
+#assistBar .ab-i{flex:none}
+#assistBar .ab-t{flex:1;min-width:0}
+#assistBar .ab-n{display:none}
+#assistBar #assistOut{flex:none;white-space:nowrap;background:#fff;color:#92400e;font-weight:700}
+/* la pagina e le schede a tutta altezza (cliente, agente, manutenzione, menu del telefono) partono sotto la barra, alta quanto serve
+   (--kxa, misurata); la zona dell'orologio dell'iPhone la occupa la barra, quindi sotto non si lascia una seconda volta (--kx-sat) */
+html.kx-assist{--kx-sat:0px}
+html.kx-assist body{padding-top:var(--kxa,50px)!important}
+${ASSIST_UNDER.map((x) => 'html.kx-assist ' + x).join(',')}{top:var(--kxa,50px)!important}
+@media (min-width:701px) and (max-width:1180px){html.kx-assist #side{height:calc(100vh - var(--kxa,50px))!important}}
+@media (max-width:700px){
+  html.kx-assist aside{top:var(--kxa,50px)!important}
+  #assistBar{gap:8px;padding:calc(5px + env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) 6px max(12px,env(safe-area-inset-left));font-size:13px;line-height:1.25}
+  #assistBar .ab-w{display:none}#assistBar .ab-n{display:inline}
+  #assistBar .ab-a,#assistBar .ab-s{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #assistBar .ab-s{font-size:11px;font-weight:500;opacity:.92}#assistBar .ab-s::first-letter{text-transform:uppercase}
+  #assistBar #assistOut{padding:6px 12px}
+}`;
   function assistBanner(name) {
+    const root = document.documentElement;
+    if (!document.getElementById('assistCss')) { const st = document.createElement('style'); st.id = 'assistCss'; st.textContent = ASSIST_CSS; document.head.appendChild(st); }
     let b = document.getElementById('assistBar');
-    if (!b) { b = document.createElement('div'); b.id = 'assistBar'; b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(90deg,#b45309,#d97706);color:#fff;display:flex;align-items:center;gap:12px;padding:9px 16px;font-size:13.5px;font-weight:600;box-shadow:0 2px 12px #0007'; document.body.appendChild(b); }
-    b.innerHTML = `🛟 Stai assistendo l'agente <b>${esc(name)}</b> — ogni modifica agisce sul <b>suo</b> pannello<span style="flex:1"></span><button class="btn sm" id="assistOut" style="background:#fff;color:#92400e;font-weight:700">Esci dall'assistenza</button>`;
-    document.body.style.paddingTop = '42px';
+    if (!b) { b = document.createElement('div'); b.id = 'assistBar'; b.setAttribute('role', 'status'); document.body.appendChild(b); }
+    // computer: una riga come sempre; telefono (.ab-n al posto di .ab-w): «Assistenza: nome», sotto l'avviso, e «Esci» sempre in vista
+    b.innerHTML = `<span class="ab-i" aria-hidden="true">🛟</span><span class="ab-t"><span class="ab-a"><span class="ab-w">Stai assistendo l'agente </span><span class="ab-n">Assistenza: </span><b>${esc(name)}</b></span><span class="ab-s"><span class="ab-w"> — </span>ogni modifica agisce sul <b>suo</b> pannello</span></span><button class="btn sm" type="button" id="assistOut" aria-label="Esci dall'assistenza"><span class="ab-w">Esci dall'assistenza</span><span class="ab-n">Esci</span></button>`;
+    root.classList.add('kx-assist');
+    const fit = () => { const h = b.offsetHeight; if (h) root.style.setProperty('--kxa', h + 'px'); };
+    fit();
+    if (!b.dataset.fit) { b.dataset.fit = '1'; if (window.ResizeObserver) new ResizeObserver(fit).observe(b); addEventListener('resize', fit); addEventListener('orientationchange', fit); }
     document.getElementById('assistOut').onclick = () => KXAssist.exit();
   }
   const KXAssist = (window.KXAssist = {
@@ -2008,7 +2036,7 @@ body.agent .foot{display:none}
   window.logout = logout = function () { if (window.__assist) return KXAssist.exit(); return origLogout.apply(this, arguments); };
   if ($('#logout')) $('#logout').onclick = logout;
   const origShowLogin = showLogin;
-  window.showLogin = showLogin = function () { if (window.__assist) { window.__assist = null; try { sessionStorage.removeItem('kxAssist'); } catch {} const b = document.getElementById('assistBar'); if (b) b.remove(); document.body.style.paddingTop = ''; } return origShowLogin.apply(this, arguments); };
+  window.showLogin = showLogin = function () { if (window.__assist) { window.__assist = null; try { sessionStorage.removeItem('kxAssist'); } catch {} const b = document.getElementById('assistBar'); if (b) b.remove(); document.documentElement.classList.remove('kx-assist'); document.documentElement.style.removeProperty('--kxa'); } return origShowLogin.apply(this, arguments); };
 
   layoutMenu();
   if ($('#app').classList.contains('on')) renderAll();
