@@ -98,7 +98,9 @@
   }
   const ADULT_WORDS = ['adult', 'xxx', '18+', '+18', 'porn', 'erotic', 'hentai', 'playboy', 'brazzers', 'hustler', 'onlyfans', 'red light', 'x-rated', 'vm18', 'sexy', 'milf'];
   const READER_DEFAULTS = { 'o.engLive': 'auto', 'o.engMovie': 'auto', 'o.engSeries': 'auto', 'o.hw': 'auto', 'o.adaptQ': true, 'o.drainQ': true, 'p.quality': 'auto', 'p.buffer': 'balanced' };
-  const isReader = (c) => c && c[2] === 'sel' && c[0] !== 'qbox';
+  // «Chi decide» (decide il cliente / sceglie tra… / decido io) solo per le voci che il cliente può davvero scegliere nell'app.
+  // Il DNS cifrato (sdns) non è una scelta del cliente: resta il menu semplice «Non imposto (spento) / Acceso / Spento»
+  const isReader = (c) => c && c[2] === 'sel' && c[0] !== 'qbox' && c[0] !== 'sdns';
   const hasRcKey = (rc, key) => Object.prototype.hasOwnProperty.call(rc || {}, key);
   const policyOf = (c, rc = {}) => {
     const key = c[0], encoded = typeof rc[key] === 'string' && rc[key].startsWith('allow:') ? rc[key].slice(6).split(',') : null;

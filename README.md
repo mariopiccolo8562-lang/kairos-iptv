@@ -1122,7 +1122,8 @@ Quando la linea raggiunge quella data si torna a seguire la linea. Clienti illim
 - **A prova di guasto**: dopo 6 domande di fila senza risposta l'interfaccia si chiude e torna il DNS normale, con un nuovo tentativo dopo 10 minuti. Con la VPN del fornitore accesa resta spento (il DNS passa già nel tunnel); se sul dispositivo c'è un'altra VPN non la tocca. Android chiede il permesso una volta, con la finestra della VPN.
 - L'app mostra lo stato nelle Impostazioni («DNS cifrato · scelto dal tuo fornitore») e lo manda nel battito (`sdns`: `on`, `asking`, `denied`, `error`, `other`, `off`, `vpn`).
 - **Pro, Plus e Nova** hanno un'interfaccia propria: lì `DnsShield.kt` è la versione autonoma (`start`, `stop`, `state`) e quando accenderlo lo decide l'interfaccia (in Kairos Pro `dnsApply()` in `player/index.html`, solo senza la VPN del fornitore; in Plus e Nova la parte Flutter).
-- **Test**: `srv_sdns` (34), `ui_sdns` (9); nelle app `DnsWireTest` (lettura della domanda, costruzione della risposta, somma di controllo).
+- **Nel pannello è un menu semplice** («Non imposto (spento)», «Acceso», «Spento»): non ha il selettore «Chi decide» delle voci che il cliente può scegliere nell'app (`isReader` in `remote-panel.js` esclude `sdns`), perché non è una scelta del cliente.
+- **Test**: `srv_sdns` (34), `ui_sdns` (10); nelle app `DnsWireTest` (lettura della domanda, costruzione della risposta, somma di controllo).
 
 ## 67. Kairos Portal e Kairos Smart: indirizzi di scarico (11 novembre 2026)
 
