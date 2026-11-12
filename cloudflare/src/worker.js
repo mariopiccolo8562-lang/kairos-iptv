@@ -2732,7 +2732,7 @@ const sportsOf = (s) => (s.showFootball === false ? [] : Array.isArray(s.sports)
 const EV_FETCH_MAX = 40;   // richieste a ESPN per giro (il piano gratuito ne permette 50 in tutto)
 const EV_MAX = 30;         // eventi nella risposta v2
 const EV_MIN = 2;          // posti garantiti a ogni sport presente
-const EV_CAP = { f1: 5, motogp: 4, tennis: 6, basket: 4, nfl: 4, ufc: 2, rugby: 5 }; // al massimo per sport (il calcio riempie il resto)
+const EV_CAP = { f1: 5, motogp: 4, tennis: 4, basket: 4, nfl: 4, ufc: 2, rugby: 5 }; // al massimo per sport (il calcio riempie il resto; tennis ridotto da 6 a 4 per non coprire il calcio)
 
 /* lettura difensiva: un campo mancante o di tipo sbagliato fa scartare l'evento, mai un'eccezione */
 const evArr = (x) => (Array.isArray(x) ? x : []);
@@ -3037,7 +3037,11 @@ function evPick(list) {
   }
   const pick = new Set();
   for (const a of by.values()) a.slice(0, EV_MIN).forEach((e) => pick.add(e));
-  for (const e of [...by.values()].flat().sort(evOrd)) { if (pick.size >= EV_MAX) break; pick.add(e); }
+  // riempimento dei posti rimasti con priorità al calcio (12 novembre 2026): prima gli eventi in diretta di ogni sport,
+  // poi il calcio (per orario), poi gli altri sport. Così il calcio e gli sport grossi non restano fuori per i tornei minori
+  const fill = [...by.values()].flat().sort((x, y) =>
+    (+!!y.live - +!!x.live) || (+(y.sport === 'calcio') - +(x.sport === 'calcio')) || evOrd(x, y));
+  for (const e of fill) { if (pick.size >= EV_MAX) break; pick.add(e); }
   return [...pick].sort(evOrd);
 }
 const evSide = (s) => { const o = { name: s.name, logo: s.logo || '' }; for (const k of ['score', 'sets', 'seed', 'it']) if (s[k] !== undefined) o[k] = s[k]; return o; };
