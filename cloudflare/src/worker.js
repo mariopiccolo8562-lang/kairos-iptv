@@ -3326,7 +3326,7 @@ function playerInput(v) {
    Ogni campo assente resta com'è; lettore: '' = lo sceglie il cliente nell'app. Il lettore vale anche per le connessioni
    collegate «indipendenti» (hanno il loro); permessi, VPN e visioni stanno sul cliente principale. L'app si riallinea al battito. */
 const MASS_MAX = 5000;
-const MASS_RC = ['lite', 'posters', 'intro', 'mergeVar']; // voci del Controllo remoto cambiabili in massa
+const MASS_RC = ['lite', 'posters', 'intro', 'mergeVar', 'u.dnsRot']; // voci del Controllo remoto cambiabili in massa
 function massInput(b) {
   if (!b || typeof b !== 'object') throw new HttpErr(400, 'Richiesta non valida');
   const o = {};
@@ -3451,13 +3451,15 @@ async function dnsSave(env, list) {
    (prima i DNS Orbix, così gli indici già salvati sui dispositivi non cambiano). */
 const hostKey = (h) => String(h || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
 const portalModeForApp = (mode, app) => app && app !== 'ult' && mode === 'rot' ? 'auto' : mode;
-async function portalsOf(env, pls, app = '') {
+async function portalsOf(env, pls, app = '', rot = '') {
   const saved = await dnsList(env), byHost = new Map(saved.map((x) => [hostKey(x.host), x]));
   const byId = new Map(saved.map((x) => [x.id, x]));
   return pls.map((p) => {
     const main = byHost.get(hostKey(hostOf(p)));
     const alts = main ? main.alts.map((id) => byId.get(id)).filter((x) => x && x.id !== main.id) : [];
-    return alts.length ? { ...p, alts: alts.map((x) => x.host), altNames: alts.map((x) => x.name), mainName: main.name, mode: portalModeForApp(main.mode, app) } : p;
+    if (!alts.length) return p;
+    const mode = rot === 'on' && app === 'ult' ? 'rot' : rot === 'off' && main.mode === 'rot' ? 'auto' : main.mode;
+    return { ...p, alts: alts.map((x) => x.host), altNames: alts.map((x) => x.name), mainName: main.name, mode: portalModeForApp(mode, app) };
   });
 }
 async function dnsSatOf(env) {
@@ -4530,6 +4532,7 @@ const RC_CAT = [
   ['u.trailer', 'Trailer', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.tmdb', 'Metadati TMDB', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.speedBar', 'Velocità in alto', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
+  ['u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.sport', 'Sport', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.sports', 'Sport da mostrare', 'txt', [], ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.sportHome', 'Sport in Home', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
@@ -5988,7 +5991,7 @@ async function playerRegister(req, env, ip, ctx) {
   const { C, pls } = status === 'active' ? await effOf(env, d, P, Ppls) : { C: P, pls: [] };
   if (status === 'active' && maintFor(s, P)) status = 'maintenance';
   const eff = rcEffective(s, d, regApp || appOfVer('', d.app), true);
-  const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? await portalsOf(env, pls, d.app) : [], messages: await msgP, rc: eff.rc, rcv: eff.rcv };
+  const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? await portalsOf(env, pls, d.app, rcDevOf(d)['u.dnsRot']) : [], messages: await msgP, rc: eff.rc, rcv: eff.rcv };
   if (status === 'active') {
     [out.account, out.vpn, out.af] = await Promise.all([accountOf(env, P, d, pls, C), vpnOf(env, P, d), acctFp(P)]);
     out.perms = permsOf(P); // i collegati ereditano i permessi del principale
@@ -9077,4 +9080,4 @@ async function cleanup(env) {
 }
 
 // esportati per i test
-export const _internal = { hashPass, checkPass, hotp, checkTotp, b32enc, seal, unseal, cleanTitle, cleanProfiles, semverCode, textToHtml, cleanWg, permsParse, permsJson, hostOf, cleanHost, swapHost, dayIT, PERM_KEYS, appFrom, appOfVer, playerReach, playerMeta, metaTmdb, ultFeed, ULT_APK, rcClean, rcSent, portalModeForApp, RC_CAT, RC_CMDS };
+export const _internal = { hashPass, checkPass, hotp, checkTotp, b32enc, seal, unseal, cleanTitle, cleanProfiles, semverCode, textToHtml, cleanWg, permsParse, permsJson, hostOf, cleanHost, swapHost, dayIT, PERM_KEYS, appFrom, appOfVer, playerReach, playerMeta, metaTmdb, ultFeed, ULT_APK, rcClean, rcSent, portalModeForApp, portalsOf, RC_CAT, RC_CMDS };
