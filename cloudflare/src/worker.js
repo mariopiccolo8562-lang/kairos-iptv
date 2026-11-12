@@ -3450,7 +3450,8 @@ async function dnsSave(env, list) {
    Così nella scheda del cliente si sceglie tra TUTTI i propri DNS, non uno solo. Dedup per host, l'ordine resta stabile
    (prima i DNS Orbix, così gli indici già salvati sui dispositivi non cambiano). */
 const hostKey = (h) => String(h || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
-const portalModeForApp = (mode, app) => app && app !== 'ult' && mode === 'rot' ? 'auto' : mode;
+const ROT_APPS = ['ult', 'xc'];
+const portalModeForApp = (mode, app) => mode === 'rot' && !ROT_APPS.includes(app) ? 'auto' : mode;
 async function portalsOf(env, pls, app = '', rot = '') {
   const saved = await dnsList(env), byHost = new Map(saved.map((x) => [hostKey(x.host), x]));
   const byId = new Map(saved.map((x) => [x.id, x]));
@@ -3458,7 +3459,7 @@ async function portalsOf(env, pls, app = '', rot = '') {
     const main = byHost.get(hostKey(hostOf(p)));
     const alts = main ? main.alts.map((id) => byId.get(id)).filter((x) => x && x.id !== main.id) : [];
     if (!alts.length) return p;
-    const mode = rot === 'on' && app === 'ult' ? 'rot' : rot === 'off' && main.mode === 'rot' ? 'auto' : main.mode;
+    const mode = rot === 'on' && ROT_APPS.includes(app) ? 'rot' : rot === 'off' && main.mode === 'rot' ? 'auto' : main.mode;
     return { ...p, alts: alts.map((x) => x.host), altNames: alts.map((x) => x.name), mainName: main.name, mode: portalModeForApp(mode, app) };
   });
 }
@@ -4532,7 +4533,7 @@ const RC_CAT = [
   ['u.trailer', 'Trailer', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.tmdb', 'Metadati TMDB', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.speedBar', 'Velocità in alto', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
-  ['u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult'], '', '', 'KAIROS Ultimate'],
+  ['u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult', 'xc'], '', '', 'KAIROS Ultimate · Kairos XC'],
   ['u.sport', 'Sport', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.sports', 'Sport da mostrare', 'txt', [], ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.sportHome', 'Sport in Home', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
@@ -4562,7 +4563,7 @@ const RC_CMDS = [
   ['exit', 'Chiudi l\'app', 'L\'app si chiude; il cliente la riapre quando vuole', RC_LINKED],
 ];
 // Portal e Smart condividono il motore di Kairos XC: ricevono ogni voce che vale per 'xc' (preview, lettore, qualità, DNS cifrato…)
-for (const c of RC_CAT) if (c[4].includes('xc') && !c[4].includes('portal')) c[4].push('portal', 'smart');
+for (const c of RC_CAT) if (c[0] !== 'u.dnsRot' && c[4].includes('xc') && !c[4].includes('portal')) c[4].push('portal', 'smart');
 // catalogo per chiave: più voci con la stessa chiave (es. «theme» per Kairos Pro e per Portal/Smart), si sceglie quella dell'app
 const rcCatAll = new Map();
 for (const c of RC_CAT) { const a = rcCatAll.get(c[0]); if (a) a.push(c); else rcCatAll.set(c[0], [c]); }
