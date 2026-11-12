@@ -120,7 +120,7 @@
     return hits.size === 1 ? [...hits][0] : '';
   }
   /* app Kairos (come nel server): nascosta nello Store = via anche dal pannello degli agenti */
-  const KKEY = { pro: 1, tv: 1, ktv: 1, premium: 1, prem: 1, lite: 1, xc: 1, ult: 1, ultimate: 1, plus: 1, nova: 1, 'nova-arm32': 1, store: 1 };
+  const KKEY = { pro: 1, tv: 1, ktv: 1, premium: 1, prem: 1, lite: 1, xc: 1, ult: 1, ultimate: 1, 'ult-arm32': 1, 'ult-arm64': 1, plus: 1, nova: 1, 'nova-arm32': 1, store: 1 };
   const isKairos = (a) => { const m = /\/get\/([a-z0-9-]+)\.apk(?:[?#]|$)/i.exec(String(a.url || '')), n = norm(a.name); return !!((m && KKEY[m[1].toLowerCase()]) || (n.startsWith('kairos') && KKEY[n.slice(6)])); };
   const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
   const EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1M6.5 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.5 4.5-1.2"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';

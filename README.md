@@ -1279,3 +1279,13 @@ Prove: `srv_trailer_lang` 21, `ui_trailer_lang` 7.
 - App: Kairos Pro 2.7.8, XC 3.4.12, TV 2.5.1, Lite 1.6.1, STB e Smarters 0.5.7. Premium, Plus e Nova non hanno lo scudo nella barra.
 
 Prove: `srv_vpn_state` (stato per ogni modo e per ogni app).
+
+## 78. KAIROS Ultimate: APK leggeri per ABI e anteprima del trailer (13 novembre 2026)
+
+- **APK per ABI.** Dalla 1.0.1 ogni release di KAIROS Ultimate ha tre file: quello unico (`kairos-ultimate.apk`, circa 45 MB) e due leggeri, `kairos-ultimate-arm32.apk` e `kairos-ultimate-arm64.apk` (circa 24 MB: senza le librerie di VLC dell'altra ABI).
+- `/get/ult.apk?abi=arm64-v8a` o `?abi=armeabi-v7a` dà l'APK leggero **solo se l'ultima release ce l'ha**; senza `abi`, con un valore diverso, senza token GitHub o con una release senza quei file arriva l'APK unico (`apkForAbi`). Gli indirizzi diretti `/get/ult-arm32.apk` e `/get/ult-arm64.apk` esistono ma non li usa nessuno.
+- Lo chiedono l'app (aggiornamenti, dalla 1.0.1) e la pagina dello Store dentro l'app Store, che conoscono l'ABI del dispositivo. Browser, pannello degli agenti e «Copia link APK» restano sull'APK unico.
+- Vale per ogni app che in `GET_APK` ha le voci `<id>-arm32` / `<id>-arm64`; per le altre `abi` si ignora.
+- **Controllo remoto**, gruppo «KAIROS Ultimate»: voce `u.heroTrailer` «Anteprima del trailer nella Home» (Automatica / Spenta). L'anteprima parte solo sui dispositivi potenti (2 GB o più, Android 9+).
+
+Prove: `srv_get_abi` (scelta dell'APK), `store_page_abi` (link dello Store).

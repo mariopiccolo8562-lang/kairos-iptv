@@ -1848,6 +1848,9 @@ const GET_APK = {
   plus: ['kairos-flutter/releases/latest/download/kairos-plus.apk', 'kairos-plus.apk'],
   xc: ['kairos-xc/releases/latest/download/kairos-xc.apk', 'kairos-xc.apk'],
   ult: ['kairos-ultimate/releases/latest/download/kairos-ultimate.apk', 'kairos-ultimate.apk'],
+  // KAIROS Ultimate dalla 1.0.1: APK leggeri per ABI (circa metà del peso), dati a chi chiede /get/ult.apk?abi=… (apkForAbi)
+  'ult-arm32': ['kairos-ultimate/releases/latest/download/kairos-ultimate-arm32.apk', 'kairos-ultimate-arm32.apk'],
+  'ult-arm64': ['kairos-ultimate/releases/latest/download/kairos-ultimate-arm64.apk', 'kairos-ultimate-arm64.apk'],
   lite: ['kairos-lite/releases/latest/download/kairos-lite.apk', 'kairos-lite.apk'],
   nova: ['Lairos-nova/releases/download/latest/KairosNova-arm64.apk', 'kairos-nova.apk'],
   'nova-arm32': ['Lairos-nova/releases/download/latest/KairosNova-arm32.apk', 'kairos-nova-arm32.apk'],
@@ -2220,7 +2223,7 @@ async function storeDoc(env, rel) {
    - le app Kairos nascoste spariscono anche dal pannello degli agenti (link e codice Downloader). Il titolare vede tutto.
    Gli indirizzi /get/<app>.apk e i file di aggiornamento NON cambiano: le app già installate continuano ad aggiornarsi.
    Elenco non letto (GitHub non risponde): vale l'ultimo letto, altrimenti niente di nascosto per gli agenti. */
-const SA_KKEY = { pro: 'pro', tv: 'tv', ktv: 'tv', premium: 'prem', prem: 'prem', lite: 'lite', xc: 'xc', ult: 'ult', ultimate: 'ult', plus: 'plus', nova: 'nova', 'nova-arm32': 'nova', store: 'store' };
+const SA_KKEY = { pro: 'pro', tv: 'tv', ktv: 'tv', premium: 'prem', prem: 'prem', lite: 'lite', xc: 'xc', ult: 'ult', ultimate: 'ult', 'ult-arm32': 'ult', 'ult-arm64': 'ult', plus: 'plus', nova: 'nova', 'nova-arm32': 'nova', store: 'store' };
 /** chiave dell'app Kairos (come in kAllow) di una voce dello Store: dal link /get/<app>.apk, altrimenti dal nome «Kairos …» */
 function storeAppKey(a) {
   if (!a || typeof a !== 'object') return '';
@@ -2287,6 +2290,23 @@ async function apkFlood(env, req) {
     return !!(r && +r.n > APK_PER_HOUR);
   } catch { return false; }
 }
+/** APK per ABI (13 novembre 2026): /get/<id>.apk?abi=arm64-v8a | armeabi-v7a dà l'APK leggero di quella ABI
+ *  (GET_APK['<id>-arm64'] o ['<id>-arm32']) solo se l'ULTIMA release ce l'ha; in ogni altro caso quello di sempre.
+ *  Lo chiedono l'app (aggiornamenti) e lo Store, che conoscono l'ABI del dispositivo: non devono sapere quali file ci sono.
+ *  Serve il token (risposta certa, anche dai repository privati): senza, sempre l'APK di sempre. */
+const ABI_APK = { 'arm64-v8a': '-arm64', 'armeabi-v7a': '-arm32' };
+async function apkForAbi(env, id, abi) {
+  const k = hasKey(ABI_APK, abi) ? id + ABI_APK[abi] : '';
+  if (!k || !hasKey(GET_APK, k) || !ghTok(env)) return GET_APK[id];
+  const p = ghRelOf(GET_APK[k][0]);
+  if (!p) return GET_APK[id];
+  try {
+    const rel = await ghApi(env, `/repos/${GH_OWNER}/${p.repo}/releases/${p.tag ? 'tags/' + encodeURIComponent(p.tag) : 'latest'}`, relSlim);
+    const a = relFile(rel, p.file);
+    if (a && a.id && a.size > 0) return GET_APK[k];
+  } catch {}
+  return GET_APK[id];
+}
 async function cleanLinks(req, env, url, path) {
   const mj = path.match(/^\/get\/([a-z0-9-]{1,24})\.json$/);
   if (mj && req.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS', 'Access-Control-Max-Age': '86400' } });
@@ -2308,7 +2328,7 @@ async function cleanLinks(req, env, url, path) {
     if (!hasKey(GET_APK, m[1])) return new Response('Non trovato', { status: 404 });
     // limite agli scaricamenti in massa (11 novembre 2026): conta solo l'inizio di un download, non i pezzi «Range» né HEAD
     if (req.method === 'GET' && apkStart(req) && await apkFlood(env, req)) return new Response('Troppi download da questa connessione: riprova tra qualche minuto', { status: 429, headers: { 'Retry-After': '300', 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
-    return dlApk(req, env, GET_APK[m[1]]);
+    return dlApk(req, env, await apkForAbi(env, m[1], url.searchParams.get('abi') || ''));
   }
   if (path.startsWith('/get/')) return new Response('Non trovato', { status: 404 });
   if (path === '/store') return Response.redirect(url.origin + '/store/' + url.search, 302);
@@ -4551,6 +4571,7 @@ const RC_CAT = [
   ['u.follow', 'Squadre seguite', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.saver', 'Salvaschermo', 'sel', [['off', 'Spento'], ['5', '5 minuti'], ['10', '10 minuti'], ['20', '20 minuti']], ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.top10', 'Righe Top 10', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
+  ['u.heroTrailer', 'Anteprima del trailer nella Home', 'sel', [['auto', 'Automatica (solo dispositivi potenti)'], ['off', 'Spenta']], ['ult'], 'Dopo qualche secondo fermi su un titolo in evidenza il trailer parte senza audio. Solo con 2 GB o più e Android 9+: sugli altri dispositivi non parte mai. Dalla versione 1.0.1', '', 'KAIROS Ultimate'],
   ['u.rows', 'Righe Home nascoste', 'txt', [], ['ult'], '', '', 'KAIROS Ultimate'],
   /* ---- Rete ---- */
   // DNS cifrato (DNS su HTTPS): voce «sdns» on | off, vuota = spento; non è una scelta del cliente (niente «:allow»).
