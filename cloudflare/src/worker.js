@@ -3450,7 +3450,7 @@ async function dnsSave(env, list) {
    Così nella scheda del cliente si sceglie tra TUTTI i propri DNS, non uno solo. Dedup per host, l'ordine resta stabile
    (prima i DNS Orbix, così gli indici già salvati sui dispositivi non cambiano). */
 const hostKey = (h) => String(h || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
-const ROT_APPS = ['ult', 'xc', 'ktv', 'prem', 'lite'];
+const ROT_APPS = ['ult', 'xc', 'ktv', 'prem', 'lite', 'plus', 'nova'];
 const PRO_ROT_VERSION = '2.7.8';
 const portalRotAllowed = (app, ver = '') => ROT_APPS.includes(app) || (app === 'tv' && semverCode(ver) >= semverCode(PRO_ROT_VERSION));
 const portalModeForApp = (mode, app, ver = '') => mode === 'rot' && !portalRotAllowed(app, ver) ? 'auto' : mode;
@@ -4535,7 +4535,7 @@ const RC_CAT = [
   ['u.trailer', 'Trailer', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.tmdb', 'Metadati TMDB', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.speedBar', 'Velocità in alto', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
-  ['u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult', 'xc', 'tv', 'ktv', 'prem', 'lite'], '', '', 'App Kairos aggiornate (Ultimate, XC, Pro, TV, Premium, Lite)'],
+  ['u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult', 'xc', 'tv', 'ktv', 'prem', 'lite', 'plus', 'nova'], '', '', 'App Kairos aggiornate (Ultimate, XC, Pro, TV, Premium, Lite, Plus, Nova)'],
   ['u.sport', 'Sport', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.sports', 'Sport da mostrare', 'txt', [], ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.sportHome', 'Sport in Home', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
