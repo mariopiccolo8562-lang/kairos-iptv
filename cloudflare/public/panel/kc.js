@@ -321,6 +321,14 @@
 .dvt-dev{max-width:170px}.dvt-dev b{overflow:hidden;text-overflow:ellipsis}
 .dvt-dev small.dvt-on{color:#22c55e;font-weight:700}
 .dvt-pl{white-space:nowrap;max-width:170px;overflow:hidden;text-overflow:ellipsis}
+.dvt-now{min-width:190px;max-width:300px}
+.dvt-now b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dvt-now b.idle{font-weight:500;color:var(--mut)}
+.dvt-now small{display:block;font-size:11px;color:var(--mut);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dvt-now .dn-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.dn-t{display:inline-block;padding:1px 6px;border-radius:999px;font-size:10.5px;font-weight:700;line-height:1.5;background:rgba(148,163,184,.14);color:#cbd5e1;white-space:nowrap}
+.dn-t.ok{background:rgba(34,197,94,.16);color:#86efac}.dn-t.no{background:transparent;border:1px dashed rgba(148,163,184,.45);color:var(--mut);padding:0 6px}
+.dn-t.vpn{background:rgba(96,165,250,.16);color:#bfdbfe}.dn-t.warn{background:rgba(245,176,65,.16);color:#f2c46c}.dn-t.bad{background:rgba(248,113,113,.16);color:#fecaca}
 .dvt-note{max-width:200px;color:#d7d9ef;cursor:text;white-space:nowrap}
 .dvt-note span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;max-width:170px;vertical-align:middle}
 .dvt-note svg{width:12px;height:12px;opacity:.45;vertical-align:middle}
@@ -347,7 +355,8 @@
 @media (max-width:760px){.adrow{grid-template-columns:1fr 1fr}.adrow .cnt{text-align:left}}
 .adsw{display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:6px;vertical-align:-2px}
 .tog.fixed{opacity:.6;cursor:default}
-@media (max-width:900px){.dvt th:nth-child(6),.dvt td:nth-child(6),.dvt th:nth-child(7),.dvt td:nth-child(7),.dvt th:nth-child(8),.dvt td:nth-child(8){display:none}}
+@media (max-width:900px){.dvt th.dvh-dev,.dvt td.dvt-dev,.dvt th.dvh-now,.dvt td.dvt-now,.dvt th.dvh-pl,.dvt td.dvt-pl,.dvt th.dvh-note,.dvt td.dvt-note{display:none}}
+@media (max-width:1500px){.dvt-now{min-width:150px;max-width:220px}}
 .kc-dns-table{margin-top:16px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .kc-dns-row{display:grid;grid-template-columns:minmax(80px,.75fr) minmax(115px,1.1fr) 45px minmax(85px,.85fr) minmax(100px,.9fr) minmax(115px,.95fr) minmax(226px,1.9fr);gap:8px;align-items:center;padding:11px 10px;border-top:1px solid var(--line);font-size:13px}
 .kc-dns-row:first-child{border-top:0}.kc-dns-row.head{background:rgba(255,255,255,.04);font-size:11px;font-weight:800;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
@@ -1126,7 +1135,29 @@
     // collegato adesso (dai battiti dell'app): pallino giallo nell'app, verde in diretta, viola film/serie
     const LIVE_L = { live: 'guarda la TV in diretta', movie: 'guarda un film', series: 'guarda una serie', rec: 'sta registrando', idle: 'nell\'app' };
     const liveDot = (d) => (d.live ? `<span class="kc-dot ${d.live === 'idle' ? 'idle' : d.live === 'live' || d.live === 'rec' ? 'live' : 'movie'}" title="Collegato adesso: ${LIVE_L[d.live] || ''}"></span>` : '');
-    const seenTxt = (d) => (d.live ? 'collegato adesso · ' + (LIVE_L[d.live] || '') : 'visto ' + ago(d.lastSeen));
+    const seenTxt = (d) => (d.live ? 'collegato adesso · ' + (LIVE_L[d.live] || '') + (d.now && d.now.t ? ': ' + d.now.t : '') : 'visto ' + ago(d.lastSeen));
+    /* «Adesso» nell'elenco (12 novembre 2026, solo titolare): cosa guarda, IP e città, DNS cifrato sì o no, VPN, rete, versione.
+       I dati sono quelli del battito dell'app (come «Online nelle app»); chi non è collegato non ha niente da mostrare */
+    const nowOn = () => D.role === 'owner' && !window.__assist;
+    const NOW_K = { live: '📺', movie: '🎬', series: '🎞️', rec: '⏺' };
+    const NET_L = { wifi: 'Wi-Fi', eth: 'Cavo', mobile: 'Rete mobile' };
+    const SDNS_L = { on: ['ok', '🔒 DNS cifrato', 'DNS cifrato attivo'], vpn: ['vpn', '🔒 DNS nella VPN', 'DNS cifrato: protetto dalla VPN'], asking: ['warn', 'DNS: in attesa', 'DNS cifrato acceso dal pannello: il cliente non ha ancora dato il permesso'],
+      denied: ['warn', 'DNS: permesso negato', 'DNS cifrato acceso dal pannello: il cliente ha negato il permesso'], other: ['warn', 'DNS: altra VPN', 'DNS cifrato acceso dal pannello: sul dispositivo c\'è un\'altra VPN attiva'], error: ['bad', 'DNS: errore', 'DNS cifrato acceso dal pannello ma non partito'] };
+    function nowCell(d) {
+      const n = d.now;
+      if (!d.live || !n) return '<span class="mut">—</span>';
+      const what = n.k === 'idle' || !n.t ? '<b class="idle">nei menu</b>' : `<b title="${esc((LIVE_L[n.k] || '') + ': ' + n.t + (n.p ? ' · ' + n.p : ''))}">${NOW_K[n.k] || '▶'} ${esc(n.t)}</b>`;
+      const where = [n.ip, [n.city, n.cc].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
+      const sd = SDNS_L[n.sdns] || ['no', 'DNS non cifrato', n.sdns === 'off' ? 'DNS cifrato spento sul dispositivo' : 'DNS cifrato non attivo (non acceso dal pannello, oppure app non aggiornata)'];
+      const tags = [`<span class="dn-t ${sd[0]}" title="${esc(sd[2])}">${sd[1]}</span>`];
+      if (n.vpn === 'on') tags.push('<span class="dn-t vpn" title="VPN accesa">🛡 VPN</span>');
+      if (n.away) tags.push('<span class="dn-t warn" title="Collegato da un paese diverso dal solito">⚠ altro paese</span>');
+      if (n.line === 'weak') tags.push('<span class="dn-t warn" title="L\'app vede la linea del cliente debole">linea debole</span>');
+      if (NET_L[n.net]) tags.push(`<span class="dn-t">${NET_L[n.net]}</span>`);
+      if (n.res) tags.push(`<span class="dn-t">${esc(n.res)}</span>`);
+      if (n.ver) tags.push(`<span class="dn-t" title="Versione dell'app">v${esc(String(n.ver).replace(/^[a-z]+\s+/i, ''))}</span>`);
+      return `${what}${where ? `<small title="Indirizzo IP e posizione approssimata">${esc(where)}</small>` : ''}<div class="dn-tags">${tags.join('')}</div>`;
+    }
     function card(d) {
       const kids = kidsOf(d.id), dl = daysLeft(d), tot = 365;
       const pct = dl === null ? 100 : Math.max(0, Math.min(100, (dl / tot) * 100));
@@ -1212,6 +1243,7 @@
         <td class="dvt-exp">${exp}${window.KXPay ? KXPay.badge('device', '', base.id) : ''}</td>
         <td class="c mono">${sub || d.status === 'pending' ? '—' : `${1 + kids.length}/${+d.maxConn >= 999 ? '∞' : esc(d.maxConn || 1)}`}</td>
         <td class="dvt-dev"><b>${esc(d.model || '—')}</b><small${d.live ? ' class="dvt-on"' : ''}>${esc(d.live ? 'collegato adesso' : ago(d.lastSeen))}</small></td>
+        ${nowOn() ? `<td class="dvt-now">${nowCell(d)}</td>` : ''}
         <td class="dvt-pl">${pls}</td>
         <td class="dvt-note" data-note="${esc(d.id)}">${d.notes ? `<span>${esc(d.notes.slice(0, 60))}</span>` : `<span class="mut">Aggiungi nota</span>`} ${IC.note}</td>
         <td class="dvt-acts">${acts}</td></tr>`;
@@ -1220,7 +1252,7 @@
       const rows = [];
       for (const d of [...pend, ...list.slice(0, st.limit)]) { rows.push(trow(d, false)); for (const k of kidsOf(d.id)) rows.push(trow(k, true)); }
       const pbar = pend.length && pendOwner() ? `<div class="dvp-bar"><span>🆕 <b>${pend.length}</b> ${pend.length === 1 ? 'richiesta' : 'richieste'} da attivare in cima all'elenco</span>${pendTools(pend)}</div>` : '';
-      $('#dvTbl').innerHTML = pbar + (rows.length ? `<div class="card glass dvt-wrap"><table class="dvt"><thead><tr><th class="c"><input type="checkbox" id="dvtAll" title="Seleziona tutti quelli mostrati"></th><th>Cliente</th><th>Stato</th><th>Scadenza</th><th class="c">Conn.</th><th>Dispositivo</th><th>Playlist</th><th>Note</th><th>Azioni</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`
+      $('#dvTbl').innerHTML = pbar + (rows.length ? `<div class="card glass dvt-wrap"><table class="dvt"><thead><tr><th class="c"><input type="checkbox" id="dvtAll" title="Seleziona tutti quelli mostrati"></th><th>Cliente</th><th>Stato</th><th>Scadenza</th><th class="c">Conn.</th><th class="dvh-dev">Dispositivo</th>${nowOn() ? '<th class="dvh-now" title="Chi è collegato adesso: cosa guarda, da dove, DNS cifrato, rete e versione">Adesso</th>' : ''}<th class="dvh-pl">Playlist</th><th class="dvh-note">Note</th><th>Azioni</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`
         : `<div class="emptyc" style="display:block">${q ? 'Nessun cliente trovato per «' + esc(q) + '»' : 'Nessun cliente in questo elenco'}</div>`);
       const all = $('#dvtAll'); if (all) { const ids = [...pend, ...list.slice(0, st.limit)].map((d) => d.id); all.checked = ids.length > 0 && ids.every((i) => st.sel.has(i)); all.onchange = () => { ids.forEach((i) => (all.checked ? st.sel.add(i) : st.sel.delete(i))); renderDevices(); }; }
       bulkBar();

@@ -1166,3 +1166,32 @@ Quando la linea raggiunge quella data si torna a seguire la linea. Clienti illim
   Premium, Lite, XC, Plus e Nova. Il logo dentro le app non cambia.
 - Non toccati: KAIROS Ultimate (lavoro di Devin), l'app Kairos Store (il suo marchio è anche nell'animazione di apertura),
   Kairos Portal e Kairos Smart (già in questo stile; si allineano alla prossima versione).
+
+## 70. Eventi futuri: nazionali, due settimane avanti, «Prossimi giorni» (12 novembre 2026)
+
+- **Perché**: nelle soste dei campionati il calcio spariva dagli eventi (app e pannello). I campionati seguiti erano solo di club
+  e la finestra era di 8 giorni: durante la sosta di novembre non c'era niente, mentre giocava la Nazionale.
+- **Nazionali** (`LEAGUES` in `worker.js`): Nations League (`uefa.nations`), Qualificazioni Europei (`uefa.euroq`) e
+  Amichevoli (`fifa.friendly`, **solo quelle dell'Italia**). Nomi delle nazionali in italiano (`NAT_IT`).
+- **Più avanti**: Serie A a 14 giorni (`LEAGUE_DAYS`), NFL e UFC a 7, NBA a 3. Le risposte arrivano fino a due settimane
+  (`EV_AHEAD`): `/api/player/events` (app) e `/api/admin/events` («Eventi ora», prima 36 ore).
+- **Costo**: stesso limite di 40 richieste a ESPN per giro; le righe di cache in più sono circa 40. Mai intervalli di date.
+- **Pannello → Eventi ora**: «Più tardi» resta per le prossime 36 ore; sotto **«📅 Prossimi giorni»** in ordine di data, i primi
+  30 e poi «Mostra tutti». «Di solito su» per la Nazionale italiana: Rai 1; per le altre nazionali non si indovina.
+- **App**: la forma delle risposte non cambia (v1 e v2). Portal e Smart leggevano l'orario come numero mentre arriva come
+  testo: corretto nel ramo `aspetto-0.5` di kairos-portal-smart.
+- **Test**: `srv_events_future` (16), `ui_events_future` (9); restano verdi `srv_events` (18) e `ui_events` (27).
+
+## 71. «Adesso» nell'elenco Clienti: cosa guardano, IP, DNS cifrato (12 novembre 2026)
+
+- **Dove**: Clienti → vista Tabella, colonna **«Adesso»** dopo «Dispositivo». Solo il titolare (non in assistenza, non gli agenti).
+- **Cosa mostra**, per chi è collegato adesso: canale, film o serie (al passaggio del mouse anche il programma), oppure «nei
+  menu»; IP con città e paese; **DNS cifrato** (verde «🔒 DNS cifrato», «DNS non cifrato», oppure in attesa, permesso negato,
+  altra VPN, errore); VPN accesa; «altro paese»; linea debole; rete (Wi-Fi, cavo), risoluzione e versione dell'app.
+  Chi non è collegato ha un trattino: niente dati vecchi. Nelle schede il «collegato adesso» dice anche cosa guarda.
+- **DNS cifrato**: l'app lo dichiarava già nel battito (`sdns`) ma il server non lo salvava. Ora colonna `presence.sdns`
+  (migrazione `0054_presence_sdns.sql`); un cambio di stato si scrive subito.
+- **Dati**: `presenceNow` legge solo le righe dei collegati (ultimi 4 minuti), una lettura per aggiornamento del pannello;
+  `withNow` li mette in `device.now`. Agli agenti non arriva niente di nuovo (né IP né «adesso»).
+- Sotto i 900 px la colonna si nasconde insieme a Dispositivo, Playlist e Note.
+- **Test**: `srv_now` (14), `ui_now` (15).

@@ -137,21 +137,26 @@
     const L = E.list || [], by = {}; for (const e of L) by[e.sport] = (by[e.sport] || 0) + 1;
     const vis = E.view = L.filter((e) => !E.sport || e.sport === E.sport);
     const live = vis.filter((e) => e.live), next = vis.filter((e) => !e.live && e.state !== 'post'), post = vis.filter((e) => e.state === 'post' && !e.live);
+    // eventi futuri (12 novembre 2026): «Più tardi» = entro 36 ore; «Prossimi giorni» = fino a due settimane, i primi 30 e poi «Mostra tutti»
+    const soonMs = Date.now() + 36 * 3600e3, soon = next.filter((e) => Date.parse(e.start) < soonMs), later = next.filter((e) => !(Date.parse(e.start) < soonMs)).sort((x, y) => Date.parse(x.start) - Date.parse(y.start));
+    const laterVis = E.more ? later : later.slice(0, 30);
+    const moreBtn = later.length > laterVis.length ? `<p style="margin:8px 0 0"><button type="button" class="btn sm" data-evmore="1">Mostra tutti i ${later.length}</button></p>` : '';
     const idx = (e) => vis.indexOf(e);
     const sec = (t, a) => (a.length ? `<h4 class="ev-h">${t} · ${a.length}</h4>${a.map((e) => card(e, idx(e))).join('')}` : '');
     const scrollY = window.scrollY;
     V.innerHTML = `<div class="card glass"><div class="hd"><h3>⚽ ${TITLE}<small>Le stesse partite e gare della app Pro, con risultato e minuto in diretta. «Di solito su»: le emittenti italiane; «Sulla tua lista»: i canali della tua lista con quel nome (🔍 Guida TV controlla cosa va in onda)</small></h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><label class="ev-sub" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="evStripOn"${stripOn() ? ' checked' : ''}> Striscia in alto</label><button type="button" class="btn sm" id="evRe">↻ Aggiorna</button></div></div>
       <div class="ev-tabs">${[['', 'Tutti', '🏟️'], ...SP].filter(([k]) => !k || by[k]).map(([k, n, ic]) => `<button type="button" data-evs="${k}" class="${E.sport === k ? 'on' : ''}">${ic} ${n}<em>${k ? by[k] : L.length}</em></button>`).join('')}</div>
-      ${E.list === null ? '<p class="ev-empty">Carico gli eventi…</p>' : !vis.length ? `<p class="ev-empty">${E.err ? 'Eventi non disponibili adesso: ' + esc(E.err) : 'Nessun evento in diretta o nelle prossime ore.'}</p>` : sec('🔴 In diretta', live) + sec('Più tardi', next) + sec('Finiti da poco', post)}
+      ${E.list === null ? '<p class="ev-empty">Carico gli eventi…</p>' : !vis.length ? `<p class="ev-empty">${E.err ? 'Eventi non disponibili adesso: ' + esc(E.err) : 'Nessun evento in diretta o nei prossimi giorni.'}</p>` : sec('🔴 In diretta', live) + sec('Più tardi', soon) + (later.length ? `<h4 class="ev-h">📅 Prossimi giorni · ${later.length}</h4>${laterVis.map((e) => card(e, idx(e))).join('')}${moreBtn}` : '') + sec('Finiti da poco', post)}
       <p class="ev-sub" style="margin-top:10px">Aggiornati alle ${E.t ? esc(hm(E.t)) : '—'} · si aggiornano da soli ogni minuto.</p></div>`;
     window.scrollTo(0, scrollY);
   }
   document.addEventListener('click', (e) => {
     const V = $('#v-events'); if (!V || !V.contains(e.target)) return;
-    const t = e.target.closest('[data-evs],[data-evg],#evRe'); if (!t) return;
+    const t = e.target.closest('[data-evs],[data-evg],[data-evmore],#evRe'); if (!t) return;
+    if (t.dataset.evmore) { E.more = true; return paintPage(); }
     if (t.id === 'evRe') return load(true);
-    if (t.dataset.evs !== undefined) { E.sport = t.dataset.evs; E.open.clear(); return paintPage(); }
+    if (t.dataset.evs !== undefined) { E.sport = t.dataset.evs; E.more = false; E.open.clear(); return paintPage(); }
     if (t.dataset.evg !== undefined) { const i = +t.dataset.evg; E.open.add(i); const e2 = (E.view || [])[i]; if (e2) for (const c of chansFor(e2)) delete E.epg[c.id]; epgFor(i); }
   });
   document.addEventListener('change', (e) => { if (e.target && e.target.id === 'evStripOn') { setStrip(e.target.checked); paintStrip(); } });

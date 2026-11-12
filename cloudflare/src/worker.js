@@ -2689,7 +2689,12 @@ const publicSettings = (s) => ({ brand: s.brand, tagline: s.tagline, accent: s.a
 const LEAGUES = [
   ['ita.1', 'Serie A'], ['uefa.champions', 'Champions League'], ['uefa.europa', 'Europa League'], ['uefa.europa.conf', 'Conference League'],
   ['ita.coppa_italia', 'Coppa Italia'], ['eng.1', 'Premier League'], ['esp.1', 'LaLiga'], ['ger.1', 'Bundesliga'], ['fra.1', 'Ligue 1'],
+  // nazionali (12 novembre 2026): nelle soste dei campionati il calcio spariva dagli eventi. Le amichevoli solo dell'Italia
+  ['uefa.nations', 'Nations League', { nat: 1 }], ['uefa.euroq', 'Qualificazioni Europei', { nat: 1 }], ['fifa.friendly', 'Amichevole', { nat: 1, only: 'Italia' }],
 ];
+/* giorni in avanti per campionato: la Serie A due settimane (dopo una sosta si vede già la giornata successiva), gli altri 8 */
+const LEAGUE_DAYS = { 'ita.1': 14 };
+const EV_AHEAD = 14 * 86400e3; // fin dove arrivano gli eventi futuri nelle risposte (app e «Eventi ora»)
 const ymd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
 /* Fonti: «site API» pubblica di ESPN, senza chiavi: https://site.api.espn.com/apis/site/v2/sports/<percorso>/scoreboard
    tipo  'team'   due squadre (calcio, basket, NFL, rugby)
@@ -2704,13 +2709,13 @@ const ymd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
    siti ufficiali (non documentate, senza garanzie per chi le usa da fuori); per volley italiano e ciclismo nessuna fonte
    pubblica gratuita senza chiavi: andrebbero lette le pagine dei siti, cosa che qui non si fa. */
 const EV_SRC = [
-  ...LEAGUES.map(([code, label]) => ({ sport: 'calcio', key: code, path: 'soccer/' + code, label, kind: 'team', days: 8 })),
+  ...LEAGUES.map(([code, label, x]) => ({ sport: 'calcio', key: code, path: 'soccer/' + code, label, kind: 'team', days: LEAGUE_DAYS[code] || 8, ...(x || {}) })),
   { sport: 'f1', key: 'racing/f1', label: 'Formula 1', kind: 'race', days: 0 },
   { sport: 'tennis', key: 'tennis/atp', label: 'ATP', kind: 'tennis', days: 2 },
   { sport: 'tennis', key: 'tennis/wta', label: 'WTA', kind: 'tennis', days: 2 },
-  { sport: 'basket', key: 'basketball/nba', label: 'NBA', kind: 'team', days: 2 },
-  { sport: 'nfl', key: 'football/nfl', label: 'NFL', kind: 'team', days: 3 },
-  { sport: 'ufc', key: 'mma/ufc', label: 'UFC', kind: 'mma', days: 3 },
+  { sport: 'basket', key: 'basketball/nba', label: 'NBA', kind: 'team', days: 3 },
+  { sport: 'nfl', key: 'football/nfl', label: 'NFL', kind: 'team', days: 7 },
+  { sport: 'ufc', key: 'mma/ufc', label: 'UFC', kind: 'mma', days: 7 },
   { sport: 'rugby', key: 'rugby/180659', label: 'Sei Nazioni', kind: 'team', days: 3 },
   { sport: 'rugby', key: 'rugby/17567', label: 'Nations Championship', kind: 'team', days: 3 },
   { sport: 'rugby', key: 'rugby/270557', label: 'URC', kind: 'team', days: 3 },
@@ -2752,6 +2757,14 @@ function evClock(sport, st) {
 /* nazionali di rugby: ESPN le dà in inglese, nella guida TV italiana sono in italiano */
 const RUGBY_IT = { Italy: 'Italia', England: 'Inghilterra', France: 'Francia', Ireland: 'Irlanda', Scotland: 'Scozia', Wales: 'Galles', 'South Africa': 'Sudafrica', 'New Zealand': 'Nuova Zelanda', Japan: 'Giappone', Fiji: 'Figi', Chile: 'Cile', Portugal: 'Portogallo', Spain: 'Spagna', 'United States': 'Stati Uniti', USA: 'Stati Uniti', Netherlands: 'Paesi Bassi', Germany: 'Germania', Belgium: 'Belgio', Russia: 'Russia', Uruguay: 'Uruguay', Georgia: 'Georgia', Romania: 'Romania', Samoa: 'Samoa', Tonga: 'Tonga', Namibia: 'Namibia', Canada: 'Canada', Argentina: 'Argentina', Australia: 'Australia' };
 
+/* nazionali di calcio: ESPN le dà in inglese */
+const NAT_IT = { Italy: 'Italia', France: 'Francia', Germany: 'Germania', Spain: 'Spagna', England: 'Inghilterra', Portugal: 'Portogallo', Netherlands: 'Olanda', Belgium: 'Belgio', Croatia: 'Croazia',
+  Switzerland: 'Svizzera', Denmark: 'Danimarca', Sweden: 'Svezia', Norway: 'Norvegia', Finland: 'Finlandia', Iceland: 'Islanda', Poland: 'Polonia', Czechia: 'Rep. Ceca', 'Czech Republic': 'Rep. Ceca',
+  Slovakia: 'Slovacchia', Hungary: 'Ungheria', Greece: 'Grecia', 'Türkiye': 'Turchia', Turkey: 'Turchia', Cyprus: 'Cipro', Israel: 'Israele', Ukraine: 'Ucraina', Azerbaijan: 'Azerbaigian',
+  Kazakhstan: 'Kazakistan', Belarus: 'Bielorussia', Lithuania: 'Lituania', Latvia: 'Lettonia', Moldova: 'Moldavia', Scotland: 'Scozia', Wales: 'Galles', 'Northern Ireland': 'Irlanda del Nord',
+  'Republic of Ireland': 'Irlanda', Ireland: 'Irlanda', Luxembourg: 'Lussemburgo', 'North Macedonia': 'Macedonia del Nord', 'Bosnia-Herzegovina': 'Bosnia', 'Bosnia and Herzegovina': 'Bosnia',
+  'Faroe Islands': 'Isole Faroe', Gibraltar: 'Gibilterra', Brazil: 'Brasile', 'United States': 'Stati Uniti', USA: 'Stati Uniti', Mexico: 'Messico', Japan: 'Giappone', Morocco: 'Marocco',
+  Egypt: 'Egitto', Chile: 'Cile', Peru: 'Perù', 'South Korea': 'Corea del Sud', Cameroon: 'Camerun', 'Ivory Coast': 'Costa d\'Avorio', 'Saudi Arabia': 'Arabia Saudita', China: 'Cina' };
 /* due squadre: calcio (stessa forma di prima), basket NBA, NFL, rugby */
 function evTeam(j, src) {
   const out = [], lg = src.sport === 'calcio' ? '' : evLogo(j);
@@ -2762,11 +2775,13 @@ function evTeam(j, src) {
         const x = evObj(cs.find((k) => k && k.homeAway === h)), t = evObj(x.team);
         let name = evS(t.shortDisplayName) || evS(t.displayName);
         if (src.sport === 'rugby') name = RUGBY_IT[evS(t.displayName)] || RUGBY_IT[name] || name;
+        if (src.nat) name = NAT_IT[evS(t.displayName)] || NAT_IT[name] || evS(t.displayName) || name;
         const sc = x.score; // stringa («2») come la dà ESPN
         return { name, logo: evUrl(t.logo), score: typeof sc === 'string' || typeof sc === 'number' ? sc : undefined };
       };
       const st = evSt(e.status), home = side('home'), away = side('away'), start = evDate(e.date);
       if (!home.name || !away.name || !start) continue;
+      if (src.only && home.name !== src.only && away.name !== src.only) continue; // amichevoli: solo quelle dell'Italia
       const ev = { id: evS(e.id, 40), league: src.label, start, home, away, venue: evS(evObj(c.venue).fullName, 120), live: st.state === 'in', state: st.state, clock: src.sport === 'calcio' ? st.sd : evClock(src.sport, st), sport: src.sport };
       if (!ev.id) continue;
       if (src.sport === 'nfl' && evObj(e.week).number) ev.round = `Settimana ${parseInt(e.week.number, 10) || ''}`.trim();
@@ -3052,8 +3067,8 @@ async function sportsEvents(env, ctx, v = 1) {
   }
   let body;
   if (v === 2) {
-    // in corso (anche da molte ore: tennis, UFC) oppure da giocare entro 8 giorni, come il calcio
-    const ok = all.filter((e) => { const st = Date.parse(e.start); return st < t + 8 * 86400e3 && ((e.live && st > t - 12 * 3600e3) || (e.state !== 'post' && st > t - 4 * 3600e3)); });
+    // in corso (anche da molte ore: tennis, UFC) oppure da giocare entro due settimane
+    const ok = all.filter((e) => { const st = Date.parse(e.start); return st < t + EV_AHEAD && ((e.live && st > t - 12 * 3600e3) || (e.state !== 'post' && st > t - 4 * 3600e3)); });
     body = { v: 2, events: evPick(ok).map(evOut), sports: on, updated: t };
   } else {
     const events = all.filter((e) => e.state !== 'post' && +new Date(e.start) > t - 4 * 3600e3)
@@ -3065,14 +3080,19 @@ async function sportsEvents(env, ctx, v = 1) {
   return body;
 }
 /* ---------------- «Eventi ora» nel pannello (10 novembre 2026) ----------------
-   Gli stessi eventi della Pro (ESPN e MotoGP), tutti gli sport: in diretta, finiti da poco e da giocare entro 36 ore, con le
+   Gli stessi eventi della Pro (ESPN e MotoGP), tutti gli sport: in diretta, finiti da poco e da giocare entro due settimane
+   (12 novembre 2026: prima 36 ore; la pagina li divide in «Più tardi» e «Prossimi giorni»), con le
    emittenti italiane di solito (le stesse di «Dove vederla» della Pro). Canali della lista e guida TV a parte (eventsChans). */
 const EV_TV = [
   [/serie a/i, ['DAZN', 'Sky Sport']], [/champions/i, ['Sky Sport', 'Prime Video', 'Canale 5']], [/europa|conference/i, ['Sky Sport', 'DAZN', 'TV8']],
   [/premier/i, ['Sky Sport']], [/laliga|la liga|liga/i, ['DAZN']], [/bundesliga/i, ['Sky Sport']], [/ligue/i, ['DAZN']], [/serie b/i, ['DAZN', 'Sky Sport']], [/coppa italia/i, ['Canale 5', 'Italia 1']],
   ['f1', ['Sky Sport F1', 'TV8']], ['motogp', ['Sky Sport MotoGP', 'TV8']], ['tennis', ['Sky Sport Tennis', 'SuperTennis']], ['basket', ['Sky Sport NBA']], ['nfl', ['DAZN']], ['ufc', ['DAZN']], ['rugby', ['Sky Sport']],
 ];
-const evTv = (e) => { const r = e.sport && e.sport !== 'calcio' ? EV_TV.find(([k]) => k === e.sport) : EV_TV.find(([k]) => k instanceof RegExp && k.test(e.league || '')); return r ? r[1] : []; };
+const evTv = (e) => {
+  // la Nazionale italiana (Nations League, qualificazioni, amichevoli): di solito sulla Rai; le altre nazionali non si indovinano
+  if ((!e.sport || e.sport === 'calcio') && /nations|qualificazioni|amichevole/i.test(e.league || '')) return [e.home, e.away].some((x) => x && x.name === 'Italia') ? ['Rai 1'] : [];
+  const r = e.sport && e.sport !== 'calcio' ? EV_TV.find(([k]) => k === e.sport) : EV_TV.find(([k]) => k instanceof RegExp && k.test(e.league || '')); return r ? r[1] : [];
+};
 async function panelEvents(env, ctx) {
   const mem = await evData(env, ctx, SPORTS);
   const t = now(), seen = new Set(), all = [];
@@ -3081,11 +3101,11 @@ async function panelEvents(env, ctx) {
     if (!SPORTS.includes(sp) || seen.has(sp + ':' + e.id)) continue;
     seen.add(sp + ':' + e.id); all.push(sp === e.sport ? e : { ...e, sport: sp });
   }
-  const ok = all.filter((e) => { const st = Date.parse(e.start); if (!isFinite(st)) return false; if (e.live) return st > t - 12 * 3600e3; if (e.state === 'post') return st > t - 5 * 3600e3 && st <= t; return st > t - 3 * 3600e3 && st < t + 36 * 3600e3; });
-  return { v: 1, events: ok.sort(evOrd).slice(0, 150).map((e) => ({ ...evOut(e), tv: evTv(e) })), sports: SPORTS, updated: t };
+  const ok = all.filter((e) => { const st = Date.parse(e.start); if (!isFinite(st)) return false; if (e.live) return st > t - 12 * 3600e3; if (e.state === 'post') return st > t - 5 * 3600e3 && st <= t; return st > t - 3 * 3600e3 && st < t + EV_AHEAD; });
+  return { v: 1, events: ok.sort(evOrd).slice(0, 220).map((e) => ({ ...evOut(e), tv: evTv(e) })), sports: SPORTS, updated: t };
 }
 /** canali sportivi della lista più usata dai clienti (solo nome e gruppo, mai indirizzi o credenziali), per «dove vederla» */
-const EV_CH_RX = /sport|calcio|dazn|eurosport|serie ?a\b|football|formula ?1|\bf1\b|motogp|tennis|\bnba\b|\bufc\b|basket|rugby|champions|premier|liga|bundesliga|ligue|tv8|canale 5|italia 1|rai ?sport|prime/i;
+const EV_CH_RX = /sport|calcio|dazn|eurosport|serie ?a\b|football|formula ?1|\bf1\b|motogp|tennis|\bnba\b|\bufc\b|basket|rugby|champions|premier|liga|bundesliga|ligue|tv8|canale 5|italia 1|rai ?sport|rai ?(?:1|uno)\b|prime/i;
 async function eventsSource(env) {
   let best = null;
   for (const src of (await catalogSources(env)).values()) if (!best || src.devices > best.devices) best = src;
@@ -3900,7 +3920,8 @@ function dayIT(t = now()) {
   catch { return new Date(t).toISOString().slice(0, 10); }
 }
 const FG_MS = 3 * 60e3;          // app dichiarata in primo piano: per 3 minuti i battiti di sfondo di un'altra app non contano
-const PRESENCE_COLS = ['fg_app', 'fg_t', 't', 'hb_t', 'ip', 'ip2', 'ip2_t', 'country', 'city', 'home_country', 'ver', 'ui', 'model', 'state', 'title', 'ch', 'ch_id', 'grp', 'pl', 'prof', 'screen', 'net', 'rssi', 'speed_dl', 'speed_ul', 'speed_ping', 'speed_jit', 'speed_t', 'res', 'fps', 'bitrate', 'buffers', 'dropped', 'engine', 'vpn', 'codec', 'dec', 'stalls_h', 'rec', 'reduced', 'app_cfg', 'rcv', 'bw', 'line', 'dev_class', 'fill', 'ttff', 'stall_ms', 'var', 'fmt', 'chk'];
+const SDNS_ST = ['on', 'off', 'asking', 'denied', 'error', 'other', 'vpn']; // DNS cifrato come lo dichiara l'app
+const PRESENCE_COLS = ['sdns', 'fg_app', 'fg_t', 't', 'hb_t', 'ip', 'ip2', 'ip2_t', 'country', 'city', 'home_country', 'ver', 'ui', 'model', 'state', 'title', 'ch', 'ch_id', 'grp', 'pl', 'prof', 'screen', 'net', 'rssi', 'speed_dl', 'speed_ul', 'speed_ping', 'speed_jit', 'speed_t', 'res', 'fps', 'bitrate', 'buffers', 'dropped', 'engine', 'vpn', 'codec', 'dec', 'stalls_h', 'rec', 'reduced', 'app_cfg', 'rcv', 'bw', 'line', 'dev_class', 'fill', 'ttff', 'stall_ms', 'var', 'fmt', 'chk'];
 /** scrive/aggiorna la riga di presenza con i campi indicati (gli altri restano) */
 async function upsertPresence(env, id, fields) {
   const cols = Object.keys(fields).filter((k) => PRESENCE_COLS.includes(k));
@@ -4214,6 +4235,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
     pl: str(b.pl, 40), prof: nameClean(b.prof, 24), screen: str(b.screen, 20),
     net: NETS.includes(net.type) ? net.type : '', rssi: Math.round(num(net.rssi, -120, 0)),
     vpn: b.vpn === 'on' ? 'on' : b.vpn === 'off' ? 'off' : '',
+    sdns: SDNS_ST.includes(b.sdns) ? b.sdns : '',
     ...rcSnapshot(b), // impostazioni attuali dell'app e configurazione remota applicata
   };
   // autopilota: esito degli auto-controlli dell'app (arriva quando cambia e ogni 15 minuti), con l'istante del server
@@ -4238,7 +4260,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
   // si riscrive al massimo una volta al minuto, così le scritture su D1 restano quelle di prima
   // bgOther: non si scrive (la presenza resta dell'app in primo piano); «vado in sfondo» (vis false) e cambio di app in primo piano si scrivono sempre
   const same = bgOther || (old && vis !== false && !(vis === true && old.fg_app !== app) && t - (+old.t || 0) < 55e3 && old.state === state && (old.title || '') === f.title && (old.ch_id || '') === f.ch_id
-    && (old.vpn || '') === f.vpn && (old.screen || '') === f.screen && (old.rcv || '') === (f.rcv || '') && (f.app_cfg === undefined || (old.app_cfg || '') === f.app_cfg) && (old.rec || '') === (f.rec ?? old.rec ?? '') && (old.reduced || '') === (f.reduced ?? old.reduced ?? '') && (+old.stalls_h || 0) === (f.stalls_h ?? +old.stalls_h ?? 0) && (!sp || +old.speed_t === f.speed_t) && (old.ip || '') === (f.ip ?? old.ip ?? '') && (f.chk === undefined || chkCore(old.chk) === chkCore(f.chk)));
+    && (old.vpn || '') === f.vpn && (old.sdns || '') === f.sdns && (old.screen || '') === f.screen && (old.rcv || '') === (f.rcv || '') && (f.app_cfg === undefined || (old.app_cfg || '') === f.app_cfg) && (old.rec || '') === (f.rec ?? old.rec ?? '') && (old.reduced || '') === (f.reduced ?? old.reduced ?? '') && (+old.stalls_h || 0) === (f.stalls_h ?? +old.stalls_h ?? 0) && (!sp || +old.speed_t === f.speed_t) && (old.ip || '') === (f.ip ?? old.ip ?? '') && (f.chk === undefined || chkCore(old.chk) === chkCore(f.chk)));
   // la presenza è la cosa che conta: si scrive per prima e un errore qui non fa fallire il battito
   if (!same) { try { await upsertPresence(env, d.id, f); } catch (e) { console.error('presenza non scritta', e && e.message); } }
   // il resto (statistiche) va in sottofondo: non rallenta la risposta e non può bloccarla
@@ -5311,6 +5333,26 @@ const onlineCount = async (env) => { try { return (await env.DB.prepare('SELECT 
     così chi guardava da ore risultava «visto 3 ore fa» anche se era collegato */
 function presenceMap(env) {
   return reqMemo(env, 'pm', async () => { try { return new Map((((await env.DB.prepare('SELECT device_id, t, state FROM presence WHERE t > ?').bind(now() - 30 * 864e5).all()).results) || []).map((r) => [r.device_id, r])); } catch { return new Map(); } });
+}
+/** Elenco Clienti del titolare (12 novembre 2026): per chi è collegato adesso, cosa guarda, da dove e con che rete.
+    Solo i collegati (pochi), una lettura sola; agli agenti non arriva (come «Online nelle app», riservata al titolare) */
+async function presenceNow(env) {
+  try {
+    const r = (await env.DB.prepare('SELECT device_id, state, title, ch, grp, ip, city, country, home_country, ver, net, vpn, sdns, res, line FROM presence WHERE t > ?').bind(now() - ONLINE_MS).all()).results || [];
+    return new Map(r.map((p) => [p.device_id, p]));
+  } catch { return new Map(); } // colonna «sdns» non ancora creata: l'elenco resta com'era
+}
+function withNow(devs, pn) {
+  for (const x of devs) {
+    const p = pn.get(x.id); if (!p || !x.live) continue;
+    const o = { k: STATES.includes(p.state) ? p.state : 'idle' };
+    const t = p.state === 'idle' ? '' : String(p.ch || p.title || '').slice(0, 80); if (t) o.t = t;
+    if (p.state !== 'idle' && p.title && p.ch && p.title !== p.ch) o.p = String(p.title).slice(0, 80); // programma in onda, se l'app lo manda
+    for (const [k, v] of [['ip', p.ip], ['city', p.city], ['cc', p.country], ['ver', p.ver], ['net', p.net], ['vpn', p.vpn], ['sdns', p.sdns], ['res', p.res], ['line', p.line]]) if (v) o[k] = String(v).slice(0, 60);
+    if (p.home_country && p.country && p.home_country !== p.country) o.away = 1; // collegato da un paese diverso dal solito
+    x.now = o;
+  }
+  return devs;
 }
 /** aggiunge ai dispositivi del pannello l'ultimo contatto vero e, se collegati adesso, cosa stanno facendo (live: idle|live|movie|series|rec) */
 function withPresence(devs, pm) {
@@ -7376,7 +7418,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const settings = await getSettings(env);
     const pendTtl = effectivePendTtl(settings);
     if (pendTtl) await pendSweep(env, false, pendTtl).catch(() => {}); // al più ogni 5 minuti
-    const [rowsR, activityR, messagesR, agentMsgsR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, ultF, plusF, sAppNames, nCounts, onl, agAll, presLast] = await Promise.all([
+    const [rowsR, activityR, messagesR, agentMsgsR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, ultF, plusF, sAppNames, nCounts, onl, agAll, presLast, presNow] = await Promise.all([
       env.DB.prepare('SELECT * FROM devices ORDER BY created_at DESC LIMIT 5000').all(),
       env.DB.prepare('SELECT t, type, text, ip FROM activity ORDER BY id DESC LIMIT 200').all(),
       env.DB.prepare('SELECT id, target, title, body, level, created, until, grp FROM messages ORDER BY id DESC LIMIT 3000').all().catch(() => ({ results: [] })),
@@ -7385,10 +7427,10 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       dnsList(env),
       env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first(),
       latestApk(env, settings), apkFeed(env), liteFeed(settings, env), ktvFeed(settings, env), xcFeed(settings, env), ultFeed(settings, env), plusFeed(settings, env),
-      storeAppNames(env), newCounts(env), onlineCount(env), ses ? agentsAll(env) : null, presenceMap(env),
+      storeAppNames(env), newCounts(env), onlineCount(env), ses ? agentsAll(env) : null, presenceMap(env), presenceNow(env),
     ]);
     const rows = rowsR.results || [];
-    const devices = withPresence(await Promise.all(rows.map((d) => deviceOut(env, d))), presLast);
+    const devices = withNow(withPresence(await Promise.all(rows.map((d) => deviceOut(env, d))), presLast), presNow);
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p && !p.parent ? p.status : 'pending'; }
     const activity = activityR.results || [], messages = msgGroups(messagesR.results || []).slice(0, 150), agentMsgs = msgGroups(agentMsgsR.results || []).slice(0, 100), sessions = sessionsR ? sessionsR.n : 0;
