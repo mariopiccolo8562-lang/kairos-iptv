@@ -4936,7 +4936,9 @@ async function playerTrailer(req, env, ip, url, ctx) {
   const title = trailerTitle(raw);
   const year = parseInt(url.searchParams.get('y') || '', 10) || yearIn(raw), kind = url.searchParams.get('kind') === 'series' ? 'series' : 'movie';
   if (title.length < 2) return json({ url: '', yt: '' });
-  const key = 'trl2:' + (await sha256(kind + '|' + title.toLowerCase() + '|' + year)).slice(0, 24);
+  // lingua scelta dal titolare: in inglese prima l'anteprima di Apple (file che parte nel lettore), poi TMDB e YouTube in inglese
+  const en = trailerLangOf(await getSettings(env)) === 'en';
+  const key = 'trl2:' + (await sha256(kind + '|' + title.toLowerCase() + '|' + year + (en ? '|en' : ''))).slice(0, 24);
   const c = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(key).first();
   if (c) {
     try {
@@ -4947,11 +4949,15 @@ async function playerTrailer(req, env, ip, url, ctx) {
   }
   const want = normT(title);
   let out = null, failures = 0;
-  const tries = [
+  const tries = (en ? [
+    () => trailerItunes(title, year, kind, want, true),
+    env.TMDB_KEY ? () => trailerTmdb(env, title, year, kind, true) : null,
+    () => trailerYoutube(title, year, kind, want, true),
+  ] : [
     env.TMDB_KEY ? () => trailerTmdb(env, title, year, kind) : null,
     () => trailerYoutube(title, year, kind, want),
     () => trailerItunes(title, year, kind, want),
-  ].filter(Boolean);
+  ]).filter(Boolean);
   for (const f of tries) {
     try { out = await f(); if (out) break; } catch { failures++; }
   }
@@ -5343,8 +5349,9 @@ function trailerTitle(t) {
 }
 const yearIn = (t) => { const m = String(t || '').match(/\b(19[3-9]\d|20[0-4]\d)\b/); return m ? +m[1] : 0; };
 const normT = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-/* 1) TMDB (se c'è la chiave): trailer ufficiale su YouTube, prima in italiano */
-async function trailerTmdb(env, title, year, kind) {
+const trailerLangOf = (s) => (s && s.trailerLang === 'en' ? 'en' : 'it');
+/* 1) TMDB (se c'è la chiave): trailer ufficiale su YouTube, prima in italiano ([en]: prima in inglese) */
+async function trailerTmdb(env, title, year, kind, en = false) {
   const k = String(env.TMDB_KEY).trim(), bearer = k.length > 40, t = kind === 'series' ? 'tv' : 'movie';
   const H = { Accept: 'application/json', ...(bearer ? { Authorization: 'Bearer ' + k } : {}) }, ak = bearer ? '' : '&api_key=' + encodeURIComponent(k);
   const get = async (u) => { const r = await fetch('https://api.themoviedb.org/3' + u + ak, { headers: H, signal: AbortSignal.timeout(7000) }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); };
@@ -5353,14 +5360,15 @@ async function trailerTmdb(env, title, year, kind) {
   if (!res.length && yq) res = (await get(`/search/${t}?query=${encodeURIComponent(title)}&language=it-IT`)).results || [];
   const hit = res[0]; if (!hit) return null;
   const pick = (v) => { const yt = (v.results || []).filter((x) => x.site === 'YouTube' && /^[\w-]{11}$/.test(x.key)); return yt.find((x) => x.type === 'Trailer' && x.official) || yt.find((x) => x.type === 'Trailer') || yt.find((x) => x.type === 'Teaser') || null; };
-  const v = pick(await get(`/${t}/${hit.id}/videos?language=it-IT`)) || pick(await get(`/${t}/${hit.id}/videos?language=en-US`));
+  const [l1, l2] = en ? ['en-US', 'it-IT'] : ['it-IT', 'en-US'];
+  const v = pick(await get(`/${t}/${hit.id}/videos?language=${l1}`)) || pick(await get(`/${t}/${hit.id}/videos?language=${l2}`));
   return v ? { yt: v.key, title: hit.title || hit.name || title, src: 'tmdb' } : null;
 }
-/* 2) YouTube: primo video della ricerca "titolo anno trailer ita" (nessuna chiave) */
-async function trailerYoutube(title, year, kind, want) {
-  const q = `${title}${year ? ' ' + year : ''} ${kind === 'series' ? 'serie tv ' : ''}trailer ita`;
-  const r = await fetch('https://www.youtube.com/results?hl=it&gl=IT&search_query=' + encodeURIComponent(q), {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', 'Accept-Language': 'it-IT,it;q=0.9', Cookie: 'CONSENT=YES+cb.20240101-00-p0.it+FX+100; SOCS=CAI' },
+/* 2) YouTube: primo video della ricerca "titolo anno trailer ita" (nessuna chiave); [en]: "official trailer", risultati in inglese */
+async function trailerYoutube(title, year, kind, want, en = false) {
+  const q = en ? `${title}${year ? ' ' + year : ''} ${kind === 'series' ? 'tv series ' : ''}official trailer` : `${title}${year ? ' ' + year : ''} ${kind === 'series' ? 'serie tv ' : ''}trailer ita`;
+  const r = await fetch(`https://www.youtube.com/results?${en ? 'hl=en&gl=US' : 'hl=it&gl=IT'}&search_query=` + encodeURIComponent(q), {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', 'Accept-Language': en ? 'en-US,en;q=0.9' : 'it-IT,it;q=0.9', Cookie: 'CONSENT=YES+cb.20240101-00-p0.it+FX+100; SOCS=CAI' },
     signal: AbortSignal.timeout(8000),
   });
   if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -5370,27 +5378,34 @@ async function trailerYoutube(title, year, kind, want) {
   let m; while ((m = re.exec(html)) && found.length < 8) { let tt = m[2]; try { tt = JSON.parse('"' + tt + '"'); } catch {} found.push({ id: m[1], t: tt }); }
   if (!found.length) { const ids = [...html.matchAll(/"videoId":"([\w-]{11})"/g)].map((x) => x[1]); if (!ids.length) throw new Error('nessun risultato'); return { yt: ids[0], title, src: 'youtube' }; }
   const words = want.split(' ').filter((w) => w.length > 2);
-  const score = (v) => { const n = normT(v.t); return words.filter((w) => n.includes(w)).length * 3 + (/trailer|teaser/i.test(v.t) ? 2 : 0) + (/\bita|italiano\b/i.test(v.t) ? 1 : 0); };
+  // in inglese: «official» vale un punto, un trailer dichiarato italiano ne perde due
+  const score = (v) => { const n = normT(v.t), ita = /\bita\b|italiano|\bsub ?ita\b/i.test(v.t); return words.filter((w) => n.includes(w)).length * 3 + (/trailer|teaser/i.test(v.t) ? 2 : 0) + (en ? (/official/i.test(v.t) ? 1 : 0) - (ita ? 2 : 0) : /\bita|italiano\b/i.test(v.t) ? 1 : 0); };
   const best = found.map((v, i) => ({ ...v, s: score(v) - i * 0.3 })).sort((a, b) => b.s - a.s)[0];
   return { yt: best.id, title: best.t, src: 'youtube' };
 }
-/* 3) Apple: anteprima video ufficiale (file diretto, si guarda nel lettore dell'app) */
-async function trailerItunes(title, year, kind, want) {
+/* 3) Apple: anteprima video ufficiale (file diretto, si guarda nel lettore dell'app).
+   12 novembre 2026: la ricerca di Apple con «media=movie» non restituisce più niente (provato: 0 risultati per qualsiasi
+   titolo, in Italia e negli Stati Uniti); senza filtro i film arrivano, in mezzo ad audiolibri e podcast, e si tengono solo
+   quelli («feature-movie»). Le serie non hanno un trailer (solo l'anteprima di un episodio): non si cercano più.
+   Il catalogo è ridotto: su 12 film famosi cercati con il titolo inglese ne ha trovati 4. Senza filtro serve più rigore:
+   vale solo il titolo uguale, con l'anno uguale o vicino («Oppenheimer: The Real Story», stesso anno, non è «Oppenheimer»).
+   [en]: prima il catalogo americano. */
+async function trailerItunes(title, year, kind, want, en = false) {
+  if (kind === 'series') return null;
   let best = null, ok = false;
-  for (const country of ['it', 'us']) {
-    const q = kind === 'series' ? `media=tvShow&entity=tvSeason` : `media=movie&entity=movie`;
-    const r = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(title)}&country=${country}&${q}&limit=10`, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(7000) }).catch(() => null);
+  for (const country of en ? ['us', 'gb'] : ['it', 'us']) {
+    const r = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(title)}&country=${country}&limit=50`, { headers: { 'User-Agent': 'KairosPanel' }, signal: AbortSignal.timeout(7000) }).catch(() => null);
     if (!r || !r.ok) continue;
     ok = true;
     const j = await r.json().catch(() => ({}));
     for (const x of j.results || []) {
-      if (!x.previewUrl || !/^https:\/\//.test(x.previewUrl)) continue;
-      const name = normT(kind === 'series' ? String(x.collectionName || '').replace(/,?\s*(stagione|season)\s*\d+.*$/i, '') : x.trackName);
-      const y = parseInt(String(x.releaseDate || '').slice(0, 4), 10) || 0;
-      const score = (name === want ? 10 : name.startsWith(want) || want.startsWith(name) ? 5 : name.includes(want) || want.includes(name) ? 3 : 0) + (year && y ? (y === year ? 4 : Math.abs(y - year) <= 1 ? 2 : -3) : 0);
-      if (score >= 3 && (!best || score > best.score)) best = { score, url: x.previewUrl, title: x.trackName || x.collectionName || '' };
+      if (x.kind !== 'feature-movie' || !x.previewUrl || !/^https:\/\//.test(x.previewUrl)) continue;
+      const name = normT(x.trackName);
+      const y = parseInt(String(x.releaseDate || '').slice(0, 4), 10) || 0, same = !!(year && y && y === year), far = !!(year && y && Math.abs(y - year) > 1);
+      const score = far || name !== want ? 0 : same ? 14 : 10;
+      if (score && (!best || score > best.score)) best = { score, url: x.previewUrl, title: x.trackName || '' };
     }
-    if (best && best.score >= 10) break;
+    if (best) break;
   }
   if (!ok) throw new Error('Apple non raggiungibile');
   return best ? { url: best.url, title: best.title, src: 'itunes' } : null;
@@ -8220,6 +8235,12 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       if (b.agentHostOnly && !s.agentHost) throw new HttpErr(400, 'Imposta prima l\'indirizzo degli agenti');
       if (b.agentHostOnly && new URL(req.url).hostname.toLowerCase() === s.agentHost) throw new HttpErr(400, 'Questa impostazione si cambia dal tuo indirizzo');
       s.agentHostOnly = b.agentHostOnly;
+    }
+    if (b.trailerLang !== undefined) { // lingua dei trailer cercati dal pannello (12 novembre 2026): la decide il titolare
+      if (!ses || ses.agent || ses.assist) throw new HttpErr(403, 'Impostazione riservata al titolare');
+      if (!['it', 'en'].includes(b.trailerLang)) throw new HttpErr(400, 'Lingua dei trailer non valida: italiano o inglese');
+      if (trailerLangOf(s) !== b.trailerLang) await log(env, 'settings', `${who}: trailer cercati in ${b.trailerLang === 'en' ? 'inglese' : 'italiano'}`, ip);
+      s.trailerLang = b.trailerLang;
     }
     if (b.reqWait !== undefined) { const was = JSON.stringify(cleanReqWait(s.reqWait)); s.reqWait = cleanReqWait({ ...cleanReqWait(s.reqWait), ...(b.reqWait && typeof b.reqWait === 'object' ? b.reqWait : {}) }); if (JSON.stringify(s.reqWait) !== was) await log(env, 'edit', `${who}: tempi di attesa delle richieste aggiornati`, ip); }
     let kicked = 0;

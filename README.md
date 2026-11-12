@@ -1258,3 +1258,14 @@ Tecnica: `devices.rec_by`, `rec_name`, `rec_t` (migrazione `0056_dev_rec.sql`); 
 Tecnica: `CODE_TTLS` in `store.js`; in `store-codes.js` `recall()` (rilegge l'elenco ogni 30 secondi solo mentre c'è un codice in vista e la scheda è visibile) e `pillPaint()`.
 
 Prove: `srv_store_codes` (durate nuove), `ui_store_code_rem` 19.
+
+## 76. Lingua dei trailer e ricerca di Apple riparata (12 novembre 2026)
+
+- Impostazioni → Funzioni dell'app → **«🎬 Trailer» → Lingua dei trailer**: Italiano (di serie) o Inglese. Solo il titolare; si salva da sola (`PUT /api/admin/settings { trailerLang }`, nel registro).
+- Vale per i trailer che cerca il pannello (`/api/player/trailer`): oggi Kairos Pro.
+- **Italiano**: come prima — TMDB (se c'è la chiave), YouTube «trailer ita», Apple.
+- **Inglese**: Apple (catalogo americano, poi inglese), TMDB in inglese (se c'è la chiave), YouTube «official trailer» (un trailer dichiarato italiano perde punti). Cache separata per lingua.
+- **Apple riparata**: la ricerca con `media=movie` oggi restituisce 0 risultati per qualsiasi titolo, quindi questa fonte non trovava più niente. Ora si cerca senza filtro e si tengono solo i film, con il titolo uguale e l'anno uguale o vicino. Le serie non si cercano più su Apple (hanno solo l'anteprima di un episodio).
+- **Limite misurato** (12 novembre, catalogo americano, titolo inglese esatto): 4 film trovati su 12 famosi (Dune: Part Two, Barbie, Interstellar, Gladiator II sì; Inception, The Godfather, Top Gun: Maverick, The Dark Knight, Joker, Finding Nemo, Wicked, Home Alone no). Con i titoli italiani delle liste ne trova meno. Apple resta un di più, non la fonte principale.
+
+Prove: `srv_trailer_lang` 21, `ui_trailer_lang` 7.
