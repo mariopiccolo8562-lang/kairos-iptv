@@ -1045,7 +1045,7 @@ img{display:block}
 .vpnbadge{width:22px;height:22px;color:var(--mut);display:inline-grid;place-items:center;opacity:.8}
 .vpnbadge svg{width:20px;height:20px}
 .vpnbadge.on{color:var(--ok);filter:drop-shadow(0 0 6px var(--ok))}
-.vpnbadge.fixed{cursor:default;opacity:.6}.vpnbadge.fixed.on{opacity:.9}
+.vpnbadge.fixed{opacity:.6}.vpnbadge.fixed.on{opacity:.9}
 .lpin{display:flex;gap:10px;justify-content:center;margin:20px 0 14px}
 .lpin span{font-family:Orbitron,monospace;font-size:clamp(34px,5vw,56px);font-weight:700;width:1.25em;padding:8px 0;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid var(--line);color:#fff}
 .inp.pinin{text-align:center;font-family:Orbitron,monospace;font-size:34px;letter-spacing:.4em;margin:16px 0 8px}
@@ -2165,14 +2165,17 @@ function navFit(nav) {
 function navRefit() { try { navFit($('.screen.on .tnav')); } catch {} }
 addEventListener('resize', navRefit);
 try { document.fonts && document.fonts.ready.then(navRefit); } catch {}
-/* scudo VPN nella barra: compare solo se il fornitore lo ha permesso dal pannello (VPN «Consentita» + permesso «Accendere/spegnere la VPN»);
-   con «Sempre attiva» è un indicatore acceso che non si tocca; negli altri casi non c'è */
+/* scudo VPN nella barra. Il cliente lo usa per accendere e spegnere solo con VPN «Consentita» + permesso «Accendere/spegnere
+   la VPN». In tutti gli altri casi in cui la VPN la gestisce il fornitore (sempre attiva, consentita senza permesso, spenta: voce
+   «shield» mandata dal pannello) lo scudo c'è lo stesso, acceso o spento secondo il pannello, e al tocco dice «VPN gestita dal
+   fornitore». Senza nessuna VPN nel pannello non compare */
+const vpnCan = () => { const v = S.vpn; return !!(v && v.conf && v.mode === 'allow' && perm('vpn')); };
 function vpnShieldHTML() {
-  const v = S.vpn; if (!v || !v.conf || !vpnOk()) return '';
-  const can = v.mode === 'allow' && perm('vpn'), forced = v.mode === 'force';
-  if (!can && !forced) return '';
+  const v = S.vpn; if (!v || !vpnOk()) return '';
+  const can = vpnCan(), forced = v.mode === 'force' && !!v.conf;
+  if (!can && !forced && !v.shield) return '';
   const on = S.vpnState === 'on';
-  return `<div class="ti tvpn vpnbadge${on ? ' on' : ''}${forced ? ' fixed' : ''}" ${can ? 'data-f data-go="vpn"' : ''} title="${forced ? 'VPN sempre attiva (impostata dal fornitore)' : on ? 'VPN attiva: premi per spegnerla' : 'VPN spenta: premi per accenderla'}">${ICX.shield}</div>`;
+  return `<div class="ti tvpn vpnbadge${on ? ' on' : ''}${can ? '' : ' fixed'}" data-f data-go="vpn" title="${can ? (on ? 'VPN attiva: premi per spegnerla' : 'VPN spenta: premi per accenderla') : 'VPN gestita dal fornitore'}">${ICX.shield}</div>`;
 }
 /* scadenza dell'abbonamento sempre in vista nella barra in alto */
 function expChip() {
@@ -2480,7 +2483,7 @@ async function register() {
   if (j.status === 'active') {
     if (j.account) { S.account = j.account; store.set('acctCache', j.account); }
     if (typeof j.af === 'string') S.af = j.af; // impronta dell'account (profili, PIN, limiti): il battito dice quando cambia
-    S.vpn = j.vpn || { mode: 'off' }; store.set('vpnCache', S.vpn.mode === 'off' ? null : S.vpn);
+    S.vpn = j.vpn || { mode: 'off' }; store.set('vpnCache', S.vpn.mode === 'off' && !S.vpn.shield ? null : S.vpn);
   } else if (S.vpn && S.vpn.mode !== 'off') { S.vpn = { mode: 'off' }; store.set('vpnCache', null); } // abbonamento non attivo: niente VPN del fornitore
   const mv = j.settings && j.settings.serverUrl;
   if (mv && /^https:\/\//.test(mv) && mv.replace(/\/+$/, '') !== baseServer()) { S.server = mv.replace(/\/+$/, ''); store.set('server', S.server); }
@@ -7064,9 +7067,8 @@ function privacyStep() {
 
 /* ---------------- scudo VPN nella barra: accende e spegne al volo ---------------- */
 function vpnQuick() {
-  const v = S.vpn; if (!v || v.mode === 'off') return;
-  if (v.mode === 'force') return toast('🛡 La VPN è sempre attiva (impostata dal fornitore)');
-  if (!perm('vpn')) return toast('La VPN è gestita dal fornitore');
+  const v = S.vpn; if (!v) return;
+  if (!vpnCan()) return toast('🛡 VPN gestita dal fornitore');
   const on = !store.get('vpnOn', false); store.set('vpnOn', on);
   toast(on ? '🛡 Attivo la VPN…' : 'VPN spenta');
   vpnApply(true);

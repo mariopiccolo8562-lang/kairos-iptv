@@ -1269,3 +1269,13 @@ Prove: `srv_store_codes` (durate nuove), `ui_store_code_rem` 19.
 - **Limite misurato** (12 novembre, catalogo americano, titolo inglese esatto): 4 film trovati su 12 famosi (Dune: Part Two, Barbie, Interstellar, Gladiator II sì; Inception, The Godfather, Top Gun: Maverick, The Dark Knight, Joker, Finding Nemo, Wicked, Home Alone no). Con i titoli italiani delle liste ne trova meno. Apple resta un di più, non la fonte principale.
 
 Prove: `srv_trailer_lang` 21, `ui_trailer_lang` 7.
+
+## 77. Scudo VPN sempre visibile quando la VPN la gestisce il fornitore (13 novembre 2026)
+
+- Lo stato mandato alle app ha una voce in più, `vpn.shield`: vera quando nel pannello c'è una VPN (configurazione generale, di una località o del cliente). Le versioni vecchie delle app la ignorano.
+- Con `shield` le app mostrano lo scudo **sempre**: VPN «Sempre attiva», «Consentita» senza il permesso «Accendere/spegnere la VPN», e anche «Spenta». Acceso o spento secondo il pannello.
+- Al tocco, quando il cliente non può cambiarla: **«VPN gestita dal fornitore»**. Il cliente la accende e la spegne solo con «Consentita» + permesso.
+- Con VPN «Spenta» la configurazione non viene mandata: arriva solo la voce dello scudo.
+- App: Kairos Pro 2.7.8, XC 3.4.12, TV 2.5.1, Lite 1.6.1, STB e Smarters 0.5.7. Premium, Plus e Nova non hanno lo scudo nella barra.
+
+Prove: `srv_vpn_state` (stato per ogni modo e per ogni app).

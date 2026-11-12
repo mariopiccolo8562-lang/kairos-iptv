@@ -3698,7 +3698,18 @@ async function vpnOf(env, P, me) {
     if (!conf) conf = await wgGlobal(env);
     if (conf) out.conf = conf;
   }
+  // scudo nelle app (13 novembre 2026): quando la VPN la gestisce il fornitore lo scudo si vede sempre, anche spenta o non
+  // modificabile dal cliente; al tocco le app dicono «VPN gestita dal fornitore». Vale solo se nel pannello c'è una VPN
+  // (configurazione generale, di una località o del cliente): senza, niente scudo. Le versioni vecchie ignorano la voce
+  out.shield = !!out.conf || await vpnAny(env);
   return out;
+}
+/** nel pannello c'è almeno una configurazione VPN (generale o una località)? Non la legge: guarda solo se esiste */
+async function vpnAny(env) {
+  try {
+    if (await env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first()) return true;
+    return (await wgLocs(env)).length > 0;
+  } catch { return false; }
 }
 /* ---------------- contatori anti-abuso su D1 (finestre lunghe, oltre i 60 s del rate limiting nativo) ---------------- */
 async function throttled(env, key, max, windowMs, inc = 1) {
