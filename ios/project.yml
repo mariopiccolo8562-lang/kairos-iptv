@@ -1,0 +1,29 @@
+name: Kairos
+options:
+  bundleIdPrefix: com.kairos
+  deploymentTarget:
+    iOS: "15.0"
+targets:
+  Kairos:
+    type: application
+    platform: iOS
+    sources:
+      - path: Kairos
+        excludes: [www]
+      - path: Kairos/www
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kairos.player
+        PRODUCT_NAME: Kairos
+        INFOPLIST_FILE: Kairos/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_BITCODE: NO
+        SWIFT_VERSION: "5.0"
