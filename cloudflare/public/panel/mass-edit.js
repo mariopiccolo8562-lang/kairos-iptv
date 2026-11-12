@@ -49,7 +49,7 @@
     ['posters', 'Locandine', 'Solo Kairos Pro · «Sempre nitide» usa più memoria sulle chiavette da 1 GB', [['auto', 'Automatiche'], ['hi', 'Sempre nitide']]],
     ['intro', 'Animazione d\'avvio', 'Solo Kairos Pro · vale dall\'apertura successiva', [['auto', 'Automatica'], ['simple', 'Semplice'], ['off', 'Spenta']]],
     ['mergeVar', 'Versioni dello stesso canale in una voce sola', 'Solo Kairos Pro · 4K/FHD/HD/SD in una voce con la versione giusta per la linea (spenta di serie)', [['off', 'No: ogni versione ha la sua voce'], ['on', 'Sì: una voce, con la versione giusta per la linea']]],
-    ['u.dnsRot', 'DNS rotativo', 'Solo KAIROS Ultimate · usa i DNS di riserva impostati in Server DNS e VPN', [['on', 'Attivo'], ['off', 'Spento']]],
+    ['u.dnsRot', 'DNS rotativo', 'Solo KAIROS Ultimate, Kairos XC e Kairos Pro (versioni nuove) · usa i DNS di riserva impostati in Server DNS e VPN', [['on', 'Attivo'], ['off', 'Spento']]],
   ];
   let M = null, ids0 = [], after = null;
   // sezione dei Clienti (I miei / degli agenti / un agente): le scelte «solo questa sezione» vengono prima

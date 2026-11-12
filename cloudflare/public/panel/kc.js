@@ -1174,7 +1174,7 @@
     /* «Remoto» accanto a «➕ Dispositivo» (12 novembre 2026, solo titolare): apre subito il Controllo remoto di quel cliente
        (impostazioni dell'app e comandi), senza passare dalla scheda */
     const rcOn = () => D.role === 'owner' && !window.__assist && !!window.KXRemote;
-    const DNS_ROT_APPS = new Set(['ult', 'xc']);
+    const DNS_ROT_APPS = new Set(['ult', 'xc', 'tv']);
     const dnsRotApp = (d) => DNS_ROT_APPS.has(appCode(d));
     const RC_IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>';
     const rcBtn = (cls) => (rcOn() ? `<button class="btn sm ${cls}" data-act="rc" title="Controllo remoto: impostazioni dell'app di questo cliente e comandi (riavvia, svuota cache, aggiorna liste…)">${RC_IC}<span>Remoto</span></button>` : '');
@@ -1205,7 +1205,7 @@
       return `<button class="btn sm${on ? ' pri' : ''}" data-act="dnsrot" title="Imposta il DNS rotativo per questo cliente">${on ? '🔄 Rotativo ON' : '🔄 DNS rotativo'}</button>`;
     }
     const DNS_ROT_NOTE = 'Nessun DNS di riserva: aggiungi le riserve in Solo Master → Server DNS e VPN';
-    const DNS_ROT_APPS_NOTE = 'Solo KAIROS Ultimate e Kairos XC (versione nuova)';
+    const DNS_ROT_APPS_NOTE = 'Solo KAIROS Ultimate, Kairos XC e Kairos Pro (versioni nuove)';
     const dnsRotHostKey = (h) => String(h || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
     async function dnsRotDnsList() {
       if (dnsRotServers) return dnsRotServers;

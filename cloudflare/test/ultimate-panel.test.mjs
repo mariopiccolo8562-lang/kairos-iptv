@@ -161,15 +161,17 @@ test('remote allow values and DNS rotation stay app-limited', () => {
   assert.ok(Object.values(_internal.rcSent(rc, 'tv')).every((value) => typeof value !== 'string' || !value.startsWith('allow:')));
   assert.equal(_internal.rcSent(rc, 'ult')['o.engLive'], rc['o.engLive']);
   assert.equal(_internal.portalModeForApp('rot', 'tv'), 'auto');
+  assert.equal(_internal.portalModeForApp('rot', 'tv', '2.7.7'), 'auto');
+  assert.equal(_internal.portalModeForApp('rot', 'tv', '2.7.8'), 'rot');
   assert.equal(_internal.portalModeForApp('rot', 'ult'), 'rot');
   const tvRc = _internal.rcClean({ 'o.engLive:allow': ['exo', 'vlc'] }, 'tv');
   assert.equal(_internal.rcSent(tvRc, 'tv')['o.engLive'], undefined);
   assert.ok(_internal.RC_CMDS.some(([key, , , apps]) => key === 'epg' && apps.length === 1 && apps[0] === 'ult'));
   assert.ok(_internal.RC_CAT.filter(([key]) => key.startsWith('u.') && key !== 'u.dnsRot').every(([, , , , apps]) => apps.length === 1 && apps[0] === 'ult'));
-  assert.deepEqual(_internal.RC_CAT.find(([key]) => key === 'u.dnsRot')[4], ['ult', 'xc']);
+  assert.deepEqual(_internal.RC_CAT.find(([key]) => key === 'u.dnsRot')[4], ['ult', 'xc', 'tv']);
 });
 
-test('device DNS rotation override selects rot for Ultimate and XC portals with reserves', async () => {
+test('device DNS rotation override selects rot for Ultimate, XC and new Pro portals with reserves', async () => {
   const saved = [
     { id: 'main', name: 'Main', host: 'https://main.example', alts: ['backup'], mode: 'auto' },
     { id: 'backup', name: 'Backup', host: 'https://backup.example', alts: [], mode: 'auto' },
@@ -191,14 +193,18 @@ test('device DNS rotation override selects rot for Ultimate and XC portals with 
   assert.equal(enabled.mode, 'rot');
   assert.deepEqual(enabled.alts, ['https://backup.example']);
   assert.equal((await _internal.portalsOf(env, [main], 'xc', 'on'))[0].mode, 'rot');
+  assert.equal((await _internal.portalsOf(env, [main], 'tv', 'on'))[0].mode, 'auto');
+  assert.equal((await _internal.portalsOf(env, [main], 'tv', 'on', '2.7.7'))[0].mode, 'auto');
+  assert.equal((await _internal.portalsOf(env, [main], 'tv', 'on', '2.7.8'))[0].mode, 'rot');
+  assert.equal((await _internal.portalsOf(env, [main], 'tv', 'off', '2.7.8'))[0].mode, 'auto');
   assert.equal((await _internal.portalsOf(env, [rotating], 'ult', 'off'))[0].mode, 'auto');
   assert.equal((await _internal.portalsOf(env, [rotating], 'xc', 'off'))[0].mode, 'auto');
   assert.deepEqual(await _internal.portalsOf(env, [solo], 'ult', 'on'), [solo]);
   assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'ult'), { 'u.dnsRot': 'on' });
   assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'xc'), { 'u.dnsRot': 'on' });
-  assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'tv'), {});
+  assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'tv'), { 'u.dnsRot': 'on' });
   assert.deepEqual(_internal.RC_CAT.find(([key]) => key === 'u.dnsRot'), [
-    'u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult', 'xc'], '', '', 'KAIROS Ultimate · Kairos XC',
+    'u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult', 'xc', 'tv'], '', '', 'KAIROS Ultimate · Kairos XC · Kairos Pro (versioni nuove)',
   ]);
 });
 

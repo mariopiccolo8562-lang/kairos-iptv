@@ -3451,16 +3451,18 @@ async function dnsSave(env, list) {
    (prima i DNS Orbix, così gli indici già salvati sui dispositivi non cambiano). */
 const hostKey = (h) => String(h || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
 const ROT_APPS = ['ult', 'xc'];
-const portalModeForApp = (mode, app) => mode === 'rot' && !ROT_APPS.includes(app) ? 'auto' : mode;
-async function portalsOf(env, pls, app = '', rot = '') {
+const PRO_ROT_VERSION = '2.7.8';
+const portalRotAllowed = (app, ver = '') => ROT_APPS.includes(app) || (app === 'tv' && semverCode(ver) >= semverCode(PRO_ROT_VERSION));
+const portalModeForApp = (mode, app, ver = '') => mode === 'rot' && !portalRotAllowed(app, ver) ? 'auto' : mode;
+async function portalsOf(env, pls, app = '', rot = '', ver = '') {
   const saved = await dnsList(env), byHost = new Map(saved.map((x) => [hostKey(x.host), x]));
   const byId = new Map(saved.map((x) => [x.id, x]));
   return pls.map((p) => {
     const main = byHost.get(hostKey(hostOf(p)));
     const alts = main ? main.alts.map((id) => byId.get(id)).filter((x) => x && x.id !== main.id) : [];
     if (!alts.length) return p;
-    const mode = rot === 'on' && ROT_APPS.includes(app) ? 'rot' : rot === 'off' && main.mode === 'rot' ? 'auto' : main.mode;
-    return { ...p, alts: alts.map((x) => x.host), altNames: alts.map((x) => x.name), mainName: main.name, mode: portalModeForApp(mode, app) };
+    const mode = rot === 'on' && portalRotAllowed(app, ver) ? 'rot' : rot === 'off' && main.mode === 'rot' ? 'auto' : main.mode;
+    return { ...p, alts: alts.map((x) => x.host), altNames: alts.map((x) => x.name), mainName: main.name, mode: portalModeForApp(mode, app, ver) };
   });
 }
 async function dnsSatOf(env) {
@@ -4363,7 +4365,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
   const { C, pls } = P ? await effOf(env, d, P, pls0) : { C: null, pls: [] }; // connessione indipendente: le sue playlist e il suo lettore
   const vm = P ? (+P.vpn === 2 ? 'force' : +P.vpn === 1 ? 'allow' : 'off') : 'off';
   // impronta dei server delle playlist: se cambia (DNS cambiato dal pannello) l'app aggiorna gli indirizzi senza ricaricare la lista
-  const portalPls = await portalsOf(env, pls);
+  const portalPls = await portalsOf(env, pls, app || d.app || '', rcDevOf(d)['u.dnsRot'], b.ver);
   const pv = pls.length ? (await sha256(pls.map((p, i) => p.id + '|' + hostOf(p) + '|' + (p.username || '') + '|' + JSON.stringify([(portalPls[i] && portalPls[i].mode) || 'auto', (portalPls[i] && portalPls[i].alts) || []])).join(','))).slice(0, 12) : '';
   const sat = await saturatedHosts(env, pls, portalPls, t);
   // autopilota: un canale che non funzionava visto bene adesso torna subito per tutti; l'app riceve l'elenco dei
@@ -4533,7 +4535,7 @@ const RC_CAT = [
   ['u.trailer', 'Trailer', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.tmdb', 'Metadati TMDB', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.speedBar', 'Velocità in alto', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
-  ['u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult', 'xc'], '', '', 'KAIROS Ultimate · Kairos XC'],
+  ['u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult', 'xc', 'tv'], '', '', 'KAIROS Ultimate · Kairos XC · Kairos Pro (versioni nuove)'],
   ['u.sport', 'Sport', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.sports', 'Sport da mostrare', 'txt', [], ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.sportHome', 'Sport in Home', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
@@ -6007,7 +6009,7 @@ async function playerRegister(req, env, ip, ctx) {
   const { C, pls } = status === 'active' ? await effOf(env, d, P, Ppls) : { C: P, pls: [] };
   if (status === 'active' && maintFor(s, P)) status = 'maintenance';
   const eff = rcEffective(s, d, regApp || appOfVer('', d.app), true);
-  const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? await portalsOf(env, pls, d.app, rcDevOf(d)['u.dnsRot']) : [], messages: await msgP, rc: eff.rc, rcv: eff.rcv };
+  const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? await portalsOf(env, pls, d.app, rcDevOf(d)['u.dnsRot'], b.ver) : [], messages: await msgP, rc: eff.rc, rcv: eff.rcv };
   if (status === 'active') {
     [out.account, out.vpn, out.af] = await Promise.all([accountOf(env, P, d, pls, C), vpnOf(env, P, d), acctFp(P)]);
     out.perms = permsOf(P); // i collegati ereditano i permessi del principale
