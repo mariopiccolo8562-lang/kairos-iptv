@@ -171,7 +171,7 @@ test('remote allow values and DNS rotation stay app-limited', () => {
   assert.equal(_internal.rcSent(tvRc, 'tv')['o.engLive'], undefined);
   assert.ok(_internal.RC_CMDS.some(([key, , , apps]) => key === 'epg' && apps.length === 1 && apps[0] === 'ult'));
   assert.ok(_internal.RC_CAT.filter(([key]) => key.startsWith('u.') && key !== 'u.dnsRot').every(([, , , , apps]) => apps.length === 1 && apps[0] === 'ult'));
-  assert.deepEqual(_internal.RC_CAT.find(([key]) => key === 'u.dnsRot')[4], ['ult', 'xc', 'tv', 'ktv', 'prem', 'lite', 'plus', 'nova']);
+  assert.deepEqual(_internal.RC_CAT.find(([key]) => key === 'u.dnsRot')[4], ['ult', 'xc', 'tv', 'ktv', 'prem', 'lite', 'plus', 'nova', 'portal', 'smart']);
 });
 
 test('device DNS rotation override selects rot for enabled apps with reserves only', async () => {
@@ -207,9 +207,13 @@ test('device DNS rotation override selects rot for enabled apps with reserves on
     assert.equal((await _internal.portalsOf(env, [rotating], app, 'on'))[0].mode, 'rot');
     assert.equal((await _internal.portalsOf(env, [rotating], app, 'off'))[0].mode, 'auto');
   }
-  for (const app of ['portal', 'smart', 'max', 'orbix']) {
+  for (const app of ['max', 'orbix', 'vega']) {
     assert.equal(_internal.portalModeForApp('rot', app), 'auto');
     assert.equal((await _internal.portalsOf(env, [main], app, 'on'))[0].mode, 'auto');
+  }
+  for (const app of ['portal', 'smart']) {
+    assert.equal(_internal.portalModeForApp('rot', app), 'rot');
+    assert.equal((await _internal.portalsOf(env, [main], app, 'on'))[0].mode, 'rot');
   }
   for (const app of ['plus', 'nova']) {
     assert.equal(_internal.portalModeForApp('rot', app), 'rot');
@@ -219,22 +223,23 @@ test('device DNS rotation override selects rot for enabled apps with reserves on
   assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'ult'), { 'u.dnsRot': 'on' });
   assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'xc'), { 'u.dnsRot': 'on' });
   assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'tv'), { 'u.dnsRot': 'on' });
+  assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'portal'), { 'u.dnsRot': 'on' });
+  assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'smart'), { 'u.dnsRot': 'on' });
   assert.deepEqual(_internal.RC_CAT.find(([key]) => key === 'u.dnsRot'), [
-    'u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult', 'xc', 'tv', 'ktv', 'prem', 'lite', 'plus', 'nova'], '', '', 'App Kairos aggiornate (Ultimate, XC, Pro, TV, Premium, Lite, Plus, Nova)',
+    'u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult', 'xc', 'tv', 'ktv', 'prem', 'lite', 'plus', 'nova', 'portal', 'smart'], '', '', 'App Kairos aggiornate (Ultimate, XC, Pro, TV, Premium, Lite, Plus, Nova, STB, Smarters)',
   ]);
 });
 
-test('legacy clients never receive allow values or rot mode', () => {
+test('legacy and external clients never receive allow values or unsupported rot mode', () => {
   const rc = _internal.rcClean({
     'o.engLive:allow': ['exo', 'vlc'],
     'o.autoNext:allow': [true, false],
     'u.saver:allow': ['off', '20'],
   });
-  for (const app of ['tv', 'portal', 'smart', 'max', 'orbix']) {
+  for (const app of ['tv', 'portal', 'smart', 'max', 'orbix', 'vega']) {
     const delivered = _internal.rcSent(rc, app);
     assert.ok(Object.keys(delivered).every((key) => !key.endsWith(':allow')), `${app} received an allow key`);
     assert.ok(Object.values(delivered).every((value) => typeof value !== 'string' || !value.startsWith('allow:')), `${app} received an allow value`);
-    assert.equal(_internal.portalModeForApp('rot', app), 'auto');
   }
   const ultimate = _internal.rcSent(rc, 'ult');
   assert.equal(ultimate['o.engLive'], 'allow:exo,vlc');
@@ -242,7 +247,8 @@ test('legacy clients never receive allow values or rot mode', () => {
   assert.equal(ultimate['u.saver'], 'allow:off,20');
   assert.equal(_internal.portalModeForApp('rot', 'ult'), 'rot');
   assert.equal(_internal.portalModeForApp('rot', 'xc'), 'rot');
-  for (const app of ['tv', 'portal', 'smart', 'max', 'orbix']) assert.equal(_internal.portalModeForApp('rot', app), 'auto');
+  for (const app of ['tv', 'max', 'orbix', 'vega']) assert.equal(_internal.portalModeForApp('rot', app), 'auto');
+  for (const app of ['portal', 'smart']) assert.equal(_internal.portalModeForApp('rot', app), 'rot');
   assert.equal(_internal.portalModeForApp('rot', 'plus'), 'rot');
   assert.equal(_internal.portalModeForApp('rot', 'nova'), 'rot');
 });
