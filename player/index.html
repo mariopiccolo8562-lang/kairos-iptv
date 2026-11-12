@@ -2450,7 +2450,7 @@ const asText = async (b) => (typeof b === 'string' ? b : b && b.size ? new Respo
 
 async function register() {
   const url = baseServer() + '/api/player/register';
-  const body = JSON.stringify({ code: S.code, secret: S.secret, model: (NATIVE && NATIVE.model && NATIVE.model()) || ((navigator.userAgent.match(/\(([^)]+)\)/) || [])[1] || '').slice(0, 70) || '' });
+  const body = JSON.stringify({ code: S.code, secret: S.secret, ver: (NATIVE && NATIVE.version && NATIVE.version()) || 'web', model: (NATIVE && NATIVE.model && NATIVE.model()) || ((navigator.userAgent.match(/\(([^)]+)\)/) || [])[1] || '').slice(0, 70) || '' });
   let status = 0, text = '';
   try {
     if (hasNativeHttp()) ({ status, text } = await nativeFetch(url, 'POST', body));
@@ -3868,7 +3868,7 @@ function nativePlay(item, kind, fromSec, extra) {
   let srv = null;
   if (portalPl && portalAlts.length) {
     const main = plOrigin(portalPl.type === 'xtream' ? portalPl.host : portalPl.url);
-    if (main) srv = { id: portalPl.id, main, alts: portalAlts, mode: portalPl.mode || 'auto', bad: [...(Array.isArray(S.sat) ? S.sat : []), ...ACK.bad] }; // ACK.bad: server principale trovato giù dagli auto-controlli
+    if (main) srv = { id: portalPl.id, main, alts: portalAlts, mode: portalPl.mode || 'auto', code: S.code, bad: [...(Array.isArray(S.sat) ? S.sat : []), ...ACK.bad] }; // ACK.bad: server principale trovato giù dagli auto-controlli
   }
   const stored = kind === 'live' ? 0 : store.get('pos', {})[item.id] || 0;
   const start = fromSec != null ? fromSec : stored;
@@ -7846,7 +7846,7 @@ async function autoCheck(why) {
       }
       if (!u) {
         // server principale giù: se il pannello ha messo un server di riserva (modalità automatica) si prova quello
-        const alts = p.mode && p.mode !== 'auto' ? [] : (Array.isArray(p.alts) ? p.alts : []).slice(0, 3);
+        const alts = p.mode && !['auto', 'rot'].includes(p.mode) ? [] : (Array.isArray(p.alts) ? p.alts : []).slice(0, 3);
         let alt = null;
         for (const a of alts) { const k = await acJson(xtApi(a, c), 7000); if (k && k.user_info && +k.user_info.auth !== 0) { alt = a; j = k; u = k.user_info; break; } }
         if (alt) { bad.push(plOrigin(c.host)); r.srv = 'alt'; fix.push('srv'); }

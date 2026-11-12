@@ -382,7 +382,7 @@ class PlayerActivity : ComponentActivity(), EngineListener {
 
     private fun canServer(err: String): Boolean {
         val p = portal ?: return false
-        if (p.mode != "auto" || Portals.cands(p).size < 2 || codecProblem(err) ||
+        if ((p.mode != "auto" && p.mode != "rot") || Portals.cands(p).size < 2 || codecProblem(err) ||
             (NetMem.lineClass(this) == "weak" || uiLine == "weak") || !Portals.canNext(this, p)) return false
         val type = try { JSONObject(NetInfo.json(this)).optString("type") } catch (_: Exception) { "" }
         return type.isNotEmpty() && type != "none"
@@ -667,12 +667,13 @@ class PlayerActivity : ComponentActivity(), EngineListener {
                 val altHosts = if (alts == null) emptyList() else (0 until alts.length()).map { alts.optString(it) }.filter { it.isNotBlank() }
                 val id = s.optString("id")
                 val main = s.optString("main")
-                val mode = s.optString("mode", "auto").lowercase(Locale.ROOT).takeIf { it in listOf("auto", "main", "alt") } ?: "auto"
+                val mode = s.optString("mode", "auto").lowercase(Locale.ROOT).takeIf { it in listOf("auto", "main", "alt", "rot") } ?: "auto"
+                val code = s.optString("code", "")
                 if (id.isNotBlank() && main.isNotBlank() && altHosts.isNotEmpty()) {
                     s.optJSONArray("bad")?.let { bad ->
                         for (i in 0 until bad.length()) Portals.markBad(this, bad.optString(i), Portals.BAD_MS)
                     }
-                    portal = PortalServer(id, main, altHosts, mode)
+                    portal = PortalServer(id, main, altHosts, mode, code)
                 }
             }
             subScale = when (j.optString("sub", "medium")) { "small" -> 0.8f; "large" -> 1.3f; "xl" -> 1.6f; else -> 1f }

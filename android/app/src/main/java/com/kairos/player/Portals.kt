@@ -4,7 +4,7 @@ import android.content.Context
 import java.net.URL
 import java.util.Locale
 
-data class PortalServer(val id: String, val main: String, val alts: List<String>, val mode: String)
+data class PortalServer(val id: String, val main: String, val alts: List<String>, val mode: String, val code: String = "")
 
 object Portals {
     const val BAD_MS = 30 * 60_000L
@@ -35,6 +35,12 @@ object Portals {
         return when (server.mode.lowercase(Locale.ROOT)) {
             "main" -> main
             "alt" -> candidates.getOrElse(1) { main }
+            "rot" -> {
+                val prefs = context.getSharedPreferences("kairos", Context.MODE_PRIVATE)
+                val chosen = prefs.getString("ptl_${server.id}", "").orEmpty()
+                if (candidates.any { hostKey(it) == hostKey(chosen) && !isBad(context, it) }) candidates.first { hostKey(it) == hostKey(chosen) && !isBad(context, it) }
+                else PortalRotation.firstHealthy(candidates, server.code) { isBad(context, it) } ?: main
+            }
             else -> {
                 val prefs = context.getSharedPreferences("kairos", Context.MODE_PRIVATE)
                 val chosen = prefs.getString("ptl_${server.id}", "").orEmpty()
@@ -64,7 +70,7 @@ object Portals {
     }
 
     fun canNext(context: Context, server: PortalServer): Boolean {
-        if (!server.mode.equals("auto", true)) return false
+        if (!server.mode.equals("auto", true) && !server.mode.equals("rot", true)) return false
         val candidates = cands(server)
         if (candidates.size < 2) return false
         val current = hostKey(host(context, server))
@@ -72,8 +78,8 @@ object Portals {
     }
 
     fun next(context: Context, server: PortalServer): Pair<String, String>? {
-        if (!server.mode.equals("auto", true)) return null
-        val candidates = cands(server)
+        if (!server.mode.equals("auto", true) && !server.mode.equals("rot", true)) return null
+        val candidates = if (server.mode.equals("rot", true)) PortalRotation.order(cands(server), server.code) else cands(server)
         if (candidates.size < 2) return null
         val old = host(context, server)
         val current = candidates.indexOfFirst { hostKey(it) == hostKey(old) }
@@ -99,4 +105,17 @@ object Portals {
             if (url.ref.isNullOrEmpty()) rewritten else "$rewritten#${url.ref}"
         } catch (_: Exception) { value }
     }
+}
+
+object PortalRotation {
+    fun order(candidates: List<String>, deviceCode: String): List<String> {
+        if (candidates.size < 2) return candidates
+        var hash = 0x811C9DC5.toInt()
+        deviceCode.forEach { hash = (hash xor it.code) * 0x01000193 }
+        val offset = Math.floorMod(hash, candidates.size)
+        return candidates.drop(offset) + candidates.take(offset)
+    }
+
+    fun firstHealthy(candidates: List<String>, deviceCode: String, bad: (String) -> Boolean): String? =
+        order(candidates, deviceCode).firstOrNull { !bad(it) }
 }
