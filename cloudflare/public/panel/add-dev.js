@@ -191,7 +191,7 @@
   function nearHtml(d) {
     if (isAg() || !d || d.parent || d.status !== 'pending') return '';
     nearLoad(false);
-    const E = N.m.get(d.id) || {}, L = E.near || [], V = E.via;
+    const E = N.m.get(d.id) || {}, L = E.near || [], V = d.dl ? null : E.via; // «via» dal vivo solo se non è già scritto sul dispositivo (d.dl)
     if (!L.length && !V) return '';
     // «📥 Scaricata col codice di …»: sulla stessa rete un Kairos Store ha usato da poco un codice usa e getta (store-codes.js)
     const via = V ? `<span class="ad-via">📥 Scaricata ${V.mine ? 'col <b>tuo codice</b>' : `col codice di <b>${esc(V.by || 'un agente')}</b>`}</span>` : '';

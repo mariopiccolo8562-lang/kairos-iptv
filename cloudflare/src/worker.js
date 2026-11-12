@@ -5957,6 +5957,7 @@ async function playerRegister(req, env, ip, ctx) {
       ctx.waitUntil(log(env, 'new', `Nuovo dispositivo in attesa: ${code}${model ? ' (' + model + ')' : ''}`, ip));
       ctx.waitUntil(webhookSend(env, 'device.new', { id: d.id, code, model, ip }));
     }
+    ctx.waitUntil(recStamp(env, d.id, ip));
   } else if (!d.secret_hash) {
     // dispositivo creato dal pannello: il primo che si presenta col codice lo "lega" al proprio segreto
     const bound = await env.DB.prepare('UPDATE devices SET secret_hash = ? WHERE id = ? AND secret_hash = ?').bind(sh, d.id, '').run();
@@ -5968,6 +5969,7 @@ async function playerRegister(req, env, ip, ctx) {
     ctx.waitUntil(log(env, 'off', `Tentativo con codice già in uso: ${code}`, ip));
     return json({ status: 'locked' }, 403);
   }
+  if (!+d.active && !d.parent && !(+d.rec_t)) ctx.waitUntil(recStamp(env, d.id, ip)); // in attesa e non ancora segnato: chi l'ha scaricata
 
   ctx.waitUntil(env.DB.prepare('UPDATE devices SET last_seen = ?, last_ip = ?, model = CASE WHEN ? <> \'\' THEN ? ELSE model END WHERE id = ?')
     .bind(now(), ip, model, model, d.id).run());
@@ -6834,6 +6836,25 @@ function ipNet(ip) {
   const full = ip.includes('::') ? [...A, ...Array(Math.max(0, 8 - A.length - B.length)).fill('0'), ...B] : A;
   if (full.length !== 8 || full.some((x) => !/^[0-9a-f]{1,4}$/.test(x))) return '';
   return full.slice(0, 4).map((x) => x.replace(/^0+(?=.)/, '')).join(':') + '::/64';
+}
+/** «📥 Scaricata col codice di …» scritto sul dispositivo al register (12 novembre 2026): quando una TV nuova si presenta in
+    attesa, si cerca il codice dello Store usato da poco dalla stessa rete (o dallo stesso IP) e si segna chi l'aveva generato
+    (agente o titolare). Così la scheda «Da attivare» lo mostra sempre, anche se poi l'IP cambia. Una volta sola per dispositivo. */
+async function recStamp(env, id, ip) {
+  try {
+    const t = now(), net = ipNet(ip);
+    const r = await env.DB.prepare("SELECT by_id, by_name, ip, used FROM store_codes WHERE used > ? AND ip <> '' ORDER BY used DESC LIMIT 80").bind(t - 48 * 36e5).all();
+    let exact = null, sameNet = null;
+    for (const c of (r && r.results) || []) {
+      if (!exact && c.ip === ip) exact = c;
+      if (!sameNet && net && ipNet(c.ip) === net) sameNet = c;
+      if (exact) break;
+    }
+    const best = exact || sameNet;
+    if (!best) return;
+    await env.DB.prepare("UPDATE devices SET rec_by = ?, rec_name = ?, rec_t = ? WHERE id = ? AND rec_t = 0 AND active = 0 AND parent = '' AND secret_hash <> ''")
+      .bind(+best.by_id || 0, str(best.by_name, 60), t, id).run();
+  } catch {}
 }
 async function devicesNear(env, forId, agentId) {
   const t = now(), SINCE_TV = t - 48 * 36e5, SINCE_CL = t - 14 * 864e5;
@@ -8769,7 +8790,7 @@ async function deviceOut(env, d) {
   const pls = await unseal(env, d.playlists).catch(() => []);
   // una connessione collegata ha lo stato del principale (il pannello lo copia); le sue eventuali playlist non la rendono «disattivata»
   return { id: d.id, code: d.code, name: d.name, model: d.model, notes: d.notes, active: !!d.active, expires: d.expires, playlists: pls, hosts: [...new Set(pls.map(hostOf).filter(Boolean))], createdAt: d.created_at, lastSeen: d.last_seen, lastIp: d.last_ip, bound: !!d.secret_hash, status: statusOf(d, d.parent ? [] : pls), own: ownOf(d),
-    addons: addonsList(d.addons), ownerId: +d.owner_id || 0, aiLimit: d.ai_limit ?? -1, aiExtra: +d.ai_extra || 0, aiProvider: d.ai_provider || '', app: d.app || '', orbix: (({ id, t, n, u, dns, h }) => (id ? { id, t, n, u, dns, h } : null))(orbixOf(d)), maxp: (({ uid, u, dom, t }) => (uid ? { uid, u, dom, t } : null))(maxpOf(d)), parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '', player: playerParse(d.player) };
+    addons: addonsList(d.addons), ownerId: +d.owner_id || 0, aiLimit: d.ai_limit ?? -1, aiExtra: +d.ai_extra || 0, aiProvider: d.ai_provider || '', app: d.app || '', orbix: (({ id, t, n, u, dns, h }) => (id ? { id, t, n, u, dns, h } : null))(orbixOf(d)), maxp: (({ uid, u, dom, t }) => (uid ? { uid, u, dom, t } : null))(maxpOf(d)), parent: d.parent || '', maxConn: d.max_conn ?? 1, maxProfiles: d.max_profiles ?? 3, profiles: readProfiles(d, pls.map((p) => p.id)), lockProfiles: !!d.lock_profiles, vpn: +d.vpn || 0, vpnConf: !!d.vpn_conf, perms: permsParse(d.perms), maxStreams: +d.max_streams || 0, vpnLoc: d.vpn_loc || '', plMode: d.pl_mode === 'split' ? 'split' : 'merge', plDefault: d.pl_default || '', player: playerParse(d.player), dl: (+d.rec_t ? { by: d.rec_name || '', mine: !(+d.rec_by) } : null) };
 }
 /** campi "account" inviati dal pannello: connessioni, profili, VPN (cur = valori attuali del dispositivo) */
 async function accountFields(env, b, cur, pls) {

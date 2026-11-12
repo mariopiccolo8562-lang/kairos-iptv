@@ -1241,3 +1241,9 @@ per i tornei minori. Le emittenti «di solito su» ora arrivano anche alle app (
 - Una sola pastiglia dell'app accanto al nome: quella vecchia (`.app-chip` di `lite-panel.js`) non si aggiunge più dove c'è già la nuova.
 
 Prove: `srv_line_src` 59, `ui_line_src` 36, `ui_list_rc_dns` 15.
+
+## 74. «Scaricata col codice di …» sulle schede «Da attivare» (12 novembre 2026)
+
+Quando una TV nuova si presenta in attesa, sotto il modello compare **«📥 Scaricata dal codice di \<agente\>»** (o «con il tuo codice»), in tabella e nelle schede. Lo si scrive sul dispositivo al register, cercando il codice dello Store usato da poco dallo **stesso IP** (la stessa TV): così resta anche se l'IP cambia poi. Scaricata senza codice → nessuna dicitura (non c'è un agente). Si segna una volta sola, finché il dispositivo è in attesa; una volta attivato non si tocca.
+
+Tecnica: `devices.rec_by`, `rec_name`, `rec_t` (migrazione `0056_dev_rec.sql`); `recStamp()` al register; `deviceOut` espone `dl: { by, mine }`. Pannello: `dlWho()` in `kc.js`, `add-dev.js` non ripete «via» dal vivo quando c'è già la dicitura scritta. Prove: `srv_dl_who` 13, `ui_dl_who` 6.

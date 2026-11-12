@@ -317,6 +317,7 @@
 .dvt-code svg{width:11px;height:11px;opacity:.6}.dvt-code:hover{color:#fff}
 .dvt-app{display:inline-block;vertical-align:middle;margin-left:7px;font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:2px 6px;border-radius:5px;line-height:1.5;white-space:nowrap}
 .dvt-app.na{background:rgba(255,255,255,.06);color:var(--mut);font-weight:700}
+.dvp-dl{margin-top:5px;font-size:12.5px;color:#67e8f9}.dvp-dl b{color:#a5f3fc}
 .dvt-exp b,.dvt-dev b{display:block;font-weight:600;white-space:nowrap}
 .dvt-exp small,.dvt-dev small{display:block;font-size:11px;color:var(--mut);margin-top:2px}
 .dvt-exp small.warn{color:var(--warn)}.dvt-exp small.bad{color:var(--bad)}
@@ -1206,8 +1207,13 @@
         <div class="dv-act">${window.KXAddDev && KXAddDev.can() ? '<button class="btn sm" data-act="adddev" title="Collega e aggiungi un altro dispositivo a questo cliente">➕ Dispositivo</button>' : ''}${rcBtn('dvt-rc')}<button class="btn sm" data-act="renew">Rinnova</button><button class="btn sm pri" data-act="open">Modifica</button></div>
       </div>`;
     }
+    // «📥 Scaricata col codice di …»: scritto sul dispositivo al download (sempre presente); se manca, il riconoscimento dal vivo (add-dev.js)
+    function dlWho(d) {
+      if (!d || !d.dl) return '';
+      return `<div class="dvp-dl">📥 Scaricata ${d.dl.mine ? 'con il <b>tuo codice</b>' : `dal codice di <b>${esc(d.dl.by || 'un agente')}</b>`}</div>`;
+    }
     function pendCard(d) {
-      return `<div class="dv-pc" data-id="${esc(d.id)}"><div><span class="code big">${esc(d.code)}</span><small>${esc(d.model || 'Dispositivo')} · si è collegato ${esc(ago(d.lastSeen || d.createdAt))}</small>${window.KXAddDev ? KXAddDev.nearHtml(d) : ''}</div>
+      return `<div class="dv-pc" data-id="${esc(d.id)}"><div><span class="code big">${esc(d.code)}</span><small>${esc(d.model || 'Dispositivo')} · si è collegato ${esc(ago(d.lastSeen || d.createdAt))}</small>${dlWho(d)}${window.KXAddDev ? KXAddDev.nearHtml(d) : ''}</div>
         <div class="dv-act"><button class="btn sm pri" data-act="activate">Attiva</button><button class="btn sm" data-act="link">Collega a un cliente</button>${pendOwner() ? '<button class="btn sm dvp-x" data-act="delp" title="Elimina la richiesta">🗑</button>' : ''}</div></div>`;
     }
     /* richieste «da attivare»: eliminarle (una o tutte) e farle annullare da sole se non le accetti entro un tempo (solo titolare) */
@@ -1270,7 +1276,7 @@
         : addDev + rcBtn('dvt-rc') + ib('ext1', 'g', '+1 mese') + ib('ext12', 'b', '+12 mesi') + (d.status === 'active' ? ib('kick', 'k', 'Disconnetti: interrompe la visione in corso') : '') + (d.active ? ib('off', 'o', 'Disattiva') : ib('on', 'g', 'Riattiva')) + ib('edit', 'e', 'Apri scheda') + ib('del', 'r', 'Elimina');
       return `<tr data-id="${esc(d.id)}" class="${sub ? 'sub' : ''} ${st.sel.has(d.id) ? 'sel' : ''}">
         <td class="c">${sub ? '' : `<input type="checkbox" data-sel="${esc(d.id)}" ${st.sel.has(d.id) ? 'checked' : ''}>`}</td>
-        <td><div class="dvt-u">${sub ? '<span class="dvt-sub">↳</span>' : ''}<div><b>${liveDot(d)}${esc(d.name || (sub ? d.model || 'Dispositivo' : '') || '— senza nome —')}${d.status === 'pending' ? '' : appTag(d)}</b><span class="dvt-code" data-copy="${esc(d.code)}" title="Copia il codice">${esc(d.code)} ${IC.copy}</span>${!sub && d.status === 'pending' && window.KXAddDev ? KXAddDev.nearHtml(d) : ''}</div></div></td>
+        <td><div class="dvt-u">${sub ? '<span class="dvt-sub">↳</span>' : ''}<div><b>${liveDot(d)}${esc(d.name || (sub ? d.model || 'Dispositivo' : '') || '— senza nome —')}${d.status === 'pending' ? '' : appTag(d)}</b><span class="dvt-code" data-copy="${esc(d.code)}" title="Copia il codice">${esc(d.code)} ${IC.copy}</span>${!sub && d.status === 'pending' ? dlWho(d) : ''}${!sub && d.status === 'pending' && window.KXAddDev ? KXAddDev.nearHtml(d) : ''}</div></div></td>
         <td>${stPill(d.status)}</td>
         <td class="dvt-exp">${exp}${window.KXPay ? KXPay.badge('device', '', base.id) : ''}</td>
         <td class="c mono">${sub || d.status === 'pending' ? '—' : `${1 + kids.length}/${+d.maxConn >= 999 ? '∞' : esc(d.maxConn || 1)}`}</td>
