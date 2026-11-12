@@ -2,6 +2,8 @@
    L'elenco delle app che i clienti vedono nel Kairos Store: è docs/apps.json del repository kairos-store, lo stesso che
    prima si cambiava solo dal pannello a parte dello store (Worker «kairos-store»). Stesse voci: nome, etichetta, colore,
    descrizione, link all'APK, codice Downloader, pacchetto, icona (caricata e ridotta a 144×144), nascondi, ordine.
+   Nascondi (12 novembre 2026): l'occhio su ogni riga nasconde l'app con un tocco. Un'app nascosta non arriva più allo Store
+   (né ai clienti né agli agenti) e, se è un'app Kairos, sparisce anche dal pannello degli agenti (link e codice Downloader).
    Salva il server (/api/admin/store-apps) con il suo token: il browser non lo vede mai. Usa $, esc, api, toast, ask, D, view di app.js. */
 (() => {
   if (!$('#side')) return;
@@ -20,7 +22,7 @@
 #v-stapps .sa-list{display:flex;flex-direction:column;gap:10px}
 #v-stapps .sa-app{--g:#22d3ee;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.02);overflow:hidden}
 #v-stapps .sa-app.open{border-color:color-mix(in srgb,var(--g) 55%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--g) 25%,transparent)}
-#v-stapps .sa-app.hid{opacity:.62}
+#v-stapps .sa-app.hid{border-style:dashed}
 #v-stapps .sa-h{display:flex;align-items:center;gap:12px;padding:10px 12px;cursor:pointer;min-width:0}
 #v-stapps .sa-ic{flex:none;width:46px;height:46px;border-radius:12px;display:grid;place-items:center;overflow:hidden;background:color-mix(in srgb,var(--g) 18%,#0b0f17);box-shadow:0 0 18px -6px var(--g);font-weight:800;color:#fff}
 #v-stapps .sa-ic img{width:100%;height:100%;object-fit:cover}
@@ -42,6 +44,13 @@
 #v-stapps .sa-dl a{color:#67e8f9}
 #v-stapps .sa-use{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:5px 10px;border-radius:9px;border:1px solid rgba(34,211,238,.4);background:rgba(34,211,238,.08);color:#a5f3fc;font:inherit;font-size:12.5px;cursor:pointer}
 #v-stapps .sa-use b{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#e0faff}
+#v-stapps .sa-eye{flex:none;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:9px;border:1px solid rgba(52,211,153,.4);background:rgba(52,211,153,.08);color:#a7f3d0;font:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+#v-stapps .sa-eye svg{width:17px;height:17px;flex:none}
+#v-stapps .sa-eye.off{border-color:rgba(248,113,113,.5);background:rgba(248,113,113,.1);color:#fecaca}
+#v-stapps .sa-app.hid .sa-eye{opacity:1}
+#v-stapps .sa-app.hid .sa-ic,#v-stapps .sa-app.hid .sa-tt{opacity:.55}
+#v-stapps .sa-hint{margin:6px 0 0 26px;color:var(--mut);font-size:12.5px;line-height:1.45}
+@media (max-width:700px){#v-stapps .sa-eye span{display:none}#v-stapps .sa-eye{padding:0 8px}}
 #v-stapps .sa-mv{display:flex;gap:4px;flex:none}
 #v-stapps .sa-mv button{width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:transparent;color:inherit;cursor:pointer;font-size:15px}
 #v-stapps .sa-mv button:disabled{opacity:.3;cursor:default}
@@ -110,6 +119,11 @@
     const hits = new Set(list.filter((x) => x && okCode(x.code) && ((n && norm(x.name) === n) || (a.url && (x.link === a.url || (Array.isArray(x.links) && x.links.some((l) => l && l.url === a.url)))))).map((x) => okCode(x.code)));
     return hits.size === 1 ? [...hits][0] : '';
   }
+  /* app Kairos (come nel server): nascosta nello Store = via anche dal pannello degli agenti */
+  const KKEY = { pro: 1, tv: 1, ktv: 1, premium: 1, prem: 1, lite: 1, xc: 1, ult: 1, ultimate: 1, plus: 1, nova: 1, 'nova-arm32': 1, store: 1 };
+  const isKairos = (a) => { const m = /\/get\/([a-z0-9-]+)\.apk(?:[?#]|$)/i.exec(String(a.url || '')), n = norm(a.name); return !!((m && KKEY[m[1].toLowerCase()]) || (n.startsWith('kairos') && KKEY[n.slice(6)])); };
+  const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1M6.5 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.5 4.5-1.2"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
   function dlInfo() {
     const x = { have: 0, total: S.data.apps.length, fill: [], missing: [], diff: [] };
     S.data.apps.forEach((a, i) => {
@@ -167,6 +181,7 @@
         <span class="sa-ic${a.light ? ' contain' : ''}">${iconHtml(a)}</span>
         <span class="sa-tt"><b>${esc(a.name || 'Nuova app')}</b>${a.tag ? `<span class="sa-bd tag">${esc(a.tag)}</span>` : ''}${a.hidden ? '<span class="sa-bd">NASCOSTA</span>' : ''}${pr.length ? '<span class="sa-bd warn">DA COMPLETARE</span>' : ''}${codeOf(a) ? `<span class="sa-bd dl" title="Codice Downloader">DL ${esc(codeOf(a))}</span>` : '<span class="sa-bd nodl" title="Manca il codice Downloader">SENZA CODICE</span>'}
           <small>${esc(a.description || a.url || '—')}</small></span>
+        ${ro ? '' : `<button type="button" class="sa-eye${a.hidden ? ' off' : ''}" data-act="hide" data-i="${i}" aria-pressed="${a.hidden ? 'true' : 'false'}" title="${a.hidden ? 'Nascosta: non la vedono né i clienti né gli agenti. Tocca per mostrarla di nuovo' : 'Visibile nello Store. Tocca per nasconderla a clienti e agenti'}">${a.hidden ? EYE_OFF : EYE}<span>${a.hidden ? 'Nascosta' : 'Visibile'}</span></button>`}
         ${ro ? '' : `<span class="sa-mv"><button type="button" data-act="up" data-i="${i}" title="Sposta su" aria-label="Sposta su"${i === 0 ? ' disabled' : ''}>↑</button><button type="button" data-act="down" data-i="${i}" title="Sposta giù" aria-label="Sposta giù"${i === n - 1 ? ' disabled' : ''}>↓</button></span>`}
         <svg class="sa-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg>
       </div>
@@ -190,7 +205,8 @@
             <label class="sa-chk"><input type="checkbox" data-f="light" data-i="${i}"${a.light ? ' checked' : ''}${dis}> Logo con sfondo trasparente (mostralo intero)</label>
           </div>
         </div>
-        <label class="sa-chk"><input type="checkbox" data-f="hidden" data-i="${i}"${a.hidden ? ' checked' : ''}${dis}> Nascondi dallo store (resta qui, la puoi riattivare)</label>
+        <label class="sa-chk"><input type="checkbox" data-f="hidden" data-i="${i}"${a.hidden ? ' checked' : ''}${dis}> Nascondi dallo Store a clienti e agenti (resta qui, la puoi riattivare)</label>
+        ${a.hidden ? `<div class="sa-hint">Lo Store non la mostra più a nessuno.${isKairos(a) ? ' Agli agenti sparisce anche dal pannello: link e codice Downloader di questa app.' : ''} Chi l'ha già installata continua a usarla e ad aggiornarla.</div>` : ''}
         ${pr.length ? `<div class="sa-err">⚠ ${esc(pr.join(' · '))}</div>` : ''}
         ${ro ? '' : `<div class="sa-del"><button class="btn sm" type="button" data-act="del" data-i="${i}" style="color:#fca5a5">Elimina app</button></div>`}
       </div>
@@ -211,7 +227,7 @@
           <div><label>Contatto (facoltativo)</label><input class="inp" id="saContact" value="${esc(st.contact || '')}" maxlength="80"${dis}></div>
           <div class="w"><label>Frasi che scorrono in alto (una per riga, massimo 10)</label><textarea class="inp" id="saTag" rows="3"${dis}>${esc((st.taglines || []).join('\n'))}</textarea></div>
         </div></div>
-      <div class="card glass"><div class="hd"><h3>App <span class="mut" id="saCount" style="font-weight:500">(${vis} visibili su ${d.apps.length})</span><small>Tocca un'app per cambiarla. Le frecce decidono l'ordine nello store.</small></h3>
+      <div class="card glass"><div class="hd"><h3>App <span class="mut" id="saCount" style="font-weight:500">(${vis} visibili su ${d.apps.length})</span><small>Tocca un'app per cambiarla. Le frecce decidono l'ordine nello store. L'occhio la nasconde a clienti e agenti.</small></h3>
         ${ro || d.apps.length >= 60 ? '' : '<button class="btn pri sm" type="button" id="saAdd">+ Aggiungi app</button>'}</div>
         <div class="sa-dl" id="saDl" hidden></div>
         <div class="sa-list" id="saList">${d.apps.length ? d.apps.map((a, i) => appRow(a, i, d.apps.length)).join('') : '<p class="mut">Nessuna app. Premi «+ Aggiungi app».</p>'}</div></div>
@@ -246,7 +262,7 @@
     try {
       const r = await api('PUT', '/admin/store-apps', { data: S.data, sha: S.sha });
       S.data = r.data; S.saved = JSON.stringify(r.data); S.sha = r.sha || S.sha;
-      render(); toast('Salvato: lo store mostra le app nuove entro un minuto');
+      render(); const nh = r.data.apps.filter((a) => a.hidden).length; toast(nh ? `Salvato: ${nh === 1 ? '1 app nascosta' : nh + ' app nascoste'} a clienti e agenti, entro un paio di minuti` : 'Salvato: lo store mostra le app nuove entro un minuto');
     } catch (e) { toast(e.message || 'Errore', 1); }
     finally { S.busy = false; bar(); }
   }
@@ -306,7 +322,11 @@
       return;
     }
     const act = t.dataset.act, i = +t.dataset.i, A = S.data.apps;
-    if (act === 'toggle') { if (e.target.closest('.sa-mv')) return; S.open = S.open === i ? -1 : i; const el = V.querySelector(`.sa-app[data-app="${i}"]`); V.querySelectorAll('.sa-app.open').forEach((x) => { if (x !== el) x.classList.remove('open'); }); if (el) el.classList.toggle('open', S.open === i); return; }
+    if (act === 'hide' && A[i] && S.canSave) {
+      A[i].hidden = !A[i].hidden; render();
+      return toast(A[i].hidden ? `«${A[i].name || 'Nuova app'}» nascosta: premi «Salva»` : `«${A[i].name || 'Nuova app'}» di nuovo visibile: premi «Salva»`);
+    }
+    if (act === 'toggle') { if (e.target.closest('.sa-mv,.sa-eye')) return; S.open = S.open === i ? -1 : i; const el = V.querySelector(`.sa-app[data-app="${i}"]`); V.querySelectorAll('.sa-app.open').forEach((x) => { if (x !== el) x.classList.remove('open'); }); if (el) el.classList.toggle('open', S.open === i); return; }
     if (act === 'up' && i > 0) { [A[i - 1], A[i]] = [A[i], A[i - 1]]; if (S.open === i) S.open = i - 1; else if (S.open === i - 1) S.open = i; render(); return; }
     if (act === 'down' && i < A.length - 1) { [A[i + 1], A[i]] = [A[i], A[i + 1]]; if (S.open === i) S.open = i + 1; else if (S.open === i + 1) S.open = i; render(); return; }
     if (act === 'del') {

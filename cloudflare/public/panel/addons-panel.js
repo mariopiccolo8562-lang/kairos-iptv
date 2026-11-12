@@ -4,6 +4,7 @@
   const css = document.createElement('style');
   css.textContent = `
 .dlbar{display:flex;gap:10px;flex-wrap:wrap;margin:-6px 0 18px}
+.dlbar:empty{display:none}
 .dlbar .dl{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:var(--glass)}
 .dlbar .dl i{font-style:normal;width:34px;height:34px;border-radius:8px;display:grid;place-items:center;background:rgba(61,124,245,.15);color:#8fb3ff;font-weight:800;font-size:13px}
 .dlbar .dl small{display:block;color:var(--mut);font-size:11.5px}
@@ -90,7 +91,9 @@
     const linkIt = (k, label, url) => `<div class="dl" data-dlk="${k}"><i>${k}</i><div><small>${label}</small><b style="font-size:13px;letter-spacing:0">${esc(url.replace(/^https?:\/\//, ''))}</b></div><button class="btn sm" data-dlc="${esc(url)}">Copia</button></div>`;
     const owner = D.role !== 'agent';
     const linkOf = (key, slug) => { if (owner) return location.protocol === 'file:' ? '' : location.origin + '/get/' + slug + '.apk'; const x = (D.kairosApps || []).find((a) => a.key === key); return x && x.apk ? x.apk : ''; };
-    const dl = (k, label, code, key, slug) => { const u = code ? '' : linkOf(key, slug); return u ? linkIt(k, label.replace('Downloader', 'Indirizzo'), u) : it(k, label, code, owner ? 'non impostato (Impostazioni → App e aggiornamenti)' : 'non impostato'); };
+    // agente senza quell'app (non concessa dal titolare, o nascosta nello Store): la voce non si disegna, nemmeno il nome
+    const mine = (key) => owner || (D.kairosApps || []).some((a) => a.key === key);
+    const dl = (k, label, code, key, slug) => { if (!code && !mine(key)) return ''; const u = code ? '' : linkOf(key, slug); return u ? linkIt(k, label.replace('Downloader', 'Indirizzo'), u) : it(k, label, code, owner ? 'non impostato (Impostazioni → App e aggiornamenti)' : 'non impostato'); };
     bar.innerHTML = dl('DL', 'Downloader · Kairos Pro', s.downloaderCode, 'pro', 'pro')
       + dl('ST', 'Downloader · Kairos Store', s.storeDownloaderCode, 'store', 'store'); // store aperto: niente più codice venditore da dare ai clienti
     $$('[data-dlc]', bar).forEach((b) => (b.onclick = () => navigator.clipboard.writeText(b.dataset.dlc).then(() => toast(/^https?:/.test(b.dataset.dlc) ? 'Indirizzo copiato' : 'Codice copiato'), () => toast('Copia non consentita', 1))));

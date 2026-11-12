@@ -1135,3 +1135,34 @@ Quando la linea raggiunge quella data si torna a seguire la linea. Clienti illim
 - Per ora è solo lo scarico: il pannello non riconosce ancora le due app (si presentano come una Kairos XC, di cui hanno il
   motore), non hanno schede di impostazioni né riquadri nello Store.
 - **Test**: `srv_get_portal` (17).
+
+## 68. App nascoste nello Store, per clienti e agenti (12 novembre 2026)
+
+- **Dove**: Store → App dello store. Ogni riga ha l'**occhio** («Visibile» / «Nascosta»): un tocco e poi «Salva».
+  La casella dentro la scheda fa la stessa cosa. L'app resta nell'elenco del titolare e si rimette con un altro tocco.
+- **Clienti e agenti nello Store**: un'app nascosta non arriva più allo Store. `/store/apps.json` (da `store-k.download` e
+  `panel-kairos.com`) esce senza le app nascoste (`storeAppsPublic` in `worker.js`): prima arrivavano e la pagina non le
+  disegnava. Lo Store ricorda l'ultimo elenco arrivato, così le nascoste non tornano quando l'elenco non arriva.
+- **Agenti nel pannello**: un'app **Kairos** nascosta nello Store sparisce anche dal pannello degli agenti: voce in
+  «App Kairos», link e codice Downloader (`storeHiddenKeys`, letta da `docs/apps.json` di kairos-store e tenuta in memoria
+  60 secondi; dopo un «Salva» vale subito). L'app si riconosce dal link `/get/<app>.apk` o dal nome «Kairos …».
+  Con due voci della stessa app, una visibile basta a tenerla. I permessi dell'agente (`kAllow`) non vengono toccati.
+  Nella riga dei codici in alto l'agente non vede più nemmeno il nome di un'app che non ha (nascosta o non concessa):
+  prima compariva «non impostato».
+- **Cosa non cambia**: gli indirizzi `/get/<app>.apk` e i file di aggiornamento (chi ha già l'app continua ad aggiornarla),
+  le attivazioni, i «Codici Downloader» delle app di terzi, tutto quello che vede il titolare.
+- **Limite**: finché il repository kairos-store è pubblico, il file `apps.json` su GitHub contiene anche le voci nascoste.
+- GitHub non risponde: per gli agenti vale l'ultimo elenco letto (all'avvio a freddo: niente di nascosto).
+- **Test**: `srv_store_hidden` (32), `ui_store_hide` (33), `store_page_list` (25, pagina dello Store).
+
+## 69. Loghi nuovi delle app Kairos (12 novembre 2026)
+
+- Un simbolo per app dentro la stessa cornice luminosa, con «KAIROS» e il nome: `strumenti/loghi/loghi.py` li disegna
+  tutti (nessuna immagine presa da internet; carattere Chakra Petch, licenza OFL, dalla cartella dei caratteri di
+  kairos-portal-smart). Esce il foglio con tutti i loghi e, per ogni app: icona di avvio (48–192 px), banner TV 320×180,
+  icona 192×192 per l'elenco dello Store.
+- **Store**: `docs/icons/kairos-<app>-2026.webp` nel repository kairos-store, per Pro, Premium, Tv, Plus, XC e Lite.
+- **App**: icona di avvio (`mipmap-*/ic_launcher.png`) e banner TV (`drawable-xhdpi/banner.png`) in Kairos Pro, TV,
+  Premium, Lite, XC, Plus e Nova. Il logo dentro le app non cambia.
+- Non toccati: KAIROS Ultimate (lavoro di Devin), l'app Kairos Store (il suo marchio è anche nell'animazione di apertura),
+  Kairos Portal e Kairos Smart (già in questo stile; si allineano alla prossima versione).

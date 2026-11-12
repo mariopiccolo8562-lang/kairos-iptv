@@ -2140,6 +2140,50 @@ async function storeDoc(env, rel) {
   }
   return { b };
 }
+/* ---------------- App nascoste nello Store (12 novembre 2026) ----------------
+   «Nascondi» in Store → App dello store vale per clienti e agenti:
+   - lo Store non riceve più le app nascoste: /store/apps.json esce senza (prima arrivavano e la pagina non le disegnava);
+   - le app Kairos nascoste spariscono anche dal pannello degli agenti (link e codice Downloader). Il titolare vede tutto.
+   Gli indirizzi /get/<app>.apk e i file di aggiornamento NON cambiano: le app già installate continuano ad aggiornarsi.
+   Elenco non letto (GitHub non risponde): vale l'ultimo letto, altrimenti niente di nascosto per gli agenti. */
+const SA_KKEY = { pro: 'pro', tv: 'tv', ktv: 'tv', premium: 'prem', prem: 'prem', lite: 'lite', xc: 'xc', ult: 'ult', ultimate: 'ult', plus: 'plus', nova: 'nova', 'nova-arm32': 'nova', store: 'store' };
+/** chiave dell'app Kairos (come in kAllow) di una voce dello Store: dal link /get/<app>.apk, altrimenti dal nome «Kairos …» */
+function storeAppKey(a) {
+  if (!a || typeof a !== 'object') return '';
+  const m = /\/get\/([a-z0-9-]+)\.apk(?:[?#]|$)/i.exec(String(a.url || ''));
+  if (m && hasKey(SA_KKEY, m[1].toLowerCase())) return SA_KKEY[m[1].toLowerCase()];
+  const n = String(a.name || '').toLowerCase().replace(/\([^)]*\)/g, '').replace(/[^a-z0-9]/g, '');
+  return n.startsWith('kairos') && hasKey(SA_KKEY, n.slice(6)) ? SA_KKEY[n.slice(6)] : '';
+}
+/** app Kairos nascoste: quelle che nello Store hanno solo voci nascoste (una voce visibile basta a tenerla) */
+function storeHiddenOf(apps) {
+  const hid = new Set(), vis = new Set();
+  for (const a of Array.isArray(apps) ? apps : []) { const k = storeAppKey(a); if (k) (a.hidden === true ? hid : vis).add(k); }
+  return new Set([...hid].filter((k) => !vis.has(k)));
+}
+let saHidMem = { t: 0, v: new Set() };
+async function storeHiddenKeys(env) {
+  if (saHidMem.t && now() - saHidMem.t < 60e3) return saHidMem.v;
+  let v = saHidMem.v;
+  try {
+    let j = null;
+    const d = ghTok(env) ? await storeDoc(env, 'apps.json').catch(() => null) : null;
+    if (d && d.b) j = JSON.parse(new TextDecoder().decode(d.b));
+    else if (!d || !d.nf) { const r = await tfetch(STORE_PAGES + 'apps.json', { cf: { cacheTtl: 60, cacheEverything: true } }, 5000); if (r.ok) j = await r.json(); else if (r.body) r.body.cancel().catch(() => {}); }
+    if (d && d.nf) v = new Set(); else if (j && Array.isArray(j.apps)) v = storeHiddenOf(j.apps);
+  } catch {}
+  saHidMem = { t: now(), v };
+  return v;
+}
+/** apps.json come lo riceve lo Store: senza le app nascoste. null = niente da togliere (o file non leggibile: esce com'è) */
+function storeAppsPublic(buf) {
+  try {
+    const j = JSON.parse(new TextDecoder().decode(buf));
+    if (!j || !Array.isArray(j.apps) || !j.apps.some((a) => a && a.hidden === true)) return null;
+    j.apps = j.apps.filter((a) => !(a && a.hidden === true));
+    return new TextEncoder().encode(JSON.stringify(j, null, 2) + '\n');
+  } catch { return null; }
+}
 /** politica pubblica degli aggiornamenti di Kairos Nova (solo bgupd e force del profilo «nova», come /api/player/update)
  *  per /get/nova.json. In memoria per 60 s: il feed è pubblico e non legge il database a ogni richiesta.
  *  Database non raggiungibile: l'ultima letta, altrimenti null (l'app tiene la politica salvata). */
@@ -2204,11 +2248,12 @@ async function cleanLinks(req, env, url, path) {
     if (d && d.dir) return Response.redirect(url.origin + '/store/' + rel + '/' + url.search, 302);
     if (d && d.nf) return new Response('Non trovato', { status: 404 });
     if (d && d.b) {
+      const pub = rel === 'apps.json' ? storeAppsPublic(d.b) : null; // lo Store non riceve le app nascoste
       const h = new Headers();
       h.set('Content-Type', DOC_TYPE[((rel.match(/\.([A-Za-z0-9]+)$/) || [])[1] || '').toLowerCase()] || 'application/octet-stream');
-      h.set('Content-Length', String(d.b.byteLength));
+      h.set('Content-Length', String(pub ? pub.byteLength : d.b.byteLength));
       h.set('Cache-Control', img ? 'public, max-age=3600' : 'no-cache');
-      return new Response(req.method === 'HEAD' ? null : d.b.slice(0), { status: 200, headers: h }); // una copia: quella in memoria resta intatta
+      return new Response(req.method === 'HEAD' ? null : pub || d.b.slice(0), { status: 200, headers: h }); // una copia: quella in memoria resta intatta
     }
     // GitHub non risponde: si prova GitHub Pages (finché il repository è pubblico)
   }
@@ -2217,6 +2262,11 @@ async function cleanLinks(req, env, url, path) {
   const h = new Headers();
   for (const k of ['content-type', 'content-length', 'last-modified', 'etag']) { const v = up.headers.get(k); if (v) h.set(k, v); }
   h.set('Cache-Control', img ? 'public, max-age=3600' : 'no-cache');
+  if (rel === 'apps.json') { // lo Store non riceve le app nascoste (il file è piccolo: si legge tutto)
+    const raw = await up.arrayBuffer(), pub = storeAppsPublic(raw), out = pub || raw;
+    h.set('Content-Length', String(out.byteLength)); if (pub) { h.delete('etag'); h.delete('last-modified'); }
+    return new Response(req.method === 'HEAD' ? null : out, { status: 200, headers: h });
+  }
   return new Response(req.method === 'HEAD' ? null : up.body, { status: 200, headers: h });
 }
 
@@ -2299,6 +2349,7 @@ async function storeApps(req, env, path, m, who, ip) {
     if (b.sha) put.sha = saStr(b.sha, 64);
     let r; try { r = await saGh(wTok, SA_DOCS + 'apps.json', { method: 'PUT', body: JSON.stringify(put) }); } catch (e) { throw saErr(e); }
     ghMem.delete(`/repos/${GH_OWNER}/kairos-store/git/trees/main?recursive=1`); // la pagina dello store la rilegge subito
+    saHidMem = { t: now(), v: storeHiddenOf(clean.apps) }; // e gli agenti smettono subito di vedere le app Kairos nascoste
     await log(env, 'settings', `${who}: app dello store salvate (${clean.apps.filter((a) => !a.hidden).length} visibili su ${clean.apps.length})`, ip);
     return json({ ok: true, sha: String((r && r.content && r.content.sha) || ''), data: clean });
   }
@@ -6970,6 +7021,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     // tutto ciò che non dipende dall'elenco dei clienti parte subito, in parallelo (prima erano una decina di attese una dopo l'altra)
     const chunks = (arr, k = 90) => { const o = []; for (let i = 0; i < arr.length; i += k) o.push(arr.slice(i, i + k)); return o; };
     const sP = getSettings(env), meP = agentsOut(env, all, [A.id], mine), snP = canAg ? storeAppNames(env) : Promise.resolve([]), pmP = presenceMap(env);
+    const hidP = Promise.race([storeHiddenKeys(env).catch(() => new Set()), new Promise((r) => setTimeout(() => r(saHidMem.v), 2500))]); // app Kairos nascoste nello Store: agli agenti non si mostrano
     // DNS di MaxPlayer limitati: servono i domini per mostrargli solo i codici cliente dei fornitori concessi (al massimo 2,5 s di attesa)
     const mxP = P.players && env.MAXPLAYER_KEY && !P.mxDns.includes('*') ? Promise.race([mxDomains(env).catch(() => null), new Promise((r) => setTimeout(() => r(null), 2500))]) : Promise.resolve(null);
     const agP = canAg ? agentsOut(env, all, tree.filter((x) => x !== A.id), mine) : Promise.resolve([]);
@@ -6986,7 +7038,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const devices = withPresence((await Promise.all([...rows, ...kids].map((d) => deviceOut(env, d)))).map(dview), await pmP); // in parallelo
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p ? p.status : 'pending'; }
-    const [meArr, sAll, agList, actR, msgR, inbox] = await Promise.all([meP, snP, agP, actP, msgP, inboxP]);
+    const [meArr, sAll, agList, actR, msgR, inbox, kHid] = await Promise.all([meP, snP, agP, actP, msgP, inboxP, hidP]);
     const meOut = meArr[0];
     const { password: _pw, ...meSafe } = meOut;
     const sNames = canAg ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
@@ -6997,10 +7049,10 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { ...x, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
       servers: servers.map((x) => ({ id: x.id, name: x.name })), addonCat: addonCfg(s).filter((a) => allowedAddons.has(a.id)),
       // codici Downloader e link delle app Kairos: solo quelli che il titolare gli concede (kAllow)
-      settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', ultDownloaderCode: ok('ult') ? s.ultDownloaderCode || '' : '', plusDownloaderCode: ok('plus') ? s.plusDownloaderCode || '' : '', premDownloaderCode: ok('prem') ? s.premDownloaderCode || '' : '', novaDownloaderCode: ok('nova') ? s.novaDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),
+      settings: (() => { const ok = (k) => storeAppOk(P.kAllow, k) && !kHid.has(k); return { brand: s.brand, accent: s.accent, downloaderCode: ok('pro') ? s.downloaderCode || '' : '', storeDownloaderCode: ok('store') ? s.storeDownloaderCode || '' : '', liteDownloaderCode: ok('lite') ? s.liteDownloaderCode || '' : '', ktvDownloaderCode: ok('tv') ? s.ktvDownloaderCode || '' : '', xcDownloaderCode: ok('xc') ? s.xcDownloaderCode || '' : '', ultDownloaderCode: ok('ult') ? s.ultDownloaderCode || '' : '', plusDownloaderCode: ok('plus') ? s.plusDownloaderCode || '' : '', premDownloaderCode: ok('prem') ? s.premDownloaderCode || '' : '', novaDownloaderCode: ok('nova') ? s.novaDownloaderCode || '' : '', apkUrl: ok('pro') ? s.apkUrl || '' : '' }; })(),
       // app Kairos per gli agenti: sempre visibili (quali le decide il titolare in kAllow), con il link pulito del pannello
       // (/get/<app>.apk: niente nome del titolare nei link) e il codice Downloader se c'è
-      kairosApps: kairosAppsOf(s).filter((x) => storeAppOk(P.kAllow, x.key)).map((x) => { const g = { prem: 'premium' }[x.key] || x.key; return { ...x, apk: GET_APK[g] ? `${url.origin}/get/${g}.apk` : x.apk }; }), permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on), rec: (ses.assist ? A.totp_on : ses.totp_on) ? await recLeft(env, A.id) : 0 }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
+      kairosApps: kairosAppsOf(s).filter((x) => storeAppOk(P.kAllow, x.key) && !kHid.has(x.key)).map((x) => { const g = { prem: 'premium' }[x.key] || x.key; return { ...x, apk: GET_APK[g] ? `${url.origin}/get/${g}.apk` : x.apk }; }), permKeys: PERM_KEYS, security: { totp: !!(ses.assist ? A.totp_on : ses.totp_on), rec: (ses.assist ? A.totp_on : ses.totp_on) ? await recLeft(env, A.id) : 0 }, counts: {}, ...(ses.assist ? { assist: { by: ses.assistBy } } : {}),
       activity: actR ? actR.results || [] : [],
       messages: msgR ? msgGroups((msgR.results || []).filter((x) => byId.has(x.target))).slice(0, 150) : [],
       // messaggi del titolare per questo agente (a tutti gli agenti, a lui o al suo gruppo)
