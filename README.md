@@ -1180,7 +1180,10 @@ Quando la linea raggiunge quella data si torna a seguire la linea. Clienti illim
   30 e poi «Mostra tutti». «Di solito su» per la Nazionale italiana: Rai 1; per le altre nazionali non si indovina.
 - **App**: la forma delle risposte non cambia (v1 e v2). Portal e Smart leggevano l'orario come numero mentre arriva come
   testo: corretto nel ramo `aspetto-0.5` di kairos-portal-smart.
-- **Test**: `srv_events_future` (16), `ui_events_future` (9); restano verdi `srv_events` (18) e `ui_events` (27).
+- **Emittenti alle app** (stessa giornata): ogni evento di `/api/player/events?v=2` porta anche `tv`, le emittenti italiane
+  «di solito» (le stesse di «Eventi ora»), solo quando si sanno. Portal e Smart le usano per aprire subito i canali
+  dell'evento scelto, senza tastiera.
+- **Test**: `srv_events_future` (18), `ui_events_future` (9); restano verdi `srv_events` (18) e `ui_events` (27).
 
 ## 71. «Adesso» nell'elenco Clienti: cosa guardano, IP, DNS cifrato (12 novembre 2026)
 

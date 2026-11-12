@@ -3048,6 +3048,8 @@ function evOut(e) {
   if (e.home && e.away) { o.home = evSide(e.home); o.away = evSide(e.away); }
   o.venue = e.venue || ''; o.round = e.round || '';
   for (const k of ['gp', 'session', 'top', 'logo']) if (e[k]) o[k] = e[k];
+  // emittenti italiane «di solito» (12 novembre 2026): anche alle app, per cercare subito il canale dell'evento scelto
+  const tv = evTv(e); if (tv.length) o.tv = tv;
   return o;
 }
 /** /api/player/events — senza ?v=2 solo calcio e la stessa forma di sempre (le interfacce vecchie leggono home/away);
