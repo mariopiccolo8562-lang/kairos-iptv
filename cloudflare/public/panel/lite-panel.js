@@ -46,10 +46,10 @@
     }
     try { rd(); } finally { D.devices = all; }
     filterBar();
-    // etichetta «LITE» / «TV» su schede e tabella
+    // etichetta «LITE» / «TV» su schede e tabella: solo dove l'elenco non ha già messo la pastiglia dell'app (kc.js, .dvt-app)
     const chip = (d) => (isLite(d) ? '<span class="app-chip">LITE</span>' : isPrem(d) ? '<span class="app-chip prem">PREMIUM</span>' : isKtv(d) ? '<span class="app-chip ktv">TV</span>' : isUlt(d) ? '<span class="app-chip ult">ULTIMATE</span>' : isXc(d) ? '<span class="app-chip xc">XC</span>' : isPlus(d) ? '<span class="app-chip plus">PLUS</span>' : isNova(d) ? '<span class="app-chip plus">NOVA</span>' : '');
-    $$('#dvCards .dv-card[data-id]').forEach((c) => { const d = all.find((x) => x.id === c.dataset.id); const b = $('.dv-n b', c); if (b && chip(d) && !$('.app-chip', b)) b.insertAdjacentHTML('beforeend', chip(d)); });
-    $$('#dvTbl tbody tr[data-id]').forEach((r) => { const d = all.find((x) => x.id === r.dataset.id); const b = $('.dvt-u b', r); if (b && chip(d) && !$('.app-chip', b)) b.insertAdjacentHTML('beforeend', chip(d)); });
+    $$('#dvCards .dv-card[data-id]').forEach((c) => { const d = all.find((x) => x.id === c.dataset.id); const b = $('.dv-n b', c); if (b && chip(d) && !$('.app-chip, .dvt-app', b)) b.insertAdjacentHTML('beforeend', chip(d)); });
+    $$('#dvTbl tbody tr[data-id]').forEach((r) => { const d = all.find((x) => x.id === r.dataset.id); const b = $('.dvt-u b', r); if (b && chip(d) && !$('.app-chip, .dvt-app', b)) b.insertAdjacentHTML('beforeend', chip(d)); });
   };
 
   /* ---------- scheda cliente: scelta dell'app e solo le funzioni che Kairos Lite ha ---------- */

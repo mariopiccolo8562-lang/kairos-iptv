@@ -791,7 +791,9 @@ function renderDrawer() {
           const deviceId = isNew ? saved && saved.id : edit.id, link = edit.lineSync;
           const matches = link && (edit.playlists || []).some((p) => String(p.username || '').trim().toLowerCase() === String(link.username || '').trim().toLowerCase());
           try {
-            if (matches && deviceId) await api('PUT', '/admin/line-sync', { deviceId, panel: link.panel, username: link.username });
+            // scelta «scadenza dalla linea | dalla nota» fatta nel riquadro della nota su una linea appena collegata
+            const srcPick = matches && deviceId && window.KXLineNote && KXLineNote.srcTake ? KXLineNote.srcTake(link.panel, link.username) : '';
+            if (matches && deviceId) await api('PUT', '/admin/line-sync', { deviceId, panel: link.panel, username: link.username, ...(srcPick ? { src: srcPick } : {}) });
             else if (link && deviceId) await api('DELETE', '/admin/line-sync', { deviceId });
           } catch (e) { syncError = e.message; }
         }

@@ -1220,3 +1220,24 @@ per i tornei minori. Le emittenti «di solito su» ora arrivano anche alle app (
 - **Limite**: la modalità «il cliente sceglie tra questi» (`theme:allow`) non è supportata dall'app per il tema; con
   «Decido io» il tema è imposto (è ciò che serve).
 - **Test**: `srv_theme_portal` (23), `ui_theme_portal` (10); `srv_sdns` e la suite restano verdi.
+
+## 73. Scadenza dell'app dalla linea o dalla nota; «Remoto» e DNS cifrato nell'elenco Clienti (12 novembre 2026)
+
+**Scadenza dell'app: «Dalla linea» oppure «Dalla nota»**
+
+- Nella scheda del cliente allineato a una linea, in cima al riquadro della nota: «Scadenza nell'app: Dalla linea | Dalla nota», ognuna con la sua data.
+- «Dalla linea»: la regola del §65 (linea, «Pagato fino al», data fissata).
+- «Dalla nota»: il cliente vede la data scritta nella nota della linea, anche se è prima della scadenza della linea, e la segue da solo quando la nota cambia (pagina delle linee aperta o controllo ogni 6 ore).
+- Nota senza una data: vale la regola di sempre. Data della nota già passata: non si applica da sola, il riquadro lo dice.
+- Linea appena collegata e non ancora salvata: la scelta c'è già e parte con «Salva». Collegamento già salvato: si salva subito.
+- Per Armada e Storm vale la nota tenuta in KAIROS.
+- Agenti: serve «Rinnovare», solo i propri clienti, massimo 3 anni. Clienti illimitati e dispositivi aggiunti non si toccano.
+- Tecnica: `line_sync.src` (migrazione `0055_line_src.sql`), `PUT /api/admin/line-sync/src` `{ deviceId, src, lineExp, note }`, `PUT /api/admin/line-sync` accetta `src`, `/line-sync/apply` riceve anche `note` per ogni linea; `noteDatesIn`/`noteDateOf` nel worker hanno le stesse regole di `line-note-box.js`.
+
+**Elenco Clienti (solo titolare)**
+
+- Tasto «Remoto» accanto a «➕ Dispositivo», anche sui dispositivi aggiunti: apre subito il Controllo remoto di quel cliente. Sotto 1650 px resta la sola icona.
+- Sotto il dispositivo: «🔒 DNS cifrato attivo» oppure «DNS cifrato spento», come lo ha dichiarato l'app all'ultimo battito (ultimi 30 giorni), anche per chi non è collegato. Permesso negato, altra VPN ed errore compaiono in giallo.
+- Una sola pastiglia dell'app accanto al nome: quella vecchia (`.app-chip` di `lite-panel.js`) non si aggiunge più dove c'è già la nuova.
+
+Prove: `srv_line_src` 59, `ui_line_src` 36, `ui_list_rc_dns` 15.

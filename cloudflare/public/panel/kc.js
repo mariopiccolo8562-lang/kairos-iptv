@@ -342,6 +342,10 @@
 .dvt-ib:hover{transform:translateY(-1px);filter:brightness(1.25)}
 .dvt-ib.g{color:#4ce3a0;border-color:rgba(76,227,160,.3);background:rgba(76,227,160,.08)}
 .dvt-add{margin-right:2px;padding:5px 10px;font-size:12px;color:#67e8f9;border-color:rgba(34,211,238,.4);background:rgba(34,211,238,.08);white-space:nowrap;vertical-align:middle}
+.dvt-rc{margin-right:2px;padding:5px 10px;font-size:12px;color:#c4b5fd;border-color:rgba(167,139,250,.45);background:rgba(167,139,250,.1);white-space:nowrap;vertical-align:middle}
+.dvt-rc svg{width:13px;height:13px;vertical-align:-2px;margin-right:5px}
+.dvt-dev .dn-t{margin-top:4px}
+@media (max-width:1650px){.dvt .dvt-rc span{display:none}.dvt .dvt-rc{padding:5px 8px}.dvt .dvt-rc svg{margin-right:0}}
 .dvt-ib.b{color:#6fb7ff;border-color:rgba(111,183,255,.3);background:rgba(111,183,255,.08)}
 .dvt-ib.k{color:#ff6b81;border-color:rgba(255,107,129,.35);background:rgba(255,107,129,.1)}
 .dvt-ib.o{color:#ffb547;border-color:rgba(255,181,71,.3);background:rgba(255,181,71,.08)}
@@ -1158,6 +1162,19 @@
       const s = APP_SHORT[k] || k.toUpperCase(), f = APP_FULL[k] || s, c = APP_C[k] || '#9aa';
       return `<span class="dvt-app" style="background:color-mix(in srgb,${c} 20%,transparent);color:${c}" title="App in uso: ${esc(f)}">${esc(s)}</span>`;
     };
+    /* DNS cifrato accanto al dispositivo (12 novembre 2026, solo titolare): acceso o spento per ogni cliente, anche se adesso
+       non è collegato. È quello che l'app ha dichiarato all'ultimo battito (d.now.sdns se collegato, altrimenti d.sdns) */
+    function dnsTag(d) {
+      const v = (d.now && d.now.sdns) || d.sdns || '';
+      const L = SDNS_L[v];
+      if (L) return `<span class="dn-t ${L[0]}" data-dns="${esc(v)}" title="${esc(L[2])}">${v === 'on' ? '🔒 DNS cifrato attivo' : L[1]}</span>`;
+      return `<span class="dn-t no" data-dns="off" title="${esc(v === 'off' ? 'DNS cifrato spento sul dispositivo' : 'DNS cifrato non attivo: non acceso dal pannello per questo cliente, oppure app non aggiornata')}">DNS cifrato spento</span>`;
+    }
+    /* «Remoto» accanto a «➕ Dispositivo» (12 novembre 2026, solo titolare): apre subito il Controllo remoto di quel cliente
+       (impostazioni dell'app e comandi), senza passare dalla scheda */
+    const rcOn = () => D.role === 'owner' && !window.__assist && !!window.KXRemote;
+    const RC_IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>';
+    const rcBtn = (cls) => (rcOn() ? `<button class="btn sm ${cls}" data-act="rc" title="Controllo remoto: impostazioni dell'app di questo cliente e comandi (riavvia, svuota cache, aggiorna liste…)">${RC_IC}<span>Remoto</span></button>` : '');
     function nowCell(d) {
       const n = d.now;
       if (!d.live || !n) return '<span class="mut">—</span>';
@@ -1186,7 +1203,7 @@
         <div class="dv-meta">${info.map(esc).join(' · ')}</div>
         ${kids.length ? `<div class="dv-kids">${kids.map((k) => `<button data-open="${esc(k.id)}" title="${esc(k.code)}${k.own ? ' · gestione indipendente (playlist sue)' : ''}">${liveDot(k)}↳ ${esc(k.name || k.model || k.code)}${k.own ? ' · <em>playlist sue</em>' : ''}</button>`).join('')}</div>` : ''}
         ${d.notes ? `<div class="dv-note">${esc(d.notes.slice(0, 90))}</div>` : ''}
-        <div class="dv-act">${window.KXAddDev && KXAddDev.can() ? '<button class="btn sm" data-act="adddev" title="Collega e aggiungi un altro dispositivo a questo cliente">➕ Dispositivo</button>' : ''}<button class="btn sm" data-act="renew">Rinnova</button><button class="btn sm pri" data-act="open">Modifica</button></div>
+        <div class="dv-act">${window.KXAddDev && KXAddDev.can() ? '<button class="btn sm" data-act="adddev" title="Collega e aggiungi un altro dispositivo a questo cliente">➕ Dispositivo</button>' : ''}${rcBtn('dvt-rc')}<button class="btn sm" data-act="renew">Rinnova</button><button class="btn sm pri" data-act="open">Modifica</button></div>
       </div>`;
     }
     function pendCard(d) {
@@ -1249,15 +1266,15 @@
       const addDev = window.KXAddDev && KXAddDev.can() ? '<button class="btn sm dvt-add" data-act="adddev" title="Collega e aggiungi un altro dispositivo a questo cliente">➕ Dispositivo</button>' : '';
       const acts = d.status === 'pending' && !sub
         ? '<button class="btn sm pri" data-act="activate">Attiva</button><button class="btn sm" data-act="link">Collega</button>' + (pendOwner() ? ib('del', 'r', 'Elimina la richiesta') : '')
-        : sub ? ib('kick', 'k', 'Disconnetti') + ib('edit', 'e', 'Apri scheda')
-        : addDev + ib('ext1', 'g', '+1 mese') + ib('ext12', 'b', '+12 mesi') + (d.status === 'active' ? ib('kick', 'k', 'Disconnetti: interrompe la visione in corso') : '') + (d.active ? ib('off', 'o', 'Disattiva') : ib('on', 'g', 'Riattiva')) + ib('edit', 'e', 'Apri scheda') + ib('del', 'r', 'Elimina');
+        : sub ? rcBtn('dvt-rc') + ib('kick', 'k', 'Disconnetti') + ib('edit', 'e', 'Apri scheda')
+        : addDev + rcBtn('dvt-rc') + ib('ext1', 'g', '+1 mese') + ib('ext12', 'b', '+12 mesi') + (d.status === 'active' ? ib('kick', 'k', 'Disconnetti: interrompe la visione in corso') : '') + (d.active ? ib('off', 'o', 'Disattiva') : ib('on', 'g', 'Riattiva')) + ib('edit', 'e', 'Apri scheda') + ib('del', 'r', 'Elimina');
       return `<tr data-id="${esc(d.id)}" class="${sub ? 'sub' : ''} ${st.sel.has(d.id) ? 'sel' : ''}">
         <td class="c">${sub ? '' : `<input type="checkbox" data-sel="${esc(d.id)}" ${st.sel.has(d.id) ? 'checked' : ''}>`}</td>
         <td><div class="dvt-u">${sub ? '<span class="dvt-sub">↳</span>' : ''}<div><b>${liveDot(d)}${esc(d.name || (sub ? d.model || 'Dispositivo' : '') || '— senza nome —')}${d.status === 'pending' ? '' : appTag(d)}</b><span class="dvt-code" data-copy="${esc(d.code)}" title="Copia il codice">${esc(d.code)} ${IC.copy}</span>${!sub && d.status === 'pending' && window.KXAddDev ? KXAddDev.nearHtml(d) : ''}</div></div></td>
         <td>${stPill(d.status)}</td>
         <td class="dvt-exp">${exp}${window.KXPay ? KXPay.badge('device', '', base.id) : ''}</td>
         <td class="c mono">${sub || d.status === 'pending' ? '—' : `${1 + kids.length}/${+d.maxConn >= 999 ? '∞' : esc(d.maxConn || 1)}`}</td>
-        <td class="dvt-dev"><b>${esc(d.model || '—')}</b><small${d.live ? ' class="dvt-on"' : ''}>${esc(d.live ? 'collegato adesso' : ago(d.lastSeen))}</small></td>
+        <td class="dvt-dev"><b>${esc(d.model || '—')}</b><small${d.live ? ' class="dvt-on"' : ''}>${esc(d.live ? 'collegato adesso' : ago(d.lastSeen))}</small>${nowOn() && d.status !== 'pending' ? dnsTag(d) : ''}</td>
         ${nowOn() ? `<td class="dvt-now">${nowCell(d)}</td>` : ''}
         <td class="dvt-pl">${pls}</td>
         <td class="dvt-note" data-note="${esc(d.id)}">${d.notes ? `<span>${esc(d.notes.slice(0, 60))}</span>` : `<span class="mut">Aggiungi nota</span>`} ${IC.note}</td>
@@ -1386,6 +1403,7 @@
         }
         if (a === 'activate') return openDrawer(d, true);
         if (a === 'adddev') return window.KXAddDev && KXAddDev.open(d);
+        if (a === 'rc') return window.KXRemote && KXRemote.open(d);
         if (a === 'nearlink') return window.KXAddDev && KXAddDev.nearLink(d, (e.target.closest('[data-near]') || {}).dataset?.near);
         if (a === 'link') { openDrawer(d, false); setTimeout(() => linkPick(), 350); return; }
         if (a === 'edit') return openDrawer(d, d.status === 'pending');
@@ -1399,6 +1417,7 @@
       if (act === 'renewx') return renderDevices();
       if (act === 'delp') return delPend([d]);
       if (act === 'adddev') return window.KXAddDev && KXAddDev.open(d);
+      if (act === 'rc') return window.KXRemote && KXRemote.open(d);
       if (act === 'nearlink') return window.KXAddDev && KXAddDev.nearLink(d, (e.target.closest('[data-near]') || {}).dataset?.near);
       const em = /^ext(\d+)$/.exec(act || ''); if (em) return extend(d, +em[1]);
       if (act === 'kick') return kickDev(d);

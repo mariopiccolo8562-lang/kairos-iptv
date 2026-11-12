@@ -1418,20 +1418,54 @@ function linePaidFor(map, username, ownerId) {
   const pick = mine.length ? mine : new Set(list.map((x) => x.owner)).size === 1 ? list : [];
   return pick.reduce((a, x) => (x.until > a ? x.until : a), '');
 }
-function lineSyncTarget(exp, paid, hold) {
-  let date = exp, src = 'line';
-  if (paid && DATE_RE.test(paid) && paid > date) { date = paid; src = 'paid'; }
-  if (hold && DATE_RE.test(hold) && hold > date) { date = hold; src = 'hold'; }
-  return { date, src };
+/* Data scritta nella nota di una linea. Stesse regole di line-note-box.js (datesIn, dateOf): le due versioni vanno tenute
+   uguali, le confronta la prova srv_line_src. Prima il segno dei pagamenti «PAGATO fino al gg/mm/aa», altrimenti la data più
+   avanti fra quelle scritte a mano. ref = scadenza della linea: dà l'anno alle date senza anno («21/02»). '' = nessuna data. */
+const NOTE_MON = { gen: 1, feb: 2, mar: 3, apr: 4, mag: 5, giu: 6, lug: 7, ago: 8, set: 9, ott: 10, nov: 11, dic: 12 };
+function noteDatesIn(note, ref) {
+  const pad = (n) => String(n).padStart(2, '0'), ms = (ymd) => Date.parse(ymd + 'T00:00:00Z'), today = paymentToday();
+  const ymdOf = (y, m, d) => { const t = new Date(Date.UTC(y, m - 1, d)); return m >= 1 && m <= 12 && d >= 1 && t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d ? `${y}-${pad(m)}-${pad(d)}` : ''; };
+  const s = String(note || ''), out = [], base = ms(/^\d{4}-\d{2}-\d{2}$/.test(ref || '') ? ref : today);
+  const yr = (v) => (v.length === 2 ? 2000 + +v : +v);
+  const noYear = (m, d) => { const y0 = new Date(base).getUTCFullYear(); for (const y of [y0 - 1, y0, y0 + 1]) { const v = ymdOf(y, m, d); if (v && ms(v) >= base - 31 * 864e5) return v; } return ''; };
+  let m;
+  const iso = /(^|[^\d])(\d{4})-(\d{2})-(\d{2})(?!\d)/g;
+  while ((m = iso.exec(s))) { const v = ymdOf(+m[2], +m[3], +m[4]); if (v) out.push(v); }
+  const num = /(^|[^\d\/.-])(\d{1,2})([\/.-])(\d{1,2})(?:\3(\d{4}|\d{2}))?(?![\d\/.-])/g;
+  while ((m = num.exec(s))) {
+    if (!m[5] && m[3] !== '/') continue;
+    const v = m[5] ? ymdOf(yr(m[5]), +m[4], +m[2]) : noYear(+m[4], +m[2]);
+    if (v) out.push(v);
+  }
+  const txt = /(^|[^\d])(\d{1,2})°?\s*(gen|feb|mar|apr|mag|giu|lug|ago|set|ott|nov|dic)[a-zà]*\.?(?:\s+(\d{4}|\d{2}))?(?![\d])/gi;
+  while ((m = txt.exec(s))) { const mo = NOTE_MON[m[3].toLowerCase()], v = m[4] ? ymdOf(yr(m[4]), mo, +m[2]) : noYear(mo, +m[2]); if (v) out.push(v); }
+  const lo = ms(today) - 400 * 864e5, hi = ms(today) + (3 * 366 + 31) * 864e5;
+  return [...new Set(out)].filter((v) => ms(v) >= lo && ms(v) <= hi);
 }
-const LINE_SYNC_WHY = { paid: 'pagato fino al', hold: 'data fissata dalla nota' };
+function noteDateOf(note, ref) {
+  const s = String(note || ''), k = s.match(/PAGATO\s+fino\s+al\s+(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4})/i);
+  if (k) { const d = noteDatesIn(k[1], ref); if (d.length) return d[0]; }
+  const all = noteDatesIn(s.replace(/\[K:[^\]]*\]/g, ' '), ref);
+  return all.length ? all.sort().pop() : '';
+}
+/* src = scelta fatta nella scheda del cliente (line_sync.src): 'note' = la scadenza dell'app è la data scritta nella nota
+   della linea (noteDate), anche quando è prima della scadenza della linea; se nella nota non c'è una data vale la regola
+   di sempre. past = la data della nota è già passata: chi chiama non la applica da sola. */
+function lineSyncTarget(exp, paid, hold, src = '', noteDate = '') {
+  if (src === 'note' && noteDate && /^\d{4}-\d{2}-\d{2}$/.test(noteDate) && DATE_RE.test(noteDate)) return { date: noteDate, src: 'note', past: noteDate < paymentToday() };
+  let date = exp, from = 'line';
+  if (paid && DATE_RE.test(paid) && paid > date) { date = paid; from = 'paid'; }
+  if (hold && DATE_RE.test(hold) && hold > date) { date = hold; from = 'hold'; }
+  return { date, src: from };
+}
+const LINE_SYNC_WHY = { paid: 'pagato fino al', hold: 'data fissata dalla nota', note: 'data della nota, scelta nella scheda' };
 async function applyLineSync(env, panel, lines, ownerId, ag) {
   if (!LINE_SYNC_PANELS.has(panel)) throw new HttpErr(400, 'Pannello non valido');
   if (!Array.isArray(lines) || lines.length > 5000) throw new HttpErr(400, 'Elenco linee non valido');
-  const expiry = new Map();
+  const expiry = new Map(), notes = new Map(); // notes: solo le linee arrivate con il campo «note» (la nota che hanno nel loro pannello)
   for (const line of lines) {
     const username = str(line && line.username, 120).trim().toLowerCase(), exp = lineSyncDate(line && line.exp);
-    if (username && exp) expiry.set(username, exp);
+    if (username && exp) { expiry.set(username, exp); if (typeof line.note === 'string') notes.set(username, line.note.slice(0, 400)); }
   }
   const query = ownerId === undefined
     ? env.DB.prepare('SELECT * FROM line_sync WHERE panel = ?').bind(panel)
@@ -1440,9 +1474,21 @@ async function applyLineSync(env, panel, lines, ownerId, ag) {
   const paid = links.length && expiry.size ? await linePaidMap(env, panel) : new Map();
   let changed = 0;
   for (const link of links) {
-    const exp = expiry.get(String(link.username || '').trim().toLowerCase());
+    const key = String(link.username || '').trim().toLowerCase(), exp = expiry.get(key);
     if (!exp) continue;
-    const want = lineSyncTarget(exp, linePaidFor(paid, link.username, link.owner_id), link.hold);
+    let noteDate = '';
+    if (link.src === 'note') {
+      // scadenza dell'app «dalla nota»: la nota arriva con l'elenco; per i pannelli senza campo nota è quella tenuta in KAIROS
+      let note = notes.get(key);
+      if (!note) {
+        const kn = await env.DB.prepare('SELECT note, owner_id FROM line_notes WHERE panel = ? AND ref = ?').bind(panel, key).first().catch(() => null);
+        if (kn && kn.note && (!ag || (+kn.owner_id || 0) === (+link.owner_id || 0))) note = String(kn.note);
+      }
+      if (note === undefined) continue; // nota non arrivata (pagina vecchia rimasta aperta): non si tocca, ci pensa il prossimo allineamento
+      noteDate = noteDateOf(note, exp);
+    }
+    const want = lineSyncTarget(exp, linePaidFor(paid, link.username, link.owner_id), link.hold, link.src, noteDate);
+    if (want.past) continue; // data della nota già passata: non si applica da sola (il cliente risulterebbe scaduto per una data vecchia)
     const device = await env.DB.prepare('SELECT id, name, expires, parent FROM devices WHERE id = ?').bind(link.device_id).first();
     if (!device || !device.expires || device.parent || device.expires === want.date) continue;
     if (ag && !(await ag.own(device.id))) continue;
@@ -1480,7 +1526,7 @@ async function lineSyncRoutes(req, env, path, who, ip, ag, ownerFilter) {
   const m = req.method, url = new URL(req.url);
   if (path === '/line-sync/apply') {
     if (m !== 'POST') throw new HttpErr(405, 'Metodo non consentito');
-    const b = await readJSON(req, 1024 * 1024), panel = str(b.panel, 20).toLowerCase();
+    const b = await readJSON(req, 3 * 1024 * 1024), panel = str(b.panel, 20).toLowerCase(); // con le note delle linee
     const changed = await applyLineSync(env, panel, b.lines, ownerFilter, ag);
     return json({ ok: true, changed });
   }
@@ -1514,13 +1560,36 @@ async function lineSyncRoutes(req, env, path, who, ip, ag, ownerFilter) {
     const paid = LINE_SYNC_PANELS.has(String(link.panel)) ? linePaidFor(await linePaidMap(env, String(link.panel)), link.username, link.owner_id) : '';
     return json({ ok: true, hold: date, paid, expires: (after && after.expires) || '' });
   }
+  if (path === '/line-sync/src') {
+    // da dove viene la scadenza che il cliente vede nell'app: 'line' = dalla scadenza della linea (con «Pagato fino al» e data
+    // fissata, come sempre), 'note' = dalla data scritta nella nota della linea. Si applica subito: scadenza e nota le manda il pannello
+    if (m !== 'PUT') throw new HttpErr(405, 'Metodo non consentito');
+    const b = await readJSON(req, 8192), deviceId = str(b.deviceId, 40);
+    if (!deviceId) throw new HttpErr(400, 'Cliente non valido');
+    if (b.src !== 'line' && b.src !== 'note') throw new HttpErr(400, 'Scelta non valida');
+    const device = await env.DB.prepare('SELECT id, name, expires, parent FROM devices WHERE id = ?').bind(deviceId).first();
+    if (!device || ag && !(await ag.own(deviceId))) throw new HttpErr(404, 'Cliente non trovato');
+    const link = await env.DB.prepare('SELECT * FROM line_sync WHERE device_id = ?').bind(deviceId).first();
+    if (!link) throw new HttpErr(400, 'Questo cliente non è allineato a una linea');
+    const src = b.src === 'note' ? 'note' : '';
+    if (String(link.src || '') !== src) {
+      await env.DB.prepare('UPDATE line_sync SET src = ?, updated = ? WHERE device_id = ?').bind(src, now(), deviceId).run();
+      await log(env, 'edit', `${who}: scadenza del cliente ${device.name || device.id} ${src ? 'dalla nota della linea' : 'dalla scadenza della linea'} (linea ${link.panel} ${link.username})`, ip).catch(() => {});
+    }
+    const lineExp = lineSyncDate(b.lineExp);
+    if (lineExp) await applyLineSync(env, String(link.panel), [{ username: link.username, exp: lineExp, ...(typeof b.note === 'string' ? { note: b.note } : {}) }], ownerFilter, ag);
+    const after = await env.DB.prepare('SELECT expires FROM devices WHERE id = ?').bind(deviceId).first();
+    const paid = LINE_SYNC_PANELS.has(String(link.panel)) ? linePaidFor(await linePaidMap(env, String(link.panel)), link.username, link.owner_id) : '';
+    return json({ ok: true, src: src || 'line', hold: String(link.hold || ''), paid, expires: (after && after.expires) || '' });
+  }
   if (path !== '/line-sync') throw new HttpErr(404, 'Non trovato');
   if (m === 'GET') {
     const deviceId = str(url.searchParams.get('deviceId'), 40);
     if (!deviceId) throw new HttpErr(400, 'Cliente non valido');
     const device = await env.DB.prepare('SELECT id FROM devices WHERE id = ?').bind(deviceId).first();
     if (!device || ag && !(await ag.own(deviceId))) throw new HttpErr(404, 'Cliente non trovato');
-    const link = await env.DB.prepare('SELECT panel, username, owner_id, updated, hold FROM line_sync WHERE device_id = ?').bind(deviceId).first();
+    const link = await env.DB.prepare('SELECT panel, username, owner_id, updated, hold, src FROM line_sync WHERE device_id = ?').bind(deviceId).first();
+    if (link) link.src = link.src === 'note' ? 'note' : 'line'; // da dove viene la scadenza dell'app: linea o nota della linea
     // paid = «Pagato fino al» della linea, se c'è: è la data che il cliente vede quando è più avanti della scadenza della linea
     if (link) link.paid = LINE_SYNC_PANELS.has(String(link.panel)) ? linePaidFor(await linePaidMap(env, String(link.panel)), link.username, link.owner_id) : '';
     return json({ link: link || null });
@@ -1532,11 +1601,16 @@ async function lineSyncRoutes(req, env, path, who, ip, ag, ownerFilter) {
     if (!device || ag && !(await ag.own(deviceId))) throw new HttpErr(404, 'Cliente non trovato');
     if (device.parent) throw new HttpErr(400, 'Collega solo il cliente principale');
     const ownerId = +device.owner_id || 0;
-    await env.DB.prepare(`INSERT INTO line_sync (device_id, panel, username, owner_id, updated) VALUES (?, ?, ?, ?, ?)
+    // src (facoltativo): 'note' = scadenza dell'app dalla nota della linea, 'line' = dalla scadenza della linea. Non detto:
+    // resta la scelta di prima se la linea è la stessa, altrimenti si riparte dalla linea
+    const old = await env.DB.prepare('SELECT panel, username, src FROM line_sync WHERE device_id = ?').bind(deviceId).first();
+    const same = !!old && String(old.panel) === panel && String(old.username || '').toLowerCase() === username.toLowerCase();
+    const src = b.src === 'note' ? 'note' : b.src === 'line' ? '' : same ? String(old.src || '') : '';
+    await env.DB.prepare(`INSERT INTO line_sync (device_id, panel, username, owner_id, updated, src) VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(device_id) DO UPDATE SET hold = CASE WHEN line_sync.panel = excluded.panel AND lower(line_sync.username) = lower(excluded.username) THEN line_sync.hold ELSE '' END,
-        panel = excluded.panel, username = excluded.username, owner_id = excluded.owner_id, updated = excluded.updated`)
-      .bind(deviceId, panel, username, ownerId, now()).run();
-    return json({ ok: true });
+        panel = excluded.panel, username = excluded.username, owner_id = excluded.owner_id, updated = excluded.updated, src = excluded.src`)
+      .bind(deviceId, panel, username, ownerId, now(), src).run();
+    return json({ ok: true, src: src || 'line' });
   }
   if (m === 'DELETE') {
     const b = await readJSON(req, 4096), deviceId = str(b.deviceId, 40);
@@ -1571,7 +1645,7 @@ async function lineSyncCron(env) {
     try {
       const data = await cronDispatch(env, ownerId, 'GET', panel === 'wolf' ? '/wolf/lines' : `/${panel}/lines`);
       const lines = Array.isArray(data.lines) ? data.lines : Array.isArray(data.rows) ? data.rows : [];
-      await cronDispatch(env, ownerId, 'POST', '/line-sync/apply', { panel, lines: lines.map((x) => ({ username: x.username, exp: x.exp })) });
+      await cronDispatch(env, ownerId, 'POST', '/line-sync/apply', { panel, lines: lines.map((x) => ({ username: x.username, exp: x.exp, note: String(x.note || x.notes || '').slice(0, 400) })) });
     } catch {}
   }
 }
@@ -5358,6 +5432,12 @@ function presenceMap(env) {
 }
 /** Elenco Clienti del titolare (12 novembre 2026): per chi è collegato adesso, cosa guarda, da dove e con che rete.
     Solo i collegati (pochi), una lettura sola; agli agenti non arriva (come «Online nelle app», riservata al titolare) */
+/** DNS cifrato come lo ha dichiarato l'app all'ultimo battito (ultimi 30 giorni), anche per chi adesso non è collegato:
+    nell'elenco Clienti del titolare compare accanto al dispositivo. Solo le righe che lo dichiarano; agli agenti non arriva */
+async function presenceSdns(env) {
+  try { return new Map((((await env.DB.prepare("SELECT device_id, sdns FROM presence WHERE t > ? AND sdns <> ''").bind(now() - 30 * 864e5).all()).results) || []).map((r) => [r.device_id, String(r.sdns)])); }
+  catch { return new Map(); } // colonna «sdns» non ancora creata
+}
 async function presenceNow(env) {
   try {
     const r = (await env.DB.prepare('SELECT device_id, state, title, ch, grp, ip, city, country, home_country, ver, net, vpn, sdns, res, line FROM presence WHERE t > ?').bind(now() - ONLINE_MS).all()).results || [];
@@ -7442,7 +7522,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     const settings = await getSettings(env);
     const pendTtl = effectivePendTtl(settings);
     if (pendTtl) await pendSweep(env, false, pendTtl).catch(() => {}); // al più ogni 5 minuti
-    const [rowsR, activityR, messagesR, agentMsgsR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, ultF, plusF, sAppNames, nCounts, onl, agAll, presLast, presNow] = await Promise.all([
+    const [rowsR, activityR, messagesR, agentMsgsR, sessionsR, dnslOwner, wgR, apk, apkF, liteF, ktvF, xcF, ultF, plusF, sAppNames, nCounts, onl, agAll, presLast, presNow, presDns] = await Promise.all([
       env.DB.prepare('SELECT * FROM devices ORDER BY created_at DESC LIMIT 5000').all(),
       env.DB.prepare('SELECT t, type, text, ip FROM activity ORDER BY id DESC LIMIT 200').all(),
       env.DB.prepare('SELECT id, target, title, body, level, created, until, grp FROM messages ORDER BY id DESC LIMIT 3000').all().catch(() => ({ results: [] })),
@@ -7451,10 +7531,11 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       dnsList(env),
       env.DB.prepare('SELECT 1 AS x FROM settings WHERE k = ?').bind('wg').first(),
       latestApk(env, settings), apkFeed(env), liteFeed(settings, env), ktvFeed(settings, env), xcFeed(settings, env), ultFeed(settings, env), plusFeed(settings, env),
-      storeAppNames(env), newCounts(env), onlineCount(env), ses ? agentsAll(env) : null, presenceMap(env), presenceNow(env),
+      storeAppNames(env), newCounts(env), onlineCount(env), ses ? agentsAll(env) : null, presenceMap(env), presenceNow(env), presenceSdns(env),
     ]);
     const rows = rowsR.results || [];
     const devices = withNow(withPresence(await Promise.all(rows.map((d) => deviceOut(env, d))), presLast), presNow);
+    for (const x of devices) { const v = presDns.get(x.id); if (v && SDNS_ST.includes(v)) x.sdns = v; } // DNS cifrato all'ultimo battito
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p && !p.parent ? p.status : 'pending'; }
     const activity = activityR.results || [], messages = msgGroups(messagesR.results || []).slice(0, 150), agentMsgs = msgGroups(agentMsgsR.results || []).slice(0, 100), sessions = sessionsR ? sessionsR.n : 0;

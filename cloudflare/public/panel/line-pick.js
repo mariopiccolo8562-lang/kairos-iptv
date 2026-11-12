@@ -23,7 +23,9 @@
     if (!force && t - (lastSync.get(panel) || 0) < 60000) return;
     if (!Array.isArray(rows) || !send || !can('renew')) return; // agente senza «Rinnovare»: il server la rifiuterebbe
     lastSync.set(panel, t);
-    const lines = rows.slice(0, 5000).map((l) => ({ username: String(l.username || '').trim(), exp: expiryDate(l.exp || l.exp_date || l.expire_date || l.expTxt) })).filter((l) => l.username && l.exp);
+    // con la nota della linea: serve a chi ha scelto «scadenza dell'app dalla nota» (una nota senza cifre non ha date: viaggia vuota)
+    const noteOf = (l) => { const n = String(l.note || l.notes || ''); return /\d/.test(n) ? n.slice(0, 400) : ''; };
+    const lines = rows.slice(0, 5000).map((l) => ({ username: String(l.username || '').trim(), exp: expiryDate(l.exp || l.exp_date || l.expire_date || l.expTxt), note: noteOf(l) })).filter((l) => l.username && l.exp);
     if (!lines.length) return;
     try { await send('POST', '/admin/line-sync/apply', { panel, lines }); } catch {}
   };
