@@ -153,7 +153,7 @@ test('player metadata preserves the no-key off response', async () => {
   assert.deepEqual(await response.json(), { cert: '', extras: [], off: true });
 });
 
-test('remote allow values and rotating DNS stay Ultimate-only', () => {
+test('remote allow values and DNS rotation stay app-limited', () => {
   const rc = _internal.rcClean({ 'o.engLive:allow': ['exo', 'vlc'] }, 'ult');
   assert.deepEqual(rc, { 'o.engLive': 'allow:exo,vlc' });
   assert.deepEqual(_internal.rcClean(rc, 'ult'), rc);
@@ -165,10 +165,11 @@ test('remote allow values and rotating DNS stay Ultimate-only', () => {
   const tvRc = _internal.rcClean({ 'o.engLive:allow': ['exo', 'vlc'] }, 'tv');
   assert.equal(_internal.rcSent(tvRc, 'tv')['o.engLive'], undefined);
   assert.ok(_internal.RC_CMDS.some(([key, , , apps]) => key === 'epg' && apps.length === 1 && apps[0] === 'ult'));
-  assert.ok(_internal.RC_CAT.filter(([key]) => key.startsWith('u.')).every(([, , , , apps]) => apps.length === 1 && apps[0] === 'ult'));
+  assert.ok(_internal.RC_CAT.filter(([key]) => key.startsWith('u.') && key !== 'u.dnsRot').every(([, , , , apps]) => apps.length === 1 && apps[0] === 'ult'));
+  assert.deepEqual(_internal.RC_CAT.find(([key]) => key === 'u.dnsRot')[4], ['ult', 'xc']);
 });
 
-test('device DNS rotation override only selects rot for Ultimate portals with reserves', async () => {
+test('device DNS rotation override selects rot for Ultimate and XC portals with reserves', async () => {
   const saved = [
     { id: 'main', name: 'Main', host: 'https://main.example', alts: ['backup'], mode: 'auto' },
     { id: 'backup', name: 'Backup', host: 'https://backup.example', alts: [], mode: 'auto' },
@@ -189,11 +190,15 @@ test('device DNS rotation override only selects rot for Ultimate portals with re
   const enabled = (await _internal.portalsOf(env, [main], 'ult', 'on'))[0];
   assert.equal(enabled.mode, 'rot');
   assert.deepEqual(enabled.alts, ['https://backup.example']);
+  assert.equal((await _internal.portalsOf(env, [main], 'xc', 'on'))[0].mode, 'rot');
   assert.equal((await _internal.portalsOf(env, [rotating], 'ult', 'off'))[0].mode, 'auto');
-  assert.equal((await _internal.portalsOf(env, [rotating], 'xc', 'on'))[0].mode, 'auto');
+  assert.equal((await _internal.portalsOf(env, [rotating], 'xc', 'off'))[0].mode, 'auto');
   assert.deepEqual(await _internal.portalsOf(env, [solo], 'ult', 'on'), [solo]);
+  assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'ult'), { 'u.dnsRot': 'on' });
+  assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'xc'), { 'u.dnsRot': 'on' });
+  assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'tv'), {});
   assert.deepEqual(_internal.RC_CAT.find(([key]) => key === 'u.dnsRot'), [
-    'u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult'], '', '', 'KAIROS Ultimate',
+    'u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult', 'xc'], '', '', 'KAIROS Ultimate · Kairos XC',
   ]);
 });
 
@@ -203,7 +208,7 @@ test('legacy clients never receive allow values or rot mode', () => {
     'o.autoNext:allow': [true, false],
     'u.saver:allow': ['off', '20'],
   });
-  for (const app of ['tv', 'ktv', 'prem', 'lite', 'xc', 'plus']) {
+  for (const app of ['tv', 'ktv', 'prem', 'lite', 'plus']) {
     const delivered = _internal.rcSent(rc, app);
     assert.ok(Object.keys(delivered).every((key) => !key.endsWith(':allow')), `${app} received an allow key`);
     assert.ok(Object.values(delivered).every((value) => typeof value !== 'string' || !value.startsWith('allow:')), `${app} received an allow value`);
@@ -214,6 +219,8 @@ test('legacy clients never receive allow values or rot mode', () => {
   assert.equal(ultimate['o.autoNext'], 'allow:true,false');
   assert.equal(ultimate['u.saver'], 'allow:off,20');
   assert.equal(_internal.portalModeForApp('rot', 'ult'), 'rot');
+  assert.equal(_internal.portalModeForApp('rot', 'xc'), 'rot');
+  for (const app of ['tv', 'prem', 'lite']) assert.equal(_internal.portalModeForApp('rot', app), 'auto');
 });
 
 test('Ultimate catalog exposes implemented settings and omits unsupported Pro-only controls', () => {

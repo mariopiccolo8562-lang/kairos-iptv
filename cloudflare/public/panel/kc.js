@@ -296,7 +296,7 @@
 .dv-exp>i{display:block;height:6px;border-radius:6px;background:rgba(255,255,255,.07);margin-top:7px;overflow:hidden}.dv-exp s{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,#3ddc84,#7ef0ab)}
 .dv-exp.warn em{color:#ffd37a}.dv-exp.warn s{background:linear-gradient(90deg,#ffb23d,#ffd37a)}.dv-exp.bad em{color:#ff8f96}.dv-exp.bad s{background:linear-gradient(90deg,#ff2a3d,#ff7a45)}
 .dv-info{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:12.5px;color:var(--mut)}.dv-info span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dv-kids{display:flex;flex-wrap:wrap;gap:6px}.dv-kids button{all:unset;cursor:pointer;font-size:12px;padding:4px 9px;border-radius:99px;background:rgba(255,255,255,.06);border:1px solid var(--line)}.dv-kids button:hover{background:rgba(255,255,255,.12)}
+.dv-kids{display:flex;flex-direction:column;gap:6px}.dv-kid{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}.dv-kids .dv-kid-open{all:unset;cursor:pointer;min-width:0;flex:1;font-size:12px;padding:4px 9px;border-radius:99px;background:rgba(255,255,255,.06);border:1px solid var(--line)}.dv-kids .dv-kid-open:hover{background:rgba(255,255,255,.12)}.dv-kid-actions{display:flex;flex:none;gap:6px}
 .dv-note{font-size:12.5px;color:var(--mut);padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.03)}
 .dv-act{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}.dv-act .btn{flex:0 0 auto}.dv-act .dv-kick{flex:0 0 auto;color:#ff6b81;border-color:rgba(255,107,129,.35)}
 .dvt-wrap{padding:0!important;overflow:auto}
@@ -1174,11 +1174,13 @@
     /* «Remoto» accanto a «➕ Dispositivo» (12 novembre 2026, solo titolare): apre subito il Controllo remoto di quel cliente
        (impostazioni dell'app e comandi), senza passare dalla scheda */
     const rcOn = () => D.role === 'owner' && !window.__assist && !!window.KXRemote;
+    const DNS_ROT_APPS = new Set(['ult', 'xc']);
+    const dnsRotApp = (d) => DNS_ROT_APPS.has(appCode(d));
     const RC_IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>';
     const rcBtn = (cls) => (rcOn() ? `<button class="btn sm ${cls}" data-act="rc" title="Controllo remoto: impostazioni dell'app di questo cliente e comandi (riavvia, svuota cache, aggiorna liste…)">${RC_IC}<span>Remoto</span></button>` : '');
     let dnsRotOverrides = null, dnsRotLoad = null, dnsRotRev = 0, dnsRotServers = null, dnsRotServersLoad = null;
     function paintDnsRotButtons() {
-      $$('.dv-card[data-id], .dvt tbody tr[data-id]', V).forEach((el) => {
+      $$('.dv-card[data-id], .dv-kid[data-id], .dvt tbody tr[data-id]', V).forEach((el) => {
         const b = el.querySelector('[data-act="dnsrot"]'); if (!b) return;
         const on = ((dnsRotOverrides || {})[el.dataset.id] || {})['u.dnsRot'] === 'on';
         b.classList.toggle('pri', on); b.textContent = on ? '🔄 Rotativo ON' : '🔄 DNS rotativo';
@@ -1197,12 +1199,13 @@
       return dnsRotLoad;
     }
     function dnsRotBtn(d) {
-      if (!rcOn() || d.parent || appCode(d) !== 'ult') return '';
+      if (!rcOn() || !dnsRotApp(d)) return '';
       loadDnsRotOverrides();
       const on = ((dnsRotOverrides || {})[d.id] || {})['u.dnsRot'] === 'on';
       return `<button class="btn sm${on ? ' pri' : ''}" data-act="dnsrot" title="Imposta il DNS rotativo per questo cliente">${on ? '🔄 Rotativo ON' : '🔄 DNS rotativo'}</button>`;
     }
     const DNS_ROT_NOTE = 'Nessun DNS di riserva: aggiungi le riserve in Solo Master → Server DNS e VPN';
+    const DNS_ROT_APPS_NOTE = 'Solo KAIROS Ultimate e Kairos XC (versione nuova)';
     const dnsRotHostKey = (h) => String(h || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
     async function dnsRotDnsList() {
       if (dnsRotServers) return dnsRotServers;
@@ -1210,8 +1213,9 @@
       return dnsRotServersLoad;
     }
     function hasDnsRotReserve(d, saved) {
+      const source = d.parent ? parentOf(d) || d : d;
       const byHost = new Map(saved.map((x) => [dnsRotHostKey(x.host), x]));
-      return (d.playlists || []).some((p) => {
+      return (source.playlists || []).some((p) => {
         const address = p.type === 'xtream' ? p.host : p.url;
         let host = address;
         try { host = new URL(address).origin; } catch {}
@@ -1221,37 +1225,46 @@
     }
     async function setDnsRot(ds, bulkMode = false) {
       if (!rcOn()) return;
-      ds = (ds || []).filter((d) => d && !d.parent && d.status !== 'pending');
-      if (!ds.length) return toast('Nessun cliente attivabile tra quelli selezionati', 1);
-      const ultimate = ds.filter((d) => appCode(d) === 'ult');
+      let targets = (ds || []).filter((d) => d && d.status !== 'pending');
+      if (bulkMode) {
+        const expanded = [];
+        for (const d of targets) expanded.push(d, ...kidsOf(d.id));
+        targets = [...new Map(expanded.filter((d) => d && d.status !== 'pending').map((d) => [d.id, d])).values()];
+      }
+      if (!targets.length) return toast('Nessun dispositivo attivabile tra quelli selezionati', 1);
+      const eligible = targets.filter(dnsRotApp);
+      if (!eligible.length) return toast('Nessun dispositivo KAIROS Ultimate o Kairos XC selezionato', 1);
       let saved;
       try { saved = await dnsRotDnsList(); } catch (e) { return toast(e.message, 1); }
       await loadDnsRotOverrides();
-      const withoutReserve = ultimate.filter((d) => !hasDnsRotReserve(d, saved)).length;
-      const skipped = ds.length - ultimate.length;
-      const current = !bulkMode ? ((dnsRotOverrides || {})[ds[0].id] || {})['u.dnsRot'] || '' : '';
+      const withoutReserve = eligible.filter((d) => !hasDnsRotReserve(d, saved)).length;
+      const skipped = targets.length - eligible.length;
+      const current = !bulkMode ? ((dnsRotOverrides || {})[eligible[0].id] || {})['u.dnsRot'] || '' : '';
       const options = [['on', 'Attiva'], ['off', 'Spegni'], ['', 'Come il DNS']];
       const body = `${bulkMode
-        ? `<p class="mut" style="margin:0 0 10px">${ultimate.length} client KAIROS Ultimate · ${withoutReserve} senza DNS di riserva${skipped ? ` · ${skipped} altri client verranno saltati` : ''}</p>`
-        : `<p class="mut" style="margin:0 0 10px">${esc(ds[0].name || ds[0].code)}</p>`}
+        ? `<p class="mut" style="margin:0 0 10px">${eligible.length} dispositivi KAIROS Ultimate / Kairos XC · ${withoutReserve} senza DNS di riserva${skipped ? ` · ${skipped} altri dispositivi verranno saltati` : ''}</p>`
+        : `<p class="mut" style="margin:0 0 10px">${esc(eligible[0].name || eligible[0].code)}</p>`}
+        <p class="mut" style="margin:0 0 10px">${DNS_ROT_APPS_NOTE}</p>
         <div style="display:grid;gap:8px">${options.map(([v, label]) => `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;cursor:pointer"><input type="radio" name="dnsRotChoice" value="${v}" ${v === current ? 'checked' : ''} style="accent-color:var(--a1);margin:0"><b>${label}</b></label>`).join('')}</div>
-        ${bulkMode ? (withoutReserve ? `<p class="mut" style="margin:10px 0 0">${DNS_ROT_NOTE}</p>` : '') : (!hasDnsRotReserve(ds[0], saved) ? `<p class="mut" style="margin:10px 0 0">${DNS_ROT_NOTE}</p>` : '')}`;
+        ${bulkMode ? (withoutReserve ? `<p class="mut" style="margin:10px 0 0">${DNS_ROT_NOTE}</p>` : '') : (!hasDnsRotReserve(eligible[0], saved) ? `<p class="mut" style="margin:10px 0 0">${DNS_ROT_NOTE}</p>` : '')}`;
       if (!(await ask('🔄 DNS rotativo', body, 'Applica'))) return;
       const choice = $('#mB').querySelector('input[name="dnsRotChoice"]:checked');
       if (!choice) return;
       const value = choice.value;
       try {
-        const r = await api('POST', '/admin/devices/mass', { scope: 'ids', ids: ds.map((d) => d.id), rcSet: { 'u.dnsRot': value } });
-        dnsRotRev++; dnsRotOverrides = dnsRotOverrides || {};
-        for (const d of ultimate) {
+        const parents = eligible.filter((d) => !d.parent), children = eligible.filter((d) => !!d.parent);
+        if (parents.length) await api('POST', '/admin/devices/mass', { scope: 'ids', ids: parents.map((d) => d.id), rcSet: { 'u.dnsRot': value } });
+        for (const d of children) {
           const rc = { ...(dnsRotOverrides[d.id] || {}) };
           if (value === '') delete rc['u.dnsRot']; else rc['u.dnsRot'] = value;
-          if (Object.keys(rc).length) dnsRotOverrides[d.id] = rc; else delete dnsRotOverrides[d.id];
-          if (window.KXRemote && KXRemote.setOverride) KXRemote.setOverride(d.id, 'u.dnsRot', value);
+          await api('PUT', '/admin/rctl/device/' + encodeURIComponent(d.id), { rc });
         }
+        for (const d of eligible) if (window.KXRemote && KXRemote.setOverride) KXRemote.setOverride(d.id, 'u.dnsRot', value);
+        dnsRotRev++; dnsRotOverrides = null;
+        await loadDnsRotOverrides();
         paintDnsRotButtons();
-        toast(r.changed ? `DNS rotativo aggiornato su ${r.changed} client${r.changed === 1 ? 'e' : 'i'} su ${r.total}` : 'Niente da cambiare: i clienti avevano già queste impostazioni');
         await load();
+        toast(`DNS rotativo aggiornato su ${eligible.length} dispositiv${eligible.length === 1 ? 'o' : 'i'}`);
       } catch (e) { toast(e.message, 1); }
     }
     function nowCell(d) {
@@ -1280,7 +1293,7 @@
         <div class="dv-exp ${tone}"><span>${d.expires ? 'Scade il <b>' + esc(fmtD(d.expires)) + '</b>' : '<b>Senza scadenza</b>'}</span><em>${dl === null ? '' : dl < 0 ? 'scaduto da ' + -dl + ' giorni' : dl === 0 ? 'scade oggi' : dl === 1 ? 'domani' : 'tra ' + dl + ' giorni'}</em></div>
         ${window.KXPay ? KXPay.badge('device', '', d.id) : ''}
         <div class="dv-meta">${info.map(esc).join(' · ')}</div>
-        ${kids.length ? `<div class="dv-kids">${kids.map((k) => `<button data-open="${esc(k.id)}" title="${esc(k.code)}${k.own ? ' · gestione indipendente (playlist sue)' : ''}">${liveDot(k)}↳ ${esc(k.name || k.model || k.code)}${k.own ? ' · <em>playlist sue</em>' : ''}</button>`).join('')}</div>` : ''}
+        ${kids.length ? `<div class="dv-kids">${kids.map((k) => `<div class="dv-kid" data-id="${esc(k.id)}"><button class="dv-kid-open" data-open="${esc(k.id)}" title="${esc(k.code)}${k.own ? ' · gestione indipendente (playlist sue)' : ''}">${liveDot(k)}↳ ${esc(k.name || k.model || k.code)}${k.own ? ' · <em>playlist sue</em>' : ''}</button><div class="dv-kid-actions">${rcBtn('dvt-rc')}${dnsRotBtn(k)}</div></div>`).join('')}</div>` : ''}
         ${d.notes ? `<div class="dv-note">${esc(d.notes.slice(0, 90))}</div>` : ''}
         <div class="dv-act">${window.KXAddDev && KXAddDev.can() ? '<button class="btn sm" data-act="adddev" title="Collega e aggiungi un altro dispositivo a questo cliente">➕ Dispositivo</button>' : ''}${rcBtn('dvt-rc')}${dnsRotBtn(d)}<button class="btn sm" data-act="renew">Rinnova</button><button class="btn sm pri" data-act="open">Modifica</button></div>
       </div>`;
@@ -1350,7 +1363,7 @@
       const addDev = window.KXAddDev && KXAddDev.can() ? '<button class="btn sm dvt-add" data-act="adddev" title="Collega e aggiungi un altro dispositivo a questo cliente">➕ Dispositivo</button>' : '';
       const acts = d.status === 'pending' && !sub
         ? '<button class="btn sm pri" data-act="activate">Attiva</button><button class="btn sm" data-act="link">Collega</button>' + (pendOwner() ? ib('del', 'r', 'Elimina la richiesta') : '')
-        : sub ? rcBtn('dvt-rc') + ib('kick', 'k', 'Disconnetti') + ib('edit', 'e', 'Apri scheda')
+        : sub ? rcBtn('dvt-rc') + dnsRotBtn(d) + ib('kick', 'k', 'Disconnetti') + ib('edit', 'e', 'Apri scheda')
         : addDev + rcBtn('dvt-rc') + dnsRotBtn(d) + ib('ext1', 'g', '+1 mese') + ib('ext12', 'b', '+12 mesi') + (d.status === 'active' ? ib('kick', 'k', 'Disconnetti: interrompe la visione in corso') : '') + (d.active ? ib('off', 'o', 'Disattiva') : ib('on', 'g', 'Riattiva')) + ib('edit', 'e', 'Apri scheda') + ib('del', 'r', 'Elimina');
       return `<tr data-id="${esc(d.id)}" class="${sub ? 'sub' : ''} ${st.sel.has(d.id) ? 'sel' : ''}">
         <td class="c">${sub ? '' : `<input type="checkbox" data-sel="${esc(d.id)}" ${st.sel.has(d.id) ? 'checked' : ''}>`}</td>
@@ -1496,7 +1509,7 @@
         if (!e.target.closest('button,input')) return openQuick(d);
         return;
       }
-      const c = e.target.closest('.dv-card, .dv-pc'); if (!c) return;
+      const c = e.target.closest('.dv-kid[data-id], .dv-card, .dv-pc'); if (!c) return;
       const d = D.devices.find((x) => x.id === c.dataset.id); if (!d) return;
       const act = (e.target.closest('[data-act]') || {}).dataset?.act;
       if (act === 'renew') { const box = c.querySelector('.dv-act'); box.innerHTML = [1, 3, 6, 12].map((m) => `<button class="btn sm" data-act="ext${m}">+${m} ${m === 1 ? 'mese' : 'mesi'}</button>`).join('') + '<button class="btn sm dv-x" data-act="renewx" title="Annulla">✕</button>'; return; }
