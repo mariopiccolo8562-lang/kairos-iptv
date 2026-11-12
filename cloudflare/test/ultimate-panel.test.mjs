@@ -168,10 +168,10 @@ test('remote allow values and DNS rotation stay app-limited', () => {
   assert.equal(_internal.rcSent(tvRc, 'tv')['o.engLive'], undefined);
   assert.ok(_internal.RC_CMDS.some(([key, , , apps]) => key === 'epg' && apps.length === 1 && apps[0] === 'ult'));
   assert.ok(_internal.RC_CAT.filter(([key]) => key.startsWith('u.') && key !== 'u.dnsRot').every(([, , , , apps]) => apps.length === 1 && apps[0] === 'ult'));
-  assert.deepEqual(_internal.RC_CAT.find(([key]) => key === 'u.dnsRot')[4], ['ult', 'xc', 'tv']);
+  assert.deepEqual(_internal.RC_CAT.find(([key]) => key === 'u.dnsRot')[4], ['ult', 'xc', 'tv', 'ktv', 'prem', 'lite']);
 });
 
-test('device DNS rotation override selects rot for Ultimate, XC and new Pro portals with reserves', async () => {
+test('device DNS rotation override selects rot for enabled apps with reserves only', async () => {
   const saved = [
     { id: 'main', name: 'Main', host: 'https://main.example', alts: ['backup'], mode: 'auto' },
     { id: 'backup', name: 'Backup', host: 'https://backup.example', alts: [], mode: 'auto' },
@@ -193,18 +193,27 @@ test('device DNS rotation override selects rot for Ultimate, XC and new Pro port
   assert.equal(enabled.mode, 'rot');
   assert.deepEqual(enabled.alts, ['https://backup.example']);
   assert.equal((await _internal.portalsOf(env, [main], 'xc', 'on'))[0].mode, 'rot');
+  for (const app of ['ktv', 'prem', 'lite']) assert.equal((await _internal.portalsOf(env, [main], app, 'on'))[0].mode, 'rot');
   assert.equal((await _internal.portalsOf(env, [main], 'tv', 'on'))[0].mode, 'auto');
   assert.equal((await _internal.portalsOf(env, [main], 'tv', 'on', '2.7.7'))[0].mode, 'auto');
   assert.equal((await _internal.portalsOf(env, [main], 'tv', 'on', '2.7.8'))[0].mode, 'rot');
   assert.equal((await _internal.portalsOf(env, [main], 'tv', 'off', '2.7.8'))[0].mode, 'auto');
   assert.equal((await _internal.portalsOf(env, [rotating], 'ult', 'off'))[0].mode, 'auto');
   assert.equal((await _internal.portalsOf(env, [rotating], 'xc', 'off'))[0].mode, 'auto');
+  for (const app of ['ktv', 'prem', 'lite']) {
+    assert.equal((await _internal.portalsOf(env, [rotating], app, 'on'))[0].mode, 'rot');
+    assert.equal((await _internal.portalsOf(env, [rotating], app, 'off'))[0].mode, 'auto');
+  }
+  for (const app of ['plus', 'nova', 'portal', 'smart']) {
+    assert.equal(_internal.portalModeForApp('rot', app), 'auto');
+    assert.equal((await _internal.portalsOf(env, [main], app, 'on'))[0].mode, 'auto');
+  }
   assert.deepEqual(await _internal.portalsOf(env, [solo], 'ult', 'on'), [solo]);
   assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'ult'), { 'u.dnsRot': 'on' });
   assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'xc'), { 'u.dnsRot': 'on' });
   assert.deepEqual(_internal.rcClean({ 'u.dnsRot': 'on' }, 'tv'), { 'u.dnsRot': 'on' });
   assert.deepEqual(_internal.RC_CAT.find(([key]) => key === 'u.dnsRot'), [
-    'u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult', 'xc', 'tv'], '', '', 'KAIROS Ultimate · Kairos XC · Kairos Pro (versioni nuove)',
+    'u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult', 'xc', 'tv', 'ktv', 'prem', 'lite'], '', '', 'App Kairos aggiornate (Ultimate, XC, Pro, TV, Premium, Lite)',
   ]);
 });
 
@@ -214,7 +223,7 @@ test('legacy clients never receive allow values or rot mode', () => {
     'o.autoNext:allow': [true, false],
     'u.saver:allow': ['off', '20'],
   });
-  for (const app of ['tv', 'ktv', 'prem', 'lite', 'plus']) {
+  for (const app of ['tv', 'plus', 'nova', 'portal', 'smart']) {
     const delivered = _internal.rcSent(rc, app);
     assert.ok(Object.keys(delivered).every((key) => !key.endsWith(':allow')), `${app} received an allow key`);
     assert.ok(Object.values(delivered).every((value) => typeof value !== 'string' || !value.startsWith('allow:')), `${app} received an allow value`);
@@ -226,7 +235,7 @@ test('legacy clients never receive allow values or rot mode', () => {
   assert.equal(ultimate['u.saver'], 'allow:off,20');
   assert.equal(_internal.portalModeForApp('rot', 'ult'), 'rot');
   assert.equal(_internal.portalModeForApp('rot', 'xc'), 'rot');
-  for (const app of ['tv', 'prem', 'lite']) assert.equal(_internal.portalModeForApp('rot', app), 'auto');
+  for (const app of ['tv', 'plus', 'nova', 'portal', 'smart']) assert.equal(_internal.portalModeForApp('rot', app), 'auto');
 });
 
 test('Ultimate catalog exposes implemented settings and omits unsupported Pro-only controls', () => {
