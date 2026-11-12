@@ -1,9 +1,10 @@
 /* KAIROS Control — codici usa e getta per lo Store (11 novembre 2026).
    - Riepilogo store (solo titolare): «🔑 Codici per lo Store» con l'interruttore «Download solo con codice», la durata
-     (30 minuti, 2 ore o 24 ore), «Genera codice» e l'elenco dei codici (chi l'ha generato, stato, dispositivo, app).
+     (10, 15, 20 o 30 minuti, 2 ore o 24 ore), «Genera codice» e l'elenco dei codici (chi l'ha generato, stato, dispositivo, app).
    - «🔑 Codice usa e getta · Genera» nella riga dei codici Downloader, accanto a Kairos Store: titolare e agenti con il
      permesso «Codici per lo Store», solo con l'interruttore acceso. Apre la finestra con il codice grande, il tempo che resta,
-     «Copia» e gli ultimi codici.
+     «Copia» e gli ultimi codici. Chiusa la finestra il codice resta nella riga, al posto di «Genera», con il tempo che
+     manca, «Copia» e «Nuovo»: finché non scade o non viene usato (12 novembre 2026). Vale anche dopo aver ricaricato la pagina.
    Il codice va scritto nello Store entro la durata; al primo uso si lega a quel dispositivo, che per la stessa durata scarica
    tutte le app. Server: /api/admin/store/codes (GET elenco, POST codice nuovo) e /api/admin/store/settings { codes }.
    Usa app.js ($, $$, esc, api, toast, D). */
@@ -29,7 +30,8 @@
 #scCard .tog{margin-top:6px}#scCard td small{display:block;color:var(--mut)}
 .sc-st{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:1px 8px}
 .sc-st.valid{background:rgba(34,211,238,.14);color:#67e8f9}.sc-st.open{background:rgba(34,197,94,.15);color:#86efac}.sc-st.used{background:rgba(148,163,184,.15);color:#cbd5e1}.sc-st.expired{background:rgba(239,68,68,.12);color:#fca5a5}
-.dlbar .dl.sc-pill b{font-family:inherit;font-size:13px;font-weight:600;letter-spacing:0}.dlbar .dl.sc-pill i{font-size:16px}#scBtn{white-space:nowrap}
+.dlbar .dl.sc-pill b{font-family:inherit;font-size:13px;font-weight:600;letter-spacing:0}.dlbar .dl.sc-pill i{font-size:16px}#scBtn,#scCopy{white-space:nowrap}
+.dlbar .dl.sc-pill b.sc-rem{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:17px;font-weight:800;letter-spacing:.14em;color:#67e8f9;white-space:nowrap}
 /* menu4.js: in Clienti la riga mostra solo il codice dello Store; la voce dei codici usa e getta resta con lui */
 #dlBar.dl-st-only>#scPill{display:flex!important}#dlBar.dl-st-only:has(>#scPill){display:flex!important}
 /* telefono: la riga dei codici scorre di lato e questa voce sarebbe la terza, fuori dallo schermo: qui viene per prima */
@@ -53,7 +55,7 @@
   /* ---------------- dati di esempio (demo) ---------------- */
   const DM = (() => {
     const t = Date.now();
-    return { on: true, ttl: 30, ttls: [30, 120, 1440], codes: [
+    return { on: true, ttl: 30, ttls: [10, 15, 20, 30, 120, 1440], codes: [
       { id: 3, code: '482913', st: 'valid', created: t - 4 * 60e3, expires: t + 26 * 60e3, used: 0, until: 0, by: 'Brusca', mine: false, device: '', country: '', apps: [], dls: 0 },
       { id: 2, code: '', st: 'used', created: t - 3 * 3600e3, expires: t - 150 * 60e3, used: t - 170 * 60e3, until: t - 140 * 60e3, by: '', mine: true, device: 'Amazon AFTSS (Fire TV)', country: 'IT · Napoli', apps: ['Kairos Tv', 'Kairos Store'], dls: 2 },
       { id: 1, code: '', st: 'expired', created: t - 26 * 3600e3, expires: t - 25.5 * 3600e3, used: 0, until: 0, by: 'Brusca', mine: false, device: '', country: '', apps: [], dls: 0 },
@@ -83,6 +85,7 @@
       <div class="sc-code mono" id="scCode">${gone ? '—' : esc(fmt(r.code))}</div>
       <div class="sc-left" id="scLeft">${gone ? 'Scaduto: generane uno nuovo' : `da usare entro <b>${esc(left(r.expires))}</b>`}</div>
       <p>Il cliente lo scrive nello Store quando preme <b>Installa</b>. Vale <b>una volta sola</b>: dopo, su quel dispositivo scarica tutte le app che vuole per <b>${esc(ttlTxt(r.ttl))}</b>.</p>
+      ${gone ? '' : '<p>Se chiudi questa finestra il codice <b>resta accanto a «Genera»</b> finché non scade o non viene usato.</p>'}
       ${r.on === false ? '<div class="sc-warn">⚠️ Adesso lo Store è aperto: il codice serve solo quando è acceso «Download solo con codice» (Store → Riepilogo store).</div>' : ''}
       <div class="sc-btns"><button type="button" class="btn" data-sccopy>Copia</button><button type="button" class="btn" data-scnew>Nuovo codice</button><button type="button" class="btn pri" data-scx>Fatto</button></div>
       ${O.mine && O.mine.length ? `<div class="sc-mine"><b style="display:block;margin-bottom:4px">I tuoi ultimi codici</b>${O.mine.slice(0, 5).map((x) => `<div><span>${x.code ? `<b class="mono">${esc(fmt(x.code))}</b>` : `<span class="mono">••• •••</span>`} · ${esc(when(x.created))}</span><span>${esc(stTxt(x))}${x.apps && x.apps.length ? ' · ' + esc(x.apps.join(', ')) : ''}</span></div>`).join('')}</div>` : ''}</div>`;
@@ -97,6 +100,7 @@
     if (!can()) return;
     try {
       const r = await cApi('POST');
+      R = { code: r.code, expires: r.expires }; rT = Date.now(); pillPaint();
       if (!O) {
         O = { r, timer: 0, mine: null };
         const ov = document.createElement('div'); ov.id = 'scOv'; document.body.appendChild(ov);
@@ -112,10 +116,36 @@
   function onClick(e) {
     if (e.target.id === 'scOv' || e.target.closest('[data-scx]')) return close();
     if (e.target.closest('[data-scnew]')) return gen();
-    if (e.target.closest('[data-sccopy]') && O) {
-      const t = O.r.code;
-      (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Codice copiato: ' + fmt(t)), () => toast('Codice: ' + fmt(t)));
+    if (e.target.closest('[data-sccopy]') && O) copy(O.r.code);
+  }
+  const copy = (t) => (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Codice copiato: ' + fmt(t)), () => toast('Codice: ' + fmt(t)));
+
+  /* ---------------- il codice ricordato: l'ultimo mio ancora da usare, finché non scade ----------------
+     Arriva da «Genera» e dall'elenco del server (così c'è anche dopo aver ricaricato la pagina o su un altro computer).
+     Riletto ogni 30 secondi solo mentre c'è un codice in vista: quando il cliente lo usa, sparisce. */
+  let R = null, rT = 0, rBusy = false, rFirst = false;
+  const rLive = () => (R && R.expires > Date.now() ? R : (R = null));
+  async function recall(force) {
+    if (!(can() && isOn()) || rBusy) return;
+    if (!force && (rFirst && !R || Date.now() - rT < 30000 || document.hidden)) return;
+    rBusy = true; rFirst = true; rT = Date.now();
+    try {
+      const d = await cApi('GET');
+      const v = (d.codes || []).find((x) => x.st === 'valid' && x.code && (x.mine || isAg()));
+      R = v ? { code: v.code, expires: v.expires } : null; pillPaint();
+    } catch {} finally { rBusy = false; }
+  }
+  const PILL0 = `<i>🔑</i><div><small>Codice usa e getta · Kairos Store</small><b>Per scaricare dallo Store</b></div><button class="btn sm pri" type="button" id="scBtn" title="Codice di 6 cifre da dare al cliente: lo scrive nello Store quando preme Installa">Genera</button>`;
+  function pillPaint() {
+    const b = document.getElementById('scPill'); if (!b) return;
+    const r = rLive(), key = r ? r.code : '-';
+    if (b.dataset.k !== key) {
+      b.dataset.k = key;
+      b.innerHTML = r ? `<i>🔑</i><div><small id="scRemS"></small><b class="sc-rem" id="scRemC" title="Codice ancora da usare: resta qui finché non scade o non viene usato">${esc(fmt(r.code))}</b></div><button class="btn sm" type="button" id="scCopy" title="Copia il codice">Copia</button><button class="btn sm pri" type="button" id="scBtn" title="Genera un codice nuovo (questo resta valido finché non scade)">Nuovo</button>` : PILL0;
+      b.querySelector('#scBtn').onclick = gen;
+      const c = b.querySelector('#scCopy'); if (c) c.onclick = () => copy(r.code);
     }
+    if (r) { const s = b.querySelector('#scRemS'), t = `Codice Store · scade tra ${left(r.expires)}`; if (s && s.textContent !== t) s.textContent = t; }
   }
 
   /* ---------------- «🔑 Codice Store» accanto ai codici Downloader (riga #dlBar) ----------------
@@ -126,16 +156,16 @@
     if (!(can() && isOn())) { if (b) b.remove(); return; }
     if (!bar || b) return;
     b = document.createElement('div'); b.className = 'dl sc-pill'; b.id = 'scPill';
-    b.innerHTML = `<i>🔑</i><div><small>Codice usa e getta · Kairos Store</small><b>Per scaricare dallo Store</b></div><button class="btn sm pri" type="button" id="scBtn" title="Codice di 6 cifre da dare al cliente: lo scrive nello Store quando preme Installa">Genera</button>`;
-    b.querySelector('button').onclick = gen;
     const st = bar.querySelector('[data-dlk="ST"]');
     if (st) st.after(b); else bar.appendChild(b);
+    pillPaint();
   }
   let obs = null;
   function watch() {
     const bar = document.getElementById('dlBar');
     if (bar && !obs) { obs = new MutationObserver(() => { if (!document.getElementById('scPill') && can() && isOn()) pill(); }); obs.observe(bar, { childList: true }); }
-    pill();
+    pill(); pillPaint();
+    if (document.getElementById('scPill')) recall();
   }
   setInterval(watch, 1500);
 
@@ -221,7 +251,7 @@
     const el = document.createElement('div'); el.className = 'card glass'; el.id = 'scCard'; el.style.marginBottom = '18px';
     el.innerHTML = `<div class="hd"><h3>🔑 Codici per lo Store<small>Per scaricare dallo Store serve un codice di 6 cifre che dai tu o un agente</small></h3><button class="btn sm pri" id="scGen" type="button">Genera codice</button></div>
       <div class="tog" id="scOn"><div><b>Download solo con codice</b><small>Spento: lo Store resta aperto come adesso. Acceso: chi preme Installa scrive il codice; vale su quel dispositivo per tutte le app, per la durata scelta qui sotto.</small></div><i></i></div>
-      <div class="sc-row"><label class="lbl" for="scTtl" style="margin:0">Il codice vale</label><select class="inp" id="scTtl"><option value="30">30 minuti</option><option value="120">2 ore</option><option value="1440">24 ore</option></select><small class="mut">per scriverlo nello Store e, dopo, per scaricare su quel dispositivo</small></div>
+      <div class="sc-row"><label class="lbl" for="scTtl" style="margin:0">Il codice vale</label><select class="inp" id="scTtl"><option value="10">10 minuti</option><option value="15">15 minuti</option><option value="20">20 minuti</option><option value="30">30 minuti</option><option value="120">2 ore</option><option value="1440">24 ore</option></select><small class="mut">per scriverlo nello Store e, dopo, per scaricare su quel dispositivo</small></div>
       <div class="sc-row sc-who"><span class="lbl" style="margin:0">Chi può generarli</span><b id="scWho">Tu</b><button class="btn sm" type="button" id="scPick">Scegli agenti</button></div>
       <div class="tbl-wrap"><table class="tbl" style="width:100%"><thead><tr><th>Codice</th><th>Generato da</th><th>Creato</th><th>Stato</th><th>Dispositivo</th><th>App scaricate</th></tr></thead><tbody id="scList"><tr><td colspan="6" class="mut">Caricamento…</td></tr></tbody></table></div>
       <small class="mut" style="display:block;margin-top:8px">Gli agenti generano i codici solo con il permesso «Codici per lo Store»: lo dai qui sopra con «Scegli agenti», oppure da Agenti → scheda dell'agente. Il codice protegge lo Store, non i file: gli APK restano raggiungibili dai link diretti, che servono agli aggiornamenti delle app.</small>`;
@@ -273,5 +303,5 @@
     setInterval(() => { if (V.classList.contains('on') && !document.hidden) refresh(); }, 30000);
   }
 
-  window.KXStoreCodes = { gen, close, refresh, pick };
+  window.KXStoreCodes = { gen, close, refresh, pick, recall };
 })();

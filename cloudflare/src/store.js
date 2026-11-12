@@ -127,7 +127,7 @@ function recNorm(r) {
    un agente con il permesso «Codici per lo Store». Va scritto entro la durata scelta (30 minuti, 2 ore o 24 ore); al primo
    uso si lega a quel Kairos Store, che per la stessa durata scarica tutte le app che vuole. Spento = store aperto come prima.
    Il codice protegge lo Store, non i file: gli APK restano raggiungibili dai link diretti (servono agli aggiornamenti). */
-const CODE_TTLS = [30, 120, 1440];            // minuti che il titolare può scegliere
+const CODE_TTLS = [10, 15, 20, 30, 120, 1440]; // minuti che il titolare può scegliere (10, 15 e 20 dal 12 novembre 2026)
 const CODE_FAIL_DEV = 5, CODE_FAIL_IP = 20;    // codici sbagliati prima della pausa (dispositivo / indirizzo)
 const CODE_PAUSE = 3600e3;                    // pausa dopo troppi codici sbagliati
 const CODE_PER_HOUR = 60;                     // codici che una persona può generare in un'ora
@@ -724,7 +724,7 @@ export async function storeAdmin(req, env, path, who, ip, by = 0, opts = {}) {
       if (b.recommend && typeof b.recommend === 'object') s.recommend = recNorm({ ...(s.recommend || {}), ...b.recommend });
       let codesTxt = '';
       if (b.codes && typeof b.codes === 'object') {
-        if (b.codes.ttl !== undefined && !CODE_TTLS.includes(+b.codes.ttl)) throw new StoreErr(400, 'Durata del codice non valida: 30 minuti, 2 ore o 24 ore');
+        if (b.codes.ttl !== undefined && !CODE_TTLS.includes(+b.codes.ttl)) throw new StoreErr(400, 'Durata del codice non valida: 10, 15, 20 o 30 minuti, 2 ore o 24 ore');
         s.codes = codesNorm({ ...s.codes, ...b.codes });
         codesTxt = s.codes.on ? `download solo con codice (vale ${ttlTxt(s.codes.ttl)})` : 'download liberi, senza codice';
       }

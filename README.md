@@ -1247,3 +1247,14 @@ Prove: `srv_line_src` 59, `ui_line_src` 36, `ui_list_rc_dns` 15.
 Quando una TV nuova si presenta in attesa, sotto il modello compare **«📥 Scaricata dal codice di \<agente\>»** (o «con il tuo codice»), in tabella e nelle schede. Lo si scrive sul dispositivo al register, cercando il codice dello Store usato da poco dallo **stesso IP** (la stessa TV): così resta anche se l'IP cambia poi. Scaricata senza codice → nessuna dicitura (non c'è un agente). Si segna una volta sola, finché il dispositivo è in attesa; una volta attivato non si tocca.
 
 Tecnica: `devices.rec_by`, `rec_name`, `rec_t` (migrazione `0056_dev_rec.sql`); `recStamp()` al register; `deviceOut` espone `dl: { by, mine }`. Pannello: `dlWho()` in `kc.js`, `add-dev.js` non ripete «via» dal vivo quando c'è già la dicitura scritta. Prove: `srv_dl_who` 13, `ui_dl_who` 6.
+
+## 75. Codice dello Store ricordato accanto a «Genera» e durate da 10, 15 e 20 minuti (12 novembre 2026)
+
+- Chiusa la finestra del codice, il codice **resta nella riga dei codici Downloader** al posto di «Genera»: codice, «scade tra …», «Copia» e «Nuovo». Sparisce quando scade o quando il cliente lo usa.
+- Arriva dall'elenco del server, quindi c'è anche dopo aver ricaricato la pagina o da un altro computer. Ognuno vede solo il proprio: il titolare il suo, l'agente il suo.
+- «Nuovo» genera un altro codice; quello di prima resta valido finché non scade.
+- Durate (Store → «🔑 Codici per lo Store» → «Il codice vale»): **10, 15, 20** o 30 minuti, 2 ore, 24 ore. La durata vale per scrivere il codice e poi per scaricare su quel dispositivo.
+
+Tecnica: `CODE_TTLS` in `store.js`; in `store-codes.js` `recall()` (rilegge l'elenco ogni 30 secondi solo mentre c'è un codice in vista e la scheda è visibile) e `pillPaint()`.
+
+Prove: `srv_store_codes` (durate nuove), `ui_store_code_rem` 19.
