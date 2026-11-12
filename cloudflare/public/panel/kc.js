@@ -315,6 +315,8 @@
 .dvt-sub{width:32px;text-align:center;color:var(--mut);font-size:16px}
 .dvt-code{display:inline-flex;align-items:center;gap:4px;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--mut);cursor:copy}
 .dvt-code svg{width:11px;height:11px;opacity:.6}.dvt-code:hover{color:#fff}
+.dvt-app{display:inline-block;vertical-align:middle;margin-left:7px;font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:2px 6px;border-radius:5px;line-height:1.5;white-space:nowrap}
+.dvt-app.na{background:rgba(255,255,255,.06);color:var(--mut);font-weight:700}
 .dvt-exp b,.dvt-dev b{display:block;font-weight:600;white-space:nowrap}
 .dvt-exp small,.dvt-dev small{display:block;font-size:11px;color:var(--mut);margin-top:2px}
 .dvt-exp small.warn{color:var(--warn)}.dvt-exp small.bad{color:var(--bad)}
@@ -1143,6 +1145,19 @@
     const NET_L = { wifi: 'Wi-Fi', eth: 'Cavo', mobile: 'Rete mobile' };
     const SDNS_L = { on: ['ok', '🔒 DNS cifrato', 'DNS cifrato attivo'], vpn: ['vpn', '🔒 DNS nella VPN', 'DNS cifrato: protetto dalla VPN'], asking: ['warn', 'DNS: in attesa', 'DNS cifrato acceso dal pannello: il cliente non ha ancora dato il permesso'],
       denied: ['warn', 'DNS: permesso negato', 'DNS cifrato acceso dal pannello: il cliente ha negato il permesso'], other: ['warn', 'DNS: altra VPN', 'DNS cifrato acceso dal pannello: sul dispositivo c\'è un\'altra VPN attiva'], error: ['bad', 'DNS: errore', 'DNS cifrato acceso dal pannello ma non partito'] };
+    /* App accanto a ogni cliente (12 novembre 2026): quale app Kairos sta usando.
+       Fonte: d.app risolto dal pannello; in mancanza, la versione del battito (now.ver) o quella registrata. */
+    const APP_SHORT = { tv: 'PRO', ktv: 'TV', xc: 'XC', lite: 'LITE', prem: 'PREMIUM', plus: 'PLUS', nova: 'NOVA', ult: 'ULTIMATE', portal: 'PORTAL', smart: 'SMART' };
+    const APP_FULL = { tv: 'Kairos Pro', ktv: 'Kairos TV', xc: 'Kairos XC', lite: 'Kairos Lite', prem: 'Kairos Premium', plus: 'Kairos Plus', nova: 'Kairos Nova', ult: 'Kairos Ultimate', portal: 'Kairos Portal', smart: 'Kairos Smart' };
+    const APP_C = { tv: '#60a5fa', ktv: '#38bdf8', xc: '#2dd4bf', lite: '#f0b429', prem: '#a78bfa', plus: '#34d399', nova: '#f472b6', ult: '#fb923c', portal: '#818cf8', smart: '#22d3ee' };
+    const verApp = (v) => { v = String(v || '').trim().toLowerCase(); for (const [re, k] of [[/^portal/, 'portal'], [/^smart/, 'smart'], [/^xc/, 'xc'], [/^lite/, 'lite'], [/^prem/, 'prem'], [/^nova/, 'nova'], [/^plus/, 'plus'], [/^ult/, 'ult'], [/^(pro|tv)\b/, 'tv'], [/^ktv/, 'ktv']]) if (re.test(v)) return k; return ''; };
+    const appCode = (d) => { const k = String((d && d.app) || '').trim().toLowerCase(); if (k) return k; const nv = d && d.now && d.now.ver; return verApp(nv || (d && d.ver)); };
+    const appTag = (d) => {
+      const k = appCode(d);
+      if (!k) return '<span class="dvt-app na" title="App non ancora rilevata">n/d</span>';
+      const s = APP_SHORT[k] || k.toUpperCase(), f = APP_FULL[k] || s, c = APP_C[k] || '#9aa';
+      return `<span class="dvt-app" style="background:color-mix(in srgb,${c} 20%,transparent);color:${c}" title="App in uso: ${esc(f)}">${esc(s)}</span>`;
+    };
     function nowCell(d) {
       const n = d.now;
       if (!d.live || !n) return '<span class="mut">—</span>';
@@ -1165,7 +1180,7 @@
       const name = d.name || '— senza nome —';
       const info = [d.model || 'Modello sconosciuto', seenTxt(d), `${1 + kids.length}/${+d.maxConn >= 999 ? '∞' : d.maxConn || 1} dispositivi`, (d.playlists || []).length ? (d.playlists || []).length + ((d.playlists || []).length === 1 ? ' playlist' : ' playlist') : 'nessuna playlist'];
       return `<div class="dv-card ${d.status}" data-id="${esc(d.id)}">
-        <div class="dv-top"><div class="dv-n"><b>${liveDot(d)}${esc(name)}</b><span class="code">${esc(d.code)}</span></div>${stPill(d.status)}</div>
+        <div class="dv-top"><div class="dv-n"><b>${liveDot(d)}${esc(name)}${d.status === 'pending' ? '' : appTag(d)}</b><span class="code">${esc(d.code)}</span></div>${stPill(d.status)}</div>
         <div class="dv-exp ${tone}"><span>${d.expires ? 'Scade il <b>' + esc(fmtD(d.expires)) + '</b>' : '<b>Senza scadenza</b>'}</span><em>${dl === null ? '' : dl < 0 ? 'scaduto da ' + -dl + ' giorni' : dl === 0 ? 'scade oggi' : dl === 1 ? 'domani' : 'tra ' + dl + ' giorni'}</em></div>
         ${window.KXPay ? KXPay.badge('device', '', d.id) : ''}
         <div class="dv-meta">${info.map(esc).join(' · ')}</div>
@@ -1238,7 +1253,7 @@
         : addDev + ib('ext1', 'g', '+1 mese') + ib('ext12', 'b', '+12 mesi') + (d.status === 'active' ? ib('kick', 'k', 'Disconnetti: interrompe la visione in corso') : '') + (d.active ? ib('off', 'o', 'Disattiva') : ib('on', 'g', 'Riattiva')) + ib('edit', 'e', 'Apri scheda') + ib('del', 'r', 'Elimina');
       return `<tr data-id="${esc(d.id)}" class="${sub ? 'sub' : ''} ${st.sel.has(d.id) ? 'sel' : ''}">
         <td class="c">${sub ? '' : `<input type="checkbox" data-sel="${esc(d.id)}" ${st.sel.has(d.id) ? 'checked' : ''}>`}</td>
-        <td><div class="dvt-u">${sub ? '<span class="dvt-sub">↳</span>' : ''}<div><b>${liveDot(d)}${esc(d.name || (sub ? d.model || 'Dispositivo' : '') || '— senza nome —')}</b><span class="dvt-code" data-copy="${esc(d.code)}" title="Copia il codice">${esc(d.code)} ${IC.copy}</span>${!sub && d.status === 'pending' && window.KXAddDev ? KXAddDev.nearHtml(d) : ''}</div></div></td>
+        <td><div class="dvt-u">${sub ? '<span class="dvt-sub">↳</span>' : ''}<div><b>${liveDot(d)}${esc(d.name || (sub ? d.model || 'Dispositivo' : '') || '— senza nome —')}${d.status === 'pending' ? '' : appTag(d)}</b><span class="dvt-code" data-copy="${esc(d.code)}" title="Copia il codice">${esc(d.code)} ${IC.copy}</span>${!sub && d.status === 'pending' && window.KXAddDev ? KXAddDev.nearHtml(d) : ''}</div></div></td>
         <td>${stPill(d.status)}</td>
         <td class="dvt-exp">${exp}${window.KXPay ? KXPay.badge('device', '', base.id) : ''}</td>
         <td class="c mono">${sub || d.status === 'pending' ? '—' : `${1 + kids.length}/${+d.maxConn >= 999 ? '∞' : esc(d.maxConn || 1)}`}</td>
