@@ -168,6 +168,35 @@ test('remote allow values and rotating DNS stay Ultimate-only', () => {
   assert.ok(_internal.RC_CAT.filter(([key]) => key.startsWith('u.')).every(([, , , , apps]) => apps.length === 1 && apps[0] === 'ult'));
 });
 
+test('device DNS rotation override only selects rot for Ultimate portals with reserves', async () => {
+  const saved = [
+    { id: 'main', name: 'Main', host: 'https://main.example', alts: ['backup'], mode: 'auto' },
+    { id: 'backup', name: 'Backup', host: 'https://backup.example', alts: [], mode: 'auto' },
+    { id: 'rot-main', name: 'Rotating', host: 'https://rot.example', alts: ['backup'], mode: 'rot' },
+    { id: 'solo', name: 'Solo', host: 'https://solo.example', alts: [], mode: 'rot' },
+  ];
+  const env = {
+    DB: {
+      prepare() {
+        return { all: async () => ({ results: [{ k: 'dnsl', v: JSON.stringify(saved) }] }) };
+      },
+    },
+  };
+  const main = { id: 'p1', type: 'xtream', host: 'https://main.example' };
+  const rotating = { id: 'p2', type: 'xtream', host: 'https://rot.example' };
+  const solo = { id: 'p3', type: 'xtream', host: 'https://solo.example' };
+
+  const enabled = (await _internal.portalsOf(env, [main], 'ult', 'on'))[0];
+  assert.equal(enabled.mode, 'rot');
+  assert.deepEqual(enabled.alts, ['https://backup.example']);
+  assert.equal((await _internal.portalsOf(env, [rotating], 'ult', 'off'))[0].mode, 'auto');
+  assert.equal((await _internal.portalsOf(env, [rotating], 'xc', 'on'))[0].mode, 'auto');
+  assert.deepEqual(await _internal.portalsOf(env, [solo], 'ult', 'on'), [solo]);
+  assert.deepEqual(_internal.RC_CAT.find(([key]) => key === 'u.dnsRot'), [
+    'u.dnsRot', 'DNS rotativo', 'sel', [['on', 'Attivo'], ['off', 'Spento']], ['ult'], '', '', 'KAIROS Ultimate',
+  ]);
+});
+
 test('legacy clients never receive allow values or rot mode', () => {
   const rc = _internal.rcClean({
     'o.engLive:allow': ['exo', 'vlc'],

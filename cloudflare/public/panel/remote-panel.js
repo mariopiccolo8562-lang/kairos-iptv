@@ -317,7 +317,13 @@
       clearTimeout(H._t); if (r.items.some((x) => !x.done && !expired(x)) && document.body.contains(H)) H._t = setTimeout(hist, 8000); } catch (e) { H.textContent = e.message; } };
     hist();
   }
-  window.KXRemote = { open: openDev };
+  function setOverride(id, key, value) {
+    if (!R.data) return;
+    const all = R.data.over || (R.data.over = {}), rc = { ...(all[id] || {}) };
+    if (value === '') delete rc[key]; else rc[key] = value;
+    if (Object.keys(rc).length) all[id] = rc; else delete all[id];
+  }
+  window.KXRemote = { open: openDev, setOverride };
 
   /* ---------- scheda cliente: collegamento al controllo remoto ---------- */
   const rdw = renderDrawer;
