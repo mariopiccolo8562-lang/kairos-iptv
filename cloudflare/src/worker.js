@@ -3315,7 +3315,7 @@ async function massEdit(env, b, who, ip) {
   const rcStr = (o) => (Object.keys(o).length ? JSON.stringify(o) : '');
   const nextRc = (x) => {
     const rc = ch.rcClear ? {} : rcDevOf(x);
-    for (const [k, v] of Object.entries(ch.rcSet || {})) { const c = rcCatByKey.get(k); if (x.app && c && !c[4].includes(x.app)) continue; if (v === '') delete rc[k]; else rc[k] = v; }
+    for (const [k, v] of Object.entries(ch.rcSet || {})) { const c = rcCatFor(k, x.app); if (x.app && c && !c[4].includes(x.app)) continue; if (v === '') delete rc[k]; else rc[k] = v; }
     return rcStr(rc);
   };
   const rcChange = (x) => { if (!ch.rcClear && !ch.rcSet) return null; const v = nextRc(x); return v !== rcStr(rcDevOf(x)) || (ch.rcClear && (x.rc || '') && !v) ? v : null; };
@@ -4334,7 +4334,7 @@ async function latestFor(env, s, app) {
   if (app !== 'tv') return null; // app non riconosciuta (es. KAIROS per Fire TV Vega OS): nessun confronto con gli APK
   const a = await latestApk(env, s); return a && a.version ? { version: a.version, versionCode: a.versionCode } : null;
 }
-const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', prem: 'Kairos Premium', lite: 'Kairos Lite', xc: 'Kairos XC', ult: 'KAIROS Ultimate', plus: 'Kairos Plus', nova: 'Kairos Nova', vega: 'Kairos per Fire TV (Vega OS)' };
+const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', prem: 'Kairos Premium', lite: 'Kairos Lite', xc: 'Kairos XC', ult: 'KAIROS Ultimate', plus: 'Kairos Plus', nova: 'Kairos Nova', portal: 'Kairos Portal', smart: 'Kairos Smart', vega: 'Kairos per Fire TV (Vega OS)' };
 /* ---------------- «🔒 Repo privati» (10 novembre 2026, solo titolare) ----------------
    Per ogni app: quanti clienti (visti negli ultimi 30 giorni) hanno già l'ultima versione e chi manca. Quando un'app è
    aggiornata da tutti, il suo repository GitHub si può rendere privato: i download passano da store-k.download con il token.
@@ -4379,9 +4379,10 @@ async function repoReady(env) {
 /*    dispositivo, consegnati nel battito (cmds) e confermati dall'app (POST /api/player/cmd)                    */
 /*  - l'app riporta le sue impostazioni attuali (cfg) e la versione della configurazione applicata (rcv)        */
 /* ====================================================================== */
-const RC_APPS = ['tv', 'ktv', 'prem', 'lite', 'xc', 'ult', 'plus', 'nova'];
+const RC_APPS = ['tv', 'ktv', 'prem', 'lite', 'xc', 'ult', 'plus', 'nova', 'portal', 'smart'];
+const RC_PARENT = { portal: 'xc', smart: 'xc' }; // Portal e Smart ereditano il profilo di Kairos XC (stesso motore)
 /** app collegate al pannello con codice (battito e comandi); Kairos Nova può anche restare libera: allora legge solo la politica degli aggiornamenti */
-const RC_LINKED = ['tv', 'ktv', 'prem', 'lite', 'xc', 'ult', 'plus', 'nova'];
+const RC_LINKED = ['tv', 'ktv', 'prem', 'lite', 'xc', 'ult', 'plus', 'nova', 'portal', 'smart'];
 // catalogo: [chiave, nome, tipo, valori [[valore, etichetta]], app che la capiscono, spiegazione, etichetta «libera» (opz.), sezione]
 // Ogni voce corrisponde a un'impostazione che il cliente trova nell'app: imposta dal pannello, lì risulta «scelta dal fornitore».
 const KPRO = ['tv'], KPRO_XC = ['tv', 'xc', 'ult'], KALL_LITE = ['tv', 'ktv', 'prem', 'lite', 'xc', 'ult', 'plus'];
@@ -4418,6 +4419,10 @@ const RC_CAT = [
   // riquadro «FHD · 1080p · 50 fps» del lettore (contratto comune: "full" | "noq" | "off"; vuoto/assente = completo).
   // Gruppo «Aspetto» e non «Lettore»: è una scelta del titolare, non una voce che il cliente può scegliere (niente «:allow»).
   ['qbox', 'Riquadro qualità nel lettore', 'sel', [['full', 'Completo: «FHD · 1080p · 50 fps»'], ['noq', 'Senza sigla: «1080p · 50 fps»'], ['off', 'Nascosto']], RC_APPS, 'Il riquadro in alto a destra quando il cliente apre un canale in diretta, cambia risoluzione o apre la barra informazioni. «Senza sigla» toglie HD, FHD, 4K e SD e lascia risoluzione e FPS. Il permesso «Vedere risoluzione e FPS» del singolo cliente vale comunque', 'Non imposto (completo)', 'Aspetto'],
+  // Portal e Smart (motore di Kairos XC, ma Home propria con i temi Skin): il pannello sceglie tema, effetti e scritte neon
+  ['theme', 'Tema', 'sel', [['nero', 'Nero'], ['neon', 'Neon'], ['oro', 'Oro'], ['smeraldo', 'Smeraldo'], ['rubino', 'Rubino'], ['artico', 'Artico'], ['tramonto', 'Tramonto'], ['terminale', 'Terminale'], ['classico', 'Classico']], ['portal', 'smart'], 'Il colore e l\'aspetto della Home. Vince su quello scelto dal cliente.', '', 'Aspetto'],
+  ['fx', 'Effetti e animazioni', 'sel', [['full', 'Completi'], ['soft', 'Ridotti'], ['off', 'Spenti']], ['portal', 'smart'], 'Ridotti o spenti: Home più leggera su dispositivi deboli', '', 'Aspetto'],
+  ['neon', 'Scritte neon', 'sel', [['on', 'Accese'], ['off', 'Spente']], ['portal', 'smart'], 'Solo con gli effetti completi', '', 'Aspetto'],
   /* ---- Lettore ---- */
   ['o.engLive', 'Lettore TV in diretta', 'sel', ENG_OPTS, KPRO_XC, 'Se nella scheda del cliente hai già scelto il lettore, vale quello', '', 'Lettore'],
   ['o.engMovie', 'Lettore film', 'sel', ENG_OPTS, KPRO_XC, '', '', 'Lettore'],
@@ -4479,7 +4484,13 @@ const RC_CMDS = [
   ['pin', 'Reimposta PIN controllo genitori', 'Il PIN torna 0000 e l\'app chiede al cliente di sceglierne uno nuovo: per chi lo ha dimenticato', RC_LINKED.filter((a) => a !== 'prem')],
   ['exit', 'Chiudi l\'app', 'L\'app si chiude; il cliente la riapre quando vuole', RC_LINKED],
 ];
-const rcCatByKey = new Map(RC_CAT.map((x) => [x[0], x]));
+// Portal e Smart condividono il motore di Kairos XC: ricevono ogni voce che vale per 'xc' (preview, lettore, qualità, DNS cifrato…)
+for (const c of RC_CAT) if (c[4].includes('xc') && !c[4].includes('portal')) c[4].push('portal', 'smart');
+// catalogo per chiave: più voci con la stessa chiave (es. «theme» per Kairos Pro e per Portal/Smart), si sceglie quella dell'app
+const rcCatAll = new Map();
+for (const c of RC_CAT) { const a = rcCatAll.get(c[0]); if (a) a.push(c); else rcCatAll.set(c[0], [c]); }
+const rcCatFor = (key, app) => { const a = rcCatAll.get(key); if (!a) return undefined; return (app && a.find((c) => c[4].includes(app))) || a[0]; };
+const rcCatByKey = { get: (k) => rcCatFor(k) };
 /** voci che valgono solo nel profilo dell'app (mai imposte al singolo dispositivo) */
 const RC_PROF_ONLY = new Set(RC_CAT.filter((x) => x[8] === 'prof').map((x) => x[0]));
 const rcNoProf = (rc) => { for (const k of Object.keys(rc)) if (RC_PROF_ONLY.has(k.endsWith(':allow') ? k.slice(0, -6) : k)) delete rc[k]; return rc; };
@@ -4498,7 +4509,7 @@ function rcClean(src, app) {
   if (!o || typeof o !== 'object') throw new HttpErr(400, 'Configurazione non valida');
   const out = {}, allows = {};
   for (const [k, v] of Object.entries(o)) {
-    const allow = k.endsWith(':allow'), base = allow ? k.slice(0, -6) : k, c = rcCatByKey.get(base); if (!c) continue;
+    const allow = k.endsWith(':allow'), base = allow ? k.slice(0, -6) : k, c = rcCatFor(base, app); if (!c) continue;
     if (allow && (c[2] !== 'sel' || base === 'qbox')) continue;
     if (v === '' || v === null || v === undefined) continue;
     if (app && !c[4].includes(app)) continue;
@@ -4537,7 +4548,7 @@ const rcDevOf = (d, app) => { try { return rcNoProf(rcClean(d && d.rc ? d.rc : {
     nuove riconoscono gli adulti da sole (vedi README §33): per loro è un di più che non cambia nulla. Stesso calcolo in remote-panel.js
     (impronta «applicata»): se cambia qui, cambia anche lì */
 const ADULT_HOME_WORDS = ['xxx', 'adult', '18+', '+18', 'porn', 'hentai', 'erotic', 'erotik', 'playboy', 'brazzers', 'hustler', 'dorcel', 'onlyfans', 'only fans', 'red light', 'redlight', 'x-rated', 'vm18', 'vm 18', 'hot club', 'private tv', 'sexy', 'milf', 'nsfw', 'vietato ai minori'];
-const ADULT_MERGE_APPS = new Set(['ktv', 'prem', 'lite', 'xc', 'ult', 'plus', 'nova']);
+const ADULT_MERGE_APPS = new Set(['ktv', 'prem', 'lite', 'xc', 'ult', 'plus', 'nova', 'portal', 'smart']);
 function adultMerge(h) {
   const cur = String(h || '').split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean), seen = new Set(cur.map((x) => x.toLowerCase()));
   for (const w of ADULT_HOME_WORDS) if (!seen.has(w)) { seen.add(w); cur.push(w); }
@@ -4556,7 +4567,10 @@ function rcSent(rc, app) {
     all'app. [forApp] = la configurazione da mandare all'app (con le parole per adulti), altrimenti quella decisa nel pannello */
 function rcEffective(s, d, app, forApp) {
   const a = app || appOfVer('', d && d.app) || 'tv';
-  const rc = { ...(rcProfiles(s)[a] || {}) }, own = rcDevOf(d, a);
+  const prof = rcProfiles(s);
+  // Portal e Smart partono dal profilo di Kairos XC (stesso motore), poi il loro profilo lo sovrascrive: così il DNS cifrato e le
+  // altre voci messe su «Kairos XC» valgono anche per loro, finché il titolare non sceglie qualcosa di diverso
+  const rc = RC_PARENT[a] ? { ...(prof[RC_PARENT[a]] || {}), ...(prof[a] || {}) } : { ...(prof[a] || {}) }, own = rcDevOf(d, a);
   for (const [k, v] of Object.entries(own)) {
     const base = k.endsWith(':allow') ? k.slice(0, -6) : k;
     delete rc[base]; delete rc[`${base}:allow`]; rc[k] = v;
@@ -4614,6 +4628,8 @@ function appOfVer(ver, saved) {
   if (/^xc\b/i.test(v)) return 'xc';
   if (/^plus\b/i.test(v)) return 'plus';
   if (/^nova\b/i.test(v)) return 'nova';
+  if (/^portal\b/i.test(v)) return 'portal';
+  if (/^smart\b/i.test(v)) return 'smart';
   if (/premium/i.test(v)) return 'prem';
   if (/^tv\b/i.test(v)) return 'ktv';
   if (/^\d+\.\d+/.test(v)) return 'tv';
@@ -4665,7 +4681,7 @@ async function fixDevice(env, s, d, who, auto = false, soft = false) {
      «Modalità leggera: Spenta» non la cambia nemmeno «Risolvi» premuto a mano (lo segnala soltanto), e la modalità leggera non scende mai */
   const prof = rcProfiles(s)[app] || {}, LR = { auto: 1, on: 2, max: 3 };
   const set = (k, v, why, keep) => {
-    const c = rcCatByKey.get(k); if (!c || !(c[4] || []).includes(app) || rc[k] === v) return;
+    const c = rcCatFor(k, app); if (!c || !(c[4] || []).includes(app) || rc[k] === v) return;
     const cur = rc[k] !== undefined ? rc[k] : prof[k];
     if (k === 'lite' && cur === 'off') { if (!auto && keep) todo.push(keep); return; }
     if (k === 'lite' && (LR[cur] || 0) >= (LR[v] || 0)) return;
@@ -5811,6 +5827,8 @@ function appFrom(req, b) {
   const ua = req.headers.get('User-Agent') || '', ver = String((b && b.ver) || '');
   if (/KairosUltimate\//i.test(ua) || /^ult\b/i.test(ver)) return 'ult';
   if (/KairosLite\//i.test(ua) || /^lite\b/i.test(ver)) return 'lite';
+  if (/KairosPortal\//i.test(ua) || /^portal\b/i.test(ver)) return 'portal'; // Portal e Smart: motore di Kairos XC, ma app a sé per il pannello
+  if (/KairosSmart\//i.test(ua) || /^smart\b/i.test(ver)) return 'smart';
   if (/KairosXC\//i.test(ua) || /^xc\b/i.test(ver)) return 'xc';
   if (/KairosPlus\//i.test(ua) || /^plus\b/i.test(ver)) return 'plus'; // Kairos Plus: «KairosPlus/x.y» e versione «plus x.y»
   if (/KairosNova\//i.test(ua) || /^nova\b/i.test(ver)) return 'nova';
@@ -7482,7 +7500,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       const devs = {}; for (const r of pr.results || []) { let cfg = null; try { cfg = r.app_cfg ? JSON.parse(r.app_cfg) : null; } catch {} devs[r.device_id] = { cfg, rcv: r.rcv || '', ver: r.ver || '', t: +r.t }; }
       return json({ apps: rcProfiles(s0), cat: RC_CAT, cmds: RC_CMDS, appNames: APP_NAME, linked: RC_LINKED, devs, over: ov, last, pending: pend, adultWords: ADULT_HOME_WORDS, adultApps: [...ADULT_MERGE_APPS] });
     }
-    const pa = path.match(/^\/rctl\/app\/(tv|ktv|prem|lite|xc|ult|plus|nova)$/);
+    const pa = path.match(/^\/rctl\/app\/(tv|ktv|prem|lite|xc|ult|plus|nova|portal|smart)$/);
     if (pa && m === 'PUT') {
       const b = await readJSON(req, 8192), rc = rcClean(b.rc || {}, pa[1]);
       await settingsPatch(env, { rcApp: { ...rcProfiles(s0), [pa[1]]: rc } });
@@ -7502,7 +7520,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       for (const a of RC_APPS) {
         const cur = { ...(prof[a] || {}) };
         for (const k of keys) {
-          const base = keyBase(k), c = rcCatByKey.get(base); if (!c[4].includes(a)) continue;
+          const base = keyBase(k), c = rcCatFor(base, a); if (!c[4].includes(a)) continue;
           const other = k === base ? `${base}:allow` : base, v = src[k];
           if (v === '' || v === null || v === undefined) { delete cur[k]; if (k === base) delete cur[other]; }
           else { delete cur[other]; cur[k] = v; }

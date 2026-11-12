@@ -1198,3 +1198,25 @@ Quando la linea raggiunge quella data si torna a seguire la linea. Clienti illim
   `withNow` li mette in `device.now`. Agli agenti non arriva niente di nuovo (né IP né «adesso»).
 - Sotto i 900 px la colonna si nasconde insieme a Dispositivo, Playlist e Note.
 - **Test**: `srv_now` (14), `ui_now` (15).
+
+## 72. Temi di Portal e Smart dal pannello; priorità al calcio (12 novembre 2026)
+
+**Priorità al calcio** (`evPick`): dopo i posti garantiti a ogni sport, i posti rimasti vanno prima agli eventi in diretta,
+poi al calcio (per orario), poi agli altri sport; tetto del tennis da 6 a 4. Il calcio e gli sport grossi non restano fuori
+per i tornei minori. Le emittenti «di solito su» ora arrivano anche alle app (campo `tv` in `/api/player/events`).
+
+**Portal e Smart comandate dal pannello** (nessuna nuova versione delle app):
+- Il pannello le **riconosce come app a sé** (`appFrom`/`appOfVer` dal battito «portal x.y» / «smart x.y»): nel Controllo
+  remoto compaiono «Kairos Portal» e «Kairos Smart».
+- **Voce «Tema»** con i temi Skin (Nero, Neon, Oro, Smeraldo, Rubino, Artico, Tramonto, Terminale, Classico) più
+  **«Effetti»** (`fx`) e **«Scritte neon»** (`neon`). L'app legge già queste voci (`Remote.theme/fx/neon`): niente rebuild.
+- Il **«Tema» della Pro** resta separato (i suoi colori: cinema, aurora…): due voci con la stessa chiave `theme`, il
+  pannello sceglie quella dell'app (`rcCatFor`).
+- **Eredità da Kairos XC** (`RC_PARENT`): Portal e Smart partono dal profilo di «Kairos XC» (stesso motore), poi il loro
+  profilo lo sovrascrive. Così il DNS cifrato e le altre voci messe su XC valgono anche per loro, finché il titolare non
+  sceglie qualcosa di diverso. Il vero Kairos XC non ha temi: la voce «Tema» non compare per lui.
+- Portal e Smart ereditano **ogni voce di «xc»** nel catalogo (preview, lettore, qualità, DNS cifrato…): `c[4]` espanso
+  automaticamente. Aggiunte a `RC_APPS`, `RC_LINKED`, `ADULT_MERGE_APPS` e alle schede dell'interfaccia.
+- **Limite**: la modalità «il cliente sceglie tra questi» (`theme:allow`) non è supportata dall'app per il tema; con
+  «Decido io» il tema è imposto (è ciò che serve).
+- **Test**: `srv_theme_portal` (23), `ui_theme_portal` (10); `srv_sdns` e la suite restano verdi.

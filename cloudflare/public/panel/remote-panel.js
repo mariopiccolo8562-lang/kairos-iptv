@@ -53,7 +53,7 @@
   document.head.appendChild(css);
 
   const owner = () => D.role !== 'agent' && !window.__assist;
-  const APPS = [['tv', 'Kairos Pro'], ['ktv', 'Kairos TV'], ['prem', 'Kairos Premium'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['ult', 'KAIROS Ultimate'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova']];
+  const APPS = [['tv', 'Kairos Pro'], ['ktv', 'Kairos TV'], ['prem', 'Kairos Premium'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['ult', 'KAIROS Ultimate'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova'], ['portal', 'Kairos Portal'], ['smart', 'Kairos Smart']];
   /** app che non si collegano al pannello con un codice (nessuna, oggi): niente clienti né comandi, solo la politica degli aggiornamenti */
   const unlinked = (app) => R.data && Array.isArray(R.data.linked) && !R.data.linked.includes(app);
   const R = { data: null, app: 'tv', q: '', busy: false, draft: {}, t: 0 };
