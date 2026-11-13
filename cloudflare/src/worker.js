@@ -3346,7 +3346,7 @@ function playerInput(v) {
    Ogni campo assente resta com'è; lettore: '' = lo sceglie il cliente nell'app. Il lettore vale anche per le connessioni
    collegate «indipendenti» (hanno il loro); permessi, VPN e visioni stanno sul cliente principale. L'app si riallinea al battito. */
 const MASS_MAX = 5000;
-const MASS_RC = ['lite', 'posters', 'intro', 'mergeVar', 'u.dnsRot']; // voci del Controllo remoto cambiabili in massa
+const MASS_RC = ['lite', 'posters', 'intro', 'mergeVar', 'u.dnsRot', 'sdns']; // voci del Controllo remoto cambiabili in massa
 function massInput(b) {
   if (!b || typeof b !== 'object') throw new HttpErr(400, 'Richiesta non valida');
   const o = {};
@@ -3388,7 +3388,11 @@ async function massEdit(env, b, who, ip) {
   if (scope === 'ids') {
     if (!Array.isArray(b.ids) || !b.ids.length) throw new HttpErr(400, 'Scegli almeno un cliente');
     const ids = [...new Set(b.ids.map((x) => str(x, 20)).filter((x) => /^[A-Za-z0-9_-]{6,20}$/.test(x)))].slice(0, MASS_MAX);
-    list = (await devicesByIds(env, ids, cols)).filter((d) => !d.parent);
+    // dispositivi collegati scelti nella tabella (13 novembre 2026): VPN, permessi e visioni sono del cliente principale,
+    // quindi si cambia lui e vale anche per loro. Prima restavano fuori e la modifica non toccava niente
+    const picked = await devicesByIds(env, ids, cols);
+    const up = [...new Set(picked.filter((d) => d.parent).map((d) => d.parent))].filter((p) => !picked.some((d) => d.id === p));
+    list = [...picked, ...(up.length ? await devicesByIds(env, up, cols) : [])].filter((d) => !d.parent);
   } else {
     list = ((await env.DB.prepare(`SELECT ${cols} FROM devices WHERE parent = '' LIMIT ${MASS_MAX + 1}`).all()).results) || [];
     if (list.length > MASS_MAX) throw new HttpErr(400, `Più di ${MASS_MAX} clienti: usa la selezione`);
@@ -3409,7 +3413,8 @@ async function massEdit(env, b, who, ip) {
   const rcStr = (o) => (Object.keys(o).length ? JSON.stringify(o) : '');
   const nextRc = (x) => {
     const rc = ch.rcClear ? {} : rcDevOf(x);
-    for (const [k, v] of Object.entries(ch.rcSet || {})) { const c = rcCatFor(k, x.app); if (x.app && c && !c[4].includes(x.app)) continue; if (v === '') delete rc[k]; else rc[k] = v; }
+    // Portal e Smart valgono come Kairos XC (stesso motore, stesso profilo di partenza): prendono le sue voci, DNS cifrato compreso
+    for (const [k, v] of Object.entries(ch.rcSet || {})) { const ak = RC_PARENT[x.app] || x.app, c = rcCatFor(k, ak); if (ak && c && !c[4].includes(ak)) continue; if (v === '') delete rc[k]; else rc[k] = v; }
     return rcStr(rc);
   };
   const rcChange = (x) => { if (!ch.rcClear && !ch.rcSet) return null; const v = nextRc(x); return v !== rcStr(rcDevOf(x)) || (ch.rcClear && (x.rc || '') && !v) ? v : null; };

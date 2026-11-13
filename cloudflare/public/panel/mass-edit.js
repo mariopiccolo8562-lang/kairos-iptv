@@ -49,9 +49,12 @@
     ['posters', 'Locandine', 'Solo Kairos Pro · «Sempre nitide» usa più memoria sulle chiavette da 1 GB', [['auto', 'Automatiche'], ['hi', 'Sempre nitide']]],
     ['intro', 'Animazione d\'avvio', 'Solo Kairos Pro · vale dall\'apertura successiva', [['auto', 'Automatica'], ['simple', 'Semplice'], ['off', 'Spenta']]],
     ['mergeVar', 'Versioni dello stesso canale in una voce sola', 'Solo Kairos Pro · 4K/FHD/HD/SD in una voce con la versione giusta per la linea (spenta di serie)', [['off', 'No: ogni versione ha la sua voce'], ['on', 'Sì: una voce, con la versione giusta per la linea']]],
+    ['sdns', 'DNS cifrato', 'Tutte le app Kairos · vale anche per i dispositivi collegati · la prima volta Android chiede il permesso al cliente', [['on', 'Acceso'], ['off', 'Spento']]],
     ['u.dnsRot', 'DNS rotativo', 'Solo KAIROS Ultimate · usa i DNS di riserva impostati in Server DNS e VPN', [['on', 'Attivo'], ['off', 'Spento']]],
   ];
-  let M = null, ids0 = [], after = null;
+  let M = null, ids0 = [], after = null, linkedSel = 0;
+  /** nel pannello c'è una VPN da usare (configurazione generale o una località)? Senza, «Consentita» e «Sempre attiva» non accendono niente */
+  const vpnReady = () => !!D.wgConf || !!((window.KC && KC.vpnLocs) || []).length;
   // sezione dei Clienti (I miei / degli agenti / un agente): le scelte «solo questa sezione» vengono prima
   let sec = null, secA = [], secAll = [];
 
@@ -77,7 +80,7 @@
     if (b.perms) { const ks = Object.keys(b.perms).filter((k) => k !== 'ai'), on = ks.filter((k) => b.perms[k]), off = ks.filter((k) => !b.perms[k]); const nm = (k) => (perms().find((p) => p[0] === k) || [k, k])[1]; if (on.length) out.push('consenti: ' + on.map(nm).join(', ')); if (off.length) out.push('blocca: ' + off.map(nm).join(', ')); }
     if (b.perms && b.perms.ai === false) out.push('assistente IA: spento');
     else if (b.aiProvider !== undefined) out.push('assistente IA: ' + (b.aiProvider ? AIN[b.aiProvider] : AIN[aiDef()] + ' (predefinito)'));
-    if (b.vpn !== undefined) out.push('VPN: ' + VPN_O.find((o) => o[0] === String(b.vpn))[1].toLowerCase());
+    if (b.vpn !== undefined) out.push('VPN: ' + VPN_O.find((o) => o[0] === String(b.vpn))[1].toLowerCase() + (b.vpn && !vpnReady() ? ' (attenzione: nessuna VPN configurata nel pannello)' : ''));
     if (b.maxStreams !== undefined) out.push('visioni contemporanee: ' + (b.maxStreams || 'illimitate'));
     if (b.rcClear) out.push('tolte le impostazioni imposte solo a loro');
     if (b.rcSet) out.push(Object.entries(b.rcSet).map(([k, x]) => { const r = RCM.find((e) => e[0] === k); return `${r[1]} → ${x === '' ? 'come il profilo' : (r[3].find((o) => o[0] === x) || [x, x])[1]}`; }).join(', '));
@@ -97,7 +100,12 @@
   }
   function open(ids, done) {
     if (!owner()) return toast('La modifica in massa è riservata al titolare', 1);
-    ids0 = (ids || []).filter((i) => { const d = (D.devices || []).find((x) => x.id === i); return d && !d.parent && d.status !== 'pending'; });
+    // un dispositivo collegato (riga «dal principale») non ha VPN, permessi e visioni suoi: sono del cliente principale.
+    // Scelto lui, si cambia il principale e vale anche per lui. Prima restava fuori e la finestra passava a «tutti i clienti»
+    const byId = (i) => (D.devices || []).find((x) => x.id === i), picked = (ids || []).map(byId).filter(Boolean);
+    ids0 = [...new Set(picked.map((d) => (d.parent ? byId(d.parent) : d)).filter((d) => d && !d.parent && d.status !== 'pending').map((d) => d.id))];
+    linkedSel = picked.filter((d) => d.parent).length;
+    if (picked.length && !ids0.length) return toast('I clienti scelti sono ancora da attivare: la modifica in massa vale per i clienti già attivati', 1);
     after = done || null;
     sec = window.KXOwn && KXOwn.scope ? KXOwn.scope() : null;
     secA = sec ? sec.devs.filter((d) => d.status === 'active').map((d) => d.id) : [];
@@ -106,7 +114,7 @@
     const sc = ids0.length ? 'ids' : sec ? 'secA' : 'active';
     M.innerHTML = `<div class="glass"><div class="mhd"><h3>Modifica in massa<small>Cambi le stesse cose a tanti clienti insieme. Le voci su «Non cambiare» restano come sono; le app si aggiornano da sole entro un minuto (alla prossima apertura se sono chiuse).</small></h3><button class="icb" id="msX" title="Chiudi">✕</button></div>
       <div class="ms-h">A chi</div>
-      <div class="ms-sc">${ids0.length ? `<label><input type="radio" name="msSc" value="ids" ${sc === 'ids' ? 'checked' : ''}> Solo i clienti selezionati <small>${ids0.length}</small></label>` : ''}
+      <div class="ms-sc">${ids0.length ? `<label><input type="radio" name="msSc" value="ids" ${sc === 'ids' ? 'checked' : ''}> <span>Solo i clienti selezionati${linkedSel ? `<small style="display:block;margin:2px 0 0">${linkedSel === 1 ? 'Hai scelto un dispositivo collegato' : 'Hai scelto ' + linkedSel + ' dispositivi collegati'}: VPN, permessi e visioni sono del cliente principale, quindi si cambia lui e vale anche per ${linkedSel === 1 ? 'il collegato' : 'i collegati'}</small>` : ''}</span> <small>${ids0.length}</small></label>` : ''}
         ${sec ? `<label><input type="radio" name="msSc" value="secA" ${sc === 'secA' ? 'checked' : ''}> <span><b>${esc(sec.label)}</b>: clienti attivi</span> <small>${secA.length}</small></label>
         <label><input type="radio" name="msSc" value="secAll"> <span><b>${esc(sec.label)}</b>: tutti (anche scaduti e disattivati)</span> <small>${secAll.length}</small></label>` : ''}
         <label><input type="radio" name="msSc" value="active" ${sc === 'active' ? 'checked' : ''}> Tutti i clienti attivi${sec ? ' (tuoi e degli agenti)' : ''} <small>${nActive()}</small></label>
@@ -117,7 +125,7 @@
       ${perms().map(([k, l, d]) => `<div class="ms-r"><div><b>${esc(l)}</b><small>${esc(d)}</small></div>${sel('perm.' + k, [['', 'Non cambiare'], ['1', 'Consenti'], ['0', 'Blocca']])}</div>`).join('')}
       <div class="ms-h">Altro</div>
       <div class="ms-r"><div><b>Assistente IA</b><small>Come nella scheda del cliente · Claude è a pagamento: valgono le domande al giorno</small></div>${sel('ai', AI_O())}</div>
-      <div class="ms-r"><div><b>VPN</b><small>Come nella scheda del cliente</small></div>${sel('vpn', VPN_O)}</div>
+      <div class="ms-r"><div><b>VPN</b><small>Come nella scheda del cliente · vale anche per i dispositivi collegati${vpnReady() ? '' : ' · <b style="color:#f5b041">nel pannello non c\'è una VPN configurata (Server DNS e VPN): si accende solo a chi ha una configurazione sua</b>'}</small></div>${sel('vpn', VPN_O)}</div>
       <div class="ms-r"><div><b>Visioni contemporanee</b><small>Vuoto = non cambiare · 0 = senza limite</small></div><input class="inp" type="number" min="0" max="20" data-ms="streams" placeholder="Non cambiare"></div>
       <div class="ms-h">Controllo remoto · solo per questi clienti</div>
       ${RCM.map(([k, l, d, o]) => `<div class="ms-r"><div><b>${esc(l)}</b><small>${esc(d)}</small></div>${sel('rc.' + k, [['', 'Non cambiare'], ['-', 'Come il profilo (togli la voce)'], ...o])}</div>`).join('')}

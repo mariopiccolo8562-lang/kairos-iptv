@@ -1301,3 +1301,12 @@ Prove: `srv_get_abi` (scelta dell'APK), `store_page_abi` (link dello Store).
 - **Kairos Pro.** Nella barra in alto, accanto allo scudo della VPN, c'è il lucchetto «DNS» quando il fornitore ha acceso il DNS cifrato: verde = attivo (o protetto dalla VPN del fornitore), giallo = non partito (permesso da confermare o negato, altra VPN, errore), grigio = in avvio. Al tocco dice lo stato; dopo un rifiuto o un errore riprova (`NATIVE.dnsRetry`, dall'app 2.7.9; con le app più vecchie riprova alla prossima apertura). È nell'interfaccia: arriva alle Pro dalla 2.7.6 senza un APK nuovo. Pubblicato con Kairos Pro **2.7.9**.
 
 Prove: `ui_list_rc_dns` (motivi nell'elenco), `pro_dns_badge` (lucchetto e tocco). In `ui_list_rc_dns` il controllo «a 1700 px la tabella entra senza scorrere» fallisce anche con il codice di prima: va guardato a parte.
+
+## 80. Modifica in massa: dispositivi collegati, DNS cifrato e avviso sulla VPN (13 novembre 2026)
+
+- **Dispositivi collegati.** Un dispositivo collegato (riga «dal principale») non ha VPN, permessi e visioni suoi: sono del cliente principale. Prima, scelto nella tabella, restava fuori dalla modifica: la finestra perdeva «Solo i clienti selezionati» e passava a «tutti i clienti attivi», e il collegato non cambiava. Ora la scelta passa al suo cliente principale (una volta sola se sono scelti tutti e due), la finestra lo dice, e il server fa lo stesso (`massEdit`, scope `ids`).
+- **DNS cifrato in massa.** Tra le voci del Controllo remoto «solo per questi clienti» c'è «DNS cifrato» (Acceso, Spento, Come il profilo): si scrive sul cliente principale e sui suoi collegati, quindi arriva a ogni dispositivo. Vale anche per Portal e Smart (contano come Kairos XC).
+- **VPN.** Se nel pannello non c'è una VPN (né configurazione generale né località) la riga della VPN e il riepilogo avvisano: «Consentita» e «Sempre attiva» accendono solo chi ha una configurazione sua.
+- Solo clienti ancora da attivare nella scelta: la finestra non si apre e lo dice.
+
+Prove: `srv_mass_linked`, `ui_mass_linked`. `v64.test` fallisce su «Animazione d'avvio (solo Pro)» anche con il codice di prima (la voce ora vale anche per Ultimate): va aggiornata la prova.
