@@ -7046,7 +7046,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
     let saved = null; try { const r = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(key).first(); saved = r ? JSON.parse(r.v) : null; } catch {}
     if (offm[2] === 'off') {
       const ids = [];
-      if (b.lines === true) {
+      if (b.lines === true || b.linesOnly === true) {
         for (let i = 0; i < tree.length; i += 90) {
           const part = tree.slice(i, i + 90);
           for (const r of ((await env.DB.prepare(`SELECT id FROM devices WHERE parent = '' AND active = 1 AND owner_id IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || []) ids.push(r.id);
@@ -7054,6 +7054,12 @@ async function agentsAdmin(req, env, path, who, ip, top) {
         for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); await env.DB.prepare(`UPDATE devices SET active = 0 WHERE id IN (${part.map(() => '?').join(',')})`).bind(...part).run(); }
         const keep = [...new Set([...((saved && saved.ids) || []), ...ids])];
         await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(key, JSON.stringify({ t: now(), ids: keep, lines: true })).run();
+      }
+      // «Disattiva anche le linee» su un agente già disattivato: solo le linee, l'agente resta come l'avevi spento (anche «solo lui»)
+      if (b.linesOnly === true) {
+        await log(env, 'off', `${who}: linee dell'agente ${A.username} disattivate (${ids.length} clienti)`, ip);
+        const ext = !top && b.ext !== false ? await agentExtSync(env, A, true, true, who, ip) : [];
+        return json({ ok: true, lines: ids.length, ext });
       }
       await env.DB.batch([
         env.DB.prepare('UPDATE admins SET active = 0, disabled_by = ? WHERE id = ?').bind(top ? top.id : -1, id),

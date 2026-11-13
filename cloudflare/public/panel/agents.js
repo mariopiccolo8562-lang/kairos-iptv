@@ -690,7 +690,7 @@ body.agent .foot{display:none}
         <td class="dn">${dnsSum(a)}</td>
         <td class="hm">${a.lastSeen ? esc(ago(a.lastSeen)) : '<span class="mut">mai</span>'}</td>
         <td class="hm">${a.totp ? '<span class="chip g">Attiva</span>' : '<span class="chip">No</span>'}</td>
-        <td><span class="ag-st ${a.active ? 'on' : 'off'}"><i></i>${a.active ? 'Attivato' : 'Disattivato'}</span><div class="ag-offb">${a.active ? `<button class="btn sm" data-agoff="${a.id}" title="Lui e i suoi sotto-agenti non entrano più; le linee restano attive">Disattiva agente</button><button class="btn sm" data-agoffs="${a.id}" title="Solo lui non entra più; i suoi sotto-agenti continuano a lavorare; le linee restano attive">Disattiva solo agente</button><button class="btn sm danger" data-agoffl="${a.id}" title="Disattiva l'agente e anche tutti i suoi clienti (e dei suoi sotto-agenti)">Disattiva agente con le sue linee</button>` : `${a.offSolo ? '<small class="mut" style="display:block;font-size:11px">solo lui: i sotto-agenti lavorano</small>' : ''}<button class="btn sm" data-agon="${a.id}">${a.offLines || a.offWithLines ? `Riattiva con ${a.offLines ? a.offLines + ' ' : 'le '}${a.offLines === 1 ? 'linea' : 'linee'}` : 'Riattiva'}</button>`}</div></td></tr>`; }).join('')}</tbody></table>`
+        <td><span class="ag-st ${a.active ? 'on' : 'off'}"><i></i>${a.active ? 'Attivato' : 'Disattivato'}</span><div class="ag-offb">${a.active ? `<button class="btn sm" data-agoff="${a.id}" title="Lui e i suoi sotto-agenti non entrano più; le linee restano attive">Disattiva agente</button><button class="btn sm" data-agoffs="${a.id}" title="Solo lui non entra più; i suoi sotto-agenti continuano a lavorare; le linee restano attive">Disattiva solo agente</button><button class="btn sm danger" data-agoffl="${a.id}" title="Disattiva l'agente e anche tutti i suoi clienti (e dei suoi sotto-agenti)">Disattiva agente con le sue linee</button>` : `${a.offSolo ? '<small class="mut" style="display:block;font-size:11px">solo lui: i sotto-agenti lavorano</small>' : ''}${a.offWithLines ? '' : `<button class="btn sm danger" data-agoffonly="${a.id}" title="L'agente resta disattivato; si spengono anche tutti i suoi clienti">Disattiva anche le linee</button>`}<button class="btn sm" data-agon="${a.id}">${a.offLines || a.offWithLines ? `Riattiva con ${a.offLines ? a.offLines + ' ' : 'le '}${a.offLines === 1 ? 'linea' : 'linee'}` : 'Riattiva'}</button>`}</div></td></tr>`; }).join('')}</tbody></table>`
       : `<div class="emptyc">${L.length ? 'Nessun agente trovato' : `Nessun agente ancora.<br><span style="font-size:13px">Gli agenti sono i tuoi rivenditori: entrano nel pannello con le loro credenziali e gestiscono solo i propri clienti, con i permessi che decidi tu.</span>`}</div>`}</div>`;
     $('#agQ').oninput = (e) => { st.q = e.target.value.toLowerCase(); const p = e.target.selectionStart; renderAgents(); const q = $('#agQ'); q.focus(); q.setSelectionRange(p, p); };
     $$('#agF [data-f]').forEach((b) => (b.onclick = () => { st.f = b.dataset.f; renderAgents(); }));
@@ -731,6 +731,16 @@ body.agent .foot{display:none}
     $$('[data-agoff]', V).forEach((b) => (b.onclick = (e) => agAct(e, b.dataset.agoff, 'off', false)));
     $$('[data-agoffl]', V).forEach((b) => (b.onclick = (e) => agAct(e, b.dataset.agoffl, 'off', true)));
     $$('[data-agoffs]', V).forEach((b) => (b.onclick = (e) => agAct(e, b.dataset.agoffs, 'off', false, true)));
+    $$('[data-agoffonly]', V).forEach((b) => (b.onclick = async (e) => {
+      e.stopPropagation();
+      const a = L.find((x) => x.id === +b.dataset.agoffonly); if (!a) return;
+      if (!(await ask(`Disattivare anche le linee di ${a.username}?`, `L'agente resta disattivato com'è${a.offSolo ? ' (solo lui: i sotto-agenti continuano)' : ''}. Si spengono <b>tutti i suoi clienti${a.subAgents ? ' e quelli dei sotto-agenti' : ''}</b> attivi (${a.clients || 0} in tutto): nelle app compare «abbonamento non attivo». Riattivandolo tornano attivi proprio quelli.<br><br>Anche sui pannelli esterni dove ha un account sotto il tuo si prova a spegnere le sue linee (su WOLF solo se il reseller è ancora attivo).`, 'Disattiva le linee'))) return;
+      try {
+        const r = await api('POST', `/admin/agents/${a.id}/off`, { linesOnly: true }); await load();
+        const ext = (r.ext || []).map(([p, x]) => `${p}: ${x}`).join(' · ');
+        toast(`${r.lines} linee di ${a.username} disattivate` + (ext ? ' — ' + ext : ''), (r.ext || []).some(([, x]) => /non riuscito|non trovato/.test(x)) ? 1 : 0);
+      } catch (er) { toast(er.message, 1); }
+    }));
     $$('[data-agon]', V).forEach((b) => (b.onclick = (e) => agAct(e, b.dataset.agon, 'on', true)));
   }
 
