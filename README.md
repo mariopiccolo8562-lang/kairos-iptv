@@ -1370,3 +1370,4 @@ Prova: `srv_dns_del_agents`.
 
 - Nell'elenco Agenti, sotto lo stato di ogni agente: «Disattiva» (non entra più; i clienti continuano a vedere), «Disattiva con le linee» (anche tutti i suoi clienti attivi e quelli dei suoi sotto-agenti vengono disattivati e ricordati in `settings agoff:<id>`), «Riattiva» / «Riattiva con N linee» (tornano attive proprio quelle). `POST /agents/:id/off|on {lines}`; `offLines` nell'elenco. Le linee sui pannelli esterni non si toccano.
 - Test: `srv_agent_off_lines` (9), `ui_agent_off` (4).
+- Tre pulsanti: «Disattiva agente» (fuori lui e i suoi sotto-agenti), «Disattiva solo agente» (fuori solo lui: i sotto-agenti continuano; `settings agsolo`, letto da `agentChainActive`), «Disattiva agente con le sue linee». In tutti e tre l'agente viene buttato fuori subito (sessioni cancellate); nei primi due le linee restano attive. Test `srv_agent_off_lines` (15).

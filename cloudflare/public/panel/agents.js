@@ -690,7 +690,7 @@ body.agent .foot{display:none}
         <td class="dn">${dnsSum(a)}</td>
         <td class="hm">${a.lastSeen ? esc(ago(a.lastSeen)) : '<span class="mut">mai</span>'}</td>
         <td class="hm">${a.totp ? '<span class="chip g">Attiva</span>' : '<span class="chip">No</span>'}</td>
-        <td><span class="ag-st ${a.active ? 'on' : 'off'}"><i></i>${a.active ? 'Attivato' : 'Disattivato'}</span><div class="ag-offb">${a.active ? `<button class="btn sm" data-agoff="${a.id}" title="Non entra più nel pannello; i suoi clienti continuano a vedere">Disattiva</button><button class="btn sm danger" data-agoffl="${a.id}" title="Disattiva l'agente e anche tutti i suoi clienti (e dei suoi sotto-agenti)">Disattiva con le linee</button>` : `<button class="btn sm" data-agon="${a.id}">${a.offLines ? `Riattiva con ${a.offLines} ${a.offLines === 1 ? 'linea' : 'linee'}` : 'Riattiva'}</button>`}</div></td></tr>`; }).join('')}</tbody></table>`
+        <td><span class="ag-st ${a.active ? 'on' : 'off'}"><i></i>${a.active ? 'Attivato' : 'Disattivato'}</span><div class="ag-offb">${a.active ? `<button class="btn sm" data-agoff="${a.id}" title="Lui e i suoi sotto-agenti non entrano più; le linee restano attive">Disattiva agente</button><button class="btn sm" data-agoffs="${a.id}" title="Solo lui non entra più; i suoi sotto-agenti continuano a lavorare; le linee restano attive">Disattiva solo agente</button><button class="btn sm danger" data-agoffl="${a.id}" title="Disattiva l'agente e anche tutti i suoi clienti (e dei suoi sotto-agenti)">Disattiva agente con le sue linee</button>` : `${a.offSolo ? '<small class="mut" style="display:block;font-size:11px">solo lui: i sotto-agenti lavorano</small>' : ''}<button class="btn sm" data-agon="${a.id}">${a.offLines ? `Riattiva con ${a.offLines} ${a.offLines === 1 ? 'linea' : 'linee'}` : 'Riattiva'}</button>`}</div></td></tr>`; }).join('')}</tbody></table>`
       : `<div class="emptyc">${L.length ? 'Nessun agente trovato' : `Nessun agente ancora.<br><span style="font-size:13px">Gli agenti sono i tuoi rivenditori: entrano nel pannello con le loro credenziali e gestiscono solo i propri clienti, con i permessi che decidi tu.</span>`}</div>`}</div>`;
     $('#agQ').oninput = (e) => { st.q = e.target.value.toLowerCase(); const p = e.target.selectionStart; renderAgents(); const q = $('#agQ'); q.focus(); q.setSelectionRange(p, p); };
     $$('#agF [data-f]').forEach((b) => (b.onclick = () => { st.f = b.dataset.f; renderAgents(); }));
@@ -712,18 +712,20 @@ body.agent .foot{display:none}
     $$('[data-aglink]', V).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); linkBox(L.find((a) => a.id === +b.dataset.aglink)); }));
     $$('[data-agcl]', V).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); window.KXOwn.show(b.dataset.agcl); }));
     // «Disattiva», «Disattiva con le linee», «Riattiva» accanto a ogni agente (13 novembre 2026)
-    const agAct = async (e, id, op, lines) => {
+    const agAct = async (e, id, op, lines, solo) => {
       e.stopPropagation();
       const a = L.find((x) => x.id === +id); if (!a) return;
       const n = a.clients || 0;
       const msg = op === 'on' ? (a.offLines ? `Torna attivo e tornano attive le <b>${a.offLines}</b> linee spente insieme a lui.` : 'Torna a entrare nel pannello.')
-        : lines ? `Non entra più nel pannello e <b>tutti i suoi clienti${a.subAgents ? ' (anche dei sotto-agenti)' : ''}</b> attivi vengono disattivati (${n} in tutto): nelle app compare «abbonamento non attivo». Riattivandolo tornano attivi proprio quelli. Le linee sui pannelli esterni (WOLF, Atlantix…) restano come sono.`
-        : 'Non entra più nel pannello. I suoi clienti continuano a vedere.';
-      if (!(await ask(op === 'on' ? `Riattivare ${a.username}?` : lines ? `Disattivare ${a.username} e le sue linee?` : `Disattivare ${a.username}?`, msg, op === 'on' ? 'Riattiva' : 'Disattiva'))) return;
-      try { const r = await api('POST', `/admin/agents/${a.id}/${op}`, { lines }); await load(); toast(op === 'on' ? `${a.username} riattivato${r.lines ? ` · ${r.lines} linee di nuovo attive` : ''}` : `${a.username} disattivato${lines ? ` · ${r.lines} linee disattivate` : ''}`); } catch (er) { toast(er.message, 1); }
+        : lines ? `Viene buttato fuori subito, non entra più nel pannello e <b>tutti i suoi clienti${a.subAgents ? ' (anche dei sotto-agenti)' : ''}</b> attivi vengono disattivati (${n} in tutto): nelle app compare «abbonamento non attivo». Riattivandolo tornano attivi proprio quelli. Le linee sui pannelli esterni (WOLF, Atlantix…) restano come sono.`
+        : solo ? `Solo <b>${esc(a.username)}</b> viene buttato fuori subito e non entra più nel pannello.${a.subAgents ? ' I suoi sotto-agenti continuano a lavorare.' : ''} <b>Le sue linee restano attive</b>: i clienti continuano a vedere.`
+        : `Viene buttato fuori subito e non entra più nel pannello${a.subAgents ? ', e nemmeno i suoi sotto-agenti' : ''}. <b>Le sue linee restano attive</b>: i clienti continuano a vedere.`;
+      if (!(await ask(op === 'on' ? `Riattivare ${a.username}?` : lines ? `Disattivare ${a.username} e le sue linee?` : solo ? `Disattivare solo ${a.username}?` : `Disattivare ${a.username}?`, msg, op === 'on' ? 'Riattiva' : 'Disattiva'))) return;
+      try { const r = await api('POST', `/admin/agents/${a.id}/${op}`, { lines, solo: !!solo }); await load(); toast(op === 'on' ? `${a.username} riattivato${r.lines ? ` · ${r.lines} linee di nuovo attive` : ''}` : `${a.username} disattivato${lines ? ` · ${r.lines} linee disattivate` : ''}`); } catch (er) { toast(er.message, 1); }
     };
     $$('[data-agoff]', V).forEach((b) => (b.onclick = (e) => agAct(e, b.dataset.agoff, 'off', false)));
     $$('[data-agoffl]', V).forEach((b) => (b.onclick = (e) => agAct(e, b.dataset.agoffl, 'off', true)));
+    $$('[data-agoffs]', V).forEach((b) => (b.onclick = (e) => agAct(e, b.dataset.agoffs, 'off', false, true)));
     $$('[data-agon]', V).forEach((b) => (b.onclick = (e) => agAct(e, b.dataset.agon, 'on', true)));
   }
 

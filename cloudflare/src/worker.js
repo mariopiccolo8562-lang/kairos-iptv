@@ -6720,10 +6720,20 @@ async function sellerOf(env, code) {
   if (!A || !(await agentChainActive(env, A.id))) return null;
   return { id: A.id, name: A.username };
 }
+/** agenti spenti con «Disattiva solo agente»: i loro sotto-agenti continuano a lavorare (13 novembre 2026) */
+const agSolo = (env) => reqMemo(env, 'agsolo', async () => { try { const r = await env.DB.prepare("SELECT v FROM settings WHERE k = 'agsolo'").first(); return new Set(r ? JSON.parse(r.v) : []); } catch { return new Set(); } });
+async function agSoloSet(env, id, on) {
+  const cur = await agSolo(env), next = new Set(cur); if (on) next.add(id); else next.delete(id);
+  if (next.size === cur.size && [...next].every((x) => cur.has(x))) return;
+  await env.DB.prepare("INSERT INTO settings (k, v) VALUES ('agsolo', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(JSON.stringify([...next])).run();
+  memoDrop(env, 'agsolo');
+}
 async function agentChainActive(env, id, all) {
   all = all || (await agentsAll(env));
   const by = new Map(all.map((a) => [a.id, a]));
-  for (let a = by.get(id), n = 0; a && n < 20; a = by.get(a.parent_id), n++) if (!a.active) return false;
+  const solo = all.some((a) => !a.active) ? await agSolo(env) : null;
+  // l'agente stesso spento: fuori sempre; chi sta sopra spento: fuori, tranne se è stato spento «solo lui»
+  for (let a = by.get(id), n = 0; a && n < 20; a = by.get(a.parent_id), n++) if (!a.active && (a.id === id || !solo || !solo.has(a.id))) return false;
   return by.has(id);
 }
 /** nome del server mostrato agli agenti: se il nome è l'indirizzo (DNS salvato senza nome) diventa «Server N» */
@@ -6772,6 +6782,7 @@ async function agentsOut(env, all, onlyIds, forAgent) {
   const lim = Array.isArray(forAgent) ? new Set(forAgent) : null;
   const [dns, counts, armSp, stSp, storeCounts] = await Promise.all([dnsList(env), agentCounts(env), armSpentRows(env, 'armada'), armSpentRows(env, 'storm'), agentStoreCounts(env)]);
   // linee spente insieme all'agente («Disattiva agente e le sue linee»): quante tornano attive riattivandolo
+  const solo = await agSolo(env);
   const offLines = new Map(); try { for (const r of ((await env.DB.prepare("SELECT k, v FROM settings WHERE k LIKE 'agoff:%'").all()).results) || []) { try { offLines.set(+String(r.k).slice(6), (JSON.parse(r.v).ids || []).length); } catch {} } } catch {}
   const dn = new Map(dns.map((x, i) => [x.id, forAgent ? { ...x, name: svName(x, i) } : x]));
   const svOk = (x) => dn.has(x) && (!lim || lim.has(x));
@@ -6780,7 +6791,7 @@ async function agentsOut(env, all, onlyIds, forAgent) {
     const tree = agentTree(all, a.id), sv = serverIds(a.servers).filter(svOk);
     return { id: a.id, username: a.username, email: a.email, parentId: a.parent_id, maxClients: a.max_clients, canAgents: !!a.can_agents, perms: agentPerms(a.perms),
       servers: sv, serverNames: sv.map((x) => dn.get(x).name),
-      active: !!a.active, offLines: offLines.get(a.id) || 0, notes: a.notes, lastSeen: a.last_seen, createdAt: a.created_at, totp: !!a.totp_on, password: a.pw_seal ? await unseal(env, a.pw_seal).catch(() => '') : '',
+      active: !!a.active, offLines: offLines.get(a.id) || 0, offSolo: !a.active && solo.has(a.id), notes: a.notes, lastSeen: a.last_seen, createdAt: a.created_at, totp: !!a.totp_on, password: a.pw_seal ? await unseal(env, a.pw_seal).catch(() => '') : '',
       clients: tree.reduce((n, id) => n + (counts.get(id) || 0), 0), ownClients: counts.get(a.id) || 0, subAgents: tree.length - 1,
       armadaUsed: Math.round(armUsedBy(all, armSp, a.id) * 100) / 100, stormUsed: Math.round(armUsedBy(all, stSp, a.id) * 100) / 100, storeCode: await sellerAgentCode(env, a), storeMax: a.store_max >= 0 ? a.store_max : null, stores: storeCounts.get(a.id) || 0 };
   }));
@@ -6856,7 +6867,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
     if (b.servers !== undefined) { if (!Array.isArray(b.servers)) throw new HttpErr(400, 'servers deve essere un elenco'); let l = serverIds(b.servers.join(',')).filter((x) => dnsIds.has(x)); if (parentForCaps) { const mine = agentServersWithin(all, parentForCaps.id); l = l.filter((x) => mine.includes(x)); } o.servers = l.join(','); }
     if (typeof b.active === 'boolean' && (!cur || b.active !== !!cur.active)) {
       if (b.active && cur && parentForCaps && cur.disabled_by && !agentTree(all, parentForCaps.id).includes(cur.disabled_by)) throw new HttpErr(403, 'Disattivato da chi sta sopra di te: non puoi riattivarlo');
-      o.active = b.active ? 1 : 0; o.disabled_by = b.active ? 0 : top ? top.id : -1;
+      o.active = b.active ? 1 : 0; o.disabled_by = b.active ? 0 : top ? top.id : -1; if (b.active && cur) await agSoloSet(env, cur.id, false);
     }
     if (b.password !== undefined && b.password !== '') { if (typeof b.password !== 'string' || b.password.length < 10 || b.password.length > 200) throw new HttpErr(400, 'Password di almeno 10 caratteri'); o.pass_hash = await hashPass(b.password); o.pw_seal = await seal(env, b.password); }
     return o;
@@ -6989,12 +7000,14 @@ async function agentsAdmin(req, env, path, who, ip, top) {
         env.DB.prepare('UPDATE admins SET active = 0, disabled_by = ? WHERE id = ?').bind(top ? top.id : -1, id),
         env.DB.prepare('DELETE FROM sessions WHERE admin_id = ?').bind(id),
       ]);
+      await agSoloSet(env, id, b.solo === true && b.lines !== true); // «solo agente»: i suoi sotto-agenti restano attivi
       memoDrop(env, 'ags');
-      await log(env, 'off', `${who}: agente ${A.username} disattivato${b.lines === true ? ` con le sue linee (${ids.length} clienti disattivati)` : ''}`, ip);
+      await log(env, 'off', `${who}: agente ${A.username} disattivato${b.lines === true ? ` con le sue linee (${ids.length} clienti disattivati)` : b.solo === true ? ' (solo lui: i sotto-agenti restano attivi)' : ''}`, ip);
       return json({ ok: true, lines: ids.length });
     }
     if (top && A.disabled_by && !agentTree(all, top.id).includes(A.disabled_by)) throw new HttpErr(403, 'Disattivato da chi sta sopra di te: non puoi riattivarlo');
     await env.DB.prepare('UPDATE admins SET active = 1, disabled_by = 0 WHERE id = ?').bind(id).run();
+    await agSoloSet(env, id, false);
     let back = 0;
     if (b.lines !== false && saved && Array.isArray(saved.ids) && saved.ids.length) {
       for (let i = 0; i < saved.ids.length; i += 90) { const part = saved.ids.slice(i, i + 90); const r = await env.DB.prepare(`UPDATE devices SET active = 1 WHERE active = 0 AND id IN (${part.map(() => '?').join(',')})`).bind(...part).run(); back += (r.meta && r.meta.changes) || 0; }
