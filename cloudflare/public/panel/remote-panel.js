@@ -200,7 +200,13 @@
     const qboxCard = hCat('qbox') ? `<div class="card glass rc-home" style="margin-bottom:16px"><div class="hd"><h3>Riquadro della qualità nel lettore · tutte le app<small>Il riquadro in alto a destra quando il cliente apre un canale in diretta, cambia risoluzione o apre la barra informazioni. Vale per Kairos Pro, TV, Premium, Lite, XC, Plus e Nova (le versioni vecchie lo mostrano completo finché non si aggiornano). Il permesso «Vedere risoluzione e FPS» del singolo cliente vale comunque. Puoi poi cambiarlo per una sola app (profilo qui sotto, sezione Aspetto) o per un solo cliente.</small></h3></div>
       <div class="rc-qb">${QB.map(([v, l, ex]) => `<button type="button" data-rcqb="${v}" class="${qAll === v ? 'on' : ''}"><b>${esc(l)}</b>${ex ? `<code>${esc(ex)}</code>` : `<small>${v === 'off' ? 'Il cliente non vede né sigla né risoluzione' : 'Come oggi: completo; nella Pro decide il cliente'}</small>`}</button>`).join('')}</div>
       <p class="rc-note" style="margin:10px 0 0">${qAll === null ? '⚠ Ora le app hanno valori diversi: scegliendo diventano uguali per tutte.' : 'Arriva alle app al prossimo battito (entro un minuto se sono aperte).'}</p></div>` : '';
-    V.innerHTML = homeCard + qboxCard + `<div class="card glass" style="margin-bottom:16px"><div class="hd"><h3>Controllo remoto delle app<small>Decidi cosa resta libero, cosa il cliente può scegliere e cosa vuoi imporre: tutto arriva al battito successivo (entro un minuto se l'app è aperta, altrimenti alla prossima apertura).</small></h3><button class="btn sm" id="rcRe">Aggiorna</button></div>
+    // DNS cifrato (13 novembre 2026): voce «sdns» accesa o spenta in tutte le app in un colpo. Portal e Smart seguono Kairos XC
+    const dCat = hCat('sdns'), dApps = dCat ? allApps.filter((a) => dCat[4].includes(a)) : [], dVals = dApps.map((a) => ((R.data.apps || {})[a] || {}).sdns || '');
+    const dAll = dVals.every((v) => v === 'on') ? 'on' : dVals.every((v) => v !== 'on') ? '' : null, dOn = dApps.filter((a, i) => dVals[i] === 'on').map((a) => (APPS.find((x) => x[0] === a) || [a, a])[1]);
+    const dnsCard = dCat ? `<div class="card glass rc-home" style="margin-bottom:16px"><div class="hd"><h3>🔒 DNS cifrato · tutte le app<small>Le app chiedono gli indirizzi dei server a un DNS pubblico dentro una connessione protetta, invece che al DNS dell'operatore. Con «Acceso» vale per tutte le app Kairos e per i clienti nuovi; la prima volta Android chiede il permesso al cliente. Con la VPN del fornitore accesa non serve: ci pensa lei. Un cliente a cui hai dato una scelta sua (Remoto) tiene la sua.</small></h3></div>
+      <div class="rc-qb"><button type="button" data-rcdns="on" class="${dAll === 'on' ? 'on' : ''}"><b>Acceso in tutte le app</b><small>Nelle app compare il lucchetto «DNS»</small></button><button type="button" data-rcdns="" class="${dAll === '' ? 'on' : ''}"><b>Spento</b><small>Le app usano il DNS della rete, come sempre</small></button></div>
+      <p class="rc-note" style="margin:10px 0 0">${dAll === null ? '⚠ Ora è acceso solo in: ' + esc(dOn.join(', ')) + '. Scegliendo diventa uguale per tutte.' : 'Arriva alle app al prossimo battito (entro un minuto se sono aperte).'}</p></div>` : '';
+    V.innerHTML = homeCard + qboxCard + dnsCard + `<div class="card glass" style="margin-bottom:16px"><div class="hd"><h3>Controllo remoto delle app<small>Decidi cosa resta libero, cosa il cliente può scegliere e cosa vuoi imporre: tutto arriva al battito successivo (entro un minuto se l'app è aperta, altrimenti alla prossima apertura).</small></h3><button class="btn sm" id="rcRe">Aggiorna</button></div>
       <div class="rc-apps">${APPS.map(([k, l]) => `<button type="button" data-rca="${k}" class="${k === app ? 'on' : ''}">${esc(l)}${unlinked(k) ? '' : `<span class="n">${byApp[k] || 0}</span>`}</button>`).join('')}</div>
       <div class="rc-g">
         <div><h4 style="margin:0 0 4px">Profilo di ${esc(name)}</h4><p class="rc-note" style="margin:0 0 10px">${unlinked(app) ? `${esc(name)} non si collega al pannello con un codice: vale per tutte le installazioni, che leggono la politica degli aggiornamenti a ogni controllo (all'apertura e ogni ora).` : `Vale per tutti i clienti con ${esc(name)} (${byApp[app] || 0}). «Decide il cliente» lascia la voce libera nell'app.`} ${nSet ? `<b>${nSet}</b> ${nSet === 1 ? 'regola impostata' : 'regole impostate'}.` : 'Nessuna regola impostata.'}</p>
@@ -233,6 +239,17 @@
         } catch (e) { cbA.checked = !on; cbA.disabled = false; toast(e.message, 1); }
       };
     }
+    $$('[data-rcdns]', V).forEach((b) => (b.onclick = async () => {
+      const v = b.dataset.rcdns; if (b.classList.contains('on')) return;
+      $$('[data-rcdns]', V).forEach((x) => (x.disabled = true));
+      try {
+        const r = await api('PUT', '/admin/rctl/all', { rc: { sdns: v } });
+        R.data.apps = r.apps || R.data.apps;
+        toast(v === 'on' ? 'DNS cifrato acceso in tutte le app: arriva al prossimo battito' : 'DNS cifrato spento in tutte le app');
+        load(true).catch(() => {}); // l'elenco Clienti rilegge chi lo ha acceso
+      } catch (e) { toast(e.message, 1); }
+      draw();
+    }));
     $$('[data-rcqb]', V).forEach((b) => (b.onclick = async () => {
       const v = b.dataset.rcqb; if (b.classList.contains('on')) return;
       $$('[data-rcqb]', V).forEach((x) => (x.disabled = true));

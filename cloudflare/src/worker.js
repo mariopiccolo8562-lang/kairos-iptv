@@ -7747,6 +7747,11 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     throw new HttpErr(404, 'Non trovato');
   }
   /* ---------- registro attività: lo svuota solo il titolare dal pannello (mai gli agenti né l'API di integrazione) ---------- */
+  // Backup completo dei dati e ripristino (solo titolare, con la sua password): vedi bkRoutes
+  if (path.startsWith('/backup/') || path.startsWith('/restore/')) {
+    if (!ses || ses.agent || m !== 'POST') throw new HttpErr(403, 'Il backup è riservato al titolare');
+    return json(await bkRoutes(req, env, path, ses, who, ip));
+  }
   // Cestino (solo titolare): elenco, ripristino, eliminazione definitiva
   if (path === '/trash' || path.startsWith('/trash/')) {
     if (ses && ses.agent) throw new HttpErr(403, 'Il cestino è del titolare');
@@ -9038,6 +9043,128 @@ async function linkLogin(req, env, ip, ctx) {
   return json({ ok: true, user: a.username, totp: !!a.totp_on, role: 'agent' }, 200, { 'Set-Cookie': setCookie(tok, SESSION_TTL) });
 }
 
+/* ======================================================================
+   Backup completo dei dati e ripristino (13 novembre 2026) — solo il titolare, con la sua password.
+
+   Il backup è un file di testo, una riga JSON per pezzo: la prima dice formato, data, tabelle e come sono fatte; poi le
+   righe di ogni tabella a pagine; l'ultima chiude con il totale. Dentro c'è tutto il database: clienti, scadenze, linee,
+   agenti e loro permessi, pagamenti, impostazioni, store, messaggi, registro. Restano fuori solo le tabelle di servizio
+   (sessioni aperte, tentativi di accesso, limiti, codici temporanei): dopo un ripristino si rientra con le credenziali
+   del backup.
+
+   Lo scarica e lo ricarica la pagina, una tabella alla volta: ogni richiesta fa poche letture o scritture, così non ci
+   sono limiti di tempo o di numero di operazioni da superare, qualunque sia la grandezza del database.
+   - POST /backup/start {password}            → { token, format, at, tables: [{ name, sql }] }
+   - POST /backup/page  {token, t, after}     → { rows, next }   (next = da dove riprendere; null = tabella finita)
+   - POST /backup/end   {token, rows}         → { ok }
+   - POST /restore/start {password, confirm: 'RIPRISTINA', tables: [nomi nel file]} → { token, tables: [quelle che si ricaricano] }
+   - POST /restore/table {token, t, first, rows} → { ok, n }     (first: svuota la tabella prima di scrivere)
+   - POST /restore/end   {token, rows}        → { ok }
+   Il file vale quanto il database: contiene le password cifrate degli accessi e le playlist dei clienti (sigillate con
+   ENC_KEY: per rileggerle dopo un ripristino serve lo stesso ENC_KEY). Ogni backup e ogni ripristino finisce nel registro.
+   ====================================================================== */
+const BK_SKIP = new Set(['sessions', 'login_fail', 'throttle', 'pk_chal', 'store_act_fail', 'store_code_fail', 'tg_codes', 'ses_out', 'relay_jobs', 'd1_migrations']);
+const BK_TOK_K = 'bkTok', BK_TTL = 30 * 60e3, BK_PAGE = 500, BK_FORMAT = 1, BK_ROWS_MAX = 100;
+const bkName = (t) => typeof t === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(t) && !BK_SKIP.has(t) && !/^(sqlite_|_cf_)/i.test(t);
+async function bkTables(env) {
+  const r = (await env.DB.prepare("SELECT name, sql FROM sqlite_master WHERE type = 'table' ORDER BY name").all()).results || [];
+  return r.filter((t) => bkName(t.name)).map((t) => ({ name: String(t.name), sql: String(t.sql || '') }));
+}
+async function bkCols(env, t) {
+  return ((((await env.DB.prepare(`PRAGMA table_info("${t}")`).all()).results) || []).map((c) => String(c.name))).filter((c) => /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(c));
+}
+async function bkTokNew(env, adminId, kind) {
+  const tok = b64url(rand(24));
+  await env.DB.prepare('INSERT OR REPLACE INTO settings (k, v) VALUES (?, ?)').bind(BK_TOK_K, JSON.stringify({ h: await sha256(tok), a: adminId, kind, until: now() + BK_TTL })).run();
+  return tok;
+}
+async function bkTokOk(env, tok, adminId, kind) {
+  if (typeof tok !== 'string' || tok.length < 20 || tok.length > 80) return false;
+  const r = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(BK_TOK_K).first();
+  let o = null; try { o = r && JSON.parse(r.v); } catch {}
+  return !!(o && o.kind === kind && o.a === adminId && o.until > now() && safeEq(await sha256(tok), String(o.h || '')));
+}
+async function bkRoutes(req, env, path, ses, who, ip) {
+  const b = await readJSON(req, 3 * 1024 * 1024);
+  const start = path === '/backup/start' || path === '/restore/start';
+  if (start) {
+    if (await limited(env.RL_LOGIN, 'bk:' + ses.admin_id)) throw new HttpErr(429, 'Troppi tentativi: riprova tra un minuto');
+    const a = await env.DB.prepare('SELECT pass_hash FROM admins WHERE id = ?').bind(ses.admin_id).first();
+    if (!a || !(await checkPass(str(b.password, 200), a.pass_hash))) { await log(env, 'auth', `${who}: password errata per ${path === '/backup/start' ? 'il backup' : 'il ripristino'}`, ip); throw new HttpErr(400, 'Password errata'); }
+  }
+  if (path === '/backup/start') {
+    const tables = await bkTables(env);
+    const token = await bkTokNew(env, ses.admin_id, 'backup');
+    await log(env, 'settings', `${who}: backup dei dati avviato`, ip);
+    return { token, format: BK_FORMAT, at: new Date(now()).toISOString(), tables };
+  }
+  if (path === '/backup/page') {
+    if (!(await bkTokOk(env, b.token, ses.admin_id, 'backup'))) throw new HttpErr(403, 'Backup scaduto: ricomincia');
+    const t = b.t; if (!bkName(t)) throw new HttpErr(400, 'Tabella non valida');
+    const after = Number.isFinite(+b.after) && +b.after >= 0 ? Math.floor(+b.after) : 0, byOff = b.mode === 'off';
+    let rows, next = null, mode = byOff ? 'off' : 'rid';
+    const strip = (list) => list.map((r) => { const o = { ...r }; delete o.__rid; return o; });
+    try {
+      if (byOff) throw new Error('off');
+      rows = (await env.DB.prepare(`SELECT rowid AS __rid, * FROM "${t}" WHERE rowid > ? ORDER BY rowid LIMIT ${BK_PAGE}`).bind(after).all()).results || [];
+      if (rows.length === BK_PAGE) next = +rows[rows.length - 1].__rid;
+    } catch (e) {
+      if (!byOff && !/rowid|off/i.test(String(e && e.message))) throw new HttpErr(400, 'Tabella non leggibile');
+      // tabella senza rowid: a pagine per posizione
+      mode = 'off';
+      rows = (await env.DB.prepare(`SELECT * FROM "${t}" LIMIT ${BK_PAGE} OFFSET ?`).bind(after).all()).results || [];
+      if (rows.length === BK_PAGE) next = after + rows.length;
+    }
+    rows = strip(rows);
+    if (t === 'settings') rows = rows.filter((r) => r.k !== BK_TOK_K); // il gettone di questo backup non fa parte dei dati
+    return { rows, next, mode };
+  }
+  if (path === '/backup/end') {
+    if (!(await bkTokOk(env, b.token, ses.admin_id, 'backup'))) throw new HttpErr(403, 'Backup scaduto: ricomincia');
+    await env.DB.prepare('DELETE FROM settings WHERE k = ?').bind(BK_TOK_K).run();
+    await log(env, 'settings', `${who}: backup dei dati scaricato (${Math.max(0, Math.floor(+b.rows || 0))} righe)`, ip);
+    return { ok: true };
+  }
+  if (path === '/restore/start') {
+    if (b.confirm !== 'RIPRISTINA') throw new HttpErr(400, 'Per ripristinare scrivi RIPRISTINA');
+    if (!Array.isArray(b.tables) || !b.tables.length || b.tables.length > 300) throw new HttpErr(400, 'File di backup non valido');
+    const have = new Set((await bkTables(env)).map((t) => t.name));
+    const tables = [...new Set(b.tables.filter((t) => bkName(t) && have.has(t)))];
+    if (!tables.includes('devices') || !tables.includes('admins') || !tables.includes('settings')) throw new HttpErr(400, 'File di backup non valido: mancano clienti, accessi o impostazioni');
+    const token = await bkTokNew(env, ses.admin_id, 'restore');
+    await log(env, 'settings', `${who}: ripristino dei dati da un backup avviato (${tables.length} tabelle)`, ip);
+    return { token, tables, max: BK_ROWS_MAX };
+  }
+  if (path === '/restore/table') {
+    if (!(await bkTokOk(env, b.token, ses.admin_id, 'restore'))) throw new HttpErr(403, 'Ripristino scaduto: ricomincia');
+    const t = b.t; if (!bkName(t)) throw new HttpErr(400, 'Tabella non valida');
+    const rows = Array.isArray(b.rows) ? b.rows : null;
+    if (!rows || rows.length > BK_ROWS_MAX) throw new HttpErr(400, 'Righe non valide');
+    const cols = await bkCols(env, t);
+    if (!cols.length) throw new HttpErr(400, 'Tabella non trovata');
+    const st = [];
+    // il gettone del ripristino resta dov'è (è nella tabella delle impostazioni) finché non si chiude
+    if (b.first === true) st.push(t === 'settings' ? env.DB.prepare('DELETE FROM settings WHERE k <> ?').bind(BK_TOK_K) : env.DB.prepare(`DELETE FROM "${t}"`));
+    for (const r of rows) {
+      if (!r || typeof r !== 'object' || Array.isArray(r)) throw new HttpErr(400, 'Righe non valide');
+      if (t === 'settings' && r.k === BK_TOK_K) continue;
+      const ks = cols.filter((c) => hasKey(r, c));
+      if (!ks.length) continue;
+      const vals = ks.map((c) => { const v = r[c]; if (v === null || typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v))) return v; if (typeof v === 'boolean') return v ? 1 : 0; throw new HttpErr(400, `Valore non valido in ${t}.${c}`); });
+      st.push(env.DB.prepare(`INSERT OR REPLACE INTO "${t}" (${ks.map((c) => `"${c}"`).join(', ')}) VALUES (${ks.map(() => '?').join(', ')})`).bind(...vals));
+    }
+    // una chiamata = una transazione: o entrano tutte le righe di questo pezzo (con lo svuotamento, se è il primo) o nessuna
+    for (let i = 0; i < st.length; i += 101) await env.DB.batch(st.slice(i, i + 101));
+    return { ok: true, n: rows.length };
+  }
+  if (path === '/restore/end') {
+    if (!(await bkTokOk(env, b.token, ses.admin_id, 'restore'))) throw new HttpErr(403, 'Ripristino scaduto: ricomincia');
+    await env.DB.prepare('DELETE FROM settings WHERE k = ?').bind(BK_TOK_K).run();
+    await log(env, 'settings', `${who}: dati ripristinati da un backup (${Math.max(0, Math.floor(+b.rows || 0))} righe)`, ip);
+    return { ok: true };
+  }
+  throw new HttpErr(404, 'Non trovato');
+}
 /* ====================================================================== */
 /* Cestino: ciò che si elimina resta 30 giorni e si può ripristinare       */
 /* ====================================================================== */

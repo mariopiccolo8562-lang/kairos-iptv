@@ -1310,3 +1310,13 @@ Prove: `ui_list_rc_dns` (motivi nell'elenco), `pro_dns_badge` (lucchetto e tocco
 - Solo clienti ancora da attivare nella scelta: la finestra non si apre e lo dice.
 
 Prove: `srv_mass_linked`, `ui_mass_linked`. `v64.test` fallisce su «Animazione d'avvio (solo Pro)» anche con il codice di prima (la voce ora vale anche per Ultimate): va aggiornata la prova.
+
+## 81. Backup dei dati dal pannello e «DNS cifrato · tutte le app» (13 novembre 2026)
+
+- **Backup dei dati.** Impostazioni → Sicurezza → «💾 Backup dei dati»: solo il titolare, con la sua password. Scarica un file `kairos-backup-AAAA-MM-GG-HHMM.json` con tutte le tabelle del pannello (clienti, dispositivi, scadenze, agenti, crediti, pagamenti, linee, pannelli, store, impostazioni, registro). Restano fuori solo i dati di passaggio (sessioni aperte, tentativi di accesso, codici temporanei). Il file contiene dati riservati: va tenuto in un posto sicuro.
+- **Ripristino.** Stessa scheda, «Ripristina da un backup»: file, parola `RIPRISTINA` e password. Prima di scrivere, il pannello salva da solo una copia dello stato attuale (`kairos-backup-prima-del-ripristino-…json`). Le tabelle del file sostituiscono quelle del pannello; quelle che il file non ha restano come sono.
+- **Fuori dal backup** (li conserva il titolare): le chiavi di firma delle app (`.jks` e password) e i segreti di Cloudflare (`ENC_KEY` e gli altri). Senza `ENC_KEY` le password cifrate nel backup non si leggono.
+- **Rotte**: `POST /admin/backup/start|page|end`, `POST /admin/restore/start|table|end` (titolare, gettone a tempo, pagine da 500 righe).
+- **DNS cifrato · tutte le app.** Controllo remoto: una scheda con «Acceso» e «Spento» scrive la voce nel profilo di tutte le app in una volta (`PUT /admin/rctl/all`). Le scelte fatte sul singolo cliente restano.
+
+Prove: `srv_backup`, `ui_backup`, `srv_sdns_all`, `ui_sdns_all`.
