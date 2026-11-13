@@ -8069,7 +8069,11 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (dsm && (m === 'PUT' || m === 'DELETE')) {
     const list = await dnsList(env), i = list.findIndex((x) => x.id === dsm[1]);
     if (i < 0) throw new HttpErr(404, 'DNS non trovato');
-    if (m === 'DELETE') { const [x] = list.splice(i, 1); for (const item of list) item.alts = (item.alts || []).filter((id) => id !== x.id); await trashPut(env, 'dns', x.id, `${x.name} (${x.host})`, x, null, who); await dnsSave(env, list); await log(env, 'settings', `${who}: DNS tolto dall'elenco · ${x.name} (i clienti non cambiano)`, ip); return json({ ok: true }); }
+    if (m === 'DELETE') { const [x] = list.splice(i, 1); for (const item of list) item.alts = (item.alts || []).filter((id) => id !== x.id); await trashPut(env, 'dns', x.id, `${x.name} (${x.host})`, x, null, who); await dnsSave(env, list);
+      // 13 novembre 2026: il DNS tolto esce anche dai «Server delle linee» degli agenti. Prima restava scritto (nascosto) e,
+      // ripristinandolo dal Cestino, ricompariva assegnato a chi lo aveva avuto, anche se nel frattempo era stato tolto.
+      for (const ag of await agentsAll(env)) { const sv = serverIds(ag.servers); if (sv.includes(x.id)) await env.DB.prepare("UPDATE admins SET servers = ? WHERE id = ? AND role = 'agent'").bind(sv.filter((y) => y !== x.id).join(','), ag.id).run(); }
+      memoDrop(env, 'ags'); await log(env, 'settings', `${who}: DNS tolto dall'elenco · ${x.name} (i clienti non cambiano)`, ip); return json({ ok: true }); }
     const b = await readJSON(req, 4096);
     if (typeof b.name === 'string') list[i].name = nameClean(b.name, 40) || list[i].name;
     if (typeof b.host === 'string') { const h = cleanHost(b.host); if (list.some((x, j) => j !== i && x.host === h)) throw new HttpErr(400, 'Questo DNS è già salvato'); list[i].host = h; }

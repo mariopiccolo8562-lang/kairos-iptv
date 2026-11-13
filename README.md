@@ -1335,3 +1335,10 @@ Prove: `srv_home_rc`.
 - La voce `o.homeArt` vale anche per Kairos STB e Smarters (dalla 0.5.8).
 
 Prove: `ui_agents_glance`, `srv_agents_glance`.
+
+## 84. DNS tolto: esce anche dagli agenti (13 novembre 2026)
+
+- Togliendo un DNS da «DNS e server» ora esce anche dai **Server delle linee** di ogni agente. Prima restava scritto (nascosto) nell'agente e, se il DNS si ripristinava dal Cestino, tornava **assegnato da solo** a chi lo aveva avuto.
+- Non c'è nessun'altra strada che assegni un server a un agente: solo le spunte «LINEE» nella sua scheda (e lo spostamento sotto un altro agente, che può solo toglierne).
+
+Prova: `srv_dns_del_agents`.
