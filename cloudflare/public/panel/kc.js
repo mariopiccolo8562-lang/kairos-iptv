@@ -1163,13 +1163,26 @@
       const s = APP_SHORT[k] || k.toUpperCase(), f = APP_FULL[k] || s, c = APP_C[k] || '#9aa';
       return `<span class="dvt-app" style="background:color-mix(in srgb,${c} 20%,transparent);color:${c}" title="App in uso: ${esc(f)}">${esc(s)}</span>`;
     };
+    /* prima versione di ogni app con il DNS cifrato: una più vecchia non può accenderlo (Portal, Smart e Ultimate lo hanno dalla prima) */
+    const SDNS_MIN = { tv: [2, 7, 6], ktv: [2, 4, 7], prem: [1, 7, 6], lite: [1, 5, 7], xc: [3, 4, 6], plus: [0, 1, 29] };
+    const sdnsOld = (d) => {
+      const min = SDNS_MIN[appCode(d)], m = /(\d+)\.(\d+)\.(\d+)/.exec(String((d.now && d.now.ver) || d.ver || ''));
+      if (!min || !m) return false;
+      for (let i = 0; i < 3; i++) if (+m[i + 1] !== min[i]) return +m[i + 1] < min[i];
+      return false;
+    };
     /* DNS cifrato accanto al dispositivo (12 novembre 2026, solo titolare): acceso o spento per ogni cliente, anche se adesso
        non è collegato. È quello che l'app ha dichiarato all'ultimo battito (d.now.sdns se collegato, altrimenti d.sdns) */
     function dnsTag(d) {
       const v = (d.now && d.now.sdns) || d.sdns || '';
       const L = SDNS_L[v];
       if (L) return `<span class="dn-t ${L[0]}" data-dns="${esc(v)}" title="${esc(L[2])}">${v === 'on' ? '🔒 DNS cifrato attivo' : L[1]}</span>`;
-      return `<span class="dn-t no" data-dns="off" title="${esc(v === 'off' ? 'DNS cifrato spento sul dispositivo' : 'DNS cifrato non attivo: non acceso dal pannello per questo cliente, oppure app non aggiornata')}">DNS cifrato spento</span>`;
+      if (v === 'off') return '<span class="dn-t no" data-dns="off" title="Il dispositivo dichiara il DNS cifrato spento">DNS cifrato spento</span>';
+      // il dispositivo non ha dichiarato niente: si dice perché (13 novembre 2026). Prima c'era «spento» per tutti i casi
+      if (!d.sdnsWant) return '<span class="dn-t no" data-dns="none" title="Non è acceso dal pannello per questo cliente. Si accende da «Remoto» → Rete → DNS cifrato → «Decido io» → «Acceso», oppure per tutta l\'app dal Controllo remoto">DNS cifrato non acceso</span>';
+      const ver = (d.now && d.now.ver) || d.ver || '';
+      if (sdnsOld(d)) return `<span class="dn-t warn" data-dns="old" title="${esc('Acceso dal pannello, ma l\'app installata (' + ver + ') è più vecchia della prima versione che lo ha (' + SDNS_MIN[appCode(d)].join('.') + '): parte dopo l\'aggiornamento')}">DNS: app da aggiornare</span>`;
+      return '<span class="dn-t warn" data-dns="wait" title="Acceso dal pannello: l\'app non lo ha ancora dichiarato. Parte alla prossima apertura dell\'app (la prima volta Android chiede il permesso al cliente)">DNS: app da riaprire</span>';
     }
     /* «Remoto» accanto a «➕ Dispositivo» (12 novembre 2026, solo titolare): apre subito il Controllo remoto di quel cliente
        (impostazioni dell'app e comandi), senza passare dalla scheda */

@@ -5486,8 +5486,23 @@ function presenceMap(env) {
 /** DNS cifrato come lo ha dichiarato l'app all'ultimo battito (ultimi 30 giorni), anche per chi adesso non è collegato:
     nell'elenco Clienti del titolare compare accanto al dispositivo. Solo le righe che lo dichiarano; agli agenti non arriva */
 async function presenceSdns(env) {
-  try { return new Map((((await env.DB.prepare("SELECT device_id, sdns FROM presence WHERE t > ? AND sdns <> ''").bind(now() - 30 * 864e5).all()).results) || []).map((r) => [r.device_id, String(r.sdns)])); }
+  try { return new Map((((await env.DB.prepare('SELECT device_id, sdns, ver FROM presence WHERE t > ?').bind(now() - 30 * 864e5).all()).results) || []).map((r) => [r.device_id, { sdns: String(r.sdns || ''), ver: String(r.ver || '') }])); }
   catch { return new Map(); } // colonna «sdns» non ancora creata
+}
+/** il pannello vuole il DNS cifrato acceso su un dispositivo? (13 novembre 2026) Stessa regola di rcEffective per la sola voce
+ *  «sdns»: la scelta fatta per il cliente vince sul profilo dell'app (Portal e Smart partono da quello di Kairos XC).
+ *  I profili si leggono una volta per tutto l'elenco: rcEffective li rifarebbe per ogni dispositivo */
+function sdnsWanted(s) {
+  const prof = rcProfiles(s);
+  return (d, app) => {
+    const a = app || 'tv';
+    if (d && d.rc && d.rc !== '{}') {
+      const own = rcDevOf(d, a);
+      if (hasKey(own, 'sdns') || hasKey(own, 'sdns:allow')) return own.sdns === 'on';
+    }
+    const p = prof[a] || {}, base = RC_PARENT[a] && !hasKey(p, 'sdns') && !hasKey(p, 'sdns:allow') ? prof[RC_PARENT[a]] || {} : p;
+    return base.sdns === 'on';
+  };
 }
 async function presenceNow(env) {
   try {
@@ -7607,7 +7622,15 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     ]);
     const rows = rowsR.results || [];
     const devices = withNow(withPresence(await Promise.all(rows.map((d) => deviceOut(env, d))), presLast), presNow);
-    for (const x of devices) { const v = presDns.get(x.id); if (v && SDNS_ST.includes(v)) x.sdns = v; } // DNS cifrato all'ultimo battito
+    // DNS cifrato: lo stato dichiarato dall'app all'ultimo battito e, per spiegare un dispositivo che non lo dichiara, la
+    // versione dell'app e se il pannello lo vuole acceso (sdnsWant): «non acceso», «app da aggiornare», «alla prossima apertura»
+    const wantDns = sdnsWanted(settings);
+    for (let i = 0; i < devices.length; i++) {
+      const x = devices[i], p = presDns.get(x.id);
+      if (p && SDNS_ST.includes(p.sdns)) x.sdns = p.sdns;
+      if (p && p.ver) x.ver = p.ver.slice(0, 40);
+      try { if (wantDns(rows[i], appOfVer(p ? p.ver : '', rows[i].app))) x.sdnsWant = true; } catch {}
+    }
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p && !p.parent ? p.status : 'pending'; }
     const activity = activityR.results || [], messages = msgGroups(messagesR.results || []).slice(0, 150), agentMsgs = msgGroups(agentMsgsR.results || []).slice(0, 100), sessions = sessionsR ? sessionsR.n : 0;
