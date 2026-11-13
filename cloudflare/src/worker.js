@@ -6783,7 +6783,7 @@ async function agentsOut(env, all, onlyIds, forAgent) {
   const [dns, counts, armSp, stSp, storeCounts] = await Promise.all([dnsList(env), agentCounts(env), armSpentRows(env, 'armada'), armSpentRows(env, 'storm'), agentStoreCounts(env)]);
   // linee spente insieme all'agente («Disattiva agente e le sue linee»): quante tornano attive riattivandolo
   const solo = await agSolo(env);
-  const offLines = new Map(); try { for (const r of ((await env.DB.prepare("SELECT k, v FROM settings WHERE k LIKE 'agoff:%'").all()).results) || []) { try { offLines.set(+String(r.k).slice(6), (JSON.parse(r.v).ids || []).length); } catch {} } } catch {}
+  const offLines = new Map(), offWith = new Set(); try { for (const r of ((await env.DB.prepare("SELECT k, v FROM settings WHERE k LIKE 'agoff:%'").all()).results) || []) { try { { const j = JSON.parse(r.v); offLines.set(+String(r.k).slice(6), Math.max((j.ids || []).length, j.lines ? 0 : 0)); if (j.lines) offWith.add(+String(r.k).slice(6)); } } catch {} } } catch {}
   const dn = new Map(dns.map((x, i) => [x.id, forAgent ? { ...x, name: svName(x, i) } : x]));
   const svOk = (x) => dn.has(x) && (!lim || lim.has(x));
   const list = all.filter((a) => !onlyIds || onlyIds.includes(a.id));
@@ -6791,10 +6791,69 @@ async function agentsOut(env, all, onlyIds, forAgent) {
     const tree = agentTree(all, a.id), sv = serverIds(a.servers).filter(svOk);
     return { id: a.id, username: a.username, email: a.email, parentId: a.parent_id, maxClients: a.max_clients, canAgents: !!a.can_agents, perms: agentPerms(a.perms),
       servers: sv, serverNames: sv.map((x) => dn.get(x).name),
-      active: !!a.active, offLines: offLines.get(a.id) || 0, offSolo: !a.active && solo.has(a.id), notes: a.notes, lastSeen: a.last_seen, createdAt: a.created_at, totp: !!a.totp_on, password: a.pw_seal ? await unseal(env, a.pw_seal).catch(() => '') : '',
+      active: !!a.active, offLines: offLines.get(a.id) || 0, offWithLines: offWith.has(a.id), offSolo: !a.active && solo.has(a.id), notes: a.notes, lastSeen: a.last_seen, createdAt: a.created_at, totp: !!a.totp_on, password: a.pw_seal ? await unseal(env, a.pw_seal).catch(() => '') : '',
       clients: tree.reduce((n, id) => n + (counts.get(id) || 0), 0), ownClients: counts.get(a.id) || 0, subAgents: tree.length - 1,
       armadaUsed: Math.round(armUsedBy(all, armSp, a.id) * 100) / 100, stormUsed: Math.round(armUsedBy(all, stSp, a.id) * 100) / 100, storeCode: await sellerAgentCode(env, a), storeMax: a.store_max >= 0 ? a.store_max : null, stores: storeCounts.get(a.id) || 0 };
   }));
+}
+/**
+ * Agente spento o riattivato anche sui pannelli esterni dove il suo account sta sotto quello del titolare (13 novembre 2026):
+ * WOLF (reseller; spento «con le linee» = disable-client), Atlantix (sub-reseller + blocco/sblocco delle sue linee),
+ * Realott (sub-reseller). SLT non lo permette da qui. Ogni pannello è indipendente: un errore non ferma gli altri.
+ * [lines] = anche le linee. Risponde un elenco [pannello, esito] da mostrare al titolare.
+ */
+async function agentExtSync(env, A, off, lines, who, ip) {
+  const out = [];
+  const call = async (fn, path, method, body, query = '') => {
+    const req = new Request('https://kairos.local/admin' + path + query, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    const r = await fn(req, env, path, who, ip, WOLF_H, null);
+    if (!(r instanceof Response)) return r;
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
+    return j;
+  };
+  const userOf = async (k) => { try { const r = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(k).first(); const c = r ? await unseal(env, r.v) : null; return c && c.user ? String(c.user) : ''; } catch { return ''; } };
+  const same = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  const rowsOf = (d) => (Array.isArray(d) ? d : d && typeof d === 'object' ? (['rows', 'items', 'subresellers', 'resellers', 'list', 'data'].map((k) => d[k]).find(Array.isArray) || []) : []);
+  const isOn = (v) => v === true || v === 1 || v === '1' || /^(active|enabled|attivo|on)$/i.test(String(v || ''));
+  // WOLF
+  const wu = await userOf('wolf:ag:' + A.id);
+  if (wu) {
+    try {
+      const r = rowsOf((await call(wolfRoutes, '/wolf/resellers', 'GET')).resellers).find((x) => same(x.username, wu));
+      if (!r) out.push(['WOLF', `reseller ${wu} non trovato sotto il tuo account`]);
+      else if (off ? r.enabled : !r.enabled) { await call(wolfRoutes, `/wolf/resellers/${r.id}/toggle`, 'POST', { lines: !!(off && lines) }); out.push(['WOLF', off ? (lines ? 'disattivato con tutte le sue linee' : 'disattivato') : 'riattivato' + (lines ? ' (le linee spente su WOLF si riattivano dal pannello WOLF)' : '')]); }
+      else out.push(['WOLF', off ? 'era già disattivato' : 'era già attivo']);
+    } catch (e) { out.push(['WOLF', 'non riuscito: ' + String(e.message || e).slice(0, 120)]); }
+  }
+  // Atlantix
+  const au = await userOf('atx:ag:' + A.id);
+  if (au) {
+    try {
+      const r = rowsOf(await call(atxRoutes, '/atx/subs', 'GET', null, '?q=' + encodeURIComponent(au))).find((x) => same(x.username || x.user || x.name, au));
+      if (!r) out.push(['Atlantix', `sub-reseller ${au} non trovato sotto il tuo account`]);
+      else {
+        const ops = [];
+        const enabled = isOn(r.status !== undefined ? r.status : r.enabled);
+        if (off && enabled) ops.push('disable'); if (!off && !enabled) ops.push('enable');
+        if (lines) ops.push(off ? 'users_off' : 'users_on');
+        for (const op of ops) await call(atxRoutes, '/atx/subs/action', 'POST', { op, id: r.id, user: au });
+        out.push(['Atlantix', ops.length ? (off ? 'disattivato' : 'riattivato') + (lines ? (off ? ' e linee bloccate' : ' e linee sbloccate') : '') : off ? 'era già disattivato' : 'era già attivo']);
+      }
+    } catch (e) { out.push(['Atlantix', 'non riuscito: ' + String(e.message || e).slice(0, 120)]); }
+  }
+  // Realott
+  const ru = await userOf('ro:ag:' + A.id);
+  if (ru) {
+    try {
+      const r = rowsOf(await call(extRoutes, '/ro/subs', 'GET')).find((x) => same(x.username, ru));
+      if (!r) out.push(['Realott', `sub-reseller ${ru} non trovato sotto il tuo account`]);
+      else if (off ? r.enabled : !r.enabled) { await call(extRoutes, '/ro/subs/action', 'POST', { op: 'toggle', id: r.id, username: ru }); out.push(['Realott', (off ? 'disattivato' : 'riattivato') + (lines ? ' (le linee si gestiscono dal pannello Realott)' : '')]); }
+      else out.push(['Realott', off ? 'era già disattivato' : 'era già attivo']);
+    } catch (e) { out.push(['Realott', 'non riuscito: ' + String(e.message || e).slice(0, 120)]); }
+  }
+  if (await userOf('slt:ag:' + A.id)) out.push(['SLT', 'da fare dal pannello SLT (non lo permette da qui)']);
+  return out;
 }
 /* «A colpo d'occhio» nell'elenco Agenti (13 novembre 2026, solo titolare): per ogni agente gli account suoi sui pannelli
    esterni (WOLF, Realott, SLT, Atlantix) con utente, crediti rimasti e DNS. Si leggono dai pannelli, al massimo 4 alla
@@ -6994,7 +7053,7 @@ async function agentsAdmin(req, env, path, who, ip, top) {
         }
         for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); await env.DB.prepare(`UPDATE devices SET active = 0 WHERE id IN (${part.map(() => '?').join(',')})`).bind(...part).run(); }
         const keep = [...new Set([...((saved && saved.ids) || []), ...ids])];
-        if (keep.length) await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(key, JSON.stringify({ t: now(), ids: keep })).run();
+        await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(key, JSON.stringify({ t: now(), ids: keep, lines: true })).run();
       }
       await env.DB.batch([
         env.DB.prepare('UPDATE admins SET active = 0, disabled_by = ? WHERE id = ?').bind(top ? top.id : -1, id),
@@ -7003,19 +7062,21 @@ async function agentsAdmin(req, env, path, who, ip, top) {
       await agSoloSet(env, id, b.solo === true && b.lines !== true); // «solo agente»: i suoi sotto-agenti restano attivi
       memoDrop(env, 'ags');
       await log(env, 'off', `${who}: agente ${A.username} disattivato${b.lines === true ? ` con le sue linee (${ids.length} clienti disattivati)` : b.solo === true ? ' (solo lui: i sotto-agenti restano attivi)' : ''}`, ip);
-      return json({ ok: true, lines: ids.length });
+      const ext = !top && b.ext !== false ? await agentExtSync(env, A, true, b.lines === true, who, ip) : [];
+      return json({ ok: true, lines: ids.length, ext });
     }
     if (top && A.disabled_by && !agentTree(all, top.id).includes(A.disabled_by)) throw new HttpErr(403, 'Disattivato da chi sta sopra di te: non puoi riattivarlo');
     await env.DB.prepare('UPDATE admins SET active = 1, disabled_by = 0 WHERE id = ?').bind(id).run();
     await agSoloSet(env, id, false);
     let back = 0;
-    if (b.lines !== false && saved && Array.isArray(saved.ids) && saved.ids.length) {
+    if (b.lines !== false && saved && Array.isArray(saved.ids)) {
       for (let i = 0; i < saved.ids.length; i += 90) { const part = saved.ids.slice(i, i + 90); const r = await env.DB.prepare(`UPDATE devices SET active = 1 WHERE active = 0 AND id IN (${part.map(() => '?').join(',')})`).bind(...part).run(); back += (r.meta && r.meta.changes) || 0; }
       await env.DB.prepare('DELETE FROM settings WHERE k = ?').bind(key).run();
     }
     memoDrop(env, 'ags');
     await log(env, 'on', `${who}: agente ${A.username} riattivato${back ? ` con le sue linee (${back} clienti riattivati)` : ''}`, ip);
-    return json({ ok: true, lines: back });
+    const ext = !top && b.ext !== false ? await agentExtSync(env, A, false, !!(saved && saved.lines) && b.lines !== false, who, ip) : [];
+    return json({ ok: true, lines: back, ext });
   }
   const am = path.match(/^\/agents\/(\d{1,9})$/);
   if (!am) throw new HttpErr(404, 'Non trovato');
