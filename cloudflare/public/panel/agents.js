@@ -1525,12 +1525,12 @@ body.agent .foot{display:none}
     const availableTargets = () => new Set([...(showKairos ? ['kairos'] : []), ...(showMax ? ['max'] : []), ...(showOrbix ? ['orbix'] : []), ...(showNanomid ? ['nanomid'] : []), ...(orcpCfg && orcpCfg.servers && orcpCfg.servers.length ? ['orcp'] : []), ...dynamicApps.map((x) => x.key)]);
     const initialTargets = Array.isArray(preset.targets) ? preset.targets.filter((k) => availableTargets().has(k) || k === 'orcp') : [showKairos ? 'kairos' : (dynamicApps[0] && dynamicApps[0].key)].filter(Boolean);
     const st = {
-      targets: new Set(initialTargets), code: '', look: null, app: 'tv', months: 1, expires: addMonths('', 1), payDue: false, payMonths: 1, payAmount: '',
+      targets: new Set(initialTargets), code: /^KX[A-Z0-9]{2}-[A-Z0-9]{4}$/.test(String(preset.code || '')) ? preset.code : '', look: null, app: 'tv', months: 1, expires: addMonths('', 1), payDue: false, payMonths: 1, payAmount: '',
       durationMode: 'months', durationN: '', durationUnit: 'd',
       pl: { serverId: (servers[0] || {}).id || '', username: '', password: '', host: '', ref: '', note: '', panel: '', picked: null }, expSource: '',
       name: '', nameAuto: '', maxConn: 1, mxDomain: '', orbixId: '', nmCode: '', oxDns: '0', orcpServer: '', appData: {}, busy: false, running: '', results: [],
       owner: !agent && +preset.ownerId > 0 ? +preset.ownerId : 0, // titolare: agente responsabile del nuovo cliente Kairos (0 = tu)
-      linkOpen: false, linkName: '', // TV nuova di un cliente che c'è già: «Collega a un cliente» (cli-pick.js)
+      linkOpen: !!preset.link, linkName: '', // TV nuova di un cliente che c'è già: «Collega a un cliente» (cli-pick.js)
     };
     if (window.KXCliPick) KXCliPick.reset('wzLinkTo');
     const showLinePick = canLoadLines(P);
@@ -1983,6 +1983,8 @@ body.agent .foot{display:none}
     draw(true);
     page.classList.add('on'); $('#agB').scrollTop = 0;
     if (preset.line && preset.line.username) fillLine(preset.line, preset.line.tag || '');
+    // aperta da una TV «Da attivare»: codice già scritto e controllato; con «Collega a un cliente» si apre subito la scelta del cliente
+    if (st.code) { lookup(true); if (st.linkOpen) setTimeout(() => { if (alive && $('#wzLinkToBox') && window.KXCliPick) KXCliPick.open('wzLinkTo'); }, 900); }
     loadOptions();
   }
   window.KXNewClient = (preset) => {
@@ -2008,10 +2010,14 @@ body.agent .foot{display:none}
   };
   const origOpen = openDrawer, origQuick = openQuick;
   window.openDrawer = openDrawer = function (d, act) {
-    if (isAgent()) return !d && canOpenActivationWizard() ? openWizard() : openClient(d);
+    if (isAgent()) {
+      // TV «Da attivare» (scaricata con il suo codice): «Attiva» e «Collega a un cliente» passano dal Nuovo cliente con il codice già scritto
+      if (d && d.status === 'pending' && !d.parent && !(d.playlists || []).length && d.code && canOpenActivationWizard()) return openWizard({ code: d.code, link: act === false });
+      return !d && canOpenActivationWizard() ? openWizard() : openClient(d);
+    }
     return !d && !window.__assist ? openWizard() : origOpen(d, act);
   };
-  window.openQuick = openQuick = function (d) { if (isAgent()) return openClient(d); return origQuick(d); };
+  window.openQuick = openQuick = function (d) { if (isAgent()) return openDrawer(d); return origQuick(d); };
   $('#newDev').onclick = () => openDrawer(null);
 
   /* ---------- demo: agenti di esempio e accesso come agente (utente "agente") ---------- */
