@@ -896,7 +896,7 @@ class MainActivity : ComponentActivity() {
         if (consent == null) { KxVpn.start(this, conf); return }
         vpnConf = conf
         KxVpn.waitingConsent()
-        try { vpnLauncher.launch(consent) } catch (e: Exception) {
+        ConsentIntro.show(this, { vpnLauncher.launch(consent) }) {
             vpnConf = null
             KxVpn.fail("Questo dispositivo non permette di usare una VPN")
         }
