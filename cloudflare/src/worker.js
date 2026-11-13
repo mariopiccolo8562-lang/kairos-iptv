@@ -7204,9 +7204,8 @@ async function devicesNear(env, forId, agentId) {
 async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const m = req.method;
   const all = await agentsAll(env);
-  if (!(await agentChainActive(env, ses.admin_id, all))) {
-    // in assistenza la sessione è quella del titolare: non va chiusa, l'agente semplicemente non è disponibile
-    if (ses.assist) throw new HttpErr(403, 'Questo agente è disattivato (o lo è chi l\'ha creato): riattivalo per entrare in assistenza');
+  // agente disattivato: fuori lui; il titolare in assistenza entra lo stesso (13 novembre 2026), per controllare o sistemare
+  if (!ses.assist && !(await agentChainActive(env, ses.admin_id, all))) {
     await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(ses.id).run();
     throw new HttpErr(401, 'Account disattivato');
   }
