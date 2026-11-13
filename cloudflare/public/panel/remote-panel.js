@@ -53,6 +53,8 @@
   document.head.appendChild(css);
 
   const owner = () => D.role !== 'agent' && !window.__assist;
+  // agente con voci del controllo remoto date dal titolare (13 novembre 2026): pagina ridotta ai suoi clienti
+  const agRc = () => !owner() && (((D.me && D.me.perms && D.me.perms.rcKeys) || []).length > 0);
   const APPS = [['tv', 'Kairos Pro'], ['ktv', 'Kairos TV'], ['prem', 'Kairos Premium'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['ult', 'KAIROS Ultimate'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova'], ['portal', 'Kairos Portal'], ['smart', 'Kairos Smart']];
   /** app che non si collegano al pannello con un codice (nessuna, oggi): niente clienti né comandi, solo la politica degli aggiornamenti */
   const unlinked = (app) => R.data && Array.isArray(R.data.linked) && !R.data.linked.includes(app);
@@ -180,9 +182,10 @@
   /* ---------- pagina ---------- */
   function draw() {
     const V = $('#v-rctl'); if (!V || !V.classList.contains('on')) return;
-    if (!owner()) { V.innerHTML = '<div class="emptyc">Riservato al titolare</div>'; return; }
+    if (!owner() && !agRc()) { V.innerHTML = '<div class="emptyc">Riservato al titolare</div>'; return; }
     if (!R.data) { V.innerHTML = '<div class="card glass"><p class="mut">Carico…</p></div>'; return; }
     if (R.data.err) { V.innerHTML = `<div class="card glass"><p class="mut">${esc(R.data.err)}</p></div>`; return; }
+    if (R.data.agent) return drawAgent(V);
     const devs = (D.devices || []).filter((d) => !d.parent || d.own), byApp = {}; for (const d of devs) { const a = appOf(d); byApp[a] = (byApp[a] || 0) + 1; }
     const app = R.app, name = (APPS.find((x) => x[0] === app) || [])[1] || app, prof = (R.data.apps || {})[app] || {}, cat = catFor(app), cmds = cmdsFor(app);
     const list = devs.filter((d) => appOf(d) === app && (!R.q || [d.name, d.code, d.notes].join(' ').toLowerCase().includes(R.q))).sort((a, b) => (((R.data.devs || {})[b.id] || {}).t || 0) - (((R.data.devs || {})[a.id] || {}).t || 0));
@@ -206,7 +209,12 @@
     const dnsCard = dCat ? `<div class="card glass rc-home" style="margin-bottom:16px"><div class="hd"><h3>🔒 DNS cifrato · tutte le app<small>Le app chiedono gli indirizzi dei server a un DNS pubblico dentro una connessione protetta, invece che al DNS dell'operatore. Con «Acceso» vale per tutte le app Kairos e per i clienti nuovi; la prima volta Android chiede il permesso al cliente. Con la VPN del fornitore accesa non serve: ci pensa lei. Un cliente a cui hai dato una scelta sua (Remoto) tiene la sua.</small></h3></div>
       <div class="rc-qb"><button type="button" data-rcdns="on" class="${dAll === 'on' ? 'on' : ''}"><b>Acceso in tutte le app</b><small>Nelle app compare il lucchetto «DNS»</small></button><button type="button" data-rcdns="" class="${dAll === '' ? 'on' : ''}"><b>Spento</b><small>Le app usano il DNS della rete, come sempre</small></button></div>
       <p class="rc-note" style="margin:10px 0 0">${dAll === null ? '⚠ Ora è acceso solo in: ' + esc(dOn.join(', ')) + '. Scegliendo diventa uguale per tutte.' : 'Arriva alle app al prossimo battito (entro un minuto se sono aperte).'}</p></div>` : '';
-    V.innerHTML = homeCard + qboxCard + dnsCard + `<div class="card glass" style="margin-bottom:16px"><div class="hd"><h3>Controllo remoto delle app<small>Decidi cosa resta libero, cosa il cliente può scegliere e cosa vuoi imporre: tutto arriva al battito successivo (entro un minuto se l'app è aperta, altrimenti alla prossima apertura).</small></h3><button class="btn sm" id="rcRe">Aggiorna</button></div>
+    // aggiornamento obbligatorio in tutte le app (13 novembre 2026): voce «force» (+ «bgupd» acceso, così l'APK è già pronto)
+    const fAll = same('force'), FO = [['now', 'Subito', 'Alla prossima apertura l\'app si usa solo dopo aver installato la versione nuova'], ['3d', 'Dopo 3 giorni', 'Tre giorni per rimandare, poi obbligatorio'], ['7d', 'Dopo 7 giorni', 'Una settimana per rimandare, poi obbligatorio'], ['', 'No', 'Il cliente può sempre rimandare']];
+    const forceCard = hCat('force') ? `<div class="card glass rc-home" style="margin-bottom:16px"><div class="hd"><h3>⬆ Aggiornamento obbligatorio · tutte le app<small>Chi ha una versione vecchia deve installare quella nuova per continuare a usare l'app. L'app la scarica da sola in sottofondo (mai durante la visione) e blocca solo quando è già pronta sul dispositivo: mai per un problema di rete.</small></h3></div>
+      <div class="rc-qb">${FO.map(([v, l, ex]) => `<button type="button" data-rcforce="${v}" class="${(fAll === v || (v === '' && (fAll === 'off'))) ? 'on' : ''}"><b>${esc(l)}</b><small>${esc(ex)}</small></button>`).join('')}</div>
+      <p class="rc-note" style="margin:10px 0 0">${fAll === null ? '⚠ Ora le app hanno valori diversi: scegliendo diventano uguali per tutte.' : 'Arriva alle app al prossimo battito (entro un minuto se sono aperte). Per una sola app usa il suo profilo qui sotto (gruppo «Aggiornamenti»).'}</p></div>` : '';
+    V.innerHTML = forceCard + homeCard + qboxCard + dnsCard + `<div class="card glass" style="margin-bottom:16px"><div class="hd"><h3>Controllo remoto delle app<small>Decidi cosa resta libero, cosa il cliente può scegliere e cosa vuoi imporre: tutto arriva al battito successivo (entro un minuto se l'app è aperta, altrimenti alla prossima apertura).</small></h3><button class="btn sm" id="rcRe">Aggiorna</button></div>
       <div class="rc-apps">${APPS.map(([k, l]) => `<button type="button" data-rca="${k}" class="${k === app ? 'on' : ''}">${esc(l)}${unlinked(k) ? '' : `<span class="n">${byApp[k] || 0}</span>`}</button>`).join('')}</div>
       <div class="rc-g">
         <div><h4 style="margin:0 0 4px">Profilo di ${esc(name)}</h4><p class="rc-note" style="margin:0 0 10px">${unlinked(app) ? `${esc(name)} non si collega al pannello con un codice: vale per tutte le installazioni, che leggono la politica degli aggiornamenti a ogni controllo (all'apertura e ogni ora).` : `Vale per tutti i clienti con ${esc(name)} (${byApp[app] || 0}). «Decide il cliente» lascia la voce libera nell'app.`} ${nSet ? `<b>${nSet}</b> ${nSet === 1 ? 'regola impostata' : 'regole impostate'}.` : 'Nessuna regola impostata.'}</p>
@@ -239,6 +247,17 @@
         } catch (e) { cbA.checked = !on; cbA.disabled = false; toast(e.message, 1); }
       };
     }
+    $$('[data-rcforce]', V).forEach((b) => (b.onclick = async () => {
+      const v = b.dataset.rcforce; if (b.classList.contains('on')) return;
+      if (v && !(await ask('Aggiornamento obbligatorio?', `Tutte le app: ${v === 'now' ? 'chi ha una versione vecchia potrà usare l\'app solo dopo aver installato quella nuova' : 'dopo ' + (v === '3d' ? '3' : '7') + ' giorni dal primo avviso l\'aggiornamento diventa obbligatorio'}. Le app scaricano la versione nuova da sole in sottofondo.`, 'Attiva'))) return;
+      $$('[data-rcforce]', V).forEach((x) => (x.disabled = true));
+      try {
+        const r = await api('PUT', '/admin/rctl/all', { rc: v ? { force: v, bgupd: 'on' } : { force: '' } });
+        R.data.apps = r.apps || R.data.apps;
+        toast(v ? 'Aggiornamento obbligatorio attivo in tutte le app: arriva al prossimo battito' : 'Aggiornamento di nuovo facoltativo in tutte le app');
+      } catch (e) { toast(e.message, 1); }
+      draw();
+    }));
     $$('[data-rcdns]', V).forEach((b) => (b.onclick = async () => {
       const v = b.dataset.rcdns; if (b.classList.contains('on')) return;
       $$('[data-rcdns]', V).forEach((x) => (x.disabled = true));
@@ -272,6 +291,23 @@
     $('#rcClear').onclick = async () => { if (!(await ask(`Liberare tutte le voci di ${name}?`, 'I clienti torneranno a scegliere da soli nell\'app (le voci imposte a un singolo cliente restano).', 'Libera'))) return; saveProfile(app, {}); };
     $$('[data-rcall]', V).forEach((b) => (b.onclick = () => sendCmd(b.dataset.rcall, { app }, `a tutti i clienti ${name} aperti negli ultimi 7 giorni`)));
     $$('[data-rcdev]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.rcdev); if (d) openDev(d); }));
+  }
+  /* pagina dell'agente: le voci concesse, per tutti i suoi clienti o per uno solo (niente profili né comandi) */
+  function drawAgent(V) {
+    const cat = R.data.cat || [], devs = (D.devices || []).filter((d) => !d.parent || d.own);
+    const list = devs.filter((d) => !R.q || [d.name, d.code, d.notes].join(' ').toLowerCase().includes(R.q)).sort((a, b) => (((R.data.devs || {})[b.id] || {}).t || 0) - (((R.data.devs || {})[a.id] || {}).t || 0));
+    V.innerHTML = `<div class="card glass" style="margin-bottom:16px"><div class="hd"><h3>Controllo remoto · tutti i tuoi clienti<small>Le voci che il titolare ti ha concesso. Scegli un valore e «Salva per tutti»: arriva alle app al prossimo battito. Per un cliente solo usa «Impostazioni» nell'elenco qui sotto.</small></h3></div>
+      <div class="rc-rows" id="rcAg">${grouped(cat, (c) => `<div class="rc-r ${c[2] === 'txt' ? 'txt' : ''}"><div><b>${esc(c[1])}</b>${c[5] ? `<small>${esc(c[5])}</small>` : ''}</div>${selHtml(c, undefined, 'Non cambiare', 'rcag')}</div>`)}</div>
+      <div style="display:flex;gap:8px;margin-top:12px;align-items:center"><button class="btn pri" id="rcAgSave">Salva per tutti i tuoi clienti</button><span class="rc-note">«Non cambiare» lascia com'è; per togliere una voce a un cliente apri le sue impostazioni.</span></div></div>
+      <div class="card glass"><div class="hd" style="flex-wrap:wrap;gap:10px"><h3>I tuoi clienti<small>Voci impostate solo a lui e impostazioni dell'app</small></h3><input class="inp" id="rcQ" placeholder="Cerca cliente…" value="${esc(R.q || '')}" style="max-width:260px"></div>
+        ${list.length ? `<div class="tbl-wrap"><table class="rc-tbl"><thead><tr><th>Cliente</th><th>Versione</th><th>Visto</th><th>Solo lui</th><th></th></tr></thead><tbody>${list.slice(0, 400).map((d) => { const p = (R.data.devs || {})[d.id] || {}, n = Object.keys((R.data.over || {})[d.id] || {}).length; return `<tr><td><b>${esc(d.name || 'Senza nome')}</b><small class="mono">${esc(d.code)}</small></td><td>${esc(p.ver || '—')}</td><td>${p.t ? esc(ago(p.t)) : '<span class="mut">—</span>'}</td><td>${n ? `<b>${n}</b> ${n === 1 ? 'voce' : 'voci'}` : '<span class="mut">—</span>'}</td><td><button class="btn sm" data-rcdev="${esc(d.id)}">Impostazioni</button></td></tr>`; }).join('')}</tbody></table></div>` : '<p class="mut">Nessun cliente</p>'}</div>`;
+    $('#rcAgSave').onclick = async () => {
+      const rc = {}; $$('#rcAg [data-rcag]').forEach((x) => { const v = String(x.value || '').trim(); if (v) rc[x.dataset.rcag] = v; });
+      if (!Object.keys(rc).length) return toast('Scegli almeno una voce', 1);
+      try { const r = await api('PUT', '/admin/rctl/mine', { rc }); toast(`Salvato per ${r.updated} ${r.updated === 1 ? 'cliente' : 'clienti'}: arriva alle app al prossimo battito`); loadR(true); } catch (e) { toast(e.message, 1); }
+    };
+    const q = $('#rcQ'); if (q) q.oninput = () => { R.q = q.value.trim().toLowerCase(); clearTimeout(q._t); q._t = setTimeout(() => { draw(); const n = $('#rcQ'); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, 250); };
+    $$('[data-rcdev]', V).forEach((b) => (b.onclick = () => { const d = (D.devices || []).find((x) => x.id === b.dataset.rcdev); if (d) openDev(d); }));
   }
   function rowHtml(d) {
     const p = (R.data.devs || {})[d.id] || {}, ov = (R.data.over || {})[d.id] || {}, [st, txt] = cfgState(d), lc = (R.data.last || {})[d.id], pend = (R.data.pending || {})[d.id] || 0;
@@ -318,6 +354,7 @@
           <h4 style="margin:14px 0 6px">Ultimi comandi</h4><div class="rc-hist" id="rcHist">Carico…</div></div>
       </div></div>`;
     bindReaderControls($('#rcDev'), 'rcd');
+    if (R.data.agent) { const g = $('#rcM .rc-g'); if (g && g.children[1]) g.children[1].remove(); } // agente: niente comandi
     M.classList.add('on');
     const close = () => M.classList.remove('on');
     $('#rcMx').onclick = close; M.onclick = (e) => { if (e.target === M) close(); };
@@ -357,7 +394,7 @@
 
   /* ---------- menu e aggiornamento ---------- */
   const ra = renderAll;
-  window.renderAll = renderAll = function () { ra(); const n = $('.nav[data-v="rctl"]'); if (n) { const d = owner() ? '' : 'none'; if (n.style.display !== d) n.style.display = d; } if ($('#v-rctl') && $('#v-rctl').classList.contains('on')) draw(); };
+  window.renderAll = renderAll = function () { ra(); const n = $('.nav[data-v="rctl"]'); if (n) { const d = owner() || agRc() ? '' : 'none'; if (n.style.display !== d) n.style.display = d; } if ($('#v-rctl') && $('#v-rctl').classList.contains('on')) draw(); };
   const v0 = view;
   window.view = view = function (v) { const r = v0.apply(this, arguments); if (v === 'rctl') { draw(); loadR(false); } return r; };
 

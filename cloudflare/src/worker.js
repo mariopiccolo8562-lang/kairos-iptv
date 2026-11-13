@@ -4375,6 +4375,11 @@ async function playerHeartbeat(req, env, ip, ctx) {
     ...(st.ttff !== undefined ? { ttff: Math.round(num(st.ttff, 0, 1e6)) } : {}), ...(st.stallMs !== undefined ? { stall_ms: Math.round(num(st.stallMs, 0, 1e8)) } : {}),
     ...(st.var !== undefined ? { var: str(st.var, 16) } : {}), ...(st.fmt !== undefined ? { fmt: str(st.fmt, 8) } : {}) });
   else if (state === 'idle') Object.assign(f, { res: '', fps: 0, bitrate: 0, buffers: 0, dropped: 0, engine: '', codec: '', dec: '', rec: '', reduced: '', fill: 0, ttff: 0, stall_ms: 0, var: '', fmt: '' });
+  // linea, banda e classe del dispositivo anche da «net» (Kairos Pro le calcola nell'interfaccia e le manda lì, anche fuori dalla
+  // visione): prima il pannello mostrava «linea … · Mbps» solo per le app che le mettono nelle misure del lettore (13 novembre 2026)
+  if (!(st && st.line) && ['weak', 'normal', 'good'].includes(net.line)) f.line = net.line;
+  if (!(st && st.bw !== undefined) && +net.bw > 0) f.bw = Math.round(num(net.bw, 0, 1e4) * 10) / 10;
+  if (!(st && st.dev) && ['D', 'N', 'O'].includes(net.dev)) f.dev_class = net.dev;
   // durante la visione l'app batte ogni 20 s (per «Disconnetti»): se non è cambiato niente di importante la riga
   // si riscrive al massimo una volta al minuto, così le scritture su D1 restano quelle di prima
   // bgOther: non si scrive (la presenza resta dell'app in primo piano); «vado in sfondo» (vis false) e cambio di app in primo piano si scrivono sempre
@@ -4431,6 +4436,71 @@ async function playerHeartbeat(req, env, ip, ctx) {
   // permessi spenti; l'assistente IA anche quando lo spegne il pannello (per tutti o dal profilo dell'app): l'app si riallinea subito
   const ph = P ? permsJson({ ...permsParse(P.perms), ...(aiEngineOf(S0, P, d, appOfVer(f.ver, d.app)) === 'off' ? { ai: false } : {}) }) : '';
   return json({ ok: true, mt, ...(upd ? { upd } : {}), rc: JSON.stringify(eff.rc), rcv: eff.rcv, ...(cmds.length ? { cmds } : {}), unseen: await unP, ts: t, vm, ph, ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', af: await acctFp(P), ...(sat.length ? { sat } : {}), ...(kick ? { kick } : {}), ...(dead ? { dead } : {}) });
+}
+/** «Controllo remoto» dell'agente (13 novembre 2026): solo le voci che il titolare gli ha dato (P.rcKeys), solo sui suoi
+    clienti (e dei sotto-agenti se li vede). Cambia le voci «solo per questo cliente» del dispositivo: le altre voci
+    impostate dal titolare sul dispositivo restano com'erano; i profili delle app e i comandi restano del titolare. */
+async function agentRctl(req, env, path, m, P, ctree, who, ip) {
+  const keys = new Set(P.rcKeys || []);
+  if (!keys.size) throw new HttpErr(403, 'Il titolare non ti ha dato voci del controllo remoto');
+  const okKey = (k) => keys.has(k.endsWith(':allow') ? k.slice(0, -6) : k);
+  const own = [];
+  for (let i = 0; i < ctree.length; i += 45) {
+    const part = ctree.slice(i, i + 45), q = part.map(() => '?').join(',');
+    own.push(...(((await env.DB.prepare(`SELECT id, name, code, app, rc FROM devices WHERE owner_id IN (${q}) OR parent IN (SELECT id FROM devices WHERE owner_id IN (${q}))`).bind(...part, ...part).all()).results) || []));
+  }
+  const byId = new Map(own.map((d) => [d.id, d]));
+  const mineOnly = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => okKey(k)));
+  /** voci del dispositivo con quelle concesse sostituite da [src] (valore vuoto = tolta) */
+  const merged = (d, src, partial) => {
+    const cur = rcDevOf(d);
+    if (!partial) for (const k of Object.keys(cur)) if (okKey(k)) delete cur[k];
+    for (const [k, v] of Object.entries(src && typeof src === 'object' && !Array.isArray(src) ? src : {})) {
+      if (!okKey(k)) continue;
+      const base = k.endsWith(':allow') ? k.slice(0, -6) : k;
+      delete cur[base]; delete cur[base + ':allow'];
+      if (v !== '' && v !== null && v !== undefined) cur[k] = v;
+    }
+    return rcNoProf(rcClean(cur, d.app));
+  };
+  if (path === '/rctl' && m === 'GET') {
+    const ids = [...byId.keys()], devs = {}, over = {};
+    for (let i = 0; i < ids.length; i += 90) {
+      const part = ids.slice(i, i + 90);
+      for (const r of ((await env.DB.prepare(`SELECT device_id, app_cfg, rcv, ver, t FROM presence WHERE device_id IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || []) {
+        let cfg = null; try { cfg = r.app_cfg ? JSON.parse(r.app_cfg) : null; } catch {}
+        devs[r.device_id] = { cfg, rcv: r.rcv || '', ver: r.ver || '', t: +r.t };
+      }
+    }
+    for (const d of own) { const o = mineOnly(rcDevOf(d)); if (Object.keys(o).length) over[d.id] = o; }
+    return json({ agent: true, apps: {}, cat: RC_CAT.filter((c) => keys.has(c[0])), cmds: [], appNames: APP_NAME, linked: RC_LINKED, devs, over, last: {}, pending: {}, adultWords: ADULT_HOME_WORDS, adultApps: [...ADULT_MERGE_APPS] });
+  }
+  const pd = path.match(/^\/rctl\/device\/([A-Za-z0-9_-]{6,20})$/);
+  if (pd && m === 'PUT') {
+    const d = byId.get(pd[1]); if (!d) throw new HttpErr(404, 'Cliente non trovato');
+    const b = await readJSON(req, 8192), rc = merged(d, b.rc, false);
+    await env.DB.prepare('UPDATE devices SET rc = ? WHERE id = ?').bind(Object.keys(rc).length ? JSON.stringify(rc) : '', d.id).run();
+    await log(env, 'edit', `${who}: controllo remoto — ${d.name || d.code}: voci aggiornate`, ip);
+    return json({ ok: true, rc: mineOnly(rc) });
+  }
+  // stessa voce a tutti i suoi clienti (valore vuoto = la toglie): chi ha un'app che non la capisce resta com'è
+  if (path === '/rctl/mine' && m === 'PUT') {
+    const b = await readJSON(req, 8192), src = b.rc && typeof b.rc === 'object' && !Array.isArray(b.rc) ? b.rc : {};
+    const ks = Object.keys(src).filter(okKey);
+    if (!ks.length) throw new HttpErr(400, 'Niente da salvare');
+    const ups = [];
+    for (const d of own) {
+      let rc; try { rc = merged(d, Object.fromEntries(ks.map((k) => [k, src[k]])), true); } catch { continue; }
+      const nv = Object.keys(rc).length ? JSON.stringify(rc) : '';
+      if (nv !== (d.rc || '')) ups.push(env.DB.prepare('UPDATE devices SET rc = ? WHERE id = ?').bind(nv, d.id));
+    }
+    for (let i = 0; i < ups.length; i += 50) await env.DB.batch(ups.slice(i, i + 50));
+    await log(env, 'edit', `${who}: controllo remoto — ${ks.map((k) => (rcCatFor(k.replace(/:allow$/, '')) || [k, k])[1]).join(', ')} per tutti i suoi clienti (${ups.length})`, ip);
+    return json({ ok: true, updated: ups.length });
+  }
+  const pc = path.match(/^\/rctl\/cmds\/([A-Za-z0-9_-]{6,20})$/);
+  if (pc && m === 'GET') { if (!byId.has(pc[1])) throw new HttpErr(404, 'Cliente non trovato'); return json({ items: [] }); }
+  throw new HttpErr(403, 'I comandi e i profili delle app restano del titolare');
 }
 /* ---------------- dati del cliente e salute delle app ---------------- */
 const verNum = (v) => { const m = String(v || '').match(/(\d{1,3})\.(\d{1,3})(?:\.(\d{1,3}))?/); return m ? +m[1] * 1e6 + +m[2] * 1e3 + +(m[3] || 0) : 0; };
@@ -4564,6 +4634,7 @@ const RC_CAT = [
   /* ---- Controllo genitori ---- */
   ['o.lockAdult', 'Blocca contenuti per adulti', 'sel', YN, [...KPRO, 'ult'], 'Con «Sì» le categorie per adulti chiedono il PIN del controllo genitori', '', 'Controllo genitori'],
   ['u.theme', 'Tema colore', 'sel', [['tramonto', 'Tramonto'], ['neon', 'Neon'], ['smeraldo', 'Smeraldo'], ['rubino', 'Rubino'], ['ghiaccio', 'Ghiaccio'], ['aurora', 'Aurora'], ['oceano', 'Oceano'], ['lava', 'Lava'], ['oro', 'Oro'], ['ametista', 'Ametista'], ['tricolore', 'Tricolore'], ['cyber', 'Cyber'], ['corallo', 'Corallo'], ['notte', 'Notte'], ['menta', 'Menta'], ['fucsia', 'Fucsia'], ['sabbia', 'Sabbia'], ['carbonio', 'Carbonio']], ['ult'], 'Il cliente lo cambia anche dall\'app (Impostazioni → Tema colore). Aurora, Oceano, Lava, Oro, Ametista dalla 1.0; gli ultimi otto dalla 1.1.2', '', 'KAIROS Ultimate'],
+  ['u.bg', 'Sfondo', 'sel', [['hud', 'HUD (esagoni)'], ['nero', 'Nero puro'], ['notte', 'Blu notte'], ['grafite', 'Grafite']], ['ult'], 'Sfondo delle schermate. Il cliente lo cambia anche dall\'app (Impostazioni → Sfondo). Dalla 1.1.3', '', 'KAIROS Ultimate'],
   ['u.neon', 'Scritte neon', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.anim', 'Animazioni', 'sel', [['auto', 'Automatiche'], ['on', 'Accese'], ['off', 'Spente']], ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.trailer', 'Trailer', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
@@ -4611,6 +4682,8 @@ const rcCatFor = (key, app) => { const a = rcCatAll.get(key); if (!a) return und
 const rcCatByKey = { get: (k) => rcCatFor(k) };
 /** voci che valgono solo nel profilo dell'app (mai imposte al singolo dispositivo) */
 const RC_PROF_ONLY = new Set(RC_CAT.filter((x) => x[8] === 'prof').map((x) => x[0]));
+/** voci che il titolare può dare agli agenti (una per chiave): [chiave, nome, gruppo] */
+const RC_CAT_AG = [...rcCatAll.values()].map((a) => a[0]).filter((c) => !RC_PROF_ONLY.has(c[0])).map((c) => [c[0], c[1], c[7] || 'Altro']);
 const rcNoProf = (rc) => { for (const k of Object.keys(rc)) if (RC_PROF_ONLY.has(k.endsWith(':allow') ? k.slice(0, -6) : k)) delete rc[k]; return rc; };
 /** voce di tipo «txt»: elenco di nomi separati da virgola (o righe), senza doppioni, al massimo 20 da 40 caratteri; null = non valido */
 const RC_TXT_MAX = 40;
@@ -6527,6 +6600,8 @@ function agentPerms(src) {
   p.mxDns = storeAppsList(o.mxDns); // DNS (domini) di MaxPlayer che può usare (per id; ['*'] = tutti). Ne vede solo il nome
   p.orcpSrv = Array.isArray(o.orcpSrv) ? [...new Set(o.orcpSrv.filter((x) => typeof x === 'string' && ORCP_SERVER_KEYS.includes(x)))].slice(0, 5) : [];
   p.actApps = Array.isArray(o.actApps) ? [...new Set(o.actApps.filter(validActAppKey))].slice(0, 200) : [];
+  // voci del «Controllo remoto» che l'agente può cambiare per i suoi clienti, scelte dal titolare una per una (13 novembre 2026)
+  p.rcKeys = Array.isArray(o.rcKeys) ? [...new Set(o.rcKeys.filter((k) => typeof k === 'string' && rcCatAll.has(k) && !RC_PROF_ONLY.has(k)))].slice(0, 200) : [];
   p.ledgerPanels = Array.isArray(o.ledgerPanels) ? [...new Set(o.ledgerPanels.filter((x) => typeof x === 'string' && LEDGER_PANELS.has(x)))] : null;
   p.maxConn = Math.max(1, Math.min(MAX_CONN, parseInt(o.maxConn, 10) || 1));
   for (const k of ['armadaCredits', 'stormCredits']) p[k] = Math.max(0, Math.min(100000, Math.round((parseFloat(o[k]) || 0) * 100) / 100)); // crediti Armada/Storm del titolare al mese (0 = nessuno)
@@ -6542,6 +6617,7 @@ function agentPermsWithin(req, top) {
   if (!top.appsAllow.includes('*')) p.appsAllow = p.appsAllow.includes('*') ? [...top.appsAllow] : p.appsAllow.filter((x) => storeAppOk(top.appsAllow, x));
   for (const k of ['dlcAllow', 'kAllow', 'orbDns', 'mxDns']) if (!top[k].includes('*')) p[k] = p[k].includes('*') ? [...top[k]] : p[k].filter((x) => storeAppOk(top[k], x));
   p.orcpSrv = p.orcpSrv.filter((x) => top.orcpSrv.includes(x));
+  p.rcKeys = p.rcKeys.filter((k) => (top.rcKeys || []).includes(k));
   const topActApps = new Set(top.actApps.map(actAppCompact));
   p.actApps = p.actApps.filter((x) => topActApps.has(actAppCompact(x)));
   p.maxConn = Math.min(p.maxConn, top.maxConn);
@@ -7033,6 +7109,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   const tree = agentTree(all, A.id), who = ses.assist ? `Assistenza di ${ses.assistBy} · ${A.username}` : 'Agente ' + A.username;
   const ctree = P.subClients ? tree : [A.id]; // clienti visibili: i suoi e (se concesso) quelli dei sotto-agenti
   const aSes = { ...ses, agent: true, orbDns: P.orbDns, mxDns: P.mxDns };
+  if (path === '/rctl' || path.startsWith('/rctl/')) return agentRctl(req, env, path, m, P, ctree, who, ip);
   if (path === '/agent/orcp') {
     if (m !== 'GET') throw new HttpErr(405, 'Metodo non consentito');
     if (!P.orcpApp) throw new HttpErr(403, 'App MirkoTeam non abilitata: chiedila al tuo fornitore');
@@ -7328,7 +7405,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const { password: _pw, ...meSafe } = meOut;
     const sNames = canAg ? sAll.filter((x) => storeAppOk(P.storeApps, x)) : [];
     const activationCatalog = await activationApps(env, s);
-    return stateJson(req, { role: 'agent', user: A.username, storeCodesOn: P.stcodes ? await storeCodesOn(env) : false, me: { ...meSafe, storeCode: await sellerAgentCode(env, A), perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients, payRemind: payRemindAgent(s), panelAcc }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
+    return stateJson(req, { role: 'agent', user: A.username, rcCat: RC_CAT_AG.filter((c) => P.rcKeys.includes(c[0])), storeCodesOn: P.stcodes ? await storeCodesOn(env) : false, me: { ...meSafe, storeCode: await sellerAgentCode(env, A), perms: P, servers: mine, canAgents: canAg, clientsUsed: meOut.clients, payRemind: payRemindAgent(s), panelAcc }, devices, storeAppNames: sNames, dlCodes: P.dlcodes ? dlCodesOf(s).filter((x) => storeAppOk(P.dlcAllow, x.name)) : [], players: P.players ? agPlayers(env, s, P, await mxP) : null, maint: P.maint ? (({ on, msg, allow } = (s.maintAg || {})[A.id] || {}) => ({ on: !!on, msg: msg || '', allow: allow || [] }))() : null,
       agents: agList,
       activationApps: activationCatalog.filter((x) => activationAppAllowed(P, x)).map((x) => ({ key: x.key, name: x.name, aliases: activationAliases(x), enabled: activationAppEnabled(s, x), link: x.link ? x.link.url : '' })),
       appLinks: P.appstore ? (Array.isArray(s.appLinks) ? s.appLinks : []).filter((x) => storeAppOk(P.appsAllow, x.name)).map((x) => (/orbix|max\s*-?player/i.test(x.name) ? { ...x, url: '' } : x)) : [], // «Attiva app» (OrbixPlay/MaxPlayer senza indirizzo: l'agente le attiva dal pannello): solo le app consentite dal titolare (sola lettura)
@@ -7699,6 +7776,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       ...(await Promise.all([premFeed(env), novaFeed(env)]).then(([pf, nf]) => ({ prem: { apk: PREM_APK, feed: pf }, nova: { apk: NOVA_APK, feed: nf } })).catch(() => ({}))),
       players: { orbix: !!env.ORBIX_KEY, max: !!env.MAXPLAYER_KEY, dns: { orbix: orbixDnsList(settings.playersCfg.orbix, dnslOwner), max: settings.playersCfg.max || [] }, showDnsAgents: !!settings.playersCfg.showDnsAgents, codes: settings.playersCfg.codes || { orbix: '265847', max: '265847' }, slots: slotsOf(settings.playersCfg) },
       dlCodes: dlCodesOf(settings),
+      rcCat: RC_CAT_AG,
       storeOwnerCode: await sellerOwnerCode(env),
       storeAppNames: sAppNames, activationApps: (await activationApps(env, settings)).map((x) => ({ key: x.key, name: x.name, aliases: activationAliases(x), enabled: activationAppEnabled(settings, x), link: x.link ? x.link.url : '' })), maintAg: Object.entries(settings.maintAg || {}).filter(([, x]) => x && x.on).map(([id]) => +id),
       counts: { ...nCounts, online: onl }, permKeys: PERM_KEYS, addonCat: addonCfg(settings), role: 'owner', ...(ses ? { agents: await agentsOut(env, agAll) } : {}),

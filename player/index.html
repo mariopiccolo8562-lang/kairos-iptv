@@ -7705,7 +7705,7 @@ async function heartbeat(force) {
     if (stats.stallsH != null) { const h = +stats.stallsH || 0; if (S.lastStallsH >= 0 && h > S.lastStallsH && it) noteStall(it.id, now); S.lastStallsH = h; }
     if ((isLiteVar(stats.var) || stats.reduced) && it && it.k === 'l') noteLite(it.id);
   }
-  net = { ...(net && typeof net === 'object' ? net : {}), line: lineClass(), bw: bwKnown() }; // classe della linea e banda nota (Mbps, null se ignota)
+  net = { ...(net && typeof net === 'object' ? net : {}), line: lineClass(), bw: bwKnown() }; try { const dc = devClass(); if (dc) net.dev = dc; } catch {} // classe della linea e banda nota (Mbps, null se ignota)
   const n = it && it.k === 'l' ? nowOf(it) : null;
   const sp = speedLast && isFinite(speedLast.mbps) ? { dl: +(+speedLast.mbps).toFixed(1), ul: speedLast.ul != null && speedLast.ul >= 0 ? +speedLast.ul.toFixed(1) : null, ping: Math.round(speedLast.ping || 0), jitter: Math.round(speedLast.jitter || 0), t: speedLast.t } : null;
   const body = { state, title: it ? (it.k === 'l' ? (n ? n.title : '') : it.name) : '', ch: it && it.k === 'l' ? it.name : '', chId: it ? it.id : '', group: it ? it.group || '' : '', pl: it ? it.pl || '' : '', prof: S.prof ? S.prof.name : '',

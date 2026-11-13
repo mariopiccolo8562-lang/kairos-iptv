@@ -1355,3 +1355,11 @@ Prova: `srv_dns_del_agents`.
 - **Controllo remoto → gruppo «Liste» → «Nascondi i separatori del fornitore»** (`o.sep`, on di base): i titoli «----SPORT----», «##### FILM #####», «★★★ CINEMA ★★★» non si vedono in diretta, film e serie in tutte le app (Pro, TV, Premium, Lite, XC, Ultimate, STB, Smarters, Plus, Nova). Stessa regola ovunque (quella di Kairos Pro, senza «.» e «:» in apertura, così «...E giustizia per tutti» resta). Vale dal prossimo aggiornamento della lista.
 - Errori del lettore: al nome si aggiunge il codice del server (« · HTTP 404»): 401/403 linea, 404 contenuto che non c'è, 5xx server del fornitore.
 - KAIROS Ultimate 1.1.2: «Scia di luce» nella Plancia (solo spostamento, adatta alle chiavette da 1 GB), otto temi in più (Tricolore, Cyber, Corallo, Notte, Menta, Fucsia, Sabbia, Carbonio); la voce `u.theme` del pannello ora li elenca tutti e 18.
+
+## 87. Controllo remoto per gli agenti, aggiornamento obbligatorio in un tocco, rete e linea di tutte le app (13 novembre 2026)
+
+- **Agenti, voce per voce**: nella scheda dell'agente → sezione App → «Controllo remoto delle app» il titolare spunta le singole voci (`perms.rcKeys`; un sotto-agente mai più voci di chi lo crea). L'agente trova «Richieste e controllo → Controllo remoto» con le sole voci concesse: «Salva per tutti i tuoi clienti» (`PUT /rctl/mine`) o per un cliente solo (`PUT /rctl/device/:id`). Cambia solo quelle voci: le altre impostate dal titolare sul dispositivo restano; profili delle app e comandi restano del titolare.
+- **Aggiornamento obbligatorio · tutte le app**: riquadro in cima a Controllo remoto (Subito / Dopo 3 giorni / Dopo 7 giorni / No) = voce `force` in tutti i profili, con `bgupd` acceso perché l'APK sia già pronto. L'app blocca solo quando la versione nuova è già scaricata e verificata.
+- **Rete e linea**: il battito prende linea, banda e classe del dispositivo anche da `net` (Kairos Pro li manda lì, anche fuori dalla visione). Le app Kotlin li mandano sempre in `net`; Premium calcola linea e banda dalle misure del lettore; Plus e Nova mandano tipo di rete e segnale Wi-Fi.
+- KAIROS Ultimate: voce `u.bg` (Sfondo: HUD, Nero puro, Blu notte, Grafite), anche dall'app (Impostazioni → Sfondo).
+- Test: `srv_agent_rctl` (12), `ui_agent_rctl` (7), `ui_force_upd` (4), `srv_net_line` (3).

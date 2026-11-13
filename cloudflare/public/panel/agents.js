@@ -313,7 +313,7 @@ body.agent .foot{display:none}
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
   // agente: le pagine senza permesso non chiamano nemmeno il server (prima ogni 20-30 s partivano richieste destinate al «non consentito»)
-  const AG_OK = /^\/admin\/(events(\/(chans|epg))?(\?.*)?|payments|line-notes(\?.*)?|online|insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/(upd|fix)|apps3\/lists(\?.*)?|ext-lists(\/(?!nanomid-clear)[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke)|\/codes)?|catalog(\/(sources|info|check))?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|agent\/(orcp|act-request)|armada\/(state|packages|lines|mags|new|renew|toggle)|storm\/(state|lines)|oxp\/(state|playlists(\/[A-Za-z0-9_-]+)?)|mxp\/(accounts|a\/[a-z0-9]{2,20}\/(overview|domains|agents(\/\d+\/(enable|disable))?|users(\/\d+(\/password|\/devices|\/lists(\/[A-Za-z0-9%-]+)?)?)?(\?fresh=1)?))|guide(?:\/read)?|(ro|slt)\/[A-Za-z0-9_\/%.-]+(\?.*)?|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+|\/bulk)?|line-sync(\/(apply|hold|src))?(\?.*)?|addon-preview\/[a-z0-9-]+)$/;
+  const AG_OK = /^\/admin\/(rctl(\/(mine|device\/[A-Za-z0-9_-]+|cmds\/[A-Za-z0-9_-]+))?|events(\/(chans|epg))?(\?.*)?|payments|line-notes(\?.*)?|online|insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/(upd|fix)|apps3\/lists(\?.*)?|ext-lists(\/(?!nanomid-clear)[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke)|\/codes)?|catalog(\/(sources|info|check))?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|agent\/(orcp|act-request)|armada\/(state|packages|lines|mags|new|renew|toggle)|storm\/(state|lines)|oxp\/(state|playlists(\/[A-Za-z0-9_-]+)?)|mxp\/(accounts|a\/[a-z0-9]{2,20}\/(overview|domains|agents(\/\d+\/(enable|disable))?|users(\/\d+(\/password|\/devices|\/lists(\/[A-Za-z0-9%-]+)?)?)?(\?fresh=1)?))|guide(?:\/read)?|(ro|slt)\/[A-Za-z0-9_\/%.-]+(\?.*)?|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+|\/bulk)?|line-sync(\/(apply|hold|src))?(\?.*)?|addon-preview\/[a-z0-9-]+)$/;
   const AG_NEED = [[/^\/admin\/requests.*[?&]kind=content/, 'contentReq'], [/^\/admin\/requests.*[?&]kind=addon/, 'addonReq'], [/^\/admin\/requests.*[?&]kind=ai/, 'ai'],
     [/^\/admin\/requests(\?(?!.*kind=)|\?.*kind=report|$)/, 'reports'], [/^\/admin\/app-errors/, 'errors'], [/^\/admin\/presence/, 'online'], [/^\/admin\/catalog/, 'vod'], [/^\/admin\/apps3\/lists/, 'appsOp'],
     [/^\/admin\/ext-lists/, 'players'], [/^\/admin\/linked-lines/, 'lines'], [/^\/admin\/agent-maint/, 'maint'], [/^\/admin\/armada\//, 'armada'], [/^\/admin\/storm\//, 'storm'], [/^\/admin\/wolf\//, 'wolf'], [/^\/admin\/mxp\//, 'mxp'], [/^\/admin\/oxp\//, 'oxp'], [/^\/admin\/ro\//, 'ro'], [/^\/admin\/slt\//, 'slt'], [/^\/admin\/store\/codes$/, 'stcodes']];
@@ -333,7 +333,7 @@ body.agent .foot{display:none}
       window.__kxWho = who;
     }
     if (p === '/admin/state' && m === 'GET' && r) {
-      D.role = r.role === 'agent' ? 'agent' : 'owner'; D.agents = r.agents || []; D.me = r.me || null; D.servers = r.servers || [];
+      D.role = r.role === 'agent' ? 'agent' : 'owner'; D.agents = r.agents || []; D.me = r.me || null; D.servers = r.servers || []; D.rcCat = Array.isArray(r.rcCat) ? r.rcCat : [];
       D.storeAppNames = r.storeAppNames || []; D.activationApps = Array.isArray(r.activationApps) ? r.activationApps : []; D.maintMe = r.maint || null; D.maintAg = r.maintAg || []; D.appLinks = Array.isArray(r.appLinks) ? r.appLinks : []; D.kairosApps = Array.isArray(r.kairosApps) ? r.kairosApps : [];
       if (r.addonCat) D.addonCat = r.addonCat;
     }
@@ -347,7 +347,7 @@ body.agent .foot{display:none}
   // Atlantix, Realott, SLT: l'account del venditore lo collega solo il titolare → senza account la voce non serve (WOLF no: l'agente si collega da solo)
   const ACC_VIEWS = new Set(['atx', 'ro', 'slt']);
   const accOk = (v) => !ACC_VIEWS.has(v) || !me().panelAcc || !!me().panelAcc[v];
-  const agentCan = (v) => !accOk(v) ? false : v === 'payments' ? (can('payments') || !!(window.KXPay && KXPay.hasRows())) : v !== 'live' && v !== 'store' && v !== 'stapps' && !!PERM_VIEW[v] && can(PERM_VIEW[v]);
+  const agentCan = (v) => !accOk(v) ? false : v === 'rctl' ? (((me().perms || {}).rcKeys) || []).length > 0 : v === 'payments' ? (can('payments') || !!(window.KXPay && KXPay.hasRows())) : v !== 'live' && v !== 'store' && v !== 'stapps' && !!PERM_VIEW[v] && can(PERM_VIEW[v]);
   const OWNER_ONLY = ['events', 'dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'stapps', 'storesum', 'dns', 'apps3', 'lines', 'appsum', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity', 'ora', 'ro', 'slt', 'blk', 'orcp', 'payments', 'allp', 'appon', 'set-pay', 'atx']; // 13 novembre 2026: anche Atlantix (prima l'agente lo vedeva sempre, anche senza permesso) // ora/ro/slt/orcp/blk, «Tutti i pannelli» e «Online nelle app»: solo titolare (il server risponde 403 agli agenti)
   const AGENT_ONLY = ['orcp-agent'];
   let modeSet = '';
@@ -957,6 +957,14 @@ body.agent .foot{display:none}
     });
   }
   // elenco «tutti» + voci singole (['*'] = tutte, anche future); un sotto-agente mai oltre chi lo crea
+  document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('[data-rcpick]'); if (!b) return; e.preventDefault(); $$('#agRc [data-rck]').forEach((i) => { if (!i.disabled) i.checked = b.dataset.rcpick === '1'; }); });
+  /* voci del controllo remoto da dare all'agente, raggruppate (per un sotto-agente solo quelle di chi lo crea) */
+  const rcBox = (P, topP) => {
+    const cur = new Set(P.rcKeys || []), top = topP ? new Set(topP.rcKeys || []) : null;
+    const items = (D.rcCat || []).filter(([k]) => !top || top.has(k));
+    if (!items.length) return '<small class="mut">Nessuna voce disponibile</small>';
+    let last = ''; return items.map(([k, l, g]) => (g !== last ? `<div class="mut" style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin:8px 0 2px">${esc((last = g))}</div>` : '') + chk('rck', k, esc(l), cur.has(k), false, '')).join('');
+  };
   const listBox = (attr, cur, items, top, empty) => {
     cur = Array.isArray(cur) ? cur : ['*']; const all = cur.includes('*'), topAll = !Array.isArray(top) || top.includes('*');
     const okTop = (k) => topAll || top.some((x) => String(x).toLowerCase() === String(k).toLowerCase());
@@ -1085,6 +1093,9 @@ body.agent .foot{display:none}
           <div class="ag-ap"><div class="ag-chk"><b style="display:block;margin-bottom:4px">Pagina «App Kairos»</b><small class="mut">Ogni agente la vede: indirizzo per Downloader (senza il tuo nome) e codice Downloader delle app scelte qui sotto. Togli le app che non deve vedere.</small></div>
             <div class="ag-chk ag-sub" id="agKa">${listBox('kapp', P.kAllow, KAPPS, topP && topP.kAllow, '')}</div>
             <small class="mut" style="display:block;margin-top:6px">Le app Kairos scelte compaiono anche in alto con il loro codice Downloader.</small></div>
+          <div class="ag-ap"><div class="ag-chk"><b style="display:block;margin-bottom:4px">Controllo remoto delle app</b><small class="mut">Le voci che può cambiare ai suoi clienti, una per una (Richieste e controllo → Controllo remoto). Profili delle app e comandi restano tuoi.</small>
+            <div style="display:flex;gap:6px;margin-top:6px"><button type="button" class="btn sm" data-rcpick="1">Tutte</button><button type="button" class="btn sm" data-rcpick="0">Nessuna</button></div></div>
+            <div class="ag-chk ag-sub" id="agRc" style="max-height:280px;overflow:auto">${rcBox(P, topP)}</div></div>
         </div>
       </div>
       <div class="ag-c ag-arm" id="agAr" style="grid-column:1/-1"><h4>🛰️ Pannello Armada</h4><small>Spento di base. Se lo accendi l'agente crea e rinnova linee e MAG su Armada <b>con i tuoi crediti</b>, fino al tetto che decidi qui. Vede e gestisce solo le linee create da lui (e dai suoi sotto-agenti); non vede il tuo saldo né i sotto-reseller. Ogni operazione resta nel registro attività.</small>
@@ -1235,6 +1246,7 @@ body.agent .foot{display:none}
       perms: { ...Object.fromEntries([...FL, ...FP, ['armadaTrial'], ['stormTrial'], ['oxpNew']].map(([k]) => [k, !!($(`#agPm [data-perm="${k}"], #agPg [data-perm="${k}"], .ag-apps [data-perm="${k}"], #agAr [data-perm="${k}"], #agSt [data-perm="${k}"], #agWf [data-perm="${k}"], #agMx [data-perm="${k}"], #agOx [data-perm="${k}"], #agEx_atx [data-perm="${k}"]`) || {}).checked])), armadaCredits: Math.max(0, +(($('#agArC') || {}).value || 0) || 0), stormCredits: Math.max(0, +(($('#agStC') || {}).value || 0) || 0), dlcAllow: listRead('agDc', 'dlca'), kAllow: listRead('agKa', 'kapp'), orbDns: listRead('agOd', 'odns'), mxDns: listRead('agMd', 'mdns'), maxConn: +$('#agC').value || 1, addons: $$('#agAd [data-ad]').filter((i) => i.checked).map((i) => i.dataset.ad),
         storeApps: $('#agSa [data-sapp="*"]') && $('#agSa [data-sapp="*"]').checked ? ['*'] : $$('#agSa [data-sapp]').filter((i) => i.checked && i.dataset.sapp !== '*').map((i) => i.dataset.sapp),
         actApps: $$('#agActApps [data-actapp]:checked').map((i) => i.dataset.actapp),
+        rcKeys: $$('#agRc [data-rck]').filter((i) => i.checked).map((i) => i.dataset.rck),
         appsAllow: $('#agAa [data-aapp="*"]') && $('#agAa [data-aapp="*"]').checked ? ['*'] : $$('#agAa [data-aapp]').filter((i) => i.checked && i.dataset.aapp !== '*').map((i) => i.dataset.aapp),
         orcpSrv: $$('#agOrcpSrv [data-orcp-srv]:checked').map((i) => i.dataset.orcpSrv),
         ...(!sub && $('#agLedgerBox') ? { ledgerPanels: ledgerPanelsValue === null ? null : [...ledgerPanelsValue] } : {}) },
