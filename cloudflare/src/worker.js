@@ -6822,8 +6822,31 @@ async function agentExtSync(env, A, off, lines, who, ip) {
     try {
       const r = rowsOf((await call(wolfRoutes, '/wolf/resellers', 'GET')).resellers).find((x) => same(x.username, wu));
       if (!r) out.push(['WOLF', `reseller ${wu} non trovato sotto il tuo account`]);
-      else if (off ? r.enabled : !r.enabled) { await call(wolfRoutes, `/wolf/resellers/${r.id}/toggle`, 'POST', { lines: !!(off && lines) }); out.push(['WOLF', off ? (lines ? 'disattivato con tutte le sue linee' : 'disattivato') : 'riattivato' + (lines ? ' (le linee spente su WOLF si riattivano dal pannello WOLF)' : '')]); }
-      else out.push(['WOLF', off ? 'era già disattivato' : 'era già attivo']);
+      else {
+        // le sue linee su WOLF (dal tuo account si vedono anche quelle dei reseller): quelle attive spente da qui si ricordano
+        // («agoffw:<id>») e riattivando l'agente tornano attive una per una (WOLF non ha un «riattiva tutte»)
+        const wk = 'agoffw:' + A.id;
+        const mine = async () => rowsOf((await call(wolfRoutes, '/wolf/lines', 'GET', null, '?fresh=1')).lines).filter((l) => same(l.owner, wu));
+        const toggleLines = async (ls) => { let n = 0; for (const l of ls.slice(0, 150)) { try { await call(wolfRoutes, `/wolf/lines/${l.id}/toggle`, 'POST', {}); n++; } catch {} } return n; };
+        let done = '';
+        if (off) {
+          let had = [];
+          if (lines) { had = (await mine()).filter((l) => l.enabled).map((l) => l.id); let prev = []; try { const x = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(wk).first(); prev = x ? JSON.parse(x.v) : []; } catch {} await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(wk, JSON.stringify([...new Set([...prev, ...had])])).run(); }
+          if (r.enabled) { await call(wolfRoutes, `/wolf/resellers/${r.id}/toggle`, 'POST', { lines: !!(lines && r.tglLines) }); done = 'disattivato'; }
+          else done = 'era già disattivato';
+          if (lines) { const still = (await mine()).filter((l) => l.enabled); const n = still.length ? await toggleLines(still) : 0; done += ` · ${had.length} linee spente`; }
+        } else {
+          if (!r.enabled) { await call(wolfRoutes, `/wolf/resellers/${r.id}/toggle`, 'POST', {}); done = 'riattivato'; } else done = 'era già attivo';
+          let ids = []; try { const x = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(wk).first(); ids = x ? JSON.parse(x.v) : []; } catch {}
+          if (lines && ids.length) {
+            const set = new Set(ids.map(String)), back = (await mine()).filter((l) => !l.enabled && set.has(String(l.id)));
+            const n = await toggleLines(back);
+            done += ` · ${n} linee riattivate`;
+            await env.DB.prepare('DELETE FROM settings WHERE k = ?').bind(wk).run();
+          }
+        }
+        out.push(['WOLF', done]);
+      }
     } catch (e) { out.push(['WOLF', 'non riuscito: ' + String(e.message || e).slice(0, 120)]); }
   }
   // Atlantix

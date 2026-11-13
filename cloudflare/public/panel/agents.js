@@ -716,7 +716,7 @@ body.agent .foot{display:none}
       e.stopPropagation();
       const a = L.find((x) => x.id === +id); if (!a) return;
       const n = a.clients || 0;
-      const extTxt = (ln) => `<br><br>Anche sui pannelli esterni dove ha un account sotto il tuo (WOLF, Atlantix, Realott) viene ${op === 'on' ? 'riattivato' : 'disattivato'}${ln ? (op === 'on' ? ' e le sue linee sbloccate (su WOLF le linee si riattivano dal pannello WOLF)' : ' insieme alle sue linee') : ', le linee restano'}.`;
+      const extTxt = (ln) => `<br><br>Anche sui pannelli esterni dove ha un account sotto il tuo (WOLF, Atlantix, Realott) viene ${op === 'on' ? 'riattivato' : 'disattivato'}${ln ? (op === 'on' ? ' e le linee spente da qui tornano attive' : ' insieme alle sue linee') : ', le linee restano'}.`;
       const msg = op === 'on' ? (a.offLines || a.offWithLines ? `Torna attivo e tornano attive le <b>${a.offLines}</b> linee spente insieme a lui.${extTxt(true)}` : `Torna a entrare nel pannello.${extTxt(false)}`)
         : lines ? `Viene buttato fuori subito, non entra più nel pannello e <b>tutti i suoi clienti${a.subAgents ? ' (anche dei sotto-agenti)' : ''}</b> attivi vengono disattivati (${n} in tutto): nelle app compare «abbonamento non attivo». Riattivandolo tornano attivi proprio quelli.${extTxt(true)}`
         : solo ? `Solo <b>${esc(a.username)}</b> viene buttato fuori subito e non entra più nel pannello.${a.subAgents ? ' I suoi sotto-agenti continuano a lavorare.' : ''} <b>Le sue linee restano attive</b>: i clienti continuano a vedere.${extTxt(false)}`
@@ -735,7 +735,7 @@ body.agent .foot{display:none}
     $$('[data-agoffonly]', V).forEach((b) => (b.onclick = async (e) => {
       e.stopPropagation();
       const a = L.find((x) => x.id === +b.dataset.agoffonly); if (!a) return;
-      if (!(await ask(`Disattivare anche le linee di ${a.username}?`, `L'agente resta disattivato com'è${a.offSolo ? ' (solo lui: i sotto-agenti continuano)' : ''}. Si spengono <b>tutti i suoi clienti${a.subAgents ? ' e quelli dei sotto-agenti' : ''}</b> attivi (${a.clients || 0} in tutto): nelle app compare «abbonamento non attivo». Riattivandolo tornano attivi proprio quelli.<br><br>Anche sui pannelli esterni dove ha un account sotto il tuo si prova a spegnere le sue linee (su WOLF solo se il reseller è ancora attivo).`, 'Disattiva le linee'))) return;
+      if (!(await ask(`Disattivare anche le linee di ${a.username}?`, `L'agente resta disattivato com'è${a.offSolo ? ' (solo lui: i sotto-agenti continuano)' : ''}. Si spengono <b>tutti i suoi clienti${a.subAgents ? ' e quelli dei sotto-agenti' : ''}</b> attivi (${a.clients || 0} in tutto): nelle app compare «abbonamento non attivo». Riattivandolo tornano attivi proprio quelli.<br><br>Anche sui pannelli esterni dove ha un account sotto il tuo si prova a spegnere le sue linee .`, 'Disattiva le linee'))) return;
       try {
         const r = await api('POST', `/admin/agents/${a.id}/off`, { linesOnly: true }); await load();
         const ext = (r.ext || []).map(([p, x]) => `${p}: ${x}`).join(' · ');

@@ -1374,3 +1374,4 @@ Prova: `srv_dns_del_agents`.
 - Disattivando o riattivando un agente si fa lo stesso sui pannelli esterni dove ha un account sotto quello del titolare (`agentExtSync`): WOLF (reseller; «con le linee» = disable-client, le linee non si riattivano da qui), Atlantix (sub-reseller e blocco/sblocco linee), Realott (sub-reseller). SLT no. L'esito di ogni pannello torna in `ext` e si vede nel messaggio.
 - Agente già disattivato: pulsante «Disattiva anche le linee» (`linesOnly`): spegne solo le linee (KAIROS e, dove si può, pannelli esterni), l'agente resta com'era (anche «solo lui»).
 - Assistenza anche su un agente disattivato (lui resta fuori): pulsante «Assistenza» nell'elenco accanto a «Riattiva» e nella scheda.
+- WOLF: le linee attive spente insieme all'agente si ricordano (`agoffw:<id>`) e riattivandolo tornano attive una per una (anche se il reseller era già spento: linee spente una per una dal tuo account).
