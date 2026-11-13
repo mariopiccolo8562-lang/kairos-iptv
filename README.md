@@ -1320,3 +1320,10 @@ Prove: `srv_mass_linked`, `ui_mass_linked`. `v64.test` fallisce su «Animazione 
 - **DNS cifrato · tutte le app.** Controllo remoto: una scheda con «Acceso» e «Spento» scrive la voce nel profilo di tutte le app in una volta (`PUT /admin/rctl/all`). Le scelte fatte sul singolo cliente restano.
 
 Prove: `srv_backup`, `ui_backup`, `srv_sdns_all`, `ui_sdns_all`.
+
+## 82. Home «Plancia» di Ultimate e titoli di tendenza nelle Home (13 novembre 2026)
+
+- **KAIROS Ultimate · Home «Plancia»**: al posto della ruota e delle righe, cinque riquadri vivi: In onda ora (evento in corso o in arrivo, oppure l'ultimo canale con il programma), Film e Serie di tendenza con le locandine che girano, Riprendi, Eventi con il conto alla rovescia, e la striscia «Adesso» in basso. Voce **«Home»** (`u.home`: `plancia` | `classic`) nel Controllo remoto, gruppo KAIROS Ultimate: «Classica» rimette la Home di prima con la ruota.
+- **Titoli di tendenza nella Home** (`o.homeArt`: `on` | `off`, gruppo Home): locandine dei film e delle serie di tendenza della settimana che la linea ha davvero (classifica `/api/player/trending`). XC: dentro i cerchi Film e Serie, a rotazione; Lite: tre locandine nelle tessere; TV, Premium, Plus, Nova: righe «Film / Serie di tendenza questa settimana». Di serie accesa; «No» la spegne.
+
+Prove: `srv_home_rc`.

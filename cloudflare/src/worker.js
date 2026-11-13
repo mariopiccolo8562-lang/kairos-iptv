@@ -4575,6 +4575,8 @@ const RC_CAT = [
   ['u.sportHome', 'Sport in Home', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.follow', 'Squadre seguite', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.saver', 'Salvaschermo', 'sel', [['off', 'Spento'], ['5', '5 minuti'], ['10', '10 minuti'], ['20', '20 minuti']], ['ult'], '', '', 'KAIROS Ultimate'],
+  ['o.homeArt', 'Titoli di tendenza nella Home', 'sel', [['on', 'Sì'], ['off', 'No']], ['ktv', 'prem', 'lite', 'xc', 'plus', 'nova'], 'Locandine dei film e delle serie di tendenza della settimana che la linea ha davvero: dentro i cerchi (XC) e le tessere (Lite), in una riga «di tendenza» (TV, Premium, Plus, Nova).', '', 'Home'],
+  ['u.home', 'Home', 'sel', [['plancia', 'Plancia (riquadri vivi)'], ['classic', 'Classica (con la ruota)']], ['ult'], 'Plancia: cinque riquadri vivi (in onda ora, film e serie di tendenza, riprendi, eventi) e la striscia «Adesso». Classica: la Home di prima con la ruota.', '', 'KAIROS Ultimate'],
   ['u.top10', 'Righe Top 10', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.heroTrailer', 'Anteprima del trailer nella Home', 'sel', [['auto', 'Automatica (solo dispositivi potenti)'], ['off', 'Spenta']], ['ult'], 'Dopo qualche secondo fermi su un titolo in evidenza il trailer parte senza audio. Solo con 2 GB o più e Android 9+: sugli altri dispositivi non parte mai. Dalla versione 1.0.1', '', 'KAIROS Ultimate'],
   ['u.rows', 'Righe Home nascoste', 'txt', [], ['ult'], '', '', 'KAIROS Ultimate'],
