@@ -1375,3 +1375,9 @@ Prova: `srv_dns_del_agents`.
 - Agente già disattivato: pulsante «Disattiva anche le linee» (`linesOnly`): spegne solo le linee (KAIROS e, dove si può, pannelli esterni), l'agente resta com'era (anche «solo lui»).
 - Assistenza anche su un agente disattivato (lui resta fuori): pulsante «Assistenza» nell'elenco accanto a «Riattiva» e nella scheda.
 - WOLF: le linee attive spente insieme all'agente si ricordano (`agoffw:<id>`) e riattivandolo tornano attive una per una (anche se il reseller era già spento: linee spente una per una dal tuo account).
+
+## 89. Agenti: linea presa da un pannello → server scelto da solo (13 novembre 2026)
+
+- Nel Nuovo cliente dell'agente («Cerca una linea già creata») la linea di WOLF/Atlantix/… arriva con il DNS del pannello del titolare, che spesso è un altro indirizzo rispetto al DNS assegnato all'agente: prima `match-server` non trovava corrispondenza e chiedeva «Scegli il server».
+- Ora, se la linea viene da un pannello e l'agente ha un solo server assegnato, `match-server` restituisce quello. Con più server si cerca ancora la corrispondenza del DNS; se non c'è, l'agente sceglie. Un indirizzo incollato a mano senza pannello non viene mai indovinato.
+- Prova: `test-qbox/srv_agent_matchpanel.mjs`.

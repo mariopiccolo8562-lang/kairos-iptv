@@ -7335,7 +7335,10 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     if (panel && !LINE_SYNC_PANELS.has(panel)) throw new HttpErr(400, 'Pannello non valido');
     if (panel && !P[panel]) throw new HttpErr(403, 'Non puoi usare questo pannello IPTV');
     const host = str(b.host, 300) || (panel ? await masterLineDns(env, panel) : '');
-    const sv = servers.find((x) => host && sameServerEndpoint(x.host, host));
+    let sv = servers.find((x) => host && sameServerEndpoint(x.host, host));
+    // linea presa da un pannello (WOLF, Atlantix…) ma il DNS dell'agente è un altro indirizzo dello stesso server: se
+    // l'agente ha un solo server assegnato si usa quello, senza fargli scegliere niente (13 novembre 2026)
+    if (!sv && panel && servers.length === 1) sv = servers[0];
     return json({ server: sv ? { id: sv.id, name: sv.name } : null });
   }
   const apv = path.match(/^\/addon-preview\/([a-z0-9-]{3,40})$/);
