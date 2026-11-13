@@ -343,8 +343,12 @@ body.agent .foot{display:none}
 
   /* ---------- modalità agente ---------- */
   // «Online ora» e «Riepilogo store» sono solo del titolare (lo store è aperto: agli agenti non resta nulla da approvare)
-  const agentCan = (v) => v === 'payments' ? (can('payments') || !!(window.KXPay && KXPay.hasRows())) : v !== 'live' && v !== 'store' && v !== 'stapps' && !!PERM_VIEW[v] && can(PERM_VIEW[v]);
-  const OWNER_ONLY = ['events', 'dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'stapps', 'storesum', 'dns', 'apps3', 'lines', 'appsum', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity', 'ora', 'ro', 'slt', 'blk', 'orcp', 'payments', 'allp', 'appon', 'set-pay']; // ora/ro/slt/orcp/blk, «Tutti i pannelli» e «Online nelle app»: solo titolare (il server risponde 403 agli agenti)
+  // pannelli esterni: solo se ha un account suo (me.panelAcc dal server; le versioni vecchie del server non lo mandano)
+  // Atlantix, Realott, SLT: l'account del venditore lo collega solo il titolare → senza account la voce non serve (WOLF no: l'agente si collega da solo)
+  const ACC_VIEWS = new Set(['atx', 'ro', 'slt']);
+  const accOk = (v) => !ACC_VIEWS.has(v) || !me().panelAcc || !!me().panelAcc[v];
+  const agentCan = (v) => !accOk(v) ? false : v === 'payments' ? (can('payments') || !!(window.KXPay && KXPay.hasRows())) : v !== 'live' && v !== 'store' && v !== 'stapps' && !!PERM_VIEW[v] && can(PERM_VIEW[v]);
+  const OWNER_ONLY = ['events', 'dash', 'live', 'rctl', 'trash', 'apperr', 'reports', 'creq', 'areq', 'ai', 'reqai', 'vod', 'msgs', 'store', 'stapps', 'storesum', 'dns', 'apps3', 'lines', 'appsum', 'armada', 'storm', 'wolf', 'mxp', 'oxp', 'appk', 'dlc', 'settings', 'set-look', 'set-app', 'set-addon', 'set-ai', 'set-maint', 'set-sec', 'api', 'activity', 'ora', 'ro', 'slt', 'blk', 'orcp', 'payments', 'allp', 'appon', 'set-pay', 'atx']; // 13 novembre 2026: anche Atlantix (prima l'agente lo vedeva sempre, anche senza permesso) // ora/ro/slt/orcp/blk, «Tutti i pannelli» e «Online nelle app»: solo titolare (il server risponde 403 agli agenti)
   const AGENT_ONLY = ['orcp-agent'];
   let modeSet = '';
   function applyMode() {

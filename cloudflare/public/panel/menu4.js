@@ -131,7 +131,8 @@
     const tb = $('.topbar'); if (tb) document.documentElement.style.setProperty('--tb4', tb.offsetHeight + 'px');
     // codici Downloader: tutti in Home, «Codici Downloader», Store e Solo Master; nelle altre schede di «Oggi» e nella pagina Clienti
     // solo quello del Kairos Store (codice, oppure indirizzo se il codice non c'è; niente barra se lo Store non è tra le sue app)
-    const dl = $('#dlBar'), showDl = v === 'home' || v === 'dlc' || hub?.[0] === 'set' || hub?.[0] === 'sto', stOnly = !showDl && (hub?.[0] === 'dash' || v === 'devices');
+    // 13 novembre 2026: il codice del Kairos Store (e il codice usa e getta) in ogni pagina del pannello, non solo in «Oggi» e Clienti
+    const dl = $('#dlBar'), showDl = v === 'home' || v === 'dlc' || hub?.[0] === 'set' || hub?.[0] === 'sto', stOnly = !showDl;
     if (dl) { dl.classList.toggle('h4-hidden', !showDl && !stOnly); dl.classList.toggle('dl-st-only', stOnly); }
   }
   let raf = 0; const later = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; sync(); }); };

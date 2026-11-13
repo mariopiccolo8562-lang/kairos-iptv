@@ -1342,3 +1342,10 @@ Prove: `ui_agents_glance`, `srv_agents_glance`.
 - Non c'è nessun'altra strada che assegni un server a un agente: solo le spunte «LINEE» nella sua scheda (e lo spostamento sotto un altro agente, che può solo toglierne).
 
 Prova: `srv_dns_del_agents`.
+
+## 85. Agenti: Atlantix solo a chi ce l'ha, codice del Kairos Store in ogni pagina (13 novembre 2026)
+
+- La voce «Pannello Atlantix» mancava dalle voci riservate: ogni agente la vedeva. Ora compare solo con il permesso Atlantix **e** un account Atlantix collegato dal titolare (stessa regola per Realott e SLT; WOLF resta com'è, perché l'agente si collega da solo).
+- Lo stato dell'agente porta `me.panelAcc` (quali pannelli esterni hanno un suo account).
+- Il codice Downloader del **Kairos Store** arriva sempre agli agenti (anche se il titolare non ha messo lo Store tra le sue «App Kairos») e la barra in alto lo mostra in **ogni pagina** del pannello, per titolare e agenti; la barra completa (Pro + Store) resta in Home, Codici Downloader, Impostazioni e Store.
+- Test: `ui_agent_st_atx` (30), `ui_store_code_orcp` e `ui_atx_agent` aggiornati.
