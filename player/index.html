@@ -2588,7 +2588,7 @@ function xtreamMap(d, pl) {
 const xtArr = (t) => { try { const j = JSON.parse(t); return Array.isArray(j) ? j : Object.values(j || {}); } catch { return []; } };
 /* dopo il parse: via i separatori, chiave del logo e numero del flusso già pronti, impronta della lista (funzione pura) */
 function libFinish(out) {
-  for (const k of ['live', 'movies', 'series']) if (out[k].some(isSepCh)) out[k] = out[k].filter((c) => !isSepCh(c));
+  if (out.live.some(isSepCh)) out.live = out.live.filter((c) => !isSepCh(c));
   for (const ch of out.live) {
     if (!ch.logo) { const k = logoKey(ch.name); ch.lk = k.key ? k.cc + '|' + k.key : ''; }
     if (!ch.sid && ch.url) { const m = ch.url.match(/\/(\d+)(?:\.[a-z0-9]+)?(?:\?.*)?$/i); if (m) ch.sidc = m[1]; }
@@ -2905,6 +2905,9 @@ function applyUserEdits(lib) {
    nuova). setLib fa tutti i passi subito; setLibAsync cede il thread fra un passo e l'altro (aggiornamento in sottofondo) */
 function* setLibSteps(lib) {
   if (!lib.clean && lib.live.some(isSepCh)) lib = { ...lib, live: lib.live.filter((c) => !isSepCh(c)) };
+  // anche fra film e serie (titoli «----NOME----» che non si aprono): voce «o.sep» del pannello, «off» = si vedono come prima
+  let sepOn = true; try { sepOn = rcGet('o.sep') !== 'off'; } catch {}
+  if (sepOn) for (const k of ['movies', 'series']) if (lib[k].some(isSepCh)) lib = { ...lib, [k]: lib[k].filter((c) => !isSepCh(c)) };
   const full = lib;
   // contenuti di una cache vecchia senza la playlist d'origine
   const ids = activePlaylists().map((p) => p.id);

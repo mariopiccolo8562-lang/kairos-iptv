@@ -1349,3 +1349,9 @@ Prova: `srv_dns_del_agents`.
 - Lo stato dell'agente porta `me.panelAcc` (quali pannelli esterni hanno un suo account).
 - Il codice Downloader del **Kairos Store** arriva sempre agli agenti (anche se il titolare non ha messo lo Store tra le sue «App Kairos») e la barra in alto lo mostra in **ogni pagina** del pannello, per titolare e agenti; la barra completa (Pro + Store) resta in Home, Codici Downloader, Impostazioni e Store.
 - Test: `ui_agent_st_atx` (30), `ui_store_code_orcp` e `ui_atx_agent` aggiornati.
+
+## 86. Separatori del fornitore nascosti (voce «o.sep»), codice HTTP negli errori, Ultimate 1.1.2 (13 novembre 2026)
+
+- **Controllo remoto → gruppo «Liste» → «Nascondi i separatori del fornitore»** (`o.sep`, on di base): i titoli «----SPORT----», «##### FILM #####», «★★★ CINEMA ★★★» non si vedono in diretta, film e serie in tutte le app (Pro, TV, Premium, Lite, XC, Ultimate, STB, Smarters, Plus, Nova). Stessa regola ovunque (quella di Kairos Pro, senza «.» e «:» in apertura, così «...E giustizia per tutti» resta). Vale dal prossimo aggiornamento della lista.
+- Errori del lettore: al nome si aggiunge il codice del server (« · HTTP 404»): 401/403 linea, 404 contenuto che non c'è, 5xx server del fornitore.
+- KAIROS Ultimate 1.1.2: «Scia di luce» nella Plancia (solo spostamento, adatta alle chiavette da 1 GB), otto temi in più (Tricolore, Cyber, Corallo, Notte, Menta, Fucsia, Sabbia, Carbonio); la voce `u.theme` del pannello ora li elenca tutti e 18.
