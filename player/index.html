@@ -2588,7 +2588,7 @@ function xtreamMap(d, pl) {
 const xtArr = (t) => { try { const j = JSON.parse(t); return Array.isArray(j) ? j : Object.values(j || {}); } catch { return []; } };
 /* dopo il parse: via i separatori, chiave del logo e numero del flusso già pronti, impronta della lista (funzione pura) */
 function libFinish(out) {
-  if (out.live.some(isSepCh)) out.live = out.live.filter((c) => !isSepCh(c));
+  for (const k of ['live', 'movies', 'series']) if (out[k].some(isSepCh)) out[k] = out[k].filter((c) => !isSepCh(c));
   for (const ch of out.live) {
     if (!ch.logo) { const k = logoKey(ch.name); ch.lk = k.key ? k.cc + '|' + k.key : ''; }
     if (!ch.sid && ch.url) { const m = ch.url.match(/\/(\d+)(?:\.[a-z0-9]+)?(?:\?.*)?$/i); if (m) ch.sidc = m[1]; }
@@ -2879,9 +2879,10 @@ const LibCache = {
     try { NATIVE && NATIVE.cacheClear && NATIVE.cacheClear(); } catch {}
   },
 };
-/* righe "separatore" delle playlist (es. "----DAZN SERIE A*----", "##### SPORT #####"): non sono canali */
-const RX_SEP = /^[\s\-=#*_~▬═━─•●◆★☆✦|+<>.:]{3,}|^[\s\-=#*_~▬═━─•●◆★☆✦|+<>.:]{2,}.*[\-=#*_~▬═━─•●◆★☆✦|+<>]{2,}\s*$/;
-const isSepCh = (c) => { const n = String(c.name || '').trim(); return !n || /[\-=#▬═━─_*~]{4,}/.test(n) || (RX_SEP.test(n) && n.replace(/[^\p{L}\p{N}]/gu, '').length < n.length * 0.85); };
+/* righe "separatore" delle playlist (es. "----DAZN SERIE A*----", "##### SPORT #####"): non sono canali né film né serie
+   (niente «.» e «:» in apertura: «...E giustizia per tutti» è un film vero) */
+const RX_SEP = /^[\s\-—=#*_~▬═━─•●◆★☆✦|+<>]{3,}|^[\s\-—=#*_~▬═━─•●◆★☆✦|+<>.:]{2,}.*[\-—=#*_~▬═━─•●◆★☆✦|+<>]{2,}\s*$/;
+const isSepCh = (c) => { const n = String(c.name || '').trim(); return !n || /[\-—=#▬═━─_*~]{4,}/.test(n) || (RX_SEP.test(n) && n.replace(/[^\p{L}\p{N}]/gu, '').length < n.length * 0.85); };
 /* nomi delle categorie e informazioni dei contenuti modificati dall'utente (originali conservati in _g0 / _m0) */
 let editsOn = false;
 function applyUserEdits(lib) {

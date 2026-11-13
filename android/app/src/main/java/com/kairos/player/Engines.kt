@@ -338,7 +338,7 @@ class ExoEngine(ctx: Context, @Volatile var l: EngineListener, ua: String, priva
                     l.onAudioDisabled()
                     return
                 }
-                l.onError(error.errorCodeName)
+                l.onError(error.errorCodeName + httpSuffix(error))
             }
         })
     }
@@ -958,4 +958,15 @@ object NetMem {
     }
     /** stima iniziale del meter: quella salvata (×0,8) oppure 2 / 6 / 12 Mbps per classe */
     fun initialBitrate(ctx: Context, cls: String): Long { val mb = bwMbps(ctx); return if (mb > 0) (mb * 800_000).toLong() else Adaptive.defaultBitrate(cls) }
+}
+
+/** codice HTTP del server dietro l'errore del lettore (« · HTTP 404»), vuoto se non c'è: nelle segnalazioni
+    si vede subito se è la linea (401/403), il contenuto che non esiste (404) o il server (5xx) */
+internal fun httpSuffix(e: Throwable?): String {
+    var c = e; var n = 0
+    while (c != null && n++ < 8) {
+        if (c is androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) return " · HTTP ${c.responseCode}"
+        c = c.cause
+    }
+    return ""
 }
