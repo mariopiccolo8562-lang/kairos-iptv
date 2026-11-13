@@ -1858,6 +1858,9 @@ const GET_APK = {
   // Servono il segreto GH_TOKEN e il repository aggiunto al token dei download; finché manca, qui risponde 502
   portal: ['kairos-portal-smart/releases/latest/download/kairos-portal.apk', 'kairos-portal.apk'],
   smart: ['kairos-portal-smart/releases/latest/download/kairos-smart.apk', 'kairos-smart.apk'],
+  // KAIROS HEAVY (13 novembre 2026): app personale del titolare, ramo «heavy» del repository della Ultimate. Si scarica
+  // la versione di prova indicata qui (le prove sono anteprime: non sono l'«ultima release» della Ultimate)
+  heavy: ['kairos-ultimate/releases/download/heavy-prova-1/kairos-ultimate.apk', 'kairos-heavy.apk'],
 };
 /** feed degli aggiornamenti (/get/<id>.json): file della stessa release dell'APK di GET_APK[id]. Lo store non ne ha uno:
  *  si ricava dalla sua ultima release (tag v1.0.N con KairosStore.apk) */
