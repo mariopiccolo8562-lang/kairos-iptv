@@ -88,6 +88,15 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 .ag-tbl tbody tr{cursor:pointer}.ag-tbl tbody tr:hover{background:var(--hov)}
 .ag-tbl small{display:block;color:var(--mut);font-size:12px;margin-top:2px}
 .ag-tbl .num{color:var(--mut);width:1%}
+.ag-gl{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;max-width:520px}
+.ag-gl .gl-c{display:inline-flex;align-items:baseline;gap:4px;font-size:11.5px;line-height:1.3;padding:2px 8px;border-radius:7px;background:rgba(56,189,248,.09);border:1px solid rgba(56,189,248,.28);color:#d4ecff;white-space:nowrap}
+.ag-gl .gl-c b{font-weight:700;color:#7dd3fc}
+.ag-gl .gl-c.cr b{color:#86efac}.ag-gl .gl-c.cr{background:rgba(34,197,94,.09);border-color:rgba(34,197,94,.3)}
+.ag-gl .gl-c.low{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.45);color:#fde68a}.ag-gl .gl-c.low b{color:#fbbf24}
+.ag-gl .gl-c.err{background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.4);color:#fecaca}.ag-gl .gl-c.err b{color:#f87171}
+.ag-gl .gl-c .mono{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#cbd5e1}
+.ag-gl .gl-c.srv{background:rgba(148,163,184,.08);border-color:rgba(148,163,184,.25)}.ag-gl .gl-c.srv b{color:#cbd5e1}
+.ag-glt{font-size:12px;color:var(--mut);align-self:center}
 .ag-tbl td.dn{min-width:190px}.dn-r{display:flex;gap:6px;align-items:baseline;font-size:12.5px;line-height:1.35;margin:1px 0}
 .dn-k{flex:none;font-size:9.5px;font-weight:800;letter-spacing:.04em;padding:1px 5px;border-radius:4px;color:#fff;background:#38bdf8}.dn-k.op{background:#a78bfa}.dn-k.mx{background:#fb7185}
 .dn-r i{font-style:normal}.dn-r .dn-all{color:var(--ok)}.dn-r .dn-no{color:var(--warn)}
@@ -610,6 +619,44 @@ body.agent .foot{display:none}
     return `<div class="dn-r"><span class="dn-k srv">LINEE</span><span>${(a.serverNames || []).length ? a.serverNames.map(esc).join(', ') : '<i class="dn-no">nessun server</i>'}</span></div>`
       + (p.players ? `<div class="dn-r"><span class="dn-k op">OP</span><span>${lst(p.orbDns)}</span></div><div class="dn-r"><span class="dn-k mx">MX</span><span>${lst(p.mxDns, mxNames)}</span></div>` : '');
   }
+  /* «A colpo d'occhio» (13 novembre 2026, solo titolare): sotto il nome di ogni agente i suoi account sui pannelli
+     (WOLF, Realott, SLT, Atlantix) con i crediti rimasti e il DNS, il tetto di Armada/Storm del mese con quanto resta e i
+     server delle sue linee. I crediti si leggono dai pannelli (GET /admin/agents/glance, 10 minuti di memoria). */
+  const glance = { data: null, loading: false, err: '' };
+  const GL_NAME = { wolf: 'WOLF', ro: 'Realott', slt: 'SLT', atx: 'Atlantix', armada: 'Armada', storm: 'Storm' };
+  const glNum = (n) => (+n || 0).toLocaleString('it-IT', { maximumFractionDigits: 2 });
+  const glHost = (d) => String(d || '').trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+  function loadGlance(fresh) {
+    if (isAgent() || window.__assist || glance.loading || (!fresh && (glance.data || glance.err))) return;
+    glance.loading = true; paintGlance();
+    api('GET', '/admin/agents/glance' + (fresh ? '?fresh=1' : '')).then((d) => { glance.data = d || {}; glance.err = ''; }, (e) => { glance.err = e.message || 'errore'; })
+      .finally(() => { glance.loading = false; paintGlance(); if (fresh) toast(glance.err ? 'Crediti non letti: ' + glance.err : 'Crediti aggiornati'); });
+  }
+  function glanceHtml(a) {
+    const p = a.perms || {}, out = [];
+    for (const x of ((glance.data && glance.data.agents) || {})[a.id] || []) {
+      const name = GL_NAME[x.panel] || x.panel, low = !x.unlimited && x.credits != null && +x.credits < 10;
+      const tip = `${name} · account ${x.user || '—'}${x.dns ? ' · DNS ' + x.dns : ''}${x.err ? ' · ' + x.err : ''}`;
+      const val = x.err ? 'non risponde' : x.unlimited ? '∞ crediti' : x.credits == null ? 'crediti ?' : glNum(x.credits) + ' cr';
+      out.push(`<span class="gl-c cr ${x.err ? 'err' : low ? 'low' : ''}" title="${esc(tip)}"><b>${esc(name)}</b>${esc(val)}${x.dns ? ` · <span class="mono">${esc(glHost(x.dns))}</span>` : ''}</span>`);
+    }
+    for (const pv of ['armada', 'storm']) {
+      const cap = +p[pv + 'Credits'] || 0;
+      if (!p[pv] || cap <= 0) continue;
+      const left = Math.max(0, cap - (+a[pv + 'Used'] || 0));
+      out.push(`<span class="gl-c cr ${left < Math.max(1, cap * 0.1) ? 'low' : ''}" title="${esc(GL_NAME[pv])}: crediti del titolare, tetto del mese ${glNum(cap)}"><b>${GL_NAME[pv]}</b>${glNum(left)} / ${glNum(cap)} cr del mese</span>`);
+    }
+    if (glance.loading && !glance.data) out.push('<span class="gl-c">leggo i crediti…</span>');
+    const srv = a.serverNames || [];
+    out.push(`<span class="gl-c srv" title="Server (DNS) delle linee che questo agente crea in KAIROS"><b>DNS</b>${srv.length ? srv.map((x) => `<span class="mono">${esc(x)}</span>`).join(', ') : 'nessun server'}</span>`);
+    return out.join('');
+  }
+  function paintGlance() {
+    $$('[data-glance]').forEach((el) => { const a = (D.agents || []).find((x) => x.id === +el.dataset.glance); if (a) el.innerHTML = glanceHtml(a); });
+    const t = $('#agGlT');
+    if (t) t.textContent = glance.loading ? 'leggo i crediti…' : glance.err ? 'crediti non letti' : glance.data && glance.data.t ? 'crediti delle ' + new Date(glance.data.t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '';
+  }
+
   function renderAgents() {
     const V = $('#v-agents'); if (!V) return;
     loadLedgerSummary();
@@ -626,11 +673,11 @@ body.agent .foot{display:none}
       <p class="ag-hnote">Il dominio deve essere tuo su Cloudflare e collegato al pannello (dominio personalizzato del Worker <b>kairos-panel</b>). Da quell'indirizzo tu non entri (risulta «credenziali errate»), così nessuno capisce che è anche il tuo pannello. L'assistenza agli agenti la fai sempre dal tuo.</p></div>`;
     V.innerHTML = `${hostCard}<div class="ag-bar"><input class="inp" id="agQ" placeholder="Cerca agente per nome, email o note" value="${esc(st.q)}">
       <div class="seg" id="agF">${[['all', 'Tutti'], ['on', 'Attivi'], ['off', 'Disattivati']].map(([k, l]) => `<button data-f="${k}" class="${st.f === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-      ${!sub && !window.__assist ? '<button class="btn" id="agHealth">🩺 Controllo generale</button>' : ''}${!sub || me().canAgents ? '<button class="btn" id="agBulk">👥 Applica a più agenti</button>' : ''}<button class="btn pri" id="agNew">+ Nuovo ${sub ? 'sotto-agente' : 'agente'}</button></div>
+      ${showHost ? '<button class="btn" id="agGl" title="Rilegge dai pannelli i crediti degli agenti">↻ Crediti</button><span class="ag-glt" id="agGlT"></span>' : ''}${!sub && !window.__assist ? '<button class="btn" id="agHealth">🩺 Controllo generale</button>' : ''}${!sub || me().canAgents ? '<button class="btn" id="agBulk">👥 Applica a più agenti</button>' : ''}<button class="btn pri" id="agNew">+ Nuovo ${sub ? 'sotto-agente' : 'agente'}</button></div>
       <div class="card glass" style="padding:0;overflow:auto">${list.length ? `<table class="ag-tbl"><thead><tr><th class="num">ID</th><th>Agente</th><th>Clienti</th><th class="hm">Sottoagenti</th><th>Accesso</th>${sub ? '' : '<th>Link accesso</th>'}<th>DNS</th><th class="hm">Ultima attività</th><th class="hm">2FA</th><th>Stato</th></tr></thead><tbody>
       ${list.map((a) => { const pct = a.maxClients ? Math.min(100, Math.round((a.clients / a.maxClients) * 100)) : 100; const up = a.parentId && byId.get(a.parentId);
         return `<tr data-ag="${a.id}"><td class="num">${a.id}</td>
-        <td><b>${esc(a.username)}</b>${ledgerBadge(ledgerSummary.get(a.id))}<small>${esc(a.email || '—')} · Responsabile: ${esc(up ? up.username : 'Master')}</small></td>
+        <td><b>${esc(a.username)}</b>${ledgerBadge(ledgerSummary.get(a.id))}<small>${esc(a.email || '—')} · Responsabile: ${esc(up ? up.username : 'Master')}</small>${showHost ? `<div class="ag-gl" data-glance="${a.id}">${glanceHtml(a)}</div>` : ''}</td>
         <td><b>${a.clients}</b><small>Limite: ${a.maxClients}</small><div class="ag-bar2"><s style="width:${pct}%"></s></div><button type="button" class="btn sm ag-cl" data-agcl="${a.id}" title="Apre Clienti con solo i clienti di ${esc(a.username)}">👥 Vedi i suoi clienti</button></td>
         <td class="hm">${a.subAgents}</td>
         <td><span class="chip ${a.canAgents ? 'b' : ''}">${a.canAgents ? 'Gestisce agenti' : 'Solo clienti'}</span>${(a.perms || {}).armada ? '<br><span class="chip" style="margin-top:4px">Armada</span>' : ''}${(a.perms || {}).storm ? '<br><span class="chip" style="margin-top:4px">Storm</span>' : ''}${(a.perms || {}).wolf ? '<br><span class="chip" style="margin-top:4px">WOLF</span>' : ''}${(a.perms || {}).mxp ? '<br><span class="chip" style="margin-top:4px">MaxPlayer</span>' : ''}${(a.perms || {}).oxp ? '<br><span class="chip" style="margin-top:4px">OrbixPlay</span>' : ''}</td>
@@ -653,6 +700,7 @@ body.agent .foot{display:none}
       };
     }
     $('#agHealth') && ($('#agHealth').onclick = openHealthCheck);
+    if (showHost) { $('#agGl').onclick = () => loadGlance(true); loadGlance(false); paintGlance(); }
     $('#agBulk') && ($('#agBulk').onclick = openBulkAgents);
     $('#agNew').onclick = () => openAgent(null);
     $$('[data-ag]', V).forEach((r) => (r.onclick = () => openAgent(L.find((a) => a.id === +r.dataset.ag))));

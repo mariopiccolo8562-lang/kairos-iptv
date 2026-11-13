@@ -321,4 +321,14 @@ export async function atxRoutes(req, env, path, who, ip, H, ag) {
   }
   return null;
 }
+/** elenco Agenti (titolare, 13 novembre 2026): utente e crediti dell'account Atlantix di un agente; null se non ne ha uno */
+export async function atxGlance(env, H, id) {
+  const KK = `atx:ag:${id}`, c = await cfgOf(env, H, KK);
+  if (!c) return null;
+  const d = (await ax(env, H, KK, '/api/dashboard/overview.php?' + qs({})).catch(() => null)) || {};
+  const mem = (d.data || {}).member || {};
+  const cr = mem.unlimited ? null : Number(mem.credits);
+  return { user: c.user, credits: Number.isFinite(cr) ? cr : null, unlimited: !!mem.unlimited, dns: '' };
+}
+
 export function clearAtxAgent(id) { mem.delete(`atx:ag:${id}`); }

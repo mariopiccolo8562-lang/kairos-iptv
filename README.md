@@ -1327,3 +1327,11 @@ Prove: `srv_backup`, `ui_backup`, `srv_sdns_all`, `ui_sdns_all`.
 - **Titoli di tendenza nella Home** (`o.homeArt`: `on` | `off`, gruppo Home): locandine dei film e delle serie di tendenza della settimana che la linea ha davvero (classifica `/api/player/trending`). XC: dentro i cerchi Film e Serie, a rotazione; Lite: tre locandine nelle tessere; TV, Premium, Plus, Nova: righe «Film / Serie di tendenza questa settimana». Di serie accesa; «No» la spegne.
 
 Prove: `srv_home_rc`.
+
+## 83. Agenti «a colpo d'occhio» (13 novembre 2026)
+
+- Nell'elenco **Agenti** (solo titolare), sotto il nome di ogni agente: i suoi account sui pannelli esterni con **crediti rimasti** e **DNS** (WOLF, Realott, SLT; Atlantix solo i crediti), il **tetto del mese di Armada/Storm** con quanto resta, e i **server (DNS) delle sue linee** KAIROS. Giallo = meno di 10 crediti (o meno del 10 % del tetto), rosso = il pannello non risponde.
+- I crediti si leggono dai pannelli con `GET /admin/agents/glance` (al massimo 4 alla volta, 15 s ciascuno) e restano in memoria 10 minuti (settings `agGlance`); «↻ Crediti» li rilegge subito.
+- La voce `o.homeArt` vale anche per Kairos STB e Smarters (dalla 0.5.8).
+
+Prove: `ui_agents_glance`, `srv_agents_glance`.

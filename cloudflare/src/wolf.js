@@ -352,6 +352,14 @@ async function syncLinks(env, H, lines, who, ip) {
   return n;
 }
 /** controllo automatico (cron): le modifiche fatte su WOLF arrivano ai clienti anche senza aprire il pannello */
+/** elenco Agenti (titolare, 13 novembre 2026): utente, crediti e DNS dell'account WOLF di un agente; null se non ne ha uno */
+export async function wolfGlance(env, H, id) {
+  const cfg = await wolfCfg(env, H, agKey(id));
+  if (!cfg) return null;
+  const cr = await credits(env, H, cfg).catch(() => null);
+  return { user: cfg.user, credits: cr, dns: cfg.dns || '' };
+}
+
 export async function wolfCron(env, H) {
   const cfg = await wolfCfg(env, H); if (!cfg) return;
   if (!(await links(env)).length) return;

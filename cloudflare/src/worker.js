@@ -10,12 +10,12 @@
  */
 import { b64u as pkB64, unb64u as pkUnb64, cbor as pkCbor, parseAuthData as pkAuthData, coseToJwk as pkJwk, verifySig as pkVerify, sha as pkSha, same as pkSame, concat as pkCat } from './passkey.js'; // accesso del titolare con impronta o Face ID
 import { storeApi, storeAdmin, storeCodes, storeCodesOn, storeHeaders, storeHooks, storeDecide, storeAgentAlerts } from './store.js'; // Store aperto: conteggi e compatibilità con gli store vecchi (/api/store/*)
-import { wolfRoutes, wolfCron, sockFetch, wolfCfg } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
-import { atxRoutes, clearAtxAgent } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz)
+import { wolfRoutes, wolfCron, sockFetch, wolfCfg, wolfGlance } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
+import { atxRoutes, clearAtxAgent, atxGlance } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz)
 import { oraRoutes } from './orapanel.js';
 import { orcpRoutes, orcpAgentConfig, setOrcpDownloader, ovpnFile, orcpRemoteHosts, orcpKeepAlive } from './orcp.js'; // Pannello ORCP (cp.ottrun.com): l'app brandizzata OTTRUN, accesso passato dal titolare
 import { vpnMark as vpnMarkRows } from './vpn-mark.js';
-import { extRoutes } from './extpanels.js'; // Pannelli Realott e SLT (accesso diretto senza API), solo titolare // Pannello ORA (panel.oraplayers.com), accesso passato dal titolare
+import { extRoutes, extGlance } from './extpanels.js'; // Pannelli Realott e SLT (accesso diretto senza API), solo titolare // Pannello ORA (panel.oraplayers.com), accesso passato dal titolare
 import { blkRoutes, relayPublic } from './relay.js';
 import { orbixFetch, orbixOutageMessage, oxpRoutes } from './orbixpanel.js'; // playlist OrbixPlay gestite da KAIROS (sezione «Pannello OrbixPlay»)
 import { mxpRoutes } from './mxpanel.js'; // account MaxPlayer gestiti da KAIROS (sezione «Pannello MaxPlayer»)
@@ -4575,7 +4575,7 @@ const RC_CAT = [
   ['u.sportHome', 'Sport in Home', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.follow', 'Squadre seguite', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.saver', 'Salvaschermo', 'sel', [['off', 'Spento'], ['5', '5 minuti'], ['10', '10 minuti'], ['20', '20 minuti']], ['ult'], '', '', 'KAIROS Ultimate'],
-  ['o.homeArt', 'Titoli di tendenza nella Home', 'sel', [['on', 'Sì'], ['off', 'No']], ['ktv', 'prem', 'lite', 'xc', 'plus', 'nova'], 'Locandine dei film e delle serie di tendenza della settimana che la linea ha davvero: dentro i cerchi (XC) e le tessere (Lite), in una riga «di tendenza» (TV, Premium, Plus, Nova).', '', 'Home'],
+  ['o.homeArt', 'Titoli di tendenza nella Home', 'sel', [['on', 'Sì'], ['off', 'No']], ['ktv', 'prem', 'lite', 'xc', 'portal', 'smart', 'plus', 'nova'], 'Locandine dei film e delle serie di tendenza della settimana che la linea ha davvero: dentro i cerchi (XC), le tessere (Lite), il riquadro a destra (STB) e le porte (Smarters), in una riga «di tendenza» (TV, Premium, Plus, Nova).', '', 'Home'],
   ['u.home', 'Home', 'sel', [['plancia', 'Plancia (riquadri vivi)'], ['classic', 'Classica (con la ruota)']], ['ult'], 'Plancia: cinque riquadri vivi (in onda ora, film e serie di tendenza, riprendi, eventi) e la striscia «Adesso». Classica: la Home di prima con la ruota.', '', 'KAIROS Ultimate'],
   ['u.top10', 'Righe Top 10', 'sel', YN, ['ult'], '', '', 'KAIROS Ultimate'],
   ['u.heroTrailer', 'Anteprima del trailer nella Home', 'sel', [['auto', 'Automatica (solo dispositivi potenti)'], ['off', 'Spenta']], ['ult'], 'Dopo qualche secondo fermi su un titolo in evidenza il trailer parte senza audio. Solo con 2 GB o più e Android 9+: sugli altri dispositivi non parte mai. Dalla versione 1.0.1', '', 'KAIROS Ultimate'],
@@ -6706,12 +6706,51 @@ async function agentsOut(env, all, onlyIds, forAgent) {
       armadaUsed: Math.round(armUsedBy(all, armSp, a.id) * 100) / 100, stormUsed: Math.round(armUsedBy(all, stSp, a.id) * 100) / 100, storeCode: await sellerAgentCode(env, a), storeMax: a.store_max >= 0 ? a.store_max : null, stores: storeCounts.get(a.id) || 0 };
   }));
 }
+/* «A colpo d'occhio» nell'elenco Agenti (13 novembre 2026, solo titolare): per ogni agente gli account suoi sui pannelli
+   esterni (WOLF, Realott, SLT, Atlantix) con utente, crediti rimasti e DNS. Si leggono dai pannelli, al massimo 4 alla
+   volta e 15 secondi ciascuno; il risultato resta 10 minuti (anche fra le istanze, in settings «agGlance»). */
+const GLANCE_TTL = 10 * 60e3;
+let glanceMem = null;
+async function agentsGlance(env, fresh) {
+  if (!fresh && glanceMem && now() - glanceMem.t < GLANCE_TTL) return glanceMem;
+  if (!fresh) {
+    try { const r = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('agGlance').first(); const g = r && JSON.parse(r.v); if (g && now() - g.t < GLANCE_TTL) return (glanceMem = g); } catch {}
+  }
+  const rows = ((await env.DB.prepare("SELECT k FROM settings WHERE (k LIKE 'wolf:ag:%' OR k LIKE 'ro:ag:%' OR k LIKE 'slt:ag:%' OR k LIKE 'atx:ag:%') AND k NOT LIKE '%:ses'").all()).results) || [];
+  const jobs = [];
+  for (const { k } of rows) {
+    const [panel, , raw] = String(k).split(':'), id = +raw;
+    if (!(id > 0)) continue;
+    jobs.push({ id, panel, run: () => (panel === 'wolf' ? wolfGlance(env, WOLF_H, id) : panel === 'atx' ? atxGlance(env, WOLF_H, id) : extGlance(env, WOLF_H, panel, id)) });
+  }
+  const agents = {};
+  let next = 0;
+  const lane = async () => {
+    while (next < jobs.length) {
+      const j = jobs[next++];
+      let r;
+      try { r = await Promise.race([j.run(), new Promise((_, no) => setTimeout(() => no(new Error('il pannello non risponde')), 15000))]); }
+      catch (e) { r = { err: String((e && e.message) || e).slice(0, 80) }; }
+      if (r) (agents[j.id] ||= []).push({ panel: j.panel, user: r.user || '', credits: r.credits ?? null, unlimited: !!r.unlimited, dns: r.dns || '', err: r.err || '' });
+    }
+  };
+  await Promise.all([lane(), lane(), lane(), lane()]);
+  const out = { t: now(), agents };
+  glanceMem = out;
+  await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('agGlance', JSON.stringify(out)).run().catch(() => {});
+  return out;
+}
+
 /** crea / modifica / elimina agenti. top = agente che sta agendo (null = proprietario) */
 async function agentsAdmin(req, env, path, who, ip, top) {
   const m = req.method;
   const all = await agentsAll(env);
   const scope = top ? agentTree(all, top.id).filter((x) => x !== top.id) : all.map((a) => a.id);
   if (path === '/agents' && m === 'GET') return json({ agents: await agentsOut(env, all, scope, top ? serverIds(top.servers) : null) });
+  if (path === '/agents/glance' && m === 'GET') {
+    if (top) throw new HttpErr(403, 'Riservato al titolare');
+    return json(await agentsGlance(env, new URL(req.url).searchParams.get('fresh') === '1'));
+  }
   const dnsIds = new Set((await dnsList(env)).map((x) => x.id));
   const clean = async (b, cur, parentForCaps = top) => {
     const o = {};

@@ -269,6 +269,19 @@ async function linkedExtDns(env, panel) {
     return extDnsOrigin(row && row.dns);
   } catch { return ''; }
 }
+/** elenco Agenti (titolare, 13 novembre 2026): utente, crediti e DNS dell'account Realott / SLT di un agente; null se non ne ha uno */
+export async function extGlance(env, H, k, id) {
+  if (!PANELS[k]) return null;
+  const KK = keyOf(k, { id }), c = await cfgOf(env, H, KK);
+  if (!c) return null;
+  const P = Object.assign(Object.create(PANELS[k]), { key: KK });
+  const [ov, dns] = await Promise.all([
+    P.overview(env, H).catch(() => null),
+    typeof P.dns === 'function' ? P.dns(env, H).catch(() => '') : Promise.resolve(''),
+  ]);
+  return { user: c.user, credits: ov && ov.credits != null ? ov.credits : null, dns: dns || '' };
+}
+
 export async function extRoutes(req, env, path, who, ip, H, ag) {
   const m = req.method, { HttpErr, json, str } = H;
   const mm = path.match(/^\/(ro|slt)\/(.+)$/); if (!mm) return null;
