@@ -131,6 +131,8 @@ img{display:block}
 @property --ang{syntax:'<angle>';initial-value:0deg;inherits:false}
 @keyframes ang{to{--ang:360deg}}
 .tile.focused::before,.tile:hover::before{opacity:1}
+/* il bordo che gira solo sulla casella scelta: prima girava (invisibile) su tutte e ridisegnava di continuo (13 novembre 2026) */
+.tile::before{animation:none}.tile.focused::before,.tile:hover::before{animation:ang 4s linear infinite}
 .tile .glow{position:absolute;width:70%;aspect-ratio:1;border-radius:50%;right:-15%;top:-25%;filter:blur(50px);opacity:.55;z-index:-1;transition:transform .6s}
 .tile.focused .glow,.tile:hover .glow{transform:scale(1.25)}
 .tile .ic{position:absolute;top:clamp(16px,2vw,28px);left:clamp(16px,2vw,28px);width:clamp(40px,4.4vw,64px);height:clamp(40px,4.4vw,64px);border-radius:18px;display:grid;place-items:center;background:rgba(255,255,255,.07);border:1px solid var(--line)}
@@ -637,6 +639,8 @@ img{display:block}
 .track{contain:layout paint}
 .rail .rlogo{width:44px;height:44px;top:26px;left:24px}
 /* ---------- modalità leggera (app su TV): niente effetti costosi, più fluidità ---------- */
+/* più fluida (13 novembre 2026): sulle TV niente sfondo «aurora» (sfocatura grande che si ridisegnava di continuo) né bordo che gira */
+.lite .aurora{display:none!important}.lite .tile::before{animation:none!important}
 .lite .glass,.lite .annc,.lite .detail,.lite .post .rt,.lite .hage,.lite .agb{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 .lite .glass{background:rgba(24,24,30,.94)}
 .lite .aurora,.lite .hbg img.blur{display:none!important}
