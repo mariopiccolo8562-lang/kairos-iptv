@@ -1365,3 +1365,8 @@ Prova: `srv_dns_del_agents`.
 - Test: `srv_agent_rctl` (12), `ui_agent_rctl` (7), `ui_force_upd` (4), `srv_net_line` (3).
 - **Controllo remoto → «Tutte le app»** (prima linguetta): ogni voce comune a più app, con «Valori diversi: non cambiare» dove le app oggi differiscono; «Salva per tutte le app» manda solo le voci cambiate (`PUT /rctl/all`). Test `ui_rc_allapps` (4).
 - Kairos Pro 2.8.1: tolta la scritta che scorre (annuncio) da Home e barra in alto; manda la classe del dispositivo nel battito.
+
+## 88. Disattiva agente / Disattiva agente e le sue linee (13 novembre 2026)
+
+- Nell'elenco Agenti, sotto lo stato di ogni agente: «Disattiva» (non entra più; i clienti continuano a vedere), «Disattiva con le linee» (anche tutti i suoi clienti attivi e quelli dei suoi sotto-agenti vengono disattivati e ricordati in `settings agoff:<id>`), «Riattiva» / «Riattiva con N linee» (tornano attive proprio quelle). `POST /agents/:id/off|on {lines}`; `offLines` nell'elenco. Le linee sui pannelli esterni non si toccano.
+- Test: `srv_agent_off_lines` (9), `ui_agent_off` (4).

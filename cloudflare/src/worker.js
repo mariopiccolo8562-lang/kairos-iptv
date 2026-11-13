@@ -6771,6 +6771,8 @@ const agentCounts = (env) => reqMemo(env, 'agc', async () => {
 async function agentsOut(env, all, onlyIds, forAgent) {
   const lim = Array.isArray(forAgent) ? new Set(forAgent) : null;
   const [dns, counts, armSp, stSp, storeCounts] = await Promise.all([dnsList(env), agentCounts(env), armSpentRows(env, 'armada'), armSpentRows(env, 'storm'), agentStoreCounts(env)]);
+  // linee spente insieme all'agente («Disattiva agente e le sue linee»): quante tornano attive riattivandolo
+  const offLines = new Map(); try { for (const r of ((await env.DB.prepare("SELECT k, v FROM settings WHERE k LIKE 'agoff:%'").all()).results) || []) { try { offLines.set(+String(r.k).slice(6), (JSON.parse(r.v).ids || []).length); } catch {} } } catch {}
   const dn = new Map(dns.map((x, i) => [x.id, forAgent ? { ...x, name: svName(x, i) } : x]));
   const svOk = (x) => dn.has(x) && (!lim || lim.has(x));
   const list = all.filter((a) => !onlyIds || onlyIds.includes(a.id));
@@ -6778,7 +6780,7 @@ async function agentsOut(env, all, onlyIds, forAgent) {
     const tree = agentTree(all, a.id), sv = serverIds(a.servers).filter(svOk);
     return { id: a.id, username: a.username, email: a.email, parentId: a.parent_id, maxClients: a.max_clients, canAgents: !!a.can_agents, perms: agentPerms(a.perms),
       servers: sv, serverNames: sv.map((x) => dn.get(x).name),
-      active: !!a.active, notes: a.notes, lastSeen: a.last_seen, createdAt: a.created_at, totp: !!a.totp_on, password: a.pw_seal ? await unseal(env, a.pw_seal).catch(() => '') : '',
+      active: !!a.active, offLines: offLines.get(a.id) || 0, notes: a.notes, lastSeen: a.last_seen, createdAt: a.created_at, totp: !!a.totp_on, password: a.pw_seal ? await unseal(env, a.pw_seal).catch(() => '') : '',
       clients: tree.reduce((n, id) => n + (counts.get(id) || 0), 0), ownClients: counts.get(a.id) || 0, subAgents: tree.length - 1,
       armadaUsed: Math.round(armUsedBy(all, armSp, a.id) * 100) / 100, stormUsed: Math.round(armUsedBy(all, stSp, a.id) * 100) / 100, storeCode: await sellerAgentCode(env, a), storeMax: a.store_max >= 0 ? a.store_max : null, stores: storeCounts.get(a.id) || 0 };
   }));
@@ -6962,6 +6964,45 @@ async function agentsAdmin(req, env, path, who, ip, top) {
     memoDrop(env, 'ags');
     await log(env, 'edit', `${who}: agente ${target.username} spostato sotto ${parent ? parent.username : 'Master'} (prima sotto ${oldParent ? oldParent.username : 'Master'})`, ip);
     return json({ ok: true, parentId });
+  }
+  // «Disattiva agente» e «Disattiva agente e le sue linee» (13 novembre 2026). Con le linee: i suoi clienti (e quelli dei
+  // suoi sotto-agenti) attivi vengono disattivati e ricordati; riattivando l'agente tornano attivi proprio quelli.
+  // Solo le linee di KAIROS: quelle sui pannelli esterni (WOLF, Atlantix…) restano come sono.
+  const offm = path.match(/^\/agents\/(\d{1,9})\/(off|on)$/);
+  if (offm && m === 'POST') {
+    const id = +offm[1], A = all.find((a) => a.id === id);
+    if (!A || !scope.includes(id)) throw new HttpErr(404, 'Agente non trovato');
+    const b = await readJSON(req, 1024), key = 'agoff:' + id, tree = agentTree(all, id);
+    let saved = null; try { const r = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind(key).first(); saved = r ? JSON.parse(r.v) : null; } catch {}
+    if (offm[2] === 'off') {
+      const ids = [];
+      if (b.lines === true) {
+        for (let i = 0; i < tree.length; i += 90) {
+          const part = tree.slice(i, i + 90);
+          for (const r of ((await env.DB.prepare(`SELECT id FROM devices WHERE parent = '' AND active = 1 AND owner_id IN (${part.map(() => '?').join(',')})`).bind(...part).all()).results) || []) ids.push(r.id);
+        }
+        for (let i = 0; i < ids.length; i += 90) { const part = ids.slice(i, i + 90); await env.DB.prepare(`UPDATE devices SET active = 0 WHERE id IN (${part.map(() => '?').join(',')})`).bind(...part).run(); }
+        const keep = [...new Set([...((saved && saved.ids) || []), ...ids])];
+        if (keep.length) await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(key, JSON.stringify({ t: now(), ids: keep })).run();
+      }
+      await env.DB.batch([
+        env.DB.prepare('UPDATE admins SET active = 0, disabled_by = ? WHERE id = ?').bind(top ? top.id : -1, id),
+        env.DB.prepare('DELETE FROM sessions WHERE admin_id = ?').bind(id),
+      ]);
+      memoDrop(env, 'ags');
+      await log(env, 'off', `${who}: agente ${A.username} disattivato${b.lines === true ? ` con le sue linee (${ids.length} clienti disattivati)` : ''}`, ip);
+      return json({ ok: true, lines: ids.length });
+    }
+    if (top && A.disabled_by && !agentTree(all, top.id).includes(A.disabled_by)) throw new HttpErr(403, 'Disattivato da chi sta sopra di te: non puoi riattivarlo');
+    await env.DB.prepare('UPDATE admins SET active = 1, disabled_by = 0 WHERE id = ?').bind(id).run();
+    let back = 0;
+    if (b.lines !== false && saved && Array.isArray(saved.ids) && saved.ids.length) {
+      for (let i = 0; i < saved.ids.length; i += 90) { const part = saved.ids.slice(i, i + 90); const r = await env.DB.prepare(`UPDATE devices SET active = 1 WHERE active = 0 AND id IN (${part.map(() => '?').join(',')})`).bind(...part).run(); back += (r.meta && r.meta.changes) || 0; }
+      await env.DB.prepare('DELETE FROM settings WHERE k = ?').bind(key).run();
+    }
+    memoDrop(env, 'ags');
+    await log(env, 'on', `${who}: agente ${A.username} riattivato${back ? ` con le sue linee (${back} clienti riattivati)` : ''}`, ip);
+    return json({ ok: true, lines: back });
   }
   const am = path.match(/^\/agents\/(\d{1,9})$/);
   if (!am) throw new HttpErr(404, 'Non trovato');

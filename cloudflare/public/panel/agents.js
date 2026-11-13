@@ -105,6 +105,7 @@ main{padding:22px clamp(16px,2.6vw,34px) 60px;background:var(--bg)}
 .chip.g{background:rgba(63,191,127,.15);color:#6fd6a1}.chip.r{background:rgba(229,83,75,.15);color:#f08a84}.chip.y{background:rgba(224,164,49,.15);color:#ecc06f}
 .ag-st{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px}.ag-st i{width:7px;height:7px;border-radius:50%;background:currentColor}
 .ag-st.on{color:var(--ok)}.ag-st.off{color:var(--bad)}
+.ag-offb{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}.ag-offb .btn{font-size:11.5px;padding:4px 8px}
 .ag-bar2{height:5px;border-radius:5px;background:#2a2e36;margin-top:6px;overflow:hidden;max-width:120px}.ag-bar2 s{display:block;height:100%;background:var(--a1)}
 .ag-host{margin-bottom:16px;border-left:4px solid #38bdf8}.ag-hrow{display:flex;gap:8px;flex-wrap:wrap}.ag-hrow .inp{flex:1;min-width:220px;margin:0}.ag-hlink{margin-top:10px;font-size:13.5px}.ag-hlink b{color:#38bdf8}.ag-hnote{margin:12px 0 0;color:var(--mut);font-size:12.5px;line-height:1.5}
 .ag-apg{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:10px}.ag-ap{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:rgba(255,255,255,.02)}.ag-ap .ag-sub{margin:6px 0 0 18px;padding-left:10px;border-left:2px solid var(--line)}
@@ -313,7 +314,7 @@ body.agent .foot{display:none}
 
   /* ---------- API: per l'agente solo le funzioni consentite (niente chiamate inutili) ---------- */
   // agente: le pagine senza permesso non chiamano nemmeno il server (prima ogni 20-30 s partivano richieste destinate al «non consentito»)
-  const AG_OK = /^\/admin\/(rctl(\/(mine|device\/[A-Za-z0-9_-]+|cmds\/[A-Za-z0-9_-]+))?|events(\/(chans|epg))?(\?.*)?|payments|line-notes(\?.*)?|online|insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/(upd|fix)|apps3\/lists(\?.*)?|ext-lists(\/(?!nanomid-clear)[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke)|\/codes)?|catalog(\/(sources|info|check))?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|agent\/(orcp|act-request)|armada\/(state|packages|lines|mags|new|renew|toggle)|storm\/(state|lines)|oxp\/(state|playlists(\/[A-Za-z0-9_-]+)?)|mxp\/(accounts|a\/[a-z0-9]{2,20}\/(overview|domains|agents(\/\d+\/(enable|disable))?|users(\/\d+(\/password|\/devices|\/lists(\/[A-Za-z0-9%-]+)?)?)?(\?fresh=1)?))|guide(?:\/read)?|(ro|slt)\/[A-Za-z0-9_\/%.-]+(\?.*)?|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+|\/bulk)?|line-sync(\/(apply|hold|src))?(\?.*)?|addon-preview\/[a-z0-9-]+)$/;
+  const AG_OK = /^\/admin\/(rctl(\/(mine|device\/[A-Za-z0-9_-]+|cmds\/[A-Za-z0-9_-]+))?|events(\/(chans|epg))?(\?.*)?|payments|line-notes(\?.*)?|online|insight\/[A-Za-z0-9_-]+|health|devices\/[A-Za-z0-9_-]+\/(upd|fix)|apps3\/lists(\?.*)?|ext-lists(\/(?!nanomid-clear)[A-Za-z0-9_-]+)?|presence|app-errors(\/seen)?(\?.*)?|requests(\/\d+(\/status)?)?(\?.*)?|messages(\/\d+)?|store(\/[A-Za-z0-9_-]+\/(approve|deny|revoke)|\/codes)?|catalog(\/(sources|info|check))?(\?.*)?|ai\/grant|match-server|linked-lines(\/\d+)?|agent-maint|agent\/(orcp|act-request)|armada\/(state|packages|lines|mags|new|renew|toggle)|storm\/(state|lines)|oxp\/(state|playlists(\/[A-Za-z0-9_-]+)?)|mxp\/(accounts|a\/[a-z0-9]{2,20}\/(overview|domains|agents(\/\d+\/(enable|disable|on|off))?|users(\/\d+(\/password|\/devices|\/lists(\/[A-Za-z0-9%-]+)?)?)?(\?fresh=1)?))|guide(?:\/read)?|(ro|slt)\/[A-Za-z0-9_\/%.-]+(\?.*)?|wolf\/(config|password|packages|lines(\/\d+(\/(extend|toggle|kick))?)?(\?fresh=1)?|resellers(\/\d+(\/(credits|toggle|delete))?)?)|orbix\/[A-Za-z0-9_-]+|maxplayer\/[A-Za-z0-9_-]+(\?fresh=1)?|login|logout|logout-all|state|password|totp\/(setup|enable|disable)|devices(\/[^/?]+(\/(kick|linkcode|reset|unlink|link))?)?(\?.*)?|agents(\/\d+|\/bulk)?|line-sync(\/(apply|hold|src))?(\?.*)?|addon-preview\/[a-z0-9-]+)$/;
   const AG_NEED = [[/^\/admin\/requests.*[?&]kind=content/, 'contentReq'], [/^\/admin\/requests.*[?&]kind=addon/, 'addonReq'], [/^\/admin\/requests.*[?&]kind=ai/, 'ai'],
     [/^\/admin\/requests(\?(?!.*kind=)|\?.*kind=report|$)/, 'reports'], [/^\/admin\/app-errors/, 'errors'], [/^\/admin\/presence/, 'online'], [/^\/admin\/catalog/, 'vod'], [/^\/admin\/apps3\/lists/, 'appsOp'],
     [/^\/admin\/ext-lists/, 'players'], [/^\/admin\/linked-lines/, 'lines'], [/^\/admin\/agent-maint/, 'maint'], [/^\/admin\/armada\//, 'armada'], [/^\/admin\/storm\//, 'storm'], [/^\/admin\/wolf\//, 'wolf'], [/^\/admin\/mxp\//, 'mxp'], [/^\/admin\/oxp\//, 'oxp'], [/^\/admin\/ro\//, 'ro'], [/^\/admin\/slt\//, 'slt'], [/^\/admin\/store\/codes$/, 'stcodes']];
@@ -689,7 +690,7 @@ body.agent .foot{display:none}
         <td class="dn">${dnsSum(a)}</td>
         <td class="hm">${a.lastSeen ? esc(ago(a.lastSeen)) : '<span class="mut">mai</span>'}</td>
         <td class="hm">${a.totp ? '<span class="chip g">Attiva</span>' : '<span class="chip">No</span>'}</td>
-        <td><span class="ag-st ${a.active ? 'on' : 'off'}"><i></i>${a.active ? 'Attivato' : 'Disattivato'}</span></td></tr>`; }).join('')}</tbody></table>`
+        <td><span class="ag-st ${a.active ? 'on' : 'off'}"><i></i>${a.active ? 'Attivato' : 'Disattivato'}</span><div class="ag-offb">${a.active ? `<button class="btn sm" data-agoff="${a.id}" title="Non entra più nel pannello; i suoi clienti continuano a vedere">Disattiva</button><button class="btn sm danger" data-agoffl="${a.id}" title="Disattiva l'agente e anche tutti i suoi clienti (e dei suoi sotto-agenti)">Disattiva con le linee</button>` : `<button class="btn sm" data-agon="${a.id}">${a.offLines ? `Riattiva con ${a.offLines} ${a.offLines === 1 ? 'linea' : 'linee'}` : 'Riattiva'}</button>`}</div></td></tr>`; }).join('')}</tbody></table>`
       : `<div class="emptyc">${L.length ? 'Nessun agente trovato' : `Nessun agente ancora.<br><span style="font-size:13px">Gli agenti sono i tuoi rivenditori: entrano nel pannello con le loro credenziali e gestiscono solo i propri clienti, con i permessi che decidi tu.</span>`}</div>`}</div>`;
     $('#agQ').oninput = (e) => { st.q = e.target.value.toLowerCase(); const p = e.target.selectionStart; renderAgents(); const q = $('#agQ'); q.focus(); q.setSelectionRange(p, p); };
     $$('#agF [data-f]').forEach((b) => (b.onclick = () => { st.f = b.dataset.f; renderAgents(); }));
@@ -710,6 +711,20 @@ body.agent .foot{display:none}
     $$('[data-ag]', V).forEach((r) => (r.onclick = () => openAgent(L.find((a) => a.id === +r.dataset.ag))));
     $$('[data-aglink]', V).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); linkBox(L.find((a) => a.id === +b.dataset.aglink)); }));
     $$('[data-agcl]', V).forEach((b) => (b.onclick = (e) => { e.stopPropagation(); window.KXOwn.show(b.dataset.agcl); }));
+    // «Disattiva», «Disattiva con le linee», «Riattiva» accanto a ogni agente (13 novembre 2026)
+    const agAct = async (e, id, op, lines) => {
+      e.stopPropagation();
+      const a = L.find((x) => x.id === +id); if (!a) return;
+      const n = a.clients || 0;
+      const msg = op === 'on' ? (a.offLines ? `Torna attivo e tornano attive le <b>${a.offLines}</b> linee spente insieme a lui.` : 'Torna a entrare nel pannello.')
+        : lines ? `Non entra più nel pannello e <b>tutti i suoi clienti${a.subAgents ? ' (anche dei sotto-agenti)' : ''}</b> attivi vengono disattivati (${n} in tutto): nelle app compare «abbonamento non attivo». Riattivandolo tornano attivi proprio quelli. Le linee sui pannelli esterni (WOLF, Atlantix…) restano come sono.`
+        : 'Non entra più nel pannello. I suoi clienti continuano a vedere.';
+      if (!(await ask(op === 'on' ? `Riattivare ${a.username}?` : lines ? `Disattivare ${a.username} e le sue linee?` : `Disattivare ${a.username}?`, msg, op === 'on' ? 'Riattiva' : 'Disattiva'))) return;
+      try { const r = await api('POST', `/admin/agents/${a.id}/${op}`, { lines }); await load(); toast(op === 'on' ? `${a.username} riattivato${r.lines ? ` · ${r.lines} linee di nuovo attive` : ''}` : `${a.username} disattivato${lines ? ` · ${r.lines} linee disattivate` : ''}`); } catch (er) { toast(er.message, 1); }
+    };
+    $$('[data-agoff]', V).forEach((b) => (b.onclick = (e) => agAct(e, b.dataset.agoff, 'off', false)));
+    $$('[data-agoffl]', V).forEach((b) => (b.onclick = (e) => agAct(e, b.dataset.agoffl, 'off', true)));
+    $$('[data-agon]', V).forEach((b) => (b.onclick = (e) => agAct(e, b.dataset.agon, 'on', true)));
   }
 
   function openHealthCheck() {
