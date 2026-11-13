@@ -1363,3 +1363,5 @@ Prova: `srv_dns_del_agents`.
 - **Rete e linea**: il battito prende linea, banda e classe del dispositivo anche da `net` (Kairos Pro li manda lì, anche fuori dalla visione). Le app Kotlin li mandano sempre in `net`; Premium calcola linea e banda dalle misure del lettore; Plus e Nova mandano tipo di rete e segnale Wi-Fi.
 - KAIROS Ultimate: voce `u.bg` (Sfondo: HUD, Nero puro, Blu notte, Grafite), anche dall'app (Impostazioni → Sfondo).
 - Test: `srv_agent_rctl` (12), `ui_agent_rctl` (7), `ui_force_upd` (4), `srv_net_line` (3).
+- **Controllo remoto → «Tutte le app»** (prima linguetta): ogni voce comune a più app, con «Valori diversi: non cambiare» dove le app oggi differiscono; «Salva per tutte le app» manda solo le voci cambiate (`PUT /rctl/all`). Test `ui_rc_allapps` (4).
+- Kairos Pro 2.8.1: tolta la scritta che scorre (annuncio) da Home e barra in alto; manda la classe del dispositivo nel battito.

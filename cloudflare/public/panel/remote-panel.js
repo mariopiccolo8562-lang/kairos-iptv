@@ -215,7 +215,7 @@
       <div class="rc-qb">${FO.map(([v, l, ex]) => `<button type="button" data-rcforce="${v}" class="${(fAll === v || (v === '' && (fAll === 'off'))) ? 'on' : ''}"><b>${esc(l)}</b><small>${esc(ex)}</small></button>`).join('')}</div>
       <p class="rc-note" style="margin:10px 0 0">${fAll === null ? '⚠ Ora le app hanno valori diversi: scegliendo diventano uguali per tutte.' : 'Arriva alle app al prossimo battito (entro un minuto se sono aperte). Per una sola app usa il suo profilo qui sotto (gruppo «Aggiornamenti»).'}</p></div>` : '';
     V.innerHTML = forceCard + homeCard + qboxCard + dnsCard + `<div class="card glass" style="margin-bottom:16px"><div class="hd"><h3>Controllo remoto delle app<small>Decidi cosa resta libero, cosa il cliente può scegliere e cosa vuoi imporre: tutto arriva al battito successivo (entro un minuto se l'app è aperta, altrimenti alla prossima apertura).</small></h3><button class="btn sm" id="rcRe">Aggiorna</button></div>
-      <div class="rc-apps">${APPS.map(([k, l]) => `<button type="button" data-rca="${k}" class="${k === app ? 'on' : ''}">${esc(l)}${unlinked(k) ? '' : `<span class="n">${byApp[k] || 0}</span>`}</button>`).join('')}</div>
+      <div class="rc-apps"><button type="button" data-rca="*" class="${app === '*' ? 'on' : ''}">Tutte le app</button>${APPS.map(([k, l]) => `<button type="button" data-rca="${k}" class="${k === app ? 'on' : ''}">${esc(l)}${unlinked(k) ? '' : `<span class="n">${byApp[k] || 0}</span>`}</button>`).join('')}</div>
       <div class="rc-g">
         <div><h4 style="margin:0 0 4px">Profilo di ${esc(name)}</h4><p class="rc-note" style="margin:0 0 10px">${unlinked(app) ? `${esc(name)} non si collega al pannello con un codice: vale per tutte le installazioni, che leggono la politica degli aggiornamenti a ogni controllo (all'apertura e ogni ora).` : `Vale per tutti i clienti con ${esc(name)} (${byApp[app] || 0}). «Decide il cliente» lascia la voce libera nell'app.`} ${nSet ? `<b>${nSet}</b> ${nSet === 1 ? 'regola impostata' : 'regole impostate'}.` : 'Nessuna regola impostata.'}</p>
           <div class="rc-rows" id="rcProf">${grouped(cat, (c) => {
@@ -291,6 +291,41 @@
     $('#rcClear').onclick = async () => { if (!(await ask(`Liberare tutte le voci di ${name}?`, 'I clienti torneranno a scegliere da soli nell\'app (le voci imposte a un singolo cliente restano).', 'Libera'))) return; saveProfile(app, {}); };
     $$('[data-rcall]', V).forEach((b) => (b.onclick = () => sendCmd(b.dataset.rcall, { app }, `a tutti i clienti ${name} aperti negli ultimi 7 giorni`)));
     $$('[data-rcdev]', V).forEach((b) => (b.onclick = () => { const d = D.devices.find((x) => x.id === b.dataset.rcdev); if (d) openDev(d); }));
+    if (app === '*') drawAllApps(V);
+  }
+  /* «Tutte le app» (13 novembre 2026): una voce cambiata qui va al profilo di ogni app che la capisce. Le voci con
+     scelte diverse da app ad app (es. «Tema» di Pro e di Portal) restano nei profili delle singole app */
+  function drawAllApps(V) {
+    const g = $('.rc-g', V); if (!g) return;
+    const ids = APPS.map((a) => a[0]), byKey = new Map();
+    for (const c of R.data.cat || []) { const a = byKey.get(c[0]); if (a) a.push(c); else byKey.set(c[0], [c]); }
+    const cat = [...byKey.values()].filter((a) => a.length === 1 && a[0][4].filter((x) => ids.includes(x)).length >= 2 && a[0][8] !== 'prof').map((a) => a[0]);
+    const curOf = (c) => {
+      const vals = c[4].filter((x) => ids.includes(x)).map((x) => { const v = ((R.data.apps || {})[x] || {})[c[0]]; return v === undefined || v === null ? '' : String(v); });
+      const same = vals.every((v) => v === vals[0]);
+      return { mixed: !same || (vals[0] !== '' && c[2] !== 'txt' && !c[3].some((o) => String(o[0]) === vals[0])), v: same ? vals[0] : '' };
+    };
+    const row = (c) => {
+      const st = curOf(c), init = st.mixed ? '__keep' : st.v;
+      const appsTxt = c[4].filter((x) => ids.includes(x)).map((x) => (APPS.find((a) => a[0] === x) || [x, x])[1].replace(/^(Kairos|KAIROS) /, '')).join(', ');
+      const ctl = c[2] === 'txt'
+        ? `<div class="rc-tx"><textarea class="inp" rows="2" data-rcx="${esc(c[0])}" data-init="${esc(init)}" placeholder="${st.mixed ? 'Valori diversi da app ad app: scrivi per renderli uguali' : 'Vuota: nessuna'}">${st.mixed ? '' : esc(st.v)}</textarea></div>`
+        : `<select class="inp" data-rcx="${esc(c[0])}" data-init="${esc(init)}">${st.mixed ? '<option value="__keep" selected>Valori diversi: non cambiare</option>' : ''}<option value=""${!st.mixed && st.v === '' ? ' selected' : ''}>${esc(c[6] || 'Decide il cliente')}</option>${c[3].map(([v, l]) => `<option value="${esc(String(v))}"${!st.mixed && String(v) === st.v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+      return `<div class="rc-r ${c[2] === 'txt' ? 'txt' : ''} ${!st.mixed && st.v !== '' ? 'set' : ''}"><div><b>${esc(c[1])}</b><small>${c[5] ? esc(c[5]) + ' · ' : ''}${esc(appsTxt)}</small></div>${ctl}</div>`;
+    };
+    g.innerHTML = `<div style="grid-column:1/-1"><h4 style="margin:0 0 4px">Tutte le app</h4><p class="rc-note" style="margin:0 0 10px">Cambi una voce qui e va al profilo di <b>tutte le app che la capiscono</b> (sotto ogni voce l'elenco). «Valori diversi» = le app oggi non sono uguali: se non la tocchi resta com'è. Arriva alle app al prossimo battito.</p>
+      <div class="rc-rows" id="rcAllRows">${grouped(cat, row)}</div>
+      <div style="display:flex;gap:8px;margin-top:12px;align-items:center"><button class="btn pri" id="rcAllSave">Salva per tutte le app</button><span class="rc-note" id="rcAllN"></span></div></div>`;
+    const changed = () => $$('#rcAllRows [data-rcx]').filter((x) => x.value !== '__keep' && (x.tagName === 'TEXTAREA' ? x.value.trim() !== (x.dataset.init === '__keep' ? '' : x.dataset.init) || (x.dataset.init === '__keep' && x.value.trim() !== '') : x.value !== x.dataset.init));
+    const upd = () => { const n = changed().length; $('#rcAllN').textContent = n ? `${n} ${n === 1 ? 'voce cambiata' : 'voci cambiate'}` : ''; };
+    $$('#rcAllRows [data-rcx]').forEach((x) => (x.oninput = x.onchange = upd));
+    $('#rcAllSave').onclick = async () => {
+      const ch = changed(); if (!ch.length) return toast('Nessuna voce cambiata', 1);
+      const rc = {}; for (const x of ch) rc[x.dataset.rcx] = x.tagName === 'TEXTAREA' ? x.value.split(/[,;\n]+/).map((y) => y.trim()).filter(Boolean).join(', ') : x.value;
+      try { const r = await api('PUT', '/admin/rctl/all', { rc }); R.data.apps = r.apps || R.data.apps; toast(`Salvato per tutte le app (${ch.length} ${ch.length === 1 ? 'voce' : 'voci'}): arriva al prossimo battito`); draw(); } catch (e) { toast(e.message, 1); }
+    };
+    // niente «Clienti con …» per «Tutte le app»
+    $$('.card.glass', V).forEach((c) => { if (/Clienti con/.test(($('h3', c) || {}).textContent || '')) c.remove(); });
   }
   /* pagina dell'agente: le voci concesse, per tutti i suoi clienti o per uno solo (niente profili né comandi) */
   function drawAgent(V) {
