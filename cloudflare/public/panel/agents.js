@@ -1488,6 +1488,8 @@ body.agent .foot{display:none}
             b.maxConn = e.maxConn;
             if ($('.ag-chk [data-cad]')) b.addons = e.addons;
           }
+          // TV «da attivare» scaricata con il suo codice: il server la attiva come un cliente nuovo (servono durata e playlist)
+          if (d.status === 'pending' && !d.parent && !(d.playlists || []).length) { b.expires = e.expires; b.playlists = pls; b.maxConn = e.maxConn; }
           await api('PUT', '/admin/devices/' + d.id, b);
         }
         let syncError = '';

@@ -1,4 +1,4 @@
-/* KAIROS Control — service worker: solo per le notifiche delle richieste di download dello store.
+/* KAIROS Control — service worker: per le notifiche dei download dello Store.
    La notifica arriva senza contenuto: il testo si legge dal pannello con la sessione di questo dispositivo,
    così su un telefono scollegato non compare nessun dato. Nessuna cache: il pannello resta sempre aggiornato. */
 const ICON = '/panel/icon-192.png';
@@ -10,7 +10,14 @@ const get = (p) => fetch(p, { credentials: 'include', cache: 'no-store' });
 async function showPush() {
   try {
     const t = await get('/api/admin/notify/peek');
-    if (t.ok && (await t.json()).test) return self.registration.showNotification('🔔 Prova riuscita', { body: 'Le notifiche del pannello funzionano su questo dispositivo.', tag: 'kairos-test', icon: ICON, badge: ICON });
+    const pk = t.ok ? await t.json() : {};
+    if (pk.dl) {
+      const d = pk.dl;
+      return self.registration.showNotification('📥 Download dallo Store', {
+        body: [d.app, d.device, d.country, d.code].filter(Boolean).join(' · '), tag: 'kairos-dl-' + d.t, icon: ICON, badge: ICON, data: {},
+      });
+    }
+    if (pk.test) return self.registration.showNotification('🔔 Prova riuscita', { body: 'Le notifiche del pannello funzionano su questo dispositivo.', tag: 'kairos-test', icon: ICON, badge: ICON });
     const r = await get('/api/admin/store');
     if (r.ok) {
       const d = await r.json();

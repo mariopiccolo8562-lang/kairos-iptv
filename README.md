@@ -1381,3 +1381,9 @@ Prova: `srv_dns_del_agents`.
 - Nel Nuovo cliente dell'agente («Cerca una linea già creata») la linea di WOLF/Atlantix/… arriva con il DNS del pannello del titolare, che spesso è un altro indirizzo rispetto al DNS assegnato all'agente: prima `match-server` non trovava corrispondenza e chiedeva «Scegli il server».
 - Ora, se la linea viene da un pannello e l'agente ha un solo server assegnato, `match-server` restituisce quello. Con più server si cerca ancora la corrispondenza del DNS; se non c'è, l'agente sceglie. Un indirizzo incollato a mano senza pannello non viene mai indovinato.
 - Prova: `test-qbox/srv_agent_matchpanel.mjs`.
+
+## 90. «Da attivare» anche per l'agente del codice, avvisi dei download dello Store (13 novembre 2026)
+
+- Una TV nuova scaricata con il codice dello Store di un agente («📥 Scaricata dal codice di …», `rec_by`) ora compare anche nel «Da attivare» di quell'agente (e di chi sta sopra di lui), non solo del titolare. «Attiva» la rende sua cliente (il `PUT` su una TV libera con il suo `rec_by` diventa un «Nuovo cliente» con il codice della TV); «Collega a un cliente» c'era già. Gli altri agenti non la vedono.
+- Con lo Store aperto le richieste da autorizzare non esistono più, quindi le notifiche del pannello e Telegram non partivano mai. Ora ogni download avvisa: con il codice di un agente lui (se il titolare gli ha dato il consenso alle notifiche/Telegram) e il titolare solo se lo chiede; senza codice il titolare. Il service worker legge il testo da `/notify/peek` (`dl`). Un solo avviso ogni 2 minuti per lo stesso download.
+- Prove: `srv_agent_recpend.mjs`, `srv_store_dl_notify.mjs`.

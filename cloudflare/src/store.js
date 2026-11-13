@@ -195,6 +195,11 @@ async function hookDecided(env, r, st, via, who) {
   if (typeof HOOKS.decided !== 'function') return;
   try { await HOOKS.decided(env, r, st, via, who); } catch {}
 }
+/* download partito: avviso (notifica del pannello + Telegram) a chi deve saperlo — titolare e/o agente del codice (13 novembre 2026) */
+async function hookDownload(env, d, origin, ip) {
+  if (typeof HOOKS.downloaded !== 'function') return;
+  try { await HOOKS.downloaded(env, d, origin, ip); } catch {}
+}
 
 /** approva o rifiuta una richiesta in attesa; false se non era più in attesa */
 async function decide(env, r, action, via, ip = '', by = 0, who = '') {
@@ -412,6 +417,11 @@ async function download(req, env, ctx, ip) {
     b.src === 'web' ? null : seenDownload(env, did, device, country, t), // dal browser: download sì, store installato no
     cr ? env.DB.prepare('UPDATE store_codes SET apps = ?, dls = dls + 1 WHERE id = ?').bind(JSON.stringify(apps.slice(0, 30)), cr.id).run().catch(() => {}) : null,
     log(env, 'edit', `Store: download · ${app} su ${device || 'dispositivo'}${country ? ' · ' + country : ''}${cr ? ' · ' + codeOf(cr) : ''}`, ip),
+    (async () => { // senza codice: il venditore è quello che ha attivato questo store (se c'è)
+      let seller = cr ? +cr.by_id || 0 : 0;
+      if (!cr) { try { const sd = await env.DB.prepare('SELECT seller FROM store_devices WHERE did = ?').bind(did).first(); seller = +(sd && sd.seller) || 0; } catch {} }
+      await hookDownload(env, { app, did, device, country, seller, code: cr ? codeOf(cr) : '' }, new URL(req.url).origin, ip);
+    })(),
     env.DB.prepare('DELETE FROM store_requests WHERE created < ?').bind(t - KEEP).run().catch(() => {}),
   ]));
   return json({ ok: true, codes: S.codes.on });
@@ -528,6 +538,7 @@ async function create(req, env, ctx, url, ip) {
     .bind(id, app, appUrl, did, device, ip, country, token, t, t).run();
   ctx.waitUntil(Promise.all([
     seenOpen(env, did, device, country, ''),
+    hookDownload(env, { app, did, device, country, seller: 0, code: '' }, url.origin, ip), // store vecchi
     env.DB.prepare('DELETE FROM store_requests WHERE created < ?').bind(t - KEEP).run().catch(() => {}),
   ]));
   return json({ id, status: 'approved', token, auto: true, open: true });

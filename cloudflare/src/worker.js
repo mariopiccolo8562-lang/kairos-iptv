@@ -19,7 +19,7 @@ import { extRoutes, extGlance } from './extpanels.js'; // Pannelli Realott e SLT
 import { blkRoutes, relayPublic } from './relay.js';
 import { orbixFetch, orbixOutageMessage, oxpRoutes } from './orbixpanel.js'; // playlist OrbixPlay gestite da KAIROS (sezione «Pannello OrbixPlay»)
 import { mxpRoutes } from './mxpanel.js'; // account MaxPlayer gestiti da KAIROS (sezione «Pannello MaxPlayer»)
-import { tgHook, notifyNew, notifyDecided, notifyActivated, notifyAdmin, notifyOwnersText } from './notify.js'; // avvisi su Telegram e notifiche del pannello
+import { tgHook, notifyNew, notifyDecided, notifyActivated, notifyDownload, notifyAdmin, notifyOwnersText } from './notify.js'; // avvisi su Telegram e notifiche del pannello
 
 const SESSION_TTL = 30 * 86400; // secondi: l'accesso resta valido 30 giorni dall'ultimo uso (si rinnova da solo)
 const ORCP_KEEPALIVE_CRON = '41 */6 * * *';
@@ -6670,6 +6670,7 @@ storeHooks({
   created: (env, r, origin, ip) => notifyNew(env, r, origin, ip, notifyH(env)),
   decided: (env, r, st, via, who) => notifyDecided(env, r, st, via, who),
   activated: (env, d, origin, ip) => notifyActivated(env, d, ip, notifyH(env)),
+  downloaded: (env, d, origin, ip) => notifyDownload(env, d, origin, ip, notifyH(env)),
 });
 /** elenco degli agenti per la scheda SMS del pannello del titolare */
 async function storeSmsAgentList(env) {
@@ -7538,7 +7539,13 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     const rows = fam.filter((d) => !d.parent && !(s.codeOnly && !+d.active && !d.playlists && !d.name && !d.notes && !d.expires)).sort((a, b) => (+b.created_at || 0) - (+a.created_at || 0)).slice(0, 5000), kept = new Set(rows.map((d) => d.id));
     const kids = fam.filter((d) => d.parent && kept.has(d.parent));
     dvOrb = agOrbList(await sP, P.orbDns).map((x) => hostKey(x.host));
-    const devices = withPresence((await Promise.all([...rows, ...kids].map((d) => deviceOut(env, d)))).map(dview), await pmP); // in parallelo
+    // «Da attivare» dell'agente (13 novembre 2026): le TV nuove scaricate con il codice dello Store suo (o di un suo sotto-agente)
+    // le vede anche lui, non solo il titolare; le attiva o le collega come le altre (diventano sue al primo salvataggio)
+    let recPend = [];
+    try { recPend = (await Promise.all(chunks(ctree, 45).map((part) => env.DB.prepare(`SELECT * FROM devices WHERE ${FREE_DEV} AND rec_t > 0 AND rec_by IN (${part.map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT 100`).bind(...part).all()))).flatMap((r) => r.results || []); } catch {}
+    const devices = withPresence((await Promise.all([...rows, ...kids, ...recPend].map((d) => deviceOut(env, d)))).map(dview), await pmP); // in parallelo
+    const recBy = new Map(recPend.map((d) => [d.id, d]));
+    for (const x of devices) { const r = recBy.get(x.id); if (r) { x.status = 'pending'; x.dl = { by: +r.rec_by === A.id ? '' : r.rec_name || 'agente', mine: +r.rec_by === A.id }; } }
     const byId = new Map(devices.map((x) => [x.id, x]));
     for (const x of devices) if (x.parent) { const p = byId.get(x.parent); x.status = p ? p.status : 'pending'; }
     const [meArr, sAll, agList, actR, msgR, inbox, kHid] = await Promise.all([meP, snP, agP, actP, msgP, inboxP, hidP]);
@@ -7622,6 +7629,15 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
   if (dm) {
     const d = await own(dm[1]);
     if (!d) {
+      // «Attiva» su una TV da attivare scaricata con il suo codice: si attiva come «Nuovo cliente» con il codice della TV
+      if (!dm[2] && m === 'PUT') {
+        const t = await env.DB.prepare(`SELECT code, rec_by FROM devices WHERE id = ? AND ${FREE_DEV} AND rec_t > 0`).bind(dm[1]).first();
+        if (t && ctree.includes(+t.rec_by)) {
+          const b = await readJSON(req, 65536);
+          const hh = new Headers(req.headers); hh.delete('Content-Length'); hh.set('Content-Type', 'application/json');
+          return agentRoutes(new Request(url.origin + '/api/admin/devices', { method: 'POST', headers: hh, body: JSON.stringify({ ...b, code: t.code }) }), env, url, '/devices', ses, ip, ctx);
+        }
+      }
       // collegare una TV nuova (codice libero) a un proprio cliente
       if (dm[2] === '/link' && m === 'POST') {
         need('link', 'Non puoi gestire i collegamenti dei dispositivi');

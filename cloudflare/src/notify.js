@@ -317,6 +317,41 @@ export async function notifyActivated(env, d, ip, h) {
   for (const chat of chats) { try { await tg(env, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true }); n++; } catch (e) { await log(env, 'off', 'Telegram: avviso di attivazione non inviato (' + str(e.message, 120) + ')', ip); } }
   return n;
 }
+/** download partito dallo Store (lo store è aperto: niente da autorizzare, solo l'avviso). Stesse regole di chi riceve:
+ *  con il codice di un agente lo avvisa lui (se ha il consenso) e il titolare solo se lo chiede; senza codice il titolare. */
+export async function notifyDownload(env, d, origin, ip, h) {
+  const t = now(), key = 'dl_note:' + str(d.did, 64) + ':' + str(d.app, 80).slice(0, 40);
+  // doppio avviso (store che manda due chiamate per lo stesso download): uno solo ogni 2 minuti
+  const g = await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v WHERE CAST(settings.v AS INTEGER) < ?').bind(key, String(t), t - 120e3).run().catch(() => null);
+  if (g && g.meta && g.meta.changes === 0) return 0;
+  const r = { app: d.app, seller: +d.seller || 0 };
+  const info = { t, app: str(d.app, 80), device: str(d.device, 80), country: str(d.country, 40), code: str(d.code, 80) };
+  let n = 0;
+  // notifiche del pannello: la notifica arriva vuota, il testo lo legge il service worker da /notify/peek
+  try {
+    const who = await recipients(env, d.app, 'push', h, r);
+    if (who.length) {
+      for (const w of who) await env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('push_dl:' + w.id, JSON.stringify(info)).run();
+      const rows = ((await env.DB.prepare(`SELECT id, endpoint FROM push_subs WHERE admin_id IN (${who.map(() => '?').join(',')})`).bind(...who.map((w) => w.id)).all()).results) || [];
+      n += (await Promise.all(rows.map((row) => pushOne(env, row, origin)))).filter(Boolean).length;
+    }
+  } catch {}
+  // Telegram
+  try {
+    if (tgReady(env)) {
+      const who = await recipients(env, d.app, 'tg', h, r);
+      if (who.length) {
+        const rows = ((await env.DB.prepare(`SELECT tg_chat FROM notify_links WHERE tg_chat <> '' AND admin_id IN (${who.map(() => '?').join(',')})`).bind(...who.map((w) => w.id)).all()).results) || [];
+        const text = `📥 <b>Download dallo Store</b>\n<b>${htmlEsc(info.app)}</b> su ${htmlEsc(info.device || 'dispositivo')}${info.country ? ' · ' + htmlEsc(info.country) : ''}${info.code ? '\n' + htmlEsc(info.code) : ''}`;
+        for (const chat of new Set(rows.map((x) => x.tg_chat))) {
+          try { await tg(env, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true }); n++; }
+          catch (e) { if (e.code === 403) await env.DB.prepare("UPDATE notify_links SET tg_chat = '', tg_name = '' WHERE tg_chat = ?").bind(chat).run(); }
+        }
+      }
+    }
+  } catch {}
+  return n;
+}
 export async function notifyDecided(env, r, st, via, who) {
   const w = [who, VIA_TXT[via] || ''].filter(Boolean).join(' ');
   await tgDecided(env, r, st, w ? w + ' · ' + fmtTime(now()).split(', ').pop() : '').catch(() => {});
@@ -395,7 +430,7 @@ export async function notifyAdmin(req, env, path, me, ip, origin, h) {
     if (path === '/notify/tg/test' && m === 'POST') {
       const link = await env.DB.prepare('SELECT tg_chat FROM notify_links WHERE admin_id = ?').bind(me.id).first();
       if (!link || !link.tg_chat) throw new NErr(400, 'Prima collega Telegram');
-      try { await tg(env, 'sendMessage', { chat_id: link.tg_chat, text: '🔔 <b>Prova riuscita</b>\nQui arriveranno le richieste di download dello store.', parse_mode: 'HTML' }); }
+      try { await tg(env, 'sendMessage', { chat_id: link.tg_chat, text: '🔔 <b>Prova riuscita</b>\nQui arriveranno gli avvisi dei download dallo Store.', parse_mode: 'HTML' }); }
       catch (e) { throw new NErr(502, 'Messaggio non inviato: ' + e.message); }
       return json({ ok: true });
     }
@@ -432,6 +467,10 @@ export async function notifyAdmin(req, env, path, me, ip, origin, h) {
     if (path === '/notify/peek' && m === 'GET') {
       const t = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('push_test:' + me.id).first();
       if (t && now() - +t.v < 120e3) { await env.DB.prepare('DELETE FROM settings WHERE k = ?').bind('push_test:' + me.id).run(); return json({ test: true }); }
+      // ultimo download da avvisare (vale 10 minuti)
+      const dl = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('push_dl:' + me.id).first();
+      let d = null; try { d = dl && JSON.parse(dl.v); } catch {}
+      if (d && now() - +d.t < 600e3) return json({ test: false, dl: { app: d.app, device: d.device, country: d.country, code: d.code, t: d.t } });
       return json({ test: false });
     }
     return json({ error: 'Endpoint sconosciuto' }, 404);
