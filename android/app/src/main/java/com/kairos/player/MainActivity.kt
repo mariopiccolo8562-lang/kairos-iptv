@@ -1256,6 +1256,8 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface fun dnsStart() { runOnUiThread { if (!isFinishing && !isDestroyed) DnsShield.start(this@MainActivity) } }
         @JavascriptInterface fun dnsStop() { DnsShield.stop(applicationContext) }
         @JavascriptInterface fun dnsState(): String = DnsShield.state
+        /** il cliente tocca il lucchetto «DNS» dopo un rifiuto o un errore: si può chiedere di nuovo subito (dalla 2.7.9) */
+        @JavascriptInterface fun dnsRetry() { DnsShield.retry() }
 
         /** scarica un indirizzo in un file locale; risposta in window.kxFileCb(id, status, path, error) */
         @JavascriptInterface fun httpFile(id: String, url: String, ua: String) { fetchToFile(id, url, ua) }

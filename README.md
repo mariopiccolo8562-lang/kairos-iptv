@@ -1289,3 +1289,15 @@ Prove: `srv_vpn_state` (stato per ogni modo e per ogni app).
 - **Controllo remoto**, gruppo «KAIROS Ultimate»: voce `u.heroTrailer` «Anteprima del trailer nella Home» (Automatica / Spenta). L'anteprima parte solo sui dispositivi potenti (2 GB o più, Android 9+).
 
 Prove: `srv_get_abi` (scelta dell'APK), `store_page_abi` (link dello Store).
+
+## 79. DNS cifrato: perché non è attivo (elenco Clienti) e lucchetto nella Home di Kairos Pro (13 novembre 2026)
+
+- **Elenco Clienti.** Prima un dispositivo che non dichiarava niente risultava sempre «DNS cifrato spento». Ora dice il motivo:
+  - «DNS cifrato non acceso»: il pannello non lo ha acceso per quel cliente (né sul cliente né sul profilo dell'app);
+  - «DNS: app da aggiornare» (giallo): acceso dal pannello, ma l'app è più vecchia della prima versione che lo ha (Pro 2.7.6, TV 2.4.7, Premium 1.7.6, Lite 1.5.7, XC 3.4.6, Plus 0.1.29);
+  - «DNS: app da riaprire» (giallo): acceso dal pannello, app aggiornata, ma non l'ha ancora dichiarato: parte alla prossima apertura;
+  - «DNS cifrato spento»: resta solo per il dispositivo che dichiara «spento».
+- `/api/admin/state`: ogni dispositivo ha in più `sdnsWant` (il pannello lo vuole acceso: `sdnsWanted`, stessa regola di `rcEffective` per la voce `sdns`) e `ver` (versione dell'ultimo battito, ultimi 30 giorni).
+- **Kairos Pro.** Nella barra in alto, accanto allo scudo della VPN, c'è il lucchetto «DNS» quando il fornitore ha acceso il DNS cifrato: verde = attivo (o protetto dalla VPN del fornitore), giallo = non partito (permesso da confermare o negato, altra VPN, errore), grigio = in avvio. Al tocco dice lo stato; dopo un rifiuto o un errore riprova (`NATIVE.dnsRetry`, dall'app 2.7.9; con le app più vecchie riprova alla prossima apertura). È nell'interfaccia: arriva alle Pro dalla 2.7.6 senza un APK nuovo.
+
+Prove: `ui_list_rc_dns` (motivi nell'elenco), `pro_dns_badge` (lucchetto e tocco). In `ui_list_rc_dns` il controllo «a 1700 px la tabella entra senza scorrere» fallisce anche con il codice di prima: va guardato a parte.

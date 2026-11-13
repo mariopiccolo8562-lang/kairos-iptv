@@ -1227,6 +1227,11 @@ h5.fh{margin-top:16px}
 .ti.tvpn{color:var(--mut)}.ti.tvpn svg{width:22px;height:22px}
 .ti.tvpn.on{color:var(--ok)}.ti.tvpn.on svg{filter:drop-shadow(0 0 6px var(--ok))}
 .ti.tvpn.focused{color:#000}
+/* DNS cifrato in vista nella barra (13 novembre 2026): lucchetto «DNS» verde quando è attivo, giallo quando non parte */
+.ti.tdns{color:var(--mut)}.ti.tdns svg{width:22px;height:22px}
+.ti.tdns.on{color:var(--ok)}.ti.tdns.on svg{filter:drop-shadow(0 0 6px var(--ok))}
+.ti.tdns.warn{color:#f5b041}
+.ti.tdns.focused{color:#000}
 #dTrailer{flex:none!important;width:auto!important}#dTrailer.busy{opacity:.6}
 .ytm{background:rgba(0,0,0,.92)}.ytbox{width:min(1100px,92vw);display:flex;flex-direction:column;gap:12px}
 .ytbox iframe{width:100%;aspect-ratio:16/9;border:0;border-radius:14px;background:#000;box-shadow:0 20px 80px rgba(0,0,0,.7)}
@@ -2140,7 +2145,7 @@ let navSeq = 0;
 function navHTML(curKey) {
   return `<nav class="tnav">${LOGO_SVG('kgN' + ++navSeq)}<span class="tmeta"><span class="tdate"></span>${expChip()}</span>
     <div class="ttabs">${TABS.map(([k, l]) => `<div class="tt ${k === curKey ? 'cur' : ''}" data-f data-go="${k}">${l}</div>`).join('')}${plBtnHTML()}</div>
-    <div class="ticons">${['refresh', 'search', 'favs', 'settings'].map((k) => `<div class="ti ${k === curKey ? 'cur' : ''}${k === 'refresh' && S.refreshing ? ' spin' : ''}" data-f data-go="${k}" title="${{ refresh: 'Aggiorna contenuti', search: 'Cerca', favs: 'La mia lista', settings: 'Impostazioni' }[k]}">${NAV_IC[k]}</div>`).join('')}${!S.demo && perm('request') && baseServer() ? `<div class="ti" data-f data-go="request" title="Richiedi un contenuto">${NAV_IC.req}</div>` : ''}<div class="ti tbell${unseenMsgs().length ? ' new' : ''}" data-f data-go="messages" title="Messaggi del fornitore">${NAV_IC.bell}${unseenMsgs().length ? `<b class="nb">${unseenMsgs().length}</b>` : ''}</div>${vpnShieldHTML()}${S.prof && profList().length > 1 ? `<div class="ti tprof" data-f data-go="profiles" title="Cambia profilo">${avatarSVG(S.prof.avatar, S.prof.name)}</div>` : ''}</div></nav>`;
+    <div class="ticons">${['refresh', 'search', 'favs', 'settings'].map((k) => `<div class="ti ${k === curKey ? 'cur' : ''}${k === 'refresh' && S.refreshing ? ' spin' : ''}" data-f data-go="${k}" title="${{ refresh: 'Aggiorna contenuti', search: 'Cerca', favs: 'La mia lista', settings: 'Impostazioni' }[k]}">${NAV_IC[k]}</div>`).join('')}${!S.demo && perm('request') && baseServer() ? `<div class="ti" data-f data-go="request" title="Richiedi un contenuto">${NAV_IC.req}</div>` : ''}<div class="ti tbell${unseenMsgs().length ? ' new' : ''}" data-f data-go="messages" title="Messaggi del fornitore">${NAV_IC.bell}${unseenMsgs().length ? `<b class="nb">${unseenMsgs().length}</b>` : ''}</div>${dnsBadgeHTML()}${vpnShieldHTML()}${S.prof && profList().length > 1 ? `<div class="ti tprof" data-f data-go="profiles" title="Cambia profilo">${avatarSVG(S.prof.avatar, S.prof.name)}</div>` : ''}</div></nav>`;
 }
 /* barra in alto: se non ci sta (testi grandi, tante icone, schermo stretto) si stringe a gradini n1…n5 finché nessun elemento
    si sovrappone; l'ultimo gradino fa scorrere le schede. Sotto i 900 px la barra ha già il suo schema (schede scorrevoli). */
@@ -2348,6 +2353,7 @@ function go(where, fromNav) {
   if (where === 'profiles') { S.stack = ['home']; return showProfiles(() => go('home', true)); }
   if (where === 'messages') return messagesDialog();
   if (where === 'vpn') return vpnQuick();
+  if (where === 'dns') return dnsQuick();
   if (where === 'request') return requestDialog();
   if (where === 'plpick') return plPickDialog();
   if (fromNav) S.stack = where === 'home' ? [] : ['home'];
@@ -6657,6 +6663,7 @@ function dnsApply() {
   if (!dnsOk()) return;
   const want = rcGet('sdns') === 'on' && S.status === 'active' && !vpnWanted();
   try { if (want) NATIVE.dnsStart(); else NATIVE.dnsStop(); } catch {}
+  setTimeout(dnsBadgeSync, 900);
 }
 /** stato per il pannello: vuoto se la voce è spenta o l'app non lo sa fare; «vpn» se ci pensa la VPN del fornitore */
 function dnsBeat() {
@@ -6664,6 +6671,45 @@ function dnsBeat() {
   if (S.vpnState === 'on') return 'vpn';
   try { return String((NATIVE.dnsState && NATIVE.dnsState()) || 'off'); } catch { return ''; }
 }
+/* DNS cifrato in vista nella Home (13 novembre 2026): quando il fornitore l'ha acceso dal pannello, nella barra in alto c'è
+   il lucchetto «DNS». Verde = attivo (o protetto dalla VPN del fornitore); giallo = non è partito (permesso da confermare o
+   negato, un'altra VPN sul dispositivo, errore); grigio = in avvio. Al tocco dice lo stato e, se serve, riprova. */
+const DNS_IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V7.4a4 4 0 0 1 8 0V10"/><rect x="3.6" y="10" width="16.8" height="10.6" rx="2.6"/><text x="12" y="17.7" text-anchor="middle" font-size="6.1" font-weight="800" font-family="Arial,sans-serif" fill="currentColor" stroke="none">DNS</text></svg>';
+const DNS_TXT = { on: 'DNS cifrato attivo', vpn: 'DNS protetto dalla VPN del fornitore', asking: 'DNS cifrato: conferma la richiesta di Android per attivarlo', denied: 'DNS cifrato non attivo: permesso negato', error: 'DNS cifrato non attivo al momento', other: 'DNS cifrato non attivo: sul dispositivo c\'è un\'altra VPN accesa', off: 'DNS cifrato in avvio…' };
+const dnsCls = (s) => (s === 'on' || s === 'vpn' ? ' on' : s === 'off' ? '' : ' warn');
+function dnsBadgeHTML() {
+  const s = dnsBeat(); if (!s) return '';
+  return `<div class="ti tdns${dnsCls(s)}" data-f data-go="dns" data-st="${esc(s)}" title="${esc(DNS_TXT[s] || 'DNS cifrato')}">${DNS_IC}</div>`;
+}
+function dnsQuick() {
+  const s = dnsBeat(); if (!s) return;
+  if (s === 'on' || s === 'vpn') return toast('🔒 ' + DNS_TXT[s] + (s === 'on' ? ' · gestito dal fornitore' : ''));
+  if (s === 'denied' || s === 'error') {
+    // l'app nuova sa riprovare subito; le più vecchie riprovano alla prossima apertura
+    const can = !!(NATIVE && NATIVE.dnsRetry);
+    try { if (can) NATIVE.dnsRetry(); } catch {}
+    dnsApply();
+    return toast(can ? (s === 'denied' ? 'DNS cifrato: riprovo. Conferma la richiesta di Android' : 'DNS cifrato: riprovo ad attivarlo…') : DNS_TXT[s] + '. Chiudi e riapri l\'app per riprovare', 5000);
+  }
+  if (s === 'off') dnsApply();
+  toast(DNS_TXT[s] || 'DNS cifrato', 5000);
+}
+/** lo stato cambia da solo (permesso dato, servizio partito o caduto): il lucchetto si aggiorna senza rifare la barra;
+    se deve comparire o sparire la barra si rifà, tenendo il cursore dov'era */
+function dnsBadgeSync() {
+  try {
+    const sc = $('.screen.on'); if (!sc || !sc.querySelector('.navslot') || S.inPlayer) return;
+    const e = sc.querySelector('.tdns'), s = dnsBeat();
+    if (!!e !== !!s) {
+      const f = cur && cur.dataset && cur.dataset.go;
+      fillNav(sc.id === 'cat' ? 'cat' : sc.id);
+      const n = f && sc.querySelector(`.tnav [data-go="${f}"]`); if (n) focus(n, true);
+      return;
+    }
+    if (e && e.dataset.st !== s) { e.dataset.st = s; e.classList.toggle('on', s === 'on' || s === 'vpn'); e.classList.toggle('warn', dnsCls(s) === ' warn'); e.title = DNS_TXT[s] || 'DNS cifrato'; }
+  } catch {}
+}
+setInterval(() => { if (!document.hidden) dnsBadgeSync(); }, 5000);
 function vpnApply(byUser) {
   try { dnsApply(); } catch {}
   if (!vpnOk()) return;
