@@ -48,7 +48,9 @@
   window.renderDevices = renderDevices = function () {
     const all = D.devices;
     if (flt !== 'all') {
-      const keep = new Set(all.filter((d) => !d.parent && kindOf(d) === flt).map((d) => d.id));
+      // le richieste «Da attivare» si vedono sempre, qualunque app sia scelta: un'app appena aperta non deve sparire dietro
+      // il filtro (14 novembre: con il filtro rimasto su «Kairos Pro» al titolare sembrava che i codici non arrivassero più)
+      const keep = new Set(all.filter((d) => !d.parent && (kindOf(d) === flt || d.status === 'pending')).map((d) => d.id));
       D.devices = all.filter((d) => keep.has(d.id) || (d.parent && keep.has(d.parent)));
     }
     try { rd(); } finally { D.devices = all; }
