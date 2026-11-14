@@ -1841,7 +1841,7 @@ async function onlineRoute(req) {
    privati. Il token resta nel Worker: mai nelle risposte, nei log o nei messaggi d'errore. */
 const GH_OWNER = 'mariopiccolo8562-lang';
 /** versione di prova di KAIROS HEAVY data da /get/heavy.apk e dallo Store: a ogni nuova prova si cambia solo questo numero */
-const HEAVY_REL = 'kairos-ultimate/releases/download/heavy-prova-12/';
+const HEAVY_REL = 'kairos-ultimate/releases/download/heavy-prova-13/';
 const GET_APK = {
   store: ['kairos-store/releases/latest/download/KairosStore.apk', 'KairosStore.apk'],
   pro: ['kairos-store/releases/download/kairos-tv/kairos-tv.apk', 'kairos-pro.apk'],
