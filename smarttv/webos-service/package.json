@@ -1,0 +1,6 @@
+{
+  "name": "com.kairos.player.service",
+  "version": "0.3.0",
+  "description": "Kairos Player: downloads, on the TV, the playlist chosen by the user",
+  "main": "service.js"
+}

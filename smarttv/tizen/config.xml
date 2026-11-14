@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Kairos Player per TV Samsung. PACKAGE_ID (10 caratteri) lo genera Tizen Studio con il tuo certificato: va messo al posto di AAAAAAAAAA nelle due righe qui sotto. -->
-<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="http://kairos-player.app/tv" version="0.2.0" viewmodes="maximized">
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="http://kairos-player.app/tv" version="0.3.0" viewmodes="maximized">
     <tizen:application id="AAAAAAAAAA.KairosPlayer" package="AAAAAAAAAA" required_version="4.0"/>
     <content src="index.html"/>
     <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>

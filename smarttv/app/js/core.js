@@ -3,7 +3,7 @@
    Nessun codice scaricato da fuori, nessuna statistica, nessuna pubblicità. Scritto in ES5: gira anche sui TV meno recenti. */
 var KP = (function () {
   'use strict';
-  var KP = { version: '0.2.0' };
+  var KP = { version: '0.3.0' };
   /** «Dal telefono»: il TV mostra un codice e la lista si scrive su questa pagina (KP.PAIR + '/tv'). È l'unico indirizzo fisso dell'app e serve solo a questo passaggio */
   KP.PAIR = 'https://store-k.download';
 
@@ -22,6 +22,7 @@ var KP = (function () {
       save: 'Salva', saving: 'Controllo la lista…', loading: 'Caricamento…', empty: 'Qui non c\'è nulla', noList: 'Nessuna lista: aggiungine una',
       errNet: 'Non riesco a raggiungere il server. Controlla l\'indirizzo e la connessione.', errAuth: 'Utente o password non validi, oppure accesso scaduto.',
       errEmpty: 'La lista è vuota o non è una lista M3U valida.', errFields: 'Compila tutti i campi.', errPlay: 'Questo contenuto non si riesce ad aprire.',
+      errBig: 'La lista è troppo grande per questo TV.', chPrev: 'Canale prima', chNext: 'Canale dopo', close: 'Chiudi', pause: 'Pausa', resumePlay: 'Riprendi', back10: '10 s indietro', fwd10: '10 s avanti',
       use: 'Usa questa', refresh: 'Aggiorna', remove: 'Elimina', inUse: 'in uso', removed: 'Lista eliminata', refreshed: 'Lista aggiornata',
       askRemove: 'Eliminare la lista «%s»?', askExit: 'Uscire da Kairos Player?', exit: 'Esci',
       play: 'Guarda', resume: 'Riprendi', fromStart: 'Dall\'inizio', addFav: 'Aggiungi ai preferiti', delFav: 'Togli dai preferiti',
@@ -45,6 +46,7 @@ var KP = (function () {
       save: 'Save', saving: 'Checking the playlist…', loading: 'Loading…', empty: 'Nothing here', noList: 'No playlist yet: add one',
       errNet: 'Cannot reach the server. Check the address and your connection.', errAuth: 'Wrong username or password, or the account has expired.',
       errEmpty: 'The playlist is empty or is not a valid M3U file.', errFields: 'Fill in all the fields.', errPlay: 'This content cannot be played.',
+      errBig: 'The playlist is too large for this TV.', chPrev: 'Previous channel', chNext: 'Next channel', close: 'Close', pause: 'Pause', resumePlay: 'Play', back10: 'Back 10 s', fwd10: 'Forward 10 s',
       use: 'Use this one', refresh: 'Refresh', remove: 'Delete', inUse: 'in use', removed: 'Playlist deleted', refreshed: 'Playlist refreshed',
       askRemove: 'Delete the playlist "%s"?', askExit: 'Exit Kairos Player?', exit: 'Exit',
       play: 'Play', resume: 'Resume', fromStart: 'From the start', addFav: 'Add to favourites', delFav: 'Remove from favourites',
@@ -72,11 +74,14 @@ var KP = (function () {
 
   /* ---------- piattaforma ---------- */
   KP.tizen = typeof window.tizen !== 'undefined';
-  KP.webos = !KP.tizen && (typeof window.webOS !== 'undefined' || typeof window.PalmSystem !== 'undefined' || /web0s|webos/i.test(window.navigator.userAgent));
+  KP.webos = !KP.tizen && (typeof window.PalmSystem !== 'undefined' || /web0s|webos/i.test(window.navigator.userAgent));
+  /** uscita. Sui TV LG decide il sistema, come chiede LG: da webOS 6 la finestra «Uscire dall'app?», prima la Home del TV
+      (webOS.platformBack della libreria ufficiale webOSTV.js, che chiama PalmSystem.platformBack) */
   KP.exit = function () {
-    try { if (KP.tizen) { window.tizen.application.getCurrentApplication().exit(); return; } } catch (e) {}
-    try { if (window.webOS && window.webOS.platformBack) { window.webOS.platformBack(); return; } } catch (e2) {}
-    try { window.close(); } catch (e3) {}
+    try { if (KP.webos && window.webOS && window.webOS.platformBack) { window.webOS.platformBack(); return; } } catch (e) {}
+    try { if (KP.webos && window.PalmSystem && window.PalmSystem.platformBack) { window.PalmSystem.platformBack(); return; } } catch (e2) {}
+    try { if (KP.tizen) { window.tizen.application.getCurrentApplication().exit(); return; } } catch (e3) {}
+    try { window.close(); } catch (e4) {}
   };
   if (KP.tizen) {
     // tasti del telecomando che Tizen consegna solo se richiesti
@@ -120,7 +125,7 @@ var KP = (function () {
     cur = e;
     if (!KP.has(e, 'on')) e.className += ' on';
     reveal(e);
-    if (e.tagName === 'INPUT') { try { e.focus(); } catch (x2) {} }
+    // il campo di testo si evidenzia e basta: la tastiera virtuale del TV si apre solo con OK (linee guida LG)
     if (e._focus) e._focus();
   };
   KP.first = function (root) {
@@ -155,9 +160,10 @@ var KP = (function () {
     var k = KEY[ev.keyCode]; if (!k) return;
     var inInput = cur && cur.tagName === 'INPUT' && document.activeElement === cur;
     if (inInput && (k === 'left' || k === 'right')) return; // dentro il campo le frecce spostano il cursore
+    if (inInput && k === 'back') { ev.preventDefault(); try { cur.blur(); } catch (x0) {} return; } // INDIETRO chiude la scrittura
     if (KP.keys && !document.querySelector('.modal') && KP.keys(k)) { ev.preventDefault(); return; }
     if (k === 'left' || k === 'right' || k === 'up' || k === 'down') { ev.preventDefault(); move(k); return; }
-    if (k === 'ok') { if (inInput) { move('down'); ev.preventDefault(); return; } if (cur && cur._ok) { ev.preventDefault(); cur._ok(); } return; }
+    if (k === 'ok') { if (inInput) { try { cur.blur(); } catch (x1) {} move('down'); ev.preventDefault(); return; } if (cur && cur._ok) { ev.preventDefault(); cur._ok(); } return; }
     if (k === 'back') { ev.preventDefault(); var m = document.querySelectorAll('.modal'); if (m.length) { var top = m[m.length - 1]; if (top._close) top._close(); return; } if (KP.onBack) KP.onBack(); }
   }, false);
   // telecomando a puntatore (LG Magic Remote) e mouse

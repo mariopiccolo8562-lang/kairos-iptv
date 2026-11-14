@@ -8,6 +8,24 @@
   function avOk() { return KP.tizen && window.webapis && window.webapis.avplay; }
   function fmt(s) { s = Math.max(0, Math.floor(s)); var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return (h ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (x < 10 ? '0' : '') + x; }
 
+  /* pulsanti a schermo: con il telecomando a puntatore (LG Magic Remote non ha play, pausa e avanti veloce) */
+  function ctl(label, act, big) { var b = KP.el('div', 'obtn' + (big ? ' big' : ''), label); b.setAttribute('data-a', act); return b; }
+  function controls() {
+    var row = KP.el('div', 'octl');
+    if (P.live) { row.appendChild(ctl('▲  ' + KP.t('chPrev'), 'prev')); row.appendChild(ctl('▼  ' + KP.t('chNext'), 'next')); }
+    else { row.appendChild(ctl('◀◀  ' + KP.t('back10'), 'rw')); row.appendChild(ctl(P.paused ? '▶  ' + KP.t('resumePlay') : '❚❚  ' + KP.t('pause'), 'pp', true)); row.appendChild(ctl(KP.t('fwd10') + '  ▶▶', 'ff')); }
+    row.appendChild(ctl('✕  ' + KP.t('close'), 'close'));
+    return row;
+  }
+  function act(a) {
+    if (a === 'close') return KP.player.close();
+    if (a === 'pp') return pause(!P.paused);
+    if (a === 'rw') return seek(-10);
+    if (a === 'ff') return seek(10);
+    if (a === 'prev') return zap(-1);
+    if (a === 'next') return zap(1);
+  }
+  function hideLater() { window.clearTimeout(P.osdT); P.osdT = window.setTimeout(function () { if (!P.paused) osd.style.display = 'none'; }, 4500); }
   function showOsd(state, keep) {
     if (!osd) return;
     KP.clear(osd);
@@ -18,10 +36,11 @@
     osd.appendChild(top);
     if (state) osd.appendChild(KP.el('div', 'osd-state', state));
     if (!P.live) { var d = duration(), c = current(); if (d > 0) { var bar = KP.el('div', 'osd-bar'), fill = KP.el('div', 'osd-fill'); fill.style.width = Math.min(100, (c / d) * 100) + '%'; bar.appendChild(fill); osd.appendChild(bar); osd.appendChild(KP.el('div', 'osd-time', fmt(c) + ' / ' + fmt(d))); } }
+    osd.appendChild(controls());
     osd.appendChild(KP.el('div', 'osd-hint', KP.t(P.live ? 'hintLive' : 'hintVod')));
     osd.style.display = 'block';
     window.clearTimeout(P.osdT);
-    if (!keep) P.osdT = window.setTimeout(function () { if (!P.paused) osd.style.display = 'none'; }, 4500);
+    if (!keep) hideLater();
   }
   function current() { try { return P.av ? window.webapis.avplay.getCurrentTime() / 1000 : (video.currentTime || 0); } catch (e) { return 0; } }
   function duration() { try { var d = P.av ? window.webapis.avplay.getDuration() / 1000 : video.duration; return isFinite(d) ? d : 0; } catch (e) { return 0; } }
@@ -76,7 +95,7 @@
   function seek(delta) { if (P.live) return; var d = duration(), t = Math.max(0, current() + delta); if (d > 0) t = Math.min(d - 2, t); seekTo(t); showOsd(''); }
   function pause(on) {
     P.paused = on;
-    try { if (P.av) { if (on) window.webapis.avplay.pause(); else window.webapis.avplay.play(); } else if (on) video.pause(); else video.play(); } catch (e) {}
+    try { if (P.av) { if (on) window.webapis.avplay.pause(); else window.webapis.avplay.play(); } else if (on) video.pause(); else { var pr = video.play(); if (pr && pr['catch']) pr['catch'](function () {}); } } catch (e) {}
     showOsd(on ? '❚❚' : '', on);
   }
   function zap(step) {
@@ -89,9 +108,8 @@
     if (!P.open) return false;
     if (k === 'back' || k === 'stop') { KP.player.close(); return true; }
     if (k === 'ok') { if (P.live) showOsd(''); else pause(!P.paused); return true; }
-    if (k === 'playpause') { pause(!P.paused); return true; }
-    if (k === 'play') { pause(false); return true; }
-    if (k === 'pause') { pause(true); return true; }
+    // il tasto Play e il tasto Pausa fanno entrambi play e pausa, come chiede la lista di controllo LG
+    if (k === 'playpause' || k === 'play' || k === 'pause') { if (!P.live) pause(!P.paused); else showOsd(''); return true; }
     if (k === 'up' || k === 'chup') { if (P.live) zap(-1); else showOsd(''); return true; }
     if (k === 'down' || k === 'chdown') { if (P.live) zap(1); else showOsd(''); return true; }
     if (k === 'left' || k === 'rw') { if (P.live) showOsd(''); else seek(k === 'rw' ? -30 : -10); return true; }
@@ -106,6 +124,13 @@
       video = $('video'); osd = $('osd');
       if (!video._kp) {
         video._kp = true;
+        osd.addEventListener('click', function (ev) {
+          var b = ev.target; while (b && b !== osd && !KP.has(b, 'obtn')) b = b.parentNode;
+          if (b && b !== osd && P.open) { ev.stopPropagation(); act(b.getAttribute('data-a')); }
+        }, false);
+        // il puntatore che si muove mostra i comandi (e li tiene finché si muove)
+        document.addEventListener('mousemove', function () { if (!P.open) return; if (osd.style.display !== 'block') showOsd(''); else hideLater(); }, false);
+        document.addEventListener('click', function (ev) { if (P.open && !KP.up(ev.target, 'obtn') && osd.style.display !== 'block') showOsd(''); }, false);
         video.addEventListener('playing', function () { if (P.open && !P.av) started(); }, false);
         video.addEventListener('waiting', function () { if (P.open && !P.av) showOsd(KP.t('buffering'), true); }, false);
         video.addEventListener('error', function () { if (P.open && !P.av) fail(); }, false);

@@ -3,7 +3,47 @@
 (function (KP) {
   'use strict';
 
+  /* ---------- TV LG: le app web di webOS seguono le regole CORS, quindi la lista la scarica il servizio interno
+     dell'app (JS service «com.kairos.player.service», sul TV stesso) e la passa a pezzi. Altrove: richiesta diretta ---------- */
+  var SVC = 'luna://com.kairos.player.service/';
+  function svcReady() { return KP.webos && typeof window.PalmServiceBridge !== 'undefined' && !!(window.webOS && window.webOS.service && window.webOS.service.request); }
+  function svc(method, params, cb) {
+    var done = false;
+    function once(e, r) { if (done) return; done = true; cb(e, r); }
+    try {
+      window.webOS.service.request(SVC, {
+        method: method, parameters: params,
+        onSuccess: function (r) { once(null, r || {}); },
+        onFailure: function (e) { once(e || { errorText: 'svc' }); }
+      });
+    } catch (x) { once({ errorText: 'svc' }); }
+  }
+  function viaService(url, cb, timeout) {
+    svc('get', { url: url, timeout: timeout || 45000 }, function (err, r) {
+      if (err) { var w = String(err.errorText || ''); return cb(w === 'big' ? 'big' : w === 'net' || w === 'url' ? 'net' : 'svc'); }
+      var st = +r.status || 0;
+      if (st >= 400) return cb(st === 401 || st === 403 ? 'auth' : 'net');
+      if (!r.id) return cb(null, String(r.text || ''));
+      var out = [], from = 0;
+      (function next() {
+        svc('part', { id: r.id, from: from, size: 131072 }, function (e2, p) {
+          if (e2) return cb('net');
+          var piece = String(p.text || '');
+          out.push(piece);
+          from = typeof p.next === 'number' ? p.next : from + piece.length;
+          if (p.end) return cb(null, out.join(''));
+          if (!piece) { svc('drop', { id: r.id }, function () {}); return cb('net'); }
+          next();
+        });
+      })();
+    });
+  }
   KP.get = function (url, cb, timeout) {
+    // servizio non installato o non raggiungibile (prova nel browser): si tenta la richiesta diretta
+    if (svcReady()) return viaService(url, function (err, txt) { if (err === 'svc') xhrGet(url, cb, timeout); else cb(err, txt); }, timeout);
+    xhrGet(url, cb, timeout);
+  };
+  function xhrGet(url, cb, timeout) {
     var x = new XMLHttpRequest(), done = false;
     function end(err, txt) { if (done) return; done = true; cb(err, txt); }
     try {
@@ -14,7 +54,7 @@
       x.ontimeout = function () { end('net'); };
       x.send();
     } catch (e) { end('net'); }
-  };
+  }
   KP.post = function (url, obj, cb) {
     var x = new XMLHttpRequest(), done = false;
     function end(err, j) { if (done) return; done = true; cb(err, j); }
@@ -46,9 +86,29 @@
   };
 
   /* ---------- liste salvate ---------- */
-  KP.lists = KP.load('lists', []);
+  /* liste salvate sul TV non in chiaro: offuscate con una chiave casuale di questo TV (lo chiede la lista di controllo LG
+     per i dati di accesso; non è una cifratura forte, ma utente e password non restano leggibili così come sono) */
+  function maskKey() {
+    var k = KP.load('k', ''), i, a;
+    if (typeof k === 'string' && k.length === 32) return k;
+    k = '';
+    a = null;
+    try { a = new Uint8Array(32); window.crypto.getRandomValues(a); } catch (e) { a = null; }
+    for (i = 0; i < 32; i++) k += String.fromCharCode(a ? a[i] : Math.floor(Math.random() * 256));
+    KP.save('k', k);
+    return k;
+  }
+  function xor(s, k) { var o = '', i; for (i = 0; i < s.length; i++) o += String.fromCharCode(s.charCodeAt(i) ^ k.charCodeAt(i % k.length)); return o; }
+  function veil(v) { try { return 'x1:' + window.btoa(xor(unescape(encodeURIComponent(JSON.stringify(v))), maskKey())); } catch (e) { return null; } }
+  function unveil(s) {
+    if (Object.prototype.toString.call(s) === '[object Array]') return s; // formato della 0.1 e 0.2: si riscrive al primo salvataggio
+    if (typeof s !== 'string' || s.indexOf('x1:') !== 0) return [];
+    try { var v = JSON.parse(decodeURIComponent(escape(xor(window.atob(s.slice(3)), maskKey())))); return Object.prototype.toString.call(v) === '[object Array]' ? v : []; } catch (e) { return []; }
+  }
+  KP.lists = unveil(KP.load('lists', []));
   KP.activeId = KP.load('active', '');
-  KP.saveLists = function () { KP.save('lists', KP.lists); KP.save('active', KP.activeId); };
+  KP.saveLists = function () { var v = veil(KP.lists); KP.save('lists', v === null ? KP.lists : v); KP.save('active', KP.activeId); };
+  if (Object.prototype.toString.call(KP.load('lists', null)) === '[object Array]' && KP.lists.length) KP.saveLists();
   KP.active = function () { for (var i = 0; i < KP.lists.length; i++) if (KP.lists[i].id === KP.activeId) return KP.lists[i]; return KP.lists[0] || null; };
   KP.newId = function () { return 'l' + new Date().getTime().toString(36) + Math.floor(Math.random() * 1e6).toString(36); };
 

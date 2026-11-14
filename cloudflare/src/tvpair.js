@@ -38,6 +38,9 @@ export function tvHeaders(h, page) {
 export async function tvPair(req, env, ctx, url, ip, H) {
   const { json, limited, seal, unseal, now, rand, b64url, sha256 } = H, path = url.pathname, m = req.method;
   if (path === '/tv' || path === '/tv/') return new Response(PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  // lista di prova per i revisori degli store: solo film liberi della Blender Foundation (CC BY 3.0), dai loro server
+  if (path === '/tv/demo.m3u' && (m === 'GET' || m === 'HEAD')) return new Response(m === 'HEAD' ? null : DEMO, { headers: { 'Content-Type': 'audio/x-mpegurl; charset=utf-8' } });
+  if (path.startsWith('/tv/')) return new Response('Non trovato', { status: 404 });
   if (m === 'OPTIONS') return new Response(null, { status: 204 });
   if (m !== 'POST') return json({ error: 'Metodo non valido' }, 405);
   await ensure(env);
@@ -87,6 +90,24 @@ export async function tvPair(req, env, ctx, url, ip, H) {
   }
   return json({ error: 'Non trovato' }, 404);
 }
+
+/* lista di prova (link M3U) per chi deve provare l'app: film della Blender Foundation con licenza Creative Commons
+   Attribuzione 3.0, letti dai server della Blender Foundation (download.blender.org) e dai flussi di prova di Mux
+   (test-streams.mux.dev, gli stessi film in HLS). I titoli non contengono virgole: nel formato M3U il nome è dopo l'ultima */
+const DEMO = [
+  '#EXTM3U',
+  '#EXTINF:-1 group-title="Demo HLS",Big Buck Bunny (HLS) · Blender Foundation · CC BY 3.0',
+  'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+  '#EXTINF:-1 group-title="Demo HLS",Tears of Steel (HLS) · Blender Foundation · CC BY 3.0',
+  'https://test-streams.mux.dev/tos_ismc/main.m3u8',
+  '#EXTINF:-1 group-title="Film demo",Tears of Steel · Blender Foundation · CC BY 3.0',
+  'https://download.blender.org/demo/movies/ToS/tears_of_steel_720p.mov',
+  '#EXTINF:-1 group-title="Film demo",Sintel (trailer) · Blender Foundation · CC BY 3.0',
+  'https://download.blender.org/durian/trailer/sintel_trailer-1080p.mp4',
+  '#EXTINF:-1 group-title="Film demo",Big Buck Bunny (trailer) · Blender Foundation · CC BY 3.0',
+  'https://download.blender.org/peach/trailer/trailer_480p.mov',
+  ''
+].join('\n');
 
 /* pagina per chi scrive la lista (dal telefono o dal computer). Nessun contenuto, nessun elenco di fornitori. */
 const PAGE = `<!DOCTYPE html>

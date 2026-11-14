@@ -1,14 +1,16 @@
 {
   "id": "com.kairos.player",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "vendor": "Kairos",
   "type": "web",
   "main": "index.html",
   "title": "Kairos Player",
+  "appDescription": "Media player for your own playlists",
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
-  "bgColor": "#0b0f1a",
+  "splashBackground": "splash.png",
   "iconColor": "#0b0f1a",
   "resolution": "1920x1080",
-  "disableBackHistoryAPI": true
+  "disableBackHistoryAPI": true,
+  "requiredACG": ["activity.operation"]
 }

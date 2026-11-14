@@ -9,6 +9,9 @@
   function back() {
     if (stack.length > 1) { stack.pop(); render(); return; }
     if (stack[0] && stack[0].name === 'setup' && KP.lists.length) { replace('home'); return; }
+    // prima schermata: sui TV LG decide il sistema (finestra «Uscire?» da webOS 6, prima la Home del TV), come chiede LG;
+    // sugli altri TV si chiede conferma
+    if (KP.webos) { KP.exit(); return; }
     KP.confirm(t('askExit'), t('exit'), KP.exit);
   }
   KP.onBack = back;
@@ -40,7 +43,9 @@
   }
   function btn(label, fn, cls) { var b = el('div', 'btn f' + (cls ? ' ' + cls : ''), label); b._ok = fn; return b; }
   function msg(scr, text) { var m = el('div', 'msg', text); scr.appendChild(m); return m; }
-  function errText(e) { return e === 'auth' ? t('errAuth') : e === 'empty' ? t('errEmpty') : e === 'nolist' ? t('noList') : t('errNet'); }
+  /** «Caricamento…» con l'indicatore che gira (LG chiede un segno visibile mentre si carica) */
+  function loading(text) { var m = el('div', 'msg busy'); m.appendChild(el('span', 'spin')); m.appendChild(document.createTextNode(text || t('loading'))); return m; }
+  function errText(e) { return e === 'auth' ? t('errAuth') : e === 'empty' ? t('errEmpty') : e === 'nolist' ? t('noList') : e === 'big' ? t('errBig') : t('errNet'); }
   function img(src, cls) {
     var i = el('img', cls); i.alt = '';
     i.onerror = function () { i.style.visibility = 'hidden'; };
@@ -60,6 +65,7 @@
     w.appendChild(el('span', '', label));
     i.type = secret ? 'password' : 'text'; i.placeholder = hint || ''; i.value = value || '';
     i.setAttribute('autocomplete', 'off'); i.setAttribute('autocapitalize', 'off'); i.setAttribute('spellcheck', 'false');
+    i._ok = function () { try { i.focus(); } catch (x) {} }; // OK sul campo: si apre la tastiera del TV
     w.appendChild(i); w._in = i;
     return w;
   }
@@ -82,15 +88,17 @@
     var hello = null;
     if (first) { box.appendChild(el('h1', '', t('welcome'))); hello = el('p', 'lead', t('welcomeTxt')); box.appendChild(hello); }
     var seg = el('div', 'seg'), fields = el('div', 'fields'), status = el('div', 'status', ''), F = {}, row = el('div', 'mrow'), pair = null, pollT = 0, gone = false;
+    /** riga di stato; busy = con l'indicatore che gira */
+    function say(text, busy) { KP.clear(status); if (busy) status.appendChild(el('span', 'spin')); status.appendChild(document.createTextNode(text || '')); }
     function stopPair() { window.clearInterval(pollT); pollT = 0; pair = null; }
     onLeave = function () { gone = true; stopPair(); };
     /* «Dal telefono»: il TV chiede un codice, lo mostra con l'indirizzo della pagina, poi aspetta che la lista arrivi */
     function phone() {
-      stopPair(); status.textContent = t('loading');
+      stopPair(); say(t('loading'), true);
       KP.post(KP.PAIR + '/api/tv/pair', {}, function (err, j) {
         if (gone || type !== 'phone') return;
-        if (err || !j || !j.code) { status.textContent = t('phoneErr'); return; }
-        pair = j; status.textContent = t('phoneWait');
+        if (err || !j || !j.code) { say(t('phoneErr')); return; }
+        pair = j; say(t('phoneWait'), true);
         var page = KP.PAIR.replace(/^https?:\/\//i, '') + '/tv', code = String(j.code), box = el('div', 'phone'), left = el('div', 'phl');
         left.appendChild(el('div', 'phk', '1 · ' + t('phoneOpen'))); left.appendChild(el('div', 'phv', page));
         left.appendChild(el('div', 'phk', '2 · ' + t('phoneCode'))); left.appendChild(el('div', 'phcode', code.slice(0, 3) + ' ' + code.slice(3)));
@@ -101,9 +109,9 @@
           if (!pair) return;
           KP.post(KP.PAIR + '/api/tv/poll', { code: pair.code, secret: pair.secret }, function (e2, r) {
             if (gone || !pair || e2 || !r) return;
-            if (r.status === 'gone') { stopPair(); status.textContent = t('phoneOld'); return; }
+            if (r.status === 'gone') { stopPair(); say(t('phoneOld')); return; }
             if (r.status !== 'ready' || !r.list) return;
-            stopPair(); status.textContent = t('phoneGot');
+            stopPair(); say(t('phoneGot'), true);
             var l = r.list, pl = { id: KP.newId(), name: String(l.name || ''), type: l.type === 'xtream' ? 'xtream' : 'm3u' };
             if (pl.type === 'xtream') { pl.host = KP.cleanHost(l.host); pl.user = String(l.user || ''); pl.pass = String(l.pass || ''); }
             else { var xt2 = KP.xtreamFromUrl(String(l.url || '')); if (xt2) { pl.type = 'xtream'; pl.host = xt2.host; pl.user = xt2.user; pl.pass = xt2.pass; } else pl.url = String(l.url || ''); }
@@ -113,7 +121,7 @@
       });
     }
     function draw() {
-      KP.clear(seg); KP.clear(fields); KP.clear(row); stopPair(); status.textContent = '';
+      KP.clear(seg); KP.clear(fields); KP.clear(row); stopPair(); say('');
       if (hello) hello.style.display = type === 'phone' ? 'none' : ''; // con codice e QR lo spazio serve tutto
       function tb(k, label) { var b0 = btn(label, function () { type = k; arg.type = k; draw(); var l = seg.childNodes, i; for (i = 0; i < l.length; i++) if (l[i]._key === 't:' + k) KP.focus(l[i]); }, type === k ? 'sel' : ''); b0._key = 't:' + k; return b0; }
       seg.appendChild(tb('m3u', t('typeM3u'))); seg.appendChild(tb('xtream', t('typeXt'))); seg.appendChild(tb('phone', t('typePhone')));
@@ -137,11 +145,11 @@
     /** controlla la lista e, se va, la salva e la mette in uso */
     function commit(pl) {
       if (!pl.name) pl.name = (pl.host || pl.url || '').replace(/^https?:\/\//i, '').split('/')[0].split(':')[0];
-      busy = true; if (type !== 'phone') status.textContent = t('saving');
+      busy = true; if (type !== 'phone') say(t('saving'), true);
       KP.check(pl, function (err) {
         busy = false;
         if (gone) return;
-        if (err) { status.textContent = errText(err); return; }
+        if (err) { say(errText(err)); return; }
         if (pl.type === 'xtream') KP.resetDb();
         KP.lists.push(pl); KP.activeId = pl.id; KP.saveLists();
         replace('home');
@@ -187,7 +195,7 @@
   SCREENS.section = function (scr, arg, entry) {
     var kind = arg.kind;
     header(scr, t(kind));
-    var wait = msg(scr, t('loading'));
+    var wait = loading(); scr.appendChild(wait);
     KP.need(kind, function (err) {
       if (stack[stack.length - 1] !== entry) return; // nel frattempo si è cambiata schermata
       scr.removeChild(wait);
@@ -249,7 +257,7 @@
     function favBtn() { var b = btn(t(KP.isFav(it) ? 'delFav' : 'addFav'), function () { KP.toggleFav(it); entry.fk = 'fav'; render(); }); b._key = 'fav'; return b; }
     if (it.kind === 'series') {
       acts.appendChild(favBtn());
-      var eps = el('div', 'eps'); right.appendChild(eps); eps.appendChild(el('div', 'msg', t('loading')));
+      var eps = el('div', 'eps'); right.appendChild(eps); eps.appendChild(loading());
       KP.seriesInfo(it, function (err, seasons) {
         if (stack[stack.length - 1] !== entry) return;
         KP.clear(eps); plot.textContent = it.plot || '';
@@ -310,7 +318,7 @@
     function run() {
       var q = f._in.value.toLowerCase().replace(/^\s+|\s+$/g, ''); arg.q = f._in.value;
       KP.clear(res);
-      if (!ready) { res.appendChild(el('div', 'msg', t('loading'))); return; }
+      if (!ready) { res.appendChild(loading()); return; }
       if (q.length < 2) { res.appendChild(el('div', 'msg', t('searchHint'))); return; }
       var kinds = ['live', 'vod', 'series'], out = [], k, i;
       for (k = 0; k < kinds.length && out.length < 90; k++) { var all = KP.items(kinds[k], '*'); for (i = 0; i < all.length && out.length < 90; i++) if (all[i].name.toLowerCase().indexOf(q) >= 0) out.push(all[i]); }

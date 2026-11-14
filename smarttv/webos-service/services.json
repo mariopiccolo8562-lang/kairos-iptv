@@ -1,0 +1,10 @@
+{
+  "id": "com.kairos.player.service",
+  "description": "Kairos Player: downloads, on the TV, the playlist chosen by the user",
+  "services": [
+    {
+      "name": "com.kairos.player.service",
+      "description": "Downloads the playlist (M3U file, Xtream server replies, programme guide) entered by the user and passes it to the app in parts"
+    }
+  ]
+}
