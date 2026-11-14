@@ -324,6 +324,11 @@ export async function storeApi(req, env, ctx, url, ip, opts = {}) {
   const p = url.pathname.slice('/api/store'.length), m = req.method;
   try {
     if (m === 'OPTIONS') return new Response(null, { status: 204 });
+    // riquadro «Info» dello Store (14 novembre 2026): comunicazioni del titolare e guida «quale app su quale dispositivo»
+    if (p === '/info' && m === 'GET') {
+      if (await limited(env.RL_DEVICE, 'sinf:' + ip)) return json({ error: 'Troppe richieste' }, 429);
+      return json(opts.info ? await opts.info() : { news: '', newsAt: 0, apps: '' });
+    }
     if (p === '/config' && m === 'GET') {
       if (await limited(env.RL_DEVICE, 'scfg:' + ip)) return json({ error: 'Troppe richieste' }, 429);
       const S = await getStoreSettings(env);

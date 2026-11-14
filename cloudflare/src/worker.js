@@ -2593,6 +2593,60 @@ function guideForAgent(s, agentId) {
   const g = guideNorm(s.guide); if (g.share === 'all' || (g.share === 'some' && g.agents.includes(String(agentId)))) return { title: g.title, text: g.text, noticeAt: g.noticeAt };
   return null;
 }
+/* ---------------- «Info»: comunicazioni del titolare e guida «quale app su quale dispositivo» (14 novembre 2026) ----------------
+   Il titolare le scrive nella pagina «Info» del pannello; gli agenti le leggono lì; lo Store le mostra nel riquadro «Info»
+   (GET /api/store/info, pubblico: solo le parti con «Mostra anche nello Store» accesa). Stanno in una riga a parte della
+   tabella settings (k = 'info'), non dentro le impostazioni: sono testi lunghi e non servono alle app. */
+const INFO_APPS_DEF = `# Prima di installare: guarda quanta memoria (RAM) ha il dispositivo
+- Apri il **Kairos Store** sul dispositivo del cliente e premi **«App consigliata per questo dispositivo»**: lo Store legge la memoria e ti dice l'app giusta.
+- Nello stesso riquadro c'è la scheda del dispositivo: lì leggi quanta RAM ha.
+- L'abbonamento e le liste sono gli stessi in tutte le app: cambiare app non cambia quello che il cliente vede.
+
+# Fino a 1 GB di RAM
+Fire TV Stick Lite, Fire TV Stick (1ª, 2ª e 3ª generazione), Fire TV Stick HD, box Android economici.
+- **Kairos-XC**: la più leggera, è quella da installare.
+- In alternativa **Kairos STB** o **Kairos Smarters**: riconoscono la chiavetta da 1 GB e si alleggeriscono da sole.
+- Non installare Kairos Pro, KAIROS Ultimate e KAIROS HEAVY: qui vanno a scatti o si chiudono.
+
+# Da 1 a 1,5 GB di RAM
+Fire TV Stick 4K prima versione (2018), molti box Android.
+- **Kairos-XC**, **Kairos STB** o **Kairos Smarters**.
+- **Kairos Premium** solo se il dispositivo ha 1,5 GB pieni.
+
+# Da 1,5 a 2 GB di RAM
+- **Kairos Premium**: stile Netflix, fluida.
+- **KAIROS Ultimate**: la più completa (Top 10, trailer, guida TV su tre livelli).
+
+# 2 GB di RAM o più
+Fire TV Stick 4K seconda versione (2023), Fire TV Stick 4K Max, Fire TV Cube, TV e box Android recenti.
+- **Kairos Pro** oppure **KAIROS Ultimate**.
+- **KAIROS HEAVY** (tutta in 3D, in anteprima): solo su dispositivi potenti.
+
+# Regole semplici
+- Nel dubbio scegli l'app più leggera: il cliente è più contento con un'app fluida che con una bella ma lenta.
+- Una sola app Kairos per dispositivo: due app installate insieme occupano memoria per niente.
+- Se un cliente ha blocchi o scatti, prima prova l'app più leggera della sua fascia, poi guarda la linea.`;
+const infoText = (v, max) => (typeof v === 'string' ? v.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').slice(0, max) : '');
+function infoNorm(x) {
+  const o = x && typeof x === 'object' && !Array.isArray(x) ? x : {}, apps = infoText(o.apps, 12000);
+  return { news: infoText(o.news, 6000).trim(), apps: apps.trim() ? apps.trim() : INFO_APPS_DEF, storeNews: o.storeNews !== false, storeApps: o.storeApps !== false, newsAt: +o.newsAt > 0 ? +o.newsAt : 0, at: +o.at > 0 ? +o.at : 0 };
+}
+const infoMem = { t: 0, v: null };
+async function infoGet(env) {
+  if (infoMem.v && now() - infoMem.t < 60e3) return infoMem.v;
+  let raw = null; try { const r = await env.DB.prepare("SELECT v FROM settings WHERE k = 'info'").first(); raw = r ? JSON.parse(r.v) : null; } catch {}
+  infoMem.v = infoNorm(raw); infoMem.t = now(); return infoMem.v;
+}
+/** salva (solo titolare): la data della comunicazione cambia solo quando cambia il testo, così «nuova» non si riaccende per niente */
+async function infoPut(env, b) {
+  infoMem.v = null;
+  const cur = await infoGet(env), n = infoNorm({ ...(b && typeof b === 'object' ? b : {}), newsAt: cur.newsAt, at: now() });
+  if (n.news !== cur.news) n.newsAt = n.news ? now() : 0;
+  await env.DB.prepare("INSERT INTO settings (k, v) VALUES ('info', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(JSON.stringify(n)).run();
+  infoMem.v = n; infoMem.t = now(); return n;
+}
+/** quello che riceve lo Store (pubblico, senza accesso): solo le parti che il titolare ha deciso di mostrare lì */
+async function infoPublic(env) { const i = await infoGet(env); return { news: i.storeNews ? i.news : '', newsAt: i.storeNews && i.news ? i.newsAt : 0, apps: i.storeApps ? i.apps : '' }; }
 /* avviso «Nuova guida da leggere»: l'agente lo vede finché non apre la guida (agent_reads k='guide') */
 async function guideReads(env) {
   try { return (await env.DB.prepare("SELECT agent_id, at FROM agent_reads WHERE k = 'guide'").all()).results || []; } catch { return []; }
@@ -6072,7 +6126,7 @@ async function route(req, env, ctx) {
 
   /* ---------- Store aperto: conteggio di store e download, compatibilità con gli store vecchi (pubblica, vedi store.js) ---------- */
   if (path === '/api/tg/hook' && req.method === 'POST') return tgHook(req, env, ctx, ip, notifyH(env)); // webhook del bot Telegram
-  if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { sellerName: (id) => sellerNameOf(env, id) });
+  if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { sellerName: (id) => sellerNameOf(env, id), info: () => infoPublic(env) });
 
   /* ---------- informativa privacy e condizioni (pubblica, la apre anche l'app) ---------- */
   if ((path === '/privacy' || path === '/privacy/') && (req.method === 'GET' || req.method === 'HEAD')) return privacyPage(env);
@@ -7805,6 +7859,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     if (g && g.noticeAt) { const r = (await guideReads(env)).find((x) => x.agent_id === A.id); g.notice = !r || +r.at < g.noticeAt; }
     return json({ guide: g });
   }
+  if (path === '/info' && m === 'GET') { const i = await infoGet(env); return json({ info: { news: i.news, newsAt: i.newsAt, apps: i.apps } }); } // pagina «Info»: l'agente legge soltanto
   if (path === '/guide/read' && m === 'POST') { // l'agente ha aperto la guida: l'avviso non si ripresenta (in assistenza il titolare non la segna come letta per lui)
     if (!ses.assist) await env.DB.prepare("INSERT INTO agent_reads (agent_id, k, at) VALUES (?, 'guide', ?) ON CONFLICT(agent_id, k) DO UPDATE SET at = excluded.at").bind(A.id, Date.now()).run();
     return json({ ok: true });
@@ -8295,6 +8350,12 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
     return json({ ok: true });
   }
   if (path === '/guide' && m === 'GET') { const g = guideNorm((await getSettings(env)).guide); return json({ guide: { ...g, readBy: g.noticeAt ? (await guideReads(env)).filter((x) => +x.at >= g.noticeAt).map((x) => String(x.agent_id)) : [], defTitle: GUIDE_DEF_TITLE, defText: GUIDE_DEF_TEXT } }); }
+  if (path === '/info' && m === 'GET') return json({ info: { ...(await infoGet(env)), defApps: INFO_APPS_DEF } });
+  if (path === '/info' && m === 'PUT') {
+    const i = await infoPut(env, await readJSON(req, 64 * 1024));
+    await log(env, 'settings', `${who}: pagina «Info» aggiornata (comunicazione ${i.news ? (i.storeNews ? 'anche nello Store' : 'solo nel pannello') : 'vuota'}, guida alle app ${i.storeApps ? 'anche nello Store' : 'solo nel pannello'})`, ip);
+    return json({ info: { ...i, defApps: INFO_APPS_DEF } });
+  }
   if (path === '/guide' && m === 'PUT') {
     const b = await readJSON(req, 64 * 1024), cur = guideNorm((await getSettings(env)).guide), g = guideNorm({ ...b, noticeAt: cur.noticeAt });
     if (b.notify === true && g.share !== 'none') g.noticeAt = Date.now(); // «Avvisali all'apertura»: gli agenti scelti vedono «Nuova guida da leggere» finché non la aprono
