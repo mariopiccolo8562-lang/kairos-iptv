@@ -1152,13 +1152,14 @@
       denied: ['warn', 'DNS: permesso negato', 'DNS cifrato acceso dal pannello: il cliente ha negato il permesso'], other: ['warn', 'DNS: altra VPN', 'DNS cifrato acceso dal pannello: sul dispositivo c\'è un\'altra VPN attiva'], error: ['bad', 'DNS: errore', 'DNS cifrato acceso dal pannello ma non partito'] };
     /* App accanto a ogni cliente (12 novembre 2026): quale app Kairos sta usando.
        Fonte: d.app risolto dal pannello; in mancanza, la versione del battito (now.ver) o quella registrata. */
-    const APP_SHORT = { tv: 'PRO', ktv: 'TV', xc: 'XC', lite: 'LITE', prem: 'PREMIUM', plus: 'PLUS', nova: 'NOVA', ult: 'ULTIMATE', portal: 'PORTAL', smart: 'SMART' };
-    const APP_FULL = { tv: 'Kairos Pro', ktv: 'Kairos TV', xc: 'Kairos XC', lite: 'Kairos Lite', prem: 'Kairos Premium', plus: 'Kairos Plus', nova: 'Kairos Nova', ult: 'Kairos Ultimate', portal: 'Kairos Portal', smart: 'Kairos Smart' };
-    const APP_C = { tv: '#60a5fa', ktv: '#38bdf8', xc: '#2dd4bf', lite: '#f0b429', prem: '#a78bfa', plus: '#34d399', nova: '#f472b6', ult: '#fb923c', portal: '#818cf8', smart: '#22d3ee' };
+    const APP_SHORT = { tv: 'PRO', ktv: 'TV', xc: 'XC', lite: 'LITE', prem: 'PREMIUM', plus: 'PLUS', nova: 'NOVA', ult: 'ULTIMATE', heavy: 'HEAVY', portal: 'STB', smart: 'SMARTERS' };
+    const APP_FULL = { tv: 'Kairos Pro', ktv: 'Kairos TV', xc: 'Kairos XC', lite: 'Kairos Lite', prem: 'Kairos Premium', plus: 'Kairos Plus', nova: 'Kairos Nova', ult: 'KAIROS Ultimate', heavy: 'KAIROS HEAVY', portal: 'Kairos STB', smart: 'Kairos Smarters' };
+    const APP_C = { tv: '#60a5fa', ktv: '#38bdf8', xc: '#2dd4bf', lite: '#f0b429', prem: '#a78bfa', plus: '#34d399', nova: '#f472b6', ult: '#fb923c', heavy: '#fbbf24', portal: '#818cf8', smart: '#22d3ee' };
     const verApp = (v) => { v = String(v || '').trim().toLowerCase(); for (const [re, k] of [[/^portal/, 'portal'], [/^smart/, 'smart'], [/^xc/, 'xc'], [/^lite/, 'lite'], [/^prem/, 'prem'], [/^nova/, 'nova'], [/^plus/, 'plus'], [/^ult/, 'ult'], [/^(pro|tv)\b/, 'tv'], [/^ktv/, 'ktv']]) if (re.test(v)) return k; return ''; };
     const appCode = (d) => { const k = String((d && d.app) || '').trim().toLowerCase(); if (k) return k; const nv = d && d.now && d.now.ver; return verApp(nv || (d && d.ver)); };
     const appTag = (d) => {
-      const k = appCode(d);
+      // la HEAVY per il pannello è una Ultimate: nella pastiglia si distingue dalla versione «heavy x.y» dell'ultimo battito
+      const k0 = appCode(d), k = k0 === 'ult' && /^heavy\b/i.test(String((d && ((d.now && d.now.ver) || d.ver)) || '')) ? 'heavy' : k0;
       if (!k) return '<span class="dvt-app na" title="App non ancora rilevata">n/d</span>';
       const s = APP_SHORT[k] || k.toUpperCase(), f = APP_FULL[k] || s, c = APP_C[k] || '#9aa';
       return `<span class="dvt-app" style="background:color-mix(in srgb,${c} 20%,transparent);color:${c}" title="App in uso: ${esc(f)}">${esc(s)}</span>`;

@@ -11,7 +11,8 @@
 .app-chip.ult{background:rgba(34,211,238,.16);color:#67e8f9}
 .app-chip.plus{background:rgba(192,38,211,.18);color:#f0abfc}
 .lite-note{padding:12px 14px;border-radius:10px;border:1px solid rgba(224,164,49,.45);background:rgba(224,164,49,.08);font-size:13.5px;margin-bottom:14px}
-#dvApp{flex:0 0 auto}`;
+.app-chip.heavy{background:rgba(251,191,36,.18);color:#fcd34d}
+#dvApp{flex:0 1 auto;flex-wrap:wrap;row-gap:3px}`;
   document.head.appendChild(css);
 
   const LITE_PERMS = new Set(['link', 'plSwitch', 'profiles', 'vpn']); // le sole funzioni che Kairos Lite usa
@@ -24,7 +25,13 @@
   const isUlt = (d) => appOf(d) === 'ult';
   const isPlus = (d) => appOf(d) === 'plus';
   const isNova = (d) => appOf(d) === 'nova';
-  const kindOf = (d) => (isLite(d) ? 'lite' : isPrem(d) ? 'prem' : isKtv(d) ? 'ktv' : isUlt(d) ? 'ult' : isXc(d) ? 'xc' : isPlus(d) ? 'plus' : isNova(d) ? 'nova' : 'tv');
+  // 14 novembre 2026: anche Kairos STB, Kairos Smarters e KAIROS HEAVY hanno la loro voce nel filtro dei Clienti.
+  // La HEAVY per il pannello è una Ultimate (stessi codici e stesso profilo): si riconosce dalla versione «heavy x.y»
+  // dell'ultimo battito (d.now.ver quando è collegata, d.ver altrimenti)
+  const isPortal = (d) => appOf(d) === 'portal';
+  const isSmart = (d) => appOf(d) === 'smart';
+  const isHeavy = (d) => appOf(d) === 'ult' && /^heavy\b/i.test(String((d && ((d.now && d.now.ver) || d.ver)) || ''));
+  const kindOf = (d) => (isLite(d) ? 'lite' : isPrem(d) ? 'prem' : isKtv(d) ? 'ktv' : isHeavy(d) ? 'heavy' : isUlt(d) ? 'ult' : isXc(d) ? 'xc' : isPlus(d) ? 'plus' : isNova(d) ? 'nova' : isPortal(d) ? 'portal' : isSmart(d) ? 'smart' : 'tv');
   let flt = 'all';
   try { flt = localStorage.getItem('kc_app') || 'all'; } catch {}
 
@@ -34,7 +41,7 @@
     let seg = $('#dvApp');
     if (!seg) { seg = document.createElement('div'); seg.className = 'seg'; seg.id = 'dvApp'; bar.insertBefore(seg, $('#dvView')); }
     const prim = D.devices.filter((d) => !d.parent), n = (k) => prim.filter((d) => k === 'all' || kindOf(d) === k).length;
-    seg.innerHTML = [['all', 'Tutte le app'], ['tv', 'Kairos Pro'], ['ktv', 'Kairos TV'], ['prem', 'Kairos Premium'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['ult', 'KAIROS Ultimate'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova']].map(([k, l]) => `<button data-app="${k}" class="${flt === k ? 'on' : ''}" title="${k === 'tv' ? 'Comprende i dispositivi non ancora collegati' : ''}">${l} <span style="opacity:.6">${n(k)}</span></button>`).join('');
+    seg.innerHTML = [['all', 'Tutte le app'], ['tv', 'Kairos Pro'], ['ktv', 'Kairos TV'], ['prem', 'Kairos Premium'], ['lite', 'Kairos Lite'], ['xc', 'Kairos XC'], ['ult', 'KAIROS Ultimate'], ['heavy', 'KAIROS HEAVY'], ['portal', 'Kairos STB'], ['smart', 'Kairos Smarters'], ['plus', 'Kairos Plus'], ['nova', 'Kairos Nova']].map(([k, l]) => `<button data-app="${k}" class="${flt === k ? 'on' : ''}" title="${k === 'tv' ? 'Comprende i dispositivi non ancora collegati' : ''}">${l} <span style="opacity:.6">${n(k)}</span></button>`).join('');
     $$('[data-app]', seg).forEach((b) => (b.onclick = () => { flt = b.dataset.app; try { localStorage.setItem('kc_app', flt); } catch {} renderDevices(); }));
   }
   const rd = renderDevices;
@@ -47,7 +54,7 @@
     try { rd(); } finally { D.devices = all; }
     filterBar();
     // etichetta «LITE» / «TV» su schede e tabella: solo dove l'elenco non ha già messo la pastiglia dell'app (kc.js, .dvt-app)
-    const chip = (d) => (isLite(d) ? '<span class="app-chip">LITE</span>' : isPrem(d) ? '<span class="app-chip prem">PREMIUM</span>' : isKtv(d) ? '<span class="app-chip ktv">TV</span>' : isUlt(d) ? '<span class="app-chip ult">ULTIMATE</span>' : isXc(d) ? '<span class="app-chip xc">XC</span>' : isPlus(d) ? '<span class="app-chip plus">PLUS</span>' : isNova(d) ? '<span class="app-chip plus">NOVA</span>' : '');
+    const chip = (d) => (isLite(d) ? '<span class="app-chip">LITE</span>' : isPrem(d) ? '<span class="app-chip prem">PREMIUM</span>' : isKtv(d) ? '<span class="app-chip ktv">TV</span>' : isHeavy(d) ? '<span class="app-chip heavy">HEAVY</span>' : isPortal(d) ? '<span class="app-chip ult">STB</span>' : isSmart(d) ? '<span class="app-chip plus">SMARTERS</span>' : isUlt(d) ? '<span class="app-chip ult">ULTIMATE</span>' : isXc(d) ? '<span class="app-chip xc">XC</span>' : isPlus(d) ? '<span class="app-chip plus">PLUS</span>' : isNova(d) ? '<span class="app-chip plus">NOVA</span>' : '');
     $$('#dvCards .dv-card[data-id]').forEach((c) => { const d = all.find((x) => x.id === c.dataset.id); const b = $('.dv-n b', c); if (b && chip(d) && !$('.app-chip, .dvt-app', b)) b.insertAdjacentHTML('beforeend', chip(d)); });
     $$('#dvTbl tbody tr[data-id]').forEach((r) => { const d = all.find((x) => x.id === r.dataset.id); const b = $('.dvt-u b', r); if (b && chip(d) && !$('.app-chip, .dvt-app', b)) b.insertAdjacentHTML('beforeend', chip(d)); });
   };
