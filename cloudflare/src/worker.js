@@ -1860,7 +1860,7 @@ const GET_APK = {
   smart: ['kairos-portal-smart/releases/latest/download/kairos-smart.apk', 'kairos-smart.apk'],
   // KAIROS HEAVY (13 novembre 2026): app personale del titolare, ramo «heavy» del repository della Ultimate. Si scarica
   // la versione di prova indicata qui (le prove sono anteprime: non sono l'«ultima release» della Ultimate)
-  heavy: ['kairos-ultimate/releases/download/heavy-prova-7/kairos-ultimate.apk', 'kairos-heavy.apk'],
+  heavy: ['kairos-ultimate/releases/download/heavy-prova-8/kairos-ultimate.apk', 'kairos-heavy.apk'],
 };
 /** feed degli aggiornamenti (/get/<id>.json): file della stessa release dell'APK di GET_APK[id]. Lo store non ne ha uno:
  *  si ricava dalla sua ultima release (tag v1.0.N con KairosStore.apk) */
@@ -4435,7 +4435,7 @@ async function playerHeartbeat(req, env, ip, ctx) {
     // ultima versione: di solito già in memoria; se va scaricata il battito non aspetta più di 800 ms
     const apu = appOfVer(f.ver, d.app); if (RC_APPS.includes(apu)) try { const lp = latestFor(env, S0, apu); ctx.waitUntil(lp.catch(() => {})); const L = await Promise.race([lp, new Promise((r) => setTimeout(() => r(null), 800))]); if (L && verBehind(f.ver, L.version)) upd = L.versionCode || 1; } catch {}
   }
-  const eff = rcEffective(S0, d, appOfVer(f.ver, d.app), true), cmds = await cmdP;
+  const eff = rcEffective(S0, d, appOfVer(f.ver, d.app), true, /^heavy\b/i.test(String(f.ver || ''))), cmds = await cmdP;
   // permessi spenti; l'assistente IA anche quando lo spegne il pannello (per tutti o dal profilo dell'app): l'app si riallinea subito
   const ph = P ? permsJson({ ...permsParse(P.perms), ...(aiEngineOf(S0, P, d, appOfVer(f.ver, d.app)) === 'off' ? { ai: false } : {}) }) : '';
   return json({ ok: true, mt, ...(upd ? { upd } : {}), rc: JSON.stringify(eff.rc), rcv: eff.rcv, ...(cmds.length ? { cmds } : {}), unseen: await unP, ts: t, vm, ph, ms: P ? +P.max_streams || 0 : 0, pv, pm: P ? (C.pl_mode === 'split' ? 'split' : 'merge') + '|' + (pls.some((p) => p.id === C.pl_default) ? C.pl_default : '') + '|' + JSON.stringify(playerParse(C.player)) : '', adg: P ? P.addons || '' : '', af: await acctFp(P), ...(sat.length ? { sat } : {}), ...(kick ? { kick } : {}), ...(dead ? { dead } : {}) });
@@ -4520,7 +4520,7 @@ async function latestFor(env, s, app) {
   if (app !== 'tv') return null; // app non riconosciuta (es. KAIROS per Fire TV Vega OS): nessun confronto con gli APK
   const a = await latestApk(env, s); return a && a.version ? { version: a.version, versionCode: a.versionCode } : null;
 }
-const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', prem: 'Kairos Premium', lite: 'Kairos Lite', xc: 'Kairos XC', ult: 'KAIROS Ultimate', plus: 'Kairos Plus', nova: 'Kairos Nova', portal: 'Kairos Portal', smart: 'Kairos Smart', vega: 'Kairos per Fire TV (Vega OS)' };
+const APP_NAME = { tv: 'Kairos Pro', ktv: 'Kairos TV', prem: 'Kairos Premium', lite: 'Kairos Lite', xc: 'Kairos XC', ult: 'KAIROS Ultimate', plus: 'Kairos Plus', nova: 'Kairos Nova', portal: 'Kairos Portal', smart: 'Kairos Smart', heavy: 'KAIROS HEAVY', vega: 'Kairos per Fire TV (Vega OS)' };
 /* ---------------- «🔒 Repo privati» (10 novembre 2026, solo titolare) ----------------
    Per ogni app: quanti clienti (visti negli ultimi 30 giorni) hanno già l'ultima versione e chi manca. Quando un'app è
    aggiornata da tutti, il suo repository GitHub si può rendere privato: i download passano da store-k.download con il token.
@@ -4565,7 +4565,7 @@ async function repoReady(env) {
 /*    dispositivo, consegnati nel battito (cmds) e confermati dall'app (POST /api/player/cmd)                    */
 /*  - l'app riporta le sue impostazioni attuali (cfg) e la versione della configurazione applicata (rcv)        */
 /* ====================================================================== */
-const RC_APPS = ['tv', 'ktv', 'prem', 'lite', 'xc', 'ult', 'plus', 'nova', 'portal', 'smart'];
+const RC_APPS = ['tv', 'ktv', 'prem', 'lite', 'xc', 'ult', 'plus', 'nova', 'portal', 'smart', 'heavy'];
 const RC_PARENT = { portal: 'xc', smart: 'xc' }; // Portal e Smart ereditano il profilo di Kairos XC (stesso motore)
 /** app collegate al pannello con codice (battito e comandi); Kairos Nova può anche restare libera: allora legge solo la politica degli aggiornamenti */
 const RC_LINKED = ['tv', 'ktv', 'prem', 'lite', 'xc', 'ult', 'plus', 'nova', 'portal', 'smart'];
@@ -4661,6 +4661,21 @@ const RC_CAT = [
   // 1.1.1.1 / 8.8.8.8 / 9.9.9.9; se non rispondono si chiude e torna il DNS normale. Dal 12 novembre 2026 tutte le app:
   // Kairos Pro dalla 2.7.6 (le più vecchie ignorano la voce), Plus e Nova dalla versione di quel giorno, Ultimate dalla prima
   ['sdns', 'DNS cifrato', 'sel', [['on', 'Acceso'], ['off', 'Spento']], ['tv', 'ktv', 'prem', 'lite', 'xc', 'ult', 'plus', 'nova'], 'L\'app chiede gli indirizzi dei server a un DNS pubblico dentro una connessione protetta, invece che al DNS dell\'operatore: l\'operatore non legge la domanda e non può cambiare la risposta. Passano di lì solo le domande DNS: video e liste vanno diretti come prima, quindi non rallenta. Android chiede il permesso una volta, con la stessa finestra della VPN. Se il servizio non risponde l\'app torna da sola al DNS normale; con la VPN accesa non serve e resta spento. Serve Kairos XC 3.4.6, Kairos TV 2.4.7, Kairos Lite 1.5.7 o Kairos Premium 1.7.6', 'Non imposto (spento)', 'Rete'],
+  // KAIROS HEAVY (14 novembre 2026): pagina «KAIROS HEAVY» del pannello. Parte dal profilo della Ultimate, queste voci sono solo sue
+  ['h.fx', 'Effetti 3D', 'sel', [['auto', 'Automatici (pieni sui dispositivi potenti)'], ['reduced', 'Ridotti']], ['heavy'], 'Ridotti: niente stelle in movimento e luci pesanti, la Home resta 3D ma più leggera. Utile su TV box lenti. Vale dall\'apertura successiva', 'Automatici', 'KAIROS HEAVY · Aspetto'],
+  ['h.intro', 'Apertura con il logo di luci', 'sel', [['on', 'Sì'], ['off', 'No: Home subito']], ['heavy'], 'All\'avvio migliaia di luci formano il logo HEAVY e poi esplodono verso chi guarda (circa 3 secondi). Con «No» la Home compare subito', 'Sì', 'KAIROS HEAVY · Aspetto'],
+  ['h.sky', 'Cielo di stelle', 'sel', [['on', 'Sì'], ['off', 'No']], ['heavy'], 'Le stelle che vengono incontro dietro la Home. Spegnerle alleggerisce un po\' la grafica', 'Sì', 'KAIROS HEAVY · Aspetto'],
+  ['h.sparks', 'Scintille sui monoliti', 'sel', [['on', 'Sì'], ['off', 'No']], ['heavy'], 'Le piccole luci che salgono attorno al monolite scelto nella Home', 'Sì', 'KAIROS HEAVY · Aspetto'],
+  ['h.top10', 'Top 10 film e serie', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Nella Home, con ▼, due mensole con i 10 film e le 10 serie del momento, con il numero gigante in rilievo. Prende i titoli di tendenza (se ci sono nella lista del cliente), altrimenti i più votati', 'Mostra', 'KAIROS HEAVY · Home'],
+  ['h.recent', 'Ultimi visti', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Mensola con gli ultimi 10 film ed episodi guardati, con la barra di quanto manca: OK riprende da dove il cliente era rimasto', 'Mostra', 'KAIROS HEAVY · Home'],
+  ['h.lastch', 'Monolite «Ultimo canale»', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Un monolite in più nella Home con il logo e il programma in onda dell\'ultimo canale visto: OK lo riapre subito a schermo intero', 'Mostra', 'KAIROS HEAVY · Home'],
+  ['h.surprise', 'Monolite «Scegli per me»', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Per chi non sa cosa guardare: un rullo di locandine gira, rallenta e si ferma su un film o una serie della Top 10, poi apre la scheda', 'Mostra', 'KAIROS HEAVY · Home'],
+  ['h.preview', 'Anteprima dei canali', 'sel', [['on', 'Al primo OK nello schermo 3D'], ['off', 'Spenta: il canale parte subito a schermo intero']], ['heavy'], 'In Diretta ed Eventi il primo OK accende il canale nello schermo di vetro con l\'audio, il secondo lo apre a schermo intero. Spenta: un solo OK, schermo intero (consuma meno banda)', 'Al primo OK', 'KAIROS HEAVY · Diretta e film'],
+  ['h.trailer', 'Trailer automatici', 'sel', [['on', 'Sì'], ['off', 'No']], ['heavy'], 'In Film e Serie, fermandosi su una locandina parte da solo il trailer dentro la scena 3D', 'Sì', 'KAIROS HEAVY · Diretta e film'],
+  ['h.trailerDelay', 'Quando parte il trailer', 'sel', [['0', 'Quasi subito (0,4 s)'], ['1', 'Dopo 1 secondo'], ['2', 'Dopo 2 secondi'], ['4', 'Dopo 4 secondi']], ['heavy'], 'Quanto aspettare fermi su una locandina prima che parta il trailer. Più tempo = meno trailer avviati mentre si scorre', 'Dopo 1 secondo', 'KAIROS HEAVY · Diretta e film'],
+  ['h.neverStop', 'Canale che non si spegne mai', 'sel', [['on', 'Sì: riaggancia il canale all\'infinito'], ['off', 'No: si ferma dopo 10 tentativi']], ['heavy'], 'Quando il canale cade (linea o fornitore) l\'app prova da sola tutte le soluzioni (ricarica, decodifica, VLC) e poi continua a riagganciarlo ogni 5-20 secondi finché non torna, senza che il cliente tocchi nulla', 'Sì', 'KAIROS HEAVY · Stabilità'],
+  ['h.buffer', 'Riserva di video (buffer)', 'sel', [['auto', 'Automatica: si adatta alla linea Internet'], ['fast', 'Piccola: avvio più veloce'], ['balanced', 'Normale'], ['stable', 'Grande: meno blocchi'], ['max', 'Massima: per linee molto instabili']], ['heavy'], 'Quanti secondi di video l\'app tiene da parte. Automatica: con linea debole tiene una riserva lunga (meno salti), con linea veloce parte prima. Massima usa più memoria: solo su dispositivi da 2 GB o più', 'Automatica', 'KAIROS HEAVY · Stabilità'],
+  ['h.audioFix', 'Audio universale (FFmpeg)', 'sel', [['vlc', 'Sì: se l\'audio non è supportato passa al motore completo'], ['off', 'No']], ['heavy'], 'Alcuni canali hanno l\'audio in formati che molti TV box non sanno leggere (MP2, AC3, E-AC3, DTS): si vede ma non si sente. Con «Sì» l\'app se ne accorge e passa da sola al motore VLC, che ha dentro i decodificatori FFmpeg: nessun canale muto, senza appesantire l\'app', 'Sì', 'KAIROS HEAVY · Stabilità'],
 ];
 // comandi: [chiave, nome, spiegazione, app che li eseguono]
 const RC_CMDS = [
@@ -4759,9 +4774,11 @@ function rcSent(rc, app) {
 }
 /** configurazione effettiva per un dispositivo: profilo della sua app + impostazioni sue; «rcv» = impronta corta di quella mandata
     all'app. [forApp] = la configurazione da mandare all'app (con le parole per adulti), altrimenti quella decisa nel pannello */
-function rcEffective(s, d, app, forApp) {
+function rcEffective(s, d, app, forApp, heavy) {
   const a = app || appOfVer('', d && d.app) || 'tv';
   const prof = rcProfiles(s);
+  // KAIROS HEAVY: per il pannello è una Ultimate (stessi codici, linee, DNS…) con in più le voci «h.*» del suo profilo
+  if (heavy && a === 'ult') prof.ult = { ...(prof.ult || {}), ...(prof.heavy || {}) };
   // Portal e Smart partono dal profilo di Kairos XC (stesso motore), poi il loro profilo lo sovrascrive: così il DNS cifrato e le
   // altre voci messe su «Kairos XC» valgono anche per loro, finché il titolare non sceglie qualcosa di diverso
   const rc = RC_PARENT[a] ? { ...(prof[RC_PARENT[a]] || {}), ...(prof[a] || {}) } : { ...(prof[a] || {}) }, own = rcDevOf(d, a);
@@ -6137,7 +6154,7 @@ async function playerRegister(req, env, ip, ctx) {
   let status = P ? statusOf(P, Ppls) : 'pending';
   const { C, pls } = status === 'active' ? await effOf(env, d, P, Ppls) : { C: P, pls: [] };
   if (status === 'active' && maintFor(s, P)) status = 'maintenance';
-  const eff = rcEffective(s, d, regApp || appOfVer('', d.app), true);
+  const eff = rcEffective(s, d, regApp || appOfVer('', d.app), true, /^heavy\b/i.test(String(b.ver || '')));
   const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? await portalsOf(env, pls, d.app, rcDevOf(d)['u.dnsRot']) : [], messages: await msgP, rc: eff.rc, rcv: eff.rcv };
   if (status === 'active') {
     [out.account, out.vpn, out.af] = await Promise.all([accountOf(env, P, d, pls, C), vpnOf(env, P, d), acctFp(P)]);
@@ -7972,7 +7989,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
       const devs = {}; for (const r of pr.results || []) { let cfg = null; try { cfg = r.app_cfg ? JSON.parse(r.app_cfg) : null; } catch {} devs[r.device_id] = { cfg, rcv: r.rcv || '', ver: r.ver || '', t: +r.t }; }
       return json({ apps: rcProfiles(s0), cat: RC_CAT, cmds: RC_CMDS, appNames: APP_NAME, linked: RC_LINKED, devs, over: ov, last, pending: pend, adultWords: ADULT_HOME_WORDS, adultApps: [...ADULT_MERGE_APPS] });
     }
-    const pa = path.match(/^\/rctl\/app\/(tv|ktv|prem|lite|xc|ult|plus|nova|portal|smart)$/);
+    const pa = path.match(/^\/rctl\/app\/(tv|ktv|prem|lite|xc|ult|plus|nova|portal|smart|heavy)$/);
     if (pa && m === 'PUT') {
       const b = await readJSON(req, 8192), rc = rcClean(b.rc || {}, pa[1]);
       await settingsPatch(env, { rcApp: { ...rcProfiles(s0), [pa[1]]: rc } });

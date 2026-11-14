@@ -1387,3 +1387,10 @@ Prova: `srv_dns_del_agents`.
 - Una TV nuova scaricata con il codice dello Store di un agente («📥 Scaricata dal codice di …», `rec_by`) ora compare anche nel «Da attivare» di quell'agente (e di chi sta sopra di lui), non solo del titolare. «Attiva» la rende sua cliente (il `PUT` su una TV libera con il suo `rec_by` diventa un «Nuovo cliente» con il codice della TV); «Collega a un cliente» c'era già. Gli altri agenti non la vedono.
 - Con lo Store aperto le richieste da autorizzare non esistono più, quindi le notifiche del pannello e Telegram non partivano mai. Ora ogni download avvisa: con il codice di un agente lui (se il titolare gli ha dato il consenso alle notifiche/Telegram) e il titolare solo se lo chiede; senza codice il titolare. Il service worker legge il testo da `/notify/peek` (`dl`). Un solo avviso ogni 2 minuti per lo stesso download.
 - Prove: `srv_agent_recpend.mjs`, `srv_store_dl_notify.mjs`.
+
+## 91. Pagina «KAIROS HEAVY» (14 novembre 2026)
+
+- Nuova voce di menu «KAIROS HEAVY» (solo titolare, `public/panel/heavy-panel.js`): tutte le funzioni della app 3D si accendono e spengono da lì, ognuna con la spiegazione. Gruppi: Aspetto (effetti 3D, logo di luci, stelle, scintille), Home (Top 10, Ultimi visti, monolite «Ultimo canale», monolite «Scegli per me»), Diretta e film (anteprima dei canali, trailer automatici e quando partono), Stabilità (canale che non si spegne mai, buffer automatico secondo la linea, audio universale con i decoder FFmpeg di VLC).
+- Le voci sono nel catalogo del controllo remoto (`RC_CAT`, chiavi `h.*`, app `heavy`) e si salvano nel profilo `heavy` (`PUT /admin/rctl/app/heavy`).
+- Per il pannello la HEAVY resta una Ultimate (user agent KairosUltimate, codici, linee, DNS cifrato): l'app manda la versione «heavy x.y» e `rcEffective(..., heavy)` aggiunge il profilo `heavy` sopra quello della Ultimate, all'apertura e al battito (stessa impronta: niente riavvii). Una Ultimate normale non riceve le voci `h.*`.
+- Prove: `srv_heavy_rc.mjs`, `ui_heavy_page.mjs`.
