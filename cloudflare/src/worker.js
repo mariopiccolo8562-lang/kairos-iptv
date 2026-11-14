@@ -1860,7 +1860,7 @@ const GET_APK = {
   smart: ['kairos-portal-smart/releases/latest/download/kairos-smart.apk', 'kairos-smart.apk'],
   // KAIROS HEAVY (13 novembre 2026): app personale del titolare, ramo «heavy» del repository della Ultimate. Si scarica
   // la versione di prova indicata qui (le prove sono anteprime: non sono l'«ultima release» della Ultimate)
-  heavy: ['kairos-ultimate/releases/download/heavy-prova-11/kairos-ultimate.apk', 'kairos-heavy.apk'],
+  heavy: ['kairos-ultimate/releases/download/heavy-prova-12/kairos-ultimate.apk', 'kairos-heavy.apk'],
 };
 /** feed degli aggiornamenti (/get/<id>.json): file della stessa release dell'APK di GET_APK[id]. Lo store non ne ha uno:
  *  si ricava dalla sua ultima release (tag v1.0.N con KairosStore.apk) */
@@ -3909,11 +3909,14 @@ async function trendTmdb(env) {
   return { movies: uniqT(m.map((x) => ({ t: cleanTitle(x.title || x.original_title, false), y: yearOf(x.release_date) }))), series: uniqT(s.map((x) => ({ t: cleanTitle(x.name || x.original_name, false), y: yearOf(x.first_air_date) }))), src: 'tmdb' };
 }
 /* ---- Notizie del giorno per la Home di KAIROS HEAVY (14 novembre 2026): titoli dal feed RSS pubblico scelto nel pannello ---- */
+// doppia fonte (14 novembre 2026): per ogni voce due feed, se il primo non risponde o è vuoto si legge il secondo
+const NEWS_ANSA = 'https://www.ansa.it/sito/', NEWS_RAI = 'https://www.rainews.it/rss/';
 const NEWS_FEEDS = {
-  ansa: ['ANSA', 'https://www.ansa.it/sito/ansait_rss.xml'],
-  ultimaora: ['ANSA', 'https://www.ansa.it/sito/notizie/topnews/topnews_rss.xml'],
-  sport: ['ANSA Sport', 'https://www.ansa.it/sito/notizie/sport/sport_rss.xml'],
-  calcio: ['ANSA Calcio', 'https://www.ansa.it/sito/notizie/sport/calcio/calcio_rss.xml'],
+  ansa: [['ANSA', NEWS_ANSA + 'ansait_rss.xml'], ['RaiNews', NEWS_RAI + 'tutti']],
+  ultimaora: [['ANSA', NEWS_ANSA + 'notizie/topnews/topnews_rss.xml'], ['RaiNews', NEWS_RAI + 'ultimora']],
+  sport: [['ANSA Sport', NEWS_ANSA + 'notizie/sport/sport_rss.xml'], ['RaiNews Sport', NEWS_RAI + 'sport']],
+  calcio: [['ANSA Calcio', NEWS_ANSA + 'notizie/sport/calcio/calcio_rss.xml'], ['RaiNews Sport', NEWS_RAI + 'sport']],
+  rai: [['RaiNews', NEWS_RAI + 'tutti'], ['ANSA', NEWS_ANSA + 'ansait_rss.xml']],
 };
 const NEWS_TTL = 10 * 60e3;
 const newsMem = {};
@@ -3943,19 +3946,22 @@ async function news(env, ctx, feed) {
     let cached = null;
     try { const r = await env.DB.prepare('SELECT v FROM settings WHERE k = ?').bind('news:' + f).first(); cached = r ? JSON.parse(r.v) : null; } catch {}
     if (cached && Array.isArray(cached.items) && now() - (+cached.updated || 0) < NEWS_TTL) { newsMem[f] = { exp: +cached.updated + NEWS_TTL, body: cached }; return cached; }
-    let items = [];
-    try {
-      const r = await fetch(NEWS_FEEDS[f][1], { headers: { Accept: 'application/rss+xml, application/xml, text/xml', 'User-Agent': 'Mozilla/5.0 (compatible; KairosNews/1.0)' }, signal: tmo(6000) });
-      if (r.ok) items = rssTitles(await r.text());
-    } catch {}
+    let items = [], src = NEWS_FEEDS[f][0][0], backup = false;
+    for (let i = 0; i < NEWS_FEEDS[f].length && !items.length; i++) {
+      try {
+        const r = await fetch(NEWS_FEEDS[f][i][1], { headers: { Accept: 'application/rss+xml, application/xml, text/xml', 'User-Agent': 'Mozilla/5.0 (compatible; KairosNews/1.0)' }, signal: tmo(6000) });
+        if (r.ok) items = rssTitles(await r.text());
+        if (items.length) { src = NEWS_FEEDS[f][i][0]; backup = i > 0; }
+      } catch {}
+    }
     if (items.length) {
-      const body = { items, src: NEWS_FEEDS[f][0], feed: f, updated: now() };
+      const body = { items, src, feed: f, updated: now(), ...(backup ? { backup: true } : {}) };
       const w = env.DB.prepare('INSERT INTO settings (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('news:' + f, JSON.stringify(body)).run().catch(() => {});
       ctx && ctx.waitUntil ? ctx.waitUntil(w) : await w;
       newsMem[f] = { exp: now() + NEWS_TTL, body };
       return body;
     }
-    const stale = cached && Array.isArray(cached.items) && now() - (+cached.updated || 0) < 12 * 3600e3 ? { ...cached, stale: true } : { items: [], src: NEWS_FEEDS[f][0], feed: f, updated: 0 };
+    const stale = cached && Array.isArray(cached.items) && now() - (+cached.updated || 0) < 12 * 3600e3 ? { ...cached, stale: true } : { items: [], src: NEWS_FEEDS[f][0][0], feed: f, updated: 0 };
     newsMem[f] = { exp: now() + 3 * 60e3, body: stale }; // fonte non raggiungibile: si riprova fra 3 minuti
     return stale;
   } catch { return { items: [], src: '', feed: f, updated: 0 }; }
@@ -4724,7 +4730,7 @@ const RC_CAT = [
   ['h.trans', 'Animazione fra le schermate', 'sel', [['tuffo', 'Tuffo dentro l\'oggetto con lampo'], ['dissolvenza', 'Dissolvenza morbida nel buio'], ['veloce', 'Immediata: nessuna animazione']], ['heavy'], 'Cosa succede quando si apre una sezione dalla Home o un titolo. «Immediata» è la più rapida', 'Tuffo', 'KAIROS HEAVY · Aspetto'],
   ['h.hints', 'Suggerimenti dei tasti', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'La barra in basso con i tastini in rilievo («OK anteprima», «◀ ▶ canale», «▲ ▼ evento»…): dice al cliente cosa fa ogni tasto in quella schermata. Da nascondere solo per chi conosce già l\'app', 'Mostra', 'KAIROS HEAVY · Aspetto'],
   ['h.net', 'Wi-Fi e velocità in alto', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Nella Home, accanto allo scudo: le tacche del Wi-Fi (o il cavo) e la velocità di Internet in numeri (Mb/s), misurata dall\'app ogni mezz\'ora quando non si sta guardando. Verde = buono, giallo = discreto, rosso = debole', 'Mostra', 'KAIROS HEAVY · Home'],
-  ['h.news', 'Notizie del giorno', 'sel', [['ansa', 'ANSA · prima pagina'], ['ultimaora', 'ANSA · ultima ora'], ['sport', 'ANSA · sport'], ['calcio', 'ANSA · calcio'], ['off', 'Spenta']], ['heavy'], 'La riga che scorre da destra a sinistra in alto nella Home con i titoli veri delle notizie, presi dal feed pubblico della fonte scelta e aggiornati ogni 10 minuti (accanto compare il nome della fonte). Se la fonte non risponde la riga non compare', 'ANSA · prima pagina', 'KAIROS HEAVY · Home'],
+  ['h.news', 'Notizie del giorno', 'sel', [['ansa', 'ANSA · prima pagina'], ['ultimaora', 'ANSA · ultima ora'], ['sport', 'ANSA · sport'], ['calcio', 'ANSA · calcio'], ['rai', 'RaiNews · tutte le notizie'], ['off', 'Spenta']], ['heavy'], 'La riga che scorre da destra a sinistra in alto nella Home con i titoli veri delle notizie, aggiornati ogni 10 minuti (accanto compare il nome della fonte). Doppia fonte: se quella scelta non risponde si leggono le notizie dall\'altra (ANSA ⇄ RaiNews); se non risponde nessuna restano le ultime lette, e solo se non ce ne sono la riga non compare', 'ANSA · prima pagina', 'KAIROS HEAVY · Home'],
   ['h.top10', 'Top 10 film e serie', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Nella Home, con ▼, due mensole con i 10 film e le 10 serie del momento, con il numero gigante in rilievo. Prende i titoli di tendenza (se ci sono nella lista del cliente), altrimenti i più votati', 'Mostra', 'KAIROS HEAVY · Home'],
   ['h.recent', 'Ultimi visti', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Mensola con gli ultimi 10 film ed episodi guardati, con la barra di quanto manca: OK riprende da dove il cliente era rimasto', 'Mostra', 'KAIROS HEAVY · Home'],
   ['h.lastch', '«Ultimi canali» nella Home', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Un telecomando 3D con i loghi degli ultimi 5 canali guardati che gli girano attorno: OK apre il menu e il cliente sceglie quale riaprire a schermo intero. In Diretta c\'è anche la cartella «Ultimi canali»', 'Mostra', 'KAIROS HEAVY · Home'],
@@ -4736,6 +4742,8 @@ const RC_CAT = [
   ['h.trailer', 'Trailer automatici', 'sel', [['on', 'Sì'], ['off', 'No']], ['heavy'], 'In Film e Serie, fermandosi su una locandina parte da solo il trailer dentro la scena 3D', 'Sì', 'KAIROS HEAVY · Diretta e film'],
   ['h.trailerDelay', 'Quando parte il trailer', 'sel', [['0', 'Quasi subito (0,4 s)'], ['1', 'Dopo 1 secondo'], ['2', 'Dopo 2 secondi'], ['4', 'Dopo 4 secondi']], ['heavy'], 'Quanto aspettare fermi su una locandina prima che parta il trailer. Più tempo = meno trailer avviati mentre si scorre', 'Dopo 1 secondo', 'KAIROS HEAVY · Diretta e film'],
   ['h.liveCheck', 'Solo canali funzionanti', 'sel', [['hide', 'Prova i canali e nascondi quelli spenti'], ['mark', 'Prova i canali e segnali «non risponde»'], ['learn', 'Nessuna prova: impara solo dai canali aperti'], ['off', 'Spento']], ['heavy'], 'In Diretta l\'app prova da sola i canali attorno a quello scelto (al massimo 40 per cartella, uno ogni 2 secondi, solo a telecomando fermo e mai mentre si guarda): quelli che non mandano video due volte di fila spariscono o restano segnati in rosso, quelli buoni hanno un puntino verde. Se il fornitore ha una sola connessione per linea o non gradisce le prove, scegli «Nessuna prova»: l\'app segna solo i canali che il cliente ha aperto davvero. Se un fornitore smette di funzionare solo su HEAVY, prova per prima cosa a mettere «Spento» qui', 'Prova e nascondi', 'KAIROS HEAVY · Stabilità'],
+  ['h.group', 'Canali doppi in fila', 'sel', [['on', 'Sì: tutti i Rai 1, poi tutti i Rai 2…'], ['off', 'No: ordine del fornitore']], ['heavy'], 'In Diretta i canali con lo stesso nome (cambia solo la qualità, il paese davanti o «backup») stanno uno dopo l\'altro: Rai 1, Rai 1 HD, RAI UNO FHD… poi tutti i Rai 2, e così via. Il gruppo sta dove il fornitore ha messo il primo; i doppioni hanno una freccetta ↳ davanti al nome', 'Sì', 'KAIROS HEAVY · Diretta e film'],
+  ['h.epg2', 'Guida TV di riserva', 'sel', [['on', 'Sì: doppia fonte per i canali senza guida'], ['off', 'No: solo la guida del fornitore']], ['heavy'], 'Se il fornitore non dà la guida di un canale (o la sua guida non si scarica), l\'app prende i programmi da una guida italiana pubblica riconoscendo il canale dal nome; se anche quella non risponde ne prova una seconda. La guida del fornitore, quando c\'è, ha sempre la precedenza. Si aggiorna da sola ogni 8 ore, mai mentre si guarda', 'Sì', 'KAIROS HEAVY · Stabilità'],
   ['h.neverStop', 'Canale che non si spegne mai', 'sel', [['on', 'Sì: riaggancia il canale all\'infinito'], ['off', 'No: si ferma dopo 10 tentativi']], ['heavy'], 'Quando il canale cade (linea o fornitore) l\'app prova da sola tutte le soluzioni (ricarica, decodifica, VLC) e poi continua a riagganciarlo ogni 5-20 secondi finché non torna, senza che il cliente tocchi nulla', 'Sì', 'KAIROS HEAVY · Stabilità'],
   ['h.buffer', 'Riserva di video (buffer)', 'sel', [['auto', 'Automatica: si adatta alla linea Internet'], ['fast', 'Piccola: avvio più veloce'], ['balanced', 'Normale'], ['stable', 'Grande: meno blocchi'], ['max', 'Massima: per linee molto instabili']], ['heavy'], 'Quanti secondi di video l\'app tiene da parte. Automatica: con linea debole tiene una riserva lunga (meno salti), con linea veloce parte prima. Massima usa più memoria: solo su dispositivi da 2 GB o più', 'Automatica', 'KAIROS HEAVY · Stabilità'],
   ['h.audioFix', 'Audio universale (FFmpeg)', 'sel', [['vlc', 'Sì: se l\'audio non è supportato passa al motore completo'], ['off', 'No']], ['heavy'], 'Alcuni canali hanno l\'audio in formati che molti TV box non sanno leggere (MP2, AC3, E-AC3, DTS): si vede ma non si sente. Con «Sì» l\'app se ne accorge e passa da sola al motore VLC, che ha dentro i decodificatori FFmpeg: nessun canale muto, senza appesantire l\'app', 'Sì', 'KAIROS HEAVY · Stabilità'],

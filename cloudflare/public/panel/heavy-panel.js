@@ -94,8 +94,8 @@
     try {
       const r = await api('GET', '/player/news?f=' + encodeURIComponent(feed));
       const n = (r.items || []).length;
-      html = n ? `<b style="color:#3dffa2">✓ ${n} notizie lette da ${esc(r.src || 'fonte')}${r.stale ? ' (ultime salvate: la fonte ora non risponde)' : ''}</b><br>Prima: «${esc(String(r.items[0]).slice(0, 90))}»`
-        : '<b style="color:#ff7b8f">✗ La fonte non risponde adesso</b>: nell\'app la riga resta nascosta finché non torna';
+      html = n ? `<b style="color:#3dffa2">✓ ${n} notizie lette da ${esc(r.src || 'fonte')}${r.backup ? ' (fonte di riserva: quella scelta ora non risponde)' : ''}${r.stale ? ' (ultime salvate: le fonti ora non rispondono)' : ''}</b><br>Prima: «${esc(String(r.items[0]).slice(0, 90))}»`
+        : '<b style="color:#ff7b8f">✗ Nessuna delle due fonti risponde adesso</b>: nell\'app la riga resta nascosta finché non tornano';
     } catch (e) { html = '<b style="color:#ff7b8f">✗ ' + esc(e.message) + '</b>'; }
     NW.feed = feed; NW.at = Date.now(); NW.html = html;
     const b2 = $('#hvNews'); if (b2) b2.innerHTML = html;
