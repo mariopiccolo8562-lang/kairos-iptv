@@ -1,0 +1,14 @@
+{
+  "id": "com.kairos.player",
+  "version": "0.1.0",
+  "vendor": "Kairos",
+  "type": "web",
+  "main": "index.html",
+  "title": "Kairos Player",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "bgColor": "#0b0f1a",
+  "iconColor": "#0b0f1a",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true
+}

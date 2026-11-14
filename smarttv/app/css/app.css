@@ -1,0 +1,112 @@
+/* Kairos Player — una sola misura: 1rem = 1/67,5 dell'altezza (16 px a 1080p, 10,7 px a 720p). Niente variabili né griglie CSS: gira anche sui TV meno recenti. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 1.4815vh; }
+body { background: #0b0f1a; color: #eef1f8; font-family: "LG Smart UI", "Samsung One UI", "Tizen Sans", Arial, Helvetica, sans-serif; overflow: hidden; width: 100vw; height: 100vh; }
+#app { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.screen { position: absolute; left: 0; top: 0; right: 0; bottom: 0; padding: 2.4rem 4rem 2rem; display: flex; flex-direction: column; }
+body.playing #app { display: none; }
+#video, #avbox { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; background: #000; display: none; }
+#av-player { width: 100%; height: 100%; }
+h1 { font-size: 3rem; font-weight: 700; margin-bottom: 1rem; }
+h2 { font-size: 2rem; font-weight: 700; margin-bottom: .8rem; }
+
+/* testata */
+.head { display: flex; align-items: center; height: 4rem; margin-bottom: 1.6rem; flex: none; }
+.brand { font-size: 1.5rem; font-weight: 700; letter-spacing: .28rem; color: #f5b301; margin-right: 2.4rem; }
+.htitle { font-size: 2.2rem; font-weight: 700; flex: 1; }
+.hlist { font-size: 1.35rem; color: #9aa3bd; margin-right: 2rem; max-width: 34rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.clock { font-size: 2rem; font-weight: 700; }
+
+/* fuoco del telecomando: bordo chiaro e leggero ingrandimento, sempre ben visibile */
+.f { outline: none; border: .22rem solid transparent; transition: transform .12s, background-color .12s; }
+.f.on { border-color: #ffffff; background-color: #26324f; transform: scale(1.03); }
+.btn { display: inline-block; padding: .9rem 2rem; margin: 0 1rem 1rem 0; border-radius: .9rem; background: #1a2238; font-size: 1.55rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.btn.pri { background: #b98500; color: #0b0f1a; }
+.btn.pri.on { background-color: #f5b301; }
+.btn.sel { background: #24406e; }
+.msg { font-size: 1.7rem; color: #9aa3bd; padding: 2rem 0; }
+.note { font-size: 1.25rem; color: #7f8aa8; margin-top: 1.2rem; }
+.center { text-align: center; }
+.scroll { overflow: hidden; }
+
+/* pannelli: prima lista, liste, impostazioni */
+.panel { width: 62rem; margin: 1rem auto 0; background: #121a2b; border-radius: 1.4rem; padding: 2.4rem 2.8rem; }
+.panel.wide { width: 86rem; }
+.lead { font-size: 1.6rem; line-height: 2.4rem; color: #c8cfe3; margin-bottom: 1.6rem; }
+.seg { margin-bottom: .6rem; }
+.field { display: block; margin-bottom: 1.1rem; }
+.field span { display: block; font-size: 1.25rem; color: #9aa3bd; margin-bottom: .35rem; }
+.field input { width: 100%; height: 4rem; padding: 0 1.2rem; border-radius: .8rem; background: #0b0f1a; color: #ffffff; font-size: 1.7rem; font-family: inherit; }
+.field input.on { background-color: #0b0f1a; transform: none; border-color: #f5b301; }
+.status { min-height: 2.2rem; font-size: 1.45rem; color: #ffcf66; margin-top: .4rem; }
+.mrow { margin-top: 1rem; }
+.lrow { display: flex; align-items: center; padding: .8rem 0; border-bottom: .1rem solid #1f2a44; }
+.lname { flex: 1; font-size: 1.7rem; font-weight: 700; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ltype { width: 14rem; font-size: 1.25rem; color: #9aa3bd; }
+.lrow .btn { margin: 0 0 0 .8rem; padding: .7rem 1.3rem; font-size: 1.35rem; }
+.srow { display: flex; align-items: center; height: 5rem; padding: 0 1.4rem; border-radius: .9rem; margin-bottom: .5rem; background: #18223a; cursor: pointer; }
+.sl { flex: 1; font-size: 1.7rem; font-weight: 700; }
+.sv { font-size: 1.5rem; color: #f5b301; }
+
+/* Home */
+.tiles { flex: 1; display: flex; flex-wrap: wrap; align-content: center; justify-content: center; }
+.tile { width: 22rem; height: 15rem; margin: 1rem; border-radius: 1.6rem; background: #151e33; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
+.tile.on { transform: scale(1.07); background-color: #24406e; }
+.tic { font-size: 4.6rem; line-height: 5.6rem; }
+.tname { font-size: 1.9rem; font-weight: 700; margin-top: .6rem; }
+
+/* sezioni: categorie a sinistra, contenuti a destra */
+.cols { flex: 1; display: flex; min-height: 0; }
+.cats { width: 24rem; flex: none; padding-right: 1rem; }
+.cat { height: 4rem; line-height: 3.5rem; padding: 0 1.2rem; border-radius: .8rem; font-size: 1.5rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; margin-bottom: .3rem; }
+.cat.sel { background: #1a2a4a; color: #f5b301; font-weight: 700; }
+.right { flex: 1; display: flex; flex-direction: column; min-width: 0; padding-left: 1.4rem; }
+.count { font-size: 1.2rem; color: #7f8aa8; margin-bottom: .6rem; flex: none; }
+.livewrap { flex: 1; display: flex; min-height: 0; }
+.rows { flex: 1; min-height: 0; padding-right: .6rem; }
+.rows.wide { margin: 0 auto; width: 90rem; }
+.row { display: flex; align-items: center; height: 4.6rem; padding: 0 1rem; border-radius: .8rem; margin-bottom: .3rem; background: #121a2b; cursor: pointer; }
+.num { width: 4.4rem; flex: none; font-size: 1.25rem; color: #7f8aa8; }
+.logo { width: 5rem; height: 3.2rem; flex: none; margin-right: 1.2rem; object-fit: contain; }
+.rname { flex: 1; font-size: 1.6rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.star { color: #f5b301; font-size: 1.5rem; margin-left: .8rem; }
+.info { width: 30rem; flex: none; padding: 1rem 0 0 2rem; }
+.biglogo { width: 16rem; height: 9rem; object-fit: contain; margin-bottom: 1rem; }
+.epg-h { font-size: 1.15rem; color: #f5b301; margin-top: 1rem; letter-spacing: .08rem; }
+.epg-t { font-size: 1.5rem; line-height: 2.1rem; }
+.grid { flex: 1; min-height: 0; display: flex; flex-wrap: wrap; align-content: flex-start; }
+.card { position: relative; width: 14.2rem; height: 21.3rem; margin: 0 1rem 1rem 0; border-radius: .9rem; background: #18223a; overflow: hidden; cursor: pointer; }
+.ctitle { position: absolute; left: 0; right: 0; top: 0; bottom: 0; padding: 1rem; font-size: 1.35rem; font-weight: 700; line-height: 1.8rem; overflow: hidden; }
+.poster { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* scheda */
+.detail { flex: 1; display: flex; min-height: 0; }
+.dleft { width: 26rem; flex: none; }
+.dposter { width: 24rem; height: 36rem; object-fit: cover; border-radius: 1rem; background: #18223a; }
+.dright { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.meta { font-size: 1.5rem; color: #f5b301; margin-bottom: 1rem; min-height: 1.6rem; }
+.plot { font-size: 1.6rem; line-height: 2.4rem; color: #c8cfe3; max-height: 14.4rem; overflow: hidden; margin-bottom: 1rem; }
+.eps { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: 1rem; }
+
+/* finestre */
+.modal { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: rgba(4, 6, 12, .86); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.mbox { width: 60rem; max-height: 56rem; overflow: hidden; background: #151e33; border-radius: 1.4rem; padding: 2.4rem 2.8rem; }
+.mtext { font-size: 1.6rem; line-height: 2.4rem; color: #dfe4f2; white-space: pre-wrap; margin-bottom: 1rem; }
+#toast { display: none; position: absolute; left: 50%; bottom: 5rem; transform: translateX(-50%); background: #f5b301; color: #0b0f1a; font-size: 1.6rem; font-weight: 700; padding: .9rem 2.2rem; border-radius: 3rem; z-index: 60; }
+
+/* lettore */
+#osd { display: none; position: absolute; left: 0; right: 0; bottom: 0; padding: 5rem 5rem 3rem; background: linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,.88)); z-index: 40; }
+.osd-top { display: flex; align-items: center; }
+.osd-live { background: #e02b3c; color: #fff; font-size: 1.2rem; font-weight: 700; padding: .25rem .9rem; border-radius: .5rem; margin-right: 1.2rem; }
+.osd-title { font-size: 2.4rem; font-weight: 700; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.osd-n { font-size: 1.5rem; color: #c8cfe3; }
+.osd-state { font-size: 1.8rem; color: #ffcf66; margin-top: .8rem; }
+.osd-bar { height: .6rem; background: rgba(255,255,255,.25); border-radius: .3rem; margin-top: 1.2rem; overflow: hidden; }
+.osd-fill { height: 100%; background: #f5b301; }
+.osd-time { font-size: 1.4rem; margin-top: .5rem; }
+.osd-hint { font-size: 1.25rem; color: #9aa3bd; margin-top: .8rem; }
+
+/* dentro gli elenchi che scorrono il fuoco non ingrandisce (verrebbe tagliato ai bordi): basta il bordo chiaro */
+.rows, .cats, .grid { padding-left: .3rem; padding-top: .3rem; }
+.row.on, .cat.on, .card.on, .srow.on { transform: none; }
+.card.on { border-color: #f5b301; }

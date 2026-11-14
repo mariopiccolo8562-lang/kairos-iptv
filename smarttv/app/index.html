@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080, user-scalable=no">
+<title>Kairos Player</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app"></div>
+<video id="video"></video>
+<div id="avbox"><object id="av-player" type="application/avplayer"></object></div>
+<div id="osd"></div>
+<div id="toast"></div>
+<!-- solo sui TV Samsung: la libreria di sistema per il lettore AVPlay (sugli altri non esiste e non viene chiesta) -->
+<script>if (typeof window.tizen !== 'undefined') document.write('<script src="$WEBAPIS/webapis/webapis.js"><\/script>');</script>
+<script src="js/core.js"></script>
+<script src="js/data.js"></script>
+<script src="js/player.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Kairos Player per TV Samsung. PACKAGE_ID (10 caratteri) lo genera Tizen Studio con il tuo certificato: va messo al posto di AAAAAAAAAA nelle due righe qui sotto. -->
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="http://kairos-player.app/tv" version="0.1.0" viewmodes="maximized">
+    <tizen:application id="AAAAAAAAAA.KairosPlayer" package="AAAAAAAAAA" required_version="4.0"/>
+    <content src="index.html"/>
+    <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
+    <icon src="icon.png"/>
+    <name>Kairos Player</name>
+    <description>Media player for your own playlists (M3U link or Xtream login). No content included.</description>
+    <tizen:profile name="tv-samsung"/>
+    <!-- l'app si collega solo al server della lista scritta dall'utente, che può essere qualunque: per questo l'accesso alla rete non è limitato a un dominio -->
+    <access origin="*" subdomains="true"/>
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:privilege name="http://developer.samsung.com/privilege/avplay"/>
+    <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
+</widget>
