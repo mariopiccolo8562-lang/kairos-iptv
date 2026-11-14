@@ -6697,7 +6697,9 @@ async function adminInner(req, env, url, ip, ctx) {
    e quelli dei loro sotto-agenti. Cosa possono fare lo decide chi li ha creati.
    ====================================================================== */
 const AGENT_FLAGS = ['create', 'renew', 'disable', 'delete', 'kick', 'playlists', 'clientPerms', 'vpn', 'link', 'lineView', 'events', 'account', 'ai',
-  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'payments', 'autoRenew', 'dlcodes', 'stcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt', 'atx', 'orcpApp'];
+  'dash', 'online', 'errors', 'reports', 'contentReq', 'addonReq', 'messages', 'store', 'vod', 'activity', 'storeAll', 'subClients', 'maint', 'players', 'payments', 'autoRenew', 'dlcodes', 'stcodes', 'appstore', 'lines', 'appsOp', 'appk', 'armada', 'armadaTrial', 'storm', 'stormTrial', 'wolf', 'mxp', 'oxp', 'oxpNew', 'ro', 'slt', 'atx', 'orcpApp',
+  // 14 novembre 2026: pagina «Info» (comunicazioni e guida alle app, accesa di serie) e «Pulizia scadute» (cancellazione in blocco, spenta di serie)
+  'info', 'lineClean'];
 const ORCP_SERVER_KEYS = ['portal', 'portal2', 'portal3', 'portal4', 'portal5'];
 function checkedOrcpServers(value) {
   if (!Array.isArray(value) || value.length > ORCP_SERVER_KEYS.length || value.some((x) => typeof x !== 'string' || !ORCP_SERVER_KEYS.includes(x)) || new Set(value).size !== value.length) {
@@ -6707,7 +6709,7 @@ function checkedOrcpServers(value) {
 }
 const AGENT_DEF = { create: true, renew: true, disable: true, delete: false, kick: true, playlists: true, clientPerms: false, vpn: false, link: true, lineView: false, events: false, account: false, ai: false,
   dash: true, online: false, errors: false, reports: false, contentReq: false, addonReq: false, messages: false, store: false, vod: false, activity: false,
-  storeAll: false, subClients: true, maint: false, players: false, payments: false, autoRenew: false, dlcodes: true, stcodes: false, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, atx: false, mxp: false, oxp: false, oxpNew: false, orcpApp: false, orcpSrv: [], actApps: [], addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
+  storeAll: false, subClients: true, maint: false, players: false, payments: false, autoRenew: false, dlcodes: true, stcodes: false, appstore: false, lines: false, appsOp: false, appk: false, armada: false, armadaTrial: false, armadaCredits: 0, storm: false, stormTrial: false, stormCredits: 0, wolf: false, ro: false, slt: false, atx: false, mxp: false, oxp: false, oxpNew: false, orcpApp: false, info: true, lineClean: false, orcpSrv: [], actApps: [], addons: [], storeApps: ['*'], appsAllow: ['*'], dlcAllow: ['*'], kAllow: ['*'], orbDns: ['*'], mxDns: ['*'], maxConn: 1 };
 /** app dello store che l'agente può approvare: ['*'] = tutte */
 function storeAppsList(v) {
   if (!Array.isArray(v)) return ['*'];
@@ -7859,7 +7861,7 @@ async function agentRoutes(req, env, url, path, ses, ip, ctx) {
     if (g && g.noticeAt) { const r = (await guideReads(env)).find((x) => x.agent_id === A.id); g.notice = !r || +r.at < g.noticeAt; }
     return json({ guide: g });
   }
-  if (path === '/info' && m === 'GET') { const i = await infoGet(env); return json({ info: { news: i.news, newsAt: i.newsAt, apps: i.apps } }); } // pagina «Info»: l'agente legge soltanto
+  if (path === '/info' && m === 'GET') { need('info', 'Il titolare non ti ha attivato la pagina Info'); const i = await infoGet(env); return json({ info: { news: i.news, newsAt: i.newsAt, apps: i.apps } }); } // pagina «Info»: l'agente legge soltanto, se il titolare gliel'ha attivata
   if (path === '/guide/read' && m === 'POST') { // l'agente ha aperto la guida: l'avviso non si ripresenta (in assistenza il titolare non la segna come letta per lui)
     if (!ses.assist) await env.DB.prepare("INSERT INTO agent_reads (agent_id, k, at) VALUES (?, 'guide', ?) ON CONFLICT(agent_id, k) DO UPDATE SET at = excluded.at").bind(A.id, Date.now()).run();
     return json({ ok: true });

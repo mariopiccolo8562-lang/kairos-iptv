@@ -124,7 +124,7 @@
   new MutationObserver(() => { if (V.classList.contains('on')) { draw(); load(false); } }).observe(V, { attributes: true, attributeFilter: ['class'] });
   // l'agente all'apertura del pannello: una lettura sola, per il pallino «comunicazione nuova»
   let tick = 0;
-  function boot() { clearInterval(tick); let n = 0; tick = setInterval(() => { if (++n > 40) return clearInterval(tick); if (typeof D !== 'object' || !D || !D.role) return; clearInterval(tick); if (isAg()) load(true); }, 900); }
+  function boot() { clearInterval(tick); let n = 0; tick = setInterval(() => { if (++n > 40) return clearInterval(tick); if (typeof D !== 'object' || !D || !D.role) return; clearInterval(tick); if (isAg() && ((D.me || {}).perms || {}).info !== false) load(true); }, 900); }
   boot();
   const appEl = $('#app');
   if (appEl) new MutationObserver(() => { if (appEl.classList.contains('on')) return boot(); Object.assign(I, { data: null, busy: false, editApps: false, t: 0, err: '' }); V.innerHTML = ''; dot(); }).observe(appEl, { attributes: true, attributeFilter: ['class'] });
