@@ -1840,6 +1840,8 @@ async function onlineRoute(req) {
    Con GH_TOKEN (token a grana fine, sola lettura di «Contents») l'API GitHub autenticata: funziona anche con i repository
    privati. Il token resta nel Worker: mai nelle risposte, nei log o nei messaggi d'errore. */
 const GH_OWNER = 'mariopiccolo8562-lang';
+/** versione di prova di KAIROS HEAVY data da /get/heavy.apk e dallo Store: a ogni nuova prova si cambia solo questo numero */
+const HEAVY_REL = 'kairos-ultimate/releases/download/heavy-prova-12/';
 const GET_APK = {
   store: ['kairos-store/releases/latest/download/KairosStore.apk', 'KairosStore.apk'],
   pro: ['kairos-store/releases/download/kairos-tv/kairos-tv.apk', 'kairos-pro.apk'],
@@ -1858,9 +1860,13 @@ const GET_APK = {
   // Servono il segreto GH_TOKEN e il repository aggiunto al token dei download; finché manca, qui risponde 502
   portal: ['kairos-portal-smart/releases/latest/download/kairos-portal.apk', 'kairos-portal.apk'],
   smart: ['kairos-portal-smart/releases/latest/download/kairos-smart.apk', 'kairos-smart.apk'],
-  // KAIROS HEAVY (13 novembre 2026): app personale del titolare, ramo «heavy» del repository della Ultimate. Si scarica
-  // la versione di prova indicata qui (le prove sono anteprime: non sono l'«ultima release» della Ultimate)
-  heavy: ['kairos-ultimate/releases/download/heavy-prova-12/kairos-ultimate.apk', 'kairos-heavy.apk'],
+  // KAIROS HEAVY (13 novembre 2026): ramo «heavy» del repository della Ultimate. Si scarica la versione di prova
+  // indicata in HEAVY_REL (le prove sono anteprime: non sono l'«ultima release» della Ultimate). Dal 14 novembre 2026 è
+  // nello Store: lì «Installa» scarica sempre questa versione, anche sopra quella già installata (è così che si aggiorna),
+  // e con «?abi=» riceve l'APK leggero della sua ABI, come per la Ultimate
+  heavy: [HEAVY_REL + 'kairos-ultimate.apk', 'kairos-heavy.apk'],
+  'heavy-arm32': [HEAVY_REL + 'kairos-ultimate-arm32.apk', 'kairos-heavy-arm32.apk'],
+  'heavy-arm64': [HEAVY_REL + 'kairos-ultimate-arm64.apk', 'kairos-heavy-arm64.apk'],
 };
 /** feed degli aggiornamenti (/get/<id>.json): file della stessa release dell'APK di GET_APK[id]. Lo store non ne ha uno:
  *  si ricava dalla sua ultima release (tag v1.0.N con KairosStore.apk) */
