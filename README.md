@@ -1394,3 +1394,4 @@ Prova: `srv_dns_del_agents`.
 - Le voci sono nel catalogo del controllo remoto (`RC_CAT`, chiavi `h.*`, app `heavy`) e si salvano nel profilo `heavy` (`PUT /admin/rctl/app/heavy`).
 - Per il pannello la HEAVY resta una Ultimate (user agent KairosUltimate, codici, linee, DNS cifrato): l'app manda la versione «heavy x.y» e `rcEffective(..., heavy)` aggiunge il profilo `heavy` sopra quello della Ultimate, all'apertura e al battito (stessa impronta: niente riavvii). Una Ultimate normale non riceve le voci `h.*`.
 - Prove: `srv_heavy_rc.mjs`, `ui_heavy_page.mjs`.
+- Prova 9 (14 novembre): voci nuove «Solo canali funzionanti» (`h.liveCheck`: nascondi / segna / spento), «Consigliati per te» (`h.rec`), «Appena arrivati» (`h.fresh`); «Ultimo canale» diventa «Ultimi canali» (ultimi 5, si sceglie dal menu).
