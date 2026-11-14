@@ -15,6 +15,19 @@
       x.send();
     } catch (e) { end('net'); }
   };
+  KP.post = function (url, obj, cb) {
+    var x = new XMLHttpRequest(), done = false;
+    function end(err, j) { if (done) return; done = true; cb(err, j); }
+    try {
+      x.open('POST', url, true);
+      x.timeout = 15000;
+      x.setRequestHeader('Content-Type', 'text/plain;charset=UTF-8');
+      x.onload = function () { var j = null; try { j = JSON.parse(x.responseText); } catch (e) {} if (x.status >= 200 && x.status < 300 && j) end(null, j); else end('net', j); };
+      x.onerror = function () { end('net'); };
+      x.ontimeout = function () { end('net'); };
+      x.send(JSON.stringify(obj || {}));
+    } catch (e2) { end('net'); }
+  };
   function json(url, cb) { KP.get(url, function (err, txt) { if (err) return cb(err); var j; try { j = JSON.parse(txt); } catch (e) { return cb('net'); } cb(null, j); }); }
   function enc(s) { return encodeURIComponent(String(s)); }
   /** indirizzo scritto dall'utente → http(s)://server[:porta] senza barra finale; '' se non valido */

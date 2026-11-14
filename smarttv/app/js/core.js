@@ -3,7 +3,9 @@
    Nessun codice scaricato da fuori, nessuna statistica, nessuna pubblicità. Scritto in ES5: gira anche sui TV meno recenti. */
 var KP = (function () {
   'use strict';
-  var KP = { version: '0.1.0' };
+  var KP = { version: '0.2.0' };
+  /** «Dal telefono»: il TV mostra un codice e la lista si scrive su questa pagina (KP.PAIR + '/tv'). È l'unico indirizzo fisso dell'app e serve solo a questo passaggio */
+  KP.PAIR = 'https://store-k.download';
 
   /* ---------- testi (italiano e inglese) ---------- */
   var T = {
@@ -12,7 +14,10 @@ var KP = (function () {
       lists: 'Le mie liste', settings: 'Impostazioni', all: 'Tutti', back: 'Indietro', yes: 'Sì', no: 'No', ok: 'OK', cancel: 'Annulla',
       welcome: 'Benvenuto', welcomeTxt: 'Kairos Player è un lettore: non contiene canali né film. Aggiungi la tua lista, quella che ti ha dato il tuo fornitore o che hai creato tu.',
       rights: 'Usa solo liste e contenuti che hai il diritto di guardare.',
-      addList: 'Aggiungi una lista', typeM3u: 'Link M3U', typeXt: 'Accesso Xtream', name: 'Nome', nameHint: 'es. La mia lista',
+      addList: 'Aggiungi una lista', typeM3u: 'Link M3U', typeXt: 'Accesso Xtream', typePhone: 'Dal telefono',
+      phoneLead: 'Più comodo che scrivere con il telecomando: apri la pagina dal telefono o dal computer, scrivi questo codice e la tua lista. Il codice lo puoi anche dare a chi ti prepara la lista.',
+      phoneOpen: 'Apri', phoneCode: 'Codice', phoneWait: 'Aspetto la lista…', phoneGot: 'Lista ricevuta: la controllo…', phoneErr: 'Non riesco a chiedere il codice. Controlla la connessione del TV.',
+      phoneOld: 'Codice scaduto.', newCode: 'Nuovo codice', phoneNote: 'La lista passa da un server solo per arrivare a questo TV: resta cifrata e viene cancellata alla consegna, o dopo 15 minuti.', name: 'Nome', nameHint: 'es. La mia lista',
       url: 'Indirizzo della lista', urlHint: 'http://… .m3u', host: 'Server', hostHint: 'http://server:porta', user: 'Utente', pass: 'Password',
       save: 'Salva', saving: 'Controllo la lista…', loading: 'Caricamento…', empty: 'Qui non c\'è nulla', noList: 'Nessuna lista: aggiungine una',
       errNet: 'Non riesco a raggiungere il server. Controlla l\'indirizzo e la connessione.', errAuth: 'Utente o password non validi, oppure accesso scaduto.',
@@ -24,7 +29,7 @@ var KP = (function () {
       searchHint: 'Scrivi almeno 2 lettere', results: 'Risultati', language: 'Lingua', parental: 'Categorie per adulti',
       shown: 'Mostrate', hidden: 'Nascoste', pin: 'PIN dei genitori', pinSet: 'Scegli un PIN di 4 cifre', pinAsk: 'Scrivi il PIN', pinBad: 'PIN sbagliato',
       pinNone: 'Non impostato', pinOn: 'Impostato', clear: 'Cancella tutti i dati', askClear: 'Cancellare liste, preferiti e impostazioni da questo TV?',
-      info: 'Informazioni e privacy', infoTxt: 'Kairos Player %s\n\nKairos Player è un lettore multimediale. Non fornisce, non contiene e non suggerisce canali, film o altri contenuti: riproduce solo le liste che l\'utente inserisce.\n\nPrivacy: le liste, i preferiti e le impostazioni restano salvati solo su questo TV. L\'app non raccoglie dati personali, non usa pubblicità né statistiche e si collega soltanto al server della lista scelta dall\'utente.\n\nL\'utente è responsabile dei contenuti delle proprie liste e deve avere il diritto di guardarli.',
+      info: 'Informazioni e privacy', infoTxt: 'Kairos Player %s\n\nKairos Player è un lettore multimediale. Non fornisce, non contiene e non suggerisce canali, film o altri contenuti: riproduce solo le liste che l\'utente inserisce.\n\nPrivacy: le liste, i preferiti e le impostazioni restano salvati solo su questo TV. L\'app non raccoglie dati personali, non usa pubblicità né statistiche e si collega soltanto al server della lista scelta dall\'utente. Solo se usi «Dal telefono», la lista passa dal server di Kairos Player per arrivare al TV: resta cifrata e viene cancellata alla consegna, o dopo 15 minuti.\n\nL\'utente è responsabile dei contenuti delle proprie liste e deve avere il diritto di guardarli.',
       buffering: 'Carico…', liveTag: 'DIRETTA', hintLive: '▲ ▼ canale · OK informazioni · INDIETRO chiudi', hintVod: '◀ ▶ 10 secondi · OK pausa · INDIETRO chiudi'
     },
     en: {
@@ -32,7 +37,10 @@ var KP = (function () {
       lists: 'My playlists', settings: 'Settings', all: 'All', back: 'Back', yes: 'Yes', no: 'No', ok: 'OK', cancel: 'Cancel',
       welcome: 'Welcome', welcomeTxt: 'Kairos Player is a media player: it includes no channels or movies. Add your own playlist, the one from your provider or one you created.',
       rights: 'Only use playlists and content you have the right to watch.',
-      addList: 'Add a playlist', typeM3u: 'M3U link', typeXt: 'Xtream login', name: 'Name', nameHint: 'e.g. My playlist',
+      addList: 'Add a playlist', typeM3u: 'M3U link', typeXt: 'Xtream login', typePhone: 'From your phone',
+      phoneLead: 'Easier than typing with the remote: open the page on your phone or computer, enter this code and your playlist. You can also give the code to whoever prepares the playlist for you.',
+      phoneOpen: 'Open', phoneCode: 'Code', phoneWait: 'Waiting for the playlist…', phoneGot: 'Playlist received: checking it…', phoneErr: 'Cannot get a code. Check the TV connection.',
+      phoneOld: 'The code has expired.', newCode: 'New code', phoneNote: 'The playlist passes through a server only to reach this TV: it is kept encrypted and deleted on delivery, or after 15 minutes.', name: 'Name', nameHint: 'e.g. My playlist',
       url: 'Playlist address', urlHint: 'http://… .m3u', host: 'Server', hostHint: 'http://server:port', user: 'Username', pass: 'Password',
       save: 'Save', saving: 'Checking the playlist…', loading: 'Loading…', empty: 'Nothing here', noList: 'No playlist yet: add one',
       errNet: 'Cannot reach the server. Check the address and your connection.', errAuth: 'Wrong username or password, or the account has expired.',
@@ -44,7 +52,7 @@ var KP = (function () {
       searchHint: 'Type at least 2 letters', results: 'Results', language: 'Language', parental: 'Adult categories',
       shown: 'Shown', hidden: 'Hidden', pin: 'Parental PIN', pinSet: 'Choose a 4-digit PIN', pinAsk: 'Enter the PIN', pinBad: 'Wrong PIN',
       pinNone: 'Not set', pinOn: 'Set', clear: 'Erase all data', askClear: 'Erase playlists, favourites and settings from this TV?',
-      info: 'About and privacy', infoTxt: 'Kairos Player %s\n\nKairos Player is a media player. It does not provide, include or suggest any channels, movies or other content: it only plays the playlists added by the user.\n\nPrivacy: playlists, favourites and settings are stored only on this TV. The app collects no personal data, has no ads or analytics, and connects only to the server of the playlist chosen by the user.\n\nUsers are responsible for the content of their playlists and must have the right to watch it.',
+      info: 'About and privacy', infoTxt: 'Kairos Player %s\n\nKairos Player is a media player. It does not provide, include or suggest any channels, movies or other content: it only plays the playlists added by the user.\n\nPrivacy: playlists, favourites and settings are stored only on this TV. The app collects no personal data, has no ads or analytics, and connects only to the server of the playlist chosen by the user. Only if you use "From your phone", the playlist passes through the Kairos Player server to reach the TV: it is kept encrypted and deleted on delivery, or after 15 minutes.\n\nUsers are responsible for the content of their playlists and must have the right to watch it.',
       buffering: 'Loading…', liveTag: 'LIVE', hintLive: '▲ ▼ channel · OK info · BACK close', hintVod: '◀ ▶ 10 seconds · OK pause · BACK close'
     }
   };

@@ -10,6 +10,7 @@
  */
 import { b64u as pkB64, unb64u as pkUnb64, cbor as pkCbor, parseAuthData as pkAuthData, coseToJwk as pkJwk, verifySig as pkVerify, sha as pkSha, same as pkSame, concat as pkCat } from './passkey.js'; // accesso del titolare con impronta o Face ID
 import { storeApi, storeAdmin, storeCodes, storeCodesOn, storeHeaders, storeHooks, storeDecide, storeAgentAlerts } from './store.js'; // Store aperto: conteggi e compatibilità con gli store vecchi (/api/store/*)
+import { tvPair, tvHeaders } from './tvpair.js'; // Kairos Player per TV LG e Samsung: «invia la lista dal telefono» (pubblica, senza legami con il pannello)
 import { wolfRoutes, wolfCron, sockFetch, wolfCfg, wolfGlance } from './wolf.js'; // pannello WOLF collegato (sezione «WOLF» del pannello)
 import { atxRoutes, clearAtxAgent, atxGlance } from './atlantix.js'; // Pannello Atlantix (cms.axdash.biz)
 import { oraRoutes } from './orapanel.js';
@@ -329,6 +330,7 @@ function harden(res, req) {
     h.set('Cross-Origin-Resource-Policy', 'cross-origin');
   }
   if (url.pathname.startsWith('/api/store/')) storeHeaders(h, url.pathname); // CORS per lo store + pagine dei link email
+  if (url.pathname.startsWith('/api/tv/')) tvHeaders(h, false); else if (url.pathname === '/tv' || url.pathname === '/tv/') tvHeaders(h, true); // Kairos Player: le API le chiama il TV, la pagina ha script interni
   if (url.pathname === '/privacy' || url.pathname === '/privacy/') {
     // pagina pubblica senza script né azioni: l'app può leggerla o mostrarla in un riquadro
     h.delete('X-Frame-Options');
@@ -6074,6 +6076,7 @@ async function route(req, env, ctx) {
   if (dlHost(env, url.hostname)) {
     if (path === '/') return Response.redirect(url.origin + '/store/', 302);
     if (path.startsWith('/get/') || path === '/store' || path.startsWith('/store/')) return cleanLinks(req, env, url, path);
+    if (path === '/tv' || path === '/tv/' || path.startsWith('/api/tv/')) return tvPair(req, env, ctx, url, ip, { json, limited, seal, unseal, now, rand, b64url, sha256 });
     return new Response('Non trovato', { status: 404 });
   }
 
@@ -6141,6 +6144,7 @@ async function route(req, env, ctx) {
 
   /* ---------- Store aperto: conteggio di store e download, compatibilità con gli store vecchi (pubblica, vedi store.js) ---------- */
   if (path === '/api/tg/hook' && req.method === 'POST') return tgHook(req, env, ctx, ip, notifyH(env)); // webhook del bot Telegram
+  if (path === '/tv' || path === '/tv/' || path.startsWith('/api/tv/')) return tvPair(req, env, ctx, url, ip, { json, limited, seal, unseal, now, rand, b64url, sha256 });
   if (path.startsWith('/api/store/')) return storeApi(req, env, ctx, url, ip, { sellerName: (id) => sellerNameOf(env, id), info: () => infoPublic(env) });
 
   /* ---------- informativa privacy e condizioni (pubblica, la apre anche l'app) ---------- */

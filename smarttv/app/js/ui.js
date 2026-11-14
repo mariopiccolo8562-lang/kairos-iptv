@@ -1,7 +1,7 @@
 /* Kairos Player — schermate: prima lista, Home, Diretta, Film, Serie, scheda, preferiti, ricerca, liste, impostazioni. */
 (function (KP) {
   'use strict';
-  var app, stack = [], clockT = 0, el = KP.el, t = KP.t;
+  var app, stack = [], clockT = 0, onLeave = null, el = KP.el, t = KP.t;
 
   /* ---------- pila delle schermate ---------- */
   function show(name, arg) { var top = stack[stack.length - 1], c = KP.cur(); if (top && c && c._key !== undefined) top.fk = c._key; stack.push({ name: name, arg: arg || {} }); render(); }
@@ -14,6 +14,7 @@
   KP.onBack = back;
   function render() {
     var s = stack[stack.length - 1];
+    if (onLeave) { var bye = onLeave; onLeave = null; bye(); } // la schermata che se ne va ferma i suoi timer
     KP.clear(app);
     var scr = el('div', 'screen s-' + s.name);
     app.appendChild(scr);
@@ -78,13 +79,52 @@
   SCREENS.setup = function (scr, arg) {
     header(scr, t('addList'));
     var box = el('div', 'panel'), type = arg.type || 'm3u', first = !KP.lists.length;
-    if (first) { box.appendChild(el('h1', '', t('welcome'))); box.appendChild(el('p', 'lead', t('welcomeTxt'))); }
-    var seg = el('div', 'seg'), fields = el('div', 'fields'), status = el('div', 'status', ''), F = {};
+    var hello = null;
+    if (first) { box.appendChild(el('h1', '', t('welcome'))); hello = el('p', 'lead', t('welcomeTxt')); box.appendChild(hello); }
+    var seg = el('div', 'seg'), fields = el('div', 'fields'), status = el('div', 'status', ''), F = {}, row = el('div', 'mrow'), pair = null, pollT = 0, gone = false;
+    function stopPair() { window.clearInterval(pollT); pollT = 0; pair = null; }
+    onLeave = function () { gone = true; stopPair(); };
+    /* «Dal telefono»: il TV chiede un codice, lo mostra con l'indirizzo della pagina, poi aspetta che la lista arrivi */
+    function phone() {
+      stopPair(); status.textContent = t('loading');
+      KP.post(KP.PAIR + '/api/tv/pair', {}, function (err, j) {
+        if (gone || type !== 'phone') return;
+        if (err || !j || !j.code) { status.textContent = t('phoneErr'); return; }
+        pair = j; status.textContent = t('phoneWait');
+        var page = KP.PAIR.replace(/^https?:\/\//i, '') + '/tv', code = String(j.code), box = el('div', 'phone'), left = el('div', 'phl');
+        left.appendChild(el('div', 'phk', '1 · ' + t('phoneOpen'))); left.appendChild(el('div', 'phv', page));
+        left.appendChild(el('div', 'phk', '2 · ' + t('phoneCode'))); left.appendChild(el('div', 'phcode', code.slice(0, 3) + ' ' + code.slice(3)));
+        box.appendChild(left);
+        try { if (window.KXQR) { var q = el('div', 'qr'); q.innerHTML = window.KXQR.svg(KP.PAIR + '/tv?c=' + code); box.appendChild(q); } } catch (e) {}
+        KP.clear(fields); fields.appendChild(el('p', 'lead', t('phoneLead'))); fields.appendChild(box); fields.appendChild(el('p', 'note', t('phoneNote')));
+        pollT = window.setInterval(function () {
+          if (!pair) return;
+          KP.post(KP.PAIR + '/api/tv/poll', { code: pair.code, secret: pair.secret }, function (e2, r) {
+            if (gone || !pair || e2 || !r) return;
+            if (r.status === 'gone') { stopPair(); status.textContent = t('phoneOld'); return; }
+            if (r.status !== 'ready' || !r.list) return;
+            stopPair(); status.textContent = t('phoneGot');
+            var l = r.list, pl = { id: KP.newId(), name: String(l.name || ''), type: l.type === 'xtream' ? 'xtream' : 'm3u' };
+            if (pl.type === 'xtream') { pl.host = KP.cleanHost(l.host); pl.user = String(l.user || ''); pl.pass = String(l.pass || ''); }
+            else { var xt2 = KP.xtreamFromUrl(String(l.url || '')); if (xt2) { pl.type = 'xtream'; pl.host = xt2.host; pl.user = xt2.user; pl.pass = xt2.pass; } else pl.url = String(l.url || ''); }
+            commit(pl);
+          });
+        }, 3000);
+      });
+    }
     function draw() {
-      KP.clear(seg); KP.clear(fields);
-      var a = btn(t('typeM3u'), function () { type = 'm3u'; arg.type = type; draw(); KP.focus(seg.firstChild); }, type === 'm3u' ? 'sel' : '');
-      var b = btn(t('typeXt'), function () { type = 'xtream'; arg.type = type; draw(); KP.focus(seg.lastChild); }, type === 'xtream' ? 'sel' : '');
-      seg.appendChild(a); seg.appendChild(b);
+      KP.clear(seg); KP.clear(fields); KP.clear(row); stopPair(); status.textContent = '';
+      if (hello) hello.style.display = type === 'phone' ? 'none' : ''; // con codice e QR lo spazio serve tutto
+      function tb(k, label) { var b0 = btn(label, function () { type = k; arg.type = k; draw(); var l = seg.childNodes, i; for (i = 0; i < l.length; i++) if (l[i]._key === 't:' + k) KP.focus(l[i]); }, type === k ? 'sel' : ''); b0._key = 't:' + k; return b0; }
+      seg.appendChild(tb('m3u', t('typeM3u'))); seg.appendChild(tb('xtream', t('typeXt'))); seg.appendChild(tb('phone', t('typePhone')));
+      if (type === 'phone') {
+        row.appendChild(btn(t('newCode'), phone));
+        if (!first) row.appendChild(btn(t('cancel'), back));
+        phone();
+        return;
+      }
+      row.appendChild(btn(t('save'), save, 'pri'));
+      if (!first) row.appendChild(btn(t('cancel'), back));
       F.name = input(t('name'), t('nameHint'), F.name ? F.name._in.value : '');
       fields.appendChild(F.name);
       if (type === 'm3u') { F.url = input(t('url'), t('urlHint'), F.url ? F.url._in.value : ''); fields.appendChild(F.url); }
@@ -93,8 +133,20 @@
         fields.appendChild(F.host); fields.appendChild(F.user); fields.appendChild(F.pass);
       }
     }
-    draw();
     var busy = false;
+    /** controlla la lista e, se va, la salva e la mette in uso */
+    function commit(pl) {
+      if (!pl.name) pl.name = (pl.host || pl.url || '').replace(/^https?:\/\//i, '').split('/')[0].split(':')[0];
+      busy = true; if (type !== 'phone') status.textContent = t('saving');
+      KP.check(pl, function (err) {
+        busy = false;
+        if (gone) return;
+        if (err) { status.textContent = errText(err); return; }
+        if (pl.type === 'xtream') KP.resetDb();
+        KP.lists.push(pl); KP.activeId = pl.id; KP.saveLists();
+        replace('home');
+      });
+    }
     function save() {
       if (busy) return;
       var pl = { id: KP.newId(), name: F.name._in.value.replace(/^\s+|\s+$/g, ''), type: type };
@@ -107,20 +159,10 @@
         pl.host = KP.cleanHost(F.host._in.value); pl.user = F.user._in.value.replace(/^\s+|\s+$/g, ''); pl.pass = F.pass._in.value;
         if (!pl.host || !pl.user || !pl.pass) { status.textContent = t('errFields'); return; }
       }
-      if (!pl.name) pl.name = (pl.host || pl.url || '').replace(/^https?:\/\//i, '').split('/')[0].split(':')[0];
-      busy = true; status.textContent = t('saving');
-      KP.check(pl, function (err) {
-        busy = false;
-        if (err) { status.textContent = errText(err); return; }
-        if (pl.type === 'xtream') KP.resetDb();
-        KP.lists.push(pl); KP.activeId = pl.id; KP.saveLists();
-        replace('home');
-      });
+      commit(pl);
     }
+    draw();
     box.appendChild(seg); box.appendChild(fields);
-    var row = el('div', 'mrow');
-    row.appendChild(btn(t('save'), save, 'pri'));
-    if (!first) row.appendChild(btn(t('cancel'), back));
     box.appendChild(row); box.appendChild(status);
     box.appendChild(el('p', 'note', t('rights')));
     scr.appendChild(box);

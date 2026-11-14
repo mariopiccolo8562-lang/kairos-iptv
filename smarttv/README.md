@@ -3,10 +3,11 @@
 Lettore neutro per le liste dell'utente: link M3U oppure accesso Xtream (server, utente, password).
 **L'app non contiene canali, film o indirizzi di contenuti** e non è collegata a nessun servizio: mostra solo ciò che l'utente inserisce.
 
-Versione 0.1.0 — prima stesura. Provata in un browser con un server finto (`tv_player.mjs`, 23 controlli); **non ancora provata su un TV vero**.
+Versione 0.2.0. Provata in un browser con un server finto (`tv_player.mjs`, 28 controlli; lato server `srv_tv_pair.mjs`, 19 controlli); **non ancora provata su un TV vero**.
 
 ## Cosa fa
 - Prima apertura: «Aggiungi una lista» (link M3U o accesso Xtream). Un link `get.php?username=…&password=…` viene riconosciuto come accesso Xtream.
+- **Dal telefono (0.2.0):** il TV mostra un codice di 6 caratteri, l'indirizzo della pagina e un QR. Chi ha il codice apre la pagina, scrive il codice e la lista, e il TV la riceve in pochi secondi. La pagina è `KP.PAIR + '/tv'` (oggi `store-k.download/tv`).
 - Home: TV in diretta, Film, Serie TV, Preferiti, Cerca, Le mie liste, Impostazioni.
 - Diretta: categorie, canali, guida «ora / a seguire» (solo Xtream), cambio canale con ▲ ▼ o CH+ / CH−.
 - Film e serie: locandine, scheda con trama, stagioni ed episodi, ripresa dal punto in cui si era arrivati.
@@ -19,7 +20,14 @@ Versione 0.1.0 — prima stesura. Provata in un browser con un server finto (`tv
 - Nessun contenuto incluso, nessun elenco di fornitori, nessun codice di attivazione verso un servizio.
 - Nessun codice scaricato da fuori, nessuna statistica, nessuna pubblicità, nessun componente di terzi.
 - Nessuna funzione che si accende dopo la revisione o che si comporta in modo diverso per chi controlla l'app.
-- Si collega solo al server della lista scritta dall'utente (canali, locandine e loghi vengono da lì).
+- Si collega solo al server della lista scritta dall'utente (canali, locandine e loghi vengono da lì) e, solo quando si usa «Dal telefono», al server che consegna la lista al TV.
+
+## «Dal telefono»: come passa la lista
+- Il TV chiede un codice (`POST /api/tv/pair`) e tiene per sé un segreto.
+- La pagina `/tv` manda codice e lista (`POST /api/tv/send`).
+- Il TV la ritira una volta sola con il suo segreto (`POST /api/tv/poll`) e la salva su di sé.
+- Sul server la lista resta cifrata, al massimo 15 minuti, e si cancella alla consegna. Non crea clienti né dispositivi nel pannello: è solo un passaggio.
+- Codice del server: `cloudflare/src/tvpair.js`, tabella `tv_pair` (migrazione 0057).
 
 ## Cartelle
 - `app/` — l'app (HTML, CSS, JavaScript ES5: gira anche sui TV meno recenti)
