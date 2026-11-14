@@ -70,7 +70,7 @@
     const groups = []; for (const c of list) { const g = String(c[7] || 'Altro').replace(/^KAIROS HEAVY · /, ''); let x = groups.find((y) => y[0] === g); if (!x) groups.push(x = [g, []]); x[1].push(c); }
     const dirty = !!H.draft;
     V.innerHTML = `<div class="card glass hv-top"><img src="heavy-icon.png" alt=""><div><h2>KAIROS HEAVY</h2>
-      <p>La tua app 3D personale. Ogni funzione si accende e si spegne da qui, con la spiegazione di cosa fa. Per linee, DNS cifrato, scudo VPN e aggiornamenti la HEAVY segue il profilo di <b>KAIROS Ultimate</b> (pagina Controllo remoto).</p>
+      <p>La tua app 3D personale. Ogni funzione si accende e si spegne da qui, con la spiegazione di cosa fa. Per linee, DNS cifrato, scudo VPN, loghi automatici dei canali e aggiornamenti la HEAVY segue il profilo di <b>KAIROS Ultimate</b> (pagina Controllo remoto).</p>
       <div class="hv-st"><span>${devs.length} ${devs.length === 1 ? 'dispositivo' : 'dispositivi'} negli ultimi 30 giorni</span><span>${onNow} aperte adesso</span><span>${Object.keys(rc).length} funzioni decise da te</span></div>
       <div class="hv-dl">Scarica: <code>store-k.download/get/heavy.apk</code></div></div></div>
       <div class="card glass"><div class="hv-g">${groups.map(([g, cs]) => `<div class="hv-sec">${esc(g)}</div>${cs.map((c) => card(c, rc)).join('')}`).join('')}</div>
@@ -78,7 +78,27 @@
     $$('[data-hvsw]', V).forEach((b) => (b.onclick = () => { const r = prof(), k = b.dataset.hvsw, cur = r[k] === undefined ? 'on' : String(r[k]); r[k] = cur === 'on' ? 'off' : 'on'; if (r[k] === 'on') delete r[k]; H.draft = r; draw(); }));
     $$('[data-hvsel]', V).forEach((s) => (s.onchange = () => { const r = prof(), k = s.dataset.hvsel; if (s.value === '') delete r[k]; else { const o = list.find((c) => c[0] === k)[3].find((x) => String(x[0]) === s.value); r[k] = o ? o[0] : s.value; } H.draft = r; draw(); }));
     $('#hvSave').onclick = () => save(prof());
+    newsCheck(rc['h.news'] || 'ansa');
     $('#hvReset').onclick = () => { H.draft = {}; draw(); };
+  }
+
+  // prova in diretta della fonte delle notizie: il titolare vede subito se la riga nell'app avrà qualcosa da mostrare
+  const NW = { feed: '', at: 0, html: '' };
+  async function newsCheck(feed) {
+    const card = $('[data-hvsel="h.news"]'); if (!card) return;
+    let box = $('#hvNews'); if (!box) { box = document.createElement('small'); box.id = 'hvNews'; card.parentNode.appendChild(box); }
+    if (feed === 'off') { box.textContent = 'Riga delle notizie spenta'; return; }
+    if (NW.feed === feed && Date.now() - NW.at < 60e3) { box.innerHTML = NW.html; return; }
+    box.textContent = 'Controllo la fonte…';
+    let html;
+    try {
+      const r = await api('GET', '/player/news?f=' + encodeURIComponent(feed));
+      const n = (r.items || []).length;
+      html = n ? `<b style="color:#3dffa2">✓ ${n} notizie lette da ${esc(r.src || 'fonte')}${r.stale ? ' (ultime salvate: la fonte ora non risponde)' : ''}</b><br>Prima: «${esc(String(r.items[0]).slice(0, 90))}»`
+        : '<b style="color:#ff7b8f">✗ La fonte non risponde adesso</b>: nell\'app la riga resta nascosta finché non torna';
+    } catch (e) { html = '<b style="color:#ff7b8f">✗ ' + esc(e.message) + '</b>'; }
+    NW.feed = feed; NW.at = Date.now(); NW.html = html;
+    const b2 = $('#hvNews'); if (b2) b2.innerHTML = html;
   }
 
   async function save(rc) {
