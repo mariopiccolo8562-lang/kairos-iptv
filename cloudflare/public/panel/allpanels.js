@@ -166,7 +166,7 @@
   function shell() {
     if ($('#apQ', V)) return;
     V.innerHTML = `<div class="card glass"><div class="hd"><h3>🌐 Tutti i pannelli<small>Le linee di WOLF, Armada, Storm, Atlantix, Realott e SLT in un elenco solo. Tocca una riga per aprirla nel suo pannello, oppure spunta le linee per consultarle, rinnovarle o modificarle.</small></h3>
-        <button class="btn sm" type="button" id="apRe">Aggiorna</button></div>
+        <span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" type="button" id="apClean" title="Cancella in un colpo solo le linee scadute da più di 7, 10 o 20 giorni, o prima di una data">🧹 Pulizia scadute</button><button class="btn sm" type="button" id="apRe">Aggiorna</button></span></div>
         <div class="ap-top"><input class="inp" id="apQ" placeholder="Cerca utente, ID o nota" autocomplete="off" spellcheck="false"><select class="inp" id="apSt" title="Stato"></select><span id="apSD" style="display:contents"></span><select class="inp" id="apOwn" title="Reseller"></select></div>
         <div class="ap-info" id="apInfo"></div><div id="apErr"></div>
         <div class="dv-tiles" id="apTiles"></div><div class="filters" id="apChips"></div><div id="apBar"></div><div class="ap-list" id="apList"></div><div id="apMore"></div></div>`;
@@ -288,7 +288,8 @@
     const ck = e.target.closest('input[data-apk]');
     if (ck) { const r = S.vis[+ck.dataset.apk]; if (r) { ck.checked ? S.sel.add(keyOf(r)) : S.sel.delete(keyOf(r)); } return paint(); }
     if (e.target.id === 'apAll') { if (e.target.checked) S.list.forEach((r) => S.sel.add(keyOf(r))); else S.sel.clear(); return paint(); }
-    const t = e.target.closest('#apRe,[data-apf],[data-app],[data-api],[data-apa],#apMoreB'); if (!t) return;
+    const t = e.target.closest('#apRe,#apClean,[data-apf],[data-app],[data-api],[data-apa],#apMoreB'); if (!t) return;
+    if (t.id === 'apClean') return view('lclean');
     if (t.id === 'apRe') { if (window.KXOnline) KXOnline.refresh(); return load(true); }
     if (t.id === 'apMoreB') { S.limit += 200; return paint(); }
     if (t.dataset.apa) { const a = t.dataset.apa; if (a === 'none') { S.sel.clear(); return paint(); } return a === 'look' ? consult('look') : a === 'renew' ? renew() : edit(); }
