@@ -2627,9 +2627,19 @@ Fire TV Stick 4K seconda versione (2023), Fire TV Stick 4K Max, Fire TV Cube, TV
 - Una sola app Kairos per dispositivo: due app installate insieme occupano memoria per niente.
 - Se un cliente ha blocchi o scatti, prima prova l'app più leggera della sua fascia, poi guarda la linea.`;
 const infoText = (v, max) => (typeof v === 'string' ? v.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').slice(0, max) : '');
+/* Due voci separate (14 novembre 2026, richiesta del titolare: «non devono essere collegati»):
+   - per gli agenti: news (comunicazione) e apps (guida), si leggono solo nel pannello;
+   - per lo Store: sNews e sApps, pubblicate nel riquadro «Info» dello Store. Vuote = lo Store non mostra quella parte.
+   La prima stesura aveva un testo solo con «Mostra anche nello Store»: quello che lo Store mostrava allora resta. */
 function infoNorm(x) {
-  const o = x && typeof x === 'object' && !Array.isArray(x) ? x : {}, apps = infoText(o.apps, 12000);
-  return { news: infoText(o.news, 6000).trim(), apps: apps.trim() ? apps.trim() : INFO_APPS_DEF, storeNews: o.storeNews !== false, storeApps: o.storeApps !== false, newsAt: +o.newsAt > 0 ? +o.newsAt : 0, at: +o.at > 0 ? +o.at : 0 };
+  const o = x && typeof x === 'object' && !Array.isArray(x) ? x : {}, apps = infoText(o.apps, 12000).trim();
+  const out = { news: infoText(o.news, 6000).trim(), apps: apps || INFO_APPS_DEF, newsAt: +o.newsAt > 0 ? +o.newsAt : 0, sNews: '', sApps: '', sNewsAt: 0, at: +o.at > 0 ? +o.at : 0 };
+  if (typeof o.sNews === 'string' || typeof o.sApps === 'string') {
+    out.sNews = infoText(o.sNews, 6000).trim(); out.sApps = typeof o.sApps === 'string' ? infoText(o.sApps, 12000).trim() : INFO_APPS_DEF; out.sNewsAt = +o.sNewsAt > 0 ? +o.sNewsAt : 0;
+  } else { out.sNews = o.storeNews !== false ? out.news : ''; out.sNewsAt = out.newsAt; out.sApps = o.storeApps !== false ? out.apps : ''; }
+  if (!out.news) out.newsAt = 0;
+  if (!out.sNews) out.sNewsAt = 0;
+  return out;
 }
 const infoMem = { t: 0, v: null };
 async function infoGet(env) {
@@ -2637,16 +2647,20 @@ async function infoGet(env) {
   let raw = null; try { const r = await env.DB.prepare("SELECT v FROM settings WHERE k = 'info'").first(); raw = r ? JSON.parse(r.v) : null; } catch {}
   infoMem.v = infoNorm(raw); infoMem.t = now(); return infoMem.v;
 }
-/** salva (solo titolare): la data della comunicazione cambia solo quando cambia il testo, così «nuova» non si riaccende per niente */
+/** salva (solo titolare): la data di una comunicazione cambia solo quando cambia il suo testo, così «nuova» non si riaccende
+ *  per niente. Una pagina del pannello rimasta aperta dalla prima stesura (senza sNews/sApps) cambia solo le voci degli agenti. */
 async function infoPut(env, b) {
   infoMem.v = null;
-  const cur = await infoGet(env), n = infoNorm({ ...(b && typeof b === 'object' ? b : {}), newsAt: cur.newsAt, at: now() });
+  b = b && typeof b === 'object' && !Array.isArray(b) ? b : {};
+  const cur = await infoGet(env), two = typeof b.sNews === 'string' || typeof b.sApps === 'string';
+  const n = infoNorm({ news: b.news, apps: b.apps, sNews: two ? String(b.sNews == null ? '' : b.sNews) : cur.sNews, sApps: two ? String(b.sApps == null ? '' : b.sApps) : cur.sApps, newsAt: cur.newsAt, sNewsAt: cur.sNewsAt, at: now() });
   if (n.news !== cur.news) n.newsAt = n.news ? now() : 0;
+  if (n.sNews !== cur.sNews) n.sNewsAt = n.sNews ? now() : 0;
   await env.DB.prepare("INSERT INTO settings (k, v) VALUES ('info', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v").bind(JSON.stringify(n)).run();
   infoMem.v = n; infoMem.t = now(); return n;
 }
-/** quello che riceve lo Store (pubblico, senza accesso): solo le parti che il titolare ha deciso di mostrare lì */
-async function infoPublic(env) { const i = await infoGet(env); return { news: i.storeNews ? i.news : '', newsAt: i.storeNews && i.news ? i.newsAt : 0, apps: i.storeApps ? i.apps : '' }; }
+/** quello che riceve lo Store (pubblico, senza accesso): solo le due voci scritte per lo Store */
+async function infoPublic(env) { const i = await infoGet(env); return { news: i.sNews, newsAt: i.sNewsAt, apps: i.sApps }; }
 /* avviso «Nuova guida da leggere»: l'agente lo vede finché non apre la guida (agent_reads k='guide') */
 async function guideReads(env) {
   try { return (await env.DB.prepare("SELECT agent_id, at FROM agent_reads WHERE k = 'guide'").all()).results || []; } catch { return []; }
@@ -8355,7 +8369,7 @@ async function adminRoutes(req, env, url, path, who, ip, ctx, ses) {
   if (path === '/info' && m === 'GET') return json({ info: { ...(await infoGet(env)), defApps: INFO_APPS_DEF } });
   if (path === '/info' && m === 'PUT') {
     const i = await infoPut(env, await readJSON(req, 64 * 1024));
-    await log(env, 'settings', `${who}: pagina «Info» aggiornata (comunicazione ${i.news ? (i.storeNews ? 'anche nello Store' : 'solo nel pannello') : 'vuota'}, guida alle app ${i.storeApps ? 'anche nello Store' : 'solo nel pannello'})`, ip);
+    await log(env, 'settings', `${who}: pagina «Info» aggiornata (agenti: comunicazione ${i.news ? 'scritta' : 'vuota'}; Store: comunicazione ${i.sNews ? 'pubblicata' : 'vuota'}, guida ${i.sApps ? 'pubblicata' : 'non mostrata'})`, ip);
     return json({ info: { ...i, defApps: INFO_APPS_DEF } });
   }
   if (path === '/guide' && m === 'PUT') {

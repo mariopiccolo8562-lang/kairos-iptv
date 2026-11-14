@@ -1,6 +1,6 @@
 /* KAIROS Control — «ℹ️ Info» (14 novembre 2026): comunicazioni del titolare e guida «quale app su quale dispositivo».
-   - Titolare: scrive le comunicazioni e può cambiare la guida; per ognuna decide se mostrarla anche nello Store
-     (riquadro «Info» dello Store, lo legge chiunque lo apra) o solo qui nel pannello agli agenti.
+   - Titolare: due voci separate, che non si toccano fra loro: «Per i tuoi agenti» (comunicazione e guida, solo nel
+     pannello) e «Per lo Store» (comunicazione e guida pubblicate nel riquadro «Info» dello Store, per chiunque lo apra).
    - Agente: legge soltanto. Un pallino sulla voce del menu finché non apre una comunicazione nuova.
    API: GET/PUT /admin/info (worker.js). Stesso formato semplice della guida della Panoramica: «# Titolo», «1.» per i
    passi, «-» per gli elenchi, **grassetto**. Usa app.js ($, esc, api, view, toast, TITLES, D). */
@@ -24,6 +24,11 @@
 #v-info .in-act{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px}
 #v-info .in-hint{font-size:12.5px;color:var(--mut);margin-top:6px}
 #v-info .in-when{font-size:12.5px;color:var(--mut);margin-top:8px}
+#v-info .in-sec{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin:22px 2px 10px;padding-left:12px;border-left:4px solid var(--c)}
+#v-info .in-sec:first-child{margin-top:0}
+#v-info .in-sec b{font-size:17px;color:#fff}
+#v-info .in-sec span{font-size:13px;color:var(--mut);line-height:1.45;flex:1;min-width:240px}
+#v-info .in-sec.ag{--c:#22d3ee}#v-info .in-sec.st{--c:#fbbf24}
 .nav[data-v="info"] .in-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#22d3ee;box-shadow:0 0 10px #22d3ee;margin-left:8px;vertical-align:middle}`;
   document.head.appendChild(css);
 
@@ -35,7 +40,7 @@
   }
   if (typeof TITLES === 'object') TITLES.info = 'Info';
   const V = $('#v-info');
-  const I = { data: null, busy: false, editApps: false, t: 0 };
+  const I = { data: null, busy: false, editApps: false, editSApps: false, t: 0 };
   const isAg = () => typeof D === 'object' && D && D.role === 'agent';
 
   /* testo semplice → HTML (come la guida della Panoramica) */
@@ -88,38 +93,49 @@
       markSeen();
       return;
     }
-    const keepNews = $('#inNews', V) ? $('#inNews', V).value : d.news, keepApps = $('#inApps', V) ? $('#inApps', V).value : d.apps;
-    V.innerHTML = `<div class="card glass"><div class="hd"><h3>📣 Comunicazioni<small>Scrivi qui gli avvisi per i tuoi agenti: novità, cambi di server, prezzi, cose da fare. Gli agenti li leggono in questa pagina e vedono un pallino sul menu quando ce n'è uno nuovo.</small></h3></div>
-        <textarea class="inp" id="inNews" maxlength="6000" placeholder="Esempio:&#10;# Novità di questa settimana&#10;- È uscita KAIROS Ultimate 1.2: aggiornate i clienti dallo Store&#10;- Da lunedì il server cambia indirizzo">${esc(keepNews)}</textarea>
-        <div class="in-hint">«# Titolo» per i titoli, «-» per gli elenchi, «1.» per i passi, **grassetto**. Lascia vuoto per non mostrare niente.${d.news ? ' · In linea dal ' + esc(when(d.newsAt)) : ''}</div>
-        <label class="in-sw"><input type="checkbox" id="inSN"${d.storeNews ? ' checked' : ''}><span><b>Mostra anche nello Store</b><small>Acceso: la comunicazione compare nel riquadro «Info» dello Store e la legge chiunque lo apra, clienti compresi. Spento: la vedono solo gli agenti, qui nel pannello. Spegnilo quando scrivi prezzi o cose riservate ai venditori.</small></span></label>
-      </div>
-      <div class="card glass" style="margin-top:16px"><div class="hd"><h3>📱 Quale app installare<small>La guida per scegliere l'app in base alla memoria (RAM) del dispositivo: fino a 1 GB, da 1 a 1,5 GB, da 1,5 a 2 GB, 2 GB o più. Serve agli agenti per installare l'app giusta al primo colpo.</small></h3>
-          <span style="display:flex;gap:8px;flex-wrap:wrap">${I.editApps ? '<button class="btn sm" type="button" id="inDef">Testo iniziale</button><button class="btn sm" type="button" id="inView">Anteprima</button>' : '<button class="btn sm" type="button" id="inEdit">✏️ Modifica</button>'}</span></div>
-        ${I.editApps ? `<textarea class="inp big" id="inApps" maxlength="12000">${esc(keepApps)}</textarea><div class="in-hint">Stesso formato delle comunicazioni. Se la svuoti torna il testo iniziale.</div>` : `<div class="in-b">${md(keepApps)}</div><textarea id="inApps" hidden>${esc(keepApps)}</textarea>`}
-        <label class="in-sw"><input type="checkbox" id="inSA"${d.storeApps ? ' checked' : ''}><span><b>Mostra anche nello Store</b><small>Acceso: la guida compare nel riquadro «Info» dello Store, così l'agente la legge davanti alla TV del cliente. Spento: resta solo qui nel pannello.</small></span></label>
-      </div>
-      <div class="in-act"><button class="btn pri" type="button" id="inSave">Salva</button><span class="mut" style="font-size:12.5px">Salvando, le modifiche arrivano subito agli agenti e, entro un minuto, allo Store.</span></div>`;
+    // titolare: due voci separate, una per gli agenti (solo pannello) e una per lo Store (pubblica). Non si toccano fra loro.
+    const val = (id, d0) => ($('#' + id, V) ? $('#' + id, V).value : d0);
+    const kN = val('inNews', d.news), kA = val('inApps', d.apps), kSN = val('inSNews', d.sNews || ''), kSA = val('inSApps', d.sApps || '');
+    const guide = (id, txt, edit, a, emptyMsg) => (edit
+      ? `<textarea class="inp big" id="${id}" maxlength="12000">${esc(txt)}</textarea>`
+      : `<div class="in-b">${txt.trim() ? md(txt) : `<div class="in-empty">${emptyMsg}</div>`}</div><textarea id="${id}" hidden>${esc(txt)}</textarea>`);
+    const gBtns = (k, edit) => (edit ? `<button class="btn sm" type="button" data-in="def" data-k="${k}">Testo iniziale</button><button class="btn sm" type="button" data-in="view" data-k="${k}">Anteprima</button>` : `<button class="btn sm" type="button" data-in="edit" data-k="${k}">✏️ Modifica</button>`);
+    V.innerHTML = `<div class="in-sec ag"><b>👥 Per i tuoi agenti</b><span>La vedono solo gli agenti, dentro il pannello. Nello Store non esce niente di quello che scrivi qui.</span></div>
+      <div class="card glass"><div class="hd"><h3>📣 Comunicazione agli agenti<small>Avvisi per i venditori: novità, cambi di server, prezzi, cose da fare. La leggono in questa pagina e vedono un pallino sul menu quando ne scrivi una nuova.</small></h3></div>
+        <textarea class="inp" id="inNews" maxlength="6000" placeholder="Esempio:&#10;# Novità di questa settimana&#10;- Prezzi nuovi da lunedì&#10;- Rinnovate i clienti in scadenza entro venerdì">${esc(kN)}</textarea>
+        <div class="in-hint">«# Titolo» per i titoli, «-» per gli elenchi, «1.» per i passi, **grassetto**. Lascia vuoto per non mostrare niente.${d.news ? ' · In linea dal ' + esc(when(d.newsAt)) : ''}</div></div>
+      <div class="card glass" style="margin-top:14px"><div class="hd"><h3>📱 Guida per gli agenti: quale app installare<small>Per scegliere l'app in base alla memoria (RAM) del dispositivo: fino a 1 GB, da 1 a 1,5 GB, da 1,5 a 2 GB, 2 GB o più. Serve agli agenti per installare l'app giusta al primo colpo.</small></h3>
+          <span style="display:flex;gap:8px;flex-wrap:wrap">${gBtns('a', I.editApps)}</span></div>
+        ${guide('inApps', kA, I.editApps, 'a', '')}${I.editApps ? '<div class="in-hint">Se la svuoti torna il testo iniziale.</div>' : ''}</div>
+      <div class="in-sec st"><b>🛒 Per lo Store</b><span>È pubblico: lo legge chiunque apra lo Store e prema «INFO», clienti compresi. Non scrivere qui prezzi o cose riservate ai venditori. Gli agenti nel pannello non vedono questa parte.</span></div>
+      <div class="card glass"><div class="hd"><h3>📣 Comunicazione nello Store<small>Un avviso per chi apre lo Store: per esempio «è uscita la versione nuova, premete Installa» oppure un numero per l'assistenza. Sul pulsante INFO dello Store compare un pallino rosso quando è nuova.</small></h3></div>
+        <textarea class="inp" id="inSNews" maxlength="6000" placeholder="Esempio:&#10;# Aggiornamento&#10;- È uscita la versione nuova di KAIROS Ultimate: premete Installa">${esc(kSN)}</textarea>
+        <div class="in-hint">Lascia vuoto per non mostrare nessuna comunicazione nello Store.${d.sNews ? ' · Pubblicata dal ' + esc(when(d.sNewsAt)) : ''}</div></div>
+      <div class="card glass" style="margin-top:14px"><div class="hd"><h3>📱 Guida nello Store: quale app installare<small>La guida che si legge nello Store davanti alla TV del cliente. È un testo a parte: cambiarla non cambia quella degli agenti, e viceversa.</small></h3>
+          <span style="display:flex;gap:8px;flex-wrap:wrap">${gBtns('s', I.editSApps)}</span></div>
+        ${guide('inSApps', kSA, I.editSApps, 's', 'Nessuna guida nello Store. Premi «Modifica» e poi «Testo iniziale» per rimetterla.')}${I.editSApps ? '<div class="in-hint">Se la svuoti, nello Store la guida non compare.</div>' : ''}</div>
+      <div class="in-act"><button class="btn pri" type="button" id="inSave">Salva</button><span class="mut" style="font-size:12.5px">Salvando, la parte degli agenti arriva subito nel pannello; quella dello Store entro un minuto. Se nello Store non c'è niente da leggere, il pulsante INFO non compare.</span></div>`;
   }
 
   async function save() {
     if (I.busy || isAg()) return;
-    const body = { news: $('#inNews', V).value, apps: $('#inApps', V).value, storeNews: $('#inSN', V).checked, storeApps: $('#inSA', V).checked };
+    const body = { news: $('#inNews', V).value, apps: $('#inApps', V).value, sNews: $('#inSNews', V).value, sApps: $('#inSApps', V).value };
     I.busy = true;
     try {
-      const r = await api('PUT', '/admin/info', body); I.data = r.info; I.t = Date.now(); I.editApps = false;
+      const r = await api('PUT', '/admin/info', body); I.data = r.info; I.t = Date.now(); I.editApps = I.editSApps = false;
       V.innerHTML = ''; // ridisegna con i testi salvati (non con quelli rimasti nelle caselle)
-      toast(I.data.news ? (I.data.storeNews ? 'Salvato: comunicazione nel pannello e nello Store' : 'Salvato: comunicazione solo nel pannello') : 'Salvato');
+      toast('Salvato · agenti: ' + (I.data.news ? 'comunicazione scritta' : 'nessuna comunicazione') + ' · Store: ' + (I.data.sNews ? 'comunicazione pubblicata' : 'nessuna comunicazione') + (I.data.sApps ? '' : ', guida non mostrata'));
     } catch (e) { toast((e && e.message) || 'Non salvato', 1); }
     I.busy = false; draw();
   }
 
   V.addEventListener('click', (e) => {
-    const t = e.target.closest('#inSave,#inEdit,#inView,#inDef'); if (!t) return;
+    const t = e.target.closest('#inSave,[data-in]'); if (!t) return;
     if (t.id === 'inSave') return save();
-    if (t.id === 'inEdit') { I.editApps = true; return draw(); }
-    if (t.id === 'inView') { I.editApps = false; return draw(); }
-    if (t.id === 'inDef') { if (!I.data || !I.data.defApps || !confirm('Rimettere il testo iniziale della guida? Le tue modifiche alla guida vanno perse quando salvi.')) return; $('#inApps', V).value = I.data.defApps; }
+    const st = t.dataset.k === 's', key = st ? 'editSApps' : 'editApps', a = t.dataset.in;
+    if (a === 'edit') { I[key] = true; return draw(); }
+    if (a === 'view') { I[key] = false; return draw(); }
+    if (a === 'def') { if (!I.data || !I.data.defApps || !confirm('Rimettere il testo iniziale in questa guida? Le modifiche a questa guida vanno perse quando salvi.')) return; $(st ? '#inSApps' : '#inApps', V).value = I.data.defApps; }
   });
   new MutationObserver(() => { if (V.classList.contains('on')) { draw(); load(false); } }).observe(V, { attributes: true, attributeFilter: ['class'] });
   // l'agente all'apertura del pannello: una lettura sola, per il pallino «comunicazione nuova»
@@ -127,6 +143,6 @@
   function boot() { clearInterval(tick); let n = 0; tick = setInterval(() => { if (++n > 40) return clearInterval(tick); if (typeof D !== 'object' || !D || !D.role) return; clearInterval(tick); if (isAg() && ((D.me || {}).perms || {}).info !== false) load(true); }, 900); }
   boot();
   const appEl = $('#app');
-  if (appEl) new MutationObserver(() => { if (appEl.classList.contains('on')) return boot(); Object.assign(I, { data: null, busy: false, editApps: false, t: 0, err: '' }); V.innerHTML = ''; dot(); }).observe(appEl, { attributes: true, attributeFilter: ['class'] });
+  if (appEl) new MutationObserver(() => { if (appEl.classList.contains('on')) return boot(); Object.assign(I, { data: null, busy: false, editApps: false, editSApps: false, t: 0, err: '' }); V.innerHTML = ''; dot(); }).observe(appEl, { attributes: true, attributeFilter: ['class'] });
   window.KXInfo = { reload: () => load(true), md };
 })();
