@@ -1841,7 +1841,7 @@ async function onlineRoute(req) {
    privati. Il token resta nel Worker: mai nelle risposte, nei log o nei messaggi d'errore. */
 const GH_OWNER = 'mariopiccolo8562-lang';
 /** versione di prova di KAIROS HEAVY data da /get/heavy.apk e dallo Store: a ogni nuova prova si cambia solo questo numero */
-const HEAVY_REL = 'kairos-ultimate/releases/download/heavy-prova-14/';
+const HEAVY_REL = 'kairos-ultimate/releases/download/heavy-prova-15/';
 const GET_APK = {
   store: ['kairos-store/releases/latest/download/KairosStore.apk', 'KairosStore.apk'],
   pro: ['kairos-store/releases/download/kairos-tv/kairos-tv.apk', 'kairos-pro.apk'],
@@ -4808,6 +4808,7 @@ const RC_CAT = [
   ['h.top10', 'Top 10 film e serie', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Nella Home, con ▼, due mensole con i 10 film e le 10 serie del momento, con il numero gigante in rilievo. Prende i titoli di tendenza (se ci sono nella lista del cliente), altrimenti i più votati', 'Mostra', 'KAIROS HEAVY · Home'],
   ['h.recent', 'Ultimi visti', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Mensola con gli ultimi 10 film ed episodi guardati, con la barra di quanto manca: OK riprende da dove il cliente era rimasto', 'Mostra', 'KAIROS HEAVY · Home'],
   ['h.lastch', '«Ultimi canali» nella Home', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Un telecomando 3D con i loghi degli ultimi 5 canali guardati che gli girano attorno: OK apre il menu e il cliente sceglie quale riaprire a schermo intero. In Diretta c\'è anche la cartella «Ultimi canali»', 'Mostra', 'KAIROS HEAVY · Home'],
+  ['h.plHome', 'Playlist nella Home', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Tre sfere in alto nella Home, accanto a Cerca e Profilo. «Aggiungi playlist»: il cliente scrive server, utente e password, oppure incolla il link M3U intero (serve il permesso «Aggiungere, modificare ed eliminare playlist» nella sua scheda). «Cambia playlist»: elenca tutte le playlist che gli hai caricato dal pannello più quelle aggiunte da lui; con le playlist «Unite» c\'è anche «Tutte insieme» (serve il permesso «Cambiare playlist»). «Aggiorna canali»: riscarica subito canali, film e serie. Nascondi: le stesse funzioni restano in Profilo e Impostazioni', 'Mostra', 'KAIROS HEAVY · Home'],
   ['h.rec', 'Consigliati per te', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Mensola nella Home con film e serie scelti in base a quello che il cliente ha guardato: prende le categorie che guarda di più e propone i titoli più votati che non ha ancora visto', 'Mostra', 'KAIROS HEAVY · Home'],
   ['h.fresh', 'Appena arrivati', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Mensola nella Home della HEAVY con gli ultimi film e le ultime serie aggiunti alla lista del cliente. «Nascondi» la toglie: Home più corta.', 'Mostra', 'KAIROS HEAVY · Home'],
   ['h.surprise', '«Scegli per me» nella Home', 'sel', [['on', 'Mostra'], ['off', 'Nascondi']], ['heavy'], 'Per chi non sa cosa guardare: un dado 3D. Il cliente sceglie film, serie o sorpresa, il rullo di locandine gira, rallenta e si ferma su un titolo (Top 10, consigliati, appena arrivati), poi apre la scheda', 'Mostra', 'KAIROS HEAVY · Home'],
