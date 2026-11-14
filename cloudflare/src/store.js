@@ -104,14 +104,21 @@ export function storeClosedNow(c, t = Date.now()) {
 const REC_DEF = { weakApp: 'Kairos-XC', weakMb: 1536, oldApp: 'Kairos-Lite', oldSdk: 7, strongApp: 'Kairos Pro', text: 'Per questo dispositivo è consigliata {app}: stesso abbonamento e stesse liste, con la migliore fluidità su questo apparecchio.' };
 /* memoria richiesta da ogni app (MB, 11 novembre 2026): nello Store le app Kairos si mostrano dalla più leggera, con ✓ se il
    dispositivo ha abbastanza memoria. A parità di memoria vale quest'ordine (Kairos Tv subito dopo XC, come deciso dal titolare) */
-const MEM_DEF = { 'Kairos-XC': 512, 'Kairos Tv': 1024, 'Kairos-Lite': 1024, 'Kairos Premium': 1536, 'Kairos Plus': 1536, 'Kairos Pro': 2048 };
+// 14 novembre 2026: ci sono tutte le app Kairos dello Store (anche STB, Smarters, Ultimate e HEAVY), con le stesse fasce della
+// guida «quale app installare» della pagina Info: fino a 1 GB XC (e STB, Smarters), 1,5 GB Premium e Ultimate, 2 GB Pro e HEAVY
+const MEM_DEF = { 'Kairos-XC': 512, 'Kairos STB': 1024, 'Kairos Smarters': 1024, 'Kairos Tv': 1024, 'Kairos-Lite': 1024, 'Kairos Premium': 1536, 'KAIROS Ultimate': 1536, 'Kairos Plus': 1536, 'Kairos Pro': 2048, 'KAIROS HEAVY': 2048 };
 function memNorm(m) {
-  const src = m && typeof m === 'object' && !Array.isArray(m) ? m : MEM_DEF, out = {};
-  for (const [k, v] of Object.entries(src).slice(0, 16)) {
+  const src = m && typeof m === 'object' && !Array.isArray(m) ? m : {}, saved = {};
+  for (const [k, v] of Object.entries(src).slice(0, 24)) {
     const name = String(k).replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40), n = parseInt(v, 10);
-    if (name && n >= 128 && n <= 16384) out[name] = n;
+    if (name && n >= 128 && n <= 16384) saved[name] = n;
   }
-  return Object.keys(out).length ? out : { ...MEM_DEF };
+  // i valori salvati dal titolare vincono; le app che nella sua tabella mancano (aggiunte dopo, come STB, Smarters, Ultimate
+  // e HEAVY) entrano da sole con il valore di serie, nell'ordine di MEM_DEF: lo Store le conosce tutte senza salvare di nuovo
+  const out = {};
+  for (const k of Object.keys(MEM_DEF)) out[k] = saved[k] !== undefined ? saved[k] : MEM_DEF[k];
+  for (const k of Object.keys(saved)) if (out[k] === undefined) out[k] = saved[k];
+  return out;
 }
 function recNorm(r) {
   r = r && typeof r === 'object' ? r : {};
