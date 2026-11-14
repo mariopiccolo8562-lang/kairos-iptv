@@ -6219,7 +6219,7 @@ const MAINT_MSG = 'Servizio in manutenzione: torna disponibile a breve. Grazie p
     Kairos TV con «KairosPlayer/x.y KairosTV/x.y», Kairos Pro solo con «KairosPlayer/x.y».
     Chiavi interne: 'tv' = Kairos Pro (nome storico), 'ktv' = Kairos TV, 'lite' = Kairos Lite, 'xc' = Kairos XC, 'ult' = KAIROS Ultimate
     (Ultimate e XC si riconoscono prima delle app che condividono il prefisso KairosTV) */
-const APPS = ['tv', 'lite', 'ktv', 'prem', 'ult', 'xc', 'plus', 'nova'];
+const APPS = ['tv', 'lite', 'ktv', 'prem', 'ult', 'xc', 'plus', 'nova', 'portal', 'smart'];
 function appFrom(req, b) {
   const ua = req.headers.get('User-Agent') || '', ver = String((b && b.ver) || '');
   if (/KairosUltimate\//i.test(ua) || /^ult\b/i.test(ver)) return 'ult';
@@ -6240,8 +6240,29 @@ function appFrom(req, b) {
     diversa la faceva riavviare a ogni apertura). Ogni app ha i suoi codici: un dispositivo che i battiti («tv x.y premium») hanno già
     riconosciuto come Premium resta Premium */
 function regAppOf(req, b, d) {
-  const a = appFrom(req, b);
-  return a === 'ktv' && d && d.app === 'prem' && !String((b && b.ver) || '').trim() ? 'prem' : a;
+  const a = appFrom(req, b), noVer = !String((b && b.ver) || '').trim();
+  if (a === 'ktv' && d && d.app === 'prem' && noVer) return 'prem';
+  // Kairos STB e Smarters usano il motore di Kairos XC: all'apertura si presentano come «KairosXC/x.y» senza versione, mentre i battiti
+  // dicono «portal x.y» / «smart x.y». Prima a ogni apertura tornavano «XC» (pastiglia sbagliata nel pannello e, per un attimo, le
+  // impostazioni di XC): una TV già riconosciuta dai battiti come STB o Smarters resta quella (14 novembre 2026)
+  if (a === 'xc' && d && (d.app === 'portal' || d.app === 'smart') && noVer) return d.app;
+  return a;
+}
+/** TV nuova che si presenta come XC senza versione: può essere Kairos STB o Smarters (stesso motore). Lo dice l'ultimo download
+    dello Store dalla stessa rete (o dallo stesso IP) nelle ultime 48 ore: STB, Smarters o XC. '' = nessun download trovato */
+async function storeAppGuess(env, ip) {
+  try {
+    const net = ipNet(ip);
+    const r = await env.DB.prepare("SELECT app, app_url, ip FROM store_requests WHERE created > ? AND uses > 0 AND ip <> '' ORDER BY created DESC LIMIT 150").bind(now() - 48 * 36e5).all();
+    const kind = (x) => { const u = String(x.app_url || ''), n = String(x.app || ''); return /\/get\/portal\b/i.test(u) || /\bstb\b/i.test(n) ? 'portal' : /\/get\/smart\b/i.test(u) || /smarters/i.test(n) ? 'smart' : /\/get\/xc\b/i.test(u) || /kairos[- ]?xc\b/i.test(n) ? 'xc' : ''; };
+    let sameNet = '';
+    for (const x of (r && r.results) || []) {
+      const k = kind(x); if (!k) continue;
+      if (x.ip === ip) return k;
+      if (!sameNet && net && net.includes('/') && ipNet(x.ip) === net) sameNet = k;
+    }
+    return sameNet;
+  } catch { return ''; }
 }
 async function playerRegister(req, env, ip, ctx) {
   if (await limited(env.RL_DEVICE, 'dev:' + ip)) return json({ error: 'Troppe richieste, riprova tra poco' }, 429);
@@ -6290,7 +6311,13 @@ async function playerRegister(req, env, ip, ctx) {
 
   ctx.waitUntil(env.DB.prepare('UPDATE devices SET last_seen = ?, last_ip = ?, model = CASE WHEN ? <> \'\' THEN ? ELSE model END WHERE id = ?')
     .bind(now(), ip, model, model, d.id).run());
-  const regApp = regAppOf(req, b, d);
+  let regApp = regAppOf(req, b, d);
+  // prima volta che questa TV si presenta, come XC e senza versione: l'app vera (STB, Smarters o XC) la dice il download dello Store
+  if (regApp === 'xc' && !d.app && !String(b.ver || '').trim()) { const g = await storeAppGuess(env, ip); if (g) regApp = g; }
+  // KAIROS HEAVY all'apertura non manda la versione: si usa quella dell'ultimo battito, così riceve subito le sue voci (prima, per un
+  // attimo, quelle della Ultimate)
+  let regVer = String(b.ver || '');
+  if (!regVer && regApp === 'ult') { try { const pv = await env.DB.prepare('SELECT ver FROM presence WHERE device_id = ?').bind(d.id).first(); regVer = String((pv && pv.ver) || ''); } catch {} }
   { const app = regApp; if (app && d.app !== app) { d.app = app; ctx.waitUntil(env.DB.prepare('UPDATE devices SET app = ? WHERE id = ?').bind(app, d.id).run()); } }
   ctx.waitUntil(presenceFromRegister(env, d, b, ip, cfOf(req)));
 
@@ -6304,7 +6331,7 @@ async function playerRegister(req, env, ip, ctx) {
   let status = P ? statusOf(P, Ppls) : 'pending';
   const { C, pls } = status === 'active' ? await effOf(env, d, P, Ppls) : { C: P, pls: [] };
   if (status === 'active' && maintFor(s, P)) status = 'maintenance';
-  const eff = rcEffective(s, d, regApp || appOfVer('', d.app), true, /^heavy\b/i.test(String(b.ver || '')));
+  const eff = rcEffective(s, d, regApp || appOfVer('', d.app), true, /^heavy\b/i.test(regVer));
   const out = { status, ...(status === 'maintenance' ? { maintMsg: maintMsgFor(s, P) } : {}), name: P ? P.name : '', expires: P ? P.expires : '', settings: publicSettings(s), playlists: status === 'active' ? await portalsOf(env, pls, d.app, rcDevOf(d)['u.dnsRot']) : [], messages: await msgP, rc: eff.rc, rcv: eff.rcv };
   if (status === 'active') {
     [out.account, out.vpn, out.af] = await Promise.all([accountOf(env, P, d, pls, C), vpnOf(env, P, d), acctFp(P)]);
