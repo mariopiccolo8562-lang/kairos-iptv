@@ -25,6 +25,15 @@
     if (a === 'prev') return zap(-1);
     if (a === 'next') return zap(1);
   }
+  // con i comandi a schermo, barra e minuti del film si aggiornano ogni secondo
+  function tick() {
+    if (!P.open || P.live || !osd || osd.style.display !== 'block') return;
+    var d = duration(), c = current(), f = osd.querySelector('.osd-fill'), tm = osd.querySelector('.osd-time');
+    if (!(d > 0)) return;
+    if (!f) return showOsd('', P.paused);
+    f.style.width = Math.min(100, (c / d) * 100) + '%';
+    if (tm) tm.textContent = fmt(c) + ' / ' + fmt(d);
+  }
   function hideLater() { window.clearTimeout(P.osdT); P.osdT = window.setTimeout(function () { if (!P.paused) osd.style.display = 'none'; }, 4500); }
   function showOsd(state, keep) {
     if (!osd) return;
@@ -131,6 +140,7 @@
         // il puntatore che si muove mostra i comandi (e li tiene finché si muove)
         document.addEventListener('mousemove', function () { if (!P.open) return; if (osd.style.display !== 'block') showOsd(''); else hideLater(); }, false);
         document.addEventListener('click', function (ev) { if (P.open && !KP.up(ev.target, 'obtn') && osd.style.display !== 'block') showOsd(''); }, false);
+        window.setInterval(tick, 1000);
         video.addEventListener('playing', function () { if (P.open && !P.av) started(); }, false);
         video.addEventListener('waiting', function () { if (P.open && !P.av) showOsd(KP.t('buffering'), true); }, false);
         video.addEventListener('error', function () { if (P.open && !P.av) fail(); }, false);
