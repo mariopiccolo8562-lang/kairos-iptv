@@ -1860,7 +1860,7 @@ const GET_APK = {
   smart: ['kairos-portal-smart/releases/latest/download/kairos-smart.apk', 'kairos-smart.apk'],
   // KAIROS HEAVY (13 novembre 2026): app personale del titolare, ramo «heavy» del repository della Ultimate. Si scarica
   // la versione di prova indicata qui (le prove sono anteprime: non sono l'«ultima release» della Ultimate)
-  heavy: ['kairos-ultimate/releases/download/heavy-prova-4/kairos-ultimate.apk', 'kairos-heavy.apk'],
+  heavy: ['kairos-ultimate/releases/download/heavy-prova-5/kairos-ultimate.apk', 'kairos-heavy.apk'],
 };
 /** feed degli aggiornamenti (/get/<id>.json): file della stessa release dell'APK di GET_APK[id]. Lo store non ne ha uno:
  *  si ricava dalla sua ultima release (tag v1.0.N con KairosStore.apk) */
